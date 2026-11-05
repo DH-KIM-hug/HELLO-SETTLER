@@ -1,0 +1,435 @@
+"""경제·인구 밸런스 시트(docs/balance_v1.xlsx) 생성 스크립트.
+
+실행: python3 tools/gen_balance.py
+- '가정' 시트의 노란 칸이 모든 계산의 입력값이다. 시트에서 바꾸면 전부 다시 계산된다.
+- 생산 수치는 docs/buildings_v1.xlsx(레시피·기후 변형)와 같은 값을 쓴다.
+"""
+import os
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.chart import LineChart, Reference
+
+FONT = "Arial"
+F = lambda **k: Font(name=FONT, **k)
+HDR = PatternFill("solid", fgColor="3E5C3A")
+SUB = PatternFill("solid", fgColor="DDE8D8")
+INP = PatternFill("solid", fgColor="FFF6D5")
+thin = Side(style="thin", color="CCCCCC")
+BD = Border(top=thin, bottom=thin, left=thin, right=thin)
+BLUE = "0000FF"
+GREY = "666666"
+
+wb = Workbook()
+
+
+def put(ws, r, c, v, inp=False, fmt=None, bold=False, color=None):
+    cell = ws.cell(row=r, column=c, value=v)
+    cell.font = F(color=color or (BLUE if inp else "000000"), bold=bold)
+    cell.border = BD
+    if inp:
+        cell.fill = INP
+    if fmt:
+        cell.number_format = fmt
+    return cell
+
+
+def header(ws, r, cols, c0=1):
+    for i, h in enumerate(cols, c0):
+        c = ws.cell(row=r, column=i, value=h)
+        c.font = F(bold=True, color="FFFFFF"); c.fill = HDR; c.border = BD
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+
+def widths(ws, ws_w):
+    for i, w in enumerate(ws_w, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+
+def title(ws, text, sub=None):
+    ws["A1"] = text; ws["A1"].font = F(bold=True, size=14)
+    if sub:
+        ws["A2"] = sub; ws["A2"].font = F(color=GREY)
+
+
+# ============================================================ 가정
+wa = wb.active; wa.title = "가정"
+widths(wa, [34, 12, 12, 12, 12, 12, 56])
+title(wa, "밸런스 가정값", "노란 칸(파란 글씨)을 바꾸면 모든 시트가 다시 계산됨. 모든 값은 임시값(안)")
+
+A = {}  # name -> absolute ref
+
+
+def assume(r, label, val, fmt, note, key):
+    put(wa, r, 1, label)
+    put(wa, r, 2, val, inp=True, fmt=fmt)
+    put(wa, r, 7, note, color=GREY)
+    A[key] = f"가정!$B${r}"
+
+
+header(wa, 4, ["인구", "값", "", "", "", "", "설명"])
+assume(5, "시작 인구 (명)", 10, "0", "첫 정착민 두 가족 (기획서 3.1)", "start")
+assume(6, "성인 비율", 0.7, "0%", "인구 중 성인 (아이·노인 제외)", "adult")
+assume(7, "혼인율 (성인 중)", 0.8, "0%", "부부 수 = 성인 × 혼인율 ÷ 2", "marry")
+assume(8, "출산율 (부부당 하루 출생 수)", 0.5, "0.00", "빈 집·식량 여유가 있을 때. 0.5 = 부부당 이틀에 1명", "birth")
+assume(9, "사망률 (하루, 인구 대비)", 0.03, "0.0%", "노환 중심. 위기·전쟁 제외. 수명 25일 사회의 평균치 근사", "death")
+assume(10, "유랑민 유입 (하루, 명)", 1.0, "0.0", "인구가 아래 기준 미만일 때만", "wander")
+assume(11, "유랑민 유입 기준 인구", 20, "0", "", "wander_th")
+assume(12, "근무 가능 비율 (성인 중)", 0.8, "0%", "임신·병·노쇠 등 제외", "work")
+
+header(wa, 14, ["주민 판매", "값", "", "", "", "", "설명"])
+assume(15, "성인 1명 기본 판매가 (지폐)", 100, "#,##0", "등급 ×1, 숙련·나이 보정 ×1 기준", "price")
+assume(16, "숙련·나이 평균 보정", 1.0, "0.00", "전성기 성인·숙련자일수록 ↑", "skill")
+assume(17, "판매 시작 인구 (병 최대 인구 대비)", 0.85, "0%", "플레이어가 병이 거의 찼을 때부터 판다고 가정", "sell_th")
+assume(18, "최소 유지 인구 (명)", 10, "0", "이 아래로는 판매 불가 (기획서 10장)", "min_pop")
+
+header(wa, 20, ["등급", "출생 확률", "판매 배율", "기여", "", "", "설명"])
+grades = [("재능", 0.10, 2), ("희귀", 0.02, 5), ("영웅", 0.003, 20), ("유니크", 0.0001, 100)]
+put(wa, 21, 1, "일반")
+put(wa, 21, 2, "=1-SUM(B22:B25)", fmt="0.00%")
+put(wa, 21, 3, 1, inp=True, fmt="0")
+put(wa, 21, 4, "=B21*C21", fmt="0.000")
+for i, (g, p, m) in enumerate(grades, 22):
+    put(wa, i, 1, g)
+    put(wa, i, 2, p, inp=True, fmt="0.00%")
+    put(wa, i, 3, m, inp=True, fmt="0")
+    put(wa, i, 4, f"=B{i}*C{i}", fmt="0.000")
+put(wa, 26, 1, "등급 기대 배율 (평균)", bold=True)
+put(wa, 26, 4, "=SUM(D21:D25)", fmt="0.000", bold=True)
+put(wa, 26, 7, "판매 1명당 평균 = 기본가 × 기대 배율 × 숙련 보정", color=GREY)
+A["ev"] = "가정!$D$26"
+put(wa, 27, 1, "판매 1명당 평균 수입 (지폐)", bold=True)
+put(wa, 27, 4, f"={A['price']}*{A['ev']}*{A['skill']}", fmt="#,##0", bold=True)
+A["per_sale"] = "가정!$D$27"
+
+header(wa, 29, ["병 단계", "병", "최대 인구", "가격 (지폐)", "일일 판매 상한", "목표 이사 일수", "설명"])
+stages = [(1, "소형 (메이슨 자)", 40, 0, 3, 0),
+          (2, "중형 (어항·돔)", 100, 1500, 5, 14),
+          (3, "대형 (모래시계 등)", 250, 8000, 8, 21),
+          (4, "대형 수조", 600, 25000, 12, 35)]
+for i, s in enumerate(stages, 30):
+    for c, v in enumerate(s, 1):
+        put(wa, i, c, v, inp=c > 1, fmt="#,##0" if c in (3, 4) else None)
+put(wa, 30, 7, "목표 이사 일수 = 이전 병에서 다음 병을 사기까지 바라는 일수 (역산 시트에서 사용)", color=GREY)
+put(wa, 31, 7, "일일 판매 상한: 기획서 안은 3명 고정 → 병이 커지면 상한도 늘리는 안", color=GREY)
+STG = "가정!$A$30:$A$33"
+STG_MAX = "가정!$C$30:$C$33"
+STG_PRICE = "가정!$D$30:$D$33"
+STG_CAP = "가정!$E$30:$E$33"
+STG_DAYS = "가정!$F$30:$F$33"
+
+header(wa, 35, ["소비·생산 (buildings_v1 기준)", "값", "", "", "", "", "설명"])
+cons = [
+    ("식량 소비 간격 (초/명)", 900, "food_iv", "주민 1명이 15분마다 식량 1개 (v1: 10분 → 근무자 부족으로 완화)"),
+    ("땔감 소비 간격 (초/집, 겨울)", 600, "fuel_iv", "집 1채당 겨울 10분마다 통나무 1개"),
+    ("옷 교체 간격 (초/성인)", 14400, "cloth_iv", "4시간마다 1벌"),
+    ("도구 교체 간격 (초/근무자)", 21600, "tool_iv", "6시간마다 1개"),
+    ("맥주 간격 (초/성인)", 3600, "beer_iv", "1시간마다 1개 (행복)"),
+    ("집 1채 평균 거주 (명)", 4.5, "house", "오두막 4 · 목조 6 · 석조 8 혼합"),
+    ("짐꾼 비율 (생산 근무자 대비)", 0.2, "carrier", "운반 인력"),
+    ("건축공 비율 (인구 대비)", 0.05, "builder", "상시 건설·개축 인력"),
+    ("서비스직 (교회·술집·치료소 등) 비율 (인구 대비)", 0.06, "service", ""),
+]
+for i, (lab, v, k, n) in enumerate(cons, 36):
+    assume(i, lab, v, "#,##0.##", n, k)
+
+header(wa, 46, ["분당 산출 (건물 1개, 온대)", "값", "", "", "", "", "레시피"])
+rates = [
+    ("빵집 (빵)", 2.0, "r_bake", "밀가루1+물1 → 빵1 / 30초"),
+    ("방앗간 (밀가루)", 2.0, "r_mill", "밀1 → 밀가루1 / 30초"),
+    ("농장 (밀)", 1.0, "r_farm", "60초"),
+    ("우물 (물)", 2.0, "r_well", "30초"),
+    ("어부 (생선)", 0.75, "r_fish", "80초"),
+    ("사냥꾼 (고기)", 0.6, "r_hunt", "100초"),
+    ("나무꾼 (통나무)", 1.0, "r_wood", "60초"),
+    ("산림관 (나무 심기)", 1.333, "r_forest", "45초"),
+    ("제재소 (판자)", 2.0, "r_saw", "30초"),
+    ("목장 (양털)", 0.5, "r_wool", "120초"),
+    ("방직소 (옷)", 0.667, "r_cloth", "양털2 → 옷1 / 90초"),
+    ("광산 (철광석·석탄)", 1.0, "r_mine", "식량1 → 1 / 60초"),
+    ("제련소 (철)", 1.0, "r_smelt", "60초"),
+    ("대장간 (도구)", 1.0, "r_smith", "철1+판자1 → 도구1 / 60초"),
+    ("양조장 (맥주)", 1.0, "r_brew", "밀1+물1 → 맥주1 / 60초"),
+]
+for i, (lab, v, k, n) in enumerate(rates, 47):
+    assume(i, lab, v, "0.000", n, k)
+
+# 기후 표
+CL_R0 = 64
+header(wa, CL_R0, ["기후대", "농업", "임업", "어업", "사냥", "목축", "광업"])
+climate = [
+    ("온대", 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.70, 0.15, 0.15, 1.0, 1.0),
+    ("냉대", 0.8, 1.3, 1.0, 1.2, 0.9, 1.0, 0.50, 0.20, 0.30, 1.5, 1.5),
+    ("아열대", 0.9, 0.8, 1.0, 0.9, 1.0, 1.0, 0.70, 0.20, 0.10, 0.5, 0.8),
+    ("열대", 1.3, 1.1, 1.2, 1.0, 0.8, 0.9, 0.70, 0.20, 0.10, 0.0, 0.5),
+    ("툰드라", 0.0, 0.3, 1.3, 1.2, 1.2, 1.0, 0.00, 0.60, 0.40, 1.0, 2.0),
+    ("사막", 0.6, 0.3, 0.5, 0.7, 0.8, 1.2, 0.60, 0.10, 0.30, 0.3, 0.8),
+]
+header(wa, CL_R0, ["기후대", "농업", "임업", "어업", "사냥", "목축", "광업", "식량 중 빵", "식량 중 생선", "식량 중 고기", "땔감 배율", "옷 배율"])
+for c, w in zip("HIJKL", [10, 11, 11, 9, 8]):
+    wa.column_dimensions[c].width = w
+for i, row in enumerate(climate, CL_R0 + 1):
+    for c, v in enumerate(row, 1):
+        put(wa, i, c, v, inp=c > 1, fmt="0.0" if 1 < c < 8 or c > 10 else ("0%" if c > 1 else None))
+CL_END = CL_R0 + len(climate)
+put(wa, CL_END + 1, 1, "생산 배율은 buildings_v1.xlsx '기후 변형'과 동일. 식량 구성·땔감·옷 배율은 이 시트에서 추가한 가정 (툰드라 = 생선·순록고기로만)", color=GREY)
+put(wa, CL_END + 2, 1, "땔감 배율 = 겨울 땔감 소비 배수 (열대 0 = 땔감 불필요). 툰드라 1.0 = 흙지붕 단열 + 고래기름 난방 (2.0이면 근무자 부족). 옷 배율 = 옷 교체 속도 배수", color=GREY)
+CL_NAMES = f"가정!$A${CL_R0+1}:$A${CL_END}"
+
+
+def clim(col_letter, climate_cell):
+    return f"INDEX(가정!${col_letter}${CL_R0+1}:${col_letter}${CL_END},MATCH({climate_cell},{CL_NAMES},0))"
+
+
+wa.freeze_panes = "A4"
+
+# ============================================================ 인구별 운영 점검
+wp = wb.create_sheet("인구별 운영 점검")
+widths(wp, [40, 13, 13, 13, 13, 46])
+title(wp, "병 크기별 운영 점검", "그 인구를 먹이고 입히고 도구를 대려면 근무자가 몇 명 필요한지 → 가용 근무자 안에 들어오는가")
+put(wp, 3, 1, "기후대", bold=True)
+put(wp, 3, 2, "온대", inp=True)
+dv = DataValidation(type="list", formula1=f"={CL_NAMES}", allow_blank=False)
+wp.add_data_validation(dv); dv.add("B3")
+put(wp, 3, 3, "겨울 기준", inp=False, color=GREY)
+put(wp, 3, 4, "Y", inp=True)
+put(wp, 3, 6, "D3 = Y 이면 겨울 땔감 포함 (가장 힘든 시기 기준)", color=GREY)
+CC = "$B$3"
+header(wp, 5, ["항목", "소형 병", "중형 병", "대형 병", "대형 수조", "계산식"])
+rows = []
+
+
+def prow(r, label, fmls, fmt="0.0", note="", bold=False):
+    put(wp, r, 1, label, bold=bold)
+    for j, f in enumerate(fmls, 2):
+        put(wp, r, j, f, fmt=fmt, bold=bold)
+    put(wp, r, 6, note, color=GREY)
+
+
+cols = "BCDE"
+R = {}
+r = 6
+items = [
+    ("pop", "인구 (최대 인구 기준)", lambda c, i: f"=INDEX({STG_MAX},{i+1})", "0", "가정 시트 병 단계"),
+    ("adults", "성인", lambda c, i: f"={c}{{pop}}*{A['adult']}", "0", ""),
+    ("avail", "가용 근무자", lambda c, i: f"={c}{{adults}}*{A['work']}", "0", "성인 × 근무 가능 비율"),
+    ("houses", "집 수", lambda c, i: f"=ROUNDUP({c}{{pop}}/{A['house']},0)", "0", ""),
+    ("sec1", "— 분당 수요 —", None, None, ""),
+    ("food", "식량 / 분", lambda c, i: f"={c}{{pop}}*60/{A['food_iv']}", "0.00", ""),
+    ("fuel", "땔감 (통나무) / 분", lambda c, i: f"=IF($D$3=\"Y\",{c}{{houses}}*60/{A['fuel_iv']}*{clim('K',CC)},0)", "0.00", "× 기후 땔감 배율"),
+    ("cloth", "옷 / 분", lambda c, i: f"={c}{{adults}}*60/{A['cloth_iv']}*{clim('L',CC)}", "0.00", "× 기후 옷 배율"),
+    ("beer", "맥주 / 분", lambda c, i: f"={c}{{adults}}*60/{A['beer_iv']}", "0.00", ""),
+    ("sec2", "— 필요 근무자 —", None, None, ""),
+    ("w_bread", "빵 체인 (빵집·방앗간·농장·우물)", lambda c, i:
+        f"=IF({clim('B',CC)}=0,0,{c}{{food}}*{clim('H',CC)}*(1/{A['r_bake']}+1/{A['r_mill']}+1/({A['r_farm']}*{clim('B',CC)})+1/{A['r_well']}))",
+        "0.0", "식량 × 빵 비중 × 단계별 1/산출"),
+    ("w_fish", "어부", lambda c, i: f"={c}{{food}}*{clim('I',CC)}/({A['r_fish']}*{clim('D',CC)})", "0.0", ""),
+    ("w_hunt", "사냥꾼 (툰드라: 순록 목동)", lambda c, i: f"={c}{{food}}*{clim('J',CC)}/({A['r_hunt']}*{clim('E',CC)})", "0.0", ""),
+    ("w_fuel", "나무꾼 + 산림관 (땔감)", lambda c, i: f"={c}{{fuel}}*(1/{A['r_wood']}+1/{A['r_forest']})/{clim('C',CC)}", "0.0", ""),
+    ("w_cloth", "목장 + 방직소 (옷)", lambda c, i: f"={c}{{cloth}}*(2/({A['r_wool']}*{clim('F',CC)})+1/{A['r_cloth']})", "0.0", "옷 1 = 양털 2"),
+    ("w_beer", "양조 체인 (양조장·농장·우물)", lambda c, i:
+        f"=IF({clim('B',CC)}=0,0,{c}{{beer}}*(1/{A['r_brew']}+1/({A['r_farm']}*{clim('B',CC)})+1/{A['r_well']}))", "0.0", "툰드라는 맥주 없음 (0)"),
+    ("base", "소계 (도구 제외)", lambda c, i: f"=SUM({c}{{w_bread}}:{c}{{w_beer}})", "0.0", ""),
+    ("tools", "도구 / 분", lambda c, i: f"=({c}{{base}}*(1+{A['carrier']})+{c}{{pop}}*({A['builder']}+{A['service']}))*60/{A['tool_iv']}", "0.000", "근무자 수 기준"),
+    ("w_tool", "도구 체인 (대장간·제련·광산2·판자·광부 식량)", lambda c, i:
+        f"={c}{{tools}}*(1/{A['r_smith']}+1/{A['r_smelt']}+2/({A['r_mine']}*{clim('G',CC)})+0.5/{A['r_saw']}+0.5*(1/{A['r_wood']}+1/{A['r_forest']})/{clim('C',CC)}+2/{A['r_fish']})",
+        "0.0", "광부 식량은 어업으로 단순화"),
+    ("w_prod", "생산 근무자 합계", lambda c, i: f"={c}{{base}}+{c}{{w_tool}}", "0.0", ""),
+    ("w_carry", "짐꾼", lambda c, i: f"={c}{{w_prod}}*{A['carrier']}", "0.0", ""),
+    ("w_build", "건축공", lambda c, i: f"={c}{{pop}}*{A['builder']}", "0.0", ""),
+    ("w_serv", "서비스직", lambda c, i: f"={c}{{pop}}*{A['service']}", "0.0", ""),
+    ("need", "필요 근무자 합계", lambda c, i: f"={c}{{w_prod}}+{c}{{w_carry}}+{c}{{w_build}}+{c}{{w_serv}}", "0.0", ""),
+    ("sec3", "— 판정 —", None, None, ""),
+    ("util", "근무자 사용률 (필요 ÷ 가용)", lambda c, i: f"={c}{{need}}/{c}{{avail}}", "0%", "70% 이하 = 여유 / 70~90% = 빡빡 / 90% 초과 = 불가"),
+    ("verdict", "판정", lambda c, i: f'=IF({c}{{util}}<=0.7,"여유",IF({c}{{util}}<=0.9,"빡빡","부족"))', None, ""),
+    ("spare", "남는 근무자 (병사·확장용)", lambda c, i: f"={c}{{avail}}-{c}{{need}}", "0.0", ""),
+]
+for key, *_ in items:
+    R[key] = r; r += 1
+for key, label, fn, fmt, note in items:
+    rr = R[key]
+    if fn is None:
+        put(wp, rr, 1, label, bold=True)
+        for j in range(1, 7):
+            wp.cell(row=rr, column=j).fill = SUB
+        continue
+    fmls = [fn(c, i).format(**R) for i, c in enumerate(cols)]
+    prow(rr, label, fmls, fmt=fmt, note=note, bold=key in ("need", "util", "verdict"))
+wp.freeze_panes = "B6"
+PR = R
+
+# ============================================================ 기후 비교
+wcmp = wb.create_sheet("기후 비교")
+widths(wcmp, [30] + [12] * 6)
+title(wcmp, "기후대별 비교 (중형 병, 인구 100명, 겨울 기준)", "'인구별 운영 점검'과 같은 공식. 기후마다 얼마나 빡빡한지 한눈에")
+names = [c[0] for c in climate]
+header(wcmp, 4, ["항목"] + names)
+pop_cell = f"INDEX({STG_MAX},2)"
+lines = [
+    ("필요 근무자 (식량)", "food"),
+    ("필요 근무자 (땔감)", "fuel"),
+    ("필요 근무자 (옷)", "cloth"),
+    ("필요 근무자 합계", "need"),
+    ("가용 근무자", "avail"),
+    ("근무자 사용률", "util"),
+    ("판정", "verdict"),
+]
+for j, nm in enumerate(names, 2):
+    col = get_column_letter(j)
+    cc = f"{col}$4"
+    pop = pop_cell
+    adults = f"({pop}*{A['adult']})"
+    houses = f"ROUNDUP({pop}/{A['house']},0)"
+    food = f"({pop}*60/{A['food_iv']})"
+    fuel = f"({houses}*60/{A['fuel_iv']}*{clim('K',cc)})"
+    cloth = f"({adults}*60/{A['cloth_iv']}*{clim('L',cc)})"
+    beer = f"({adults}*60/{A['beer_iv']})"
+    w_food = (f"(IF({clim('B',cc)}=0,0,{food}*{clim('H',cc)}*(1/{A['r_bake']}+1/{A['r_mill']}+1/({A['r_farm']}*{clim('B',cc)})+1/{A['r_well']}))"
+              f"+{food}*{clim('I',cc)}/({A['r_fish']}*{clim('D',cc)})+{food}*{clim('J',cc)}/({A['r_hunt']}*{clim('E',cc)}))")
+    w_fuel = f"({fuel}*(1/{A['r_wood']}+1/{A['r_forest']})/{clim('C',cc)})"
+    w_cloth = f"({cloth}*(2/({A['r_wool']}*{clim('F',cc)})+1/{A['r_cloth']}))"
+    w_beer = f"IF({clim('B',cc)}=0,0,{beer}*(1/{A['r_brew']}+1/({A['r_farm']}*{clim('B',cc)})+1/{A['r_well']}))"
+    put(wcmp, 5, j, f"={w_food}", fmt="0.0")
+    put(wcmp, 6, j, f"={w_fuel}", fmt="0.0")
+    put(wcmp, 7, j, f"={w_cloth}", fmt="0.0")
+    base = f"({col}5+{col}6+{col}7+{w_beer})"
+    tools = f"(({base}*(1+{A['carrier']})+{pop}*({A['builder']}+{A['service']}))*60/{A['tool_iv']})"
+    w_tool = (f"({tools}*(1/{A['r_smith']}+1/{A['r_smelt']}+2/({A['r_mine']}*{clim('G',cc)})+0.5/{A['r_saw']}"
+              f"+0.5*(1/{A['r_wood']}+1/{A['r_forest']})/{clim('C',cc)}+2/{A['r_fish']}))")
+    put(wcmp, 8, j, f"=({base}+{w_tool})*(1+{A['carrier']})+{pop}*({A['builder']}+{A['service']})", fmt="0.0", bold=True)
+    put(wcmp, 9, j, f"={adults}*{A['work']}", fmt="0.0")
+    put(wcmp, 10, j, f"={col}8/{col}9", fmt="0%", bold=True)
+    put(wcmp, 11, j, f'=IF({col}10<=0.7,"여유",IF({col}10<=0.9,"빡빡","부족"))', bold=True)
+for i, (lab, _) in enumerate(lines, 5):
+    put(wcmp, i, 1, lab, bold=lab in ("필요 근무자 합계", "근무자 사용률", "판정"))
+wcmp["A13"] = "※ 필요 근무자 합계 = (식량+땔감+옷+맥주+도구 체인) × (1+짐꾼 비율) + 건축공·서비스직"
+wcmp["A13"].font = F(color=GREY)
+
+# ============================================================ 이사 시뮬레이션
+ws = wb.create_sheet("이사 시뮬레이션")
+DAYS = 150
+cols = ["일차", "병 단계", "최대 인구", "인구 (아침)", "성인", "사망", "판매", "출생", "유랑민",
+        "인구 (밤)", "판매 수입", "지폐 (구매 전)", "다음 병 가격", "이사", "지폐 (밤)"]
+widths(ws, [7, 8, 9, 10, 8, 7, 7, 7, 8, 10, 10, 12, 11, 7, 11])
+title(ws, "이사 시뮬레이션 (하루 단위)", "시작 인구에서 출발해 출생·사망·판매로 인구가 변하고, 판매 수입으로 다음 병을 사면 바로 이사 (주민은 모두 데려감)")
+H0 = 4
+header(ws, H0, cols)
+for d in range(1, DAYS + 1):
+    r = H0 + d
+    p = r - 1
+    put(ws, r, 1, d)
+    put(ws, r, 2, 1 if d == 1 else f"=B{p}+N{p}")
+    put(ws, r, 3, f"=INDEX({STG_MAX},B{r})", fmt="#,##0")
+    put(ws, r, 4, f"={A['start']}" if d == 1 else f"=J{p}", fmt="0.0")
+    put(ws, r, 5, f"=D{r}*{A['adult']}", fmt="0.0")
+    put(ws, r, 6, f"=D{r}*{A['death']}", fmt="0.00")
+    put(ws, r, 7, f"=IF(D{r}>=C{r}*{A['sell_th']},MIN(INDEX({STG_CAP},B{r}),MAX(0,D{r}-F{r}-{A['min_pop']})),0)", fmt="0.0")
+    put(ws, r, 8, f"=MIN(E{r}*{A['marry']}/2*{A['birth']},MAX(0,C{r}-(D{r}-F{r}-G{r})))", fmt="0.00")
+    put(ws, r, 9, f"=IF(D{r}<{A['wander_th']},MIN({A['wander']},MAX(0,C{r}-(D{r}-F{r}-G{r})-H{r})),0)", fmt="0.0")
+    put(ws, r, 10, f"=D{r}-F{r}-G{r}+H{r}+I{r}", fmt="0.0")
+    put(ws, r, 11, f"=G{r}*{A['per_sale']}", fmt="#,##0")
+    put(ws, r, 12, f"=K{r}" if d == 1 else f"=O{p}+K{r}", fmt="#,##0")
+    put(ws, r, 13, f'=IF(B{r}<4,INDEX({STG_PRICE},B{r}+1),0)', fmt="#,##0")
+    put(ws, r, 14, f"=IF(AND(B{r}<4,L{r}>=M{r}),1,0)")
+    put(ws, r, 15, f"=L{r}-N{r}*M{r}", fmt="#,##0")
+LAST = H0 + DAYS
+ws.freeze_panes = f"B{H0+1}"
+
+ch = LineChart(); ch.title = "인구 변화"; ch.y_axis.title = "인구"; ch.x_axis.title = "일차"
+ch.add_data(Reference(ws, min_col=10, min_row=H0, max_row=LAST), titles_from_data=True)
+ch.add_data(Reference(ws, min_col=3, min_row=H0, max_row=LAST), titles_from_data=True)
+ch.set_categories(Reference(ws, min_col=1, min_row=H0 + 1, max_row=LAST))
+ch.height = 8; ch.width = 18
+ws.add_chart(ch, "Q4")
+ch2 = LineChart(); ch2.title = "지폐 보유"; ch2.y_axis.title = "지폐"; ch2.x_axis.title = "일차"
+ch2.add_data(Reference(ws, min_col=15, min_row=H0, max_row=LAST), titles_from_data=True)
+ch2.set_categories(Reference(ws, min_col=1, min_row=H0 + 1, max_row=LAST))
+ch2.height = 8; ch2.width = 18
+ws.add_chart(ch2, "Q22")
+
+SIM_B = f"'이사 시뮬레이션'!$B${H0+1}:$B${LAST}"
+SIM_D = f"'이사 시뮬레이션'!$D${H0+1}:$D${LAST}"
+SIM_K = f"'이사 시뮬레이션'!$K${H0+1}:$K${LAST}"
+SIM_G = f"'이사 시뮬레이션'!$G${H0+1}:$G${LAST}"
+
+# ============================================================ 판매가·병 가격 역산
+wv = wb.create_sheet("병 가격 역산")
+widths(wv, [26, 16, 14, 14, 16, 16, 16, 40])
+title(wv, "병 가격 역산", "목표 이사 일수(가정 시트)를 넣으면, 그 일수 안에 살 수 있는 병 가격을 거꾸로 계산")
+header(wv, 4, ["다음 병", "현재 가격", "이전 병 판매 상한/일", "하루 최대 수입", "현재 가격 → 일수", "목표 이사 일수", "추천 가격", "메모"])
+for i, k in enumerate((2, 3, 4), 5):
+    put(wv, i, 1, f"=INDEX(가정!$B$30:$B$33,{k})")
+    put(wv, i, 2, f"=INDEX({STG_PRICE},{k})", fmt="#,##0")
+    put(wv, i, 3, f"=INDEX({STG_CAP},{k-1})", fmt="0")
+    put(wv, i, 4, f"=C{i}*{A['per_sale']}", fmt="#,##0")
+    put(wv, i, 5, f"=B{i}/D{i}", fmt="0.0")
+    put(wv, i, 6, f"=INDEX({STG_DAYS},{k})", fmt="0")
+    put(wv, i, 7, f"=ROUND(F{i}*D{i},-2)", fmt="#,##0", bold=True)
+    put(wv, i, 8, "판매 상한까지 매일 판다고 가정 (인구가 차는 기간 제외)", color=GREY)
+put(wv, 9, 1, "시뮬레이션 결과", bold=True)
+header(wv, 10, ["항목", "값", "", "", "", "", "", "메모"])
+res = [
+    ("중형 병으로 이사한 날", f'=IFERROR(MATCH(2,{SIM_B},0),"150일 내 미도달")'),
+    ("대형 병으로 이사한 날", f'=IFERROR(MATCH(3,{SIM_B},0),"150일 내 미도달")'),
+    ("대형 수조로 이사한 날", f'=IFERROR(MATCH(4,{SIM_B},0),"150일 내 미도달")'),
+    ("150일간 판매한 주민 (명)", f"=SUM({SIM_G})"),
+    ("150일간 판매 수입 (지폐)", f"=SUM({SIM_K})"),
+    ("150일 차 인구", f"=INDEX({SIM_D},150)"),
+    ("병 1개 수명 대비 (첫 이사일 ÷ 주민 수명 25일)", "=IFERROR(B11/25,\"-\")"),
+]
+for i, (lab, f) in enumerate(res, 11):
+    put(wv, i, 1, lab)
+    put(wv, i, 2, f, fmt="#,##0.0" if "비" in lab else "#,##0", bold=i <= 13)
+put(wv, 11, 8, "일차 = 이사한 다음 날 아침부터 새 병", color=GREY)
+
+# ============================================================ 오프라인 12시간
+wo = wb.create_sheet("오프라인 12시간")
+widths(wo, [36, 13, 13, 13, 13, 40])
+title(wo, "오프라인 12시간 점검", "앱을 꺼둔 12시간 동안 (판매는 플레이어가 직접 하므로 0)")
+header(wo, 4, ["항목", "소형", "중형", "대형", "수조", "메모"])
+put(wo, 5, 1, "인구 (최대)")
+put(wo, 6, 1, "12시간 식량 소비 (개)")
+put(wo, 7, 1, "→ 비축이 필요하면: 창고 식량 (개)")
+put(wo, 8, 1, "12시간 출생 (명)")
+put(wo, 9, 1, "12시간 사망 (명)")
+for j, c in enumerate("BCDE", 2):
+    put(wo, 5, j, f"=INDEX({STG_MAX},{j-1})", fmt="#,##0")
+    put(wo, 6, j, f"={c}5*12*3600/{A['food_iv']}", fmt="#,##0")
+    put(wo, 7, j, f"={c}6*0.25", fmt="#,##0")
+    put(wo, 8, j, f"={c}5*{A['adult']}*{A['marry']}/2*{A['birth']}/2", fmt="0.0")
+    put(wo, 9, j, f"={c}5*{A['death']}/2", fmt="0.0")
+put(wo, 7, 6, "생산이 수요를 맞춘다는 전제에서, 흔들림 대비 25% 비축", color=GREY)
+put(wo, 8, 6, "병이 가득 차 있으면 실제 출생은 0 (빈 집 없음)", color=GREY)
+
+# ============================================================ 안내 (맨 앞)
+wi = wb.create_sheet("안내", 0)
+widths(wi, [22, 100])
+info = [
+    ("나의 작은 지구 — 경제·인구 밸런스 시트 v1", ""),
+    ("", ""),
+    ("목적", "병 크기별로 경제가 굴러가는지, 주민 판매로 큰 병까지 며칠 걸리는지 검증해 병 가격·판매가를 정한다"),
+    ("", ""),
+    ("시트", "내용"),
+    ("가정", "모든 입력값 (인구·판매·병 단계·소비·생산·기후). 여기만 고치면 됨"),
+    ("인구별 운영 점검", "병 크기별 필요 근무자 vs 가용 근무자. 기후대·겨울 여부 선택 가능"),
+    ("기후 비교", "인구 100명 기준 6개 기후대 나란히 비교"),
+    ("이사 시뮬레이션", "150일 하루 단위 시뮬레이션: 인구·판매·지폐·이사 시점 + 그래프"),
+    ("병 가격 역산", "목표 이사 일수 → 추천 병 가격. 시뮬레이션 결과 요약"),
+    ("오프라인 12시간", "앱을 꺼둔 동안의 소비·출생·사망"),
+    ("", ""),
+    ("편집 방법", "노란 배경 + 파란 글씨 = 입력 칸. 검정 = 수식"),
+    ("단위", "시간은 현실 기준. 시뮬레이션 1행 = 현실 1일. 주민 수명 약 25일"),
+    ("한계", "근무자 계산은 체인 비율을 연속값으로 계산 (건물 수 올림 없음) → 실제보다 약간 낙관적. 위기·전쟁·교역은 미반영"),
+]
+for r, (a, b) in enumerate(info, 1):
+    wi.cell(row=r, column=1, value=a).font = F(bold=bool(a))
+    wi.cell(row=r, column=2, value=b).font = F()
+wi["A1"].font = F(bold=True, size=14)
+for c in ("A5", "B5"):
+    wi[c].font = F(bold=True, color="FFFFFF"); wi[c].fill = HDR
+wi["A13"].fill = INP; wi["A13"].font = F(bold=True, color=BLUE)
+
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "balance_v1.xlsx")
+wb.save(out)
+print(os.path.abspath(out))
