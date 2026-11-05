@@ -2,4 +2,4 @@
 
 유리병 속 작은 중세 문명을 키우는 모바일 3D 정착·테라리움 시뮬레이션.
 
-- 📄 [게임 기획서 v0.8](docs/GAME_DESIGN.md)
+- 📄 [게임 기획서 v0.9](docs/GAME_DESIGN.md)
