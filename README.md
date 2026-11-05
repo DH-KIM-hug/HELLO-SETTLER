@@ -4,3 +4,4 @@
 
 - 📄 [게임 기획서 v1.1](docs/GAME_DESIGN.md)
 - 📊 [아이 고유 특징 데이터 v1](docs/traits_v1.xlsx)
+- 🏗 [건물·생산 명세서 v1](docs/BUILDINGS.md) · [데이터](docs/buildings_v1.xlsx)
