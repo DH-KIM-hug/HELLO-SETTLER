@@ -28,7 +28,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
 .chip b{color:var(--ink);font-size:13px}
 .hint{pointer-events:auto;align-self:center;max-width:min(92%,460px);padding:7px 12px;border-radius:12px;background:rgba(42,38,32,.86);color:var(--paper);font-size:13px;text-align:center}
 .tools{position:absolute;left:0;right:0;bottom:0;padding-bottom:max(12px, env(safe-area-inset-bottom,0px));padding-left:max(12px, env(safe-area-inset-left,0px));padding-right:max(12px, env(safe-area-inset-right,0px));display:flex;justify-content:center;pointer-events:none}
-.toolrow{pointer-events:auto;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:6px;background:var(--ink);border-radius:20px;width:min(100%,520px)}
+.toolrow{pointer-events:auto;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;padding:6px;background:var(--ink);border-radius:20px;width:min(100%,520px)}
 .tool{appearance:none;border:0;background:transparent;color:var(--paper);font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;min-height:54px;border-radius:14px;cursor:pointer}
 .tool svg{width:22px;height:22px}
 .tool[aria-pressed="true"]{background:var(--moss)}
@@ -84,6 +84,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
       <button class="tool" id="tRain" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg>물 뿌리기</button>
       <button class="tool" id="tSpeed" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-3M12 2v3"/></svg><span id="speedLbl">×60</span></button>
       <button class="tool" id="tAway" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg>자리비움</button>
+      <button class="tool" id="tTurn" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.3-5.7"/><path d="M20 4v5h-5"/></svg>돌리기</button>
       <button class="tool" id="tBook" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 9h6M9 13h6"/></svg>연대기</button>
     </div>
   </div>
@@ -142,10 +143,12 @@ function wetness(x, y) {
   if (!S || !S.wetC) return 0.3;
   const k = cellIdx(x, y); return clamp01(0.12 + S.wetC[k] * 0.9 - 0.1 * sunward(x, y));
 }
-function farmMult(x, y) { const w = warmth(x, y), m = wetness(x, y); return Math.max(0.5, Math.min(1.5, (0.6 + 0.6 * w) * (0.65 + 0.7 * m))); }
+const saltAt = (x, y) => (S && S.salt ? S.salt[cellIdx(x, y)] : 0);
+function farmMult(x, y) { const w = warmth(x, y), m = wetness(x, y), sl = saltAt(x, y); return Math.max(0.15, Math.min(1.5, (0.6 + 0.6 * w) * (0.65 + 0.7 * m) / (1 + sl * 300))); }
 function climateText(x, y) {
   const w = warmth(x, y), m = wetness(x, y);
-  return `${w > 0.66 ? '따뜻함' : w > 0.36 ? '선선함' : '서늘함'} · ${m > 0.6 ? '물가라 촉촉함' : m > 0.35 ? '촉촉함' : '건조함'}`;
+  const sl = saltAt(x, y);
+  return `${w > 0.66 ? '따뜻함' : w > 0.36 ? '선선함' : '서늘함'} · ${m > 0.6 ? '물가라 촉촉함' : m > 0.35 ? '촉촉함' : '건조함'}${sl > 0.003 ? ' · 소금기 많음' : ''}`;
 }
 
 const DEF = {
@@ -160,10 +163,11 @@ const DEF = {
   '방앗간': {plank:3, stone:3, time:150, era:1, size:1.2, job:true, in:{'밀':1}, out:{'밀가루':1}, cycle:30, color:'#D9CDB8', desc:'밀 → 밀가루'},
   '빵집':   {plank:2, stone:3, time:150, era:1, size:1.2, job:true, in:{'밀가루':1,'물':1}, out:{'빵':1}, cycle:30, color:'#E2B07A', desc:'밀가루+물 → 빵'},
   '목조주택': {plank:4, stone:1, time:120, era:1, size:1.2, cap:6, color:'#E0D2B8', desc:'6명이 사는 집'},
+  '소금밭':  {plank:2, stone:0, time:60,  era:0, size:1.0, job:true, out:{'소금':1}, cycle:90, color:'#EDE8DA', desc:'마른 호수 바닥의 소금 캐기 (소금 들판 위에)'},
 };
 const ERAS = ['개척기', '마을'];
 // 창고에 이만큼 넘게 있으면 그 물자 생산을 쉬고 다른 일을 돕는다
-const ENOUGH = {'통나무': 20, '판자': 40, '돌': 30, '물': 20, '밀가루': 20};
+const ENOUGH = {'통나무': 20, '판자': 40, '돌': 30, '물': 20, '밀가루': 20, '소금': 40};
 const FOODS = ['건량', '빵', '밀'];  // 창고 식량 (낟알은 따로)
 const NAMES_M = ['브루노','디터','에밀','구스타프','요나스','루카스','니코','오스카','지몬','파울','막스','한네스','테오','빌리'];
 const NAMES_F = ['아다','클라라','프리다','하나','이다','카타','미아','파울라','로사','테아','우르슬라','빌마','엘라','넬레'];
@@ -222,7 +226,7 @@ function buildHydro() {
   HY = {cells, nb, warm, rim, streaks: [], tick: 0};
 }
 function hydroStep(scale) {
-  const {h, w, flux} = S, {cells, nb, warm, rim} = HY;
+  const {h, w, flux, salt} = S, {cells, nb, warm, rim} = HY;
   // 들어오는 물
   for (const d of S.drips) w[cellIdx(d.x, d.y)] += 0.0013 * scale * (0.6 + (S.humid || 0.5));
   // 유리벽의 '골': 뚜껑 경사가 모이는 몇 군데로만 물이 흘러내린다 (그늘일수록 많이)
@@ -234,7 +238,9 @@ function hydroStep(scale) {
     const s0 = h[k] + wk; let best = -1, bs = s0;
     for (const n of nb[k]) { const sn = h[n] + w[n]; if (sn < bs) { bs = sn; best = n; } }
     if (best < 0) continue;
-    const mv = Math.min(wk, (s0 - bs) * 0.5); w[k] -= mv; w[best] += mv; flux[k] += mv;
+    const mv = Math.min(wk, (s0 - bs) * 0.5);
+    if (salt[k] > 0 && wk > 0.0005) { const sm = salt[k] * (mv / wk); salt[k] -= sm; salt[best] += sm; }   // 녹은 소금은 물과 함께 흐른다
+    w[k] -= mv; w[best] += mv; flux[k] += mv;
   }
   // 증발과 스며듦
   for (const k of cells) { let v = w[k]; if (v <= 0) continue;
@@ -266,7 +272,7 @@ function newWorld() {
   const st = {
     t: 0, startClock, speedIdx: 2, offline: false, auto: true,
     era: 0, eraPts: 0, faith: 30, fear: 0, tapLog: [],
-    stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22},
+    stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22, '소금': 0},
     manna: [], mannaBatches: [], firstHarvestAt: null, mannaEnded: false, lastDawnIdx: null, arrivalManna: false,
     trees: [], rocks: [], humid: 0.5, b: [], p: [], nextId: 1,
     book: [], paths: new Float32Array(128 * 128), rain: null, ripples: [], deficit: 0,
@@ -281,11 +287,12 @@ function newWorld() {
   }
   for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
   // 지형(높이)과 처음 물: 창조 때 부은 물이 오목한 곳에 고여 있다
-  st.h = new Float32Array(N * N); st.w = new Float32Array(N * N); st.flux = new Float32Array(N * N); st.wetC = new Float32Array(N * N);
+  st.h = new Float32Array(N * N); st.w = new Float32Array(N * N); st.flux = new Float32Array(N * N); st.wetC = new Float32Array(N * N); st.salt = new Float32Array(N * N); st.rot = 0;
   for (let k = 0; k < N * N; k++) st.h[k] = heightAt(cellX(k), cellY(k));
   st.drips = [{x: 11, y: 11, name: '큰 물방울 호수'}, {x: -13, y: -12, name: '작은 물방울 호수'}];
   const fill = (cx, cy, rad, add) => { const lvl = st.h[cellIdxRaw(cx, cy)] + add; for (let k = 0; k < N * N; k++) { const x = cellX(k), y = cellY(k); if (Math.hypot(x - cx, y - cy) < rad) st.w[k] = Math.max(st.w[k], lvl - st.h[k]); } };
   fill(11, 11, 7, 0.28); fill(-13, -12, 5, 0.18); fill(-19, 9, 14, 0.42);
+  for (let k = 0; k < N * N; k++) st.salt[k] = st.w[k] * 0.03;   // 창조 때 부은 물에 녹아 있던 광물 (물방울·벽의 물은 증류수라 소금이 없다)
   st.basins = [{name: '서쪽 큰 호수', x: -19, y: 9, r: 11, area0: 0, said: 0}];
   st.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)}));
   st.trees = st.trees.filter(t => st.w[cellIdxRaw(t.x, t.y)] < 0.005);
@@ -360,6 +367,7 @@ function foodTotal() {
   return n;
 }
 function consume(need) {
+  if ((S.stock['소금'] || 0) > 0) { S.stock['소금'] = Math.max(0, S.stock['소금'] - need / 400); need *= 0.85; }   // 소금 절임: 음식이 덜 상해 덜 든다
   // 낟알(상하기 전, 오래된 것부터) → 들판 낟알 → 건량 → 빵 → 밀(죽)
   for (const m of S.mannaBatches) { const take = Math.min(m.amt, need); m.amt -= take; need -= take; if (need <= 0) break; }
   if (need > 0) for (const m of S.manna) { const take = Math.min(m.amt, need); m.amt -= take; need -= take; if (need <= 0) break; }
@@ -472,6 +480,13 @@ function updateBuilding(b, dt) {
   if (b.type === '농장' && b.readyAt === null) b.readyAt = S.t + GROW_FIRST;
   // 생산·가공: 일꾼이 배정돼 있으면 밤에도 돌아간다 (밸런스 시트와 같은 24시간 기준)
   if (!d.job || !d.out || GATHER.includes(b.type) || !b.worker) return;
+  if (b.type === '소금밭') {   // 둘레 소금 들판에서 소금을 긁어 모은다
+    if ((S.stock['소금'] || 0) + (b.out['소금'] || 0) >= ENOUGH['소금']) return;
+    b.timer += dt; if (b.timer < d.cycle) return; b.timer = 0;
+    let got = 0; for (const k of HY.cells) { if (got >= 0.0005) break; if (S.w[k] < 0.004 && S.salt[k] > 0.0004 && Math.hypot(cellX(k) - b.x, cellY(k) - b.y) < 3.5) { const t = Math.min(S.salt[k], 0.0005 - got); S.salt[k] -= t; got += t; } }
+    if (got >= 0.00045) { add(b.out, '소금', 1); if (!S.firstSalt) { S.firstSalt = true; const w2 = person(b.worker); log(`${w2 ? w2.name : '누군가'}${w2 ? josa(w2.name, '이', '가') : '가'} 마른 호수 바닥에서 흰 소금을 긁어 모았다. 소금에 절인 생선은 겨울을 난다.`); } }
+    return;
+  }
   if (b.type === '농장' && S.t < b.readyAt) return;
   if (Object.keys(d.out).every(k => ENOUGH[k] !== undefined && (S.stock[k] || 0) + (b.out[k] || 0) >= ENOUGH[k])) return;
   if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) return;
@@ -800,6 +815,7 @@ function idleChatter() {
 }
 
 // ───────────────────────── 자율 건설 (촌장) ─────────────────────────
+function saltFlat() { let best = null, bv = 0.004; for (const k of HY.cells) if (S.w[k] < 0.004 && S.salt[k] > bv) { bv = S.salt[k]; best = {x: cellX(k), y: cellY(k)}; } return best; }
 function chief() { return alive().filter(p => p.age >= 4).sort((a, b) => b.age - a.age)[0]; }
 function autoBuild() {
   const pending = S.b.filter(b => !b.built).length; if (pending >= 2) return;
@@ -822,6 +838,7 @@ function autoBuild() {
   else if (S.stock['판자'] < 12 && !has('제재소')) want = '제재소';
   else if (S.stock['돌'] < 6 && !has('채석장')) want = '채석장';
   else if (S.trees.filter(t => t.s === 'tree').length < 40 && !has('산림관')) want = '산림관';
+  else if (!has('소금밭') && saltFlat()) want = '소금밭';
   else if (S.era >= 1 && !has('방앗간')) want = '방앗간';
   else if (S.era >= 1 && !has('빵집')) want = '빵집';
   // 비상용 판자 4장은 남긴다 (나무꾼·제재소 제외) — 판자가 바닥나 아무것도 못 짓는 교착 방지
@@ -854,6 +871,7 @@ function findSpot(type) {
   let cx = 0, cy = 0;
   if (type === '나무꾼' || type === '산림관') { const t = S.trees.filter(t => t.s === 'tree').sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (t) { cx = t.x * 0.85; cy = t.y * 0.85; } }
   if (type === '농장') { let best = null, bv = 0; for (let k = 0; k < 200; k++) { const a = rnd() * Math.PI * 2, d = 3 + rnd() * 14; const x = Math.cos(a) * d, y = Math.sin(a) * d; const v = farmMult(x, y) - d * 0.02; if (v > bv && free(x, y, DEF[type].size)) { bv = v; best = {x, y}; } } if (best) { clearTrees(best.x, best.y, DEF[type].size); return best; } }
+  if (type === '소금밭') { const f = saltFlat(); if (f) { for (let d = 0; d < 6; d += 0.5) for (let a = 0; a < 12; a++) { const x = f.x + Math.cos(a / 2) * d, y = f.y + Math.sin(a / 2) * d; if (free(x, y, DEF[type].size)) { clearTrees(x, y, DEF[type].size); return {x, y}; } } } }
   if (type === '채석장') { const r = S.rocks.filter(r => r.amt > 0).sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (r) { cx = r.x * 0.8; cy = r.y * 0.8; } }
   for (let rad = 2; rad < R; rad += 0.8) for (let k = 0; k < 24; k++) {
     const a = k / 24 * Math.PI * 2 + rad;
@@ -874,8 +892,27 @@ function lakeWatch() {
     const elder = alive().filter(q => q.age >= 15).sort((a, c) => c.age - a.age)[0];
     if (b.said < 1 && f < 0.8) { b.said = 1; log(`${b.name}의 물가가 조금씩 물러난다. 이 호수로 흘러드는 강이 없다.`); }
     if (b.said < 2 && f < 0.5) { b.said = 2; log(`${b.name}${josa(b.name, '이', '가')} 절반 넘게 말랐다. 드러난 호수 바닥에 흰 소금기가 번진다.`); if (elder) say(elder, '내가 어릴 적엔 저기까지 물이었지', 7); }
-    if (b.said < 3 && f < 0.12) { b.said = 3; log(`${b.name}${josa(b.name, '이', '가')} 마침내 사라졌다. 아이들은 그곳에 호수가 있었다는 걸 믿지 않는다.`); toast(`${b.name}${josa(b.name, '이', '가')} 말라 사라졌어요`); }
+    if (b.said < 3 && f < 0.12) { b.said = 3; log(`${b.name}${josa(b.name, '이', '가')} 마침내 사라졌다. 그 자리에 하얀 소금 들판이 남았다. 아이들은 그곳에 호수가 있었다는 걸 믿지 않는다.`); toast(`${b.name}${josa(b.name, '이', '가')} 말라 사라졌어요`); }
   }
+}
+function rotPt(o) { const x = o.x, y = o.y; o.x = -y; o.y = x; }
+function rotGrid(a, n) { const b = new Float32Array(n * n); for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) b[i * n + (n - 1 - j)] = a[j * n + i]; return b; }
+function rotateJar() {
+  for (const k of ['h', 'w', 'flux', 'wetC', 'salt']) S[k] = rotGrid(S[k], N);
+  S.paths = rotGrid(S.paths, 128);
+  for (const list of [S.trees, S.rocks, S.b, S.manna, S.drips, S.grooves, S.basins, S.ripples]) for (const o of list) rotPt(o);
+  for (const p of S.p) { rotPt(p); for (const st of p.steps) if (st.k === 'walk') rotPt(st); }
+  rotPt(S.fire); if (S.rain) rotPt(S.rain);
+  for (const b of S.b) b.cm = null;
+  S.rot = ((S.rot || 0) + 1) % 4;
+  buildHydro(); updateWet(); GROUND = null;
+  // 주민에게는 해가 하늘을 건너간 사건
+  S.turns = (S.turns || []).filter(t => S.t - t < DAY); S.turns.push(S.t);
+  const awake = alive().filter(q => !q.sleeping);
+  if (S.turns.length >= 3) { S.fear = Math.min(100, S.fear + 15); for (const q of awake.slice(0, 3)) say(q, '세상이 또 돈다… 무서워', 5); log('하루에도 몇 번씩 해가 하늘을 건너간다. 사람들이 두려워 집 안에 숨었다.'); }
+  else { blessAll(0.06); for (const q of awake.slice(0, 3)) say(q, pick(['해가 옮겨갔다!', '하늘이 돌았어!', '거인님이 세상을 돌리셨다']), 6);
+    log('땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.'); }
+  toast('병을 돌렸어요. 볕 드는 쪽이 바뀌어 강 물줄기가 달라집니다. 물방울 호수 자리는 그대로예요.');
 }
 function giantTap() {
   S.tapLog = S.tapLog.filter(t => S.t - t < 600); S.tapLog.push(S.t);
@@ -890,6 +927,7 @@ function giantTap() {
 }
 function giantRain(wx, wy) {
   S.rain = {x: wx, y: wy, t: 600, natural: false};
+  for (const k of HY.cells) { const d = Math.hypot(cellX(k) - wx, cellY(k) - wy); if (d < 4) S.w[k] += 0.012 * (1 - d / 4); }   // 진짜 물이 더해진다 → 소금을 녹여 낮은 곳으로 씻어낸다
   for (const b of S.b) if (b.type === '농장' && Math.hypot(b.x - wx, b.y - wy) < 8) { b.boost = HOUR; if (b.readyAt && b.readyAt > S.t) b.readyAt -= 1800; }
   S.humid = Math.min(1, (S.humid || 0) + 0.1);
   // 기적: 본 사람의 믿음이 크게 오른다 (같은 기적이 잦으면 감동이 줄어듦)
@@ -1161,10 +1199,10 @@ function buildGround() {
     const shade = (nx * LIGHT.x + ny * LIGHT.y + 1.2) / (nl * L);                // 빛을 받는 비탈은 밝게
     const wv = warmth(x, y), m = wetness(x, y);
     let c = mixHex(mixHex('#6b9459', '#c2c070', wv), '#4c7d56', Math.min(0.8, Math.max(0, m - 0.3)));
-    if (S.w[k] > 0.0005 && S.w[k] < 0.0015 && S.basins && S.basins.some(b => b.said >= 2 && Math.hypot(x - b.x, y - b.y) < b.r)) c = '#d9d2bd';   // 마른 호수 바닥의 소금기
+    if (S.salt && S.salt[k] > 0.0015 && S.w[k] < 0.004) c = mixHex(c, '#ece7da', Math.min(1, S.salt[k] * 180));   // 마른 호수 바닥의 소금
     const lift = 0.78 + 0.32 * shade + 0.25 * (h[k] - 0.15);
     const cont = Math.floor(h[k] * 14) !== Math.floor(h[Math.min(N * N - 1, k + 1)] * 14) || Math.floor(h[k] * 14) !== Math.floor(h[Math.min(N * N - 1, k + N)] * 14);
-    out.push({x: x - CELL / 2, y: y - CELL / 2, c: scaleHex(c, lift * (cont ? 0.9 : 1)), cs: CELL});
+    out.push({x: x - CELL / 2, y: y - CELL / 2, c: scaleHex(c, lift * (cont ? 0.9 : 1) * (S.salt && S.salt[k] > 0.0015 && S.w[k] < 0.004 ? 1.08 : 1)), cs: CELL});
   }
   return out;
 }
@@ -1174,7 +1212,7 @@ function renderHud() {
   document.getElementById('eraName').textContent = ERAS[S.era];
   document.getElementById('eraBar').style.width = (S.era >= ERAS.length - 1 ? 100 : S.eraPts / ERA_NEED * 100) + '%';
   const food = Math.floor(foodTotal());
-  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['믿음', Math.round(S.faith) + '%'], ['의심', doubters().length + '명']];
+  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['소금', Math.floor(S.stock['소금'] || 0)], ['믿음', Math.round(S.faith) + '%'], ['의심', doubters().length + '명']];
   document.getElementById('stats').innerHTML = chips.map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
   let hint = '';
   const has = (t) => S.b.some(b => b.type === t);
@@ -1215,6 +1253,7 @@ function openSheet(id) { closeSheets(); document.getElementById(id).hidden = fal
 document.querySelectorAll('[data-close]').forEach(el => el.onclick = () => { document.getElementById(el.dataset.close).hidden = true; if (el.dataset.close === 'personSheet') selected = null; });
 document.getElementById('tBuild').onclick = () => { if (buildPick) { buildPick = null; setPressed('tBuild', false); return; } rainMode = false; setPressed('tRain', false); renderBuild(); openSheet('buildSheet'); };
 document.getElementById('tTap').onclick = () => giantTap();
+document.getElementById('tTurn').onclick = () => { if (!busy) rotateJar(); };
 document.getElementById('tRain').onclick = () => { rainMode = !rainMode; buildPick = null; setPressed('tBuild', false); setPressed('tRain', rainMode); if (rainMode) toast('기적: 물을 뿌릴 곳을 누르세요'); };
 document.getElementById('tSpeed').onclick = () => { S.speedIdx = (S.speedIdx + 1) % SPEEDS.length; renderHud(); };
 document.getElementById('tBook').onclick = () => { renderBook(); openSheet('bookSheet'); };
@@ -1262,12 +1301,12 @@ function frame(now) {
 }
 function start(data) {
   newWorld();
-  if (data && data.S && data.S.h) { try { const d = data.S; for (const k of ['paths', 'h', 'w', 'flux', 'wetC']) d[k] = new Float32Array(d[k]); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.grooves) d.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)})); S = d; buildHydro(); GROUND = null; } catch (e) { newWorld(); } }
+  if (data && data.S && data.S.h) { try { const d = data.S; for (const k of ['paths', 'h', 'w', 'flux', 'wetC', 'salt']) d[k] = new Float32Array(d[k] || N * N); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.grooves) d.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)})); S = d; buildHydro(); GROUND = null; } catch (e) { newWorld(); } }
   resize(); window.addEventListener('resize', () => { resize(); });
   renderHud(); renderBuild();
   requestAnimationFrame(frame);
 }
-window.claude?.hot?.snapshot?.(() => { try { return {S: JSON.parse(JSON.stringify({...S, paths: Array.from(S.paths), h: Array.from(S.h), w: Array.from(S.w), flux: Array.from(S.flux), wetC: Array.from(S.wetC), p: S.p.map(q => ({...q, steps: []}))}))}; } catch (e) { return {}; } });
+window.claude?.hot?.snapshot?.(() => { try { return {S: JSON.parse(JSON.stringify({...S, paths: Array.from(S.paths), h: Array.from(S.h), w: Array.from(S.w), flux: Array.from(S.flux), wetC: Array.from(S.wetC), salt: Array.from(S.salt), p: S.p.map(q => ({...q, steps: []}))}))}; } catch (e) { return {}; } });
 // 시험용 훅 (프로토타입 확인용)
 window.__proto = {get S() { return S; }, step, goAway, alive};
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
