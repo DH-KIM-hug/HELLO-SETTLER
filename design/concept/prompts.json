@@ -1,0 +1,304 @@
+{
+ "style": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition",
+ "negative": "text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors, oversaturated, chibi, anime big eyes, photorealistic humans close-up, fantasy elves, dragons, sea, ocean, beach, waves",
+ "count": 33,
+ "items": [
+  {
+   "id": "1-1",
+   "title": "병 시점 — 선반 위의 세상",
+   "desc": "나무 선반 위 메이슨 자 하나. 옆면으로 땅속 단면(핵·암반·광맥)이 보이고, 위쪽엔 작은 중세 마을. 창가에서 빛이 비스듬히 들어온다.",
+   "prompt": "a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes",
+   "aspect": "9:16",
+   "file": "design/concept/1-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes"
+  },
+  {
+   "id": "1-2",
+   "title": "지구 시점 — 병 안의 평평한 세상",
+   "desc": "병 안으로 들어가면 지평선까지 펼쳐진 둥글고 평평한 대지. 하늘은 유리 돔, 세상 끝은 희미하게 빛나는 유리벽.",
+   "prompt": "view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake under a giant water droplet falling from the dome, a river starting from water trickling down the glass wall, tiny villagers carrying sacks, morning light from one side",
+   "aspect": "16:9",
+   "file": "design/concept/1-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake under a giant water droplet falling from the dome, a river starting from water trickling down the glass wall, tiny villagers carrying sacks, morning light from one side"
+  },
+  {
+   "id": "2-1",
+   "title": "핵 넣기",
+   "desc": "어두운 방, 빈 병, 손바닥 위 붉게 맥동하는 구슬",
+   "prompt": "a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm",
+   "aspect": "9:16",
+   "file": "design/concept/2-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm"
+  },
+  {
+   "id": "2-2",
+   "title": "암반 쌓기",
+   "desc": "돌 컵 4개(회색=철, 검정=석탄, 반짝이=금, 하양=암염)",
+   "prompt": "four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view",
+   "aspect": "3:2",
+   "file": "design/concept/2-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view"
+  },
+  {
+   "id": "2-3",
+   "title": "흙 덮기",
+   "desc": "손가락으로 산·골짜기·깊은 분지를 빚음",
+   "prompt": "a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view",
+   "aspect": "9:16",
+   "file": "design/concept/2-3.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view"
+  },
+  {
+   "id": "2-4",
+   "title": "물 붓기",
+   "desc": "파 놓은 곳부터 물이 차오름",
+   "prompt": "water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics",
+   "aspect": "9:16",
+   "file": "design/concept/2-4.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics"
+  },
+  {
+   "id": "2-5",
+   "title": "태양 맞추기",
+   "desc": "반원 궤도 위 6자리, 온대만 밝고 나머지는 안개",
+   "prompt": "a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious",
+   "aspect": "9:16",
+   "file": "design/concept/2-5.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious"
+  },
+  {
+   "id": "2-6",
+   "title": "뚜껑 닫기 + 물방울 돌기",
+   "desc": "뚜껑 안쪽을 찍어 돌기를 만들고 잠금",
+   "prompt": "the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up",
+   "aspect": "3:2",
+   "file": "design/concept/2-6.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up"
+  },
+  {
+   "id": "2-7",
+   "title": "타임랩스",
+   "desc": "수천 년이 몇 초에",
+   "prompt": "time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy",
+   "aspect": "16:9",
+   "file": "design/concept/2-7.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy"
+  },
+  {
+   "id": "2-8",
+   "title": "생명의 씨앗",
+   "desc": "숨구멍으로 이끼·풀·도토리를 뿌림",
+   "prompt": "seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge",
+   "aspect": "9:16",
+   "file": "design/concept/2-8.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge"
+  },
+  {
+   "id": "2-9",
+   "title": "첫 인간",
+   "desc": "해 질 녘 숲 가장자리의 작은 불빛, 10명",
+   "prompt": "dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk",
+   "aspect": "9:16",
+   "file": "design/concept/2-9.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk"
+  },
+  {
+   "id": "3-1",
+   "title": "물방울 호수",
+   "desc": "뚜껑 돌기에서 거대한 물방울이 똑, 강 없는 호수",
+   "prompt": "a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up",
+   "aspect": "16:9",
+   "file": "design/concept/3-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up"
+  },
+  {
+   "id": "3-2",
+   "title": "유리벽의 강",
+   "desc": "그늘 쪽 유리벽을 타고 흘러내린 물이 강이 됨",
+   "prompt": "water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns",
+   "aspect": "9:16",
+   "file": "design/concept/3-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns"
+  },
+  {
+   "id": "3-3",
+   "title": "창가 쪽 vs 그늘 쪽",
+   "desc": "한 세상 안의 기후 차이",
+   "prompt": "split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view",
+   "aspect": "16:9",
+   "file": "design/concept/3-3.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view"
+  },
+  {
+   "id": "3-4",
+   "title": "말라가는 큰 호수",
+   "desc": "물가가 물러나고 하얀 소금기",
+   "prompt": "a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon",
+   "aspect": "16:9",
+   "file": "design/concept/3-4.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon"
+  },
+  {
+   "id": "3-5",
+   "title": "소금의 발견",
+   "desc": "아이가 하얀 흙을 찍어 맛봄",
+   "prompt": "a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light",
+   "aspect": "3:2",
+   "file": "design/concept/3-5.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light"
+  },
+  {
+   "id": "3-6",
+   "title": "병 돌리기",
+   "desc": "해가 하늘을 건너감",
+   "prompt": "a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other",
+   "aspect": "9:16",
+   "file": "design/concept/3-6.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other"
+  },
+  {
+   "id": "3-7",
+   "title": "하늘 낟알",
+   "desc": "첫 수확 전, 새벽 들판의 흰 낟알",
+   "prompt": "dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome",
+   "aspect": "16:9",
+   "file": "design/concept/3-7.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome"
+  },
+  {
+   "id": "3-8",
+   "title": "거인의 물 뿌리기 (기적)",
+   "desc": "",
+   "prompt": "sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth",
+   "aspect": "16:9",
+   "file": "design/concept/3-8.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth"
+  },
+  {
+   "id": "4-1",
+   "title": "주민 캐릭터 시트 (온대)",
+   "desc": "",
+   "prompt": "character sheet of small medieval European villagers with realistic proportions: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front and side views, simple low-poly 3D style, neutral background",
+   "aspect": "3:2",
+   "file": "design/concept/4-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, character sheet of small medieval European villagers with realistic proportions: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front and side views, simple low-poly 3D style, neutral background"
+  },
+  {
+   "id": "4-2",
+   "title": "기후별 복식",
+   "desc": "",
+   "prompt": "six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background",
+   "aspect": "3:2",
+   "file": "design/concept/4-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background"
+  },
+  {
+   "id": "4-3",
+   "title": "고유 특징이 보이는 아이들",
+   "desc": "",
+   "prompt": "four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful",
+   "aspect": "3:2",
+   "file": "design/concept/4-3.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful"
+  },
+  {
+   "id": "4-4",
+   "title": "의심하는 아이 vs 꾸짖는 노인",
+   "desc": "",
+   "prompt": "a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire",
+   "aspect": "3:2",
+   "file": "design/concept/4-4.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire"
+  },
+  {
+   "id": "4-5",
+   "title": "귀환 축제",
+   "desc": "",
+   "prompt": "festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns",
+   "aspect": "16:9",
+   "file": "design/concept/4-5.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns"
+  },
+  {
+   "id": "5-1",
+   "title": "건물 세트 (개척기·마을)",
+   "desc": "",
+   "prompt": "isometric sheet of small low-poly medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left",
+   "aspect": "3:2",
+   "file": "design/concept/5-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, isometric sheet of small low-poly medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left"
+  },
+  {
+   "id": "5-2",
+   "title": "기후별 건축 양식",
+   "desc": "",
+   "prompt": "six small medieval houses in different climate styles: temperate timber-framed cottage, taiga log longhouse, mediterranean stone house with terracotta roof, tropical stilt house, tundra sod-roof hut, desert mud-brick house, isometric, neutral background",
+   "aspect": "3:2",
+   "file": "design/concept/5-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, six small medieval houses in different climate styles: temperate timber-framed cottage, taiga log longhouse, mediterranean stone house with terracotta roof, tropical stilt house, tundra sod-roof hut, desert mud-brick house, isometric, neutral background"
+  },
+  {
+   "id": "6-1",
+   "title": "선반과 여러 병",
+   "desc": "병 사이의 거인의 다리",
+   "prompt": "a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light",
+   "aspect": "16:9",
+   "file": "design/concept/6-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light"
+  },
+  {
+   "id": "6-2",
+   "title": "거인의 종이배",
+   "desc": "나루터에서 떠나는 주민",
+   "prompt": "a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet",
+   "aspect": "16:9",
+   "file": "design/concept/6-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet"
+  },
+  {
+   "id": "6-3",
+   "title": "거인의 상점 물건의 크기감",
+   "desc": "",
+   "prompt": "a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder",
+   "aspect": "16:9",
+   "file": "design/concept/6-3.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder"
+  },
+  {
+   "id": "6-4",
+   "title": "유적 (멸망한 병)",
+   "desc": "",
+   "prompt": "an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass",
+   "aspect": "16:9",
+   "file": "design/concept/6-4.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass"
+  },
+  {
+   "id": "7-1",
+   "title": "연대기 양피지",
+   "desc": "",
+   "prompt": "an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text",
+   "aspect": "3:4",
+   "file": "design/concept/7-1.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text"
+  },
+  {
+   "id": "7-2",
+   "title": "지구 카드 (폴라로이드)",
+   "desc": "",
+   "prompt": "a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text",
+   "aspect": "3:4",
+   "file": "design/concept/7-2.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text"
+  },
+  {
+   "id": "7-3",
+   "title": "앱 아이콘",
+   "desc": "",
+   "prompt": "app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text",
+   "aspect": "1:1",
+   "file": "design/concept/7-3.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text"
+  }
+ ]
+}

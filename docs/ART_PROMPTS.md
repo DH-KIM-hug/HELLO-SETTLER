@@ -148,6 +148,6 @@ desert mud-brick house, isometric, neutral background, 3:2
 1. **1-1 병 시점 키 아트**로 공통 스타일을 먼저 확정한다 (여러 번 뽑아 가장 마음에 드는 1장 고르기).
 2. 고른 그림을 **참조 이미지**로 넣고(지원하는 모델에서) 나머지를 뽑는다 → 색감·질감 통일.
 3. 주민 시트(4-1)와 건물 시트(5)를 뽑아 3D 모델링 참고 자료로 쓴다.
-4. 마음에 든 결과는 `design/concept/`에 저장하고, 쓴 프롬프트와 모델·시드를 이 문서에 기록한다.
+4. 마음에 든 결과는 `design/concept/`에 저장하고, 모델·시드는 `design/concept/log.csv`에 기록한다. 에이전트(Codex 등)에게 맡길 때는 루트의 `AGENTS.md`와 `design/concept/prompts.json`(이 문서에서 `python3 tools/gen_art_list.py`로 생성)을 쓴다.
 
 > 주의: 생성 이미지는 콘셉트 참고용. 출시용 아트는 아티스트가 이 방향으로 새로 그리거나 모델링한다 (생성 이미지의 상업적 이용 조건은 쓰는 모델의 약관을 확인).
