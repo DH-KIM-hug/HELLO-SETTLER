@@ -182,6 +182,17 @@ def clim(col_letter, climate_cell):
     return f"INDEX(가정!${col_letter}${CL_R0+1}:${col_letter}${CL_END},MATCH({climate_cell},{CL_NAMES},0))"
 
 
+
+# 하늘 낟알 (첫 수확 전 식량) 가정
+MN_R0 = CL_END + 5
+header(wa, MN_R0, ["하늘 낟알 (첫 수확 전)", "값", "", "", "", "", "설명"])
+assume(MN_R0 + 1, "첫 정착민 도착 시각 (0~23시)", 20, "0", "현실 시각. 저녁에 처음 켜는 경우가 가장 까다로움", "mn_arrive")
+assume(MN_R0 + 2, "새벽 시각 (낟알이 내리는 시각)", 6, "0", "", "mn_dawn")
+assume(MN_R0 + 3, "도착하자마자 첫 낟알 (1 = 예, 0 = 아니오)", 1, "0", "1 권장: 저녁에 시작해도 첫 낟알을 바로 봄 (튜토리얼 T0)", "mn_first")
+assume(MN_R0 + 4, "첫 농장 완공까지 (도착 후 시간)", 0.5, "0.0", "튜토리얼 T5 시점 + 건설 2분 + 자재 운반", "mn_build")
+assume(MN_R0 + 5, "밭이 첫 수확까지 자라는 시간 (시간)", 4, "0.0", "첫 수확에만 적용. 이후는 레시피대로 1개/분", "mn_grow")
+assume(MN_R0 + 6, "첫 농장 수", 1, "0", "", "mn_farms")
+assume(MN_R0 + 7, "시작 짐 식량 (인구 하루치 대비)", 0.25, "0%", "첫 정착민이 들고 온 식량", "mn_pack")
 wa.freeze_panes = "A4"
 
 # ============================================================ 인구별 운영 점검
@@ -383,6 +394,66 @@ for i, (lab, f) in enumerate(res, 11):
     put(wv, i, 2, f, fmt="#,##0.0" if "비" in lab else "#,##0", bold=i <= 13)
 put(wv, 11, 8, "일차 = 이사한 다음 날 아침부터 새 병", color=GREY)
 
+# ============================================================ 하늘 낟알 (시간 단위)
+wm = wb.create_sheet("하늘 낟알")
+widths(wm, [8, 8, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11])
+title(wm, "하늘 낟알 — 첫 72시간 (시간 단위)", "첫 수확 전까지만 새벽마다 하루치 낟알이 내림. 하루 지나면 상함. 인구는 시작 인구로 고정 (72시간 출생 약 4명은 무시)")
+POP0 = A['start']
+CONS_H = f"({POP0}*3600/{A['food_iv']})"
+DAYAMT = f"({POP0}*86400/{A['food_iv']})"
+HARV = f"({A['mn_build']}+{A['mn_grow']})"
+FARM_H = f"({A['mn_farms']}*{A['r_farm']}*60)"
+put(wm, 3, 1, "첫 수확 (도착 후 시간)", bold=True); put(wm, 3, 4, f"={HARV}", fmt="0.0", bold=True)
+put(wm, 4, 1, "시간당 소비 / 낟알 1회 양", bold=True); put(wm, 4, 4, f"={CONS_H}", fmt="0.0"); put(wm, 4, 5, f"={DAYAMT}", fmt="#,##0")
+put(wm, 5, 1, "농장 시간당 생산 (첫 수확 후)", bold=True); put(wm, 5, 4, f"={FARM_H}", fmt="0.0")
+HM = 8
+cols = ["경과(시)", "시각", "낟알 내림", "마지막 낟알", "낟알 (시작)", "농장 생산", "소비", "낟알로 먹음", "창고로 먹음", "창고 식량", "낟알 (남음)", "굶주림"]
+header(wm, HM, cols)
+HOURS = 72
+for t in range(0, HOURS + 1):
+    r = HM + 1 + t; p = r - 1
+    put(wm, r, 1, t)
+    put(wm, r, 2, f"=MOD({A['mn_arrive']}+A{r},24)")
+    put(wm, r, 3, f"=IF(OR(AND(A{r}=0,{A['mn_first']}=1),AND(B{r}={A['mn_dawn']},A{r}<={HARV})),{DAYAMT},0)", fmt="#,##0")
+    put(wm, r, 4, f'=IF(C{r}>0,A{r},"")' if t == 0 else f'=IF(C{r}>0,A{r},D{p})')
+    put(wm, r, 5, f"=C{r}" if t == 0 else f'=IF(C{r}>0,C{r},IF(AND(D{p}<>"",A{r}-D{p}>=24),0,K{p}))', fmt="#,##0")
+    put(wm, r, 6, f"=IF(A{r}>={HARV},{FARM_H},0)", fmt="0.0")
+    put(wm, r, 7, f"={CONS_H}", fmt="0.0")
+    put(wm, r, 8, f"=MIN(E{r},G{r})", fmt="0.0")
+    prevJ = f"{POP0}*{A['mn_pack']}*86400/{A['food_iv']}" if t == 0 else f"J{p}"
+    put(wm, r, 9, f"=MIN(G{r}-H{r},{prevJ}+F{r})", fmt="0.0")
+    put(wm, r, 10, f"={prevJ}+F{r}-I{r}", fmt="#,##0")
+    put(wm, r, 11, f"=E{r}-H{r}", fmt="#,##0")
+    put(wm, r, 12, f"=MAX(0,G{r}-H{r}-I{r})", fmt="0.0")
+MLAST = HM + 1 + HOURS
+wm.freeze_panes = f"A{HM+1}"
+# summary at right
+put(wm, 3, 7, "낟알 내린 횟수", bold=True); put(wm, 3, 9, f'=COUNTIF(C{HM+1}:C{MLAST},">0")', bold=True)
+put(wm, 4, 7, "굶은 시간 (시간)", bold=True); put(wm, 4, 9, f'=COUNTIF(L{HM+1}:L{MLAST},">0.01")', bold=True)
+put(wm, 5, 7, "72시간 뒤 창고 식량", bold=True); put(wm, 5, 9, f"=J{MLAST}", fmt="#,##0", bold=True)
+put(wm, 6, 7, "상해서 버려진 낟알", bold=True); put(wm, 6, 9, f"=SUM(C{HM+1}:C{MLAST})-SUM(H{HM+1}:H{MLAST})-K{MLAST}", fmt="#,##0")
+
+# 시나리오 표 (수식: 낟알 횟수 = 도착 직후 1회 + 첫 수확 시각까지의 새벽 수)
+SR = MLAST + 3
+put(wm, SR, 1, "시나리오 — 도착 시각 × 밭 성장 시간 → 낟알 내린 횟수 (굶주림 위험 시간)", bold=True)
+grows = [1, 4, 8, 12]
+arrives = [6, 12, 18, 20, 23]
+header(wm, SR + 1, ["도착 시각", "성장(시간) →"] + [f"성장 {g}시간" for g in grows])
+for i, a in enumerate(arrives):
+    r = SR + 2 + i
+    put(wm, r, 1, a, inp=True)
+    for j, g in enumerate(grows):
+        col = get_column_letter(3 + j)
+        put(wm, SR + 1, 3 + j, g, inp=True)  # 성장 시간 입력 (헤더 행을 값으로)
+        H = f"({A['mn_build']}+{col}${SR+1})"
+        d0 = f"MOD({A['mn_dawn']}-$A{r},24)"
+        d0p = f"IF(AND({d0}=0,{A['mn_first']}=1),24,{d0})"
+        cnt = f"({A['mn_first']}+IF({H}<{d0p},0,INT(({H}-{d0p})/24)+1))"
+        gap = f"IF({A['mn_first']}=1,0,MIN({d0},{H}))"
+        risk = f"MAX(0,{gap}-{A['mn_pack']}*24)"
+        put(wm, r, 3 + j, f'={cnt}&"회"&IF({risk}>0," (굶주림 "&TEXT({risk},"0.0")&"시간)","")')
+put(wm, SR + 2 + len(arrives), 1, "3행 성장 시간 칸(노란색)을 바꿔 다른 성장 시간도 비교 가능. '도착하자마자 첫 낟알'을 0으로 바꾸면 저녁 도착 시 굶주림 위험이 생김", color=GREY)
+
 # ============================================================ 오프라인 12시간
 wo = wb.create_sheet("오프라인 12시간")
 widths(wo, [36, 13, 13, 13, 13, 40])
@@ -416,6 +487,7 @@ info = [
     ("기후 비교", "인구 100명 기준 6개 기후대 나란히 비교"),
     ("이사 시뮬레이션", "150일 하루 단위 시뮬레이션: 인구·판매·지폐·이사 시점 + 그래프"),
     ("병 가격 역산", "목표 이사 일수 → 추천 병 가격. 시뮬레이션 결과 요약"),
+    ("하늘 낟알", "첫 72시간 시간 단위 시뮬레이션: 낟알·첫 수확·창고 식량·굶주림 + 도착 시각×성장 시간 시나리오"),
     ("오프라인 12시간", "앱을 꺼둔 동안의 소비·출생·사망"),
     ("", ""),
     ("편집 방법", "노란 배경 + 파란 글씨 = 입력 칸. 검정 = 수식"),
