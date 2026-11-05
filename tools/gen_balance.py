@@ -1,8 +1,9 @@
-"""경제·인구 밸런스 시트(docs/balance_v1.xlsx) 생성 스크립트.
+"""경제·인구 밸런스 시트(docs/balance_v2.xlsx) 생성 스크립트.
 
 실행: python3 tools/gen_balance.py
 - '가정' 시트의 노란 칸이 모든 계산의 입력값이다. 시트에서 바꾸면 전부 다시 계산된다.
 - 생산 수치는 docs/buildings_v1.xlsx(레시피·기후 변형)와 같은 값을 쓴다.
+- v2: 주민 단위 생애 시뮬레이션(tools/sim_life.py)을 불러 '생애 시뮬레이션' 시트를 만든다 (약 1분).
 """
 import os
 from openpyxl import Workbook
@@ -72,16 +73,18 @@ header(wa, 4, ["인구", "값", "", "", "", "", "설명"])
 assume(5, "시작 인구 (명)", 10, "0", "첫 정착민 두 가족 (기획서 5.1)", "start")
 assume(6, "성인 비율", 0.7, "0%", "인구 중 성인 (아이·노인 제외)", "adult")
 assume(7, "혼인율 (성인 중)", 0.8, "0%", "부부 수 = 성인 × 혼인율 ÷ 2", "marry")
-assume(8, "출산율 (부부당 하루 출생 수)", 0.6, "0.00", "빈 집·식량 여유가 있을 때. 0.6 = 부부당 약 1.7일에 1명 (닫힌 세계라 출생이 유일한 인구 증가)", "birth")
+assume(8, "기본 출산율 (부부당 하루)", 0.6, "0.00", "규칙의 기본값. 실제 출산 = 0.6 × 개인 배율(0.4~1.6, 평균 1) × 환경 배율(식량·행복·축제). 아래 실효 비율로 하루 단위 모델을 보정", "birth0")
 assume(9, "사망률 (하루, 인구 대비)", 0.03, "0.0%", "노환 중심. 위기·전쟁 제외. 수명 25일 사회의 평균치 근사", "death")
-assume(10, "(사용 안 함) 외부 유입 (하루, 명)", 0, "0.0", "닫힌 세계 원칙 — 바깥에서 사람이 들어오지 않음. 항상 0", "wander")
-assume(11, "(사용 안 함) 외부 유입 기준 인구", 20, "0", "", "wander_th")
+assume(10, "실효 비율 (생애 시뮬레이션)", 0.6, "0%", "집 빈자리·혼인·노화 때문에 실제 출산은 기본값의 약 60% (부부당 0.36명/일) — sim_life.py 결과", "eff")
+put(wa, 11, 1, "실효 출산율 (부부당 하루)", bold=True); put(wa, 11, 2, "=B8*B10", fmt="0.00", bold=True)
+put(wa, 11, 7, "하루 단위 시트(이사 시뮬레이션·오프라인)는 이 값을 쓴다. 외부 유입은 닫힌 세계라 없음", color=GREY)
+A["birth"] = "가정!$B$11"
 assume(12, "근무 가능 비율 (성인 중)", 0.8, "0%", "임신·병·노쇠 등 제외", "work")
 
 header(wa, 14, ["주민 판매", "값", "", "", "", "", "설명"])
 assume(15, "성인 1명 기본 판매가 (지폐)", 100, "#,##0", "등급 ×1, 숙련·나이 보정 ×1 기준", "price")
-assume(16, "숙련·나이 평균 보정", 1.0, "0.00", "전성기 성인·숙련자일수록 ↑", "skill")
-assume(17, "판매 시작 인구 (병 최대 인구 대비)", 0.85, "0%", "플레이어가 병이 거의 찼을 때부터 판다고 가정", "sell_th")
+assume(16, "숙련·나이 평균 보정", 1.07, "0.00", "v2: 판매가는 숙련을 크게 본다 ('판매가' 시트). 생애 시뮬레이션에서 실제 판매 평균 = 기대 배율 기준의 약 1.07배", "skill")
+assume(17, "판매 시작 (품을 수 있는 인구 대비)", 0.85, "0%", "땅이 85% 찼을 때부터 판다고 가정 (병 인구 상한은 없음 — 땅이 한계)", "sell_th")
 assume(18, "최소 유지 인구 (명)", 10, "0", "이 아래로는 판매 불가 (기획서 11장)", "min_pop")
 
 header(wa, 20, ["등급", "출생 확률", "판매 배율", "기여", "", "", "설명"])
@@ -103,16 +106,22 @@ put(wa, 27, 1, "판매 1명당 평균 수입 (지폐)", bold=True)
 put(wa, 27, 4, f"={A['price']}*{A['ev']}*{A['skill']}", fmt="#,##0", bold=True)
 A["per_sale"] = "가정!$D$27"
 
-header(wa, 29, ["병 단계", "병", "최대 인구", "가격 (지폐)", "일일 판매 상한", "목표 이사 일수", "설명"])
-stages = [(1, "소형 (메이슨 자)", 40, 0, 3, 0),
-          (2, "중형 (어항·돔)", 100, 1500, 5, 14),
-          (3, "대형 (모래시계 등)", 250, 8000, 8, 21),
-          (4, "대형 수조", 600, 25000, 12, 35)]
+header(wa, 29, ["병 단계", "병", "품을 수 있는 인구", "가격 (지폐)", "일일 판매 상한", "목표 이사 일수", "설명", "대지 지름 (칸)", "그 병에서의 시대 (1~4)"])
+stages = [(1, "소형 (메이슨 자)", None, 0, 3, 0, None, 64, 2),
+          (2, "중형 (어항·돔)", None, 1000, 5, 14, None, 96, 3),
+          (3, "대형 (모래시계 등)", None, 6000, 8, 21, None, 140, 4),
+          (4, "대형 수조", None, 20000, 12, 35, None, 200, 4)]
 for i, s in enumerate(stages, 30):
     for c, v in enumerate(s, 1):
-        put(wa, i, c, v, inp=c > 1, fmt="#,##0" if c in (3, 4) else None)
-put(wa, 30, 7, "목표 이사 일수 = 이전 병에서 다음 병을 사기까지 바라는 일수 (역산 시트에서 사용)", color=GREY)
-put(wa, 31, 7, "일일 판매 상한: 기획서 안은 3명 고정 → 병이 커지면 상한도 늘리는 안", color=GREY)
+        if c == 3:
+            put(wa, i, 3, f"=PI()*(H{i}/2)^2*$B$127/INDEX($B$128:$B$131,I{i})", fmt="#,##0")
+        elif c == 7:
+            continue
+        else:
+            put(wa, i, c, v, inp=c > 1, fmt="#,##0" if c in (3, 4) else None)
+put(wa, 30, 7, "품을 수 있는 인구 = 대지 넓이 × 쓸 수 있는 비율 ÷ 1인당 땅(그 시대). 병 인구 상한은 없다 (v2)", color=GREY)
+put(wa, 31, 7, "가격 v2: 1,000 / 6,000 / 20,000 (v1 1,500 / 8,000 / 25,000). 목표 이사 일수 = 역산 시트용", color=GREY)
+put(wa, 32, 7, "시대 가정: 생애 시뮬레이션(보통 마을)에서 그 병에 사는 동안 주로 머무는 시대", color=GREY)
 STG = "가정!$A$30:$A$33"
 STG_MAX = "가정!$C$30:$C$33"
 STG_PRICE = "가정!$D$30:$D$33"
@@ -177,6 +186,59 @@ put(wa, CL_END + 1, 1, "생산 배율은 buildings_v1.xlsx '기후 변형'과 �
 put(wa, CL_END + 2, 1, "땔감 배율 = 겨울 땔감 소비 배수 (열대 0 = 땔감 불필요). 툰드라 1.0 = 흙지붕 단열 + 고래기름 난방 (2.0이면 근무자 부족). 옷 배율 = 옷 교체 속도 배수", color=GREY)
 CL_NAMES = f"가정!$A${CL_R0+1}:$A${CL_END}"
 
+# ---- v2 가정: 땅과 인구 · 출산 환경 · 판매가 · 시대 점수 · 소금 절임
+header(wa, 125, ["땅과 인구 (v2)", "값", "", "", "", "", "설명"])
+assume(126, "집 크기 (개척기 / 마을 / 읍내·영지)", "4 / 6 / 8", None, "새로 짓거나 넓혀 지은 집의 정원. 꽉 차면 더 큰 집으로 옮겨야 아이를 낳는다 (의도한 병목)", "house_sz")
+assume(127, "쓸 수 있는 땅 비율", 0.5, "0%", "호수·숲·비탈·유리벽 가 제외", "usable")
+for i, (era, v) in enumerate([("개척기", 40), ("마을", 40), ("읍내", 34), ("영지", 28)], 128):
+    assume(i, f"1인당 땅 (칸) — {era}", v, "0", "집·밭·일터 포함. 시대가 오르면 촘촘해짐", f"lpp{i}")
+put(wa, 132, 1, "빈 땅이 없으면 새 집 대신 작은 옛 집을 그 시대 집으로 넓혀 짓는다", color=GREY)
+
+header(wa, 134, ["출산 환경 배율 (v2, 3개만)", "힘듦", "보통", "좋음", "", "", "설명"])
+env_rows = [("식량", 0.8, 1.0, 1.1, "굶주림 있음 / 끼니 거르지 않음 / 다양한 음식 3종 이상"),
+            ("행복", 0.9, 1.0, 1.1, "행복 평균 0.4 미만 / 0.4~0.7 / 0.7 초과"),
+            ("축제", 1.0, 1.0, 1.1, "최근 3일 안에 축제 없음 / — / 있음 (귀환·첫 수확·계절 축제)")]
+for i, (lab, a, b, c3, note) in enumerate(env_rows, 135):
+    put(wa, i, 1, lab); put(wa, i, 2, a, inp=True, fmt="0.00"); put(wa, i, 3, b, inp=True, fmt="0.00"); put(wa, i, 4, c3, inp=True, fmt="0.00"); put(wa, i, 7, note, color=GREY)
+put(wa, 138, 1, "곱 (환경 배율)", bold=True)
+for j, col in ((2, "B"), (3, "C"), (4, "D")):
+    put(wa, 138, j, f"={col}135*{col}136*{col}137", fmt="0.00", bold=True)
+put(wa, 138, 7, "생애 시뮬레이션의 힘든 ×0.7 / 보통 ×1.0 / 잘 꾸린 ×1.3은 일부러 넓게 잡은 범위 (스트레스 시험)", color=GREY)
+assume(139, "혼인 시작 나이 (일)", 4, "0", "성인부터. v1은 6일", "marry_age")
+assume(140, "혼인 확률 (미혼 남녀 짝마다 하루)", 0.5, "0.00", "v1은 마을 전체 하루 약 0.83쌍 고정 → 인구가 늘수록 병목", "marry_rate")
+assume(141, "개인 출산 배율 범위", "0.4 ~ 1.6", None, "타고남, 삼각분포, 평균 1", "fert")
+
+header(wa, 143, ["판매가 (v2) — 숙련을 크게, 나이는 작게", "값", "", "", "", "", "설명"])
+assume(144, "숙련 배율 = 기본 + 계수 × 숙련(0~10)  · 기본", 0.5, "0.00", "숙련 0 → ×0.5, 5 → ×1.0, 10 → ×1.5", "sk0")
+assume(145, "숙련 배율 계수", 0.1, "0.00", "", "sk1")
+assume(146, "나이 배율 — 성인 (4~20일)", 1.0, "0.00", "", "ag1")
+assume(147, "나이 배율 — 노인 (20~25일)", 0.8, "0.00", "", "ag2")
+assume(148, "나이 배율 — 고령 (25일~)", 0.6, "0.00", "", "ag3")
+assume(149, "혈통 배율 (명장 가문)", 1.1, "0.00", "조부모 중 희귀 등급 이상이 있으면", "blood")
+assume(150, "건강 배율 (병든 주민)", 0.7, "0.00", "", "sick")
+assume(151, "같은 날 n번째 판매 할인", 0.95, "0.00", "그날 n번째 판매가 × 0.95^(n−1). 다음 날 처음으로", "nth")
+assume(152, "숙련 성장 (일한 하루당)", 0.6, "0.00", "× 재주(0.6~1.4, 평균 1). 약 17일 일하면 10. 노인이 제자에게 일부 전수", "sk_rate")
+
+header(wa, 154, ["시대 점수 (v2)", "값", "", "", "", "", "설명"])
+assume(155, "필요 점수 — 마을", 100, "0", "", "need1")
+assume(156, "필요 점수 — 읍내", 200, "0", "", "need2")
+assume(157, "필요 점수 — 영지", 300, "0", "", "need3")
+assume(158, "시간당 점수 — 인구 1명당", 0.4, "0.00", "", "pt_pop")
+assume(159, "시간당 점수 — 건물 1개당", 0.6, "0.00", "", "pt_bld")
+assume(160, "시대 배율 — 개척기", 1.0, "0.00", "", "em1")
+assume(161, "시대 배율 — 마을", 0.08, "0.00", "", "em2")
+assume(162, "시대 배율 — 읍내", 0.03, "0.00", "", "em3")
+assume(163, "거인이 없을 때 배율", 0.3, "0%", "지켜볼 때 100%", "off")
+assume(164, "하루에 지켜보는 시간", 2, "0", "가정 (저녁 2시간)", "watch")
+assume(165, "소금 발견 점수", 15, "0", "v2에서 그대로 확정 (발견이 시대 점수의 약 30%를 채움)", "salt_pts")
+
+header(wa, 167, ["소금 절임", "값", "", "", "", "", "설명"])
+assume(168, "소금 절임 켜기 (0 = 아직 / 1 = 발견 후)", 0, "0", "1이면 식량이 덜 상해 식량 소비 ×0.85 (운영 점검·오프라인 시트에 반영)", "salt_on")
+assume(169, "소금 절임 식량 배율", 0.85, "0.00", "", "salt_m")
+put(wa, 170, 1, "적용 배율", bold=True); put(wa, 170, 2, "=IF(B168=1,B169,1)", fmt="0.00", bold=True)
+A["salt_f"] = "가정!$B$170"
+wa.column_dimensions["H"].width = 12; wa.column_dimensions["I"].width = 12
+
 
 def clim(col_letter, climate_cell):
     return f"INDEX(가정!${col_letter}${CL_R0+1}:${col_letter}${CL_END},MATCH({climate_cell},{CL_NAMES},0))"
@@ -222,12 +284,12 @@ cols = "BCDE"
 R = {}
 r = 6
 items = [
-    ("pop", "인구 (최대 인구 기준)", lambda c, i: f"=INDEX({STG_MAX},{i+1})", "0", "가정 시트 병 단계"),
+    ("pop", "인구 (품을 수 있는 인구 기준)", lambda c, i: f"=INDEX({STG_MAX},{i+1})", "0", "가정 시트 병 단계"),
     ("adults", "성인", lambda c, i: f"={c}{{pop}}*{A['adult']}", "0", ""),
     ("avail", "가용 근무자", lambda c, i: f"={c}{{adults}}*{A['work']}", "0", "성인 × 근무 가능 비율"),
     ("houses", "집 수", lambda c, i: f"=ROUNDUP({c}{{pop}}/{A['house']},0)", "0", ""),
     ("sec1", "— 분당 수요 —", None, None, ""),
-    ("food", "식량 / 분", lambda c, i: f"={c}{{pop}}*60/{A['food_iv']}", "0.00", ""),
+    ("food", "식량 / 분", lambda c, i: f"={c}{{pop}}*60/{A['food_iv']}*{A['salt_f']}", "0.00", ""),
     ("fuel", "땔감 (통나무) / 분", lambda c, i: f"=IF($D$3=\"Y\",{c}{{houses}}*60/{A['fuel_iv']}*{clim('K',CC)},0)", "0.00", "× 기후 땔감 배율"),
     ("cloth", "옷 / 분", lambda c, i: f"={c}{{adults}}*60/{A['cloth_iv']}*{clim('L',CC)}", "0.00", "× 기후 옷 배율"),
     ("beer", "맥주 / 분", lambda c, i: f"={c}{{adults}}*60/{A['beer_iv']}", "0.00", ""),
@@ -292,7 +354,7 @@ for j, nm in enumerate(names, 2):
     pop = pop_cell
     adults = f"({pop}*{A['adult']})"
     houses = f"ROUNDUP({pop}/{A['house']},0)"
-    food = f"({pop}*60/{A['food_iv']})"
+    food = f"({pop}*60/{A['food_iv']}*{A['salt_f']})"
     fuel = f"({houses}*60/{A['fuel_iv']}*{clim('K',cc)})"
     cloth = f"({adults}*60/{A['cloth_iv']}*{clim('L',cc)})"
     beer = f"({adults}*60/{A['beer_iv']})"
@@ -320,10 +382,10 @@ wcmp["A13"].font = F(color=GREY)
 # ============================================================ 이사 시뮬레이션
 ws = wb.create_sheet("이사 시뮬레이션")
 DAYS = 150
-cols = ["일차", "병 단계", "최대 인구", "인구 (아침)", "성인", "사망", "판매", "출생", "외부 유입 (항상 0)",
+cols = ["일차", "병 단계", "품을 수 있는 인구", "인구 (아침)", "성인", "사망", "판매", "출생", "외부 유입 (항상 0)",
         "인구 (밤)", "판매 수입", "지폐 (구매 전)", "다음 병 가격", "이사", "지폐 (밤)"]
 widths(ws, [7, 8, 9, 10, 8, 7, 7, 7, 8, 10, 10, 12, 11, 7, 11])
-title(ws, "이사 시뮬레이션 (하루 단위)", "시작 인구에서 출발해 출생·사망·판매로 인구가 변하고, 판매 수입으로 다음 병을 사면 바로 이사 (주민은 모두 데려감)")
+title(ws, "이사 시뮬레이션 (하루 단위 평균 모델 — 참고용)", "v2 기준은 '생애 시뮬레이션' 시트. 이 시트는 실효 출산율로 보정한 빠른 근사. 시작 인구에서 출발해 출생·사망·판매로 인구가 변하고, 판매 수입으로 다음 병을 사면 바로 이사 (주민은 모두 데려감)")
 H0 = 4
 header(ws, H0, cols)
 for d in range(1, DAYS + 1):
@@ -337,7 +399,7 @@ for d in range(1, DAYS + 1):
     put(ws, r, 6, f"=D{r}*{A['death']}", fmt="0.00")
     put(ws, r, 7, f"=IF(D{r}>=C{r}*{A['sell_th']},MIN(INDEX({STG_CAP},B{r}),MAX(0,D{r}-F{r}-{A['min_pop']})),0)", fmt="0.0")
     put(ws, r, 8, f"=MIN(E{r}*{A['marry']}/2*{A['birth']},MAX(0,C{r}-(D{r}-F{r}-G{r})))", fmt="0.00")
-    put(ws, r, 9, f"=IF(D{r}<{A['wander_th']},MIN({A['wander']},MAX(0,C{r}-(D{r}-F{r}-G{r})-H{r})),0)", fmt="0.0")
+    put(ws, r, 9, 0, fmt="0.0")
     put(ws, r, 10, f"=D{r}-F{r}-G{r}+H{r}+I{r}", fmt="0.0")
     put(ws, r, 11, f"=G{r}*{A['per_sale']}", fmt="#,##0")
     put(ws, r, 12, f"=K{r}" if d == 1 else f"=O{p}+K{r}", fmt="#,##0")
@@ -466,18 +528,101 @@ put(wo, 8, 1, "12시간 출생 (명)")
 put(wo, 9, 1, "12시간 사망 (명)")
 for j, c in enumerate("BCDE", 2):
     put(wo, 5, j, f"=INDEX({STG_MAX},{j-1})", fmt="#,##0")
-    put(wo, 6, j, f"={c}5*12*3600/{A['food_iv']}", fmt="#,##0")
+    put(wo, 6, j, f"={c}5*12*3600/{A['food_iv']}*{A['salt_f']}", fmt="#,##0")
     put(wo, 7, j, f"={c}6*0.25", fmt="#,##0")
     put(wo, 8, j, f"={c}5*{A['adult']}*{A['marry']}/2*{A['birth']}/2", fmt="0.0")
     put(wo, 9, j, f"={c}5*{A['death']}/2", fmt="0.0")
 put(wo, 7, 6, "생산이 수요를 맞춘다는 전제에서, 흔들림 대비 25% 비축", color=GREY)
 put(wo, 8, 6, "병이 가득 차 있으면 실제 출생은 0 (빈 집 없음)", color=GREY)
 
+# ============================================================ v2: 생애 시뮬레이션
+import sys
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import sim_life
+wl = wb.create_sheet("생애 시뮬레이션", 1)
+widths(wl, [20, 14, 14, 14, 14, 14, 14, 14, 40])
+title(wl, "생애 시뮬레이션 v2 (주민 단위 · 1시간 단위 · 30번 평균)", "값은 생성할 때 계산한 결과 (수식 아님). 규칙·수치를 바꾸려면 tools/sim_life.py를 고치고 다시 생성. 대괄호 = 10%~90%")
+header(wl, 4, ["마을", "환경 배율", "중형 이사", "대형 이사", "수조 이사", "마을 시대", "읍내 시대", "영지 시대", "100일간 판매 · 평균가"])
+pops = []
+for k, (name, env) in enumerate(sim_life.SCENARIOS):
+    cfg = sim_life.default_cfg(); cfg['env'] = env
+    r = sim_life.scenario(cfg)
+    pops.append((name, r['pop']))
+    row = 5 + k
+    put(wl, row, 1, name, bold=True); put(wl, row, 2, env, fmt="0.0")
+    for j, m in enumerate(r['moves']):
+        put(wl, row, 3 + j, f"{m['mean']:.0f}일 [{m['p10']}~{m['p90']}]" if m['mean'] else "-")
+    for j, e in enumerate(r['eras']):
+        put(wl, row, 6 + j, f"{e['mean']:.1f}일" if e['mean'] else "-")
+    put(wl, row, 9, f"{r['sold']:.0f}명 · {r['avg_price']:.0f}지폐")
+put(wl, 9, 1, "판매 순서 비교 (보통 마을)", bold=True)
+header(wl, 10, ["누구부터 파나", "", "중형 이사", "대형 이사", "수조 이사", "", "", "", "판매 · 평균가"])
+for k, (order, label) in enumerate((('old', '노인 먼저'), ('skilled', '숙련 높은 순'), ('young', '젊은 미혼 먼저'))):
+    cfg = sim_life.default_cfg(); cfg['sell_order'] = order
+    r = sim_life.scenario(cfg)
+    row = 11 + k
+    put(wl, row, 1, label)
+    for j, m in enumerate(r['moves']):
+        put(wl, row, 3 + j, f"{m['mean']:.0f}일" if m['mean'] else "100일 안에 못 감")
+    put(wl, row, 9, f"{r['sold']:.0f}명 · {r['avg_price']:.0f}지폐")
+put(wl, 14, 1, "→ 숙련 없는 젊은이를 팔면 싸고(평균 약 57) 일손만 줄어 이사가 크게 늦어진다. 숙련자를 팔면 돈은 되지만 마을의 장인이 떠난다 — 의도한 딜레마", color=GREY)
+H2 = 17
+header(wl, H2, ["일차"] + [n for n, _ in pops])
+for d in range(len(pops[0][1])):
+    put(wl, H2 + 1 + d, 1, d + 1)
+    for j, (_, pp) in enumerate(pops):
+        put(wl, H2 + 1 + d, 2 + j, round(pp[d], 1), fmt="0.0")
+chl = LineChart(); chl.title = "평균 인구 (이사하면 새 병)"; chl.y_axis.title = "인구"; chl.x_axis.title = "일차"
+chl.add_data(Reference(wl, min_col=2, max_col=1 + len(pops), min_row=H2, max_row=H2 + len(pops[0][1])), titles_from_data=True)
+chl.set_categories(Reference(wl, min_col=1, min_row=H2 + 1, max_row=H2 + len(pops[0][1])))
+chl.height = 9; chl.width = 20
+wl.add_chart(chl, "F17")
+
+# ============================================================ v2: 판매가 계산기
+wpz = wb.create_sheet("판매가", 2)
+widths(wpz, [30, 14, 12, 12, 12, 12, 12, 40])
+title(wpz, "주민 판매가 (v2) — 숙련을 크게, 나이는 작게", "판매가 = 기본가 × 등급 배율 × 숙련 배율 × 나이 배율 × 혈통 × 건강 × 0.95^(n−1)")
+header(wpz, 4, ["입력", "값", "", "", "", "", "", "설명"])
+calc = [("등급 배율 (1/2/5/20/100)", 1, "0"), ("숙련 (0~10)", 5, "0.0"), ("나이 (일)", 12, "0.0"),
+        ("명장 가문 (0/1)", 0, "0"), ("병듦 (0/1)", 0, "0"), ("그날 몇 번째 판매", 1, "0")]
+for i, (lab, v, fm) in enumerate(calc, 5):
+    put(wpz, i, 1, lab); put(wpz, i, 2, v, inp=True, fmt=fm)
+age_m = f"IF(B7<20,{A['ag1']},IF(B7<25,{A['ag2']},{A['ag3']}))"
+put(wpz, 12, 1, "판매가 (지폐)", bold=True)
+put(wpz, 12, 2, f"=ROUND({A['price']}*B5*({A['sk0']}+{A['sk1']}*B6)*{age_m}*IF(B8=1,{A['blood']},1)*IF(B9=1,{A['sick']},1)*{A['nth']}^(B10-1),0)", fmt="#,##0", bold=True)
+put(wpz, 12, 8, "아이(4일 미만)는 팔 수 없다", color=GREY)
+put(wpz, 14, 1, "일반 등급 · 첫 판매 기준 표", bold=True)
+ages = [("성인", A['ag1']), ("노인 (20일~)", A['ag2']), ("고령 (25일~)", A['ag3'])]
+header(wpz, 15, ["숙련"] + [a for a, _ in ages])
+for k, sk in enumerate(range(0, 11)):
+    r = 16 + k
+    put(wpz, r, 1, sk)
+    for j, (_, ref) in enumerate(ages):
+        put(wpz, r, 2 + j, f"=ROUND({A['price']}*({A['sk0']}+{A['sk1']}*A{r})*{ref},0)", fmt="#,##0")
+put(wpz, 28, 1, "판매 시 연출: '마을에 생기는 일' — 그 사람이 마을에서 가장 숙련 높은 직업이면 '○○이 멈춰요' 경고", color=GREY)
+
+# ============================================================ v2: 시대 점수
+wez = wb.create_sheet("시대 점수", 3)
+widths(wez, [20, 12, 12, 12, 14, 14, 14, 14, 44])
+title(wez, "시대 점수 (v2)", "시간당 점수 = (인구 × 0.4 + 건물 × 0.6) × 시대 배율 × (지켜볼 때 1 / 아닐 때 0.3). 발견 점수는 따로 더함. 계시는 지켜볼 때만")
+header(wez, 4, ["다음 시대", "필요 점수", "인구 (가정)", "건물 (가정)", "시대 배율", "하루 점수 (발견 제외)", "그 시대에 머무는 날 (발견 제외)", "발견 30% 포함", "메모"])
+rows_e = [("마을", A['need1'], 10, 8, A['em1']), ("읍내", A['need2'], 18, 12, A['em2']), ("영지", A['need3'], 45, 30, A['em3'])]
+for i, (nm, need, pop, bld, em) in enumerate(rows_e, 5):
+    put(wez, i, 1, nm); put(wez, i, 2, f"={need}", fmt="0")
+    put(wez, i, 3, pop, inp=True, fmt="0"); put(wez, i, 4, bld, inp=True, fmt="0")
+    put(wez, i, 5, f"={em}", fmt="0.00")
+    put(wez, i, 6, f"=({A['pt_pop']}*C{i}+{A['pt_bld']}*D{i})*E{i}*({A['watch']}+(24-{A['watch']})*{A['off']})", fmt="0.0")
+    put(wez, i, 7, f"=B{i}/F{i}", fmt="0.0")
+    put(wez, i, 8, f"=B{i}*0.7/F{i}", fmt="0.0", bold=True)
+put(wez, 5, 9, "개척기 → 마을은 첫날~이틀 (튜토리얼 안에서 첫 계시)", color=GREY)
+put(wez, 6, 9, "생애 시뮬레이션(보통): 도달 일차 마을 1.8 / 읍내 17.1 / 영지 39.3 → 머무는 날 약 15 / 22일", color=GREY)
+put(wez, 7, 9, "인구·건물은 그 시대 동안의 평균 가정 — 바꿔 볼 수 있음", color=GREY)
+
 # ============================================================ 안내 (맨 앞)
 wi = wb.create_sheet("안내", 0)
 widths(wi, [22, 100])
 info = [
-    ("나의 작은 지구 — 경제·인구 밸런스 시트 v1", ""),
+    ("나의 작은 지구 — 경제·인구 밸런스 시트 v2", ""),
     ("", ""),
     ("목적", "병 크기별로 경제가 굴러가는지, 주민 판매로 큰 병까지 며칠 걸리는지 검증해 병 가격·판매가를 정한다"),
     ("", ""),
@@ -485,7 +630,10 @@ info = [
     ("가정", "모든 입력값 (인구·판매·병 단계·소비·생산·기후). 여기만 고치면 됨"),
     ("인구별 운영 점검", "병 크기별 필요 근무자 vs 가용 근무자. 기후대·겨울 여부 선택 가능"),
     ("기후 비교", "인구 100명 기준 6개 기후대 나란히 비교"),
-    ("이사 시뮬레이션", "150일 하루 단위 시뮬레이션: 인구·판매·지폐·이사 시점 + 그래프"),
+    ("생애 시뮬레이션", "v2 기준. 주민 한 명 한 명을 1시간 단위로 30번 돌린 평균 (tools/sim_life.py): 이사·시대 일차, 인구 그래프, 판매 순서 비교"),
+    ("판매가", "주민 판매가 계산기 (등급·숙련·나이·혈통·건강·n번째) + 숙련 × 나이 표"),
+    ("시대 점수", "시대마다 필요한 점수와 걸리는 날 (인구·건물·지켜보는 시간·발견)"),
+    ("이사 시뮬레이션", "하루 단위 평균 모델 (참고용, 실효 출산율 보정): 인구·판매·지폐·이사 시점 + 그래프"),
     ("병 가격 역산", "목표 이사 일수 → 추천 병 가격. 시뮬레이션 결과 요약"),
     ("하늘 낟알", "첫 72시간 시간 단위 시뮬레이션: 낟알·첫 수확·창고 식량·굶주림 + 도착 시각×성장 시간 시나리오"),
     ("오프라인 12시간", "앱을 꺼둔 동안의 소비·출생·사망"),
@@ -502,6 +650,6 @@ for c in ("A5", "B5"):
     wi[c].font = F(bold=True, color="FFFFFF"); wi[c].fill = HDR
 wi["A13"].fill = INP; wi["A13"].font = F(bold=True, color=BLUE)
 
-out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "balance_v1.xlsx")
+out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "balance_v2.xlsx")
 wb.save(out)
 print(os.path.abspath(out))

@@ -2,10 +2,10 @@
 
 유리병 속 작은 중세 문명을 키우는 모바일 3D 정착·테라리움 시뮬레이션.
 
-- 📄 [게임 기획서 v3.0](docs/GAME_DESIGN.md) · [변경 이력](docs/CHANGELOG.md)
+- 📄 [게임 기획서 v3.5](docs/GAME_DESIGN.md) · [변경 이력](docs/CHANGELOG.md)
 - 📊 [아이 고유 특징 데이터 v1](docs/traits_v1.xlsx)
 - 🏗 [건물·생산 명세서 v1](docs/BUILDINGS.md) · [데이터](docs/buildings_v1.xlsx)
-- ⚖️ [경제·인구 밸런스 v1](docs/BALANCE.md) · [데이터](docs/balance_v1.xlsx)
+- ⚖️ [경제·인구 밸런스 v2](docs/BALANCE.md) · [데이터](docs/balance_v2.xlsx)
 - 🎬 [창조 오프닝 상세 v1](docs/OPENING.md)
 - 🖼 [UI 화면 설계 v1](docs/UI.md)
 - 🧠 [주민 행동 명세 v1](docs/RESIDENT_AI.md)

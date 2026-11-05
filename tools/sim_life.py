@@ -15,6 +15,9 @@ v1(하루 단위 평균 모델)은 '부부당 하루 0.6명'을 그대로 곱했
           빈 땅이 없으면 새 집을 못 짓고, 대신 작은 옛 집을 그 시대 집으로 넓혀 짓는다
   - 집 크기: 개척기 오두막 4 / 마을 목조 6 / 읍내·영지 석조 8 (새로 짓거나 넓혀 지은 집)
   - 판매: 땅이 85% 차면 하루 상한까지 (노인 → 미혼 성인 순), 아이 불가, 최소 10명
+          판매가 = 100 × 등급 기대 배율 1.25 × 숙련 배율(0.5 + 0.1 × 숙련) × 나이 배율 × 0.95^(그날 n번째 − 1)
+          숙련 = min(10, 0.6 × 재주(0.6~1.4, 평균 1) × 일한 날 수), 일은 4일(성인)부터 20일(노인)까지
+          나이 배율 = 성인 1.0 / 노인(20일~) 0.8 / 25일~ 0.6  — 기획서 11장 (숙련을 크게, 나이는 작게)
   - 이사: 지폐가 다음 병 가격 이상이면 바로 (주민·집 모두 옮김)
   - 시대 점수: 시간당 (인구 × 0.4 + 건물 × 0.6) × 시대 배율 × 지켜봄(1 / 거인 없음 0.3) + 발견 점수
           계시는 거인이 지켜볼 때만
@@ -50,7 +53,10 @@ def default_cfg():
         usable=0.5,                    # 대지 중 집·밭·일터로 쓸 수 있는 비율 (호수·숲·비탈·벽가 제외)
         land_pp=[40, 40, 34, 28],      # 1인당 땅 (칸) — 시대별
         house_slack=1.1,               # 집 정원 합계는 품을 수 있는 인구의 110%까지
-        sell_th=0.85, min_pop=10, per_sale=125,
+        sell_th=0.85, min_pop=10,
+        base_price=100, grade_mult=1.25,   # 기본가 · 등급 기대 배율 (7.2)
+        skill_rate=0.6, talent_lo=0.6, talent_hi=1.4,
+        sell_order='old',              # 'old' 노인 먼저 / 'young' 미혼 젊은 성인 먼저 / 'skilled' 숙련 높은 순
         watch_hours=set(range(20, 22)),  # 거인이 지켜보는 시간: 하루 2시간 (저녁)
         offline=0.3,
         era_need=[100, 200, 300], era_mult=[1.0, 0.08, 0.03],
@@ -65,7 +71,7 @@ def land_capacity(diam, usable, land_pp):
 
 def run(c, seed, days):
     rnd = random.Random(seed)
-    sex, age, partner, home, mom, fert = {}, {}, {}, {}, {}, {}
+    sex, age, partner, home, mom, fert, tal = {}, {}, {}, {}, {}, {}, {}
     kids_of, alive = {}, set()
     nid = [0]
 
@@ -73,11 +79,20 @@ def run(c, seed, days):
         i = nid[0]; nid[0] += 1
         sex[i], age[i], partner[i], home[i], mom[i] = s, a, None, None, m
         fert[i] = rnd.triangular(c['fert_lo'], c['fert_hi'], 1.0) if c['fert_lo'] < c['fert_hi'] else 1.0
+        tal[i] = rnd.triangular(c['talent_lo'], c['talent_hi'], 1.0)
         alive.add(i)
         if m is not None: kids_of.setdefault(m, set()).add(i)
         return i
 
     homes, occ = [], []
+
+    def skill(i):
+        return min(10.0, c['skill_rate'] * tal[i] * max(0.0, min(age[i], 20) - 4))
+
+    def price(i):
+        a = age[i]
+        am = 1.0 if a < 20 else (0.8 if a < 25 else 0.6)
+        return c['base_price'] * c['grade_mult'] * (0.5 + 0.1 * skill(i)) * am
 
     def set_home(i, h):
         if home[i] is not None: occ[home[i]] -= 1
@@ -106,7 +121,8 @@ def run(c, seed, days):
         mom[ids[k]] = ids[m]; kids_of.setdefault(ids[m], set()).add(ids[k])
 
     stage, era, era_pts, money = 0, 0, 0.0, 0.0
-    sold, born = 0, 0
+    sold, born, revenue = 0, 0, 0.0
+    sale_log = []
     moves, eras, log = [], [], []
     disc_i = 0
     for hr in range(days * H):
@@ -174,9 +190,17 @@ def run(c, seed, days):
         n = len(alive)
         if hod == 12 and n >= maxpop * c['sell_th'] and stage < len(c['stages']) - 1:
             can = min(c['stages'][stage]['cap'], max(0, n - c['min_pop']))
-            cands = sorted((i for i in alive if age[i] >= 4), key=lambda i: (-(age[i] >= 18), partner[i] is not None, -age[i]))
-            for i in cands[:can]:
-                kill(i); money += c['per_sale']; sold += 1
+            pool = [i for i in alive if age[i] >= 4]
+            if c['sell_order'] == 'old':
+                cands = sorted(pool, key=lambda i: (-(age[i] >= 18), partner[i] is not None, -age[i]))
+            elif c['sell_order'] == 'young':
+                cands = sorted(pool, key=lambda i: (partner[i] is not None, age[i]))
+            else:
+                cands = sorted(pool, key=lambda i: -skill(i))
+            for n_i, i in enumerate(cands[:can]):
+                pr = price(i) * 0.95 ** n_i
+                sale_log.append((age[i], skill(i), pr))
+                kill(i); money += pr; sold += 1; revenue += pr
         # 이사
         if stage < len(c['stages']) - 1 and money >= c['stages'][stage + 1]['price']:
             money -= c['stages'][stage + 1]['price']; stage += 1; moves.append(day + 1)
@@ -193,7 +217,7 @@ def run(c, seed, days):
         if hod == H - 1:
             log.append(dict(day=day + 1, pop=n, stage=stage, money=money, era=era, homes=len(homes),
                             cap=round(maxpop, 1), born=born, sold=sold))
-    return dict(log=log, moves=moves, eras=eras, sold=sold, born=born)
+    return dict(log=log, moves=moves, eras=eras, sold=sold, born=born, revenue=revenue, sales=sale_log)
 
 
 def pct(xs, p):
@@ -214,6 +238,8 @@ def scenario(c, seeds=30, days=100):
         pop=[statistics.mean(r['log'][d]['pop'] for r in rs) for d in range(days)],
         stage=[statistics.mean(r['log'][d]['stage'] for r in rs) for d in range(days)],
         sold=statistics.mean(r['sold'] for r in rs),
+        avg_price=sum(r['revenue'] for r in rs) / max(1, sum(r['sold'] for r in rs)),
+        sales=[x for r in rs for x in r['sales']],
     )
 
 
@@ -225,4 +251,10 @@ if __name__ == '__main__':
         r = scenario(c)
         mv = " / ".join(f"{m['mean']:.0f}일 [{m['p10']}~{m['p90']}]" if m['mean'] else "-" for m in r['moves'])
         er = " / ".join(f"{e['mean']:.1f}" if e['mean'] else "-" for e in r['eras'])
-        print(f"{name} (환경 ×{env}): 이사 {mv}   시대 {er}   판매 {r['sold']:.0f}명")
+        print(f"{name} (환경 ×{env}): 이사 {mv}   시대 {er}   판매 {r['sold']:.0f}명 · 평균가 {r['avg_price']:.0f}")
+    print("판매 순서 비교 (보통 마을):")
+    for order, label in (('old', '노인 먼저'), ('young', '젊은 미혼 먼저'), ('skilled', '숙련 높은 순')):
+        c = default_cfg(); c['sell_order'] = order
+        r = scenario(c)
+        mv = " / ".join(f"{m['mean']:.0f}" if m['mean'] else "-" for m in r['moves'])
+        print(f"  {label}: 이사 {mv}일   판매 {r['sold']:.0f}명 · 평균가 {r['avg_price']:.0f}")
