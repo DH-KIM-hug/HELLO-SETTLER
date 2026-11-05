@@ -81,7 +81,7 @@ canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
     <div class="toolrow" role="toolbar" aria-label="거인의 도구">
       <button class="tool" id="tBuild" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>건설</button>
       <button class="tool" id="tTap" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"/></svg>톡</button>
-      <button class="tool" id="tRain" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg>비</button>
+      <button class="tool" id="tRain" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg>물 뿌리기</button>
       <button class="tool" id="tSpeed" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-3M12 2v3"/></svg><span id="speedLbl">×60</span></button>
       <button class="tool" id="tAway" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg>자리비움</button>
       <button class="tool" id="tBook" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 9h6M9 13h6"/></svg>연대기</button>
@@ -158,7 +158,7 @@ const TRAITS = [
   ['새벽형', '아침에 힘이 남', 1.05],
   ['겁쟁이지만 손이 빠름', '빠르지만 하늘 소리에 숨음', 1.2],
   ['할머니 레시피를 기억함', '음식 솜씨', 1.0],
-  ['거인의 손가락을 본 적 있다고 우김', '신앙이 깊음', 1.0],
+  ['거인의 손가락을 본 적 있다고 우김', '믿음이 깊음', 1.0],
   ['고양이만 보면 따라감', '가끔 딴짓', 0.9],
   ['망치 소리로 박자를 맞춤', '건설이 빠름', 1.15],
   ['절대 뛰지 않음', '느리지만 다치지 않음', 0.9],
@@ -182,7 +182,7 @@ function newWorld() {
     era: 0, eraPts: 0, faith: 30, fear: 0, tapLog: [],
     stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22},
     manna: [], mannaBatches: [], firstHarvestAt: null, mannaEnded: false, lastDawnIdx: null, arrivalManna: false,
-    trees: [], rocks: [], pond: {x: 13, y: 9, rx: 5, ry: 3.4}, b: [], p: [], nextId: 1,
+    trees: [], rocks: [], pond: {x: 13, y: 9, rx: 5, ry: 3.4}, river: [], humid: 0.5, b: [], p: [], nextId: 1,
     book: [], paths: new Float32Array(128 * 128), rain: null, ripples: [], deficit: 0,
     stats: {born: 0, died: 0, built: 0}, timers: {life: 0, jobs: 0, auto: 0, decay: 0, speak: 0}, cam: {x: 0, y: 2, z: 0},
   };
@@ -194,6 +194,10 @@ function newWorld() {
     if (Math.hypot(x, y) < R - 1.5) st.trees.push({x, y, s: 'tree', g: 0, res: 0});
   }
   for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
+  // 세상 끝 유리벽에서 흘러내린 물이 시내가 되어 호수로
+  { const a0 = Math.atan2(9, 13), sx0 = Math.cos(a0) * (R - 0.3), sy0 = Math.sin(a0) * (R - 0.3);
+    for (let i = 0; i <= 24; i++) { const f = i / 24; st.river.push({x: sx0 + (13 + 4.2 * Math.cos(a0) - sx0) * f + Math.sin(f * 9) * 0.9, y: sy0 + (9 + 2.8 * Math.sin(a0) - sy0) * f + Math.cos(f * 7) * 0.7}); } }
+  st.trees = st.trees.filter(t => !st.river.some(r => Math.hypot(r.x - t.x, r.y - t.y) < 1));
   S = st;
   // 시작 창고 + 모닥불
   const w = addBuilding('창고', 0, 0, true);
@@ -222,7 +226,8 @@ function addBuilding(type, x, y, built) {
 function addPerson(name, sex, age, trait, x, y) {
   const tr = trait ? TRAITS.find(t => t[0] === trait) : pick(TRAITS);
   const p = {id: S.nextId++, name, sex, age, trait: tr[0], tdesc: tr[1], mult: tr[2], partner: null, home: null, job: null, parents: null,
-    hunger: 0, health: 1, x, y, steps: [], carry: null, say: '', sayT: 0, doing: '쉬는 중', dead: false};
+    hunger: 0, health: 1, x, y, steps: [], carry: null, say: '', sayT: 0, doing: '쉬는 중', dead: false,
+    belief: age > 0 ? 0.7 : (S.offline ? 0.25 : 0.55)};
   S.p.push(p);
   return p;
 }
@@ -275,7 +280,7 @@ function mannaFall(reason) {
     S.manna.push({x: store.x + Math.cos(a) * d, y: store.y + Math.sin(a) * d, amt: amt / piles, born: S.t, res: 0});
   }
   S.ripples.push({x: store.x, y: store.y, t: 0, kind: 'manna'});
-  S.faith = Math.min(100, S.faith + 6);
+  blessAll(0.06);
   const kids = alive().filter(p => p.age < 4);
   const who = kids.length ? pick(kids) : pick(alive());
   if (reason === 'arrival') { say(who, '엄마, 하늘에서 뭐가 내렸어요!', 8); log('굶주린 조상들에게 거인이 하늘에서 낟알을 내렸다.'); toast('하늘 낟알이 내렸어요. 첫 수확을 거둘 때까지 매일 새벽 내립니다.'); }
@@ -342,8 +347,18 @@ function step(dt) {
   const builtN = S.b.filter(b => b.built).length;
   const rate = (pop.length * 0.4 + builtN * 0.6) * (S.offline ? OFFLINE_ERA : 1);
   if (S.era < ERAS.length - 1) S.eraPts = Math.min(ERA_NEED, S.eraPts + rate * dt / HOUR);
-  // 신앙은 천천히 식는다
-  S.faith = Math.max(0, S.faith - dt / (6 * HOUR));
+  // 믿음: 거인이 지켜보면 천천히 오르고, 없으면 내려간다 (아이는 더 빨리)
+  let sum = 0;
+  for (const p of pop) {
+    if (S.offline) p.belief -= dt / (DAY * (p.age < 6 ? 1.5 : 4));
+    else p.belief += dt / (DAY * 6);
+    p.belief = Math.max(0, Math.min(1, p.belief)); sum += p.belief;
+  }
+  S.faith = pop.length ? sum / pop.length * 100 : 0;
+  // 닫힌 병의 물 순환: 낮의 빛으로 증발 → 유리 천장에 맺힘 → 습한 새벽에 비
+  const hNow = hourNow();
+  if (hNow >= 7 && hNow < 18) S.humid = Math.min(1, (S.humid || 0) + dt / (DAY * 0.45));
+  if (hNow >= 4 && hNow < 6 && (S.humid || 0) > 0.7 && !S.rain) naturalRain();
   S.fear = Math.max(0, S.fear - dt / (2 * HOUR));
 }
 
@@ -359,7 +374,7 @@ function updateBuilding(b, dt) {
   if (Object.keys(d.out).every(k => ENOUGH[k] !== undefined && (S.stock[k] || 0) + (b.out[k] || 0) >= ENOUGH[k])) return;
   if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) return;
   const w = person(b.worker);
-  b.timer += dt * (w ? w.mult : 1) * (b.boost > 0 ? 1.5 : 1) * (S.rain && b.type === '농장' ? 1.2 : 1);
+  b.timer += dt * (w ? w.mult : 1) * (b.boost > 0 ? 1.5 : 1) * (S.rain && S.rain.natural && b.type === '농장' ? 1.2 : 1);
   while (b.timer >= d.cycle) {
     b.timer -= d.cycle;
     if (d.in) { if (!Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) { b.timer = 0; break; } for (const [k, n] of Object.entries(d.in)) b.inBuf[k] -= n; }
@@ -449,7 +464,7 @@ function pray(p) {
   p.doing = '기도하는 중';
   const lines = ['거인님, 오늘도 지켜주세요', '거인님, 비를 내려주세요', '아이들이 건강하게 해주세요', '거인님은 지금도 보고 계실까'];
   const s = near(S.fire.x, S.fire.y, 2.2);
-  p.steps.push(walk(s.x, s.y), act(600, (q) => { S.faith = Math.min(100, S.faith + 0.3); }));
+  p.steps.push(walk(s.x, s.y), act(600, (q) => { blessAll(0.003); }));
   if (rnd() < 0.35) say(p, pick(lines), 6);
 }
 
@@ -668,6 +683,14 @@ function kill(p, why) {
 
 function idleChatter() {
   const pop = alive().filter(q => !q.sleeping && q.age >= 2.5); if (!pop.length) return;
+  const d = pop.filter(q => q.belief < 0.3);
+  if (d.length && rnd() < 0.6) {
+    const kid = d.find(q => q.age < 6) || d[0];
+    say(kid, pick(['거인 같은 건 없어', '그냥 하늘이야', '본 적도 없는걸', '어른들 옛날이야기야']), 6);
+    const elder = pop.filter(q => q.age >= 15 && q.belief > 0.5).sort((a, b) => b.age - a.age)[0];
+    if (elder) say(elder, '저 하늘의 그림자를 봐라', 6);
+    return;
+  }
   const p = pick(pop);
   if (!S.offline && rnd() < 0.4) say(p, pick(['거인님이 보고 계신다', '하늘에 큰 그림자가…', '오늘은 하늘이 따뜻해']), 5);
   else if (S.deficit > 0) say(p, '창고가 비었어…', 5);
@@ -717,6 +740,7 @@ function autoBuild() {
 function free(x, y, size) {
   if (Math.hypot(x, y) > R - size - 1.2) return false;
   if (inPond({x, y})) return false;
+  for (const r of S.river) if (Math.hypot(r.x - x, r.y - y) < size + 0.7) return false;
   for (const b of S.b) if (Math.hypot(b.x - x, b.y - y) < DEF[b.type].size + size + 0.6) return false;
   if (Math.hypot(S.fire.x - x, S.fire.y - y) < size + 1.2) return false;
   for (const r of S.rocks) if (Math.hypot(r.x - x, r.y - y) < size + 0.8) return false;
@@ -737,10 +761,19 @@ function findSpot(type) {
 function clearTrees(x, y, size) { S.trees = S.trees.filter(t => Math.hypot(t.x - x, t.y - y) > size + 0.4); }
 
 // ───────────────────────── 거인의 행동 ─────────────────────────
+function blessAll(d) { for (const p of alive()) p.belief = Math.min(1, (p.belief ?? 0.6) + d); }
+const doubters = () => alive().filter(p => p.belief < 0.3 && p.age >= 2.5);
+function naturalRain() {
+  S.rain = {x: 0, y: 0, t: 1800, natural: true}; S.humid -= 0.55;
+  S.rainCount = (S.rainCount || 0) + 1;
+  if (S.rainCount === 1) log('새벽, 하늘이 울었다. 유리 천장에서 물방울이 떨어져 밭을 적셨다.');
+  else if (S.rainCount % 4 === 0) log('새벽 비가 내렸다. 세상 끝 벽을 타고 물이 흘러내려 시내가 불었다.');
+  const d = doubters(); if (d.length && rnd() < 0.7) say(pick(d), '봐, 비는 그냥 내리는 거야', 6);
+}
 function giantTap() {
   S.tapLog = S.tapLog.filter(t => S.t - t < 600); S.tapLog.push(S.t);
   const angry = S.tapLog.length >= 4;
-  if (angry) S.fear = Math.min(100, S.fear + 10); else S.faith = Math.min(100, S.faith + 2);
+  if (angry) S.fear = Math.min(100, S.fear + 10); else blessAll(0.02);
   S.ripples.push({x: S.cam.x, y: S.cam.y - 10, t: 0, kind: 'tap'});
   for (const p of alive()) if (!p.sleeping && rnd() < 0.5) {
     if (angry && p.trait === '겁쟁이지만 손이 빠름') { say(p, '거인님이 노하셨나…', 5); p.steps = [act(60, null)]; }
@@ -749,12 +782,18 @@ function giantTap() {
   if (angry) toast('너무 자주 두드리면 주민들이 겁을 먹어요.');
 }
 function giantRain(wx, wy) {
-  S.rain = {x: wx, y: wy, t: 600};
+  S.rain = {x: wx, y: wy, t: 600, natural: false};
   for (const b of S.b) if (b.type === '농장' && Math.hypot(b.x - wx, b.y - wy) < 8) { b.boost = HOUR; if (b.readyAt && b.readyAt > S.t) b.readyAt -= 1800; }
-  S.faith = Math.min(100, S.faith + 3);
-  const p = alive().filter(q => !q.sleeping).sort((a, b) => Math.hypot(a.x - wx, a.y - wy) - Math.hypot(b.x - wx, b.y - wy))[0];
-  if (p) say(p, '거인님이 비를 내리셨다', 5);
-  log('하늘에서 비가 내렸다. 밀밭이 고개를 들었다.');
+  S.humid = Math.min(1, (S.humid || 0) + 0.1);
+  // 기적: 본 사람의 믿음이 크게 오른다 (같은 기적이 잦으면 감동이 줄어듦)
+  S.miracles = (S.miracles || []).filter(t => S.t - t < 6 * HOUR); S.miracles.push(S.t);
+  const wow = Math.max(0.25, 1 - (S.miracles.length - 1) * 0.25);
+  const seen = alive().filter(q => !q.sleeping && Math.hypot(q.x - wx, q.y - wy) < 14);
+  let turned = 0;
+  for (const q of seen) { if (q.belief < 0.3) turned++; q.belief = Math.min(1, q.belief + 0.3 * wow); }
+  for (const q of seen.slice(0, 3)) say(q, q.age < 6 && turned ? '정말… 계셨어?' : pick(['기적이다!', '거인님이 물을 내리셨다!', '하늘에서 물이!']), 6);
+  log(turned ? `한낮에 하늘에서 물이 쏟아졌다. 거인을 믿지 않던 ${turned}명이 무릎을 꿇었다.` : '한낮에 하늘에서 물이 쏟아졌다. 거인님의 기적이었다.');
+  if (wow < 0.6) toast('같은 기적이 잦으면 감동이 줄어요.');
 }
 function giantPlace(type, wx, wy) {
   const d = DEF[type];
@@ -768,7 +807,7 @@ function giantPlace(type, wx, wy) {
 }
 function revelation() {
   if (S.eraPts < ERA_NEED || S.era >= ERAS.length - 1) return;
-  S.era++; S.eraPts = 0; S.faith = Math.min(100, S.faith + 15);
+  S.era++; S.eraPts = 0; blessAll(0.15);
   log(`거인님의 계시가 내렸다. 초록방울은 '${ERAS[S.era]}'${josa(ERAS[S.era], '이', '가')} 되었다. 방앗간과 빵집을 짓는 법을 알게 되었다.`);
   toast(`'${ERAS[S.era]}' 시대가 열렸어요. 방앗간·빵집·목조주택을 지을 수 있어요.`);
   renderBuild();
@@ -792,14 +831,21 @@ function goAway(hours) {
     if (done < total) setTimeout(chunk, 0);
     else {
       S.offline = false; busy = false;
+      const doubtN = doubters().length;
+      const boost = Math.min(0.55, 0.08 + hours / 48 * 0.35);
+      blessAll(boost);
       log('하늘에 다시 커다란 그림자가 비쳤다. 거인님이 돌아오셨다!');
-      const pick5 = S.book.slice(before.book).filter(e => !/그림자/.test(e.text)).slice(-8);
+      if (hours >= 8) log(doubtN ? `귀환 축제가 열렸다. 거인을 믿지 않던 ${doubtN}명도 하늘을 보며 울었다.` : '귀환 축제가 열렸다. 모두 하늘을 향해 손을 흔들었다.');
+      const kid = alive().filter(q => q.age < 8 && q.age >= 2.5)[0]; if (kid) say(kid, doubtN ? '정말 계셨어…!' : '거인님이다!', 8);
+      const pick5 = S.book.slice(before.book).filter(e => !/그림자가 하늘에서 사라졌다/.test(e.text)).slice(-8);
       showOverlay(`<h3>거인이 없던 ${hours >= 24 ? (hours / 24) + '일' : hours + '시간'} 동안</h3>
         <div class="kv">
           <span>인구</span><b>${before.pop} → ${alive().length}</b>
           <span>태어남 / 떠남(죽음)</span><b>${S.stats.born - before.born} / ${S.stats.died - before.died}</b>
           <span>새로 지은 건물</span><b>${S.b.filter(b => b.built).length - before.built}</b>
           <span>문명 발전 (30% 속도)</span><b>+${Math.round(S.eraPts - before.era)}점</b>
+          <span>돌아오기 전 거인을 믿지 않던 사람</span><b>${doubtN}명</b>
+          <span>귀환의 기쁨 (믿음)</span><b>+${Math.round(boost * 100)}</b>
         </div>
         <div class="parch">${pick5.map(e => `<div class="entry"><small>${fmtTime(e.t)}</small><span>${esc(e.text)}</span></div>`).join('') || '<div class="entry"><span>조용한 날들이었다.</span></div>'}</div>
         <button class="btn" type="button" id="awayOk">마을 보기</button>`);
@@ -849,6 +895,10 @@ function draw() {
   // 세상의 끝 — 유리벽
   ctx.strokeStyle = 'rgba(220,240,250,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = 'rgba(220,240,250,0.25)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex - 5, ey - 3, 0, Math.PI, Math.PI * 2); ctx.stroke();
+  // 시내 (세상 끝에서 시작)
+  ctx.strokeStyle = '#6fa4c6'; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, S.cam.z * (S.rain && S.rain.natural ? 0.75 : 0.55));
+  ctx.beginPath(); S.river.forEach((r, i) => i ? ctx.lineTo(sx(r.x), sy(r.y)) : ctx.moveTo(sx(r.x), sy(r.y))); ctx.stroke();
+  { const r0 = S.river[0]; ctx.strokeStyle = 'rgba(220,240,250,0.9)'; ctx.lineWidth = 2; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(sx(r0.x) + i * 4, sy(r0.y) - 60); ctx.lineTo(sx(r0.x) + i * 4, sy(r0.y) - 4); ctx.stroke(); } }
   // 오솔길
   const cell = (2 * R) / 128;
   for (let gy = 0; gy < 128; gy++) for (let gx = 0; gx < 128; gx++) {
@@ -878,7 +928,7 @@ function draw() {
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.f();
   // 비
-  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < 70; i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10; const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
+  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < 70; i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10 * (S.rain.natural ? 3.5 : 1); const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
   // 밤 어둠 + 불빛
   const dk = darkness(h);
   if (dk > 0) {
@@ -969,7 +1019,7 @@ function renderHud() {
   document.getElementById('eraName').textContent = ERAS[S.era];
   document.getElementById('eraBar').style.width = (S.era >= ERAS.length - 1 ? 100 : S.eraPts / ERA_NEED * 100) + '%';
   const food = Math.floor(foodTotal());
-  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['신앙', Math.round(S.faith)]];
+  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['믿음', Math.round(S.faith) + '%'], ['의심', doubters().length + '명']];
   document.getElementById('stats').innerHTML = chips.map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
   let hint = '';
   const has = (t) => S.b.some(b => b.type === t);
@@ -1000,7 +1050,7 @@ function renderPerson() {
   document.getElementById('pName').textContent = p.name;
   const job = p.job ? bld(p.job).type : (p.age < 4 ? '아이' : p.age >= 20 ? '노인 (은퇴)' : '일거리 찾는 중');
   const partner = p.partner ? person(p.partner)?.name : '—';
-  const rows = [['나이', `${Math.round(p.age * 2.4)}세`], ['특징', p.trait], ['', p.tdesc], ['직업', job], ['지금', p.doing], ['배우자', partner], ['집', p.home ? bld(p.home).type : '없음 (모닥불)'], ['배고픔', p.hunger < 0.5 ? '배부름' : p.hunger < 2 ? '조금 출출' : '굶주림'], ['건강', Math.round(p.health * 100) + '%']];
+  const rows = [['나이', `${Math.round(p.age * 2.4)}세`], ['특징', p.trait], ['', p.tdesc], ['직업', job], ['지금', p.doing], ['배우자', partner], ['집', p.home ? bld(p.home).type : '없음 (모닥불)'], ['믿음', p.belief < 0.3 ? '거인을 믿지 않음' : p.belief < 0.6 ? '반신반의' : '거인님을 믿음'], ['배고픔', p.hunger < 0.5 ? '배부름' : p.hunger < 2 ? '조금 출출' : '굶주림'], ['건강', Math.round(p.health * 100) + '%']];
   document.getElementById('pInfo').innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${esc(String(v))}</b>`).join('');
 }
 function setPressed(id, v) { document.getElementById(id).setAttribute('aria-pressed', v ? 'true' : 'false'); }
@@ -1009,7 +1059,7 @@ function openSheet(id) { closeSheets(); document.getElementById(id).hidden = fal
 document.querySelectorAll('[data-close]').forEach(el => el.onclick = () => { document.getElementById(el.dataset.close).hidden = true; if (el.dataset.close === 'personSheet') selected = null; });
 document.getElementById('tBuild').onclick = () => { if (buildPick) { buildPick = null; setPressed('tBuild', false); return; } rainMode = false; setPressed('tRain', false); renderBuild(); openSheet('buildSheet'); };
 document.getElementById('tTap').onclick = () => giantTap();
-document.getElementById('tRain').onclick = () => { rainMode = !rainMode; buildPick = null; setPressed('tBuild', false); setPressed('tRain', rainMode); if (rainMode) toast('비를 내릴 곳을 누르세요'); };
+document.getElementById('tRain').onclick = () => { rainMode = !rainMode; buildPick = null; setPressed('tBuild', false); setPressed('tRain', rainMode); if (rainMode) toast('기적: 물을 뿌릴 곳을 누르세요'); };
 document.getElementById('tSpeed').onclick = () => { S.speedIdx = (S.speedIdx + 1) % SPEEDS.length; renderHud(); };
 document.getElementById('tBook').onclick = () => { renderBook(); openSheet('bookSheet'); };
 document.getElementById('tAway').onclick = () => { openSheet('awaySheet'); };
@@ -1056,7 +1106,7 @@ function frame(now) {
 }
 function start(data) {
   newWorld();
-  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); S = d; } catch (e) { newWorld(); } }
+  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.river) d.river = S.river; S = d; } catch (e) { newWorld(); } }
   resize(); window.addEventListener('resize', () => { resize(); });
   renderHud(); renderBuild();
   requestAnimationFrame(frame);
