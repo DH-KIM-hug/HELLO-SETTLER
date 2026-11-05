@@ -43,12 +43,9 @@
 
 ## 다시 할 것
 
-기준에 대체로 맞지만 작게 어긋난 부분이 있다. 쓰기 전에 다시 뽑을지 판단한다.
+2026-11-06 다시 그리기: 주민이 나오는 23장을 `mid_variety.png`를 참조로 다시 그려 생김새·옷 색을 다양하게 했고, 강이 바위·언덕에서 시작하던 장면(3-3, 3-7, 3-10, 4-4, 6-3)과 2-3(풀 없음)을 고쳤다. 남은 작은 문제:
 
-- `2-3`: some grass already on the hills
-- `3-3`: waterfall starts from rocks, not the glass wall
-- `3-7`: a small stream of unclear source
-- `3-10`: an inner river and waterwheel start from a hill, not the glass wall
-- `4-4`: a stream of unclear source
-- `6-3`: waterfall starts from rocks, not the glass wall
-- 공통: 주민 옷 색이 크림·갈색에 몰리는 편이다. 다양성은 [style-test/mid_variety.png](style-test/mid_variety.png) 기준으로 더 넓혀야 한다.
+- `2-9`: about 12 settlers instead of 10
+- `4-3`: a stream of unclear source
+- `5-1`: the sawmill's waterwheel stream has no visible source
+- `7-2`: inside the card a waterfall starts from rocks, not the glass wall
