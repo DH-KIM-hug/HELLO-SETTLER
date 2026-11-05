@@ -1,0 +1,36 @@
+; Engine configuration file.
+; 나의 작은 지구 (나작지) — Godot 4.7.2, GDScript. 안내: docs/GODOT_KICKOFF.md
+
+config_version=5
+
+[application]
+
+config/name="Nazakji"
+config/description="나의 작은 지구 — 유리병 속 작은 중세 문명"
+run/main_scene="res://scenes/test_pixel.tscn"
+config/features=PackedStringArray("4.7", "Mobile")
+
+[display]
+
+window/size/viewport_width=360
+window/size/viewport_height=640
+window/size/window_width_override=720
+window/size/window_height_override=1280
+window/stretch/mode="viewport"
+window/stretch/aspect="keep"
+window/stretch/scale_mode="integer"
+window/handheld/orientation=1
+
+[gui]
+
+theme/default_font_antialiasing=0
+theme/default_font_hinting=0
+theme/default_font_subpixel_positioning=0
+
+[rendering]
+
+renderer/rendering_method="mobile"
+textures/canvas_textures/default_texture_filter=0
+textures/default_filters/use_nearest_mipmap_filter=true
+anti_aliasing/quality/msaa_3d=0
+anti_aliasing/quality/screen_space_aa=0
