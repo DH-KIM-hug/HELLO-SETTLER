@@ -459,7 +459,7 @@ function step(dt) {
   const hyEvery = S.offline ? 300 : 60;
   while (T.hydro >= hyEvery) { hydroStep(hyEvery / 60); T.hydro -= hyEvery; }
   T.lake = (T.lake || 0) + dt;
-  if (T.lake >= HOUR) { T.lake = 0; lakeWatch(); }
+  if (T.lake >= HOUR) { T.lake = 0; lakeWatch(); saltDiscovery(); }
   if (T.decay >= 60) { for (let i = 0; i < S.paths.length; i++) S.paths[i] *= 0.997; T.decay = 0; }
   if (T.speak >= 240) { idleChatter(); T.speak = 0; }
   // 시대 점수
@@ -847,7 +847,7 @@ function autoBuild() {
   else if (S.stock['판자'] < 12 && !has('제재소')) want = '제재소';
   else if (S.stock['돌'] < 6 && !has('채석장')) want = '채석장';
   else if (S.trees.filter(t => t.s === 'tree').length < 40 && !has('산림관')) want = '산림관';
-  else if (!has('소금밭') && saltFlat()) want = '소금밭';
+  else if (S.saltKnown && !has('소금밭') && saltFlat()) want = '소금밭';
   else if (S.era >= 1 && !has('방앗간')) want = '방앗간';
   else if (S.era >= 1 && !has('빵집')) want = '빵집';
   // 비상용 판자 4장은 남긴다 (나무꾼·제재소 제외) — 판자가 바닥나 아무것도 못 짓는 교착 방지
@@ -894,6 +894,24 @@ function clearTrees(x, y, size) { S.trees = S.trees.filter(t => Math.hypot(t.x -
 // ───────────────────────── 거인의 행동 ─────────────────────────
 function blessAll(d) { for (const p of alive()) p.belief = Math.min(1, (p.belief ?? 0.6) + d); }
 const doubters = () => alive().filter(p => p.belief < 0.3 && p.age >= 2.5);
+// 소금의 발견: 호수가 마르고 하얀 땅이 드러나면, 누군가 그 곁을 지나다 맛을 본다
+function saltDiscovery() {
+  if (S.saltKnown) return;
+  let flat = 0, fx = 0, fy = 0;
+  for (const k of HY.cells) if (S.w[k] < 0.004 && S.salt[k] > 0.003) { flat++; fx += cellX(k); fy += cellY(k); }
+  if (flat < 25) return;   // 호숫가 몇 칸이 아니라, 눈에 띄는 하얀 들판이 드러났을 때
+  fx /= flat; fy /= flat;
+  const near = alive().filter(q => !q.sleeping && q.age >= 2.5 && Math.hypot(q.x - fx, q.y - fy) < 12);
+  if (!near.length && rnd() > 0.25) return;            // 아무도 근처에 없으면 가끔만 (누군가 찾아가 본다)
+  const who = near.find(q => q.age < 8) || near[0] || pick(alive().filter(q => q.age >= 2.5));
+  if (!who) return;
+  S.saltKnown = true; S.eraPts = Math.min(ERA_NEED, S.eraPts + 15);
+  log(`${who.name}${josa(who.name, '이', '가')} 마른 호수 바닥의 하얀 흙을 손가락으로 찍어 맛보았다. 짰다! 사람들은 그것을 '소금'이라 불렀다.`);
+  log(alive().some(q => q.belief < 0.3) ? '어떤 이는 거인님이 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다.' : '사람들은 거인님이 호수를 거두어 소금을 남기셨다고 믿었다.');
+  say(who, '짜다! 이 하얀 흙, 짜!', 8);
+  toast('소금을 발견했어요! 이제 소금밭을 지을 수 있어요.');
+  renderBuild();
+}
 function lakeWatch() {
   for (const b of S.basins) {
     if (!b.area0) continue;
@@ -1221,7 +1239,7 @@ function renderHud() {
   document.getElementById('eraName').textContent = ERAS[S.era];
   document.getElementById('eraBar').style.width = (S.era >= ERAS.length - 1 ? 100 : S.eraPts / ERA_NEED * 100) + '%';
   const food = Math.floor(foodTotal());
-  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['소금', Math.floor(S.stock['소금'] || 0)], ['믿음', Math.round(S.faith) + '%'], ['의심', doubters().length + '명']];
+  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['소금', S.saltKnown ? Math.floor(S.stock['소금'] || 0) : '?'], ['믿음', Math.round(S.faith) + '%'], ['의심', doubters().length + '명']];
   document.getElementById('stats').innerHTML = chips.map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
   let hint = '';
   const has = (t) => S.b.some(b => b.type === t);
@@ -1240,8 +1258,8 @@ function renderHud() {
 function renderBuild() {
   const grid = document.getElementById('buildGrid');
   grid.innerHTML = Object.entries(DEF).filter(([k]) => k !== '창고').map(([k, d]) => {
-    const locked = d.era > S.era;
-    return `<button class="card" type="button" data-b="${k}" ${locked ? 'disabled' : ''}><b>${k}</b><span>${d.desc}</span><span>판자 ${d.plank} · 돌 ${d.stone}${locked ? ' · 마을 시대에 열림' : ''}</span></button>`;
+    const noSalt = k === '소금밭' && !S.saltKnown, locked = d.era > S.era || noSalt;
+    return `<button class="card" type="button" data-b="${k}" ${locked ? 'disabled' : ''}><b>${k}</b><span>${d.desc}</span><span>판자 ${d.plank} · 돌 ${d.stone}${noSalt ? ' · 소금을 발견하면 열림' : d.era > S.era ? ' · 마을 시대에 열림' : ''}</span></button>`;
   }).join('');
   grid.querySelectorAll('[data-b]').forEach(el => el.onclick = () => { buildPick = el.dataset.b; closeSheets(); toast(`${buildPick}: 지을 곳을 누르세요`); setPressed('tBuild', true); });
 }
