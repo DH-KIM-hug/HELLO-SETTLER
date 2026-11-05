@@ -12,8 +12,8 @@
 2. **Git** 과 **Git LFS** 설치 (`git lfs install`) — 그림·모델·소리 같은 큰 파일용
 3. 저장소 받기
    ```
-   git clone https://github.com/dh-kim-hug/hello-settler.git
-   cd hello-settler
+   git clone https://github.com/DH-KIM-hug/HELLO-SETTLER.git
+   cd HELLO-SETTLER
    git checkout ccr-5955ceb0-i7kj1q
    ```
 4. **Claude Code** 설치 (데스크톱 앱 또는 터미널 CLI) → 이 폴더에서 실행
