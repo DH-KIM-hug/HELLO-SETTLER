@@ -1,6 +1,6 @@
 {
- "style": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition",
- "negative": "text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors, oversaturated, chibi, anime big eyes, photorealistic humans close-up, fantasy elves, dragons, sea, ocean, beach, waves",
+ "style": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded",
+ "negative": "text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors, oversaturated, anime big eyes, blush, chibi giant heads, mascot, photorealistic, tilt-shift, bokeh, depth of field, golden haze, glossy plastic, cinematic lighting, hyperdetailed, fantasy elves, dragons, castle, sea, ocean, beach, waves",
  "count": 35,
  "items": [
   {
@@ -10,7 +10,7 @@
    "prompt": "a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny miner's tunnel, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes",
    "aspect": "9:16",
    "file": "design/concept/1-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny miner's tunnel, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny miner's tunnel, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes"
   },
   {
    "id": "1-2",
@@ -19,7 +19,7 @@
    "prompt": "view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake under a giant water droplet falling from the dome, a river starting from water trickling down the glass wall, tiny villagers carrying sacks, morning light from one side",
    "aspect": "16:9",
    "file": "design/concept/1-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake under a giant water droplet falling from the dome, a river starting from water trickling down the glass wall, tiny villagers carrying sacks, morning light from one side"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake under a giant water droplet falling from the dome, a river starting from water trickling down the glass wall, tiny villagers carrying sacks, morning light from one side"
   },
   {
    "id": "2-1",
@@ -28,7 +28,7 @@
    "prompt": "a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm",
    "aspect": "9:16",
    "file": "design/concept/2-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm"
   },
   {
    "id": "2-2",
@@ -37,7 +37,7 @@
    "prompt": "four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view",
    "aspect": "3:2",
    "file": "design/concept/2-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view"
   },
   {
    "id": "2-3",
@@ -46,7 +46,7 @@
    "prompt": "a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view",
    "aspect": "9:16",
    "file": "design/concept/2-3.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view"
   },
   {
    "id": "2-4",
@@ -55,7 +55,7 @@
    "prompt": "water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics",
    "aspect": "9:16",
    "file": "design/concept/2-4.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics"
   },
   {
    "id": "2-5",
@@ -64,7 +64,7 @@
    "prompt": "a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious",
    "aspect": "9:16",
    "file": "design/concept/2-5.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious"
   },
   {
    "id": "2-6",
@@ -73,7 +73,7 @@
    "prompt": "the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up",
    "aspect": "3:2",
    "file": "design/concept/2-6.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up"
   },
   {
    "id": "2-7",
@@ -82,7 +82,7 @@
    "prompt": "time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy",
    "aspect": "16:9",
    "file": "design/concept/2-7.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy"
   },
   {
    "id": "2-8",
@@ -91,7 +91,7 @@
    "prompt": "seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge",
    "aspect": "9:16",
    "file": "design/concept/2-8.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge"
   },
   {
    "id": "2-9",
@@ -100,7 +100,7 @@
    "prompt": "dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk",
    "aspect": "9:16",
    "file": "design/concept/2-9.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk"
   },
   {
    "id": "3-1",
@@ -109,7 +109,7 @@
    "prompt": "a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up",
    "aspect": "16:9",
    "file": "design/concept/3-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up"
   },
   {
    "id": "3-2",
@@ -118,7 +118,7 @@
    "prompt": "water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns",
    "aspect": "9:16",
    "file": "design/concept/3-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns"
   },
   {
    "id": "3-3",
@@ -127,7 +127,7 @@
    "prompt": "split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view",
    "aspect": "16:9",
    "file": "design/concept/3-3.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view"
   },
   {
    "id": "3-4",
@@ -136,7 +136,7 @@
    "prompt": "a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon",
    "aspect": "16:9",
    "file": "design/concept/3-4.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon"
   },
   {
    "id": "3-5",
@@ -145,7 +145,7 @@
    "prompt": "a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light",
    "aspect": "3:2",
    "file": "design/concept/3-5.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light"
   },
   {
    "id": "3-6",
@@ -154,7 +154,7 @@
    "prompt": "a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other",
    "aspect": "9:16",
    "file": "design/concept/3-6.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other"
   },
   {
    "id": "3-7",
@@ -163,7 +163,7 @@
    "prompt": "dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome",
    "aspect": "16:9",
    "file": "design/concept/3-7.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome"
   },
   {
    "id": "3-8",
@@ -172,7 +172,7 @@
    "prompt": "sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth",
    "aspect": "16:9",
    "file": "design/concept/3-8.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth"
   },
   {
    "id": "3-9",
@@ -181,7 +181,7 @@
    "prompt": "top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces",
    "aspect": "16:9",
    "file": "design/concept/3-9.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces"
   },
   {
    "id": "3-10",
@@ -190,16 +190,16 @@
    "prompt": "side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style",
    "aspect": "9:16",
    "file": "design/concept/3-10.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style"
   },
   {
    "id": "4-1",
    "title": "주민 캐릭터 시트 (온대)",
    "desc": "",
-   "prompt": "character sheet of small medieval European villagers with realistic proportions: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front and side views, simple low-poly 3D style, neutral background",
+   "prompt": "sprite sheet of tiny medieval European settlers about 4 heads tall, each clearly different in body shape, hair and clothing colors: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front, side, back views and one walking pose, plain cream background",
    "aspect": "3:2",
    "file": "design/concept/4-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, character sheet of small medieval European villagers with realistic proportions: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front and side views, simple low-poly 3D style, neutral background"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, sprite sheet of tiny medieval European settlers about 4 heads tall, each clearly different in body shape, hair and clothing colors: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front, side, back views and one walking pose, plain cream background"
   },
   {
    "id": "4-2",
@@ -208,7 +208,7 @@
    "prompt": "six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background",
    "aspect": "3:2",
    "file": "design/concept/4-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background"
   },
   {
    "id": "4-3",
@@ -217,7 +217,7 @@
    "prompt": "four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful",
    "aspect": "3:2",
    "file": "design/concept/4-3.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful"
   },
   {
    "id": "4-4",
@@ -226,7 +226,7 @@
    "prompt": "a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire",
    "aspect": "3:2",
    "file": "design/concept/4-4.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire"
   },
   {
    "id": "4-5",
@@ -235,16 +235,16 @@
    "prompt": "festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns",
    "aspect": "16:9",
    "file": "design/concept/4-5.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns"
   },
   {
    "id": "5-1",
    "title": "건물 세트 (개척기·마을)",
    "desc": "",
-   "prompt": "isometric sheet of small low-poly medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left",
+   "prompt": "isometric sheet of small retro pixel-art medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left",
    "aspect": "3:2",
    "file": "design/concept/5-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, isometric sheet of small low-poly medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, isometric sheet of small retro pixel-art medieval buildings on a neutral background: hut with thatched roof, storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings, quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house, consistent lighting from the upper left"
   },
   {
    "id": "5-2",
@@ -253,7 +253,7 @@
    "prompt": "six small medieval houses in different climate styles: temperate timber-framed cottage, taiga log longhouse, mediterranean stone house with terracotta roof, tropical stilt house, tundra sod-roof hut, desert mud-brick house, isometric, neutral background",
    "aspect": "3:2",
    "file": "design/concept/5-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, six small medieval houses in different climate styles: temperate timber-framed cottage, taiga log longhouse, mediterranean stone house with terracotta roof, tropical stilt house, tundra sod-roof hut, desert mud-brick house, isometric, neutral background"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, six small medieval houses in different climate styles: temperate timber-framed cottage, taiga log longhouse, mediterranean stone house with terracotta roof, tropical stilt house, tundra sod-roof hut, desert mud-brick house, isometric, neutral background"
   },
   {
    "id": "6-1",
@@ -262,7 +262,7 @@
    "prompt": "a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light",
    "aspect": "16:9",
    "file": "design/concept/6-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light"
   },
   {
    "id": "6-2",
@@ -271,7 +271,7 @@
    "prompt": "a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet",
    "aspect": "16:9",
    "file": "design/concept/6-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet"
   },
   {
    "id": "6-3",
@@ -280,7 +280,7 @@
    "prompt": "a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder",
    "aspect": "16:9",
    "file": "design/concept/6-3.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder"
   },
   {
    "id": "6-4",
@@ -289,7 +289,7 @@
    "prompt": "an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass",
    "aspect": "16:9",
    "file": "design/concept/6-4.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass"
   },
   {
    "id": "7-1",
@@ -298,7 +298,7 @@
    "prompt": "an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text",
    "aspect": "3:4",
    "file": "design/concept/7-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text"
   },
   {
    "id": "7-2",
@@ -307,7 +307,7 @@
    "prompt": "a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text",
    "aspect": "3:4",
    "file": "design/concept/7-2.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text"
   },
   {
    "id": "7-3",
@@ -316,7 +316,7 @@
    "prompt": "app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text",
    "aspect": "1:1",
    "file": "design/concept/7-3.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text"
+   "full_prompt": "charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow, soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window) with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded, app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text"
   }
  ]
 }

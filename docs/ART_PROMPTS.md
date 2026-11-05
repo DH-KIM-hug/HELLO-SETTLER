@@ -1,6 +1,6 @@
-# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v2 — 기획서 v3.0 기준)
+# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v3 — 기획서 v3.2 기준, 레트로 스타일)
 
-> [기획서 v3.0](GAME_DESIGN.md)에서 **확정된 내용만** 그림으로 옮기기 위한 프롬프트. 그림이 기획서와 다르면 **기획서가 맞다** (특히 4장 '병의 자연'). 이미지 생성 AI(Midjourney, DALL·E, Stable Diffusion, Imagen 등)에 그대로 붙여 넣어 쓴다.
+> [기획서 v3.2](GAME_DESIGN.md)에서 **확정된 내용만** 그림으로 옮기기 위한 프롬프트. 그림이 기획서와 다르면 **기획서가 맞다** (특히 4장 '병의 자연'). 이미지 생성 AI(Midjourney, DALL·E, Stable Diffusion, Imagen 등)에 그대로 붙여 넣어 쓴다.
 > 영어 프롬프트가 대부분의 모델에서 결과가 안정적이라 영어로 쓰고, 각 장면에 한국어 설명을 붙였다.
 > 모든 프롬프트는 맨 앞에 **[공통 스타일]**을 붙여서 쓴다 → 그림들이 한 게임처럼 보인다.
 
@@ -9,23 +9,28 @@
 ## 0. 공통 스타일 (모든 프롬프트 앞에 붙이기)
 
 ```
-cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field,
-warm natural window light, gentle glass refraction and condensation, muted earthy palette
-(moss green, cream, soil brown, evening amber), small medieval European villagers with
-realistic proportions (not chibi), calm and healing mood, high detail, clean composition
+charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites
+with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow,
+soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window)
+with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but
+human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy
+thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded
 ```
 
 **네거티브 프롬프트** (지원하는 모델에서)
 ```
 text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors,
-oversaturated, chibi, anime big eyes, photorealistic humans close-up, fantasy elves, dragons,
-sea, ocean, beach, waves
+oversaturated, anime big eyes, blush, chibi giant heads, mascot, photorealistic, tilt-shift,
+bokeh, depth of field, golden haze, glossy plastic, cinematic lighting, hyperdetailed,
+fantasy elves, dragons, castle, sea, ocean, beach, waves
 ```
 
 **규칙**
 - 실존 작가 이름·다른 게임 이름을 스타일로 넣지 않는다 (저작권·표절 방지).
 - 바다는 없다 → 항상 *no sea* 유지. 물은 호수·강·물방울뿐.
-- 주민은 **중세 유럽풍 평민 복식, 사실적인 비율**의 작은 사람.
+- 주민은 **중세 유럽풍 평민 복식, 약 4등신**의 작은 사람 (짤막하지만 사람 비율, 점 눈, 볼터치 없음, 마스코트 아님).
+- 그림체는 **90년대 PC 전략 게임풍 레트로** (아이소메트릭, 선명한 픽셀 느낌, 평평한 조명). 틸트시프트·흐림·금빛 안개·광택 질감은 쓰지 않는다 ('AI 같은' 느낌 방지).
+- 주민은 한 명도 같지 않다: 체형·머리 모양·머리색·피부·수염·모자·옷 색·소품으로 구분하고, 가문은 머리색·체형·코를 물려받는다 (기획서 7.1).
 - 빛은 항상 **한쪽(거인의 창가)**에서 들어온다.
 - 땅은 평평한 원반이지만 **완만한 언덕·골짜기·분지**가 있다 (높낮이 있음).
 - 물방울은 **뚜껑 안쪽 돌기**에서만, 강은 **유리벽을 타고 흘러내린 물**에서만 시작한다. 호수에서 강이 흘러나가지 않는다. 넓게 내리는 비는 '거인의 물 뿌리기'뿐이다.
@@ -100,7 +105,7 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 
 | # | 장면 | 프롬프트 |
 |---|---|---|
-| 4-1 | **주민 캐릭터 시트** (온대) | `character sheet of small medieval European villagers with realistic proportions: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front and side views, simple low-poly 3D style, neutral background, 3:2` |
+| 4-1 | **주민 캐릭터 시트** (온대) | `sprite sheet of tiny medieval European settlers about 4 heads tall, each clearly different in body shape, hair and clothing colors: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front, side, back views and one walking pose, plain cream background, 3:2` |
 | 4-2 | **기후별 복식** | `six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background, 3:2` |
 | 4-3 | **고유 특징이 보이는 아이들** | `four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful, 3:2` |
 | 4-4 | **의심하는 아이 vs 꾸짖는 노인** | `a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire, 3:2` |
@@ -111,7 +116,7 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 ## 5. 건물 (개척기·마을 시대)
 
 ```
-isometric sheet of small low-poly medieval buildings on a neutral background: hut with thatched roof,
+isometric sheet of small retro pixel-art medieval buildings on a neutral background: hut with thatched roof,
 storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings,
 quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white
 salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house,
