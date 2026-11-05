@@ -1,1 +1,11 @@
 id,file,model,seed,size,date,chosen,note
+1-1,design/concept/old/1-1_A.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt + staging variant: night/moonlight; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_B.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt + staging variant: low angle; FAIL scale broken (villager faces bigger than village); superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_C.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt + staging variant: wide attic workroom with giant hand; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_D.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt + staging variant: top-down 3/4 view; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_v1.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt as written; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_v2.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt as written; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_v3.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt as written; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_v4.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt as written; superseded by v2, kept in old/"
+1-1,design/concept/old/1-1_v5.png,codex-cli 0.163.0 (built-in image generation),-,941x1672,2026-11-05,no,"v1 prompt as written; superseded by v2, kept in old/"
+7-3,design/concept/old/7-3.png,codex-cli 0.163.0 (built-in image generation),-,1254x1254,2026-11-05,no,"v1 prompt; 1-1_v1 as style reference; superseded by v2, kept in old/"
