@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>연대기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#252122;text-decoration:none}a:hover{color:#3e5c2c}
+
+@font-face{font-family:'Galmuri11';src:url(/_blob/e321ae828107592b5028f589f9653a1c) format('woff2');font-weight:400}
+@font-face{font-family:'Galmuri11';src:url(/_blob/200361b0289ace4e3d5666f90ae5c51e) format('woff2');font-weight:700}
+*{font-family:'Galmuri11',monospace !important;-webkit-font-smoothing:none;letter-spacing:0 !important}
+[style*="border-radius"]{border-radius:0 !important}
+svg{shape-rendering:crispEdges}
+button,a[style*="min-height"]{box-shadow:inset -3px -3px 0 rgba(0,0,0,.30),inset 3px 3px 0 rgba(255,255,255,.30) !important}
+[style*="border: 1px solid"],[style*="border: 1.5px solid"]{border-width:2px !important}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; color: #252122; background: #533727; display: flex; flex-direction: column">
+  <div style="display: flex; align-items: center; gap: 8px; padding: 14px 12px 10px">
+    <a href="Main.dc.html" aria-label="뒤로" style="width: 44px; height: 44px; border-radius: 50%; background: #e2ded8; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#252122" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <span style="font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700; color: #e2ded8">초록방울 연대기</span>
+  </div>
+
+  <div role="tablist" aria-label="연대기 장" style="display: flex; gap: 6px; padding: 0 14px 12px">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="3">
+      <button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="flex: 1; margin: 0 12px 14px; padding: 22px 20px; background: #eac79c; border-radius: 6px; box-shadow: inset 0 0 40px rgba(122,90,50,0.35); display: flex; flex-direction: column; gap: 14px; overflow: hidden">
+    <span style="font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700; color: #533727; text-align: center">{{heading}}</span>
+    <div style="height: 1px; background: #a6974b"></div>
+    <sc-for list="{{entries}}" as="e" hint-placeholder-count="5">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 12px; font-weight: 700; color: #6e452f">{{e.when}}</span>
+        <span style="font-family: 'Nanum Pen Script', cursive; font-size: 23px; line-height: 1.25; color: #252122">{{e.text}}</span>
+      </div>
+    </sc-for>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: '최근' }; }
+  renderVals() {
+    const tabs = ['최근', '창세 신화', '사람들'];
+    const base = 'min-height: 44px; padding: 0 16px; border-radius: 999px; font-size: 13px; font-family: inherit; cursor: pointer;';
+    const pages = {
+      '최근': {
+        heading: '가을 3일',
+        entries: [
+          { when: '새벽', text: '토미가 처음으로 걸음마를 뗐다. 한스가 망치를 내려놓고 박수를 쳤다.' },
+          { when: '오전', text: '누가 물을 줬는지 모르겠지만, 밀밭이 금빛으로 익었다.' },
+          { when: '오후', text: '노인 베른이 숨을 거두었다. 묘지에 첫 비석이 섰다.' },
+          { when: '저녁', text: '다 같이 모닥불에서 버섯 수프를 먹었다. 겨울 땔감이 걱정이다.' }
+        ]
+      },
+      '창세 신화': {
+        heading: '태초에',
+        entries: [
+          { when: '첫째 날', text: '거인이 어둠 속에 붉은 별 하나를 심었다.' },
+          { when: '둘째 날', text: '거인은 별을 바위로 감싸고, 흙을 덮어 산과 골짜기를 빚었다.' },
+          { when: '셋째 날', text: '거인이 물을 부으니 바다가 생기고, 하늘에 태양을 걸었다.' },
+          { when: '넷째 날', text: '거인이 하늘을 닫자 첫 비가 내렸고, 수천 년이 흘렀다.' },
+          { when: '그리고', text: '어느 저녁, 우리 조상 열 명이 숲 가장자리에 처음 불을 피웠다.' }
+        ]
+      },
+      '사람들': {
+        heading: '이 땅에 살았던 사람들',
+        entries: [
+          { when: '대장장이 한스 · 34세 · 살아 있음', text: '마을의 첫 도끼를 만든 사람.' },
+          { when: '노인 베른 · 61세 · 가을 3일 잠듦', text: '첫 정착민. 숲 가장자리에 첫 불을 피웠다.' },
+          { when: '빵쟁이 마르타 · 31세 · 살아 있음', text: '할머니의 레시피를 기억한다.' },
+          { when: '목수 오토 · 29세 · 가을 1일 종이배로 떠남', text: '거인의 배를 타고 하늘 너머로 갔다.' }
+        ]
+      }
+    };
+    const p = pages[this.state.tab];
+    return {
+      tabs: tabs.map((t) => ({
+        label: t,
+        sel: t === this.state.tab ? 'true' : 'false',
+        pick: () => this.setState({ tab: t }),
+        style: base + (t === this.state.tab ? 'border: none; background: #eac79c; color: #252122; font-weight: 700' : 'border: 1px solid #927664; background: transparent; color: #e2ded8')
+      })),
+      heading: p.heading,
+      entries: p.entries
+    };
+  }
+}
+</script>
+</body>
+</html>

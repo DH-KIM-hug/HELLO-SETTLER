@@ -1,0 +1,25 @@
+{
+  "v": 3,
+  "attachments": {},
+  "boards": {
+    "Build.dc.html": {"h": 844, "is_interactive": true, "title": "02 건설", "w": 390, "x": 592, "y": -898},
+    "Chronicle.dc.html": {"h": 844, "is_interactive": true, "title": "07 연대기", "w": 390, "x": 940, "y": 1300},
+    "Creation.dc.html": {"h": 844, "is_interactive": true, "title": "08 창조 — 핵 넣기", "w": 390, "x": 1410, "y": 1300},
+    "Main.dc.html": {"h": 844, "is_interactive": true, "title": "01 메인 — 병 화면", "w": 390, "x": 0, "y": 0},
+    "Resident.dc.html": {"h": 844, "is_interactive": true, "title": "03 주민 정보", "w": 390, "x": 940, "y": 0},
+    "Sell.dc.html": {"h": 844, "is_interactive": true, "title": "04 종이배 (주민 판매)", "w": 390, "x": 1410, "y": 0},
+    "Shelf.dc.html": {"h": 844, "is_interactive": true, "title": "05 선반 (여러 병)", "w": 390, "x": 0, "y": 1300},
+    "Shop.dc.html": {"h": 844, "is_interactive": true, "title": "06 거인의 상점", "w": 390, "x": 470, "y": 1300},
+    "Inside.dc.html": {"h": 844, "is_interactive": true, "title": "09 지구 시점 — 병 안의 평평한 세상", "w": 390, "x": 1880, "y": 0}
+  },
+  "createdOnFiles": {"at": "2026-11-05T09:00:00Z", "v": 1},
+  "designSystems": [],
+  "launch": {"view": "canvas"},
+  "notes": {
+    "t1": {"kind": "title1", "maxW": 2270, "text": "병 안 — 매일 보는 화면", "w": 240, "x": 0, "y": -300},
+    "t2": {"kind": "title1", "maxW": 1800, "text": "병 밖 — 거인의 세계", "w": 240, "x": 0, "y": 1000}
+  },
+  "order": ["Main.dc.html", "Build.dc.html", "Resident.dc.html", "Sell.dc.html", "Shelf.dc.html", "Shop.dc.html", "Chronicle.dc.html", "Creation.dc.html", "Inside.dc.html"],
+  "pages": [],
+  "title": "나작지 UI 화면 설계"
+}

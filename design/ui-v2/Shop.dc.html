@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>거인의 상점</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#252122;text-decoration:none}a:hover{color:#3e5c2c}
+
+@font-face{font-family:'Galmuri11';src:url(/_blob/e321ae828107592b5028f589f9653a1c) format('woff2');font-weight:400}
+@font-face{font-family:'Galmuri11';src:url(/_blob/200361b0289ace4e3d5666f90ae5c51e) format('woff2');font-weight:700}
+*{font-family:'Galmuri11',monospace !important;-webkit-font-smoothing:none;letter-spacing:0 !important}
+[style*="border-radius"]{border-radius:0 !important}
+svg{shape-rendering:crispEdges}
+button,a[style*="min-height"]{box-shadow:inset -3px -3px 0 rgba(0,0,0,.30),inset 3px 3px 0 rgba(255,255,255,.30) !important}
+[style*="border: 1px solid"],[style*="border: 1.5px solid"]{border-width:2px !important}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; color: #252122; background: #e2ded8; display: flex; flex-direction: column">
+  <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 14px 12px 4px">
+    <div style="display: flex; align-items: center; gap: 8px">
+      <a href="Main.dc.html" aria-label="뒤로" style="width: 44px; height: 44px; border-radius: 50%; background: #cdc6c4; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#252122" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+      </a>
+      <span style="font-family: 'Gowun Batang', serif; font-size: 22px; font-weight: 700">거인의 상점</span>
+    </div>
+    <span style="padding: 8px 12px; border-radius: 999px; background: #cdc6c4; font-size: 13px; font-weight: 700">2,244 지폐</span>
+  </div>
+  <span style="padding: 0 18px 10px; font-size: 13px; color: #3a3537">바깥 세상의 작은 물건이, 병 안에서는 큰 선물이 돼요.</span>
+
+  <div role="tablist" aria-label="상점 분류" style="display: flex; gap: 6px; padding: 0 14px 12px; flex-wrap: wrap">
+    <sc-for list="{{tabs}}" as="t" hint-placeholder-count="5">
+      <button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+    </sc-for>
+  </div>
+
+  <div style="flex: 1; padding: 0 14px; display: flex; flex-direction: column; gap: 10px">
+    <sc-for list="{{items}}" as="it" hint-placeholder-count="5">
+      <div style="display: flex; gap: 12px; align-items: center; padding: 12px; background: #fffbea; border: 1px solid #b6b0b1; border-radius: 16px">
+        <div style="width: 64px; height: 64px; border-radius: 14px; background: #cdc6c4; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: 'Gowun Batang', serif; font-size: 13px; font-weight: 700; color: #544e4f; text-align: center">{{it.thumb}}</div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0">
+          <span style="font-size: 15px; font-weight: 700">{{it.name}}</span>
+          <span style="font-size: 12px; color: #324c28; font-weight: 700">병 안에서: {{it.inside}}</span>
+          <span style="font-size: 12px; color: #3a3537">{{it.note}}</span>
+        </div>
+        <button type="button" aria-label="{{it.aria}}" style="min-width: 72px; min-height: 44px; padding: 0 10px; border-radius: 12px; border: none; background: #252122; color: #e2ded8; font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer">{{it.price}}</button>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="margin: 10px 14px 14px; padding: 10px 14px; border-radius: 14px; background: #cdc6c4; font-size: 12px; color: #3a3537">산 물건은 손가락으로 병 안 원하는 곳에 떨어뜨려요. 집 위에 떨어뜨리면 집이 부서져요.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: '자원' }; }
+  renderVals() {
+    const tabs = ['자원', '생물', '건축물', '유물', '기적'];
+    const base = 'min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-family: inherit; cursor: pointer;';
+    const data = {
+      '자원': [
+        { thumb: '각설탕', name: '각설탕 한 조각', inside: '식량 약 1주일치', note: '흉작 때 든든해요', price: '120' },
+        { thumb: '젓가락', name: '나무젓가락 한 쌍', inside: '통나무 산더미', note: '나무꾼 없이도 집을 지어요', price: '90' },
+        { thumb: '쌀 한 톨', name: '쌀 한 톨', inside: '밀가루 포대 몇 개', note: '빵집이 바로 돌아가요', price: '40' },
+        { thumb: '녹슨 못', name: '녹슨 못 한 줌', inside: '철 10', note: '광산이 열리기 전 도구 재료', price: '150' },
+        { thumb: '자갈', name: '자갈 세 알', inside: '돌 바위 3개', note: '채석장 자리가 생겨요', price: '60' }
+      ],
+      '생물': [
+        { thumb: '양', name: '양 한 쌍', inside: '목장이 열려요', note: '양털 → 옷', price: '200' },
+        { thumb: '닭', name: '닭 다섯 마리', inside: '달걀 (식량 다양성)', note: '행복 조금↑', price: '110' },
+        { thumb: '당나귀', name: '당나귀', inside: '운반 속도↑', note: '붐비는 도로에', price: '180' }
+      ],
+      '건축물': [
+        { thumb: '풍차', name: '완성된 풍차', inside: '방앗간 즉시 완공', note: '"하늘에서 풍차가 내려왔다"', price: '400' },
+        { thumb: '성당', name: '작은 성당', inside: '교회 즉시 완공', note: '신앙 크게↑', price: '900' }
+      ],
+      '유물': [
+        { thumb: '동전', name: '오래된 동전', inside: '광장 기념비', note: '행복 반경↑', price: '250' },
+        { thumb: '골무', name: '은 골무', inside: '우물', note: '물 생산 두 배', price: '300' },
+        { thumb: '반지', name: '작은 반지', inside: '왕관', note: '희귀 출생 확률 조금↑', price: '800' }
+      ],
+      '기적': [
+        { thumb: '구름', name: '비구름', inside: '가뭄 해결', note: '너무 오래 두면 홍수', price: '150' },
+        { thumb: '약 가방', name: '의사 가방', inside: '역병 치료', note: '전염을 멈춰요', price: '350' }
+      ]
+    };
+    const list = data[this.state.tab];
+    return {
+      tabs: tabs.map((t) => ({
+        label: t,
+        sel: t === this.state.tab ? 'true' : 'false',
+        pick: () => this.setState({ tab: t }),
+        style: base + (t === this.state.tab ? 'border: none; background: #3e5c2c; color: #e2ded8; font-weight: 700' : 'border: 1px solid #a49b9a; background: transparent; color: #252122')
+      })),
+      items: list.map((i) => ({ ...i, aria: i.name + ' 사기, ' + i.price + ' 지폐' }))
+    };
+  }
+}
+</script>
+</body>
+</html>
