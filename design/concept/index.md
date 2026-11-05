@@ -43,9 +43,4 @@
 
 ## 다시 할 것
 
-2026-11-06 다시 그리기: 주민이 나오는 23장을 `mid_variety.png`를 참조로 다시 그려 생김새·옷 색을 다양하게 했고, 강이 바위·언덕에서 시작하던 장면(3-3, 3-7, 3-10, 4-4, 6-3)과 2-3(풀 없음)을 고쳤다. 남은 작은 문제:
-
-- `2-9`: about 12 settlers instead of 10
-- `4-3`: a stream of unclear source
-- `5-1`: the sawmill's waterwheel stream has no visible source
-- `7-2`: inside the card a waterfall starts from rocks, not the glass wall
+2026-11-06 다시 그리기: 주민이 나오는 23장을 `mid_variety.png`를 참조로 다시 그려 생김새·옷 색을 다양하게 했고, 강이 바위·언덕에서 시작하던 장면(3-3, 3-7, 3-10, 4-4, 6-3)과 2-3(풀 없음)을 고쳤다. 남은 작은 문제였던 2-9(사람 수), 4-3·5-1·7-2(물길)도 같은 날 다시 그려 고쳤다. 현재 남은 항목 없음.

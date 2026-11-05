@@ -82,7 +82,7 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 | 2-6 | **뚜껑 닫기 + 물방울 돌기** — 뚜껑 안쪽을 찍어 돌기를 만들고 잠금 | `the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up, the world is still lifeless at this step: no people, no houses, no fields, no plants, only bare soil, rock and water, 3:2` |
 | 2-7 | **타임랩스** — 수천 년이 몇 초에 | `time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy, no people, no houses and no fields yet, only bare land, water and rock, 16:9` |
 | 2-8 | **생명의 씨앗** — 숨구멍으로 이끼·풀·도토리를 뿌림 | `seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge, no people, no houses and no fields yet, only moss, grass, young forest and wild animals, 9:16` |
-| 2-9 | **첫 인간** — 해 질 녘 숲 가장자리의 작은 불빛, 10명 | `dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk, no houses, no fields and no roads yet, only a wild forest edge, a campfire, the ten settlers and their handcart, 9:16` |
+| 2-9 | **첫 인간** — 해 질 녘 숲 가장자리의 작은 불빛, 10명 | `dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk, no houses, no fields and no roads yet, only a wild forest edge, a campfire, the ten settlers and their handcart, exactly ten people in total (count them: two families of five), no more, 9:16` |
 
 ---
 
@@ -109,7 +109,7 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 |---|---|---|
 | 4-1 | **주민 캐릭터 시트** (온대) | `sprite sheet of tiny medieval European settlers about 4 heads tall, each clearly different in body shape, hair and clothing colors: blacksmith with leather apron and hammer, baker woman with flour on sleeves, farmer with sickle, woodcutter with axe, old man with a cane, two children, front, side, back views and one walking pose, plain cream background, 3:2` |
 | 4-2 | **기후별 복식** | `six small medieval villagers side by side dressed for different climates: temperate wool tunic, taiga fur-lined coat, mediterranean linen and straw hat, tropical light cotton, tundra heavy furs, desert loose robes and head wrap, neutral background, 3:2` |
-| 4-3 | **고유 특징이 보이는 아이들** | `four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful, 3:2` |
+| 4-3 | **고유 특징이 보이는 아이들** | `four small medieval children each with a visible quirk: one humming while carrying water, one following a cat, one holding a pebble collection, one pointing at the sky claiming she saw a giant finger, playful, any stream starts only from water trickling down the inside of the glass wall at the edge of the world, no waterfall from rocks or hills, no stream flowing out of a lake, 3:2` |
 | 4-4 | **의심하는 아이 vs 꾸짖는 노인** | `a medieval village child shrugging and saying there is no giant, an old woman pointing up at a huge faint shadow on the glass sky dome, evening campfire, any stream starts only from water trickling down the inside of the glass wall at the edge of the world, no waterfall from rocks or hills, no stream flowing out of a lake, 3:2` |
 | 4-5 | **귀환 축제** | `festival night in a tiny medieval village celebrating, villagers dancing around a bonfire, children crying with joy and waving at a giant shadow returning over the glass sky dome, lanterns, 16:9` |
 
@@ -122,7 +122,7 @@ isometric sheet of small retro pixel-art medieval buildings on a neutral backgro
 storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings,
 quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white
 salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house,
-consistent lighting from the upper left, 3:2
+no streams or waterwheels (the sawmill is worked by hand), consistent lighting from the upper left, 3:2
 ```
 
 **기후별 건축 양식**
@@ -150,7 +150,7 @@ desert mud-brick house, isometric, neutral background, 3:2
 | # | 소재 | 프롬프트 |
 |---|---|---|
 | 7-1 | **연대기 양피지** | `an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text, plain paper texture only, no illustrations, no village, no figures, no border scenes, 3:4` |
-| 7-2 | **지구 카드** (폴라로이드) | `a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text, 3:4` |
+| 7-2 | **지구 카드** (폴라로이드) | `a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text, any stream starts only from water trickling down the inside of the glass wall at the edge of the world, no waterfall from rocks or hills, no stream flowing out of a lake, 3:4` |
 | 7-3 | **앱 아이콘** | `mobile app icon in crisp retro pixel-art style, bold and readable at 64x64 pixels, one simple glass jar shape filling most of the frame on a plain warm cream-to-amber background, inside only a small green hill, one tiny thatched hut with a lit window and one large water droplet hanging under the lid, a thin glowing red line at the bottom, thick clean outlines, at most 10 flat colors, no people, no small details, centered, no text, 1:1` |
 
 ---
