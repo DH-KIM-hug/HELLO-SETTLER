@@ -10,3 +10,4 @@
 - 🖼 [UI 화면 설계 v1](docs/UI.md)
 - 🧠 [주민 행동 명세 v1](docs/RESIDENT_AI.md)
 - 🎮 [브라우저 프로토타입](prototype/README.md)
+- 🎨 [콘셉트 아트 프롬프트 모음](docs/ART_PROMPTS.md)
