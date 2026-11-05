@@ -47,7 +47,7 @@
 
 ## 개발 시작 — 엔진은 Godot 4, 개발은 별도 세션
 - 엔진을 **Unity → Godot 4 (GDScript)**로 바꿈 (기획서 18장, v3.4). 무료, 도트 렌더에 적합, 텍스트 장면 파일, **로그인 없이 리눅스 실행**.
-- **클라우드 세션에서 실행·캡처 확인 완료**: Godot 4.4.1 공식 배포 → `xvfb-run` + `--rendering-method gl_compatibility`로 3D 장면을 그려 PNG 저장 성공. (받은 실행 파일 실행은 사용자가 허락함)
+- **개발은 사용자 Mac에서만** (2026-11-06 결정): Godot **4.7.2** (Homebrew), Mobile 렌더러. 클라우드 세션은 개발하지 않고 기획·검토만 한다. Git LFS는 쓰지 않는다 (작은 도트 에셋 → 일반 git).
 - 개발은 **다른 세션**이 맡는다 → 시작 안내: [`GODOT_KICKOFF.md`](GODOT_KICKOFF.md). 루트 `CLAUDE.md`가 안내한다.
 - 개발 쪽은 단계마다 `godot_shots/`에 캡처를 남긴다 → 기획 세션이 기획과 맞는지 검토.
 

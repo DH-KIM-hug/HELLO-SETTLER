@@ -95,7 +95,7 @@
 ## 6. 엔진 — Godot 4
 
 - **Godot 4 (GDScript).** 필요한 기능이 기본으로 있다: `SubViewport`(낮은 해상도 렌더) + 정수배 확대, 정사영 `Camera3D`, 화면 셰이더(팔레트 맞추기·외곽선·디더링), 텍스처 Nearest 필터.
-- 렌더러: 휴대폰은 **Mobile**, 클라우드 세션의 캡처 확인은 **Compatibility**(소프트웨어 렌더링). 두 렌더러에서 같게 보이도록 셰이더는 단순하게.
+- 렌더러: **Mobile** (Godot 4.7.2). 오래된 기기용 Compatibility에서도 같게 보이도록 셰이더는 단순하게.
 - 3D 모델 제작: Blender 또는 Blockbench → glTF(.glb)로 가져오기.
 - 시작 안내: [GODOT_KICKOFF.md](GODOT_KICKOFF.md)
 

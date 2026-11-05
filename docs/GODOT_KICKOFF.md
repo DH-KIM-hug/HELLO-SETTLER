@@ -1,36 +1,18 @@
 # 고도(Godot) 개발 시작 안내 — 개발 세션용
 
-> 이 문서는 **개발을 맡은 Claude Code 세션**(클라우드든 사용자 컴퓨터든)이 고도 개발을 이어받기 위한 안내다.
+> 이 문서는 **개발을 맡은 Claude Code 세션**(사용자 Mac)이 고도 개발을 이어받기 위한 안내다.
 > 기획은 기획 세션에서 계속하고, 둘은 **같은 저장소·같은 브랜치**(`ccr-5955ceb0-i7kj1q`)로 주고받는다.
-> 엔진 결정 배경: 기획서 [18장](GAME_DESIGN.md) — 무료(MIT), "3D를 도트처럼"에 잘 맞음, 장면 파일이 텍스트라 AI가 다루기 쉬움, **로그인 없이 리눅스에서 실행되어 클라우드 세션에서도 돌려보고 화면을 캡처할 수 있음** (확인 완료: Godot 4.4.1, 호환 렌더러, 3D 장면 캡처 성공).
+> 엔진 결정 배경: 기획서 [18장](GAME_DESIGN.md) — 무료(MIT), "3D를 도트처럼"에 잘 맞음, 장면 파일이 텍스트라 AI가 다루기 쉬움, 로그인 없이 설치·실행 (Godot 4.7.2).
 
 ---
 
-## 0. 준비
+## 0. 준비 (사용자 Mac — 개발은 여기서만 한다)
 
-### 클라우드 세션에서 (확인된 방법)
-```bash
-# 1) 고도 받기 (공식 배포, 약 60MB) — 세션마다 한 번
-mkdir -p ~/.cache/godot && cd ~/.cache/godot
-curl -sSL -o godot.zip https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip
-unzip -oq godot.zip && chmod +x Godot_v4.4.1-stable_linux.x86_64
-# 2) 화면 없이 실행 확인
-./Godot_v4.4.1-stable_linux.x86_64 --headless --version
-# 3) 화면을 그려 캡처할 때: 가상 화면 + 호환 렌더러 (그래픽 카드 없음 → 소프트웨어로 그림)
-xvfb-run -a -s "-screen 0 1280x720x24" ~/.cache/godot/Godot_v4.4.1-stable_linux.x86_64 \
-  --path godot --audio-driver Dummy --rendering-method gl_compatibility --resolution 360x640 -s res://tools/shot.gd
-```
-- 받은 실행 파일을 처음 실행할 때 세션의 안전 확인이 뜰 수 있다 → 사용자가 허락함 (고도 공식 배포만).
-- 소리 장치가 없어 `--audio-driver Dummy`를 쓴다.
-- 캡처 스크립트 예시는 3장 '확인 방법'.
-- C#(.NET)은 이 환경에 없다 → **GDScript로 개발**한다 (아래 2장).
-
-### 사용자 컴퓨터에서
-1. [godotengine.org](https://godotengine.org)에서 **Godot 4.4 (표준판)** 받기 — 설치 없이 압축만 풀면 됨
-2. Git, Git LFS 설치 (`git lfs install`)
-3. `git clone https://github.com/DH-KIM-hug/HELLO-SETTLER.git && cd HELLO-SETTLER && git checkout ccr-5955ceb0-i7kj1q`
-4. Claude Code를 이 폴더에서 실행 → *"`docs/GODOT_KICKOFF.md`를 읽고 1단계부터 진행해줘."*
-5. 휴대폰 빌드: 고도 편집기 → 내보내기 → Android 템플릿 설치 (Android SDK 필요). iOS는 Mac + Xcode.
+- **Godot 4.7.2 (표준판, GDScript)**: `brew install --cask godot` → 명령줄 `godot` (`godot --version` = `4.7.2.stable`). 모든 개발자가 **같은 버전**을 쓴다 (장면·리소스 파일 형식이 버전마다 다를 수 있음). 버전을 올릴 때는 이 문서와 기획서 18장을 함께 고친다.
+- 저장소: `git clone https://github.com/DH-KIM-hug/HELLO-SETTLER.git && cd HELLO-SETTLER && git checkout ccr-5955ceb0-i7kj1q`
+- Claude Code를 이 폴더에서 실행 → *"`docs/GODOT_KICKOFF.md`를 읽고 지금 단계부터 진행해줘."*
+- 휴대폰 빌드: 편집기 → 내보내기 → Android 템플릿 설치 (Android SDK 필요). iOS는 Xcode.
+- 클라우드 세션은 **개발하지 않는다** (기획·검토만). 캡처는 이 Mac에서 만들어 커밋한다.
 
 ## 1. 반드시 먼저 읽을 문서 (이 순서로)
 
@@ -49,10 +31,10 @@ xvfb-run -a -s "-screen 0 1280x720x24" ~/.cache/godot/Godot_v4.4.1-stable_linux.
 ## 2. 프로젝트 만들기
 
 - 저장소 안 **`godot/`** 폴더에 고도 프로젝트 (`project.godot`). 이름 `Nazakji`.
-- 렌더러: **Mobile**(휴대폰 기본) — 단, 클라우드 캡처 확인은 **Compatibility**로 돌린다. 두 렌더러에서 같은 모습이 나오게 셰이더는 단순하게 쓴다.
+- 렌더러: **Mobile** (휴대폰 기본, Mac에서는 Metal로 같은 렌더러를 쓴다). 오래된 휴대폰 대응이 필요하면 Compatibility에서도 같게 보이도록 셰이더는 단순하게 쓴다.
 - 언어: **GDScript** (타입 명시 `var x: int`). 무거운 계산(물 지도 200×200, 오프라인 며칠치 몰아서 계산)은 `PackedFloat32Array` 등 묶음 배열로 쓰고, 그래도 느리면 그 부분만 GDExtension(C++)으로 옮긴다 — 측정 후 결정.
 - `.gitignore`: `godot/.godot/`, `godot/export_presets.cfg`(비밀 키 포함 시), `godot/builds/`
-- `.gitattributes` (LFS): `*.png *.glb *.blend *.wav *.ogg *.woff2 *.ttf` — 단 `docs/`·`design/`의 기존 파일은 그대로.
+- **Git LFS는 지금 쓰지 않는다.** 도트 텍스처·로우폴리 모델은 작아서 일반 git으로 충분하다 (GitHub 무료 LFS는 저장 10 GiB·월 다운로드 10 GiB, 지난 버전까지 모두 셈 → 작은 파일엔 손해). 파일당 100MB 제한은 지킨다. 소리 원본·`.blend` 같은 큰 원본이 쌓이면 그 확장자만 LFS로 옮긴다.
 - 텍스처 가져오기 설정: 필터 **Nearest**, 밉맵 끔.
 
 ### 폴더 구조 (안)
@@ -100,7 +82,7 @@ godot/
 - [ ] **팔레트 맞추기**: `design/palette/palette.json` → 색 LUT 텍스처 → 화면 셰이더에서 가장 가까운 색 + 4×4 디더링
 - [ ] **1픽셀 외곽선** (깊이·노멀 차이, 화면 셰이더), 외곽선 색 = 물체 색의 어두운 버전
 - [ ] **팬 떨림 방지**: 카메라 위치를 픽셀 격자에 맞춤
-- [ ] 클라우드 캡처 1장 + 안드로이드 빌드 30fps 이상 (사용자 기기)
+- [ ] 캡처 1장 (`godot_shots/`) + 안드로이드 빌드 30fps 이상
 
 ### 2단계 — 지형과 물
 - [ ] 높이 지도 64×64 → 지형 메시 (`ArrayMesh` 또는 `SurfaceTool`)
