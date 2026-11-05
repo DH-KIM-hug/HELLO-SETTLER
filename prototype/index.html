@@ -1,0 +1,1081 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}[hidden]{display:none!important}</style>
+</head>
+<body>
+<!-- 생성 파일: 수정은 prototype/app.html 에서 하고 python3 tools/build_prototype.py 로 다시 만드세요 -->
+<title>초록방울 프로토타입</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&family=Nanum+Pen+Script&display=swap">
+<style>
+/* 한 화면 게임: 캔버스가 화면 전체, 위·아래 가장자리에만 UI. 따뜻한 방 + 유리병 안의 세상 (단일 테마) */
+:root{
+  --paper:#F4EDE0; --paper-2:#E9DFCD; --ink:#2A2620; --ink-2:#5A5247;
+  --moss:#3E5C3A; --amber:#9A5B12; --amber-soft:#E3C58C; --night:#1E1F2A; --line:#D9CDB8;
+  --f-display:'Gowun Batang', 'Nanum Myeongjo', serif;
+  --f-body:'Noto Sans KR', system-ui, sans-serif;
+  --f-hand:'Nanum Pen Script', 'Gowun Batang', cursive;
+  color-scheme: light;
+}
+html,body{height:100%}
+body{background:var(--night);color:var(--ink);font-family:var(--f-body);overflow:hidden;-webkit-tap-highlight-color:transparent}
+#app{position:relative;height:100%;width:100%;overflow:hidden}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+.hud{position:absolute;left:0;right:0;top:0;padding-top:max(10px, env(safe-area-inset-top,0px));padding-left:max(12px, env(safe-area-inset-left,0px));padding-right:max(12px, env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.bar{pointer-events:auto;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:rgba(244,237,224,.94);border-radius:16px;box-shadow:0 2px 10px rgba(0,0,0,.18)}
+.name{font-family:var(--f-display);font-weight:700;font-size:17px}
+.sub{font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.era{display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:110px}
+.pill{font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;background:var(--moss);color:var(--paper)}
+.prog{width:110px;height:6px;border-radius:3px;background:#DCD2C0;overflow:hidden}
+.prog>i{display:block;height:100%;background:var(--amber)}
+.stats{pointer-events:auto;display:flex;gap:6px;flex-wrap:wrap}
+.chip{display:flex;gap:5px;align-items:baseline;padding:5px 9px;border-radius:12px;background:rgba(244,237,224,.92);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.chip b{color:var(--ink);font-size:13px}
+.hint{pointer-events:auto;align-self:center;max-width:min(92%,460px);padding:7px 12px;border-radius:12px;background:rgba(42,38,32,.86);color:var(--paper);font-size:13px;text-align:center}
+.tools{position:absolute;left:0;right:0;bottom:0;padding-bottom:max(12px, env(safe-area-inset-bottom,0px));padding-left:max(12px, env(safe-area-inset-left,0px));padding-right:max(12px, env(safe-area-inset-right,0px));display:flex;justify-content:center;pointer-events:none}
+.toolrow{pointer-events:auto;display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:4px;padding:6px;background:var(--ink);border-radius:20px;width:min(100%,520px)}
+.tool{appearance:none;border:0;background:transparent;color:var(--paper);font:inherit;font-size:11px;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 2px;min-height:54px;border-radius:14px;cursor:pointer}
+.tool svg{width:22px;height:22px}
+.tool[aria-pressed="true"]{background:var(--moss)}
+.tool:focus-visible,.btn:focus-visible,.card:focus-visible{outline:3px solid var(--amber-soft);outline-offset:2px}
+.sheet{position:absolute;left:0;right:0;bottom:0;max-height:72%;background:var(--paper);border-radius:22px 22px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.25);padding:14px max(16px, env(safe-area-inset-right,0px)) max(16px, env(safe-area-inset-bottom,0px)) max(16px, env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:10px;overflow:auto;z-index:5}
+.sheet h2{margin:0;font-family:var(--f-display);font-size:20px}
+.sheet .row{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.x{appearance:none;border:0;background:var(--paper-2);width:40px;height:40px;border-radius:50%;font-size:18px;cursor:pointer;color:var(--ink)}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.card{appearance:none;text-align:left;font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:3px;cursor:pointer;min-height:44px}
+.card[disabled]{opacity:.55;cursor:not-allowed;background:#EDE5D6}
+.card b{font-size:14px}.card span{font-size:12px;color:var(--ink-2)}
+.btn{appearance:none;border:0;font:inherit;font-weight:700;font-size:14px;padding:0 14px;min-height:46px;border-radius:14px;background:var(--ink);color:var(--paper);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink);border:1.5px solid var(--moss)}
+.btns{display:flex;gap:8px;flex-wrap:wrap}
+.toggle{display:flex;align-items:center;gap:8px;font-size:13px}
+.toggle input{width:20px;height:20px;accent-color:var(--moss)}
+.parch{background:#F1E4C8;border-radius:8px;padding:12px 14px;box-shadow:inset 0 0 30px rgba(122,90,50,.3);display:flex;flex-direction:column;gap:8px}
+.entry{display:flex;flex-direction:column}
+.entry small{font-size:11px;font-weight:700;color:#6E5233}
+.entry span{font-family:var(--f-hand);font-size:21px;line-height:1.2;color:#2E241A}
+.toast{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(96px + env(safe-area-inset-bottom,0px));background:rgba(42,38,32,.92);color:var(--paper);padding:9px 14px;border-radius:12px;font-size:13px;max-width:86%;text-align:center;pointer-events:none;z-index:6}
+.overlay{position:absolute;inset:0;background:rgba(20,20,28,.78);display:flex;align-items:center;justify-content:center;z-index:8;padding-left:max(16px, env(safe-area-inset-left,0px));padding-right:max(16px, env(safe-area-inset-right,0px))}
+.overlay .box{background:var(--paper);border-radius:18px;padding:18px;max-width:420px;width:100%;display:flex;flex-direction:column;gap:10px}
+.overlay .box h3{margin:0;font-family:var(--f-display);font-size:20px}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;font-size:14px;font-variant-numeric:tabular-nums}
+.kv b{text-align:right}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div id="app">
+  <canvas id="cv" aria-label="병 안의 평평한 지구. 주민들이 살아가는 마을"></canvas>
+
+  <div class="hud">
+    <div class="bar">
+      <div>
+        <div class="name">초록방울</div>
+        <div class="sub" id="clock">1일차 20:00 · 저녁</div>
+      </div>
+      <div class="era">
+        <span class="pill" id="eraName">개척기</span>
+        <div class="prog" aria-label="다음 시대까지"><i id="eraBar" style="width:0%"></i></div>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <div class="hint" id="hint" role="status">주민들이 배고파해요…</div>
+  </div>
+
+  <div class="tools">
+    <div class="toolrow" role="toolbar" aria-label="거인의 도구">
+      <button class="tool" id="tBuild" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/></svg>건설</button>
+      <button class="tool" id="tTap" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="2"/><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"/></svg>톡</button>
+      <button class="tool" id="tRain" aria-pressed="false" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"/></svg>비</button>
+      <button class="tool" id="tSpeed" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 13l4-3M12 2v3"/></svg><span id="speedLbl">×60</span></button>
+      <button class="tool" id="tAway" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10z"/></svg>자리비움</button>
+      <button class="tool" id="tBook" type="button"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"/><path d="M9 9h6M9 13h6"/></svg>연대기</button>
+    </div>
+  </div>
+
+  <section class="sheet" id="buildSheet" hidden aria-label="건설">
+    <div class="row"><h2>무엇을 지을까요</h2><button class="x" type="button" data-close="buildSheet" aria-label="닫기">✕</button></div>
+    <div class="sub">고른 뒤 땅을 누르면 거기에 터가 생겨요. 주민들이 자재를 날라와 짓습니다.</div>
+    <label class="toggle"><input type="checkbox" id="autoBuild" checked> 주민 자율 건설 (촌장이 필요한 건물을 알아서 짓기)</label>
+    <div class="grid" id="buildGrid"></div>
+  </section>
+
+  <section class="sheet" id="bookSheet" hidden aria-label="연대기">
+    <div class="row"><h2>초록방울 연대기</h2><button class="x" type="button" data-close="bookSheet" aria-label="닫기">✕</button></div>
+    <div class="parch" id="bookList"></div>
+  </section>
+
+  <section class="sheet" id="awaySheet" hidden aria-label="자리 비우기">
+    <div class="row"><h2>거인이 자리를 비우면</h2><button class="x" type="button" data-close="awaySheet" aria-label="닫기">✕</button></div>
+    <div class="sub">앱을 끈 것처럼 시간을 흘려봅니다. 주민들은 알아서 먹고, 짓고, 아이를 낳아요. 대신 문명 발전은 30% 속도이고, 시대는 거인이 돌아와야 바뀝니다.</div>
+    <div class="btns" id="awayBtns"></div>
+  </section>
+
+  <section class="sheet" id="personSheet" hidden aria-label="주민 정보">
+    <div class="row"><h2 id="pName">—</h2><button class="x" type="button" data-close="personSheet" aria-label="닫기">✕</button></div>
+    <div class="kv" id="pInfo"></div>
+  </section>
+
+  <div class="toast" id="toast" hidden></div>
+  <div class="overlay" id="overlay" hidden><div class="box" id="overlayBox"></div></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ───────────────────────── 상수 (밸런스 v1 · 건물 명세 v1) ─────────────────────────
+const DAY = 86400, HOUR = 3600;
+const R = 32;                 // 소형 병 안쪽 대지 반지름 (지름 64칸)
+const TILT = 0.58;            // 비스듬히 내려다보는 각도
+const FOOD_IV = 900;          // 1명이 15분마다 식량 1
+const BIRTH_RATE = 0.6;       // 부부당 하루 출생
+const MAX_POP = 40;
+const GROW_FIRST = 4 * HOUR;  // 새 밭 첫 수확까지
+const WALK = 1.25;            // 칸/초
+const ERA_NEED = 100;
+const OFFLINE_ERA = 0.3;
+const SPEEDS = [1, 10, 60, 600];
+
+const DEF = {
+  '창고':   {plank:4, stone:2, time:120, era:0, size:1.5, color:'#B08A5A', desc:'물자 보관'},
+  '오두막': {plank:2, stone:0, time:60,  era:0, size:1.0, cap:4, color:'#E9DFCD', desc:'4명이 사는 집'},
+  '나무꾼': {plank:2, stone:0, time:60,  era:0, size:0.9, job:true, color:'#C9A36B', desc:'나무 → 통나무 (숲 옆)'},
+  '산림관': {plank:2, stone:0, time:60,  era:0, size:0.9, job:true, color:'#9DB37A', desc:'나무를 다시 심음'},
+  '채석장': {plank:2, stone:0, time:60,  era:0, size:0.9, job:true, color:'#A7A39A', desc:'바위 → 돌 (바위 옆)'},
+  '제재소': {plank:2, stone:2, time:120, era:0, size:1.2, job:true, in:{'통나무':1}, out:{'판자':1}, cycle:30, color:'#C08A55', desc:'통나무 1 → 판자 1'},
+  '농장':   {plank:3, stone:1, time:120, era:0, size:1.8, job:true, out:{'밀':1}, cycle:60, color:'#D8B44A', desc:'밀 1/분 · 첫 수확 4시간'},
+  '우물':   {plank:0, stone:2, time:60,  era:0, size:0.7, job:true, out:{'물':1}, cycle:30, color:'#8FA9B5', desc:'물 2/분'},
+  '방앗간': {plank:3, stone:3, time:150, era:1, size:1.2, job:true, in:{'밀':1}, out:{'밀가루':1}, cycle:30, color:'#D9CDB8', desc:'밀 → 밀가루'},
+  '빵집':   {plank:2, stone:3, time:150, era:1, size:1.2, job:true, in:{'밀가루':1,'물':1}, out:{'빵':1}, cycle:30, color:'#E2B07A', desc:'밀가루+물 → 빵'},
+  '목조주택': {plank:4, stone:1, time:120, era:1, size:1.2, cap:6, color:'#E0D2B8', desc:'6명이 사는 집'},
+};
+const ERAS = ['개척기', '마을'];
+// 창고에 이만큼 넘게 있으면 그 물자 생산을 쉬고 다른 일을 돕는다
+const ENOUGH = {'통나무': 20, '판자': 40, '돌': 30, '물': 20, '밀가루': 20};
+const FOODS = ['건량', '빵', '밀'];  // 창고 식량 (낟알은 따로)
+const NAMES_M = ['브루노','디터','에밀','구스타프','요나스','루카스','니코','오스카','지몬','파울','막스','한네스','테오','빌리'];
+const NAMES_F = ['아다','클라라','프리다','하나','이다','카타','미아','파울라','로사','테아','우르슬라','빌마','엘라','넬레'];
+const TRAITS = [
+  ['노래하며 일함', '주변 기분이 좋아짐', 1.0],
+  ['부지런함', '일이 빠름', 1.2],
+  ['느긋함', '일이 조금 느림', 0.85],
+  ['손이 큼', '가끔 하나 더 만듦', 1.1],
+  ['새벽형', '아침에 힘이 남', 1.05],
+  ['겁쟁이지만 손이 빠름', '빠르지만 하늘 소리에 숨음', 1.2],
+  ['할머니 레시피를 기억함', '음식 솜씨', 1.0],
+  ['거인의 손가락을 본 적 있다고 우김', '신앙이 깊음', 1.0],
+  ['고양이만 보면 따라감', '가끔 딴짓', 0.9],
+  ['망치 소리로 박자를 맞춤', '건설이 빠름', 1.15],
+  ['절대 뛰지 않음', '느리지만 다치지 않음', 0.9],
+  ['짐을 많이 들 수 있음', '한 번에 더 나름', 1.1],
+];
+
+// ───────────────────────── 난수 (시드 고정) ─────────────────────────
+let seed = 20261105;
+const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+const pick = (a) => a[Math.floor(rnd() * a.length)];
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// ───────────────────────── 상태 ─────────────────────────
+let S = null;
+function newWorld() {
+  seed = 20261105;
+  const now = new Date();
+  const startClock = now.getHours() * HOUR + now.getMinutes() * 60;
+  const st = {
+    t: 0, startClock, speedIdx: 2, offline: false, auto: true,
+    era: 0, eraPts: 0, faith: 30, fear: 0, tapLog: [],
+    stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22},
+    manna: [], mannaBatches: [], firstHarvestAt: null, mannaEnded: false, lastDawnIdx: null, arrivalManna: false,
+    trees: [], rocks: [], pond: {x: 13, y: 9, rx: 5, ry: 3.4}, b: [], p: [], nextId: 1,
+    book: [], paths: new Float32Array(128 * 128), rain: null, ripples: [], deficit: 0,
+    stats: {born: 0, died: 0, built: 0}, timers: {life: 0, jobs: 0, auto: 0, decay: 0, speak: 0}, cam: {x: 0, y: 2, z: 0},
+  };
+  // 숲 (네 군데) · 바위 · 연못
+  const groves = [[-16, -10], [-18, 8], [10, -16], [20, 4]];
+  for (const [gx, gy] of groves) for (let i = 0; i < 30; i++) {
+    const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * 6.5;
+    const x = gx + Math.cos(a) * d, y = gy + Math.sin(a) * d * 0.9;
+    if (Math.hypot(x, y) < R - 1.5) st.trees.push({x, y, s: 'tree', g: 0, res: 0});
+  }
+  for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
+  S = st;
+  // 시작 창고 + 모닥불
+  const w = addBuilding('창고', 0, 0, true);
+  w.isStore = true;
+  S.fire = {x: 2.2, y: 1.6};
+  // 첫 정착민 두 가족 + 노인 + 젊은이
+  const fam = [
+    ['한스', 'm', 14, '망치 소리로 박자를 맞춤'], ['마르타', 'f', 13, '할머니 레시피를 기억함'], ['리나', 'f', 2.5, '거인의 손가락을 본 적 있다고 우김'], ['토미', 'm', 1.2, null],
+    ['오토', 'm', 12, '부지런함'], ['엘자', 'f', 11, '노래하며 일함'], ['펠릭스', 'm', 3, null],
+    ['베른', 'm', 23, '느긋함'], ['그레타', 'f', 9, '새벽형'], ['카를', 'm', 8, '짐을 많이 들 수 있음'],
+  ];
+  const ids = fam.map(([n, sx, age, tr]) => addPerson(n, sx, age, tr, S.fire.x + (rnd() - .5) * 3, S.fire.y + (rnd() - .5) * 3));
+  marry(ids[0], ids[1]); ids[2].parents = [ids[0].id, ids[1].id]; ids[3].parents = [ids[0].id, ids[1].id];
+  marry(ids[4], ids[5]); ids[6].parents = [ids[4].id, ids[5].id];
+  log('어느 저녁, 우리 조상 열 명이 숲 가장자리에 처음 불을 피웠다.');
+}
+
+function addBuilding(type, x, y, built) {
+  const d = DEF[type];
+  const b = {id: S.nextId++, type, x, y, built: !!built, prog: built ? d.time : 0, del: {'판자': 0, '돌': 0}, inc: {'판자': 0, '돌': 0},
+    worker: null, inBuf: {}, inInc: {}, out: {}, timer: 0, readyAt: null, byGiant: false, boost: 0};
+  S.b.push(b);
+  if (built) onBuilt(b, true);
+  return b;
+}
+function addPerson(name, sex, age, trait, x, y) {
+  const tr = trait ? TRAITS.find(t => t[0] === trait) : pick(TRAITS);
+  const p = {id: S.nextId++, name, sex, age, trait: tr[0], tdesc: tr[1], mult: tr[2], partner: null, home: null, job: null, parents: null,
+    hunger: 0, health: 1, x, y, steps: [], carry: null, say: '', sayT: 0, doing: '쉬는 중', dead: false};
+  S.p.push(p);
+  return p;
+}
+const person = (id) => S.p.find(q => q.id === id);
+const bld = (id) => S.b.find(q => q.id === id);
+function marry(a, b) { a.partner = b.id; b.partner = a.id; }
+
+// ───────────────────────── 시간 ─────────────────────────
+const clockOf = (t) => (S.startClock + t) % DAY;
+const dayOf = (t) => Math.floor((S.startClock + t) / DAY) - Math.floor(S.startClock / DAY) + 1;
+const hourNow = () => clockOf(S.t) / HOUR;
+const isNight = () => { const h = hourNow(); return h >= 22 || h < 6; };
+const isWork = () => { const h = hourNow(); return h >= 6 && h < 20.5; };
+function fmtTime(t) {
+  const c = clockOf(t), h = Math.floor(c / HOUR), m = Math.floor((c % HOUR) / 60);
+  return `${dayOf(t)}일차 ${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+function partOfDay() { const h = hourNow(); return h < 5 ? '밤' : h < 8 ? '새벽' : h < 12 ? '오전' : h < 17 ? '오후' : h < 20 ? '저녁' : '밤'; }
+
+// ───────────────────────── 기록 ─────────────────────────
+function log(text) { S.book.push({t: S.t, text}); if (S.book.length > 400) S.book.shift(); }
+function say(p, text, dur = 6) { p.say = text; p.sayT = dur; }
+let toastTimer = null;
+function toast(text) {
+  const el = document.getElementById('toast'); el.textContent = text; el.hidden = false;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { el.hidden = true; }, 3200);
+}
+
+// ───────────────────────── 식량 ─────────────────────────
+function foodTotal() {
+  let n = FOODS.reduce((s, k) => s + S.stock[k], 0);
+  n += S.mannaBatches.reduce((s, m) => s + m.amt, 0) + S.manna.reduce((s, m) => s + m.amt, 0);
+  for (const b of S.b) n += (b.out['밀'] || 0) + (b.out['빵'] || 0);
+  return n;
+}
+function consume(need) {
+  // 낟알(상하기 전, 오래된 것부터) → 들판 낟알 → 건량 → 빵 → 밀(죽)
+  for (const m of S.mannaBatches) { const take = Math.min(m.amt, need); m.amt -= take; need -= take; if (need <= 0) break; }
+  if (need > 0) for (const m of S.manna) { const take = Math.min(m.amt, need); m.amt -= take; need -= take; if (need <= 0) break; }
+  for (const k of FOODS) { if (need <= 0) break; const take = Math.min(S.stock[k], need); S.stock[k] -= take; need -= take;
+    if (need > 0 && (k === '빵' || k === '밀')) for (const b of S.b) { if (need <= 0) break; const t2 = Math.min(b.out[k] || 0, need); if (t2 > 0) { b.out[k] -= t2; need -= t2; } } }
+  S.mannaBatches = S.mannaBatches.filter(m => m.amt > 0.001);
+  return Math.max(0, need);
+}
+function mannaFall(reason) {
+  const pop = alive().length; let amt = pop * DAY / FOOD_IV;
+  const piles = 8; const store = S.b.find(b => b.isStore);
+  for (let i = 0; i < piles; i++) {
+    const a = rnd() * Math.PI * 2, d = 5 + rnd() * 9;
+    S.manna.push({x: store.x + Math.cos(a) * d, y: store.y + Math.sin(a) * d, amt: amt / piles, born: S.t, res: 0});
+  }
+  S.ripples.push({x: store.x, y: store.y, t: 0, kind: 'manna'});
+  S.faith = Math.min(100, S.faith + 6);
+  const kids = alive().filter(p => p.age < 4);
+  const who = kids.length ? pick(kids) : pick(alive());
+  if (reason === 'arrival') { say(who, '엄마, 하늘에서 뭐가 내렸어요!', 8); log('굶주린 조상들에게 거인이 하늘에서 낟알을 내렸다.'); toast('하늘 낟알이 내렸어요. 첫 수확을 거둘 때까지 매일 새벽 내립니다.'); }
+  else { say(who, '거인님의 낟알이다!', 6); log('새벽, 들판에 하늘의 낟알이 하얗게 깔렸다.'); }
+}
+
+// ───────────────────────── 메인 시뮬레이션 ─────────────────────────
+const alive = () => S.p.filter(p => !p.dead);
+function step(dt) {
+  S.t += dt;
+  // 도착 직후 첫 낟알
+  if (!S.arrivalManna && S.t >= 3) { S.arrivalManna = true; mannaFall('arrival'); }
+  // 새벽 (6시)
+  const dawnIdx = Math.floor((S.startClock + S.t - 6 * HOUR) / DAY);
+  if (S.lastDawnIdx === null) S.lastDawnIdx = dawnIdx;
+  if (dawnIdx > S.lastDawnIdx) {
+    S.lastDawnIdx = dawnIdx;
+    if (S.firstHarvestAt === null) mannaFall('dawn');
+    else if (!S.mannaEnded) {
+      S.mannaEnded = true;
+      log('들에서 첫 곡식을 거둔 다음 날, 하늘의 낟알이 그쳤다. 이제 우리는 우리 손으로 먹고산다.');
+      log('첫 수확 축제가 열렸다. 모두 모닥불 둘레에서 밤늦게까지 춤을 추었다.');
+      toast('하늘 낟알이 그쳤어요. 첫 수확 축제!');
+    }
+  }
+  // 낟알 상함 (하루)
+  for (const m of S.manna) if (S.t - m.born >= DAY) m.amt = 0;
+  for (const m of S.mannaBatches) if (S.t - m.born >= DAY) m.amt = 0;
+  S.manna = S.manna.filter(m => m.amt > 0.001);
+  S.mannaBatches = S.mannaBatches.filter(m => m.amt > 0.001);
+
+  // 식량 소비 (집계)
+  const pop = alive();
+  const need = pop.length * dt / FOOD_IV;
+  const unmet = consume(need);
+  const f = need > 0 ? unmet / need : 0;
+  S.deficit = f;
+  for (const p of pop) {
+    if (f > 0) p.hunger = Math.min(4, p.hunger + f * dt / FOOD_IV); else p.hunger = Math.max(0, p.hunger - dt / FOOD_IV);
+    if (p.hunger >= 3) p.health -= dt / (8 * HOUR); else p.health = Math.min(1, p.health + dt / (12 * HOUR));
+    p.age += dt / DAY;
+    if (p.sayT > 0) p.sayT -= dt;
+  }
+  // 건물
+  for (const b of S.b) updateBuilding(b, dt);
+  // 주민
+  for (const p of pop) updatePerson(p, dt);
+  // 나무 재생
+  for (const tr of S.trees) if (tr.s !== 'tree') { tr.g -= dt; if (tr.g <= 0) tr.s = 'tree'; }
+  // 비
+  if (S.rain) { S.rain.t -= dt; if (S.rain.t <= 0) S.rain = null; }
+  for (const r of S.ripples) r.t += dt;
+  S.ripples = S.ripples.filter(r => r.t < 40);
+
+  // 주기 처리
+  const T = S.timers;
+  T.life += dt; T.jobs += dt; T.auto += dt; T.decay += dt; T.speak += dt;
+  if (T.life >= 60) { lifeEvents(T.life); T.life = 0; }
+  if (T.jobs >= 20) { assignJobs(); assignHomes(); T.jobs = 0; }
+  if (T.auto >= 900) { if (S.auto || S.offline) autoBuild(); T.auto = 0; }
+  if (T.decay >= 60) { for (let i = 0; i < S.paths.length; i++) S.paths[i] *= 0.997; T.decay = 0; }
+  if (T.speak >= 240) { idleChatter(); T.speak = 0; }
+  // 시대 점수
+  const builtN = S.b.filter(b => b.built).length;
+  const rate = (pop.length * 0.4 + builtN * 0.6) * (S.offline ? OFFLINE_ERA : 1);
+  if (S.era < ERAS.length - 1) S.eraPts = Math.min(ERA_NEED, S.eraPts + rate * dt / HOUR);
+  // 신앙은 천천히 식는다
+  S.faith = Math.max(0, S.faith - dt / (6 * HOUR));
+  S.fear = Math.max(0, S.fear - dt / (2 * HOUR));
+}
+
+const GATHER = ['나무꾼', '채석장', '산림관'];  // 채집형은 일꾼이 직접 걸어가서 일함
+function updateBuilding(b, dt) {
+  const d = DEF[b.type];
+  if (!b.built) return;
+  if (b.boost > 0) b.boost -= dt;
+  if (b.type === '농장' && b.readyAt === null) b.readyAt = S.t + GROW_FIRST;
+  // 생산·가공: 일꾼이 배정돼 있으면 밤에도 돌아간다 (밸런스 시트와 같은 24시간 기준)
+  if (!d.job || !d.out || GATHER.includes(b.type) || !b.worker) return;
+  if (b.type === '농장' && S.t < b.readyAt) return;
+  if (Object.keys(d.out).every(k => ENOUGH[k] !== undefined && (S.stock[k] || 0) + (b.out[k] || 0) >= ENOUGH[k])) return;
+  if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) return;
+  const w = person(b.worker);
+  b.timer += dt * (w ? w.mult : 1) * (b.boost > 0 ? 1.5 : 1) * (S.rain && b.type === '농장' ? 1.2 : 1);
+  while (b.timer >= d.cycle) {
+    b.timer -= d.cycle;
+    if (d.in) { if (!Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) { b.timer = 0; break; } for (const [k, n] of Object.entries(d.in)) b.inBuf[k] -= n; }
+    for (const [k, n] of Object.entries(d.out)) add(b.out, k, n);
+    if (b.type === '농장' && w) harvestCheck(w);
+    if (b.type === '빵집' && !S.firstBread && w) { S.firstBread = true; log(`${w.name}${josa(w.name, '이', '가')} 마을의 첫 빵을 구웠다. 죽만 먹던 아이들이 울었다.`); toast('첫 빵!'); }
+  }
+}
+
+function onBuilt(b, silent) {
+  const d = DEF[b.type];
+  if (b.type === '농장') b.readyAt = S.t + GROW_FIRST;
+  if (!silent) {
+    S.stats.built++;
+    const builder = alive().find(p => p.job === null && p.age >= 4) || alive()[0];
+    if (b.type === '오두막' || b.type === '목조주택') log(`${b.type} 한 채가 다 지어졌다. 이제 한 가족이 지붕 아래에서 잔다.`);
+    else if (b.type === '농장') log('밭을 갈았다. 첫 곡식이 여물려면 반나절은 걸리겠지.');
+    else log(`${b.type}${josa(b.type, '이', '가')} 다 지어졌다.`);
+    if (builder) say(builder, `${b.type} 완성!`, 5);
+  }
+}
+function josa(w, a, b) { const c = w.charCodeAt(w.length - 1) - 0xac00; return (c >= 0 && c % 28 !== 0) ? a : b; }
+
+// ───────────────────────── 주민 ─────────────────────────
+function updatePerson(p, dt) {
+  // 진행 중 단계
+  while (dt > 0 && p.steps.length) {
+    const s = p.steps[0];
+    if (s.k === 'walk') {
+      const dx = s.x - p.x, dy = s.y - p.y, dd = Math.hypot(dx, dy);
+      const sp = WALK * (p.age >= 20 ? 0.75 : 1) * (p.age < 4 ? 0.9 : 1);
+      const can = sp * dt;
+      if (dd <= can) { p.x = s.x; p.y = s.y; dt -= dd / sp; p.steps.shift(); markPath(p.x, p.y, dd); }
+      else { p.x += dx / dd * can; p.y += dy / dd * can; markPath(p.x, p.y, can); dt = 0; }
+    } else if (s.k === 'do') {
+      s.left -= dt * (s.fast ? p.mult : 1);
+      if (s.left <= 0) { dt = -s.left; p.steps.shift(); if (s.done) s.done(p); }
+      else dt = 0;
+    }
+  }
+  if (!p.steps.length) decide(p);
+}
+function markPath(x, y, amt) {
+  const gx = Math.floor((x + R) / (2 * R) * 128), gy = Math.floor((y + R) / (2 * R) * 128);
+  if (gx >= 0 && gy >= 0 && gx < 128 && gy < 128) S.paths[gy * 128 + gx] = Math.min(60, S.paths[gy * 128 + gx] + amt);
+}
+const walk = (x, y) => ({k: 'walk', x, y});
+const act = (left, done, fast) => ({k: 'do', left, done, fast});
+const store = () => S.b.find(b => b.isStore && b.built);
+const homeOf = (p) => (p.home ? bld(p.home) : null);
+function near(x, y, r = 1.2) { const a = rnd() * Math.PI * 2; return {x: x + Math.cos(a) * r, y: y + Math.sin(a) * r}; }
+
+function decide(p) {
+  const h = hourNow();
+  // 밤: 집이나 모닥불에서 잠
+  if (isNight()) {
+    const home = homeOf(p);
+    const spot = home ? {x: home.x, y: home.y + 0.3} : near(S.fire.x, S.fire.y, 1.4);
+    const untilMorning = ((6 * HOUR - clockOf(S.t)) + DAY) % DAY;
+    p.doing = home ? '집에서 자는 중' : '모닥불 곁에서 자는 중';
+    p.steps.push(walk(spot.x, spot.y), act(Math.max(60, Math.min(untilMorning, 2 * HOUR)), null));
+    p.sleeping = true;
+    return;
+  }
+  p.sleeping = false;
+  // 굶주림 → 먹을 걸 찾아 헤맴
+  if (p.hunger >= 2) { const s = store(); p.doing = '먹을 것을 찾는 중'; say(p, '배고파요…', 5); p.steps.push(walk(...xy(near(s.x, s.y, 2))), act(120, null)); return; }
+  // 새벽 낟알 줍기 (아이도)
+  if (S.manna.length && h < 11 && p.age >= 2.5) { const t = haulMannaTask(p); if (t) return; }
+  // 식사 시간 (아침·점심·저녁) — 모닥불에 모여 앉음
+  const meal = (h >= 7 && h < 7.5) || (h >= 12 && h < 12.5) || (h >= 18.5 && h < 19);
+  if (meal && rnd() < 0.7) { p.doing = '밥 먹는 중'; const s = near(S.fire.x, S.fire.y, 1.8); p.steps.push(walk(s.x, s.y), act(900, null)); return; }
+  // 아이·노인
+  if (p.age < 4) { p.doing = '노는 중'; const c = homeOf(p) || S.fire; const s = near(c.x, c.y, 2.5 + rnd() * 2); p.steps.push(walk(s.x, s.y), act(120 + rnd() * 240, null)); return; }
+  if (p.age >= 20) { if (h >= 18 && rnd() < 0.5) { pray(p); return; } p.doing = '모닥불 곁에서 쉬는 중'; const s = near(S.fire.x, S.fire.y, 2); p.steps.push(walk(s.x, s.y), act(600 + rnd() * 600, null)); return; }
+  // 성인
+  if (isWork()) {
+    if (p.job && workTask(p)) return;
+    if (haulTask(p)) return;
+    if (buildTask(p)) return;
+  }
+  if (h >= 18.5 && rnd() < 0.3) { pray(p); return; }
+  p.doing = '어울리는 중'; const s = near(S.fire.x, S.fire.y, 2.5); p.steps.push(walk(s.x, s.y), act(300 + rnd() * 400, null));
+}
+const xy = (o) => [o.x, o.y];
+function pray(p) {
+  p.doing = '기도하는 중';
+  const lines = ['거인님, 오늘도 지켜주세요', '거인님, 비를 내려주세요', '아이들이 건강하게 해주세요', '거인님은 지금도 보고 계실까'];
+  const s = near(S.fire.x, S.fire.y, 2.2);
+  p.steps.push(walk(s.x, s.y), act(600, (q) => { S.faith = Math.min(100, S.faith + 0.3); }));
+  if (rnd() < 0.35) say(p, pick(lines), 6);
+}
+
+function workTask(p) {
+  const b = bld(p.job); if (!b || !b.built) { p.job = null; return false; }
+  const d = DEF[b.type];
+  const full = (k) => ENOUGH[k] !== undefined && (S.stock[k] || 0) >= ENOUGH[k];
+  if (b.type === '나무꾼' && full('통나무')) return false;
+  if (b.type === '채석장' && full('돌')) return false;
+  if (b.type === '산림관' && S.trees.filter(t => t.s !== 'stump').length >= 70) return false;
+  if (d.out && Object.keys(d.out).every(full)) return false;
+  // 건물 앞에 쌓인 산출물은 일꾼이 직접 창고로
+  const outN = Object.values(b.out).reduce((a, n) => a + n, 0);
+  if (outN >= 4) {
+    const k = Object.keys(b.out).find(q => b.out[q] >= 1); const take = Math.min(4, Math.floor(b.out[k])); b.out[k] -= take;
+    const st = store(); p.doing = `${k} 나르는 중`;
+    p.steps.push(walk(b.x + 0.7, b.y + 0.5), act(3, (q) => { q.carry = k; }), walk(st.x + 0.8, st.y + 0.6), act(3, (q) => { S.stock[k] = (S.stock[k] || 0) + take; q.carry = null; }));
+    return true;
+  }
+  p.doing = `${b.type}에서 일하는 중`;
+  if (b.type === '나무꾼') {
+    const tr = S.trees.filter(t => t.s === 'tree' && !t.res).sort((a, c) => dist(a, b) - dist(c, b))[0];
+    if (!tr || dist(tr, b) > 20) { p.doing = '벨 나무가 없어요'; p.steps.push(act(120, null)); return true; }
+    tr.res = 1; const s = store();
+    p.steps.push(walk(tr.x + 0.4, tr.y + 0.2), act(55, () => { tr.s = 'stump'; tr.g = 3 * HOUR; tr.res = 0; p.carry = '통나무'; }, true),
+      walk(s.x + 0.8, s.y + 0.6), act(4, () => { S.stock['통나무']++; p.carry = null; }));
+    return true;
+  }
+  if (b.type === '산림관') {
+    const sp = near(b.x, b.y, 2 + rnd() * 5);
+    if (Math.hypot(sp.x, sp.y) > R - 2 || inPond(sp)) { p.steps.push(act(45, null)); return true; }
+    p.steps.push(walk(sp.x, sp.y), act(45, () => { S.trees.push({x: sp.x, y: sp.y, s: 'sapling', g: 3 * HOUR, res: 0}); }, true));
+    return true;
+  }
+  if (b.type === '채석장') {
+    const rk = S.rocks.filter(r => r.amt > 0 && !r.res).sort((a, c) => dist(a, b) - dist(c, b))[0];
+    if (!rk || dist(rk, b) > 20) { p.doing = '캘 바위가 없어요'; p.steps.push(act(120, null)); return true; }
+    rk.res = 1; const s = store();
+    p.steps.push(walk(rk.x + 0.6, rk.y + 0.4), act(50, () => { rk.amt--; rk.res = 0; p.carry = '돌'; }, true),
+      walk(s.x + 0.8, s.y + 0.6), act(4, () => { S.stock['돌']++; p.carry = null; }));
+    return true;
+  }
+  // 생산·가공 건물: 실제 생산은 건물에서 돌아가고(updateBuilding), 일꾼은 곁에서 일한다
+  if (d.out && Object.keys(d.out).every(full)) return false;
+  const spot = near(b.x, b.y, 0.9);
+  if (b.type === '농장' && S.t < b.readyAt) p.doing = '밭을 돌보는 중 (아직 자라는 중)';
+  else if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) p.doing = `${Object.keys(d.in).join('·')}을 기다리는 중`;
+  p.steps.push(walk(spot.x, spot.y), act(90, null));
+  return true;
+}
+const add = (o, k, n) => { o[k] = (o[k] || 0) + n; };
+const inPond = (pt) => ((pt.x - S.pond.x) / (S.pond.rx + 0.6)) ** 2 + ((pt.y - S.pond.y) / (S.pond.ry + 0.6)) ** 2 < 1;
+function harvestCheck(p) {
+  if (S.firstHarvestAt === null) {
+    S.firstHarvestAt = S.t;
+    log(`${p.name}${josa(p.name, '이', '가')} 들에서 첫 곡식을 거두었다.`);
+    say(p, '첫 곡식이다!', 7); toast('첫 수확! 다음 새벽부터 하늘 낟알이 그칩니다.');
+  }
+}
+
+function haulMannaTask(p) {
+  const s = store();
+  const m = S.manna.filter(m => m.amt > 0 && m.res < 3).sort((a, c) => dist(a, p) - dist(c, p))[0];
+  if (!m) return false;
+  m.res++;
+  p.doing = '하늘 낟알을 줍는 중';
+  const cap = p.age < 4 ? 8 : 20;
+  p.steps.push(walk(m.x, m.y), act(40, (q) => { const take = Math.min(cap, m.amt); m.amt -= take; m.res--; q.carry = '낟알'; q.carryAmt = take; }),
+    walk(s.x + 0.6, s.y + 0.7), act(4, (q) => { if (q.carryAmt) S.mannaBatches.push({amt: q.carryAmt, born: m.born}); q.carry = null; q.carryAmt = 0; }));
+  if (rnd() < 0.15) say(p, '거인님의 낟알이다!', 5);
+  return true;
+}
+
+function haulTask(p) {
+  const s = store(); const capN = p.trait === '짐을 많이 들 수 있음' ? 3 : 2;
+  // ① 건물 앞 산출물 → 창고
+  for (const b of S.b) if (b.built && !b.isStore) for (const [k, n] of Object.entries(b.out)) if (n >= 1) {
+    const take = Math.min(capN, Math.floor(n)); b.out[k] -= take;
+    p.doing = `${k} 나르는 중`;
+    p.steps.push(walk(b.x + 0.7, b.y + 0.5), act(3, (q) => { q.carry = k; }), walk(s.x + 0.8, s.y + 0.6), act(3, (q) => { S.stock[k] = (S.stock[k] || 0) + take; q.carry = null; }));
+    return true;
+  }
+  // ② 건설 현장 ← 창고 자재 (거인이 정한 터 먼저)
+  const sites = S.b.filter(b => !b.built).sort((a, c) => (c.byGiant - a.byGiant) || (a.id - c.id));
+  for (const b of sites) for (const k of ['판자', '돌']) {
+    const req = DEF[b.type][k === '판자' ? 'plank' : 'stone'];
+    const lack = req - b.del[k] - b.inc[k];
+    if (lack > 0 && S.stock[k] >= 1) {
+      const take = Math.min(capN, lack, Math.floor(S.stock[k])); S.stock[k] -= take; b.inc[k] += take;
+      p.doing = `${b.type} 터로 ${k} 나르는 중`;
+      p.steps.push(walk(s.x + 0.8, s.y + 0.6), act(3, (q) => { q.carry = k; }), walk(b.x + 0.6, b.y + 0.6), act(3, (q) => { b.inc[k] -= take; b.del[k] += take; q.carry = null; }));
+      return true;
+    }
+  }
+  // ③ 가공 건물 ← 창고 재료
+  for (const b of S.b) if (b.built && DEF[b.type].in) for (const k of Object.keys(DEF[b.type].in)) {
+    const have = (b.inBuf[k] || 0) + (b.inInc[k] || 0);
+    if (have < 3 && S.stock[k] >= 1) {
+      const take = Math.min(capN, 3 - have, Math.floor(S.stock[k])); S.stock[k] -= take; add(b.inInc, k, take);
+      p.doing = `${b.type}에 ${k} 나르는 중`;
+      p.steps.push(walk(s.x + 0.8, s.y + 0.6), act(3, (q) => { q.carry = k; }), walk(b.x + 0.6, b.y + 0.6), act(3, (q) => { b.inInc[k] -= take; add(b.inBuf, k, take); q.carry = null; }));
+      return true;
+    }
+  }
+  return false;
+}
+function buildTask(p) {
+  const sites = S.b.filter(b => !b.built && b.del['판자'] >= DEF[b.type].plank && b.del['돌'] >= DEF[b.type].stone).sort((a, c) => (c.byGiant - a.byGiant) || (a.id - c.id));
+  const b = sites[0]; if (!b) return false;
+  p.doing = `${b.type} 짓는 중`;
+  const chunk = Math.min(30, DEF[b.type].time - b.prog);
+  const sp = near(b.x, b.y, 0.8);
+  p.steps.push(walk(sp.x, sp.y), act(chunk, () => {
+    if (b.built) return;
+    b.prog += chunk * (S.faith > 50 && b.byGiant ? 1.2 : 1);
+    if (b.prog >= DEF[b.type].time) { b.built = true; onBuilt(b); }
+  }, true));
+  return true;
+}
+
+// ───────────────────────── 일자리·집 ─────────────────────────
+function assignJobs() {
+  for (const p of alive()) if (p.job && p.age >= 20) { const b = bld(p.job); if (b) b.worker = null; p.job = null; log(`${p.name}${josa(p.name, '은', '는')} 늙어서 일을 내려놓았다.`); }
+  for (const b of S.b) {
+    if (!b.built || !DEF[b.type].job) continue;
+    if (b.worker && !(person(b.worker) && !person(b.worker).dead)) b.worker = null;
+    if (b.worker) continue;
+    if (S.stock['도구'] < 1) continue;
+    const cand = alive().filter(p => p.age >= 4 && p.age < 20 && !p.job).sort((a, c) => dist(a, b) - dist(c, b))[0];
+    if (!cand) continue;
+    cand.job = b.id; b.worker = cand.id; S.stock['도구']--;
+    cand.steps = []; say(cand, `오늘부터 ${b.type} 일을 해요`, 5);
+  }
+}
+function householdOf(p) {
+  // 부부 + 같은 부모의 아이들 (아직 성인 아닌)
+  const ids = new Set([p.id]); if (p.partner) ids.add(p.partner);
+  for (const q of alive()) if (q.parents && (ids.has(q.parents[0]) || ids.has(q.parents[1])) && q.age < 4) ids.add(q.id);
+  return [...ids].map(person).filter(q => q && !q.dead);
+}
+function occupants(b) { return alive().filter(p => p.home === b.id).length; }
+function assignHomes() {
+  const homes = S.b.filter(b => b.built && DEF[b.type].cap);
+  for (const p of alive()) if (p.home === null && (p.partner || p.age >= 4)) {
+    const hh = householdOf(p).filter(q => q.home === null);
+    const h = homes.find(b => DEF[b.type].cap - occupants(b) >= hh.length);
+    if (h) { for (const q of hh) q.home = h.id; }
+  }
+  // 다 자란 미혼 자녀는 집이 꽉 차면 빈 자리가 있는 집으로 독립
+  for (const p of alive()) if (p.age >= 4 && !p.partner && p.parents && p.home) {
+    const h = bld(p.home); if (occupants(h) < DEF[h.type].cap) continue;
+    const to = homes.filter(b => b.id !== h.id && DEF[b.type].cap - occupants(b) >= 1).sort((a, b) => occupants(a) - occupants(b))[0];
+    if (to) { p.home = to.id; log(`${p.name}${josa(p.name, '이', '가')} 부모 집을 나와 따로 살기 시작했다.`); }
+  }
+  // 집 없는 아이는 부모 집으로
+  for (const p of alive()) if (p.home === null && p.parents) { const par = person(p.parents[0]) || person(p.parents[1]); if (par && par.home) { const h = bld(par.home); if (occupants(h) < DEF[h.type].cap) p.home = h.id; } }
+}
+
+// ───────────────────────── 생로병사 ─────────────────────────
+function lifeEvents(dt) {
+  const pop = alive();
+  // 혼인
+  const singles = pop.filter(p => !p.partner && p.age >= 6 && p.age < 20);
+  const men = singles.filter(p => p.sex === 'm'), women = singles.filter(p => p.sex === 'f');
+  if (men.length && women.length && rnd() < dt / (DAY / 1.2)) {
+    const a = pick(men), b = pick(women); marry(a, b);
+    if (a.home !== b.home) { a.home = null; b.home = null; }
+    log(`${a.name}${josa(a.name, '과', '와')} ${b.name}${josa(b.name, '이', '가')} 모닥불 앞에서 혼인을 약속했다.`);
+    say(a, '거인님, 저희를 지켜봐 주세요', 6);
+  }
+  // 출산
+  if (pop.length < MAX_POP && foodTotal() >= pop.length * 24) {
+    for (const w of pop.filter(p => p.sex === 'f' && p.partner && p.age >= 4 && p.age < 18)) {
+      let h = homeOf(w);
+      if (!h || occupants(h) >= DEF[h.type].cap) {
+        // 집이 꽉 찼으면 자리가 있는 집으로 가족이 옮긴다
+        const hh = householdOf(w);
+        const to = S.b.find(b => b.built && DEF[b.type].cap && b.id !== (h && h.id) && DEF[b.type].cap - occupants(b) >= hh.length + 1);
+        if (!to) continue;
+        for (const q of hh) q.home = to.id; h = to;
+        log(`${w.name}의 가족이 더 넓은 집으로 옮겼다.`);
+      }
+      if (rnd() < BIRTH_RATE * dt / DAY) {
+        const sex = rnd() < 0.5 ? 'm' : 'f';
+        const name = pick(sex === 'm' ? NAMES_M : NAMES_F);
+        const baby = addPerson(name, sex, 0, null, w.x, w.y);
+        baby.parents = [w.id, w.partner]; baby.home = h.id;
+        S.stats.born++;
+        log(`${w.name}${josa(w.name, '이', '가')} ${name}${josa(name, '을', '를')} 낳았다. 아이는 '${baby.trait}' 아이였다.`);
+        say(w, `${name}, 반가워!`, 7);
+        if (alive().length >= MAX_POP) break;
+      }
+    }
+  }
+  // 죽음 (노환 · 굶주림)
+  const couples = pop.filter(p => p.partner && p.sex === 'f' && !person(p.partner)?.dead).length;
+  for (const p of pop) {
+    let die = false, why = '';
+    if (p.age >= 20) { const pd = 0.05 + 0.06 * (p.age - 20); if (rnd() < pd * dt / DAY || p.age > 30) { die = true; why = '노환'; } }
+    if (p.health <= 0) {
+      // 거인이 없을 때: 굶주림 사망은 하루 1명까지, 부부 2쌍 아래로는 일어나지 않음 (멸망 방지)
+      const today = dayOf(S.t);
+      if (S.offline && (couples <= 2 || S.lastStarveDay === today)) { p.health = 0.05; }
+      else { die = true; why = '굶주림'; S.lastStarveDay = today; }
+    }
+    if (die) kill(p, why);
+  }
+}
+function kill(p, why) {
+  p.dead = true; S.stats.died++;
+  if (p.job) { const b = bld(p.job); if (b) b.worker = null; }
+  if (p.partner) { const q = person(p.partner); if (q) q.partner = null; }
+  const age = Math.round(p.age * 2.4);
+  log(why === '노환' ? `${p.name}(${age}세)${josa(p.name, '이', '가')} 잠들 듯 숨을 거두었다.` : `${p.name}(${age}세)${josa(p.name, '이', '가')} 굶주림 끝에 숨을 거두었다.`);
+}
+
+function idleChatter() {
+  const pop = alive().filter(q => !q.sleeping && q.age >= 2.5); if (!pop.length) return;
+  const p = pick(pop);
+  if (!S.offline && rnd() < 0.4) say(p, pick(['거인님이 보고 계신다', '하늘에 큰 그림자가…', '오늘은 하늘이 따뜻해']), 5);
+  else if (S.deficit > 0) say(p, '창고가 비었어…', 5);
+}
+
+// ───────────────────────── 자율 건설 (촌장) ─────────────────────────
+function chief() { return alive().filter(p => p.age >= 4).sort((a, b) => b.age - a.age)[0]; }
+function autoBuild() {
+  const pending = S.b.filter(b => !b.built).length; if (pending >= 2) return;
+  const has = (t) => S.b.filter(b => b.type === t).length;
+  const pop = alive().length;
+  const cap = S.b.filter(b => DEF[b.type].cap).reduce((s, b) => s + DEF[b.type].cap, 0);
+  const homeless = alive().filter(p => !p.home && p.age >= 4).length;
+  const farmRate = S.b.filter(b => b.type === '농장').length * 60;
+  let want = null;
+  // 집이 꽉 차서 아이를 못 낳는 부부 (오두막으로 옮길 수 있는 크기의 가족만)
+  const crowded = alive().some(w => { if (!(w.sex === 'f' && w.partner && w.age >= 4 && w.age < 18)) return false; const h = homeOf(w); return h && occupants(h) >= DEF[h.type].cap && householdOf(w).length + 1 <= DEF['오두막'].cap; });
+  const homes = S.b.filter(b => DEF[b.type].cap).length;
+  const basics = has('농장') && has('나무꾼');
+  if (!has('농장') && homes >= 1) want = '농장';
+  else if (!has('나무꾼') && homes >= 1) want = '나무꾼';
+  else if (homeless > 0 || cap - pop <= 1 || (crowded && basics)) want = S.era >= 1 && S.stock['판자'] >= 4 ? '목조주택' : '오두막';
+  else if (farmRate < pop * 4 * 1.3) want = '농장';
+  else if (!has('우물')) want = '우물';
+  else if (has('나무꾼') < 2) want = '나무꾼';
+  else if (S.stock['판자'] < 12 && !has('제재소')) want = '제재소';
+  else if (S.stock['돌'] < 6 && !has('채석장')) want = '채석장';
+  else if (S.trees.filter(t => t.s === 'tree').length < 40 && !has('산림관')) want = '산림관';
+  else if (S.era >= 1 && !has('방앗간')) want = '방앗간';
+  else if (S.era >= 1 && !has('빵집')) want = '빵집';
+  // 비상용 판자 4장은 남긴다 (나무꾼·제재소 제외) — 판자가 바닥나 아무것도 못 짓는 교착 방지
+  if (want) {
+    const owe = (k, key) => S.b.filter(x => !x.built).reduce((a, x) => a + Math.max(0, DEF[x.type][key] - x.del[k] - x.inc[k]), 0);
+    const freePlank = S.stock['판자'] - owe('판자', 'plank'), freeStone = S.stock['돌'] - owe('돌', 'stone');
+    const reserve = (want === '나무꾼' || want === '제재소') ? 0 : 4;
+    if (freePlank - DEF[want].plank < reserve || freeStone - DEF[want].stone < 0) want = null;
+  }
+  const idle = alive().filter(p => p.age >= 4 && p.age < 20 && !p.job).length;
+  const foodShort = farmRate < pop * 4 * 1.3;
+  if (want && DEF[want].job && idle < 2 && !(want === '농장' && foodShort)) want = null;
+  if (!want || DEF[want].era > S.era) return;
+  const spot = findSpot(want); if (!spot) return;
+  const b = addBuilding(want, spot.x, spot.y, false);
+  const c = chief();
+  log(`촌장 ${c ? c.name : ''}${c ? josa(c.name, '이', '가') : ''} ${want} 자리를 정했다.`);
+}
+function free(x, y, size) {
+  if (Math.hypot(x, y) > R - size - 1.2) return false;
+  if (inPond({x, y})) return false;
+  for (const b of S.b) if (Math.hypot(b.x - x, b.y - y) < DEF[b.type].size + size + 0.6) return false;
+  if (Math.hypot(S.fire.x - x, S.fire.y - y) < size + 1.2) return false;
+  for (const r of S.rocks) if (Math.hypot(r.x - x, r.y - y) < size + 0.8) return false;
+  return true;
+}
+function findSpot(type) {
+  const size = DEF[type].size;
+  let cx = 0, cy = 0;
+  if (type === '나무꾼' || type === '산림관') { const t = S.trees.filter(t => t.s === 'tree').sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (t) { cx = t.x * 0.85; cy = t.y * 0.85; } }
+  if (type === '채석장') { const r = S.rocks.filter(r => r.amt > 0).sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (r) { cx = r.x * 0.8; cy = r.y * 0.8; } }
+  for (let rad = 2; rad < R; rad += 0.8) for (let k = 0; k < 24; k++) {
+    const a = k / 24 * Math.PI * 2 + rad;
+    const x = cx + Math.cos(a) * rad, y = cy + Math.sin(a) * rad;
+    if (free(x, y, size)) { clearTrees(x, y, size); return {x, y}; }
+  }
+  return null;
+}
+function clearTrees(x, y, size) { S.trees = S.trees.filter(t => Math.hypot(t.x - x, t.y - y) > size + 0.4); }
+
+// ───────────────────────── 거인의 행동 ─────────────────────────
+function giantTap() {
+  S.tapLog = S.tapLog.filter(t => S.t - t < 600); S.tapLog.push(S.t);
+  const angry = S.tapLog.length >= 4;
+  if (angry) S.fear = Math.min(100, S.fear + 10); else S.faith = Math.min(100, S.faith + 2);
+  S.ripples.push({x: S.cam.x, y: S.cam.y - 10, t: 0, kind: 'tap'});
+  for (const p of alive()) if (!p.sleeping && rnd() < 0.5) {
+    if (angry && p.trait === '겁쟁이지만 손이 빠름') { say(p, '거인님이 노하셨나…', 5); p.steps = [act(60, null)]; }
+    else say(p, pick(['하늘이 울렸다!', '거인님이 부르신다', '하늘을 봐!']), 4);
+  }
+  if (angry) toast('너무 자주 두드리면 주민들이 겁을 먹어요.');
+}
+function giantRain(wx, wy) {
+  S.rain = {x: wx, y: wy, t: 600};
+  for (const b of S.b) if (b.type === '농장' && Math.hypot(b.x - wx, b.y - wy) < 8) { b.boost = HOUR; if (b.readyAt && b.readyAt > S.t) b.readyAt -= 1800; }
+  S.faith = Math.min(100, S.faith + 3);
+  const p = alive().filter(q => !q.sleeping).sort((a, b) => Math.hypot(a.x - wx, a.y - wy) - Math.hypot(b.x - wx, b.y - wy))[0];
+  if (p) say(p, '거인님이 비를 내리셨다', 5);
+  log('하늘에서 비가 내렸다. 밀밭이 고개를 들었다.');
+}
+function giantPlace(type, wx, wy) {
+  const d = DEF[type];
+  if (!free(wx, wy, d.size)) { toast('거기에는 지을 수 없어요.'); return false; }
+  clearTrees(wx, wy, d.size);
+  const b = addBuilding(type, wx, wy, false); b.byGiant = true;
+  const p = alive().filter(q => q.age >= 4 && !q.sleeping)[0];
+  if (p) say(p, '거인님이 여기 지으라 하신다', 5);
+  log(`땅에 빛나는 표시가 나타났다. 거인님이 ${type}${josa(type, '을', '를')} 지으라 하신다.`);
+  return true;
+}
+function revelation() {
+  if (S.eraPts < ERA_NEED || S.era >= ERAS.length - 1) return;
+  S.era++; S.eraPts = 0; S.faith = Math.min(100, S.faith + 15);
+  log(`거인님의 계시가 내렸다. 초록방울은 '${ERAS[S.era]}'${josa(ERAS[S.era], '이', '가')} 되었다. 방앗간과 빵집을 짓는 법을 알게 되었다.`);
+  toast(`'${ERAS[S.era]}' 시대가 열렸어요. 방앗간·빵집·목조주택을 지을 수 있어요.`);
+  renderBuild();
+}
+
+// ───────────────────────── 자리 비우기 (오프라인 몰아서 계산) ─────────────────────────
+let busy = false;
+function goAway(hours) {
+  if (busy) return; busy = true;
+  closeSheets();
+  const before = {pop: alive().length, built: S.b.filter(b => b.built).length, born: S.stats.born, died: S.stats.died, book: S.book.length, era: S.eraPts, t: S.t};
+  S.offline = true;
+  log('거인님의 그림자가 하늘에서 사라졌다.');
+  const total = hours * HOUR; let done = 0;
+  const box = document.getElementById('overlayBox');
+  showOverlay(`<h3>주민들이 살아가는 중…</h3><div class="sub" id="awayProg">0%</div>`);
+  const chunk = () => {
+    const end = Math.min(total, done + 6 * HOUR);
+    while (done < end) { const d = Math.min(10, end - done); step(d); done += d; }
+    const el = document.getElementById('awayProg'); if (el) el.textContent = `${Math.round(done / total * 100)}% · ${fmtTime(S.t)}`;
+    if (done < total) setTimeout(chunk, 0);
+    else {
+      S.offline = false; busy = false;
+      log('하늘에 다시 커다란 그림자가 비쳤다. 거인님이 돌아오셨다!');
+      const pick5 = S.book.slice(before.book).filter(e => !/그림자/.test(e.text)).slice(-8);
+      showOverlay(`<h3>거인이 없던 ${hours >= 24 ? (hours / 24) + '일' : hours + '시간'} 동안</h3>
+        <div class="kv">
+          <span>인구</span><b>${before.pop} → ${alive().length}</b>
+          <span>태어남 / 떠남(죽음)</span><b>${S.stats.born - before.born} / ${S.stats.died - before.died}</b>
+          <span>새로 지은 건물</span><b>${S.b.filter(b => b.built).length - before.built}</b>
+          <span>문명 발전 (30% 속도)</span><b>+${Math.round(S.eraPts - before.era)}점</b>
+        </div>
+        <div class="parch">${pick5.map(e => `<div class="entry"><small>${fmtTime(e.t)}</small><span>${esc(e.text)}</span></div>`).join('') || '<div class="entry"><span>조용한 날들이었다.</span></div>'}</div>
+        <button class="btn" type="button" id="awayOk">마을 보기</button>`);
+      document.getElementById('awayOk').onclick = hideOverlay;
+      document.getElementById('awayOk').focus();
+    }
+  };
+  setTimeout(chunk, 30);
+}
+function showOverlay(html) { document.getElementById('overlayBox').innerHTML = html; document.getElementById('overlay').hidden = false; }
+function hideOverlay() { document.getElementById('overlay').hidden = true; }
+const esc = (s) => s.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+// ───────────────────────── 그리기 ─────────────────────────
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() { DPR = Math.min(2, window.devicePixelRatio || 1); W = cv.clientWidth; H = cv.clientHeight; cv.width = W * DPR; cv.height = H * DPR; if (!S.cam.z) S.cam.z = Math.max(22, Math.min(W / (R * 2.2), H / (R * 2 * TILT * 1.7)) * 1.35); }
+const sx = (x) => W / 2 + (x - S.cam.x) * S.cam.z;
+const sy = (y) => H * 0.56 + (y - S.cam.y) * S.cam.z * TILT;
+const toWorld = (px, py) => ({x: S.cam.x + (px - W / 2) / S.cam.z, y: S.cam.y + (py - H * 0.56) / (S.cam.z * TILT)});
+
+function skyColors(h) {
+  const keys = [[0, '#141826', '#232a40'], [5, '#1d2236', '#3b3f5e'], [6.5, '#d9a7a0', '#f2d6b0'], [9, '#9cc6dc', '#d5e8ef'], [16, '#a4cbe0', '#e0eef2'], [18.5, '#e2a26c', '#f4d29c'], [20, '#3a3556', '#6a5a7a'], [22, '#161a2a', '#262c44'], [24, '#141826', '#232a40']];
+  for (let i = 0; i < keys.length - 1; i++) if (h >= keys[i][0] && h < keys[i + 1][0]) { const f = (h - keys[i][0]) / (keys[i + 1][0] - keys[i][0]); return [mix(keys[i][1], keys[i + 1][1], f), mix(keys[i][2], keys[i + 1][2], f)]; }
+  return [keys[0][1], keys[0][2]];
+}
+function mix(a, b, f) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const r = (pa >> 16) + (((pb >> 16) - (pa >> 16)) * f), g = ((pa >> 8) & 255) + ((((pb >> 8) & 255) - ((pa >> 8) & 255)) * f), bl = (pa & 255) + (((pb & 255) - (pa & 255)) * f); return `rgb(${r | 0},${g | 0},${bl | 0})`; }
+function darkness(h) { if (h >= 7 && h < 18) return 0; if (h >= 22 || h < 5) return 0.55; if (h < 7) return 0.55 * (7 - h) / 2; return 0.55 * (h - 18) / 4; }
+
+function draw() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const h = hourNow();
+  const [top, bot] = skyColors(h);
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, top); g.addColorStop(0.6, bot); g.addColorStop(1, bot);
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // 유리 돔 반사
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(sx(0), sy(0), R * S.cam.z * 1.08, R * S.cam.z * 1.5, 0, Math.PI * 1.05, Math.PI * 1.95); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.ellipse(sx(0), sy(0), R * S.cam.z * 0.98, R * S.cam.z * 1.38, 0, Math.PI * 1.15, Math.PI * 1.35); ctx.stroke();
+  // 별
+  if (darkness(h) > 0.3) { ctx.fillStyle = 'rgba(255,255,240,0.7)'; for (let i = 0; i < 40; i++) { const x = (i * 97 % W), y = (i * 53 % (H * 0.35)); ctx.fillRect(x, y, 1.5, 1.5); } }
+  // 대지 (평평한 원반)
+  const ex = R * S.cam.z, ey = R * S.cam.z * TILT;
+  ctx.fillStyle = '#6f8f4e'; ctx.beginPath(); ctx.ellipse(sx(0), sy(0) + 10, ex, ey, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8fb26a'; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.fill();
+  // 세상의 끝 — 유리벽
+  ctx.strokeStyle = 'rgba(220,240,250,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.strokeStyle = 'rgba(220,240,250,0.25)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex - 5, ey - 3, 0, Math.PI, Math.PI * 2); ctx.stroke();
+  // 오솔길
+  const cell = (2 * R) / 128;
+  for (let gy = 0; gy < 128; gy++) for (let gx = 0; gx < 128; gx++) {
+    const v = S.paths[gy * 128 + gx]; if (v < 8) continue;
+    ctx.fillStyle = `rgba(226,207,163,${Math.min(0.8, (v - 8) / 30)})`;
+    const x = -R + gx * cell, y = -R + gy * cell;
+    ctx.fillRect(sx(x), sy(y), cell * S.cam.z + 0.6, cell * S.cam.z * TILT + 0.6);
+  }
+  // 연못
+  ctx.fillStyle = '#6fa4c6'; ctx.beginPath(); ctx.ellipse(sx(S.pond.x), sy(S.pond.y), S.pond.rx * S.cam.z, S.pond.ry * S.cam.z * TILT, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx(S.pond.x - 2), sy(S.pond.y)); ctx.lineTo(sx(S.pond.x + 1), sy(S.pond.y)); ctx.stroke();
+  // 밭 (농장 앞)
+  for (const b of S.b) if (b.type === '농장') {
+    const ripe = b.built && b.readyAt !== null && S.t >= b.readyAt;
+    const grow = b.built && b.readyAt ? Math.max(0, Math.min(1, 1 - (b.readyAt - S.t) / GROW_FIRST)) : 0;
+    ctx.fillStyle = !b.built ? 'rgba(142,106,69,0.4)' : ripe ? '#d8b44a' : mix('#8e6a45', '#9fb35a', grow);
+    for (let i = 0; i < 2; i++) ctx.fillRect(sx(b.x + 1.2), sy(b.y - 1.2 + i * 1.3), 3.4 * S.cam.z, 1.0 * S.cam.z * TILT);
+  }
+  // 그릴 것 모으기 (y 정렬)
+  const items = [];
+  for (const t of S.trees) items.push({y: t.y, f: () => drawTree(t)});
+  for (const r of S.rocks) if (r.amt > 0) items.push({y: r.y, f: () => drawRock(r)});
+  for (const m of S.manna) items.push({y: m.y, f: () => drawManna(m)});
+  for (const b of S.b) items.push({y: b.y, f: () => drawBuilding(b)});
+  items.push({y: S.fire.y, f: drawFire});
+  for (const p of alive()) items.push({y: p.y, f: () => drawPerson(p)});
+  items.sort((a, b) => a.y - b.y);
+  for (const it of items) it.f();
+  // 비
+  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < 70; i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10; const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
+  // 밤 어둠 + 불빛
+  const dk = darkness(h);
+  if (dk > 0) {
+    ctx.fillStyle = `rgba(14,16,34,${dk})`; ctx.fillRect(0, 0, W, H);
+    ctx.globalCompositeOperation = 'lighter';
+    const gl = (x, y, r, a) => { const rg = ctx.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, `rgba(255,170,80,${a})`); rg.addColorStop(1, 'rgba(255,170,80,0)'); ctx.fillStyle = rg; ctx.fillRect(x - r, y - r, r * 2, r * 2); };
+    gl(sx(S.fire.x), sy(S.fire.y), 4.5 * S.cam.z, 0.5 * dk);
+    for (const b of S.b) if (b.built && DEF[b.type].cap && occupants(b)) gl(sx(b.x), sy(b.y) - 0.6 * S.cam.z, 2 * S.cam.z, 0.35 * dk);
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // 하늘의 울림 / 낟알 내림
+  for (const r of S.ripples) {
+    const a = 1 - r.t / 40;
+    ctx.strokeStyle = r.kind === 'manna' ? `rgba(255,250,230,${a})` : `rgba(255,255,255,${a})`;
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(sx(r.x), sy(r.y) - 40, r.t * 6 + 10, (r.t * 6 + 10) * 0.4, 0, 0, Math.PI * 2); ctx.stroke();
+  }
+  // 말풍선 (맨 위)
+  ctx.font = `${Math.max(15, 0.55 * S.cam.z + 8)}px 'Nanum Pen Script', cursive`;
+  for (const p of alive()) if (p.sayT > 0 && p.say) drawBubble(sx(p.x), sy(p.y) - 1.6 * S.cam.z - 8, p.say);
+  // 건설 미리보기
+  if (buildPick && hoverW) { const d = DEF[buildPick]; const ok = free(hoverW.x, hoverW.y, d.size); ctx.strokeStyle = ok ? '#3E5C3A' : '#9A4A2E'; ctx.setLineDash([5, 4]); ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(sx(hoverW.x), sy(hoverW.y), d.size * S.cam.z, d.size * S.cam.z * TILT, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]); }
+}
+function drawTree(t) {
+  const z = S.cam.z, x = sx(t.x), y = sy(t.y);
+  if (t.s === 'stump') { ctx.fillStyle = '#7a5a3a'; ctx.fillRect(x - z * 0.15, y - z * 0.15, z * 0.3, z * 0.15); return; }
+  const k = t.s === 'sapling' ? 0.45 : 1;
+  ctx.fillStyle = '#6E4F31'; ctx.fillRect(x - z * 0.08, y - z * 0.5 * k, z * 0.16, z * 0.5 * k);
+  ctx.fillStyle = '#4E7A3E'; ctx.beginPath(); ctx.arc(x, y - z * 0.85 * k, z * 0.55 * k, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.arc(x - z * 0.15 * k, y - z * 1.0 * k, z * 0.2 * k, 0, Math.PI * 2); ctx.fill();
+}
+function drawRock(r) { const z = S.cam.z, x = sx(r.x), y = sy(r.y), k = 0.5 + r.amt / 40; ctx.fillStyle = '#9AA6A8'; ctx.beginPath(); ctx.ellipse(x, y - z * 0.3 * k, z * 0.7 * k, z * 0.45 * k, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#c8cfd0'; ctx.beginPath(); ctx.ellipse(x - z * 0.2 * k, y - z * 0.45 * k, z * 0.25 * k, z * 0.15 * k, 0, 0, Math.PI * 2); ctx.fill(); }
+function drawManna(m) { const z = S.cam.z, x = sx(m.x), y = sy(m.y), n = Math.min(14, Math.ceil(m.amt / 10)); ctx.fillStyle = '#FFFBEA'; for (let i = 0; i < n; i++) { const a = i * 2.39, d = (i % 5) * 0.12 * z; ctx.beginPath(); ctx.arc(x + Math.cos(a) * d, y + Math.sin(a) * d * TILT, Math.max(1.5, z * 0.09), 0, Math.PI * 2); ctx.fill(); } }
+function drawFire() { const z = S.cam.z, x = sx(S.fire.x), y = sy(S.fire.y); ctx.fillStyle = '#6E4F31'; ctx.fillRect(x - z * 0.35, y - z * 0.1, z * 0.7, z * 0.14); const fl = 0.8 + Math.sin(S.t * 0.7 + performance.now() / 160) * 0.15; ctx.fillStyle = '#E8913A'; ctx.beginPath(); ctx.moveTo(x - z * 0.25, y - z * 0.05); ctx.quadraticCurveTo(x, y - z * 0.9 * fl, x + z * 0.25, y - z * 0.05); ctx.fill(); ctx.fillStyle = '#F6D36B'; ctx.beginPath(); ctx.moveTo(x - z * 0.12, y - z * 0.05); ctx.quadraticCurveTo(x, y - z * 0.5 * fl, x + z * 0.12, y - z * 0.05); ctx.fill(); }
+function drawBuilding(b) {
+  const d = DEF[b.type], z = S.cam.z, x = sx(b.x), y = sy(b.y), w = d.size * z * 1.3, hh = d.size * z * 0.9;
+  if (!b.built) {
+    const f = b.prog / d.time;
+    ctx.strokeStyle = b.byGiant ? 'rgba(255,240,190,0.95)' : 'rgba(62,92,58,0.9)'; ctx.setLineDash([4, 3]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(x, y, d.size * z, d.size * z * TILT, 0, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#8E6A45'; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - hh * f, w, hh * f);
+    // 쌓인 자재
+    ctx.fillStyle = '#C08A55'; for (let i = 0; i < b.del['판자']; i++) ctx.fillRect(x - w / 2 + i * 4, y + 3, 3, 3);
+    ctx.fillStyle = '#9AA6A8'; for (let i = 0; i < b.del['돌']; i++) ctx.fillRect(x + w / 4 + i * 4, y + 3, 3, 3);
+    label(b.type + ' 터', x, y + z * 0.6 + 10);
+    return;
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.12)'; ctx.beginPath(); ctx.ellipse(x, y + 2, w * 0.6, w * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+  if (b.type === '우물') { ctx.fillStyle = '#8C8A84'; ctx.beginPath(); ctx.ellipse(x, y - z * 0.2, z * 0.45, z * 0.25, 0, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#4a6f8a'; ctx.beginPath(); ctx.ellipse(x, y - z * 0.25, z * 0.3, z * 0.15, 0, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = '#6E4F31'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x - z * 0.4, y - z * 0.2); ctx.lineTo(x - z * 0.4, y - z * 0.9); ctx.lineTo(x + z * 0.4, y - z * 0.9); ctx.lineTo(x + z * 0.4, y - z * 0.2); ctx.stroke(); return; }
+  ctx.fillStyle = d.color; ctx.strokeStyle = '#6E4F31'; ctx.lineWidth = 1.5;
+  ctx.fillRect(x - w / 2, y - hh, w, hh); ctx.strokeRect(x - w / 2, y - hh, w, hh);
+  ctx.fillStyle = b.type === '창고' ? '#7A6A4A' : b.type.includes('주택') || b.type === '오두막' ? '#9A4A2E' : '#7A5C3E';
+  ctx.beginPath(); ctx.moveTo(x - w / 2 - 3, y - hh); ctx.lineTo(x, y - hh - w * 0.45); ctx.lineTo(x + w / 2 + 3, y - hh); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#4A3A2A'; ctx.fillRect(x - w * 0.1, y - hh * 0.55, w * 0.2, hh * 0.55);
+  if (b.type === '방앗간') { ctx.strokeStyle = '#6E4F31'; ctx.lineWidth = 2.5; const a = performance.now() / 900; for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.moveTo(x, y - hh - w * 0.2); ctx.lineTo(x + Math.cos(a + i * Math.PI / 2) * w * 0.7, y - hh - w * 0.2 + Math.sin(a + i * Math.PI / 2) * w * 0.7); ctx.stroke(); } }
+  if (b.type === '빵집' || (DEF[b.type].cap && occupants(b))) { ctx.strokeStyle = 'rgba(210,205,195,0.7)'; ctx.lineWidth = 2; ctx.beginPath(); const sy0 = y - hh - w * 0.3; ctx.moveTo(x + w * 0.25, sy0); ctx.quadraticCurveTo(x + w * 0.35, sy0 - 8, x + w * 0.25, sy0 - 16); ctx.stroke(); }
+  // 쌓인 산출물
+  const outN = Object.values(b.out).reduce((s, n) => s + n, 0);
+  if (outN >= 1) { ctx.fillStyle = '#F3E3B5'; for (let i = 0; i < Math.min(6, outN); i++) ctx.fillRect(x + w / 2 + 2, y - 4 - i * 4, 5, 3); }
+  if (S.cam.z > 18) label(b.type, x, y + 12);
+}
+function label(t, x, y) { ctx.font = "600 11px 'Noto Sans KR', sans-serif"; const w = ctx.measureText(t).width + 10; ctx.fillStyle = 'rgba(244,237,224,0.85)'; ctx.fillRect(x - w / 2, y - 9, w, 15); ctx.fillStyle = '#2A2620'; ctx.textAlign = 'center'; ctx.fillText(t, x, y + 2); ctx.textAlign = 'left'; }
+const JOBCOL = {'나무꾼': '#6E8F3A', '산림관': '#7FA35C', '채석장': '#7A7F86', '제재소': '#A0703E', '농장': '#C9A23A', '우물': '#4F7FA0', '방앗간': '#B7A98E', '빵집': '#C9824A'};
+function drawPerson(p) {
+  const z = S.cam.z, x = sx(p.x), y = sy(p.y), k = p.age < 1 ? 0.45 : p.age < 4 ? 0.65 : 1;
+  const s = Math.max(3, z * 0.22) * k;
+  if (p.sleeping && homeOf(p) && Math.hypot(p.x - homeOf(p).x, p.y - homeOf(p).y - 0.3) < 0.2) return; // 집 안
+  const job = p.job ? bld(p.job) : null;
+  ctx.fillStyle = job ? (JOBCOL[job.type] || '#5A5247') : p.age >= 20 ? '#7d7466' : p.age < 4 ? '#c9b48a' : '#8a6a52';
+  ctx.beginPath(); ctx.ellipse(x, y - s * 1.2, s * 0.75, s * 1.15, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#E8C4A0'; ctx.beginPath(); ctx.arc(x, y - s * 2.7, s * 0.65, 0, Math.PI * 2); ctx.fill();
+  if (p.sleeping) { ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.font = "11px 'Noto Sans KR'"; ctx.fillText('z', x + s, y - s * 3); }
+  if (p.carry) { ctx.fillStyle = p.carry === '낟알' ? '#FFFBEA' : p.carry === '돌' ? '#9AA6A8' : p.carry === '밀' ? '#D8B44A' : '#C08A55'; ctx.fillRect(x - s * 0.7, y - s * 4.4, s * 1.4, s * 0.9); }
+  if (selected === p.id) { ctx.strokeStyle = '#E3C58C'; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(x, y, s * 1.6, s * 0.7, 0, 0, Math.PI * 2); ctx.stroke(); }
+}
+function drawBubble(x, y, text) {
+  const w = ctx.measureText(text).width + 14, h = 24;
+  ctx.fillStyle = 'rgba(255,251,240,0.95)'; ctx.strokeStyle = 'rgba(42,38,32,0.25)'; ctx.lineWidth = 1;
+  roundRect(x - w / 2, y - h, w, h, 9); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x, y + 6); ctx.lineTo(x + 4, y); ctx.fill();
+  ctx.fillStyle = '#2E241A'; ctx.textAlign = 'center'; ctx.fillText(text, x, y - 6); ctx.textAlign = 'left';
+}
+function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+
+// ───────────────────────── UI ─────────────────────────
+let buildPick = null, hoverW = null, selected = null, rainMode = false;
+function renderHud() {
+  document.getElementById('clock').textContent = `${fmtTime(S.t)} · ${partOfDay()}`;
+  document.getElementById('eraName').textContent = ERAS[S.era];
+  document.getElementById('eraBar').style.width = (S.era >= ERAS.length - 1 ? 100 : S.eraPts / ERA_NEED * 100) + '%';
+  const food = Math.floor(foodTotal());
+  const chips = [['인구', `${alive().length}/${MAX_POP}`], ['식량', food], ['판자', Math.floor(S.stock['판자'])], ['돌', Math.floor(S.stock['돌'])], ['통나무', Math.floor(S.stock['통나무'])], ['도구', S.stock['도구']], ['신앙', Math.round(S.faith)]];
+  document.getElementById('stats').innerHTML = chips.map(([k, v]) => `<span class="chip">${k} <b>${v}</b></span>`).join('');
+  let hint = '';
+  const has = (t) => S.b.some(b => b.type === t);
+  if (S.eraPts >= ERA_NEED && S.era < ERAS.length - 1) hint = '<button class="btn" type="button" id="revBtn" style="min-height:36px">거인의 계시 내리기 → 마을 시대</button>';
+  else if (!has('오두막')) hint = '밤이 추워요. [건설]에서 오두막을 지어주세요.';
+  else if (!has('농장')) hint = '농장을 지으면, 첫 수확 뒤 하늘 낟알이 그쳐요.';
+  else if (S.firstHarvestAt === null) { const f = S.b.find(b => b.type === '농장' && b.built); hint = f ? `밀이 자라는 중… 첫 수확까지 ${Math.max(0, Math.ceil((f.readyAt - S.t) / 60))}분` : '농장을 짓는 중이에요.'; }
+  else if (S.deficit > 0) hint = '창고가 비었어요! 농장을 더 지어주세요.';
+  else hint = `주민들이 ${alive().filter(p => !p.sleeping).length}명 깨어 있어요. 사람을 누르면 무엇을 하는지 보여요.`;
+  const el = document.getElementById('hint');
+  if (el.dataset.h !== hint) { el.innerHTML = hint; el.dataset.h = hint; const rb = document.getElementById('revBtn'); if (rb) rb.onclick = revelation; }
+  document.getElementById('speedLbl').textContent = '×' + SPEEDS[S.speedIdx];
+  if (selected) renderPerson();
+}
+function renderBuild() {
+  const grid = document.getElementById('buildGrid');
+  grid.innerHTML = Object.entries(DEF).filter(([k]) => k !== '창고').map(([k, d]) => {
+    const locked = d.era > S.era;
+    return `<button class="card" type="button" data-b="${k}" ${locked ? 'disabled' : ''}><b>${k}</b><span>${d.desc}</span><span>판자 ${d.plank} · 돌 ${d.stone}${locked ? ' · 마을 시대에 열림' : ''}</span></button>`;
+  }).join('');
+  grid.querySelectorAll('[data-b]').forEach(el => el.onclick = () => { buildPick = el.dataset.b; closeSheets(); toast(`${buildPick}: 지을 곳을 누르세요`); setPressed('tBuild', true); });
+}
+function renderBook() {
+  document.getElementById('bookList').innerHTML = S.book.slice().reverse().slice(0, 80).map(e => `<div class="entry"><small>${fmtTime(e.t)}</small><span>${esc(e.text)}</span></div>`).join('');
+}
+function renderPerson() {
+  const p = person(selected); if (!p || p.dead) { selected = null; closeSheets(); return; }
+  document.getElementById('pName').textContent = p.name;
+  const job = p.job ? bld(p.job).type : (p.age < 4 ? '아이' : p.age >= 20 ? '노인 (은퇴)' : '일거리 찾는 중');
+  const partner = p.partner ? person(p.partner)?.name : '—';
+  const rows = [['나이', `${Math.round(p.age * 2.4)}세`], ['특징', p.trait], ['', p.tdesc], ['직업', job], ['지금', p.doing], ['배우자', partner], ['집', p.home ? bld(p.home).type : '없음 (모닥불)'], ['배고픔', p.hunger < 0.5 ? '배부름' : p.hunger < 2 ? '조금 출출' : '굶주림'], ['건강', Math.round(p.health * 100) + '%']];
+  document.getElementById('pInfo').innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${esc(String(v))}</b>`).join('');
+}
+function setPressed(id, v) { document.getElementById(id).setAttribute('aria-pressed', v ? 'true' : 'false'); }
+function closeSheets() { for (const id of ['buildSheet', 'bookSheet', 'awaySheet', 'personSheet']) document.getElementById(id).hidden = true; }
+function openSheet(id) { closeSheets(); document.getElementById(id).hidden = false; }
+document.querySelectorAll('[data-close]').forEach(el => el.onclick = () => { document.getElementById(el.dataset.close).hidden = true; if (el.dataset.close === 'personSheet') selected = null; });
+document.getElementById('tBuild').onclick = () => { if (buildPick) { buildPick = null; setPressed('tBuild', false); return; } rainMode = false; setPressed('tRain', false); renderBuild(); openSheet('buildSheet'); };
+document.getElementById('tTap').onclick = () => giantTap();
+document.getElementById('tRain').onclick = () => { rainMode = !rainMode; buildPick = null; setPressed('tBuild', false); setPressed('tRain', rainMode); if (rainMode) toast('비를 내릴 곳을 누르세요'); };
+document.getElementById('tSpeed').onclick = () => { S.speedIdx = (S.speedIdx + 1) % SPEEDS.length; renderHud(); };
+document.getElementById('tBook').onclick = () => { renderBook(); openSheet('bookSheet'); };
+document.getElementById('tAway').onclick = () => { openSheet('awaySheet'); };
+document.getElementById('awayBtns').innerHTML = [[1, '1시간'], [8, '8시간'], [24, '하루'], [72, '3일'], [168, '일주일']].map(([h, l]) => `<button class="btn ghost" type="button" data-h="${h}">${l}</button>`).join('');
+document.querySelectorAll('[data-h]').forEach(el => el.onclick = () => goAway(+el.dataset.h));
+document.getElementById('autoBuild').onchange = (e) => { S.auto = e.target.checked; };
+
+// 포인터: 드래그 = 둘러보기, 두 손가락 = 확대, 누르기 = 선택/짓기/비
+const ptrs = new Map(); let drag = null, pinch = null;
+cv.addEventListener('pointerdown', (e) => { cv.setPointerCapture(e.pointerId); ptrs.set(e.pointerId, {x: e.offsetX, y: e.offsetY}); if (ptrs.size === 1) drag = {x: e.offsetX, y: e.offsetY, cx: S.cam.x, cy: S.cam.y, moved: false}; else if (ptrs.size === 2) { const [a, b] = [...ptrs.values()]; pinch = {d: Math.hypot(a.x - b.x, a.y - b.y), z: S.cam.z}; drag = null; } });
+cv.addEventListener('pointermove', (e) => {
+  hoverW = toWorld(e.offsetX, e.offsetY);
+  if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, {x: e.offsetX, y: e.offsetY});
+  if (pinch && ptrs.size === 2) { const [a, b] = [...ptrs.values()]; S.cam.z = clampZ(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d); return; }
+  if (drag) { const dx = e.offsetX - drag.x, dy = e.offsetY - drag.y; if (Math.hypot(dx, dy) > 6) drag.moved = true; if (drag.moved) { S.cam.x = drag.cx - dx / S.cam.z; S.cam.y = drag.cy - dy / (S.cam.z * TILT); clampCam(); } }
+});
+cv.addEventListener('pointerup', (e) => {
+  const wasDrag = drag && drag.moved; ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+  if (ptrs.size === 0) { if (!wasDrag && drag) tapAt(e.offsetX, e.offsetY); drag = null; }
+});
+cv.addEventListener('pointercancel', (e) => { ptrs.delete(e.pointerId); drag = null; pinch = null; });
+cv.addEventListener('wheel', (e) => { e.preventDefault(); S.cam.z = clampZ(S.cam.z * (e.deltaY < 0 ? 1.12 : 0.89)); }, {passive: false});
+const clampZ = (z) => Math.max(6, Math.min(60, z));
+function clampCam() { const d = Math.hypot(S.cam.x, S.cam.y); if (d > R) { S.cam.x *= R / d; S.cam.y *= R / d; } }
+function tapAt(px, py) {
+  const w = toWorld(px, py);
+  if (Math.hypot(w.x, w.y) > R) return;
+  if (buildPick) { if (giantPlace(buildPick, w.x, w.y)) { buildPick = null; setPressed('tBuild', false); } return; }
+  if (rainMode) { giantRain(w.x, w.y); rainMode = false; setPressed('tRain', false); return; }
+  // 사람 고르기 (화면 거리)
+  let best = null, bd = 28;
+  for (const p of alive()) { const d = Math.hypot(sx(p.x) - px, sy(p.y) - S.cam.z * 0.5 - py); if (d < bd) { bd = d; best = p; } }
+  if (best) { selected = best.id; renderPerson(); openSheet('personSheet'); }
+}
+
+// ───────────────────────── 루프 · 시작 ─────────────────────────
+let last = performance.now();
+function frame(now) {
+  const real = Math.min(0.1, (now - last) / 1000); last = now;
+  if (!busy) { let gdt = real * SPEEDS[S.speedIdx]; while (gdt > 0) { const d = Math.min(gdt, SPEEDS[S.speedIdx] >= 600 ? 4 : 1); step(d); gdt -= d; } }
+  draw();
+  if (now - (frame.hudAt || 0) > 250) { renderHud(); frame.hudAt = now; }
+  requestAnimationFrame(frame);
+}
+function start(data) {
+  newWorld();
+  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); S = d; } catch (e) { newWorld(); } }
+  resize(); window.addEventListener('resize', () => { resize(); });
+  renderHud(); renderBuild();
+  requestAnimationFrame(frame);
+}
+window.claude?.hot?.snapshot?.(() => { try { return {S: JSON.parse(JSON.stringify({...S, paths: Array.from(S.paths), p: S.p.map(q => ({...q, steps: []}))}))}; } catch (e) { return {}; } });
+// 시험용 훅 (프로토타입 확인용)
+window.__proto = {get S() { return S; }, step, goAway, alive};
+window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
+})();
+</script>
+
+</body>
+</html>
