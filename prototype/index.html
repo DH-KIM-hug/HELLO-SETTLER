@@ -139,23 +139,25 @@ const WALK = 1.25;            // 칸/초
 const ERA_NEED = 100;
 const OFFLINE_ERA = 0.3;
 const SPEEDS = [1, 10, 60, 600];
-// 병 안의 기후 지도: 빛은 북서쪽 유리(거인의 창가)로 들어온다 → 그쪽은 늘 따뜻하고 마르고,
-// 반대쪽 그늘의 차가운 유리에 물방울이 맺혀 흘러내린다 → 비와 시내는 그쪽에서.
+// 병 안의 기후 지도 (병 자체의 설계):
+// · 빛은 북서쪽 유리(거인의 창가)로 들어온다 → 그쪽은 늘 따뜻하다.
+// · 뚜껑 안쪽의 '물방울 돌기' 아래로만 거대한 물방울이 똑똑 떨어진다 → 그 자리에 강 없는 호수.
+// · 돌기가 없는 곳은 김이 뚜껑 경사를 타고 유리벽으로 흘러내린다 → 강은 유리벽에서 시작해 안쪽 습지로 스며든다.
 const LIGHT = {x: -0.72, y: -0.69};
 const clamp01 = (v) => Math.max(0, Math.min(1, v));
 const sunward = (x, y) => (x * LIGHT.x + y * LIGHT.y) / R;           // -1 (그늘 끝) ~ 1 (창가)
 function warmth(x, y) { return clamp01(0.5 + 0.55 * sunward(x, y)); }   // 0 추움 ~ 1 따뜻함
 function wetness(x, y) {
-  let m = clamp01(0.45 - 0.55 * sunward(x, y));
-  if (S && S.rivers) for (const rv of S.rivers) for (const r of rv) { const d = Math.hypot(r.x - x, r.y - y); if (d < 5) m += (5 - d) / 5 * 0.08; }
-  if (S && S.pond) { const d = Math.hypot(S.pond.x - x, S.pond.y - y) - S.pond.rx; if (d < 6) m += (6 - Math.max(0, d)) / 6 * 0.25; }
-  return clamp01(m);
+  let m = 0.18;
+  if (S && S.lakes) for (const l of S.lakes) { const d = Math.hypot(l.x - x, l.y - y) - l.rx; m += Math.max(0, (7 - Math.max(0, d)) / 7) * 0.55; }
+  if (S && S.rivers) for (const rv of S.rivers) { let best = 99; for (const r of rv) best = Math.min(best, Math.hypot(r.x - x, r.y - y)); if (best < 5) m += (5 - best) / 5 * 0.35; }
+  if (S && S.marshes) for (const k of S.marshes) { const d = Math.hypot(k.x - x, k.y - y); if (d < 5) m += (5 - d) / 5 * 0.3; }
+  return clamp01(m - 0.12 * sunward(x, y));
 }
-const rainZone = (x, y) => wetness(x, y) > 0.6;
 function farmMult(x, y) { const w = warmth(x, y), m = wetness(x, y); return Math.max(0.5, Math.min(1.5, (0.6 + 0.6 * w) * (0.65 + 0.7 * m))); }
 function climateText(x, y) {
   const w = warmth(x, y), m = wetness(x, y);
-  return `${w > 0.66 ? '따뜻함' : w > 0.36 ? '선선함' : '서늘함'} · ${m > 0.6 ? '비가 자주 옴' : m > 0.35 ? '촉촉함' : '건조함'}`;
+  return `${w > 0.66 ? '따뜻함' : w > 0.36 ? '선선함' : '서늘함'} · ${m > 0.6 ? '물가라 촉촉함' : m > 0.35 ? '촉촉함' : '건조함'}`;
 }
 
 const DEF = {
@@ -209,7 +211,7 @@ function newWorld() {
     era: 0, eraPts: 0, faith: 30, fear: 0, tapLog: [],
     stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22},
     manna: [], mannaBatches: [], firstHarvestAt: null, mannaEnded: false, lastDawnIdx: null, arrivalManna: false,
-    trees: [], rocks: [], pond: {x: 11, y: 11, rx: 5, ry: 3.4}, river: [], rivers: [], humid: 0.5, b: [], p: [], nextId: 1,
+    trees: [], rocks: [], lakes: [], marshes: [], river: [], rivers: [], humid: 0.5, b: [], p: [], nextId: 1,
     book: [], paths: new Float32Array(128 * 128), rain: null, ripples: [], deficit: 0,
     stats: {born: 0, died: 0, built: 0}, timers: {life: 0, jobs: 0, auto: 0, decay: 0, speak: 0}, cam: {x: 0, y: 2, z: 0},
   };
@@ -221,19 +223,20 @@ function newWorld() {
     if (Math.hypot(x, y) < R - 1.5) st.trees.push({x, y, s: 'tree', g: 0, res: 0});
   }
   for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
-  // 세상 끝(그늘 쪽 차가운 유리벽)에서 흘러내린 물이 시내가 되어 호수로 — 시내 세 줄기
-  st.rivers = [];
-  const shade = Math.atan2(-LIGHT.y, -LIGHT.x);
-  for (const off of [-0.55, 0, 0.5]) {
-    const a0 = shade + off, x0 = Math.cos(a0) * (R - 0.2), y0 = Math.sin(a0) * (R - 0.2);
-    const ex = st.pond.x + (x0 - st.pond.x) / Math.hypot(x0 - st.pond.x, y0 - st.pond.y) * st.pond.rx * 0.9;
-    const ey = st.pond.y + (y0 - st.pond.y) / Math.hypot(x0 - st.pond.x, y0 - st.pond.y) * st.pond.ry * 0.9;
+  // 뚜껑의 물방울 돌기 아래 — 거대한 물방울이 똑똑 떨어지는 호수 (강 없음)
+  st.lakes = [{x: 11, y: 11, rx: 5, ry: 3.4, name: '큰 물방울 호수'}, {x: -13, y: -12, rx: 3.2, ry: 2.4, name: '작은 물방울 호수'}];
+  // 돌기가 없는 곳: 뚜껑 경사를 타고 유리벽으로 흘러내린 물이 강이 되어 안쪽 습지로 스며든다
+  st.rivers = []; st.marshes = [];
+  for (const [a0, len, bend] of [[-0.55, 15, 1], [2.75, 13, -1], [1.75, 11, 0.6]]) {
+    const x0 = Math.cos(a0) * (R - 0.2), y0 = Math.sin(a0) * (R - 0.2);
+    const ix = -Math.cos(a0), iy = -Math.sin(a0);            // 안쪽 방향
     const line = [];
-    for (let i = 0; i <= 20; i++) { const f = i / 20, w = Math.sin(f * Math.PI) * (1 + off); line.push({x: x0 + (ex - x0) * f + Math.sin(f * 8 + off * 5) * 0.8 * w, y: y0 + (ey - y0) * f + Math.cos(f * 6 + off * 3) * 0.7 * w}); }
+    for (let i = 0; i <= 18; i++) { const f = i / 18, w = Math.sin(f * Math.PI) * 1.6 * bend; line.push({x: x0 + ix * len * f + iy * Math.sin(f * 5) * w, y: y0 + iy * len * f - ix * Math.sin(f * 5) * w}); }
     st.rivers.push(line);
+    const e = line[line.length - 1]; st.marshes.push({x: e.x, y: e.y, r: 2.2});
   }
   st.river = st.rivers.flat();
-  st.trees = st.trees.filter(t => !st.river.some(r => Math.hypot(r.x - t.x, r.y - t.y) < 1));
+  st.trees = st.trees.filter(t => !st.river.some(r => Math.hypot(r.x - t.x, r.y - t.y) < 1) && !st.lakes.some(l => ((t.x - l.x) / (l.rx + 0.5)) ** 2 + ((t.y - l.y) / (l.ry + 0.5)) ** 2 < 1));
   S = st;
   // 시작 창고 + 모닥불
   const w = addBuilding('창고', 0, 0, true);
@@ -249,6 +252,7 @@ function newWorld() {
   marry(ids[0], ids[1]); ids[2].parents = [ids[0].id, ids[1].id]; ids[3].parents = [ids[0].id, ids[1].id];
   marry(ids[4], ids[5]); ids[6].parents = [ids[4].id, ids[5].id];
   log('어느 저녁, 우리 조상 열 명이 숲 가장자리에 처음 불을 피웠다.');
+  log('하늘의 한 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 세상 끝 벽에서 흘러내려 땅속으로 스며든다.');
 }
 
 function addBuilding(type, x, y, built) {
@@ -394,7 +398,7 @@ function step(dt) {
   // 닫힌 병의 물 순환: 낮의 빛으로 증발 → 유리 천장에 맺힘 → 습한 새벽에 비
   const hNow = hourNow();
   if (hNow >= 7 && hNow < 18) S.humid = Math.min(1, (S.humid || 0) + dt / (DAY * 0.45));
-  if (hNow >= 4 && hNow < 6 && (S.humid || 0) > 0.7 && !S.rain) naturalRain();
+  if (hNow < 7 || hNow >= 18) S.humid = Math.max(0.2, (S.humid || 0) - dt / (DAY * 0.9));
   S.fear = Math.max(0, S.fear - dt / (2 * HOUR));
 }
 
@@ -411,7 +415,7 @@ function updateBuilding(b, dt) {
   if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) return;
   const w = person(b.worker);
   const place = b.type === '농장' ? (b.cm || (b.cm = farmMult(b.x, b.y))) : 1;
-  b.timer += dt * (w ? w.mult : 1) * place * (b.boost > 0 ? 1.5 : 1) * (S.rain && S.rain.natural && b.type === '농장' && rainZone(b.x, b.y) ? 1.3 : 1);
+  b.timer += dt * (w ? w.mult : 1) * place * (b.boost > 0 ? 1.5 : 1);
   while (b.timer >= d.cycle) {
     b.timer -= d.cycle;
     if (d.in) { if (!Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) { b.timer = 0; break; } for (const [k, n] of Object.entries(d.in)) b.inBuf[k] -= n; }
@@ -553,7 +557,7 @@ function workTask(p) {
   return true;
 }
 const add = (o, k, n) => { o[k] = (o[k] || 0) + n; };
-const inPond = (pt) => ((pt.x - S.pond.x) / (S.pond.rx + 0.6)) ** 2 + ((pt.y - S.pond.y) / (S.pond.ry + 0.6)) ** 2 < 1;
+const inPond = (pt) => S.lakes.some(l => ((pt.x - l.x) / (l.rx + 0.6)) ** 2 + ((pt.y - l.y) / (l.ry + 0.6)) ** 2 < 1) || S.marshes.some(k => Math.hypot(k.x - pt.x, k.y - pt.y) < k.r);
 function harvestCheck(p) {
   if (S.firstHarvestAt === null) {
     S.firstHarvestAt = S.t;
@@ -723,7 +727,7 @@ function idleChatter() {
   const d = pop.filter(q => q.belief < 0.3);
   if (d.length && rnd() < 0.6) {
     const kid = d.find(q => q.age < 6) || d[0];
-    say(kid, pick(['거인 같은 건 없어', '그냥 하늘이야', '본 적도 없는걸', '어른들 옛날이야기야']), 6);
+    say(kid, pick(['거인 같은 건 없어', '그냥 하늘이야', '본 적도 없는걸', '하늘 물방울은 원래 떨어지는 거야']), 6);
     const elder = pop.filter(q => q.age >= 15 && q.belief > 0.5).sort((a, b) => b.age - a.age)[0];
     if (elder) say(elder, '저 하늘의 그림자를 봐라', 6);
     return;
@@ -801,14 +805,6 @@ function clearTrees(x, y, size) { S.trees = S.trees.filter(t => Math.hypot(t.x -
 // ───────────────────────── 거인의 행동 ─────────────────────────
 function blessAll(d) { for (const p of alive()) p.belief = Math.min(1, (p.belief ?? 0.6) + d); }
 const doubters = () => alive().filter(p => p.belief < 0.3 && p.age >= 2.5);
-function naturalRain() {
-  const sh = Math.atan2(-LIGHT.y, -LIGHT.x);
-  S.rain = {x: Math.cos(sh) * R * 0.55, y: Math.sin(sh) * R * 0.55, t: 1800, natural: true}; S.humid -= 0.55;
-  S.rainCount = (S.rainCount || 0) + 1;
-  if (S.rainCount === 1) log('새벽, 그늘진 동남쪽 하늘이 울었다. 차가운 유리 천장에서 물방울이 떨어졌다. 해 드는 서북쪽 들판은 오늘도 말라 있다.');
-  else if (S.rainCount % 4 === 0) log('새벽 비가 내렸다. 세상 끝 벽을 타고 물이 흘러내려 시내가 불었다.');
-  const d = doubters(); if (d.length && rnd() < 0.7) say(pick(d), '봐, 비는 그냥 내리는 거야', 6);
-}
 function giantTap() {
   S.tapLog = S.tapLog.filter(t => S.t - t < 600); S.tapLog.push(S.t);
   const angry = S.tapLog.length >= 4;
@@ -935,33 +931,27 @@ function draw() {
   ctx.fillStyle = '#8fb26a'; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.fill();
   // 기후 색: 창가 쪽은 햇볕에 바랜 연두, 그늘 쪽은 짙은 이끼색
   ctx.save(); ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.clip();
-  const gc = 2 * R / 32;
   if (!GROUND) GROUND = buildGround();
-  for (const g of GROUND) { ctx.fillStyle = g.c; ctx.fillRect(sx(g.x), sy(g.y), gc * S.cam.z + 1, gc * S.cam.z * TILT + 1); }
+  for (const g of GROUND) { ctx.fillStyle = g.c; ctx.fillRect(sx(g.x), sy(g.y), g.cs * S.cam.z + 1, g.cs * S.cam.z * TILT + 1); }
   // 창가로 드는 빛
   { const lx = sx(LIGHT.x * R), ly = sy(LIGHT.y * R); const rg = ctx.createRadialGradient(lx, ly, 0, lx, ly, R * S.cam.z * 1.1); rg.addColorStop(0, 'rgba(255,236,180,0.28)'); rg.addColorStop(1, 'rgba(255,236,180,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H); }
   ctx.restore();
   // 세상의 끝 — 유리벽
   ctx.strokeStyle = 'rgba(220,240,250,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = 'rgba(220,240,250,0.25)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex - 5, ey - 3, 0, Math.PI, Math.PI * 2); ctx.stroke();
-  // 시내 — 모두 그늘 쪽 유리벽에서 시작
+  // 강 — 유리벽에서 시작해 안쪽 습지로 스며든다
+  for (const k of S.marshes) { ctx.fillStyle = 'rgba(92,128,110,0.65)'; ctx.beginPath(); ctx.ellipse(sx(k.x), sy(k.y), k.r * S.cam.z, k.r * S.cam.z * TILT * 0.8, 0, 0, Math.PI * 2); ctx.fill(); }
   for (const rv of S.rivers) {
-    ctx.strokeStyle = '#6fa4c6'; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, S.cam.z * (S.rain && S.rain.natural ? 0.7 : 0.5));
-    ctx.beginPath(); rv.forEach((r, i) => i ? ctx.lineTo(sx(r.x), sy(r.y)) : ctx.moveTo(sx(r.x), sy(r.y))); ctx.stroke();
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let i = 1; i < rv.length; i++) { const f = i / rv.length; ctx.strokeStyle = '#6fa4c6'; ctx.lineWidth = Math.max(1.5, S.cam.z * (0.6 - 0.35 * f)); ctx.beginPath(); ctx.moveTo(sx(rv[i - 1].x), sy(rv[i - 1].y)); ctx.lineTo(sx(rv[i].x), sy(rv[i].y)); ctx.stroke(); }
   }
-  // 차가운 유리벽을 타고 흘러내리는 물줄기와 물방울
+  // 유리벽을 타고 흘러내리는 물 (강의 근원)
   { const now = performance.now() / 1000;
-    const shade = Math.atan2(-LIGHT.y, -LIGHT.x);
-    for (let k = -8; k <= 8; k++) {
-      const a = shade + k * 0.09, bx = sx(Math.cos(a) * R), by = sy(Math.sin(a) * R);
-      const src = S.rivers.some(rv => Math.hypot(rv[0].x - Math.cos(a) * R, rv[0].y - Math.sin(a) * R) < 2.2);
-      const hgt = 70 + (k * 37 % 30);
-      ctx.strokeStyle = src ? 'rgba(200,232,248,0.85)' : 'rgba(220,240,250,0.35)'; ctx.lineWidth = src ? 3 : 1.5;
-      ctx.beginPath(); ctx.moveTo(bx, by - hgt); ctx.lineTo(bx, by); ctx.stroke();
-      const dy = ((now * (src ? 40 : 18) + k * 13) % hgt);
-      ctx.fillStyle = 'rgba(235,248,255,0.95)'; ctx.beginPath(); ctx.arc(bx, by - hgt + dy, src ? 2.6 : 1.8, 0, Math.PI * 2); ctx.fill();
-    }
-  }
+    for (const rv of S.rivers) { const r0 = rv[0], bx = sx(r0.x), by = sy(r0.y), near = r0.y > 0;
+      for (let k = -2; k <= 2; k++) { const hgt = (near ? 34 : 90) - Math.abs(k) * (near ? 6 : 14), x = bx + k * 5;
+        ctx.strokeStyle = 'rgba(205,235,250,' + (0.9 - Math.abs(k) * 0.2) + ')'; ctx.lineWidth = 2.5 - Math.abs(k) * 0.5;
+        ctx.beginPath(); ctx.moveTo(x, by - hgt); ctx.lineTo(x, by); ctx.stroke();
+        const dy = (now * 46 + k * 17) % hgt; ctx.fillStyle = 'rgba(240,250,255,0.95)'; ctx.beginPath(); ctx.arc(x, by - hgt + dy, 2.2, 0, Math.PI * 2); ctx.fill(); } } }
   // 오솔길
   const cell = (2 * R) / 128;
   for (let gy = 0; gy < 128; gy++) for (let gx = 0; gx < 128; gx++) {
@@ -970,9 +960,11 @@ function draw() {
     const x = -R + gx * cell, y = -R + gy * cell;
     ctx.fillRect(sx(x), sy(y), cell * S.cam.z + 0.6, cell * S.cam.z * TILT + 0.6);
   }
-  // 연못
-  ctx.fillStyle = '#6fa4c6'; ctx.beginPath(); ctx.ellipse(sx(S.pond.x), sy(S.pond.y), S.pond.rx * S.cam.z, S.pond.ry * S.cam.z * TILT, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx(S.pond.x - 2), sy(S.pond.y)); ctx.lineTo(sx(S.pond.x + 1), sy(S.pond.y)); ctx.stroke();
+  // 물방울 호수 (강이 없다)
+  for (const l of S.lakes) {
+    ctx.fillStyle = '#6fa4c6'; ctx.beginPath(); ctx.ellipse(sx(l.x), sy(l.y), l.rx * S.cam.z, l.ry * S.cam.z * TILT, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.45)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(sx(l.x - l.rx * 0.4), sy(l.y)); ctx.lineTo(sx(l.x + l.rx * 0.2), sy(l.y)); ctx.stroke();
+  }
   // 밭 (농장 앞)
   for (const b of S.b) if (b.type === '농장') {
     const ripe = b.built && b.readyAt !== null && S.t >= b.readyAt;
@@ -991,7 +983,7 @@ function draw() {
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.f();
   // 비
-  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < (S.rain.natural ? 160 : 70); i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10 * (S.rain.natural ? 1.9 : 1); const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
+  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < 70; i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10; const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
   // 밤 어둠 + 불빛
   const dk = darkness(h);
   if (dk > 0) {
@@ -1002,6 +994,17 @@ function draw() {
     for (const b of S.b) if (b.built && DEF[b.type].cap && occupants(b)) gl(sx(b.x), sy(b.y) - 0.6 * S.cam.z, 2 * S.cam.z, 0.35 * dk);
     ctx.globalCompositeOperation = 'source-over';
   }
+  // 뚜껑의 물방울 돌기에서 거대한 물방울이 똑… 똑… (실제 시간 기준으로 보이게)
+  { const now = performance.now() / 1000;
+    for (let i = 0; i < S.lakes.length; i++) { const l = S.lakes[i], lx = sx(l.x), ly = sy(l.y);
+      const per = (i ? 3.4 : 2.6) / (0.6 + (S.humid || 0.5)), ph = ((now + i * 1.3) % per) / per;
+      const top = Math.max(-20, ly - H * 0.55);
+      ctx.strokeStyle = 'rgba(220,240,250,0.35)'; ctx.lineWidth = 1; ctx.setLineDash([2, 6]); ctx.beginPath(); ctx.moveTo(lx, top); ctx.lineTo(lx, ly); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(225,242,252,0.9)'; ctx.beginPath(); ctx.ellipse(lx, top + 6, 5, 7, 0, 0, Math.PI * 2); ctx.fill();   // 매달린 물방울 돌기
+      const fall = Math.min(1, ph / 0.35);
+      if (ph < 0.35) { const y = top + 10 + (ly - top - 10) * fall * fall, rr = Math.max(4, S.cam.z * 0.35); ctx.fillStyle = 'rgba(235,248,255,0.95)'; ctx.beginPath(); ctx.moveTo(lx, y - rr * 1.6); ctx.quadraticCurveTo(lx + rr, y, lx, y + rr); ctx.quadraticCurveTo(lx - rr, y, lx, y - rr * 1.6); ctx.fill(); }
+      else { const t2 = (ph - 0.35) / 0.65; ctx.strokeStyle = `rgba(255,255,255,${0.8 * (1 - t2)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.ellipse(lx, ly, (0.4 + t2 * 2.4) * S.cam.z, (0.4 + t2 * 2.4) * S.cam.z * TILT, 0, 0, Math.PI * 2); ctx.stroke(); }
+    } }
   // 하늘의 울림 / 낟알 내림
   for (const r of S.ripples) {
     const a = 1 - r.t / 40;
@@ -1079,11 +1082,11 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.a
 let buildPick = null, hoverW = null, selected = null, rainMode = false;
 let GROUND = null;
 function buildGround() {
-  const out = [], n = 32, c = 2 * R / n;
+  const out = [], n = 64, c = 2 * R / n;
   for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
     const x = -R + i * c, y = -R + j * c; if (Math.hypot(x + c / 2, y + c / 2) > R + 1) continue;
     const w = warmth(x + c / 2, y + c / 2), m = wetness(x + c / 2, y + c / 2);
-    const base = mixHex('#6b9459', '#c2c070', w); out.push({x, y, c: mixHex(base, '#3f7352', Math.min(1, Math.max(0, m - 0.4) * 1.6))});
+    const base = mixHex('#6b9459', '#c2c070', w); out.push({x, y, c: mixHex(base, '#4c7d56', Math.min(0.8, Math.max(0, m - 0.3) * 1.0)), cs: c});
   }
   return out;
 }
@@ -1180,7 +1183,7 @@ function frame(now) {
 }
 function start(data) {
   newWorld();
-  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.rivers || !d.rivers.length) { d.rivers = S.rivers; d.river = S.river; d.pond = S.pond; } S = d; GROUND = null; } catch (e) { newWorld(); } }
+  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.lakes) { d.rivers = S.rivers; d.river = S.river; d.lakes = S.lakes; d.marshes = S.marshes; } S = d; GROUND = null; } catch (e) { newWorld(); } }
   resize(); window.addEventListener('resize', () => { resize(); });
   renderHud(); renderBuild();
   requestAnimationFrame(frame);
