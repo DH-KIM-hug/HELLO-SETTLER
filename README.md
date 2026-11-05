@@ -13,3 +13,4 @@
 - 🔁 [인수인계 메모](docs/HANDOFF.md)
 - 🎮 [브라우저 프로토타입](prototype/README.md)
 - 🎨 [콘셉트 아트 프롬프트 모음](docs/ART_PROMPTS.md)
+- 🖥 [렌더링 명세 — 3D를 도트처럼](docs/RENDERING.md)

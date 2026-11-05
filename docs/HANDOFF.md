@@ -1,11 +1,12 @@
 # 인수인계 메모 — 다음 세션이 이어서 볼 것
 
-> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.2 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
+> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.3 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
 
 ## 지금까지 만든 것
 | 무엇 | 어디 |
 |---|---|
-| 게임 기획서 v3.2 (확정 내용만, 22장) | `docs/GAME_DESIGN.md` |
+| 게임 기획서 v3.3 (확정 내용만, 22장) | `docs/GAME_DESIGN.md` |
+| 렌더링 명세 — 3D를 도트처럼 | `docs/RENDERING.md` |
 | 창조 오프닝·튜토리얼 | `docs/OPENING.md` |
 | 주민 행동 명세 (믿음·오프라인 자율 번성 포함) | `docs/RESIDENT_AI.md` |
 | 건물·생산 명세 + 데이터 | `docs/BUILDINGS.md`, `docs/buildings_v1.xlsx` |
