@@ -6,3 +6,4 @@
 - 📊 [아이 고유 특징 데이터 v1](docs/traits_v1.xlsx)
 - 🏗 [건물·생산 명세서 v1](docs/BUILDINGS.md) · [데이터](docs/buildings_v1.xlsx)
 - ⚖️ [경제·인구 밸런스 v1](docs/BALANCE.md) · [데이터](docs/balance_v1.xlsx)
+- 🎬 [창조 오프닝 상세 v1](docs/OPENING.md)
