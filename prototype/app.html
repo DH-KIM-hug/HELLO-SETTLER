@@ -242,6 +242,9 @@ function hydroStep(scale) {
     if (salt[k] > 0 && wk > 0.0005) { const sm = salt[k] * (mv / wk); salt[k] -= sm; salt[best] += sm; }   // 녹은 소금은 물과 함께 흐른다
     w[k] -= mv; w[best] += mv; flux[k] += mv;
   }
+  // 암염이 물에 녹는다 (흐르는 물이 더 많이 녹임)
+  const {halite} = S;
+  if (halite) for (const k of cells) { const hv = halite[k]; if (hv <= 0) continue; const wet = w[k] + flux[k] * 40; if (wet < 0.0008) continue; const d = Math.min(hv, 0.000015 * Math.min(1, wet * 20) * scale); halite[k] -= d; salt[k] += d; }
   // 증발과 스며듦
   for (const k of cells) { let v = w[k]; if (v <= 0) continue;
     v -= 0.000024 * (0.35 + warm[k]) * scale;
@@ -287,12 +290,17 @@ function newWorld() {
   }
   for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
   // 지형(높이)과 처음 물: 창조 때 부은 물이 오목한 곳에 고여 있다
-  st.h = new Float32Array(N * N); st.w = new Float32Array(N * N); st.flux = new Float32Array(N * N); st.wetC = new Float32Array(N * N); st.salt = new Float32Array(N * N); st.rot = 0;
+  st.h = new Float32Array(N * N); st.w = new Float32Array(N * N); st.flux = new Float32Array(N * N); st.wetC = new Float32Array(N * N); st.salt = new Float32Array(N * N); st.halite = new Float32Array(N * N); st.rot = 0;
   for (let k = 0; k < N * N; k++) st.h[k] = heightAt(cellX(k), cellY(k));
   st.drips = [{x: 11, y: 11, name: '큰 물방울 호수'}, {x: -13, y: -12, name: '작은 물방울 호수'}];
   const fill = (cx, cy, rad, add) => { const lvl = st.h[cellIdxRaw(cx, cy)] + add; for (let k = 0; k < N * N; k++) { const x = cellX(k), y = cellY(k); if (Math.hypot(x - cx, y - cy) < rad) st.w[k] = Math.max(st.w[k], lvl - st.h[k]); } };
   fill(11, 11, 7, 0.28); fill(-13, -12, 5, 0.18); fill(-19, 9, 14, 0.42);
-  for (let k = 0; k < N * N; k++) st.salt[k] = st.w[k] * 0.03;   // 창조 때 부은 물에 녹아 있던 광물 (물방울·벽의 물은 증류수라 소금이 없다)
+  // 암염(하얀 돌): 창조 2단계에서 암반에 섞어 넣은 소금 바위. 물이 닿으면 조금씩 녹아 물과 함께 흐른다.
+  // 물방울·벽의 물은 증류수라 소금이 없다 → 병 안 소금은 모두 이 암염에서 나온다.
+  const seam = (cx, cy, rad, amt) => { for (let k = 0; k < N * N; k++) { const d = Math.hypot(cellX(k) - cx, cellY(k) - cy); if (d < rad) st.halite[k] += amt * (1 - d / rad); } };
+  seam(-19, 9, 8, 0.03);     // 서쪽 큰 호수 바닥 아래 — 오랜 세월 녹아 호수가 이미 짭짤하다
+  seam(3, 25, 3.5, 0.02);    // 남쪽 벽 아래 — 그쪽 골에서 흘러내린 강이 지나가면 소금을 녹여 나른다
+  for (let k = 0; k < N * N; k++) if (st.w[k] > 0 && st.halite[k] > 0) { const d = Math.min(st.halite[k] * 0.5, st.w[k] * 0.05); st.halite[k] -= d; st.salt[k] += d; }
   st.basins = [{name: '서쪽 큰 호수', x: -19, y: 9, r: 11, area0: 0, said: 0}];
   st.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)}));
   st.trees = st.trees.filter(t => st.w[cellIdxRaw(t.x, t.y)] < 0.005);
@@ -890,14 +898,14 @@ function saltDiscovery() {
   if (S.saltKnown) return;
   let flat = 0, fx = 0, fy = 0;
   for (const k of HY.cells) if (S.w[k] < 0.004 && S.salt[k] > 0.003) { flat++; fx += cellX(k); fy += cellY(k); }
-  if (flat < 25) return;   // 호숫가 몇 칸이 아니라, 눈에 띄는 하얀 들판이 드러났을 때
+  if (flat < 45) return;   // 호숫가 몇 칸이 아니라, 눈에 띄는 하얀 들판이 드러났을 때
   fx /= flat; fy /= flat;
   const near = alive().filter(q => !q.sleeping && q.age >= 2.5 && Math.hypot(q.x - fx, q.y - fy) < 12);
   if (!near.length && rnd() > 0.25) return;            // 아무도 근처에 없으면 가끔만 (누군가 찾아가 본다)
   const who = near.find(q => q.age < 8) || near[0] || pick(alive().filter(q => q.age >= 2.5));
   if (!who) return;
   S.saltKnown = true; S.eraPts = Math.min(ERA_NEED, S.eraPts + 15);
-  log(`${who.name}${josa(who.name, '이', '가')} 마른 호수 바닥의 하얀 흙을 손가락으로 찍어 맛보았다. 짰다! 사람들은 그것을 '소금'이라 불렀다.`);
+  log(`${who.name}${josa(who.name, '이', '가')} 마른 호수 바닥의 하얀 흙을 손가락으로 찍어 맛보았다. 짰다! 사람들은 그것을 '소금'이라 불렀다. 호수 바닥 아래 하얀 바위가 오래도록 녹아든 것이었다.`);
   log(alive().some(q => q.belief < 0.3) ? '어떤 이는 거인님이 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다.' : '사람들은 거인님이 호수를 거두어 소금을 남기셨다고 믿었다.');
   say(who, '짜다! 이 하얀 흙, 짜!', 8);
   toast('소금을 발견했어요! 이제 소금밭을 지을 수 있어요.');
@@ -916,7 +924,7 @@ function lakeWatch() {
 function rotPt(o) { const x = o.x, y = o.y; o.x = -y; o.y = x; }
 function rotGrid(a, n) { const b = new Float32Array(n * n); for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) b[i * n + (n - 1 - j)] = a[j * n + i]; return b; }
 function rotateJar() {
-  for (const k of ['h', 'w', 'flux', 'wetC', 'salt']) S[k] = rotGrid(S[k], N);
+  for (const k of ['h', 'w', 'flux', 'wetC', 'salt', 'halite']) S[k] = rotGrid(S[k], N);
   S.paths = rotGrid(S.paths, 128);
   for (const list of [S.trees, S.rocks, S.b, S.manna, S.drips, S.grooves, S.basins, S.ripples]) for (const o of list) rotPt(o);
   for (const p of S.p) { rotPt(p); for (const st of p.steps) if (st.k === 'walk') rotPt(st); }
@@ -1319,12 +1327,12 @@ function frame(now) {
 }
 function start(data) {
   newWorld();
-  if (data && data.S && data.S.h) { try { const d = data.S; for (const k of ['paths', 'h', 'w', 'flux', 'wetC', 'salt']) d[k] = new Float32Array(d[k] || N * N); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.grooves) d.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)})); S = d; buildHydro(); GROUND = null; } catch (e) { newWorld(); } }
+  if (data && data.S && data.S.h) { try { const d = data.S; for (const k of ['paths', 'h', 'w', 'flux', 'wetC', 'salt', 'halite']) d[k] = new Float32Array(d[k] && d[k].length ? d[k] : N * N); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.grooves) d.grooves = [0.15, 0.85, 1.55, -0.75, 2.6].map(a => ({x: Math.cos(a) * (R - 1.0), y: Math.sin(a) * (R - 1.0)})); S = d; buildHydro(); GROUND = null; } catch (e) { newWorld(); } }
   resize(); window.addEventListener('resize', () => { resize(); });
   renderHud(); renderBuild();
   requestAnimationFrame(frame);
 }
-window.claude?.hot?.snapshot?.(() => { try { return {S: JSON.parse(JSON.stringify({...S, paths: Array.from(S.paths), h: Array.from(S.h), w: Array.from(S.w), flux: Array.from(S.flux), wetC: Array.from(S.wetC), salt: Array.from(S.salt), p: S.p.map(q => ({...q, steps: []}))}))}; } catch (e) { return {}; } });
+window.claude?.hot?.snapshot?.(() => { try { return {S: JSON.parse(JSON.stringify({...S, paths: Array.from(S.paths), h: Array.from(S.h), w: Array.from(S.w), flux: Array.from(S.flux), wetC: Array.from(S.wetC), salt: Array.from(S.salt), halite: Array.from(S.halite || []), p: S.p.map(q => ({...q, steps: []}))}))}; } catch (e) { return {}; } });
 // 시험용 훅 (프로토타입 확인용)
 window.__proto = {get S() { return S; }, step, goAway, alive};
 window.claude?.hot?.ready ? window.claude.hot.ready(start) : start(window.claude?.hot?.data ?? {});
