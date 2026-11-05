@@ -11,6 +11,7 @@
 - 🧠 [주민 행동 명세 v1](docs/RESIDENT_AI.md)
 - 🔎 [발견 목록 v1](docs/DISCOVERIES.md)
 - 🔁 [인수인계 메모](docs/HANDOFF.md)
+- 🛠 [유니티 개발 시작 안내](docs/UNITY_KICKOFF.md) (컴퓨터의 Claude Code용)
 - 🎮 [브라우저 프로토타입](prototype/README.md)
 - 🎨 [콘셉트 아트 프롬프트 모음](docs/ART_PROMPTS.md)
 - 🖥 [렌더링 명세 — 3D를 도트처럼](docs/RENDERING.md)
