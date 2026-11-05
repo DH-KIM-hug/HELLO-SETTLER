@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>메인 — 병 화면</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Nanum+Pen+Script&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2A2620;text-decoration:none}a:hover{color:#3E5C3A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; color: #2A2620; background: {{wall}}">
+  <div style="position: absolute; left: 0; right: 0; top: 590px; height: 26px; background: #8A6440; box-shadow: 0 6px 0 #6E4F31"></div>
+  <div style="position: absolute; left: 0; right: 0; top: 622px; bottom: 0; background: {{floor}}"></div>
+
+  <div style="position: absolute; left: 12px; right: 12px; top: 14px; display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px; background: rgba(244,237,224,0.94); border-radius: 18px; box-shadow: 0 2px 8px rgba(42,38,32,0.12)">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <div style="font-family: 'Gowun Batang', serif; font-size: 18px; font-weight: 700">초록방울</div>
+        <div style="font-size: 12px; color: #5A5247">온대 · 가을 3일 · 오후</div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px">
+        <span style="font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #3E5C3A; color: #F4EDE0">마을 시대</span>
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px">
+      <div style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(244,237,224,0.94); border-radius: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3E5C3A" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="9" cy="8" r="3"></circle><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"></path><circle cx="17" cy="9" r="2.5"></circle><path d="M15 14.5c3 0 6 2 6 5.5"></path></svg>
+        <div style="display: flex; flex-direction: column">
+          <span style="font-size: 11px; color: #5A5247">인구</span>
+          <span style="font-size: 15px; font-weight: 700">34 / 40</span>
+        </div>
+      </div>
+      <div style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(244,237,224,0.94); border-radius: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3E5C3A" stroke-width="2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2"></rect><circle cx="12" cy="12" r="2.5"></circle></svg>
+        <div style="display: flex; flex-direction: column">
+          <span style="font-size: 11px; color: #5A5247">지폐</span>
+          <span style="font-size: 15px; font-weight: 700">2,244</span>
+        </div>
+      </div>
+      <div style="flex: 1; display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: rgba(244,237,224,0.94); border-radius: 14px">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3E5C3A" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"></path></svg>
+        <div style="display: flex; flex-direction: column">
+          <span style="font-size: 11px; color: #5A5247">행복</span>
+          <span style="font-size: 15px; font-weight: 700">좋음</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 45px; top: 150px; width: 300px; height: 448px">
+    <svg width="300" height="448" viewBox="0 0 300 448" role="img" aria-label="유리병 안의 중세 마을. 호수, 숲, 오두막, 밀밭, 도로를 오가는 주민들">
+      <rect x="62" y="6" width="176" height="30" rx="8" fill="#B08A5A" stroke="#6E4F31" stroke-width="2"></rect>
+      <rect x="74" y="36" width="152" height="18" fill="#DDE8E6" opacity="0.6"></rect>
+      <path d="M74 54 C 20 70, 14 100, 14 140 L 14 410 Q 14 440 44 440 L 256 440 Q 286 440 286 410 L 286 140 C 286 100, 280 70, 226 54 Z" fill="#DCEAF0" opacity="0.35" stroke="#9FB9C2" stroke-width="3"></path>
+      <path d="M16 380 L 284 380 L 284 410 Q 284 438 256 438 L 44 438 Q 16 438 16 410 Z" fill="#8C8A84"></path>
+      <path d="M16 330 C 60 300, 90 320, 130 300 C 170 280, 210 250, 250 262 C 270 268, 280 280, 284 290 L 284 384 L 16 384 Z" fill="#8E6A45"></path>
+      <path d="M16 330 C 60 300, 90 320, 130 300 C 170 280, 210 250, 250 262 C 270 268, 280 280, 284 290" fill="none" stroke="#6F8F4E" stroke-width="10"></path>
+      <path d="M16 338 C 40 326, 70 330, 96 342 L 96 384 L 16 384 Z" fill="#6FA4C6"></path>
+      <path d="M22 344 L 46 344" stroke="#FFFFFF" stroke-width="2" opacity="0.6"></path>
+      <path d="M96 344 C 130 330, 160 318, 200 300" fill="none" stroke="#E2CFA3" stroke-width="5" stroke-linecap="round"></path>
+      <g fill="#4E7A3E"><circle cx="212" cy="236" r="16"></circle><circle cx="236" cy="226" r="19"></circle><circle cx="260" cy="240" r="15"></circle><circle cx="246" cy="250" r="13"></circle></g>
+      <g fill="#6E4F31"><rect x="210" y="248" width="4" height="12"></rect><rect x="234" y="242" width="4" height="14"></rect><rect x="258" y="252" width="4" height="12"></rect></g>
+      <g><rect x="120" y="292" width="18" height="12" fill="#E9DFCD" stroke="#6E4F31"></rect><path d="M117 293 L 129 282 L 141 293 Z" fill="#9A4A2E"></path></g>
+      <g><rect x="148" y="282" width="18" height="12" fill="#E9DFCD" stroke="#6E4F31"></rect><path d="M145 283 L 157 272 L 169 283 Z" fill="#9A4A2E"></path></g>
+      <g><rect x="176" y="270" width="22" height="14" fill="#E9DFCD" stroke="#6E4F31"></rect><path d="M173 271 L 187 258 L 201 271 Z" fill="#7A6A4A"></path><path d="M194 256 q 4 -8 0 -14 q -4 -6 0 -12" fill="none" stroke="#BDB3A3" stroke-width="2"></path></g>
+      <g fill="#D8B44A"><rect x="56" y="300" width="40" height="10" rx="2"></rect><rect x="56" y="312" width="40" height="8" rx="2" opacity="0.8"></rect></g>
+      <g fill="#2A2620"><circle cx="112" cy="338" r="2.4"></circle><circle cx="140" cy="326" r="2.4"></circle><circle cx="168" cy="314" r="2.4"></circle><circle cx="190" cy="304" r="2.4"></circle></g>
+      <rect x="164" y="308" width="7" height="4" fill="#B08A5A"></rect>
+      <path d="M40 120 C 34 180, 34 250, 40 320" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity="0.45"></path>
+    </svg>
+  </div>
+
+  <a href="Resident.dc.html" aria-label="한스, 대장장이. 주민 정보 열기" style="position: absolute; left: 168px; top: 408px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; min-height: 32px; box-sizing: border-box; background: #F4EDE0; border: 1.5px solid #3E5C3A; border-radius: 999px; font-size: 12px; font-weight: 700; box-shadow: 0 2px 6px rgba(42,38,32,0.18)">
+    <span style="width: 8px; height: 8px; border-radius: 50%; background: #9A5B12"></span>한스 · 대장장이
+  </a>
+
+  <a href="Chronicle.dc.html" aria-label="새 편지 1통. 연대기 열기" style="position: absolute; left: 238px; top: 352px; display: flex; align-items: center; gap: 6px; padding: 6px 10px; min-height: 32px; box-sizing: border-box; background: #FFF8E8; border: 1.5px solid #9A5B12; border-radius: 12px; font-size: 12px; font-weight: 700; color: #7A4510">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9A5B12" stroke-width="2" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"></rect><path d="M3 7l9 6 9-6"></path></svg>
+    편지 1
+  </a>
+
+  <div style="position: absolute; left: 16px; right: 16px; top: 642px; display: flex; align-items: flex-start; gap: 10px; padding: 10px 14px; background: rgba(244,237,224,0.96); border-radius: 14px; border: 1px solid #D9CDB8">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A4A2E" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v6"></path><circle cx="12" cy="16.5" r="0.6"></circle></svg>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 13px; font-weight: 700">곧 겨울이에요</span>
+      <span style="font-size: 12px; color: #5A5247">땔감이 8일치밖에 없어요. 나무꾼이 더 필요해요.</span>
+    </div>
+  </div>
+
+  <nav aria-label="주요 도구" style="position: absolute; left: 12px; right: 12px; bottom: 16px; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; padding: 8px; background: #2A2620; border-radius: 22px">
+    <a href="Build.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; min-height: 56px; box-sizing: border-box; border-radius: 14px; color: #F4EDE0; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F4EDE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7"></path><path d="M5 10v10h14V10"></path><path d="M10 20v-6h4v6"></path></svg>
+      건설
+    </a>
+    <a href="Main.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; min-height: 56px; box-sizing: border-box; border-radius: 14px; background: #3E5C3A; color: #F4EDE0; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F4EDE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 13V5a1.5 1.5 0 0 1 3 0v6"></path><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"></path><path d="M14 11V6a1.5 1.5 0 0 1 3 0v8a6 6 0 0 1-6 6h-1a6 6 0 0 1-5-3l-2-4a1.5 1.5 0 0 1 2.5-1.5L8 13"></path></svg>
+      거인의 손
+    </a>
+    <a href="Shop.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; min-height: 56px; box-sizing: border-box; border-radius: 14px; color: #F4EDE0; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F4EDE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 8h14l-1 12H6z"></path><path d="M9 8a3 3 0 0 1 6 0"></path></svg>
+      상점
+    </a>
+    <a href="Chronicle.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; min-height: 56px; box-sizing: border-box; border-radius: 14px; color: #F4EDE0; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F4EDE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3z"></path><path d="M9 9h6M9 13h6"></path></svg>
+      연대기
+    </a>
+    <a href="Shelf.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 0; min-height: 56px; box-sizing: border-box; border-radius: 14px; color: #F4EDE0; font-size: 12px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F4EDE0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 19h18"></path><path d="M6 19V9h4v10M14 19V6h4v13"></path></svg>
+      선반
+    </a>
+  </nav>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 104px; display: flex; justify-content: center">
+    <div style="display: flex; gap: 8px; padding: 6px; background: rgba(244,237,224,0.96); border-radius: 999px; border: 1px solid #D9CDB8">
+      <button type="button" aria-label="물 주기" style="width: 44px; height: 44px; border-radius: 50%; border: none; background: #DDEBF2; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2F6A8A" stroke-width="2" aria-hidden="true"><path d="M12 3c3 4 6 7 6 11a6 6 0 0 1-12 0c0-4 3-7 6-11z"></path></svg>
+      </button>
+      <button type="button" aria-label="빛 조절 (커튼)" style="width: 44px; height: 44px; border-radius: 50%; border: none; background: #F6E6C2; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#9A5B12" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5"></path></svg>
+      </button>
+      <button type="button" aria-label="유리 톡 두드리기" style="width: 44px; height: 44px; border-radius: 50%; border: none; background: #E6E1D6; display: flex; align-items: center; justify-content: center; cursor: pointer">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2A2620" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="2"></circle><path d="M7 7a7 7 0 0 0 0 10M17 7a7 7 0 0 1 0 10"></path></svg>
+      </button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"night":{"editor":"boolean","default":false},"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const night = this.props.night ?? false;
+    return {
+      wall: night ? '#2E3140' : '#E9DFCD',
+      floor: night ? '#3A3226' : '#C9B79A'
+    };
+  }
+}
+</script>
+</body>
+</html>

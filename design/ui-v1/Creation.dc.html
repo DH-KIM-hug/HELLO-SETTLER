@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>창조 — 핵 넣기</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=Noto+Sans+KR:wght@400;500;700&amp;family=Nanum+Pen+Script&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#F4EDE0;text-decoration:none}a:hover{color:#FFFFFF}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; color: #F4EDE0; background: #1E1F2A">
+  <div style="position: absolute; left: 0; right: 0; top: 0; padding: 18px 16px; display: flex; align-items: center; justify-content: space-between">
+    <div style="display: flex; gap: 6px" aria-label="창조 9단계 중 1단계">
+      <sc-for list="{{steps}}" as="s" hint-placeholder-count="9">
+        <span style="{{s.style}}"></span>
+      </sc-for>
+    </div>
+    <span style="font-size: 12px; color: #C9C3B6">1 / 9 · 핵</span>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; top: 120px; display: flex; justify-content: center">
+    <svg width="240" height="340" viewBox="0 0 240 340" role="img" aria-label="빈 유리병. 바닥 가운데에 핵을 놓을 자리가 희미하게 빛남">
+      <path d="M60 30 C 14 44, 8 70, 8 104 L 8 312 Q 8 334 30 334 L 210 334 Q 232 334 232 312 L 232 104 C 232 70, 226 44, 180 30 Z" fill="#2A2D3C" stroke="#7F93A3" stroke-width="2.5"></path>
+      <rect x="58" y="16" width="124" height="16" rx="5" fill="none" stroke="#7F93A3" stroke-width="2" stroke-dasharray="5 5"></rect>
+      <ellipse cx="120" cy="300" rx="44" ry="12" fill="none" stroke="#C98A2E" stroke-width="2" stroke-dasharray="4 5" opacity="0.8"></ellipse>
+      <circle cx="{{coreX}}" cy="{{coreY}}" r="{{coreR}}" fill="{{coreFill}}"></circle>
+      <circle cx="{{coreX}}" cy="{{coreY}}" r="{{glowR}}" fill="{{coreFill}}" opacity="0.18"></circle>
+      <path d="M30 120 C 24 170, 24 230, 30 280" fill="none" stroke="#FFFFFF" stroke-width="5" stroke-linecap="round" opacity="0.18"></path>
+    </svg>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; top: 486px; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 0 24px; text-align: center">
+    <span style="font-family: 'Nanum Pen Script', cursive; font-size: 32px; color: #F4EDE0">핵을 넣어주세요.</span>
+    <span style="font-family: 'Nanum Pen Script', cursive; font-size: 24px; color: #E3C58C">{{line}}</span>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 112px; display: flex; flex-direction: column; gap: 10px">
+    <span style="font-size: 12px; color: #C9C3B6; text-align: center">두 손가락으로 크기를 바꾸고, 병 바닥에 놓아요</span>
+    <div role="radiogroup" aria-label="핵 크기" style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{sizes}}" as="z" hint-placeholder-count="3">
+        <button type="button" role="radio" aria-checked="{{z.sel}}" onClick="{{z.pick}}" style="{{z.style}}">{{z.label}}</button>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 16px; right: 16px; bottom: 28px; display: flex; gap: 10px">
+    <a href="Shelf.dc.html" style="flex: 1; min-height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 16px; border: 1.5px solid #7F93A3; font-size: 15px; font-weight: 700">나중에</a>
+    <a href="Main.dc.html" style="flex: 2; min-height: 56px; display: flex; align-items: center; justify-content: center; border-radius: 16px; background: #C98A2E; color: #1E1F2A; font-size: 16px; font-weight: 700">놓기</a>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { size: 1 }; }
+  renderVals() {
+    const z = this.state.size;
+    const cfg = [
+      { label: '작게', r: 10, fill: '#E8A35A', line: '조용한 별이네요.' },
+      { label: '보통', r: 16, fill: '#D9653B', line: '따뜻한 별이네요.' },
+      { label: '크게', r: 24, fill: '#F2E3D0', line: '뜨거운 별이네요. 땅이 자주 흔들릴지도 몰라요.' }
+    ];
+    const c = cfg[z];
+    const base = 'min-height: 48px; border-radius: 14px; font-family: inherit; font-size: 14px; cursor: pointer;';
+    return {
+      steps: Array.from({ length: 9 }, (_, i) => ({ style: 'display: block; width: ' + (i === 0 ? 22 : 8) + 'px; height: 8px; border-radius: 4px; background: ' + (i === 0 ? '#C98A2E' : '#4A4D5E') })),
+      coreX: 120, coreY: 300 - c.r, coreR: c.r, glowR: c.r * 2.2, coreFill: c.fill,
+      line: c.line,
+      sizes: cfg.map((s, i) => ({
+        label: s.label,
+        sel: i === z ? 'true' : 'false',
+        pick: () => this.setState({ size: i }),
+        style: base + (i === z ? 'border: none; background: #F4EDE0; color: #1E1F2A; font-weight: 700' : 'border: 1px solid #5A5E72; background: transparent; color: #F4EDE0')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>건설</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@400;700&amp;family=Noto+Sans+KR:wght@400;500;700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:#2A2620;text-decoration:none}a:hover{color:#3E5C3A}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; font-family: 'Noto Sans KR', sans-serif; color: #2A2620; background: #E9DFCD">
+  <div style="position: absolute; left: 0; right: 0; top: 0; height: 380px; background: #CFC3AC">
+    <div style="position: absolute; left: 0; right: 0; top: 0; bottom: 0; background-image: linear-gradient(#B9AD95 1px, transparent 1px), linear-gradient(90deg, #B9AD95 1px, transparent 1px); background-size: 28px 28px; opacity: 0.6"></div>
+    <div style="position: absolute; left: 0; right: 0; top: 0; height: 120px; background: #6FA4C6; opacity: 0.55"></div>
+    <div style="position: absolute; left: 140px; top: 196px; width: 84px; height: 56px; border: 2.5px dashed #3E5C3A; border-radius: 6px; background: rgba(62,92,58,0.18); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #2C4329">빵집 터</div>
+    <div style="position: absolute; left: 182px; top: 252px; width: 4px; height: 90px; background: #E2CFA3"></div>
+    <div style="position: absolute; left: 100px; top: 340px; width: 180px; height: 4px; background: #E2CFA3"></div>
+    <div style="position: absolute; left: 20px; top: 136px; padding: 6px 10px; background: rgba(244,237,224,0.95); border-radius: 10px; font-size: 12px">반경 행복 +3 범위 표시</div>
+    <div style="position: absolute; left: 112px; top: 168px; width: 140px; height: 112px; border-radius: 50%; border: 1.5px solid #9A5B12; opacity: 0.7"></div>
+  </div>
+
+  <div style="position: absolute; left: 12px; top: 14px; display: flex; gap: 8px">
+    <a href="Main.dc.html" aria-label="뒤로" style="width: 44px; height: 44px; border-radius: 50%; background: rgba(244,237,224,0.95); display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2A2620" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"></path></svg>
+    </a>
+    <div style="height: 44px; display: flex; align-items: center; padding: 0 14px; border-radius: 22px; background: rgba(244,237,224,0.95); font-size: 13px; font-weight: 700">건설 모드 · 터를 끌어서 놓으세요</div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; top: 360px; bottom: 0; background: #F4EDE0; border-radius: 24px 24px 0 0; box-shadow: 0 -4px 16px rgba(42,38,32,0.14); display: flex; flex-direction: column">
+    <div style="display: flex; justify-content: center; padding-top: 8px"><div style="width: 40px; height: 4px; border-radius: 2px; background: #C9BCA6"></div></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 18px 8px">
+      <div style="font-family: 'Gowun Batang', serif; font-size: 20px; font-weight: 700">무엇을 지을까요</div>
+      <div style="display: flex; gap: 10px; font-size: 12px; color: #5A5247">
+        <span>판자 <b style="color: #2A2620">24</b></span><span>돌 <b style="color: #2A2620">11</b></span>
+      </div>
+    </div>
+    <div role="tablist" aria-label="건물 분류" style="display: flex; gap: 6px; padding: 0 14px 10px; flex-wrap: wrap">
+      <sc-for list="{{tabs}}" as="t" hint-placeholder-count="6">
+        <button type="button" role="tab" aria-selected="{{t.sel}}" onClick="{{t.pick}}" style="{{t.style}}">{{t.label}}</button>
+      </sc-for>
+    </div>
+    <div style="flex: 1; overflow: hidden; padding: 0 14px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; align-content: start">
+      <sc-for list="{{cards}}" as="c" hint-placeholder-count="6">
+        <button type="button" style="{{c.style}}" aria-label="{{c.aria}}">
+          <div style="display: flex; justify-content: space-between; align-items: center">
+            <span style="font-size: 15px; font-weight: 700">{{c.name}}</span>
+            <span style="font-size: 11px; color: #5A5247">{{c.size}}</span>
+          </div>
+          <span style="font-size: 12px; color: #4A443B; text-align: left">{{c.recipe}}</span>
+          <div style="display: flex; gap: 8px; font-size: 12px; color: #4A443B">
+            <span>판자 {{c.plank}}</span><span>돌 {{c.stone}}</span><span>{{c.time}}</span>
+          </div>
+          <span style="font-size: 11px; font-weight: 700; color: {{c.noteColor}}; text-align: left">{{c.note}}</span>
+        </button>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { tab: '식량' }; }
+  renderVals() {
+    const tabs = ['주거', '식량', '목재·석재', '광업', '생활', '군사'];
+    const base = 'min-height: 44px; padding: 0 14px; border-radius: 999px; font-size: 13px; font-family: inherit; cursor: pointer;';
+    const data = {
+      '식량': [
+        { name: '빵집', size: '중', recipe: '밀가루 1 + 물 1 → 빵 1 · 30초', plank: 2, stone: 3, time: '2분 30초', note: '반경 행복 +3', ok: true },
+        { name: '방앗간', size: '중', recipe: '밀 1 → 밀가루 1 · 30초', plank: 3, stone: 3, time: '2분 30초', note: '언덕이면 풍차형', ok: true },
+        { name: '농장', size: '대', recipe: '→ 밀 1 · 60초', plank: 3, stone: 1, time: '2분', note: '겨울엔 쉼', ok: true },
+        { name: '어부 오두막', size: '소', recipe: '→ 생선 1 · 80초', plank: 2, stone: 0, time: '1분', note: '물가에만', ok: true },
+        { name: '양돈장', size: '대', recipe: '밀 1 + 물 1 → 돼지 1', plank: 3, stone: 1, time: '2분 30초', note: '읍내 시대에 열림', ok: false },
+        { name: '양조장', size: '중', recipe: '밀 1 + 물 1 → 맥주 1', plank: 2, stone: 3, time: '2분 30초', note: '읍내 시대에 열림', ok: false }
+      ]
+    };
+    const list = data[this.state.tab] || data['식량'];
+    return {
+      tabs: tabs.map((t) => ({
+        label: t,
+        sel: t === this.state.tab ? 'true' : 'false',
+        pick: () => this.setState({ tab: t }),
+        style: base + (t === this.state.tab ? 'border: none; background: #3E5C3A; color: #F4EDE0; font-weight: 700' : 'border: 1px solid #C9BCA6; background: transparent; color: #2A2620')
+      })),
+      cards: list.map((c) => ({
+        ...c,
+        aria: c.name + (c.ok ? '' : ', 잠김'),
+        noteColor: c.ok ? '#3E5C3A' : '#7A4510',
+        style: 'display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; font-family: inherit; color: #2A2620; cursor: pointer; text-align: left; ' + (c.ok ? 'background: #FFFFFF; border: 1px solid #D9CDB8' : 'background: #EDE5D6; border: 1px dashed #B9AD95; opacity: 0.85')
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>
