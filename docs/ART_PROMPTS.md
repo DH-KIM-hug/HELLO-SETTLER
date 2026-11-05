@@ -13,7 +13,8 @@ charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art
 with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow,
 soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window)
 with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but
-human proportions, simple faces with small dot eyes, no blush, calm working poses, sturdy
+human proportions (when settlers appear), simple faces with small dot eyes, no blush, every settler different in hair color, hat and
+clothing color, calm working poses, sturdy
 thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded
 ```
 
@@ -59,7 +60,7 @@ the left window, dust motes, 9:16
 ### 1-2. 지구 시점 — 병 안의 평평한 세상
 *병 안으로 들어가면 지평선까지 펼쳐진 둥글고 평평한 대지. 하늘은 유리 돔, 세상 끝은 희미하게 빛나는 유리벽.*
 ```
-view from inside a terrarium: a wide flat round world stretching to the horizon, the sky is a
+first-person view standing on the ground inside a terrarium at villager eye level (we do not see the jar from outside, no shelf, no room): a wide flat round world stretching to the horizon, the sky is a
 huge curved glass dome with faint reflections, the edge of the world is a softly glowing glass
 wall, a medieval hamlet with thatched cottages and dirt paths, wheat fields, forests, a calm lake
 under a giant water droplet falling from the dome, a river starting from water trickling down the
@@ -73,14 +74,14 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 | # | 장면 | 프롬프트 |
 |---|---|---|
 | 2-1 | **핵 넣기** — 어두운 방, 빈 병, 손바닥 위 붉게 맥동하는 구슬 | `a giant gentle hand holding a small glowing red-orange core sphere above an empty glass jar, dark room, soft rim light, the core pulses like a heartbeat, magical but calm, 9:16` |
-| 2-2 | **암반 쌓기** — 돌 컵 4개(회색=철, 검정=석탄, 반짝이=금, 하양=암염) | `four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view, 3:2` |
-| 2-3 | **흙 덮기** — 손가락으로 산·골짜기·깊은 분지를 빚음 | `a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view, 9:16` |
-| 2-4 | **물 붓기** — 파 놓은 곳부터 물이 차오름 | `water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics, 9:16` |
-| 2-5 | **태양 맞추기** — 반원 궤도 위 6자리, 온대만 밝고 나머지는 안개 | `a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious, 9:16` |
-| 2-6 | **뚜껑 닫기 + 물방울 돌기** — 뚜껑 안쪽을 찍어 돌기를 만들고 잠금 | `the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up, 3:2` |
-| 2-7 | **타임랩스** — 수천 년이 몇 초에 | `time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy, 16:9` |
-| 2-8 | **생명의 씨앗** — 숨구멍으로 이끼·풀·도토리를 뿌림 | `seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge, 9:16` |
-| 2-9 | **첫 인간** — 해 질 녘 숲 가장자리의 작은 불빛, 10명 | `dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk, 9:16` |
+| 2-2 | **암반 쌓기** — 돌 컵 4개(회색=철, 검정=석탄, 반짝이=금, 하양=암염) | `four small cups of pebbles beside an empty glass jar: grey stones, black stones, glittering gold stones, and white salt-crystal stones, pebbles pouring into the jar forming visible colored strata around a glowing core, side cross-section view, the world is still lifeless at this step: no people, no houses, no fields, no plants, only the giant's hand pouring, 3:2` |
+| 2-3 | **흙 덮기** — 손가락으로 산·골짜기·깊은 분지를 빚음 | `a fingertip sculpting soft brown soil inside a glass jar, shaping hills, valleys and one deep long basin, soil particles, a faint glowing circle marking the future village site on flat ground, top-down three-quarter view, the world is still lifeless at this step: no people, no houses, no fields, no plants, 9:16` |
+| 2-4 | **물 붓기** — 파 놓은 곳부터 물이 차오름 | `water being poured from a small glass bottle into a terrarium, water filling the low basins first forming a long deep lake like a narrow inland lake, no sea, ripples, light caustics, the world is still lifeless at this step: no people, no houses, no fields, no plants, only bare soil and water, 9:16` |
+| 2-5 | **태양 맞추기** — 반원 궤도 위 6자리, 온대만 밝고 나머지는 안개 | `a small warm lamp sun being placed on a semicircular track above a glass jar, six positions on the track, only one position glowing, the other five hidden in soft fog, gentle and mysterious, the world is still lifeless at this step: no people, no houses, no fields, no plants, only bare soil, rock and water, 9:16` |
+| 2-6 | **뚜껑 닫기 + 물방울 돌기** — 뚜껑 안쪽을 찍어 돌기를 만들고 잠금 | `the inside of a glass jar lid seen from below, a fingertip pressing two small bumps into it, condensation gathering on the bumps into large drops, then the lid twisting shut onto the jar, close-up, the world is still lifeless at this step: no people, no houses, no fields, no plants, only bare soil, rock and water, 3:2` |
+| 2-7 | **타임랩스** — 수천 년이 몇 초에 | `time-lapse feeling inside a sealed terrarium: first drops falling from lid bumps, lakes filling, rivers forming from water trickling down the glass walls, day and night streaking across, motion blur of light, epic yet cozy, no people, no houses and no fields yet, only bare land, water and rock, 16:9` |
+| 2-8 | **생명의 씨앗** — 숨구멍으로 이끼·풀·도토리를 뿌림 | `seeds of moss, grass and tiny acorns sprinkled through a small air hole in a jar lid, below them moss spreading and a forest growing in time-lapse, deer and rabbits appearing at the forest edge, no people, no houses and no fields yet, only moss, grass, young forest and wild animals, 9:16` |
+| 2-9 | **첫 인간** — 해 질 녘 숲 가장자리의 작은 불빛, 10명 | `dusk inside a terrarium world, a tiny campfire at the edge of a forest, ten small medieval villagers in two families with bundles and a handcart sitting around it, a child looking up at the sky and waving, warm orange firelight against blue dusk, no houses, no fields and no roads yet, only a wild forest edge, a campfire, the ten settlers and their handcart, 9:16` |
 
 ---
 
@@ -90,10 +91,10 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 |---|---|---|
 | 3-1 | **물방울 호수** — 뚜껑 돌기에서 거대한 물방울이 똑, 강 없는 호수 | `a giant water droplet falling from a bump on the glass sky dome into a calm round lake below, concentric ripples, no rivers flowing in or out, misty morning, tiny fishermen on the shore look up, 16:9` |
 | 3-2 | **유리벽의 강** — 그늘 쪽 유리벽을 타고 흘러내린 물이 강이 됨 | `water trickling down the inside of a curved glass wall at the edge of a tiny world, gathering at the base into a small stream that winds inward across meadows, shaded cool side, moss and ferns, 9:16` |
-| 3-3 | **창가 쪽 vs 그늘 쪽** — 한 세상 안의 기후 차이 | `split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view, 16:9` |
+| 3-3 | **창가 쪽 vs 그늘 쪽** — 한 세상 안의 기후 차이 | `split lighting across a flat round terrarium world: one side sunlit, warm and dry with pale yellow-green grass, the other side shaded, cool and lush with dark moss and forests, sunlight beam from a window on the left, top-down three-quarter view, strong visible contrast: the left half is bright, warm and dry with yellowish grass, the right half is dim, cool and blue-green with dark moss, a clear light boundary across the land, 16:9` |
 | 3-4 | **말라가는 큰 호수** — 물가가 물러나고 하얀 소금기 | `a long inland lake slowly drying in a terrarium world, receding shoreline rings, white salt crust spreading on the exposed lakebed, an old villager pointing at where the water used to be, a child doubtful, golden afternoon, 16:9` |
 | 3-5 | **소금의 발견** — 아이가 하얀 흙을 찍어 맛봄 | `a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light, 3:2` |
-| 3-6 | **병 돌리기** — 해가 하늘을 건너감 | `a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other, 9:16` |
+| 3-6 | **병 돌리기** — 해가 하늘을 건너감 | `a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other, the hand holds the jar's glass body (not the lid) and rotates the whole jar on the shelf, 9:16` |
 | 3-7 | **하늘 낟알** — 첫 수확 전, 새벽 들판의 흰 낟알 | `dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome, 16:9` |
 | 3-9 | **넘치는 호수와 새 강** — 지형을 따라 물이 흘러 고이고, 가득 찬 분지가 넘쳐 새 물길이 열림 | `top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces, 16:9` |
 | 3-10 | **땅속 단면** — 병 옆면으로 보이는 핵·암반·광맥·암염·광부의 굴 | `side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style, 9:16` |
@@ -139,7 +140,7 @@ desert mud-brick house, isometric, neutral background, 3:2
 | 6-1 | **선반과 여러 병** — 병 사이의 거인의 다리 | `a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light, 16:9` |
 | 6-2 | **거인의 종이배** — 나루터에서 떠나는 주민 | `a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet, 16:9` |
 | 6-3 | **거인의 상점 물건의 크기감** | `a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder, 16:9` |
-| 6-4 | **유적 (멸망한 병)** | `an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass, 16:9` |
+| 6-4 | **유적 (멸망한 병)** | `an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass, no living people at all, completely abandoned and silent, only fresh flowers left on the graves, 16:9` |
 
 ---
 
@@ -147,9 +148,9 @@ desert mud-brick house, isometric, neutral background, 3:2
 
 | # | 소재 | 프롬프트 |
 |---|---|---|
-| 7-1 | **연대기 양피지** | `an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text, 3:4` |
+| 7-1 | **연대기 양피지** | `an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text, plain paper texture only, no illustrations, no village, no figures, no border scenes, 3:4` |
 | 7-2 | **지구 카드** (폴라로이드) | `a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text, 3:4` |
-| 7-3 | **앱 아이콘** | `app icon, a small glass jar with a tiny glowing village inside and a single water droplet hanging under the lid, simple shapes, warm colors, centered, no text, 1:1` |
+| 7-3 | **앱 아이콘** | `mobile app icon in crisp retro pixel-art style, bold and readable at 64x64 pixels, one simple glass jar shape filling most of the frame on a plain warm cream-to-amber background, inside only a small green hill, one tiny thatched hut with a lit window and one large water droplet hanging under the lid, a thin glowing red line at the bottom, thick clean outlines, at most 10 flat colors, no people, no small details, centered, no text, 1:1` |
 
 ---
 
