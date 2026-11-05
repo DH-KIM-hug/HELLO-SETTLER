@@ -2,6 +2,14 @@
 
 > 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.4 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
 
+## 세션 역할 분담
+| 세션 | 하는 일 | 건드리는 곳 |
+|---|---|---|
+| **기획 세션** | 기획 결정·문서 작성·검토 (그림·개발 결과를 기획과 맞는지 보고 피드백) | `docs/` (기획 문서), 검토 메모 |
+| **개발 세션** | Godot 개발 ([`GODOT_KICKOFF.md`](GODOT_KICKOFF.md)) | `godot/`, `godot_shots/` |
+| **Codex** | 콘셉트 아트 ([`AGENTS.md`](../AGENTS.md)) | `design/concept/` |
+- 기획 세션은 코드·그림을 직접 만들지 않는다. 기획을 바꿔야 할 일이 생기면 개발 세션·Codex는 사람에게 알리고, 사람이 기획 세션에서 정리한다.
+
 ## 지금까지 만든 것
 | 무엇 | 어디 |
 |---|---|
