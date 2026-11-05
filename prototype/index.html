@@ -139,6 +139,24 @@ const WALK = 1.25;            // 칸/초
 const ERA_NEED = 100;
 const OFFLINE_ERA = 0.3;
 const SPEEDS = [1, 10, 60, 600];
+// 병 안의 기후 지도: 빛은 북서쪽 유리(거인의 창가)로 들어온다 → 그쪽은 늘 따뜻하고 마르고,
+// 반대쪽 그늘의 차가운 유리에 물방울이 맺혀 흘러내린다 → 비와 시내는 그쪽에서.
+const LIGHT = {x: -0.72, y: -0.69};
+const clamp01 = (v) => Math.max(0, Math.min(1, v));
+const sunward = (x, y) => (x * LIGHT.x + y * LIGHT.y) / R;           // -1 (그늘 끝) ~ 1 (창가)
+function warmth(x, y) { return clamp01(0.5 + 0.55 * sunward(x, y)); }   // 0 추움 ~ 1 따뜻함
+function wetness(x, y) {
+  let m = clamp01(0.45 - 0.55 * sunward(x, y));
+  if (S && S.rivers) for (const rv of S.rivers) for (const r of rv) { const d = Math.hypot(r.x - x, r.y - y); if (d < 5) m += (5 - d) / 5 * 0.08; }
+  if (S && S.pond) { const d = Math.hypot(S.pond.x - x, S.pond.y - y) - S.pond.rx; if (d < 6) m += (6 - Math.max(0, d)) / 6 * 0.25; }
+  return clamp01(m);
+}
+const rainZone = (x, y) => wetness(x, y) > 0.6;
+function farmMult(x, y) { const w = warmth(x, y), m = wetness(x, y); return Math.max(0.5, Math.min(1.5, (0.6 + 0.6 * w) * (0.65 + 0.7 * m))); }
+function climateText(x, y) {
+  const w = warmth(x, y), m = wetness(x, y);
+  return `${w > 0.66 ? '따뜻함' : w > 0.36 ? '선선함' : '서늘함'} · ${m > 0.6 ? '비가 자주 옴' : m > 0.35 ? '촉촉함' : '건조함'}`;
+}
 
 const DEF = {
   '창고':   {plank:4, stone:2, time:120, era:0, size:1.5, color:'#B08A5A', desc:'물자 보관'},
@@ -191,21 +209,30 @@ function newWorld() {
     era: 0, eraPts: 0, faith: 30, fear: 0, tapLog: [],
     stock: {'건량': 240, '빵': 0, '밀': 0, '통나무': 0, '판자': 20, '돌': 8, '물': 0, '밀가루': 0, '도구': 22},
     manna: [], mannaBatches: [], firstHarvestAt: null, mannaEnded: false, lastDawnIdx: null, arrivalManna: false,
-    trees: [], rocks: [], pond: {x: 13, y: 9, rx: 5, ry: 3.4}, river: [], humid: 0.5, b: [], p: [], nextId: 1,
+    trees: [], rocks: [], pond: {x: 11, y: 11, rx: 5, ry: 3.4}, river: [], rivers: [], humid: 0.5, b: [], p: [], nextId: 1,
     book: [], paths: new Float32Array(128 * 128), rain: null, ripples: [], deficit: 0,
     stats: {born: 0, died: 0, built: 0}, timers: {life: 0, jobs: 0, auto: 0, decay: 0, speak: 0}, cam: {x: 0, y: 2, z: 0},
   };
   // 숲 (네 군데) · 바위 · 연못
-  const groves = [[-16, -10], [-18, 8], [10, -16], [20, 4]];
-  for (const [gx, gy] of groves) for (let i = 0; i < 30; i++) {
+  const groves = [[-12, 14], [-20, 4], [18, -6], [22, 12], [4, 22]];
+  for (const [gx, gy] of groves) for (let i = 0; i < 24; i++) {
     const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * 6.5;
     const x = gx + Math.cos(a) * d, y = gy + Math.sin(a) * d * 0.9;
     if (Math.hypot(x, y) < R - 1.5) st.trees.push({x, y, s: 'tree', g: 0, res: 0});
   }
   for (const [x, y] of [[-6, -18], [-3, -20], [4, 20], [7, 19], [-24, -2], [24, -10]]) st.rocks.push({x, y, amt: 20, res: 0});
-  // 세상 끝 유리벽에서 흘러내린 물이 시내가 되어 호수로
-  { const a0 = Math.atan2(9, 13), sx0 = Math.cos(a0) * (R - 0.3), sy0 = Math.sin(a0) * (R - 0.3);
-    for (let i = 0; i <= 24; i++) { const f = i / 24; st.river.push({x: sx0 + (13 + 4.2 * Math.cos(a0) - sx0) * f + Math.sin(f * 9) * 0.9, y: sy0 + (9 + 2.8 * Math.sin(a0) - sy0) * f + Math.cos(f * 7) * 0.7}); } }
+  // 세상 끝(그늘 쪽 차가운 유리벽)에서 흘러내린 물이 시내가 되어 호수로 — 시내 세 줄기
+  st.rivers = [];
+  const shade = Math.atan2(-LIGHT.y, -LIGHT.x);
+  for (const off of [-0.55, 0, 0.5]) {
+    const a0 = shade + off, x0 = Math.cos(a0) * (R - 0.2), y0 = Math.sin(a0) * (R - 0.2);
+    const ex = st.pond.x + (x0 - st.pond.x) / Math.hypot(x0 - st.pond.x, y0 - st.pond.y) * st.pond.rx * 0.9;
+    const ey = st.pond.y + (y0 - st.pond.y) / Math.hypot(x0 - st.pond.x, y0 - st.pond.y) * st.pond.ry * 0.9;
+    const line = [];
+    for (let i = 0; i <= 20; i++) { const f = i / 20, w = Math.sin(f * Math.PI) * (1 + off); line.push({x: x0 + (ex - x0) * f + Math.sin(f * 8 + off * 5) * 0.8 * w, y: y0 + (ey - y0) * f + Math.cos(f * 6 + off * 3) * 0.7 * w}); }
+    st.rivers.push(line);
+  }
+  st.river = st.rivers.flat();
   st.trees = st.trees.filter(t => !st.river.some(r => Math.hypot(r.x - t.x, r.y - t.y) < 1));
   S = st;
   // 시작 창고 + 모닥불
@@ -383,7 +410,8 @@ function updateBuilding(b, dt) {
   if (Object.keys(d.out).every(k => ENOUGH[k] !== undefined && (S.stock[k] || 0) + (b.out[k] || 0) >= ENOUGH[k])) return;
   if (d.in && !Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) return;
   const w = person(b.worker);
-  b.timer += dt * (w ? w.mult : 1) * (b.boost > 0 ? 1.5 : 1) * (S.rain && S.rain.natural && b.type === '농장' ? 1.2 : 1);
+  const place = b.type === '농장' ? (b.cm || (b.cm = farmMult(b.x, b.y))) : 1;
+  b.timer += dt * (w ? w.mult : 1) * place * (b.boost > 0 ? 1.5 : 1) * (S.rain && S.rain.natural && b.type === '농장' && rainZone(b.x, b.y) ? 1.3 : 1);
   while (b.timer >= d.cycle) {
     b.timer -= d.cycle;
     if (d.in) { if (!Object.entries(d.in).every(([k, n]) => (b.inBuf[k] || 0) >= n)) { b.timer = 0; break; } for (const [k, n] of Object.entries(d.in)) b.inBuf[k] -= n; }
@@ -498,7 +526,7 @@ function workTask(p) {
     const tr = S.trees.filter(t => t.s === 'tree' && !t.res).sort((a, c) => dist(a, b) - dist(c, b))[0];
     if (!tr || dist(tr, b) > 20) { p.doing = '벨 나무가 없어요'; p.steps.push(act(120, null)); return true; }
     tr.res = 1; const s = store();
-    p.steps.push(walk(tr.x + 0.4, tr.y + 0.2), act(55, () => { tr.s = 'stump'; tr.g = 3 * HOUR; tr.res = 0; p.carry = '통나무'; }, true),
+    p.steps.push(walk(tr.x + 0.4, tr.y + 0.2), act(55, () => { tr.s = 'stump'; tr.g = 3 * HOUR / (0.6 + wetness(tr.x, tr.y)); tr.res = 0; p.carry = '통나무'; }, true),
       walk(s.x + 0.8, s.y + 0.6), act(4, () => { S.stock['통나무']++; p.carry = null; }));
     return true;
   }
@@ -759,6 +787,7 @@ function findSpot(type) {
   const size = DEF[type].size;
   let cx = 0, cy = 0;
   if (type === '나무꾼' || type === '산림관') { const t = S.trees.filter(t => t.s === 'tree').sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (t) { cx = t.x * 0.85; cy = t.y * 0.85; } }
+  if (type === '농장') { let best = null, bv = 0; for (let k = 0; k < 200; k++) { const a = rnd() * Math.PI * 2, d = 3 + rnd() * 14; const x = Math.cos(a) * d, y = Math.sin(a) * d; const v = farmMult(x, y) - d * 0.02; if (v > bv && free(x, y, DEF[type].size)) { bv = v; best = {x, y}; } } if (best) { clearTrees(best.x, best.y, DEF[type].size); return best; } }
   if (type === '채석장') { const r = S.rocks.filter(r => r.amt > 0).sort((a, b) => Math.hypot(a.x, a.y) - Math.hypot(b.x, b.y))[0]; if (r) { cx = r.x * 0.8; cy = r.y * 0.8; } }
   for (let rad = 2; rad < R; rad += 0.8) for (let k = 0; k < 24; k++) {
     const a = k / 24 * Math.PI * 2 + rad;
@@ -773,9 +802,10 @@ function clearTrees(x, y, size) { S.trees = S.trees.filter(t => Math.hypot(t.x -
 function blessAll(d) { for (const p of alive()) p.belief = Math.min(1, (p.belief ?? 0.6) + d); }
 const doubters = () => alive().filter(p => p.belief < 0.3 && p.age >= 2.5);
 function naturalRain() {
-  S.rain = {x: 0, y: 0, t: 1800, natural: true}; S.humid -= 0.55;
+  const sh = Math.atan2(-LIGHT.y, -LIGHT.x);
+  S.rain = {x: Math.cos(sh) * R * 0.55, y: Math.sin(sh) * R * 0.55, t: 1800, natural: true}; S.humid -= 0.55;
   S.rainCount = (S.rainCount || 0) + 1;
-  if (S.rainCount === 1) log('새벽, 하늘이 울었다. 유리 천장에서 물방울이 떨어져 밭을 적셨다.');
+  if (S.rainCount === 1) log('새벽, 그늘진 동남쪽 하늘이 울었다. 차가운 유리 천장에서 물방울이 떨어졌다. 해 드는 서북쪽 들판은 오늘도 말라 있다.');
   else if (S.rainCount % 4 === 0) log('새벽 비가 내렸다. 세상 끝 벽을 타고 물이 흘러내려 시내가 불었다.');
   const d = doubters(); if (d.length && rnd() < 0.7) say(pick(d), '봐, 비는 그냥 내리는 거야', 6);
 }
@@ -812,6 +842,7 @@ function giantPlace(type, wx, wy) {
   const p = alive().filter(q => q.age >= 4 && !q.sleeping)[0];
   if (p) say(p, '거인님이 여기 지으라 하신다', 5);
   log(`땅에 빛나는 표시가 나타났다. 거인님이 ${type}${josa(type, '을', '를')} 지으라 하신다.`);
+  toast(`이 자리: ${climateText(wx, wy)}${type === '농장' ? ` · 농사 ×${farmMult(wx, wy).toFixed(1)}` : ''}`);
   return true;
 }
 function revelation() {
@@ -882,6 +913,7 @@ function skyColors(h) {
   return [keys[0][1], keys[0][2]];
 }
 function mix(a, b, f) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const r = (pa >> 16) + (((pb >> 16) - (pa >> 16)) * f), g = ((pa >> 8) & 255) + ((((pb >> 8) & 255) - ((pa >> 8) & 255)) * f), bl = (pa & 255) + (((pb & 255) - (pa & 255)) * f); return `rgb(${r | 0},${g | 0},${bl | 0})`; }
+function mixHex(a, b, f) { const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16); const c = [16, 8, 0].map(sh => Math.round(((pa >> sh) & 255) + ((((pb >> sh) & 255) - ((pa >> sh) & 255)) * f))); return '#' + c.map(v => v.toString(16).padStart(2, '0')).join(''); }
 function darkness(h) { if (h >= 7 && h < 18) return 0; if (h >= 22 || h < 5) return 0.55; if (h < 7) return 0.55 * (7 - h) / 2; return 0.55 * (h - 18) / 4; }
 
 function draw() {
@@ -901,13 +933,35 @@ function draw() {
   const ex = R * S.cam.z, ey = R * S.cam.z * TILT;
   ctx.fillStyle = '#6f8f4e'; ctx.beginPath(); ctx.ellipse(sx(0), sy(0) + 10, ex, ey, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#8fb26a'; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.fill();
+  // 기후 색: 창가 쪽은 햇볕에 바랜 연두, 그늘 쪽은 짙은 이끼색
+  ctx.save(); ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.clip();
+  const gc = 2 * R / 32;
+  if (!GROUND) GROUND = buildGround();
+  for (const g of GROUND) { ctx.fillStyle = g.c; ctx.fillRect(sx(g.x), sy(g.y), gc * S.cam.z + 1, gc * S.cam.z * TILT + 1); }
+  // 창가로 드는 빛
+  { const lx = sx(LIGHT.x * R), ly = sy(LIGHT.y * R); const rg = ctx.createRadialGradient(lx, ly, 0, lx, ly, R * S.cam.z * 1.1); rg.addColorStop(0, 'rgba(255,236,180,0.28)'); rg.addColorStop(1, 'rgba(255,236,180,0)'); ctx.fillStyle = rg; ctx.fillRect(0, 0, W, H); }
+  ctx.restore();
   // 세상의 끝 — 유리벽
   ctx.strokeStyle = 'rgba(220,240,250,0.85)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex, ey, 0, 0, Math.PI * 2); ctx.stroke();
   ctx.strokeStyle = 'rgba(220,240,250,0.25)'; ctx.lineWidth = 10; ctx.beginPath(); ctx.ellipse(sx(0), sy(0), ex - 5, ey - 3, 0, Math.PI, Math.PI * 2); ctx.stroke();
-  // 시내 (세상 끝에서 시작)
-  ctx.strokeStyle = '#6fa4c6'; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, S.cam.z * (S.rain && S.rain.natural ? 0.75 : 0.55));
-  ctx.beginPath(); S.river.forEach((r, i) => i ? ctx.lineTo(sx(r.x), sy(r.y)) : ctx.moveTo(sx(r.x), sy(r.y))); ctx.stroke();
-  { const r0 = S.river[0]; ctx.strokeStyle = 'rgba(220,240,250,0.9)'; ctx.lineWidth = 2; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(sx(r0.x) + i * 4, sy(r0.y) - 60); ctx.lineTo(sx(r0.x) + i * 4, sy(r0.y) - 4); ctx.stroke(); } }
+  // 시내 — 모두 그늘 쪽 유리벽에서 시작
+  for (const rv of S.rivers) {
+    ctx.strokeStyle = '#6fa4c6'; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, S.cam.z * (S.rain && S.rain.natural ? 0.7 : 0.5));
+    ctx.beginPath(); rv.forEach((r, i) => i ? ctx.lineTo(sx(r.x), sy(r.y)) : ctx.moveTo(sx(r.x), sy(r.y))); ctx.stroke();
+  }
+  // 차가운 유리벽을 타고 흘러내리는 물줄기와 물방울
+  { const now = performance.now() / 1000;
+    const shade = Math.atan2(-LIGHT.y, -LIGHT.x);
+    for (let k = -8; k <= 8; k++) {
+      const a = shade + k * 0.09, bx = sx(Math.cos(a) * R), by = sy(Math.sin(a) * R);
+      const src = S.rivers.some(rv => Math.hypot(rv[0].x - Math.cos(a) * R, rv[0].y - Math.sin(a) * R) < 2.2);
+      const hgt = 70 + (k * 37 % 30);
+      ctx.strokeStyle = src ? 'rgba(200,232,248,0.85)' : 'rgba(220,240,250,0.35)'; ctx.lineWidth = src ? 3 : 1.5;
+      ctx.beginPath(); ctx.moveTo(bx, by - hgt); ctx.lineTo(bx, by); ctx.stroke();
+      const dy = ((now * (src ? 40 : 18) + k * 13) % hgt);
+      ctx.fillStyle = 'rgba(235,248,255,0.95)'; ctx.beginPath(); ctx.arc(bx, by - hgt + dy, src ? 2.6 : 1.8, 0, Math.PI * 2); ctx.fill();
+    }
+  }
   // 오솔길
   const cell = (2 * R) / 128;
   for (let gy = 0; gy < 128; gy++) for (let gx = 0; gx < 128; gx++) {
@@ -937,7 +991,7 @@ function draw() {
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.f();
   // 비
-  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < 70; i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10 * (S.rain.natural ? 3.5 : 1); const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
+  if (S.rain) { ctx.strokeStyle = 'rgba(200,225,240,0.7)'; ctx.lineWidth = 1.2; for (let i = 0; i < (S.rain.natural ? 160 : 70); i++) { const a = (i * 2.4 + S.t * 3) % (Math.PI * 2), d = (i * 37 % 80) / 10 * (S.rain.natural ? 1.9 : 1); const x = sx(S.rain.x + Math.cos(a) * d), y = sy(S.rain.y + Math.sin(a) * d) - ((S.t * 90 + i * 23) % 120); ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 2, y + 9); ctx.stroke(); } }
   // 밤 어둠 + 불빛
   const dk = darkness(h);
   if (dk > 0) {
@@ -1023,6 +1077,16 @@ function roundRect(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.a
 
 // ───────────────────────── UI ─────────────────────────
 let buildPick = null, hoverW = null, selected = null, rainMode = false;
+let GROUND = null;
+function buildGround() {
+  const out = [], n = 32, c = 2 * R / n;
+  for (let j = 0; j < n; j++) for (let i = 0; i < n; i++) {
+    const x = -R + i * c, y = -R + j * c; if (Math.hypot(x + c / 2, y + c / 2) > R + 1) continue;
+    const w = warmth(x + c / 2, y + c / 2), m = wetness(x + c / 2, y + c / 2);
+    const base = mixHex('#6b9459', '#c2c070', w); out.push({x, y, c: mixHex(base, '#3f7352', Math.min(1, Math.max(0, m - 0.4) * 1.6))});
+  }
+  return out;
+}
 function renderHud() {
   document.getElementById('clock').textContent = `${fmtTime(S.t)} · ${partOfDay()}`;
   document.getElementById('eraName').textContent = ERAS[S.era];
@@ -1038,6 +1102,7 @@ function renderHud() {
   else if (S.firstHarvestAt === null) { const f = S.b.find(b => b.type === '농장' && b.built); hint = f ? `밀이 자라는 중… 첫 수확까지 ${Math.max(0, Math.ceil((f.readyAt - S.t) / 60))}분` : '농장을 짓는 중이에요.'; }
   else if (S.deficit > 0) hint = '창고가 비었어요! 농장을 더 지어주세요.';
   else hint = `주민들이 ${alive().filter(p => !p.sleeping).length}명 깨어 있어요. 사람을 누르면 무엇을 하는지 보여요.`;
+  if (buildPick && hoverW && Math.hypot(hoverW.x, hoverW.y) < R) hint = `${buildPick} 자리 — ${climateText(hoverW.x, hoverW.y)}${buildPick === '농장' ? ` · 농사 ×${farmMult(hoverW.x, hoverW.y).toFixed(1)}` : ''}`;
   const el = document.getElementById('hint');
   if (el.dataset.h !== hint) { el.innerHTML = hint; el.dataset.h = hint; const rb = document.getElementById('revBtn'); if (rb) rb.onclick = revelation; }
   document.getElementById('speedLbl').textContent = '×' + SPEEDS[S.speedIdx];
@@ -1059,7 +1124,7 @@ function renderPerson() {
   document.getElementById('pName').textContent = p.name;
   const job = p.job ? bld(p.job).type : (p.age < 4 ? '아이' : p.age >= 20 ? '노인 (은퇴)' : '일거리 찾는 중');
   const partner = p.partner ? person(p.partner)?.name : '—';
-  const rows = [['나이', `${Math.round(p.age * 2.4)}세`], ['특징', p.trait], ['', p.tdesc], ['직업', job], ['지금', p.doing], ['배우자', partner], ['집', p.home ? bld(p.home).type : '없음 (모닥불)'], ['믿음', p.belief < 0.3 ? '거인을 믿지 않음' : p.belief < 0.6 ? '반신반의' : '거인님을 믿음'], ['배고픔', p.hunger < 0.5 ? '배부름' : p.hunger < 2 ? '조금 출출' : '굶주림'], ['건강', Math.round(p.health * 100) + '%']];
+  const rows = [['나이', `${Math.round(p.age * 2.4)}세`], ['특징', p.trait], ['', p.tdesc], ['직업', job], ['지금', p.doing], ['배우자', partner], ['집', p.home ? bld(p.home).type : '없음 (모닥불)'], ['여기 날씨', climateText(p.x, p.y)], ['믿음', p.belief < 0.3 ? '거인을 믿지 않음' : p.belief < 0.6 ? '반신반의' : '거인님을 믿음'], ['배고픔', p.hunger < 0.5 ? '배부름' : p.hunger < 2 ? '조금 출출' : '굶주림'], ['건강', Math.round(p.health * 100) + '%']];
   document.getElementById('pInfo').innerHTML = rows.map(([k, v]) => `<span>${k}</span><b>${esc(String(v))}</b>`).join('');
 }
 function setPressed(id, v) { document.getElementById(id).setAttribute('aria-pressed', v ? 'true' : 'false'); }
@@ -1115,7 +1180,7 @@ function frame(now) {
 }
 function start(data) {
   newWorld();
-  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.river) d.river = S.river; S = d; } catch (e) { newWorld(); } }
+  if (data && data.S) { try { const d = data.S; d.paths = new Float32Array(d.paths); for (const q of d.p) if (q.belief === undefined) q.belief = 0.6; if (!d.rivers || !d.rivers.length) { d.rivers = S.rivers; d.river = S.river; d.pond = S.pond; } S = d; GROUND = null; } catch (e) { newWorld(); } }
   resize(); window.addEventListener('resize', () => { resize(); });
   renderHud(); renderBuild();
   requestAnimationFrame(frame);
