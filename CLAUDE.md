@@ -2,7 +2,7 @@
 
 이 저장소는 모바일 게임 **나의 작은 지구 (나작지)**의 기획 + 개발 저장소다.
 
-- **유니티 개발을 하러 왔다면**: [`docs/UNITY_KICKOFF.md`](docs/UNITY_KICKOFF.md)를 먼저 읽고 그 순서대로 진행한다.
+- **개발(Godot)을 하러 왔다면**: [`docs/GODOT_KICKOFF.md`](docs/GODOT_KICKOFF.md)를 먼저 읽고 그 순서대로 진행한다. 클라우드 세션에서도 고도를 받아 실행·캡처할 수 있다 (안내 0장).
 - **기획 작업이라면**: [`docs/HANDOFF.md`](docs/HANDOFF.md)에서 현재 상황을 본다.
 - 기준 문서는 [`docs/GAME_DESIGN.md`](docs/GAME_DESIGN.md). 문서와 코드가 다르면 기획서가 맞다.
 - 저장소 구조와 콘셉트 아트(Codex) 작업 규칙은 [`AGENTS.md`](AGENTS.md).

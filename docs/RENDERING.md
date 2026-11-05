@@ -1,7 +1,7 @@
 # 나의 작은 지구 — 렌더링 명세: 3D를 도트처럼 (v1)
 
 > 기획서 [16장 아트](GAME_DESIGN.md)·[18장 기술](GAME_DESIGN.md)의 상세. 그림체 기준: [`design/concept/style-test/`](../design/concept/style-test/) (`mid_scene`, `mid_jar`, `mid_variety`, `mid_family`).
-> **세계는 진짜 3D다. 화면에는 90년대 PC 전략 게임의 도트 그림처럼 보인다.**
+> **세계는 진짜 3D다. 화면에는 90년대 PC 전략 게임의 도트 그림처럼 보인다.** (엔진: Godot 4)
 
 ---
 
@@ -92,10 +92,12 @@
 - 물·소금 지도는 64×64(소형 병)~200×200(수조) 텍스처 → 매 프레임 그대로 올려도 가볍다.
 - 그림자는 실시간 그림자 대신 **도트 원형 그림자**(물체 밑 어두운 타원).
 
-## 6. 엔진
+## 6. 엔진 — Godot 4
 
-- **Unity 6 + URP 유지.** 필요한 기능이 기본으로 있다: 렌더 텍스처, 정사영 카메라, 셰이더 그래프(팔레트 맞추기·외곽선·디더링), 픽셀 퍼펙트 카메라 패키지 참고 가능.
-- 3D 모델 제작: Blender 또는 Blockbench (로우폴리 + 작은 텍스처에 적합).
+- **Godot 4 (GDScript).** 필요한 기능이 기본으로 있다: `SubViewport`(낮은 해상도 렌더) + 정수배 확대, 정사영 `Camera3D`, 화면 셰이더(팔레트 맞추기·외곽선·디더링), 텍스처 Nearest 필터.
+- 렌더러: 휴대폰은 **Mobile**, 클라우드 세션의 캡처 확인은 **Compatibility**(소프트웨어 렌더링). 두 렌더러에서 같게 보이도록 셰이더는 단순하게.
+- 3D 모델 제작: Blender 또는 Blockbench → glTF(.glb)로 가져오기.
+- 시작 안내: [GODOT_KICKOFF.md](GODOT_KICKOFF.md)
 
 ## 7. 다음 단계
 
