@@ -1,6 +1,6 @@
-# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v1)
+# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v2 — 기획서 v3.0 기준)
 
-> 기획서에서 **확정된 내용만** 그림으로 옮기기 위한 프롬프트. 이미지 생성 AI(Midjourney, DALL·E, Stable Diffusion, Imagen 등)에 그대로 붙여 넣어 쓴다.
+> [기획서 v3.0](GAME_DESIGN.md)에서 **확정된 내용만** 그림으로 옮기기 위한 프롬프트. 그림이 기획서와 다르면 **기획서가 맞다** (특히 4장 '병의 자연'). 이미지 생성 AI(Midjourney, DALL·E, Stable Diffusion, Imagen 등)에 그대로 붙여 넣어 쓴다.
 > 영어 프롬프트가 대부분의 모델에서 결과가 안정적이라 영어로 쓰고, 각 장면에 한국어 설명을 붙였다.
 > 모든 프롬프트는 맨 앞에 **[공통 스타일]**을 붙여서 쓴다 → 그림들이 한 게임처럼 보인다.
 
@@ -27,6 +27,8 @@ sea, ocean, beach, waves
 - 바다는 없다 → 항상 *no sea* 유지. 물은 호수·강·물방울뿐.
 - 주민은 **중세 유럽풍 평민 복식, 사실적인 비율**의 작은 사람.
 - 빛은 항상 **한쪽(거인의 창가)**에서 들어온다.
+- 땅은 평평한 원반이지만 **완만한 언덕·골짜기·분지**가 있다 (높낮이 있음).
+- 물방울은 **뚜껑 안쪽 돌기**에서만, 강은 **유리벽을 타고 흘러내린 물**에서만 시작한다. 호수에서 강이 흘러나가지 않는다. 넓게 내리는 비는 '거인의 물 뿌리기'뿐이다.
 
 | 용도 | 비율 |
 |---|---|
@@ -42,8 +44,9 @@ sea, ocean, beach, waves
 *나무 선반 위 메이슨 자 하나. 옆면으로 땅속 단면(핵·암반·광맥)이 보이고, 위쪽엔 작은 중세 마을. 창가에서 빛이 비스듬히 들어온다.*
 ```
 a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval
-village on a flat round land with forests and a small lake, the jar's side shows a cross-section
-of soil layers, grey and black rock layers, a glowing red core at the bottom center, condensation
+village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a
+cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny
+miner's tunnel, a glowing red core at the bottom center, condensation
 on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from
 the left window, dust motes, 9:16
 ```
@@ -87,6 +90,8 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 | 3-5 | **소금의 발견** — 아이가 하얀 흙을 찍어 맛봄 | `a small medieval village girl kneeling on a white salt flat, touching the white ground with her finger and tasting it, surprised face, other villagers walking toward her, white crystals sparkling, warm light, 3:2` |
 | 3-6 | **병 돌리기** — 해가 하늘을 건너감 | `a giant hand gently turning a glass terrarium jar on a shelf, inside the tiny world the sunlight sweeps across the land, villagers looking up in awe, light shifting from one side to the other, 9:16` |
 | 3-7 | **하늘 낟알** — 첫 수확 전, 새벽 들판의 흰 낟알 | `dawn in a tiny medieval world, white grains scattered on the meadow like dew, villagers with baskets gathering them, a child shouting with joy, soft pink morning light through the glass dome, 16:9` |
+| 3-9 | **넘치는 호수와 새 강** — 지형을 따라 물이 흘러 고이고, 가득 찬 분지가 넘쳐 새 물길이 열림 | `top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces, 16:9` |
+| 3-10 | **땅속 단면** — 병 옆면으로 보이는 핵·암반·광맥·암염·광부의 굴 | `side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style, 9:16` |
 | 3-8 | **거인의 물 뿌리기 (기적)** | `sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth, 16:9` |
 
 ---

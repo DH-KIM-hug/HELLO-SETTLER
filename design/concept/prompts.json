@@ -1,16 +1,16 @@
 {
  "style": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition",
  "negative": "text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors, oversaturated, chibi, anime big eyes, photorealistic humans close-up, fantasy elves, dragons, sea, ocean, beach, waves",
- "count": 33,
+ "count": 35,
  "items": [
   {
    "id": "1-1",
    "title": "병 시점 — 선반 위의 세상",
    "desc": "나무 선반 위 메이슨 자 하나. 옆면으로 땅속 단면(핵·암반·광맥)이 보이고, 위쪽엔 작은 중세 마을. 창가에서 빛이 비스듬히 들어온다.",
-   "prompt": "a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes",
+   "prompt": "a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny miner's tunnel, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes",
    "aspect": "9:16",
    "file": "design/concept/1-1.png",
-   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes"
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, a glass mason jar terrarium standing on a wooden shelf by a window, inside it a tiny medieval village on a flat round land with gentle hills, forests and a small lake, the jar's side shows a cross-section of soil layers, grey and black rock layers with a seam of white salt rock, a tiny miner's tunnel, a glowing red core at the bottom center, condensation on the inner glass, two large water droplets hanging from bumps under the lid, warm sunlight from the left window, dust motes"
   },
   {
    "id": "1-2",
@@ -173,6 +173,24 @@
    "aspect": "16:9",
    "file": "design/concept/3-8.png",
    "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, sudden water pouring from the bright sky dome onto a dry field at noon, villagers kneeling in awe, rainbow mist, a doubtful child staring with an open mouth"
+  },
+  {
+   "id": "3-9",
+   "title": "넘치는 호수와 새 강",
+   "desc": "지형을 따라 물이 흘러 고이고, 가득 찬 분지가 넘쳐 새 물길이 열림",
+   "prompt": "top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces",
+   "aspect": "16:9",
+   "file": "design/concept/3-9.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, top-down three-quarter view of a terrarium world with gentle hills and valleys, water flowing downhill from the glass wall into a basin, the basin full and spilling over its lowest rim to carve a new small stream, freshly wet soil, villagers watching from a hill, contour-like terraces"
+  },
+  {
+   "id": "3-10",
+   "title": "땅속 단면",
+   "desc": "병 옆면으로 보이는 핵·암반·광맥·암염·광부의 굴",
+   "prompt": "side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style",
+   "aspect": "9:16",
+   "file": "design/concept/3-10.png",
+   "full_prompt": "cozy miniature diorama, low-poly 3D with soft hand-painted textures, tilt-shift depth of field, warm natural window light, gentle glass refraction and condensation, muted earthy palette (moss green, cream, soil brown, evening amber), small medieval European villagers with realistic proportions (not chibi), calm and healing mood, high detail, clean composition, side cross-section through the glass of a terrarium: topsoil with grass and tiny houses on top, below that brown soil, grey iron-bearing rock, black coal seam, a thin glittering gold vein, a white rock-salt seam, a tiny miner with a lantern in a tunnel, a glowing red core at the very bottom, educational diorama style"
   },
   {
    "id": "4-1",
