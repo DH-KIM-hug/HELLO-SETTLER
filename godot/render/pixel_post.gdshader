@@ -1,19 +1,20 @@
 // 도트 마무리 — RENDERING.md 2.3 색 · 2.4 외곽선
 // 화면 전체를 덮는 사각형에 붙인다. 3D가 다 그려진 뒤의 화면을 읽어서:
 //   1) 깊이가 갑자기 멀어지는 곳(물체의 가장자리)에 1픽셀 선 — 색은 그 물체 색을 어둡게
-//   2) 4×4 디더링 점무늬를 섞어 팔레트(48색)의 가장 가까운 색으로 맞춘다
+//   2) 4×4 디더링 점무늬를 섞어 팔레트(data/palette.json, 지금 64색)의 가장 가까운 색으로 맞춘다
 shader_type spatial;
 render_mode unshaded, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled, shadows_disabled;
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 uniform sampler2D palette_tex : filter_nearest;   // 팔레트 색 N×1 (sRGB)
-uniform int palette_size = 48;
+uniform int palette_size = 64;          // render/pixel_post.gd가 palette.json의 count로 넣는다
 uniform bool use_palette = true;
 uniform bool use_outline = true;
 uniform float dither_strength : hint_range(0.0, 0.3) = 0.07;
 uniform float outline_gap = 0.9;      // 이웃 픽셀이 이만큼(세계 단위) 더 멀면 가장자리
 uniform float outline_dark : hint_range(0.0, 1.0) = 0.55;
+uniform float glint_min = 0.62;       // 선형 색 — #ebe5db·#fffbea 같은 유리 하이라이트
 
 void vertex() {
 	// 카메라 바로 앞 화면 전체 (4.3+ 역방향 깊이: 1.0 = 가장 가까움)
@@ -52,7 +53,9 @@ void fragment() {
 		far_gap = max(far_gap, view_depth(uv - vec2(px.x, 0.0), INV_PROJECTION_MATRIX) - d);
 		far_gap = max(far_gap, view_depth(uv + vec2(0.0, px.y), INV_PROJECTION_MATRIX) - d);
 		far_gap = max(far_gap, view_depth(uv - vec2(0.0, px.y), INV_PROJECTION_MATRIX) - d);
-		if (far_gap > outline_gap) {
+		// 유리 하이라이트처럼 아주 밝은 흰 줄(모든 채널이 glint_min 이상)에는 선을 넣지 않는다
+		bool glint = min(col.r, min(col.g, col.b)) > glint_min;
+		if (far_gap > outline_gap && !glint) {
 			col *= outline_dark;   // 검정이 아니라 그 물체 색의 어두운 버전
 		}
 	}

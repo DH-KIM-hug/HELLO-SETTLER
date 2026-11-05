@@ -25,9 +25,9 @@ const TUNICS: Array[Color] = [Color("3f5f9a"), Color("9a3f36"), Color("4f7a3a"),
 const HAIRS: Array[Color] = [Color("3a2a1e"), Color("6e4a2c"), Color("d8b860"), Color("a8502e"), Color("9a9a96")]
 
 var cam: JarCamera
-var post: MeshInstance3D
 var post_mat: ShaderMaterial
 var ui_label: Label
+var glass: JarGlass
 var _drag := false
 
 
@@ -189,24 +189,9 @@ func _build_lake() -> void:
 
 
 func _build_glass() -> void:
-	# 세상 끝 유리벽 — 옅은 빛 띠 (RENDERING.md 2.8)
-	var wall := CylinderMesh.new()
-	wall.top_radius = R + 0.3
-	wall.bottom_radius = R + 0.3
-	wall.height = 7.0
-	wall.radial_segments = 64
-	wall.cap_top = false
-	wall.cap_bottom = false
-	var mi := MeshInstance3D.new()
-	mi.mesh = wall
-	mi.position = Vector3(0, 3.0, 0)
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	m.albedo_color = Color(0.85, 0.93, 1.0, 0.10)
-	m.cull_mode = BaseMaterial3D.CULL_FRONT          # 카메라 반대편 벽만 보인다
-	mi.material_override = m
-	add_child(mi)
+	# 세상 끝 유리벽 — 빛나는 픽셀 줄 (RENDERING.md 2.8, view/jar_glass.gd)
+	glass = JarGlass.new(R + 0.05, func(x: float, z: float) -> float: return height_at(x, z) + 0.05, 6.5)
+	add_child(glass)
 
 
 # ───────────────────────── 물체 ─────────────────────────
@@ -321,24 +306,7 @@ func _setup_camera() -> void:
 
 
 func _setup_post() -> void:
-	var img := Image.create(64, 1, false, Image.FORMAT_RGB8)
-	var data: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/palette.json"))
-	var cols: Array = data["colors"]
-	for i in cols.size():
-		img.set_pixel(i, 0, Color(cols[i]["hex"]))
-	post_mat = ShaderMaterial.new()
-	post_mat.shader = load("res://render/pixel_post.gdshader")
-	post_mat.set_shader_parameter("palette_tex", ImageTexture.create_from_image(img))
-	post_mat.set_shader_parameter("palette_size", cols.size())
-	var q := QuadMesh.new()
-	q.size = Vector2(2, 2)
-	post = MeshInstance3D.new()
-	post.mesh = q
-	post.material_override = post_mat
-	post.extra_cull_margin = 16384.0
-	post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	cam.camera.add_child(post)
-	post.position = Vector3(0, 0, -2)
+	post_mat = PixelPost.attach(cam.camera)
 
 
 func set_pixel_effects(on: bool) -> void:
@@ -380,6 +348,8 @@ func _setup_ui() -> void:
 
 
 func _process(_dt: float) -> void:
+	if glass and cam:
+		glass.set_units_per_pixel(cam.units_per_pixel())
 	if ui_label:
 		ui_label.text = "도트 시험 장면 · 병 방향 %d · 1칸 = %d픽셀 · %d fps" % [cam.quarter * 90, JarCamera.ZOOM_PPU[cam.zoom_i], Engine.get_frames_per_second()]
 
