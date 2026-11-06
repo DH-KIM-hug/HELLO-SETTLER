@@ -31,7 +31,7 @@ func _init() -> void:
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.add_theme_color_override("font_color", UiTheme.PARCHMENT)
 	label.add_theme_font_override("font", UiTheme.hand_font())
-	label.add_theme_font_size_override("font_size", 12)
+	label.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
 	add_child(label)
 
 

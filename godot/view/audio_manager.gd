@@ -108,11 +108,11 @@ static func get_instance() -> GameAudio:
 	return _inst if is_instance_valid(_inst) else null
 
 
-## 효과음 하나 — bus: Room(거인) · Village(마을). at = 마을 소리의 자리 (거리만큼 작아짐)
-static func fx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null) -> void:
+## 효과음 하나 — bus: Room(거인) · Village(마을). at = 마을 소리의 자리 (거리만큼 작아짐). pitch > 0 = 그 음높이로 (없으면 ±6% 흔들림)
+static func fx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null, pitch := 0.0) -> void:
 	var a := get_instance()
 	if a != null:
-		a.play_sfx(id, bus, vol_db, at)
+		a.play_sfx(id, bus, vol_db, at, pitch)
 
 
 ## 주민 목소리 — who가 비면 화면 안 주민 가운데서 고른다
@@ -404,7 +404,7 @@ func sfx_allowed(id: String, t := -1.0) -> bool:
 	return true
 
 
-func play_sfx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null) -> void:
+func play_sfx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null, pitch := 0.0) -> void:
 	if at != null:
 		var d := (at as Vector2).distance_to(listener)
 		if d > HEAR_R:
@@ -419,7 +419,10 @@ func play_sfx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null) -> v
 	p.stream = s
 	p.bus = bus
 	p.volume_db = vol_db
-	p.pitch_scale = tap_note() if id == "glass_tap_light" else rng.randf_range(0.94, 1.06)
+	if pitch > 0.0:
+		p.pitch_scale = pitch * rng.randf_range(0.98, 1.02)
+	else:
+		p.pitch_scale = tap_note() if id == "glass_tap_light" else rng.randf_range(0.94, 1.06)
 	_play(p)
 
 
@@ -554,7 +557,7 @@ func _snapshot(v: Village) -> Dictionary:
 	return {"lid": v.air != null and v.air.lid_open, "phase": v.mold.phase if v.mold != null else "calm",
 		"wild": wild, "flee": fleeing, "groves": int(v.flora.stats["groves"]) if v.flora != null else 0,
 		"letters": v.letters.size(), "married": int(v.stats["marriages"]), "born": int(v.stats["born"]),
-		"fest": v.festival_t, "sick": sick, "hungry": hungry}
+		"fest": v.festival_t, "sick": sick, "hungry": hungry, "funerals": int(v.stats.get("funerals", 0))}
 
 
 func _watch_village(dt: float) -> void:
@@ -589,6 +592,8 @@ func _watch_village(dt: float) -> void:
 		fx("bell", "Village", -2.0)
 		festival()
 		say("wedding")
+	if int(s["funerals"]) > int(o["funerals"]) and not fast():
+		fx("funeral", "Village", -4.0)       # 장례: 아주 작고 낮은 종 한 번 (A17)
 	if int(s["born"]) > int(o["born"]):
 		say("baby", _filter(func(r: Resident) -> bool: return r.sex == "f" and r.is_adult()))
 	if float(s["fest"]) != float(o["fest"]):

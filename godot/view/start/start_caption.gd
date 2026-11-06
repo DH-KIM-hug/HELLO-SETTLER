@@ -24,10 +24,10 @@ func _init() -> void:
 	label = Label.new()
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	label.add_theme_font_override("font", UiTheme.font())
-	label.add_theme_font_size_override("font_size", 11)
+	label.add_theme_font_override("font", UiTheme.hand_font())          # 화자 자막 = 손글씨 (UI.md 글꼴: 창조 자막)
+	label.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
 	label.add_theme_color_override("font_color", UiTheme.INK)
-	label.add_theme_constant_override("line_spacing", 3)
+	label.add_theme_constant_override("line_spacing", 0)
 	add_child(label)
 
 

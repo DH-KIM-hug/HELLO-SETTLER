@@ -104,7 +104,8 @@ func build(root: Control) -> void:
 	hint_text = Label.new()
 	hint_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	hint_text.custom_minimum_size = Vector2(300, 0)          # 자동 줄바꿈 글의 최소 높이가 한 글자씩 접혀 커지지 않게
-	hint_text.add_theme_font_override("font", UiTheme.hand_font())
+	hint_text.add_theme_font_override("font", UiTheme.hand_font())          # 노인의 귀띔 = 손글씨
+	hint_text.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
 	hc.add_child(hint_text)
 	var hr := HBoxContainer.new()
 	hc.add_child(hr)
@@ -246,6 +247,7 @@ func confirm() -> void:
 		return
 	var dir := int(pv["to"])
 	close_all()
+	GameAudio.fx("lamp_move", "Room", -4.0)          # 거인이 등불을 옮김 — 따뜻한 '쉭' + 불꽃 일렁임 (A17)
 	sc.lamp_apply(dir)
 
 

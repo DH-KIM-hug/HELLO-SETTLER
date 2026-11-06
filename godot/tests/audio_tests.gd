@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 소리·음악 (AUDIO.md)")
-	run.timed(self, ["test_tracks", "test_voices", "test_line_cooldown", "test_sfx_thinning", "test_settings_buses", "test_muffle"])
+	run.timed(self, ["test_tracks", "test_voices", "test_line_cooldown", "test_sfx_thinning", "test_settings_buses", "test_muffle", "test_sfx_files", "test_waterfall_sound"])
 
 
 func _person(age_frac: String, sex: String, id: int) -> Resident:
@@ -188,3 +188,42 @@ func test_muffle() -> void:
 	check(a._muffle == 0.0, "0.5초 뒤 다 열림")
 	GameAudio.apply_muffle(0.0)
 	a.free()
+
+
+## 코드가 부르는 효과음 id가 모두 파일로 있음 (A17) — view·sim의 fx("…") · play_sfx("…") · 배경 고리 · 폭포 소리
+func test_sfx_files() -> void:
+	var ids := {}
+	var re := RegEx.create_from_string("(?:\\bfx|play_sfx)\\(\"([a-z0-9_]+)\"")
+	var files: Array = []
+	for d: String in ["res://view", "res://sim"]:
+		_gd_files(d, files)
+	for f: String in files:
+		var src := FileAccess.get_file_as_string(f)
+		for m in re.search_all(src):
+			ids[m.get_string(1)] = f
+	for id: String in GameAudio.AMBIENT_LOOPS:
+		ids[id] = "AMBIENT_LOOPS"
+	ids[Waterfalls.SFX_ID] = "Waterfalls.SFX_ID"
+	var missing: Array = []
+	for id: String in ids:
+		if not ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3"):
+			missing.append("%s (%s)" % [id, String(ids[id]).get_file()])
+	check(ids.size() >= 30 and missing.is_empty(), "코드가 부르는 효과음 %d가지가 모두 파일로 있음 %s" % [ids.size(), str(missing)])
+	for id: String in ["fly_whoosh", "waterfall", "core_hum", "soil_pour", "box_open", "lamp_move", "chapel_bell", "funeral"]:
+		check(id in ids, "A17 효과음 '%s'를 어딘가에서 부름" % id)
+
+
+func _gd_files(dir: String, out: Array) -> void:
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_gd_files(dir.path_join(d), out)
+
+
+## 폭포 물소리: 이음매 없는 고리 파일 · 멀리 물러날수록 작게
+func test_waterfall_sound() -> void:
+	var s := load(GameAudio.SFX_DIR + Waterfalls.SFX_ID + ".mp3") as AudioStreamMP3
+	check(s != null and s.get_length() > 4.0 and s.get_length() < 15.0, "폭포 소리 고리 4~15초 (%.2f초)" % (s.get_length() if s != null else 0.0))
+	check(Waterfalls.hear_zoom(16.0) == 1.0 and Waterfalls.hear_zoom(3.0) < 0.6 and Waterfalls.hear_zoom(0.4) <= 0.2
+		and Waterfalls.hear_zoom(3.0) > Waterfalls.hear_zoom(0.4), "폭포 소리: 기본 확대 그대로 · 멀리 물러날수록 작게")

@@ -187,10 +187,10 @@ func _fill_letter() -> void:
 		lamp.modulate.a = 0.0
 		create_tween().tween_property(lamp, "modulate:a", 1.0, 0.8)
 	_rule()
-	_label("거인님께,")
-	_label("자리를 비우신 동안 이런 일이 있었어요.")
+	_label("거인님께,", "Hand")                      # 촌장이 쓴 편지 = 손글씨
+	_label("자리를 비우신 동안 이런 일이 있었어요.", "Hand")
 	for e: String in data.get("events", []):
-		_label("· " + e)
+		_label("· " + e, "Hand")
 	var p0 := int(data.get("pop0", 0))
 	var p1 := int(data.get("pop1", 0))
 	var pl := _label("우리는 %d명 → %d명이 되었어요." % [p0, p1], "Section")
@@ -218,12 +218,12 @@ func _fill_letter() -> void:
 		if altar_line != "":
 			_altar_row(altar_line)
 		for w: String in waiting:
-			_label("· " + w)
+			_label("· " + w, "Hand")
 	if data.get("long", false):
-		_label("오래 비우셔서, 거인님 이야기를 옛날이야기로 여기는 아이들도 생겼어요.")
+		_label("오래 비우셔서, 거인님 이야기를 옛날이야기로 여기는 아이들도 생겼어요.", "Hand")
 	elif data.get("festival", false):
-		_label("모두 광장에 모여 거인님을 기다리고 있어요!")
-	var sign := _label("— 촌장 %s 올림" % String(data.get("chief", "")))
+		_label("모두 광장에 모여 거인님을 기다리고 있어요!", "Hand")
+	var sign := _label("— 촌장 %s 올림" % String(data.get("chief", "")), "Hand")
 	sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 
 

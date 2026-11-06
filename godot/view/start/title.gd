@@ -88,10 +88,10 @@ func _build_ui() -> void:
 		tr.custom_minimum_size = Vector2(196, 144)
 		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		title_box.add_child(tr)
-	title_l = _label("나의 작은 지구", 33, true, ink, shadow)
+	title_l = _label("나의 작은 지구", UiTheme.SIZE_BIG + 8, true, ink, shadow)
 	title_l.visible = logo_tex == null
 	title_box.add_child(title_l)
-	sub_l = _label("유리병 속 작은 세상", 11, false, ink.lerp(Color(0.5, 0.45, 0.4) if not night else Color(0.8, 0.8, 0.9), 0.35), shadow)
+	sub_l = _label("유리병 속 작은 세상", UiTheme.SIZE, false, ink.lerp(Color(0.5, 0.45, 0.4) if not night else Color(0.8, 0.8, 0.9), 0.35), shadow)
 	title_box.add_child(sub_l)
 	# 큰 버튼 + 마지막으로 본 지구
 	button = Button.new()
@@ -99,7 +99,7 @@ func _build_ui() -> void:
 	button.focus_mode = Control.FOCUS_NONE
 	button.custom_minimum_size = Vector2(216, 54)
 	button.add_theme_font_override("font", UiTheme.font(true))
-	button.add_theme_font_size_override("font_size", 22)
+	button.add_theme_font_size_override("font_size", UiTheme.SIZE_TITLE)
 	for st: Array in [["normal", UiTheme.PRIMARY], ["hover", UiTheme.PRIMARY.lightened(0.08)], ["pressed", UiTheme.PRIMARY.darkened(0.15)], ["focus", UiTheme.PRIMARY]]:
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = st[1]
@@ -118,14 +118,13 @@ func _build_ui() -> void:
 	button.pressed.connect(func() -> void: GameAudio.fx("glass_tap_light", "Room", -2.0))
 	button.pressed.connect(enter)
 	ui.add_child(button)
-	save_line = _label(String(info["sub"]), 11, false, ink, shadow)
+	save_line = _label(String(info["sub"]), UiTheme.SIZE, false, ink, shadow)
 	save_line.visible = String(info["sub"]) != ""
 	ui.add_child(save_line)
 	# 구석: 톱니 · 버전
 	gear = _gear_button(ink)
 	ui.add_child(gear)
-	version_l = _label("v" + String(ProjectSettings.get_setting("application/config/version", "0.1.0")), 9, false, Color(ink, 0.6), Color(0, 0, 0, 0))
-	version_l.add_theme_font_override("font", load(UiTheme.FONT_SMALL))
+	version_l = _label("v" + String(ProjectSettings.get_setting("application/config/version", "0.1.0")), UiTheme.SIZE_SMALL - 1, false, Color(ink, 0.6), Color(0, 0, 0, 0))
 	ui.add_child(version_l)
 
 
@@ -134,7 +133,7 @@ func _label(text: String, px: int, bold: bool, col: Color, shadow: Color) -> Lab
 	l.text = text
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	l.add_theme_font_override("font", UiTheme.font(bold))
+	l.add_theme_font_override("font", UiTheme.title_font() if px > 20 else UiTheme.font(bold))   # 큰 제목 = 주아
 	l.add_theme_font_size_override("font_size", px)
 	l.add_theme_color_override("font_color", col)
 	l.add_theme_color_override("font_shadow_color", shadow)

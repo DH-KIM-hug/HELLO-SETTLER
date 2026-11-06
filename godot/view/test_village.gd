@@ -1,6 +1,6 @@
 ## 마을 장면 (3단계 주민 → 4단계 셀 채색 그림체, docs/RENDERING.md v2)
 ## 2단계 땅·물(JarTerrain) 위에서 첫 정착민 열 명이 살아간다: sim/village.gd(Village)를 돌리고 view/village_view.gd로 그린다.
-## 주민은 부품 조합 모델(view/resident_model.gd), 동작은 부드럽게. 말풍선은 화면 위 글자(갈무리).
+## 주민은 부품 조합 모델(view/resident_model.gd), 동작은 부드럽게. 말풍선은 화면 위 손글씨 (UiTheme.hand_font).
 ## 그림: 공용 툰 셰이더(render/toon.gd) + 그림자 맵 한 단계 + 깊이 외곽선·밤 색·화면 유리 곡선(render/outline_post.gd). 색은 data/style.gd.
 ## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
 ## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
@@ -581,7 +581,7 @@ func _setup_ui() -> void:
 	speed_btn = Button.new()
 	speed_btn.focus_mode = Control.FOCUS_NONE
 	speed_btn.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
-	speed_btn.add_theme_font_size_override("font_size", 11)
+	speed_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 	GameIcons.button_icon(speed_btn, "속도", 22)
 	speed_btn.expand_icon = false           # 아이콘 폭이 최소 크기에 들어가게 (칩은 글자 폭만큼)
 	speed_btn.button_down.connect(func() -> void:
@@ -604,7 +604,7 @@ func _setup_ui() -> void:
 			clock.set_speed(i)
 			speed_list.visible = false)
 		sb.custom_minimum_size = Vector2(40, UiTheme.TOUCH)
-		sb.add_theme_font_size_override("font_size", 11)
+		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 	# 거인의 손 칸 (뚜껑 · 불기 · 등불 + 손에 든 것) · 떨어뜨릴 자리 띠
 	hand_ctl = GiantHandCtl.new(self)
 	add_child(hand_ctl)
@@ -782,8 +782,7 @@ func lamp_light_shown() -> Vector2:
 
 ## [옮기기]
 func lamp_apply(dir: int) -> void:
-	village.move_lamp(dir)
-	GameAudio.fx("jar_turn")
+	village.move_lamp(dir)                # 소리(lamp_move)는 LampCtl.confirm
 	refresh()
 
 
@@ -830,7 +829,7 @@ func _tool_button(parent: Node, text: String, icon: String, on_press: Callable) 
 	b.custom_minimum_size = Vector2(UiTheme.TOUCH, 54)
 	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
-	b.add_theme_font_size_override("font_size", 10)
+	b.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)
 	b.add_theme_constant_override("h_separation", 0)
 	GameIcons.button_icon(b, icon, 30)
 	tool_btns.append(b)
@@ -1214,16 +1213,23 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 			continue
 		var l := Label.new()
 		l.text = r.say
-		l.add_theme_font_size_override("font_size", 11)
+		l.add_theme_font_override("font", UiTheme.hand_font())          # 주민의 말 = 손글씨
+		l.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)
+		l.add_theme_constant_override("line_spacing", 0)
 		l.add_theme_color_override("font_color", Color("252122"))
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color("fffbea")
 		sb.border_color = Color("252122")
 		sb.set_border_width_all(1)
-		sb.set_content_margin_all(2)
+		sb.set_corner_radius_all(6)
+		sb.content_margin_left = 5
+		sb.content_margin_right = 5
+		sb.content_margin_top = 0
+		sb.content_margin_bottom = 1
 		l.add_theme_stylebox_override("normal", sb)
 		bubbles.add_child(l)
-		l.position = Vector2(roundf(p.x - l.get_minimum_size().x * 0.5), roundf(p.y - 16))
+		var ms := l.get_minimum_size()
+		l.position = Vector2(roundf(p.x - ms.x * 0.5), roundf(p.y - ms.y - 2.0))
 		shown += 1
 	return shown
 
@@ -1468,15 +1474,16 @@ func _on_drop_landed(p: Vector3) -> void:
 
 
 ## 배속(빨리 돌리기 → 목소리 끔·효과음 줄임) · 병 밖 시점(축소 → 마을 소리 먹먹하게) · 듣는 자리
-## 교회 종 (저녁 기도·혼례 — Village.bell_t가 바뀌면 한 번)
+## 교회 종 (저녁 기도·혼례 — Village.bell_t가 바뀌면 한 번). 저녁 기도 = 멀리서 들리는 작은 예배당 종 (chapel_bell, A17) ·
+## 혼례 = 밝은 종 (bell — 혼례 소리는 GameAudio가 '혼인 수'를 보고 이미 내므로 여기선 저녁 종만)
 func _bells() -> void:
 	for vv: Array in village_views():
 		var q: Village = vv[0]
 		if q.bell_t > float(_bell_seen.get(q, -1.0e9)):
 			var first := not _bell_seen.has(q)
 			_bell_seen[q] = q.bell_t
-			if not first and q.t - q.bell_t < 600.0:
-				GameAudio.fx("bell", "Village", -6.0)
+			if not first and q.t - q.bell_t < 600.0 and q.wedding_t != q.bell_t:
+				GameAudio.fx("chapel_bell", "Village", -4.0)
 
 
 func _update_audio() -> void:

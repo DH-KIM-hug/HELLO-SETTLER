@@ -122,8 +122,8 @@ func meet_next() -> void:
 		return
 	var r := picks[meet_i]
 	_clear_card()
-	_card_label(intro_line(r), 11, true)
-	var sub := _card_label("누르면 다음 사람" if meet_i < picks.size() - 1 else "누르면 계속", 11, false)
+	_card_label(intro_line(r), UiTheme.SIZE, true)
+	var sub := _card_label("누르면 다음 사람" if meet_i < picks.size() - 1 else "누르면 계속", UiTheme.SIZE_SMALL, false)
 	sub.add_theme_color_override("font_color", Color(UiTheme.INK, 0.55))
 	card.visible = true
 	caption.visible = false
@@ -155,7 +155,7 @@ func show_name() -> void:
 	step = "name"
 	caption.visible = false
 	_clear_card()
-	_card_label("이 지구에 이름을 지어 주세요", 11, true)
+	_card_label("이 지구에 이름을 지어 주세요", UiTheme.SIZE, true)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	card_box.add_child(row)
@@ -164,8 +164,8 @@ func show_name() -> void:
 	name_edit.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	name_edit.custom_minimum_size = Vector2(160, UiTheme.TOUCH)
 	name_edit.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	name_edit.add_theme_font_override("font", UiTheme.font(true))
-	name_edit.add_theme_font_size_override("font_size", 22)
+	name_edit.add_theme_font_override("font", UiTheme.title_font())
+	name_edit.add_theme_font_size_override("font_size", UiTheme.SIZE_TITLE + 2)
 	name_edit.add_theme_color_override("font_color", UiTheme.INK)
 	name_edit.virtual_keyboard_enabled = true
 	name_edit.add_theme_color_override("caret_color", UiTheme.INK)
@@ -189,7 +189,7 @@ func show_name() -> void:
 	again.pressed.connect(GameAudio.ui_click)
 	again.pressed.connect(func() -> void: name_edit.text = _other_name(name_edit.text))
 	row.add_child(again)
-	hint_l = _card_label("", 11, false)
+	hint_l = _card_label("", UiTheme.SIZE_SMALL, false)
 	hint_l.visible = false
 	var ok := Button.new()
 	ok.text = "이 이름으로"
@@ -238,13 +238,12 @@ func show_card() -> void:
 	step = "card"
 	_clear_card()
 	GameAudio.fx("chime", "Room", -6.0)
-	var t := _card_label(chosen, 22, true)
-	t.add_theme_font_size_override("font_size", 22)
+	var t := _card_label(chosen, UiTheme.SIZE_TITLE + 2, true)
 	var d := Time.get_date_dict_from_system()
-	var sub := _card_label("%d년 %d월 %d일 창조" % [d["year"], d["month"], d["day"]], 11, false)
+	var sub := _card_label("%d년 %d월 %d일 창조" % [d["year"], d["month"], d["day"]], UiTheme.SIZE_SMALL, false)
 	sub.add_theme_color_override("font_color", Color(UiTheme.INK, 0.6))
 	for row: Array in card_rows():
-		_card_label("%s   %s" % [row[0], row[1]], 11, false)
+		_card_label("%s   %s" % [row[0], row[1]], UiTheme.SIZE, false)
 	var ok := Button.new()
 	ok.text = "병 안으로"
 	ok.theme_type_variation = "Primary"
@@ -308,7 +307,7 @@ func _card_label(text: String, px: int, bold: bool) -> Label:
 	l.text = text
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	l.add_theme_font_override("font", UiTheme.font(bold))
+	l.add_theme_font_override("font", UiTheme.title_font() if px >= UiTheme.SIZE_TITLE else UiTheme.font(bold))   # 지구 이름 = 주아
 	l.add_theme_font_size_override("font_size", px)
 	l.add_theme_color_override("font_color", UiTheme.INK)
 	card_box.add_child(l)

@@ -2,18 +2,18 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://b6kphgsba21n7"
-path="res://.godot/imported/Galmuri11-Bold.ttf-a838045532345cad50fe0c4c96544918.fontdata"
+uid="uid://dt4ngclnimpd2"
+path="res://.godot/imported/NanumPenScript-Regular.ttf-095a22c145e57562d9df54ff8ca09b83.fontdata"
 
 [deps]
 
-source_file="res://fonts/Galmuri11-Bold.ttf"
-dest_files=["res://.godot/imported/Galmuri11-Bold.ttf-a838045532345cad50fe0c4c96544918.fontdata"]
+source_file="res://fonts/NanumPenScript-Regular.ttf"
+dest_files=["res://.godot/imported/NanumPenScript-Regular.ttf-095a22c145e57562d9df54ff8ca09b83.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=0
+antialiasing=1
 generate_mipmaps=false
 disable_embedded_bitmaps=true
 multichannel_signed_distance_field=false
@@ -22,8 +22,8 @@ msdf_size=48
 allow_system_fallback=true
 force_autohinter=false
 modulate_color_glyphs=false
-hinting=0
-subpixel_positioning=0
+hinting=3
+subpixel_positioning=4
 keep_rounding_remainders=true
 oversampling=0.0
 Fallbacks=null
