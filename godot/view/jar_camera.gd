@@ -197,7 +197,10 @@ func _clamp_target() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	var half_h := view_height_px() / ppu * 0.5 / sin(deg_to_rad(PITCH_DEG))    # 화면 세로 절반이 덮는 땅
 	var half_w := vs.x / ppu * 0.5
-	var lim := maxf(0.0, ground_radius - Vector2(half_w, half_h).length())
+	# 원형 세상 어디든 화면 가운데로 가져올 수 있게 — 가장자리(유리벽)까지. 화면 크기를 빼면 멀리 볼수록 갈 수 있는 곳이 좁아져서 답답했음
+	var lim := ground_radius * 0.97
+	if half_w < 0.0 or half_h < 0.0:
+		lim = 0.0
 	var p := Vector2(target.x, target.z) - ground_center
 	if p.length() > lim:
 		p = p.normalized() * lim + ground_center
