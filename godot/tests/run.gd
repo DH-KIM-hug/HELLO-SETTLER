@@ -14,6 +14,11 @@ func check(ok: bool, what: String) -> void:
 
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
+	if "world" in OS.get_cmdline_user_args():          # -- world : 넓은 세상 테스트만 (6단계 개발용)
+		load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
+		quit(1 if fails > 0 else 0)
+		return
 	test_nine_days()
 	test_rotation()
 	test_sale_price()
@@ -21,6 +26,8 @@ func _initialize() -> void:
 	test_house_bottleneck()
 	test_determinism()
 	test_time_controls()
+	# 6단계 — 넓은 세상 (tests/world_tests.gd)
+	load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
 		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])

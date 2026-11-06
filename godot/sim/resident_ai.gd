@@ -127,6 +127,9 @@ static func decide(v: Village, r: Resident) -> void:
 		cand["play"] = Balance.ACT_BASE["play"]
 	if r.is_elder() and not night:
 		cand["rest"] = Balance.ACT_BASE["rest"]
+	# 탐험 (넓은 세상만 — 6단계): 무리마다 가끔 한 명이 안개 가장자리로
+	if v.explore_on and work_t and r.is_adult() and v.can_explore():
+		cand["explore"] = WorldCfg.EXPLORE_BASE
 	# 보정
 	var fs: Dictionary = Balance.FAITH_STATE_MOD.get(v.faith_state(), {})
 	var order: Array = []
@@ -190,6 +193,8 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			r.steps.append(walk(p.x, p.y))
 			r.steps.append(act(120.0 + v.rng.randf() * 240.0, "play"))
 			return true
+		"explore":
+			return _explore(v, r)
 		"rest":
 			var p := near(v, v.fire.x, v.fire.y, 2.0)
 			r.doing = "모닥불 곁에서 쉬는 중"
@@ -197,6 +202,30 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			r.steps.append(act(600.0 + v.rng.randf() * 600.0, "sit"))
 			return true
 	return false
+
+
+## 탐험: 안개 가장자리까지 걸어가 둘러보고 돌아온다 (걷는 길과 둘러본 둘레의 안개가 걷힌다)
+static func _explore(v: Village, r: Resident) -> bool:
+	var tg: Variant = v.explore_target()
+	v.last_explore_t = v.t
+	if tg == null:
+		return false
+	var p: Vector2 = tg
+	v.explorer = r.id
+	v.stats["explore"] = int(v.stats.get("explore", 0)) + 1
+	r.doing = "안개 너머를 살피러 가는 중"
+	var clear := func() -> void:
+		if v.explorer == r.id:
+			v.explorer = -1
+	var look := func() -> void:
+		r.doing = "집으로 돌아가는 중"
+		v._reveal_at(Vector2(r.x, r.y), WorldCfg.REVEAL_LOOK, r, true)
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(WorldCfg.EXPLORE_LOOK_TIME, "idle", look, false, clear))
+	var hp := near(v, v.fire.x, v.fire.y, 2.5)
+	r.steps.append(walk(hp.x, hp.y))
+	r.steps.append(act(1.0, "idle", clear, false, clear))
+	return true
 
 
 static func _baby(v: Village, r: Resident) -> void:
@@ -309,7 +338,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return true
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
-		if sp.length() > Village.R - 2.0 or v.water_at(sp.x, sp.y):
+		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):
 			r.steps.append(act(45.0, "idle"))
 			return true
 		r.steps.append(walk(sp.x, sp.y))
