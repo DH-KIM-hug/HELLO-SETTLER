@@ -4,7 +4,8 @@
 ## 그림: 공용 툰 셰이더(render/toon.gd) + 그림자 맵 한 단계 + 깊이 외곽선·밤 색·화면 유리 곡선(render/outline_post.gd). 색은 data/style.gd.
 ## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
 ## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
-## 조작: 속도 · 밤 건너뛰기 / 개발: +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
+## 조작: 위 띠 = 시각·인구·지폐 + 톱니(설정·문의, 길게 누르면 개발 모드) / 아래 띠 = 제단 · 뚜껑 · 불기(뚜껑 열린 동안) · 속도, 그 위 밤 건너뛰기.
+## 개발 모드(휴대폰 기본 꺼짐 · F3): 상태 글 + +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델 · 곰팡이 · 버섯 숲. 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 ## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
 ## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
 extends Node3D
@@ -39,9 +40,29 @@ var blow_btn: Button                 # [하늘의 것] 불기 — 뚜껑이 열�
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
 var _tap_ok := false
+var settings_sheet: SettingsSheet    # 설정 · 문의 (UI 10) — 위 띠 톱니
+var top_bar: PanelContainer          # 위 띠: 시각·인구·지폐 + 톱니
+var bottom_bar: PanelContainer       # 아래 띠: 제단 · 뚜껑 · 불기 · 속도
+var info_label: Label
+var gear_btn: Button
+var stack: VBoxContainer             # 아래 띠 위: 알림 · 밤 건너뛰기 · (개발) 버튼 줄
+var dev_bar: HFlowContainer
+var debug_mode := true               # 개발 모드: 상태 글 + 개발 버튼 (휴대폰은 기본 꺼짐 — 톱니 길게 누르기 / F3)
+var top_h := 0.0                     # 위 띠 높이 (노치 포함)
+var bottom_h := 0.0                  # 아래 띠 높이 (제스처 막대 포함)
+var _insets := Vector2.ZERO
+var _layout_t := 0.0
+var _gear_down_t := 0.0
+var _gear_long := false
+var _touches := {}                   # 화면 위 손가락: index → 위치 (세계 쪽에서 시작한 것만)
+var _touch_tap := false
+var _touch_press := Vector2.ZERO
+var _pinch_d := 0.0
+var _pinch_mid := Vector2.ZERO
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
+const GEAR_HOLD := 0.6               # 톱니를 이만큼(초) 길게 누르면 개발 모드
 
 
 func _ready() -> void:
@@ -124,6 +145,7 @@ func _process(dt: float) -> void:
 	terrain.animate(dt)
 	update_night()
 	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]
+	_gear_hold(dt)
 	_update_ui()
 
 
@@ -199,16 +221,17 @@ func resident_px_height(m: Node3D, top := 1.95) -> float:
 
 
 # ───────────────────────── UI ─────────────────────────
+## 화면 가장자리에만 (UI.md 원칙 — 병이 주인공): 위 띠 = 시각·인구·지폐 + 오른쪽 끝 톱니(⚙ 설정·문의, 길게 누르면 개발 모드) ·
+## 아래 띠 = 제단 · 뚜껑 · 불기(뚜껑이 열린 동안만) · 속도. 밤 건너뛰기·알림 한 줄은 아래 띠 바로 위 가운데.
+## 개발 모드(휴대폰은 기본 꺼짐, 컴퓨터는 켜짐): 위 왼쪽 상태 글(인구·fps 등) + 개발 버튼 줄(+1일·병 돌리기·확대·외곽선·모델·곰팡이·버섯 숲).
+## 노치·제스처 막대: SafeArea.insets 만큼 띠 안쪽 여백을 늘린다.
 func _setup_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
-	var theme := Theme.new()
-	theme.default_font = load("res://fonts/Galmuri11.ttf") as FontFile
-	theme.default_font_size = 11
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.theme = theme
+	root.theme = UiTheme.get_theme()
 	layer.add_child(root)
 	air_overlay = JarAirOverlay.new()   # [곰팡이·뚜껑] 3D 위, 말풍선·버튼 아래
 	air_overlay.setup(village)
@@ -217,75 +240,88 @@ func _setup_ui() -> void:
 	bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bubbles)
+	# 위 띠
+	top_bar = PanelContainer.new()
+	top_bar.theme_type_variation = "TopBar"
+	top_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(top_bar)
+	var trow := HBoxContainer.new()
+	top_bar.add_child(trow)
+	info_label = Label.new()
+	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	info_label.clip_text = true
+	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trow.add_child(info_label)
+	gear_btn = _gear_button()
+	trow.add_child(gear_btn)
+	# 개발: 상태 글 (위 띠 아래)
 	ui_label = Label.new()
-	ui_label.position = Vector2(8, 6)
 	ui_label.add_theme_color_override("font_color", Color("ebe5db"))
 	ui_label.add_theme_color_override("font_shadow_color", Color("242121"))
 	ui_label.add_theme_constant_override("shadow_offset_x", 1)
 	ui_label.add_theme_constant_override("shadow_offset_y", 1)
+	ui_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(ui_label)
+	# 아래 띠 위: 알림 한 줄 · 밤 건너뛰기 · (개발) 버튼 줄 — 아래에서 위로 쌓임
+	stack = VBoxContainer.new()
+	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	stack.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	stack.add_theme_constant_override("separation", 6)
+	root.add_child(stack)
 	notice_label = Label.new()
-	_pin_bottom(notice_label, 0.5, -172.0, 92.0)
-	notice_label.offset_right = 172.0
 	notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notice_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	notice_label.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	notice_label.custom_minimum_size.x = 300
 	notice_label.add_theme_color_override("font_color", Color("252122"))
 	var nsb := StyleBoxFlat.new()
 	nsb.bg_color = Color("fffbea")
 	nsb.border_color = Color("252122")
 	nsb.set_border_width_all(1)
-	nsb.set_content_margin_all(3)
+	nsb.set_content_margin_all(4)
 	notice_label.add_theme_stylebox_override("normal", nsb)
 	notice_label.visible = false
-	root.add_child(notice_label)
-	# 시간 (기획서 6.6) — 속도 ×1 → ×2 → ×4 → ×8, 밤 건너뛰기는 모두 잠든 밤에만 보임
-	var tbar := HBoxContainer.new()
-	_pin_bottom(tbar, 0.0, 6.0, 60.0)
-	tbar.add_theme_constant_override("separation", 3)
-	root.add_child(tbar)
-	speed_btn = Button.new()
-	speed_btn.focus_mode = Control.FOCUS_NONE
-	speed_btn.custom_minimum_size = Vector2(64, 0)
-	speed_btn.pressed.connect(func() -> void: clock.cycle_speed())
-	tbar.add_child(speed_btn)
-	skip_btn = Button.new()
-	skip_btn.text = "밤 건너뛰기"
-	skip_btn.focus_mode = Control.FOCUS_NONE
-	skip_btn.pressed.connect(func() -> void: clock.start_skip_night())
-	tbar.add_child(skip_btn)
-	var altar_btn := Button.new()
-	altar_btn.text = "제단"
-	altar_btn.focus_mode = Control.FOCUS_NONE
-	altar_btn.pressed.connect(func() -> void:
-		detail.close()
-		altar_sheet.open())
-	tbar.add_child(altar_btn)
-	lid_btn = Button.new()              # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
-	lid_btn.text = "뚜껑 열기"
-	lid_btn.focus_mode = Control.FOCUS_NONE
-	lid_btn.pressed.connect(toggle_lid)
-	tbar.add_child(lid_btn)
-	blow_btn = Button.new()             # [하늘의 것] 거인이 입으로 불기 — 솜털 공의 꽃씨가 하늘 가득 (뚜껑이 열린 동안만)
-	blow_btn.text = "불기"
-	blow_btn.focus_mode = Control.FOCUS_NONE
-	blow_btn.pressed.connect(blow)
-	tbar.add_child(blow_btn)
-	var bar := HBoxContainer.new()
-	_pin_bottom(bar, 0.0, 6.0, 34.0)
-	bar.add_theme_constant_override("separation", 3)
-	root.add_child(bar)
-	for spec: Array in [["개발: +1일", func() -> void: advance(Balance.DAY)],
+	stack.add_child(notice_label)
+	skip_btn = _bar_button(stack, "밤 건너뛰기", func() -> void: clock.start_skip_night())
+	skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	skip_btn.custom_minimum_size.x = 140
+	dev_bar = HFlowContainer.new()
+	dev_bar.alignment = FlowContainer.ALIGNMENT_CENTER
+	dev_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	dev_bar.add_theme_constant_override("h_separation", 4)
+	dev_bar.add_theme_constant_override("v_separation", 4)
+	stack.add_child(dev_bar)
+	for spec: Array in [["+1일", func() -> void: advance(Balance.DAY)],
 			["병 돌리기", func() -> void: village.rotate_jar(); refresh()],
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
 			["곰팡이", func() -> void: village.mold.force_swarm(village)],     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
 			["버섯 숲", func() -> void: village.flora.grove(village)]]:      # [하늘의 것] 개발: 하룻밤 버섯 숲 바로
-		var b := Button.new()
-		b.text = spec[0]
-		b.focus_mode = Control.FOCUS_NONE
-		b.pressed.connect(spec[1])
-		bar.add_child(b)
-	# 주민 상세 (UI 03) — 위 화면보다 앞 층
+		var b := _bar_button(dev_bar, spec[0], spec[1])
+		b.custom_minimum_size = Vector2(40, 32)
+		b.clip_text = false
+	# 아래 띠 — 거인의 도구 (한 손 조작, 누르는 곳 44px 이상)
+	bottom_bar = PanelContainer.new()
+	bottom_bar.theme_type_variation = "BottomBar"
+	bottom_bar.mouse_filter = Control.MOUSE_FILTER_STOP
+	root.add_child(bottom_bar)
+	var brow := HBoxContainer.new()
+	brow.add_theme_constant_override("separation", UiTheme.GAP)
+	bottom_bar.add_child(brow)
+	var altar_btn := _bar_button(brow, "제단", func() -> void:
+		detail.close()
+		settings_sheet.close()
+		altar_sheet.open())
+	altar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lid_btn = _bar_button(brow, "뚜껑 열기", toggle_lid)   # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
+	lid_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	blow_btn = _bar_button(brow, "불기", blow)            # [하늘의 것] 거인이 입으로 불기 — 뚜껑이 열린 동안만 보임
+	blow_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	speed_btn = _bar_button(brow, "속도 ×1", func() -> void: clock.cycle_speed())
+	speed_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	# 주민 상세 (UI 03) · 제단 (UI 02) · 설정 (UI 10) — 위 화면보다 앞 층
 	var dlayer := CanvasLayer.new()
 	dlayer.layer = 5
 	add_child(dlayer)
@@ -298,17 +334,121 @@ func _setup_ui() -> void:
 	altar_sheet.setup(village)
 	dlayer.add_child(altar_sheet)
 	altar_sheet.bought.connect(func(_b: Building) -> void: view.sync(0.0, true))
+	settings_sheet = SettingsSheet.new()
+	settings_sheet.setup(village)
+	dlayer.add_child(settings_sheet)
+	GameSettings.get_current().apply()
+	set_debug_mode(not OS.has_feature("mobile"))
+	get_viewport().size_changed.connect(layout_bars)
+	layout_bars()
 
 
-## 화면 아래 가장자리에 붙임 (세로로 긴 화면에서도 아래에 — 넓히기 비율)
-static func _pin_bottom(c: Control, ax: float, x: float, from_bottom: float) -> void:
-	c.anchor_left = ax
-	c.anchor_right = ax
-	c.anchor_top = 1.0
-	c.anchor_bottom = 1.0
-	c.offset_left = x
-	c.offset_top = -from_bottom
-	c.offset_bottom = -from_bottom
+func _bar_button(parent: Node, text: String, on_press: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.clip_text = true
+	b.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
+	b.pressed.connect(on_press)
+	parent.add_child(b)
+	return b
+
+
+## 톱니 버튼 (글꼴에 ⚙가 없어 직접 그림). 누르면 설정, 0.6초 길게 누르면 개발 모드 켜고 끄기
+func _gear_button() -> Button:
+	var b := Button.new()
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
+	b.tooltip_text = "설정"
+	var icon := Control.new()
+	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
+	icon.draw.connect(func() -> void:
+		var c := icon.size * 0.5
+		for i in 8:
+			var a := TAU * i / 8.0
+			var d := Vector2(cos(a), sin(a))
+			var p := c + d * 8.5
+			icon.draw_set_transform(p, a, Vector2.ONE)
+			icon.draw_rect(Rect2(-2.5, -2.5, 5, 5), UiTheme.INK)
+		icon.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+		icon.draw_circle(c, 8.0, UiTheme.INK)
+		icon.draw_circle(c, 3.5, UiTheme.BUTTON))
+	b.add_child(icon)
+	b.button_down.connect(func() -> void:
+		_gear_down_t = 0.0
+		_gear_long = false)
+	b.pressed.connect(func() -> void:
+		if _gear_long:
+			return
+		if settings_sheet.visible:
+			settings_sheet.close()
+			return
+		detail.close()
+		altar_sheet.close()
+		settings_sheet.open())
+	return b
+
+
+## 길게 누르기 확인 (_process에서)
+func _gear_hold(dt: float) -> void:
+	if gear_btn == null or not gear_btn.is_pressed() or _gear_long:
+		return
+	_gear_down_t += dt
+	if _gear_down_t >= GEAR_HOLD:
+		_gear_long = true
+		set_debug_mode(not debug_mode)
+		GameSettings.buzz(40)
+
+
+func set_debug_mode(on: bool) -> void:
+	debug_mode = on
+	ui_label.visible = on
+	dev_bar.visible = on
+
+
+## 띠 위치·안쪽 여백: 노치(위)·제스처 막대(아래)만큼 늘림. 화면 크기가 바뀔 때 + 1초마다 (휴대폰은 처음 몇 화면 뒤에 값이 옴)
+func layout_bars() -> void:
+	var ins := SafeArea.insets(get_viewport())
+	_insets = ins
+	var pad := 6.0
+	top_h = ins.x + UiTheme.TOUCH + pad * 2.0 + 1.0
+	bottom_h = ins.y + UiTheme.TOUCH + pad * 2.0 + 1.0
+	_bar_style(top_bar, "TopBar", ins.x, 0.0)
+	top_bar.anchor_left = 0.0
+	top_bar.anchor_right = 1.0
+	top_bar.anchor_top = 0.0
+	top_bar.anchor_bottom = 0.0
+	top_bar.offset_left = 0
+	top_bar.offset_right = 0
+	top_bar.offset_top = 0
+	top_bar.offset_bottom = top_h
+	_bar_style(bottom_bar, "BottomBar", 0.0, ins.y)
+	bottom_bar.anchor_left = 0.0
+	bottom_bar.anchor_right = 1.0
+	bottom_bar.anchor_top = 1.0
+	bottom_bar.anchor_bottom = 1.0
+	bottom_bar.offset_left = 0
+	bottom_bar.offset_right = 0
+	bottom_bar.offset_top = -bottom_h
+	bottom_bar.offset_bottom = 0
+	ui_label.position = Vector2(8, top_h + 4.0)
+	stack.anchor_left = 0.0
+	stack.anchor_right = 1.0
+	stack.anchor_top = 1.0
+	stack.anchor_bottom = 1.0
+	stack.offset_left = 8
+	stack.offset_right = -8
+	stack.offset_bottom = -bottom_h - 6.0
+	stack.offset_top = stack.offset_bottom
+
+
+func _bar_style(p: PanelContainer, variation: String, extra_top: float, extra_bottom: float) -> void:
+	p.remove_theme_stylebox_override("panel")
+	var sb := (UiTheme.get_theme().get_stylebox("panel", variation) as StyleBox).duplicate() as StyleBox
+	sb.content_margin_top += extra_top
+	sb.content_margin_bottom += extra_bottom
+	p.add_theme_stylebox_override("panel", sb)
 
 
 ## [곰팡이·뚜껑] 뚜껑 열기 / 닫기 (WORLD_EVENTS 3)
@@ -349,8 +489,20 @@ func status_text() -> String:
 		Balance.ERAS[v.era], int(v.faith), c.name if c != null else "-", Engine.get_frames_per_second(), _sim_ms]
 
 
+## 위 띠 한 줄 (거인이 보는 것만 — 시각 · 인구 · 지폐)
+func top_text() -> String:
+	return "%s · 인구 %d · %s 지폐" % [village.fmt_time(village.t), village.people.size(), AltarSheet._num(Market.notes)]
+
+
 func _update_ui() -> void:
-	ui_label.text = status_text()
+	info_label.text = top_text()
+	if debug_mode:
+		ui_label.text = status_text()
+	_layout_t += get_process_delta_time()
+	if _layout_t > 1.0:
+		_layout_t = 0.0
+		if SafeArea.insets(get_viewport()) != _insets:
+			layout_bars()
 	speed_btn.text = "새벽으로…" if clock.skipping else "속도 ×%d" % int(clock.speed())
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
@@ -360,16 +512,17 @@ func _update_ui() -> void:
 	else:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
-	blow_btn.disabled = not village.air.lid_open
+	blow_btn.visible = village.air.lid_open    # [하늘의 것] 불기는 뚜껑이 열린 동안만
 	if not village.warnings.is_empty() and clock.notice_t <= 0.0:     # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		clock.notice = str(village.warnings.pop_front()["text"])
 		clock.notice_t = 6.0
 	notice_label.visible = clock.notice_t > 0.0
 	notice_label.text = clock.notice
-	# 말풍선: 화면 안에서 말하고 있는 주민 몇 명
+	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명
 	for c in bubbles.get_children():
 		c.queue_free()
 	var shown := 0
+	var vs := get_viewport().get_visible_rect().size
 	for r in village.people:
 		if r.say_t <= 0.0 or r.say == "" or shown >= 4:
 			continue
@@ -377,8 +530,7 @@ func _update_ui() -> void:
 		if m == null or not m.visible:
 			continue
 		var p := cam.camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
-		var vs := get_viewport().get_visible_rect().size
-		if p.x < 0 or p.y < 40 or p.x > vs.x or p.y > vs.y - 40:
+		if p.x < 0 or p.y < top_h + 20.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
 			continue
 		var l := Label.new()
 		l.text = r.say
@@ -395,7 +547,19 @@ func _update_ui() -> void:
 		shown += 1
 
 
+## 화면 조작 — 휴대폰: 한 손가락 끌기 = 이동, 두 손가락 = 벌리고 오므리기 확대(+ 가운데 이동), 톡 = 주민 고르기 / 빈 곳은 유리 톡.
+## 손가락 입력은 InputEventScreenTouch/Drag로만 처리하고, 엔진이 손가락에서 흉내 낸 마우스(device = DEVICE_ID_EMULATION)는
+## 화면(세계)에서는 버린다 → 이동·톡이 두 번 걸리지 않음. (UI 버튼은 흉내 낸 마우스로 눌리고, 버튼 위 손가락은 엔진이 먼저 가져감)
+## 컴퓨터: 마우스 끌기 = 이동, 휠·트랙패드 벌리기 = 확대, 클릭 = 톡.
 func _unhandled_input(e: InputEvent) -> void:
+	if e is InputEventScreenTouch:
+		_on_touch(e as InputEventScreenTouch)
+		return
+	if e is InputEventScreenDrag:
+		_on_touch_drag(e as InputEventScreenDrag)
+		return
+	if (e is InputEventMouseButton or e is InputEventMouseMotion) and (e.device == InputEvent.DEVICE_ID_EMULATION or not _touches.is_empty()):
+		return                        # 손가락이 흉내 낸 마우스 — 위에서 이미 처리
 	if e is InputEventMouseButton:
 		var mb := e as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
@@ -411,16 +575,14 @@ func _unhandled_input(e: InputEvent) -> void:
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			cam.zoom_by(1.0 / 1.15)
 	elif e is InputEventMagnifyGesture:
-		cam.zoom_by((e as InputEventMagnifyGesture).factor)
+		if _touches.is_empty():       # 휴대폰 두 손가락은 아래 _on_touch_drag가 직접 (엔진 몸짓과 겹치지 않게)
+			cam.zoom_by((e as InputEventMagnifyGesture).factor)
 	elif e is InputEventMouseMotion and _drag:
 		if _tap_ok and (e as InputEventMouseMotion).position.distance_to(_press_pos) > TAP_SLOP:
 			_tap_ok = false
 		if not _tap_ok:
 			_stop_follow()
 		cam.pan_pixels((e as InputEventMouseMotion).relative)
-	elif e is InputEventScreenDrag:
-		_stop_follow()
-		cam.pan_pixels((e as InputEventScreenDrag).relative)
 	elif e is InputEventKey and e.pressed:
 		match (e as InputEventKey).keycode:
 			KEY_SPACE: paused = not paused
@@ -431,8 +593,63 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_R: village.rotate_jar(); refresh()
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
 			KEY_T: village.tap_glass(true)    # 개발: 크게 친 톡 (지진)
+			KEY_F3: set_debug_mode(not debug_mode)
 
 
+func _on_touch(t: InputEventScreenTouch) -> void:
+	if t.pressed:
+		_touches[t.index] = t.position
+		if _touches.size() == 1:
+			_touch_tap = true
+			_touch_press = t.position
+		else:
+			_touch_tap = false        # 두 손가락 = 확대, 톡 아님
+			_pinch_reset()
+	else:
+		var had := _touches.has(t.index)
+		_touches.erase(t.index)
+		_drag = false                 # (컴퓨터에서 마우스로 손가락 흉내를 켠 경우) 마우스 끌기 상태도 끝냄
+		if t.canceled:
+			_touch_tap = false
+		if had and _touches.is_empty() and _touch_tap:
+			_touch_tap = false
+			_on_tap(t.position)
+		elif _touches.size() >= 2:
+			_pinch_reset()
+
+
+func _on_touch_drag(d: InputEventScreenDrag) -> void:
+	if not _touches.has(d.index):
+		return                        # 버튼 위에서 시작한 손가락 (UI가 가져감)
+	_touches[d.index] = d.position
+	if _touches.size() == 1:
+		if _touch_tap and d.position.distance_to(_touch_press) > TAP_SLOP:
+			_touch_tap = false
+		if not _touch_tap:
+			_stop_follow()
+			cam.pan_pixels(d.relative)
+		return
+	# 두 손가락: 거리 비율만큼 확대, 가운데가 움직인 만큼 이동
+	var ps: Array = _touches.values()
+	var a: Vector2 = ps[0]
+	var b: Vector2 = ps[1]
+	var dist := a.distance_to(b)
+	var mid := (a + b) * 0.5
+	if _pinch_d > 1.0 and dist > 1.0:
+		cam.zoom_by(dist / _pinch_d)
+	_stop_follow()
+	cam.pan_pixels(mid - _pinch_mid)
+	_pinch_d = dist
+	_pinch_mid = mid
+
+
+func _pinch_reset() -> void:
+	var ps: Array = _touches.values()
+	if ps.size() < 2:
+		_pinch_d = 0.0
+		return
+	_pinch_d = (ps[0] as Vector2).distance_to(ps[1])
+	_pinch_mid = ((ps[0] as Vector2) + (ps[1] as Vector2)) * 0.5
 # ───────────────────────── 주민 누르기 · 따라가기 (UI 03) ─────────────────────────
 ## 누른 곳에서 가장 가까운 주민 (화면 거리 — 발끝~머리 선분까지, 넉넉한 반지름). 없으면 null
 func pick_resident(sp: Vector2) -> Resident:

@@ -8,6 +8,7 @@ config_version=5
 config/name="Nazakji"
 config/icon="res://art/icon/icon_512.png"
 config/description="나의 작은 지구 — 유리병 속 작은 중세 문명"
+config/version="0.1.0"
 run/main_scene="res://scenes/test_village.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 
@@ -20,6 +21,12 @@ window/size/window_height_override=1280
 window/stretch/mode="canvas_items"
 window/stretch/aspect="keep"
 window/handheld/orientation=1
+
+[input_devices]
+
+; 손가락 → 흉내 마우스는 켜 둔다 (UI 버튼이 눌리게). 세계 화면은 흉내 마우스를 버리고 손가락 사건만 쓴다 (view/test_village.gd _unhandled_input).
+pointing/emulate_touch_from_mouse=false
+pointing/emulate_mouse_from_touch=true
 
 [rendering]
 

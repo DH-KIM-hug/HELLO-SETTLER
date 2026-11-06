@@ -124,6 +124,7 @@ func _button(parent: Node, text: String, expand := true) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_filter = Control.MOUSE_FILTER_PASS      # 스크롤 안에서 끌면 스크롤 (부모 패널이 STOP — 화면 뒤로 새지 않음)
 	b.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
 	if expand:
 		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -185,6 +186,7 @@ func _layout() -> void:
 		panel.offset_right = 0
 		panel.offset_top = 0
 		panel.offset_bottom = 0
+	SafeArea.pad_sheet(panel, SafeArea.insets(get_viewport()).y)   # 제스처 막대 위로 내용
 
 
 # ───────────────────────── 열기·닫기 ─────────────────────────

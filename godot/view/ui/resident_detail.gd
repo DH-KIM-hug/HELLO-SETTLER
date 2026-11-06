@@ -167,6 +167,7 @@ func _button(parent: Node, text: String) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_filter = Control.MOUSE_FILTER_PASS      # 스크롤 안에서 끌면 스크롤 (부모 패널이 STOP — 화면 뒤로 새지 않음)
 	b.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
 	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	parent.add_child(b)
@@ -205,6 +206,7 @@ func _layout() -> void:
 		panel.offset_right = 0
 		panel.offset_top = 0
 		panel.offset_bottom = 0
+	SafeArea.pad_sheet(panel, SafeArea.insets(get_viewport()).y)   # 제스처 막대 위로 내용
 
 
 ## 화면에서 패널이 가리지 않는 곳 (따라가기 카메라가 주민을 이 가운데에 둠)
@@ -355,6 +357,7 @@ func _fill_blood() -> void:
 		b.text = Bloodlines.name_of(id)
 		b.theme_type_variation = "Chip_" + kind
 		b.focus_mode = Control.FOCUS_NONE
+		b.mouse_filter = Control.MOUSE_FILTER_PASS
 		b.custom_minimum_size = Vector2(72, UiTheme.TOUCH)
 		b.toggle_mode = true
 		b.button_pressed = _chip_open == id
@@ -500,6 +503,7 @@ func _row() -> HBoxContainer:
 func _node(q: Variant, w: int, is_self := false) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
+	b.mouse_filter = Control.MOUSE_FILTER_PASS        # 가계도 위에서 끌어도 스크롤 (390×844에서 가계도가 시트보다 길다)
 	b.custom_minimum_size = Vector2(w, 56)
 	b.theme_type_variation = "TreeSelf" if is_self else "TreeNode"
 	var p: Resident = q

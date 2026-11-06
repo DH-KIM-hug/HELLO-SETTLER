@@ -24,7 +24,10 @@ const PORTRAIT_BG := Color("cfe3cf")    # 초상 뒤 (연한 풀색)
 const BUTTON := Color("f3e9cc")
 const BUTTON_HOVER := Color("fff7dc")
 const BUTTON_PRESSED := Color("e2d3a8")
-const ACCENT := Color("3e8a6e")         # [따라가 보기] 켜짐
+const ACCENT := Color("3e8a6e")         # [따라가 보기] 켜짐 · 설정 켜짐 · 고른 종류
+const PRIMARY := Color("44622d")        # 주요 동작 (이끼 초록 — UI.md 원칙: [메일 쓰기])
+const BAR_PAPER := Color(0.984, 0.965, 0.902, 0.9)   # 위 띠·아래 띠 바탕 (종이색, 살짝 비침)
+const TOAST_BG := Color("252122")       # 잠깐 뜨는 알림 (먹색 바탕 + 종이색 글자)
 
 ## 혈통 칩: 좋은 = 초록, 나쁜 = 갈색, 서로 상쇄 = 회색
 const CHIP_GOOD := Color("4e9a5b")
@@ -144,6 +147,26 @@ static func get_theme() -> Theme:
 		t.set_stylebox(st, "FollowOn", _box(ACCENT, INK, 1, 6, 6))
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "FollowOn", CHIP_TEXT)
+	# 주요 동작 (이끼 초록)
+	t.set_type_variation("Primary", "Button")
+	for st in ["normal", "hover", "pressed"]:
+		t.set_stylebox(st, "Primary", _box(PRIMARY.lightened(0.08) if st == "hover" else (PRIMARY.darkened(0.15) if st == "pressed" else PRIMARY), INK, 1, 6, 6))
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		t.set_color(c, "Primary", CHIP_TEXT)
+	# 위 띠·아래 띠 (화면 가장자리 — 병이 주인공이라 얇게)
+	var barbox := _box(BAR_PAPER, INK, 0, 0, 6)
+	t.set_type_variation("TopBar", "PanelContainer")
+	var top := barbox.duplicate() as StyleBoxFlat
+	top.border_width_bottom = 1
+	t.set_stylebox("panel", "TopBar", top)
+	t.set_type_variation("BottomBar", "PanelContainer")
+	var bot := barbox.duplicate() as StyleBoxFlat
+	bot.border_width_top = 1
+	t.set_stylebox("panel", "BottomBar", bot)
+	# 잠깐 뜨는 알림 (토스트)
+	t.set_type_variation("Toast", "Label")
+	t.set_stylebox("normal", "Toast", _box(TOAST_BG, TOAST_BG, 0, 6, 8))
+	t.set_color("font_color", "Toast", CHIP_TEXT)
 	# 혈통 칩 (누르는 것 — 버튼)
 	for kind: String in ["good", "bad", "off"]:
 		var nm: String = "Chip_" + kind
