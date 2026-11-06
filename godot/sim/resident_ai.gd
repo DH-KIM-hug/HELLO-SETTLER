@@ -55,6 +55,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			r.meal_done = int(d["mk"])
 		"pray":
 			r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER)
+		"pray_chapel":                    # 교회에서 (사제가 있으면 믿음 조금 더 — A6)
+			var chb := VillageEra.first_built(v, "교회")
+			r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER + (Balance.CHAPEL_BELIEF if VillageEra.staffed(v, chb) else 0.0))
 		"chop":
 			var tr: Dictionary = d["tr"]
 			tr["s"] = "stump"                 # 그루터기는 다시 자라지 않고 2~3일 뒤 썩어 사라진다 (Village._update_trees)
@@ -164,11 +167,16 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 		var s: Dictionary = r.steps[0]
 		var used := 0.0
 		if s["k"] == "walk":
+			if not s.has("rt"):
+				VillageEra.route(v, r, s)          # 강 건너: 나루터로 돌아가는 게 빠르면 (A6) — 걸음이 늘면 첫 걸음부터 다시
+				if r.steps[0] != s:
+					continue
 			var to := Vector2(s["x"], s["y"])
 			var from := Vector2(r.x, r.y)
 			var d := to - from
 			var dd := d.length()
-			var sp := r.walk_speed() * v.path_mult(r.x, r.y)     # 흙길 위는 빠르다 (기획서 6.7)
+			var wm := VillageEra.wade_mult(v, r.x, r.y)          # 물을 걸어 건너면 느리다 · 나루터의 뗏목 길은 그대로
+			var sp := r.walk_speed() * v.path_mult(r.x, r.y) * wm     # 흙길 위는 빠르다 (기획서 6.7)
 			var can := sp * left
 			if dd > 1e-4:
 				r.facing = atan2(d.x, d.y)
@@ -183,6 +191,8 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				r.y += d.y / dd * can
 				used = left
 				v.mark_path_seg(from, Vector2(r.x, r.y))
+			if wm < 1.0:
+				VillageEra.note_wade(v, used)
 			r.anim = "carry" if r.carry != "" else "walk"
 		else:
 			var speed: float = r.job_speed(_job_kind(v, r)) if s["fast"] else 1.0
@@ -346,6 +356,10 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 		"social":
 			var p := near(v, v.fire.x, v.fire.y, 2.5)
 			r.doing = "어울리는 중"
+			var ss: Variant = VillageEra.social_spot(v, v.rng.randf() * TAU) if VillageEra.has_social_place(v) else null     # (A6) 혼례 잔치는 교회 앞 · 광장이 있으면 광장
+			if ss != null:
+				p = ss
+				r.doing = "혼례 잔치에 어울리는 중" if VillageEra.wedding_on(v) else ("장터에서 어울리는 중" if VillageEra.is_market_day(v) else "광장에서 어울리는 중")
 			r.steps.append(walk(p.x, p.y))
 			r.steps.append(act(300.0 + v.rng.randf() * 400.0, "sit"))
 			return true
@@ -435,6 +449,10 @@ static func _sick_rest(v: Village, r: Resident) -> void:
 	var p := Vector2(hm.x, hm.y + 0.3) if (hm != null and hm.built) else near(v, v.fire.x, v.fire.y, 1.4)
 	r.action = "sick"
 	r.doing = "앓아누운 중" if (hm != null and hm.built) else "모닥불 곁에 앓아누운 중"
+	var bed: Variant = VillageEra.clinic_bed(v, r)       # (A6) 약초사가 있는 치료소에 빈 자리가 있으면 툇마루에 누움
+	if bed != null:
+		p = bed
+		r.doing = "치료소에 누운 중"
 	r.sleeping = v.is_night()
 	r.steps.append(walk(p.x, p.y))
 	r.steps.append(act(minf(600.0, maxf(60.0, r.sick_left)), "sleep"))
@@ -525,6 +543,18 @@ static func _pray(v: Village, r: Resident) -> bool:
 		r.steps.append(walk(f.x, f.y))
 		r.steps.append(act(600.0, "pray", op("pray")))
 		return true
+	var ch := VillageEra.pray_spot(v, a)           # (A6) 교회가 있으면 교회 앞에서
+	if not ch.is_empty():
+		var cp: Vector2 = ch["p"]
+		r.doing = "교회 앞에서 기도하는 중"
+		r.steps.append(walk(cp.x, cp.y))
+		var cf: Vector2 = ch["face"]
+		var ff := cp + (cf - cp).normalized() * 0.03
+		r.steps.append(walk(ff.x, ff.y))
+		r.steps.append(act(600.0, "pray", op("pray_chapel")))
+		if v.rng.randf() < 0.35:
+			v.speak(r, Balance.LINES_PRAY[v.rng.randi() % Balance.LINES_PRAY.size()], 6)
+		return true
 	var p := v.altar_pos + Vector2(cos(a), sin(a)) * Awakening.RING_R
 	r.steps.append(walk(p.x, p.y))
 	r.steps.append(Awakening.face_altar_step(v, p))
@@ -554,6 +584,10 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return false
 	if b.type == "버섯꾼" and _full(v, "버섯") and _full(v, "말린 버섯"):      # [하늘의 것]
 		return false
+	if b.type == "약초꾼" and _full(v, Balance.HERB):        # (A6) 약초가 넉넉하면 쉼 (곰팡이약은 Mold.decide가 먼저)
+		return false
+	if b.type == Balance.CLINIC_TYPE:                     # (A6) 약초사: 앓는 사람이 있을 때만
+		return VillageEra.healer_task(v, r, b, dry)
 	if b.type == "농장" and v.flora != null and int(v.flora.weeds.get(b.id, 0)) > 0:   # [하늘의 것] 잡초는 넉넉해도 뽑는다
 		return dry or v.flora.weed_task(v, r, b)
 	if d.has("out"):
@@ -592,6 +626,8 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return true
 	if b.type == "버섯꾼":                # [하늘의 것] 큰 버섯을 베어 나름 (WORLD_EVENTS 2.6)
 		return v.flora.pick_task(v, r, b)
+	if b.type == "약초꾼":                # (A6) 습한 땅·숲 가에서 약초
+		return VillageEra.herb_task(v, r, b)
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
 		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):

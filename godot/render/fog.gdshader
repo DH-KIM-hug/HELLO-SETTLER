@@ -9,7 +9,12 @@ uniform vec3 cloud_shade : source_color = vec3(0.855, 0.886, 0.902);
 uniform vec3 haze_col : source_color = vec3(0.93, 0.95, 0.95);
 uniform float puff_scale = 0.075;
 uniform float drift = 0.012;
-uniform float far = 0.0;          // 0 가까이 ~ 1 병 전체가 보일 만큼 축소 — 잔무늬를 큰 뭉게구름으로 바꾸고 그늘을 옅게 (깨알 무늬 방지)
+uniform float far = 0.0;
+// 등불 옮기기 미리보기 (A11 — view/lamp_ctl.gd): 안개 위에도 볕이 들 땅 노랑 · 그늘이 될 땅 파랑 (wpos = 병 데이터 좌표)
+uniform float lamp_mix = 0.0;
+uniform vec2 lamp_l0 = vec2(-0.72, -0.69);
+uniform vec2 lamp_l1 = vec2(-0.72, -0.69);
+uniform float lamp_rr = 512.0;          // 0 가까이 ~ 1 병 전체가 보일 만큼 축소 — 잔무늬를 큰 뭉게구름으로 바꾸고 그늘을 옅게 (깨알 무늬 방지)
 
 varying vec3 wpos;
 
@@ -59,6 +64,12 @@ void fragment() {
 	float sh = smoothstep(0.56 - fwidth(n2), 0.56 + fwidth(n2), n2);
 	vec3 c = mix(cloud_col, cloud_shade, sh * 0.85 * (1.0 - 0.45 * far));
 	c = mix(haze_col, c, core);
+	if (lamp_mix > 0.0) {
+		float g = (dot(wpos.xz, lamp_l1) - dot(wpos.xz, lamp_l0)) / lamp_rr;
+		float k = smoothstep(0.04, 0.45, abs(g));
+		vec3 tint = g > 0.0 ? vec3(1.0, 0.84, 0.36) : vec3(0.45, 0.62, 0.98);
+		c = mix(c, tint * (0.75 + 0.25 * c.r), k * 0.6 * lamp_mix);
+	}
 	ALBEDO = c;
 	ALPHA = max(core * 0.97, halo * 0.45);
 }

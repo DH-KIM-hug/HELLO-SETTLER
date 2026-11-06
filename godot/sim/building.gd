@@ -24,6 +24,14 @@ var upgrade_to := ""                  # 개축 중이면 새 종류 (그동안�
 var built_t := -1.0
 var fuel_on := false                  # 집: 지금 불을 때고 있다 (땔감 있음 — HEALTH.md 1.3). 땔감 = in_buf["통나무"]
 var fuel_acc := 0.0                   # 집: 다음 통나무까지 탄 몫 (1 = 통나무 하나)
+# 마을 시대 건물 (A6 — sim/village_era.gd)
+var has_link := false                 # 나루터: 건너편 물가가 있다
+var link_x := 0.0
+var link_y := 0.0
+var has_spot := false                 # 약초꾼: 약초 자리를 찾았다 (6시간마다 다시)
+var spot_x := 0.0
+var spot_y := 0.0
+var spot_t := -1.0e9
 
 
 func def() -> Dictionary:

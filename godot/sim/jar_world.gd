@@ -214,12 +214,21 @@ func _auto_split() -> void:
 				break
 
 
-func rotate_jar() -> void:
+## 등불 옮기기 (기획서 4.6 · A11): dir 자리 (0~3)로 — 세상 전체의 빛이 돈다. 이미 그 자리면 false
+func move_lamp(dir: int) -> bool:
 	var pv := primary()
 	if pv != null:
-		pv.rotate_jar()
-	else:
+		return pv.move_lamp(dir)
+	if posmod(dir - water.rot, 4) == 0:
+		return false
+	for i in posmod(dir - water.rot, 4):
 		water.rotate_jar()
+	return true
+
+
+## 옛 이름 — 등불을 다음 자리로 한 칸
+func rotate_jar() -> void:
+	move_lamp(water.rot + 1)
 
 
 # ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────

@@ -38,6 +38,7 @@ var _chunks := {}                   # 조각 번호 → {t: MeshInstance3D, w: M
 var _fog_nodes := {}                # 안개 묶음 → MeshInstance3D
 var _fog_mat: ShaderMaterial
 var _terrain_mat: ShaderMaterial
+var light_shown := Vector2.ZERO       # (A11) 등불을 옮기는 3초 동안 화면이 보여 주는 빛 (ZERO = 물의 빛 그대로)
 var _whole_mat: ShaderMaterial
 var _water_mat: ShaderMaterial
 var _clock := 0.0
@@ -89,7 +90,7 @@ func _ready() -> void:
 		var k := ww.idx(x, z)
 		return (ww.h[k] + _depth_w(k)) * HS if _depth_w(k) > JarWater.LAKE_DEPTH else -1.0e9
 	waterfalls.setup(ww.grooves, ww.groove_mult, ww.rr - 0.15, WALL_TOP + 4.0 - 0.15, WorldWater.GROOVE_BASE, ground_y,
-		func(x: float, z: float) -> float: return ww.sun_at(x, z))
+		func(x: float, z: float) -> float: return shown_light().dot(Vector2(x, z)) / ww.rr)
 	for b in (ww.fn / WorldWater.FOG_BLOCK) * (ww.fn / WorldWater.FOG_BLOCK):
 		_build_fog_block(b)
 	ww.fog_dirty.clear()
@@ -644,6 +645,27 @@ func _season_village() -> Village:
 	return villages[0] if not villages.is_empty() else null
 
 
+## 언덕 명암·폭포에 쓰는 빛 — 등불이 옮겨 가는 동안은 화면이 돌리는 빛 (world_village.gd)
+func shown_light() -> Vector2:
+	return light_shown if light_shown != Vector2.ZERO else ww.light
+
+
+## 등불 옮기기 미리보기 — 땅과 안개 모두 (볕이 들 땅 노랑 · 그늘이 될 땅 파랑)
+func set_lamp_preview(mix: float, l0: Vector2, l1: Vector2, rr: float) -> void:
+	super(mix, l0, l1, rr)
+	if _fog_mat != null:
+		_fog_mat.set_shader_parameter("lamp_mix", mix)
+		_fog_mat.set_shader_parameter("lamp_l0", l0)
+		_fog_mat.set_shader_parameter("lamp_l1", l1)
+		_fog_mat.set_shader_parameter("lamp_rr", rr)
+
+
+func set_light_shown(l: Vector2) -> void:
+	light_shown = l
+	for m: ShaderMaterial in _ground_mats():
+		m.set_shader_parameter("light_dir", shown_light())
+
+
 func _ground_mats() -> Array:
 	var out: Array = []
 	for m: ShaderMaterial in [_terrain_mat, _whole_mat]:
@@ -712,7 +734,7 @@ func _update_map_water() -> void:
 		_whole_mat.set_shader_parameter("map_wn", float(m))
 	else:
 		_map_w.update(img)
-	_whole_mat.set_shader_parameter("light_dir", ww.light)
+	_whole_mat.set_shader_parameter("light_dir", shown_light())
 
 
 # ───────────────────────── 조각 메시 (여러 화면에 나눠) ─────────────────────────
@@ -1339,7 +1361,7 @@ func zoom_ppu(ppu: float) -> void:
 		_terrain_mat.set_shader_parameter("band_h", bh)
 		_terrain_mat.set_shader_parameter("path_far", clampf((9.0 - ppu) / 6.0, 0.0, 1.0))
 		_terrain_mat.set_shader_parameter("far_shade", clampf((2.5 - ppu) / 1.5, 0.0, 1.0))
-		_terrain_mat.set_shader_parameter("light_dir", ww.light)
+		_terrain_mat.set_shader_parameter("light_dir", shown_light())
 	if cover != null:
 		cover.visible = not whole_mode and ppu >= GroundCover.SHOW_PPU
 		if cover.visible and _cover_dirty:

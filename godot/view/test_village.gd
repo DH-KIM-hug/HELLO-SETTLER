@@ -85,6 +85,8 @@ var tool_btns: Array[Button] = []
 var shop_sheet: ShopSheet
 var shelf_sheet: ShelfSheet
 var hand_ctl: GiantHandCtl
+var lamp_ctl: LampCtl                 # [등불 옮기기] 나침반 · 미리보기 · 구석의 작은 해 (view/lamp_ctl.gd — A11)
+var _bell_seen := {}                  # 무리 → 들은 교회 종 (Village.bell_t)
 var lamp_btn: Button
 var notes_label: Label
 var speed_list: HBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6)
@@ -159,6 +161,9 @@ func on_back() -> void:
 		return
 	if hand_ctl != null and hand_ctl.is_open():
 		hand_ctl.close()
+		return
+	if lamp_ctl != null and lamp_ctl.is_open():
+		lamp_ctl.cancel()
 		return
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
@@ -384,6 +389,9 @@ func _process(dt: float) -> void:
 	_speed_hold(dt)
 	if hand_ctl != null:
 		hand_ctl.process(dt)
+	if lamp_ctl != null:
+		lamp_ctl.process(dt)
+	_bells()
 	_update_ui()
 	_update_audio()
 
@@ -542,7 +550,7 @@ func _setup_ui() -> void:
 	dev_bar.add_theme_constant_override("v_separation", 4)
 	stack.add_child(dev_bar)
 	for spec: Array in [["+1일", func() -> void: advance(Balance.DAY)],
-			["병 돌리기", dev_rotate],
+			["등불 한 칸", dev_rotate],
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
@@ -604,6 +612,9 @@ func _setup_ui() -> void:
 	lid_btn = hand_ctl.lid_btn
 	blow_btn = hand_ctl.blow_btn
 	lamp_btn = hand_ctl.lamp_btn
+	lamp_ctl = LampCtl.new(self)
+	add_child(lamp_ctl)
+	lamp_ctl.build(root)
 	# 주민 상세 (UI 03) · 제단 (UI 02) · 설정 (UI 10) — 위 화면보다 앞 층
 	var dlayer := CanvasLayer.new()
 	dlayer.layer = 5
@@ -658,6 +669,8 @@ func close_sheets(keep: Control = null) -> void:
 		hand_ctl.close()
 		if hand_ctl.aiming():
 			hand_ctl.cancel_drop()
+	if lamp_ctl != null and lamp_ctl.is_open() and not lamp_ctl.previewing():
+		lamp_ctl.close_all()
 
 
 ## 제단 시트 — 넓은 세상은 카메라가 보고 있는 무리의 제단 (focus_village). 다시 누르면 닫힘
@@ -735,9 +748,60 @@ func screen_to_ground(sp: Vector2) -> Vector2:
 	return Vector2(hit.x, hit.z)
 
 
-## [등불 옮기기] (기획서 6.3 · 4.6 — A11 전까지는 병 돌리기 그대로: 볕·그늘이 바뀜)
+## [등불 옮기기] (기획서 4.6 · A11): 손 칸을 닫고 작은 나침반 → 자리를 고르면 미리보기 (view/lamp_ctl.gd)
 func move_lamp() -> void:
-	dev_rotate()
+	if hand_ctl != null:
+		hand_ctl.close()
+	lamp_ctl.open_compass()
+
+
+# ───────────────────────── 등불 옮기기 — LampCtl이 부르는 것 ─────────────────────────
+func lamp_water() -> JarWater:
+	return village.water
+
+
+func lamp_villages() -> Array:
+	return [village]
+
+
+## 병 데이터 좌표 → 화면 (flat: 높이를 카메라가 보는 땅 높이로 — 방향만 잴 때)
+func lamp_screen(p: Vector2, flat := false) -> Vector2:
+	var y := cam.target.y if flat else terrain.ground_y(p.x, p.y)
+	return cam.camera.unproject_position(Vector3(p.x, y, p.y))
+
+
+## 화면(세계) 좌표 → 병 데이터 좌표 (소형 병은 같음)
+func lamp_data_of(p: Vector2) -> Vector2:
+	return p
+
+
+## 지금 화면이 보여 주는 빛 (소형 병은 데이터가 돌고 빛은 그대로)
+func lamp_light_shown() -> Vector2:
+	return JarWater.LIGHT
+
+
+## [옮기기]
+func lamp_apply(dir: int) -> void:
+	village.move_lamp(dir)
+	GameAudio.fx("jar_turn")
+	refresh()
+
+
+var _lamp_cam := {}
+
+
+## 미리보기 동안: 병 전체가 보이게 (소형 병) + 땅에 볕·그늘 색
+func lamp_preview_begin(pv: Dictionary) -> void:
+	_lamp_cam = {"ppu": cam.ppu_goal, "target": cam.target}
+	cam.ppu_goal = float(JarCamera.ZOOM_PPU[0])
+	terrain.set_lamp_preview(1.0, pv["l0"], pv["l1"], village.water.radius())
+
+
+func lamp_preview_end() -> void:
+	terrain.set_lamp_preview(0.0, Vector2.ZERO, Vector2.ZERO, 1.0)
+	if not _lamp_cam.is_empty():
+		cam.ppu_goal = float(_lamp_cam["ppu"])
+		_lamp_cam = {}
 
 
 ## 떨어진 물건 — 화면을 곧바로 맞춤 (SkyDropView가 하늘에서 떨어뜨림)
@@ -1003,13 +1067,16 @@ func layout_bars() -> void:
 	ui_label.position = Vector2(8, top_h + UiTheme.TOUCH + 12.0)
 	if hand_ctl != null:
 		hand_ctl.layout(bottom_h)
+	if lamp_ctl != null:
+		lamp_ctl.layout(bottom_h, top_h)
 	stack.anchor_left = 0.0
 	stack.anchor_right = 1.0
 	stack.anchor_top = 1.0
 	stack.anchor_bottom = 1.0
 	stack.offset_left = 8
 	stack.offset_right = -8
-	stack.offset_bottom = -bottom_h - 6.0 - (hand_ctl.height() + 4.0 if hand_ctl != null and hand_ctl.height() > 0.0 else 0.0)
+	var tray_h := maxf(hand_ctl.height() if hand_ctl != null else 0.0, lamp_ctl.height() if lamp_ctl != null else 0.0)
+	stack.offset_bottom = -bottom_h - 6.0 - (tray_h + 4.0 if tray_h > 0.0 else 0.0)
 	stack.offset_top = stack.offset_bottom
 
 
@@ -1401,6 +1468,17 @@ func _on_drop_landed(p: Vector3) -> void:
 
 
 ## 배속(빨리 돌리기 → 목소리 끔·효과음 줄임) · 병 밖 시점(축소 → 마을 소리 먹먹하게) · 듣는 자리
+## 교회 종 (저녁 기도·혼례 — Village.bell_t가 바뀌면 한 번)
+func _bells() -> void:
+	for vv: Array in village_views():
+		var q: Village = vv[0]
+		if q.bell_t > float(_bell_seen.get(q, -1.0e9)):
+			var first := not _bell_seen.has(q)
+			_bell_seen[q] = q.bell_t
+			if not first and q.t - q.bell_t < 600.0:
+				GameAudio.fx("bell", "Village", -6.0)
+
+
 func _update_audio() -> void:
 	var a := GameAudio.get_instance()
 	if a == null:

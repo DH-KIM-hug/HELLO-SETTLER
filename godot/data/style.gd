@@ -164,7 +164,12 @@ static func night_amount(hour: float) -> float:
 
 ## 화면용 해 방향 (해에서 땅으로 — DirectionalLight의 -Z)
 static func sun_direction() -> Vector3:
-	var a := Vector2(JarWater.LIGHT.x, JarWater.LIGHT.y).normalized().rotated(deg_to_rad(SUN_AZIMUTH_OFFSET_DEG))
+	return sun_direction_for(JarWater.LIGHT)
+
+
+## 창가(등불) 방향 l (병 데이터 좌표)에서 오는 해 — 등불을 옮기면 (A11) 넓은 세상은 빛이 돈다
+static func sun_direction_for(l: Vector2) -> Vector3:
+	var a := l.normalized().rotated(deg_to_rad(SUN_AZIMUTH_OFFSET_DEG))
 	var el := deg_to_rad(SUN_ELEVATION_DEG)
 	# 해는 창가 쪽(a 방향)에 떠 있다 → 빛은 그 반대로 비춘다
 	return -Vector3(a.x * cos(el), sin(el), a.y * cos(el)).normalized()

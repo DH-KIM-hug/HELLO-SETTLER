@@ -388,7 +388,7 @@ func _arrival_process() -> void:
 
 
 func _set_hud(on: bool) -> void:
-	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn, speed_btn]:
+	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn, speed_btn, lamp_ctl.badge if lamp_ctl != null else null]:
 		if n != null:
 			n.visible = on
 
@@ -438,8 +438,14 @@ func _after_ready() -> void:
 	altar_sheet.set_meta("world", world)
 	altar_sheet.split_requested.connect(begin_split_pick)
 	_sync_views()
-	_rot_shown = world.water.rot
-	jar.rotation.y = -PI * 0.5 * _rot_shown
+	_rot_shown = 0                    # 등불을 옮겨도 병·땅·화면은 그대로 — 빛만 돈다 (GD 4.6 · A11). 옛 저장의 rot도 빛으로
+	jar.rotation.y = 0.0
+	_lamp_rot = world.water.rot
+	_lamp_goal = world.water.light.angle()
+	_lamp_from = _lamp_goal
+	_lamp_cur = _lamp_goal
+	_lamp_t = Balance.LAMP_TURN_SECS
+	_apply_light(world.water.light)
 	cam.ground_center = village.center
 	cam.ground_radius = WorldCfg.REVEAL_KIT + 6.0
 	cam.ppu_min = 0.3                 # 세상 전체 + 유리벽이 보이는 데까지 (병·거인의 방 단계가 붙으면 더 낮춤)
@@ -521,10 +527,7 @@ func _process(dt: float) -> void:
 		_sync_views()
 	_update_focus(dt)
 	_update_limits()
-	# 병이 돈 만큼 병 노드를 돌린다 (데이터는 그대로, 빛만 돈다 — WorldWater.rotate_jar)
-	if world.water.rot != _rot_shown:
-		_rot_shown = world.water.rot
-		jar.rotation.y = -PI * 0.5 * _rot_shown
+	_lamp_anim(dt)                    # 등불을 옮기면 해(그림자·언덕 명암·폭포)가 3초 동안 돈다 (A11)
 	wterrain.set_focus(ground_at_camera(), cam.view_radius())
 	wterrain.zoom_ppu(cam.ppu)
 	far_outline_check()
@@ -628,6 +631,95 @@ func dev_rotate() -> void:
 	world.rotate_jar()
 	GameAudio.fx("jar_turn")
 	refresh()
+
+
+# ───────────────────────── 등불 옮기기 (A11 — view/lamp_ctl.gd) ─────────────────────────
+var _lamp_rot := 0
+var _lamp_goal := 0.0                 # 빛 방향 각 (풀어 둔 값 — 옮길 때마다 −90° × 칸 수)
+var _lamp_from := 0.0
+var _lamp_t := 0.0
+var _lamp_shown := Vector2.ZERO
+var _lamp_cur := 0.0                  # 지금 보이는 빛의 각 (풀어 둔 값)
+
+
+## 물의 빛이 바뀌면(등불을 옮김) 지금 보이는 빛에서 새 빛으로 3초 동안 (옮긴 방향 그대로 돈다)
+func _lamp_anim(dt: float) -> void:
+	var ww := world.water
+	if ww.rot != _lamp_rot:
+		var k := posmod(ww.rot - _lamp_rot, 4)
+		_lamp_rot = ww.rot
+		_lamp_from = _lamp_cur
+		_lamp_goal -= k * PI * 0.5
+		_lamp_t = 0.0
+	if _lamp_t >= Balance.LAMP_TURN_SECS:
+		return
+	_lamp_t += dt
+	var u := smoothstep(0.0, 1.0, clampf(_lamp_t / Balance.LAMP_TURN_SECS, 0.0, 1.0))
+	var a := lerpf(_lamp_from, _lamp_goal, u)
+	_lamp_cur = a
+	var l := Vector2(cos(a), sin(a)) * ww.light.length()
+	if _lamp_t >= Balance.LAMP_TURN_SECS:
+		l = ww.light
+	_apply_light(l)
+
+
+func _apply_light(l: Vector2) -> void:
+	_lamp_shown = l
+	var d := Style.sun_direction_for(l)
+	sun.look_at_from_position(-d * 50.0, Vector3.ZERO, Vector3.UP)
+	wterrain.set_light_shown(l)
+
+
+func lamp_water() -> JarWater:
+	return world.water
+
+
+func lamp_villages() -> Array:
+	return world.settlements
+
+
+func lamp_screen(p: Vector2, flat := false) -> Vector2:
+	var q := p.rotated(PI * 0.5 * _rot_shown)
+	var y := cam.target.y if flat else terrain.ground_y(p.x, p.y)
+	return cam.camera.unproject_position(Vector3(q.x, y, q.y))
+
+
+func lamp_data_of(p: Vector2) -> Vector2:
+	return p.rotated(-PI * 0.5 * _rot_shown)
+
+
+func lamp_light_shown() -> Vector2:
+	return _lamp_shown if _lamp_shown != Vector2.ZERO else world.water.light
+
+
+func lamp_apply(dir: int) -> void:
+	world.move_lamp(dir)
+	GameAudio.fx("jar_turn")
+	refresh()
+
+
+## 미리보기: 세상 전체가 보이게 날아 올라감 (유리벽의 골까지) + 땅에 볕·그늘 색. 끝나면 보던 곳으로 돌아옴
+func lamp_preview_begin(pv: Dictionary) -> void:
+	_stop_follow()
+	_lamp_cam = {"ppu": cam.ppu, "target": cam.target}
+	var vs := get_viewport().get_visible_rect().size
+	var panel_h := lamp_ctl.prev_panel.get_combined_minimum_size().y if lamp_ctl != null else 220.0
+	var free_h := maxf(200.0, vs.y - top_h - bottom_h - panel_h)
+	var fit := clampf(minf(vs.x, free_h / sin(deg_to_rad(JarCamera.PITCH_DEG))) / (world.water.n * 1.16), cam.ppu_min, JarCamera.PPU_MAX)
+	# 화면 위쪽 빈 곳 가운데에 세상이 오게: 바라보는 점을 화면 아래쪽(카메라 쪽)으로 조금
+	var b := cam.camera.global_transform.basis
+	var back := Vector2(b.z.x, b.z.z).normalized()
+	var shift := (panel_h + bottom_h - top_h) * 0.5 / fit / sin(deg_to_rad(JarCamera.PITCH_DEG))
+	var g := back * shift
+	cam.fly_to(Vector3(g.x, 0.0, g.y), fit)
+	terrain.set_lamp_preview(1.0, pv["l0"], pv["l1"], world.water.rr)
+
+
+func lamp_preview_end() -> void:
+	terrain.set_lamp_preview(0.0, Vector2.ZERO, Vector2.ZERO, 1.0)
+	if not _lamp_cam.is_empty():
+		cam.fly_to(_lamp_cam["target"], float(_lamp_cam["ppu"]))
+		_lamp_cam = {}
 
 
 ## 뚜껑은 병에 하나 — 모든 무리가 함께 열리고 닫힌다 (첫 무리의 뚜껑이 기준: JarClock의 1분 자동 닫힘)

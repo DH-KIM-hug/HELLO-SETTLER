@@ -46,6 +46,9 @@ var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃�
 var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
+var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Village.graves)
+var _grave_key := ""
+var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 
 
@@ -106,6 +109,7 @@ func sync(dt: float, force := false) -> void:
 		if force:
 			_far_t = -1.0e9           # 안개만 바뀐 먼 숲도 바로 다시
 		_sync_buildings()
+		_sync_graves()
 		_sync_trees()
 		_sync_rocks()
 		_sync_manna()
@@ -151,6 +155,7 @@ func _sync_residents(dt: float) -> void:
 			z = lerpf(r.py, r.y, alpha)
 		m.position = Vector3(x, gy(x, z), z)
 		m.rotation.y = r.facing
+		_raft(r, m)                     # (A6) 나루터 뗏목 위
 		_ride(r, m)                     # [하늘의 것] 꽃씨에 매달린 아이 — 떠올라 날아감
 		m.set_item(r.carry)
 		if r.anim == "work":
@@ -171,6 +176,67 @@ func _sync_residents(dt: float) -> void:
 			(residents[id] as Node3D).queue_free()
 			residents.erase(id)
 			_res_key.erase(id)
+	for id in _rafts.keys():
+		if not seen.has(int(id) / 2):
+			(_rafts[id] as Node3D).queue_free()
+			_rafts.erase(id)
+
+
+## (A6) 무덤: 흙 둔덕 + 작은 비석 (묘지 안이면 줄지어, 묘지가 없을 땐 마을 끝에 홀로)
+func _sync_graves() -> void:
+	var key := "%d|%d" % [v.graves.size(), v.water.rot]
+	if key == _grave_key:
+		return
+	_grave_key = key
+	if _graves != null:
+		_graves.queue_free()
+	_graves = _node(self)
+	for g: Dictionary in v.graves:
+		var x := float(g["x"])
+		var z := float(g["y"])
+		var n := _node(_graves)
+		n.position = Vector3(x, gy(x, z), z)
+		n.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG) + fposmod(float(g["id"]) * 0.37, 0.3) - 0.15
+		_box(n, Vector3(0.42, 0.1, 0.62), Vector3(0, 0.04, 0.08), Style.WOOD.darkened(0.15))
+		_box(n, Vector3(0.3, 0.38, 0.09), Vector3(0, 0.2, -0.22), Style.STONE)
+		_box(n, Vector3(0.22, 0.06, 0.1), Vector3(0, 0.42, -0.22), Style.STONE.lightened(0.15))
+
+
+## (A6) 뗏목 길을 건너는 사람: 발밑에 작은 뗏목 (물 위 높이) · 치료소에 누운 사람: 밑에 흰 깔개
+func _raft(r: Resident, m: ResidentModel) -> void:
+	var on := not r.steps.is_empty() and bool((r.steps[0] as Dictionary).get("raft", false)) and m.visible
+	var mat := r.doing == "치료소에 누운 중" and r.anim == "sleep" and m.visible
+	var key := r.id * 2 + (1 if mat else 0)
+	for k2 in [r.id * 2, r.id * 2 + 1]:
+		if k2 != key or not (on or mat):
+			var old: Node3D = _rafts.get(k2)
+			if old != null:
+				old.visible = false
+	if not on and not mat:
+		return
+	var rf: Node3D = _rafts.get(key)
+	if rf == null:
+		rf = _node(self)
+		if mat:
+			_box(rf, Vector3(0.62, 0.05, 1.25), Vector3(0, -0.08, 0.0), Color("f3ecd8"))
+			_box(rf, Vector3(0.5, 0.1, 0.28), Vector3(0, -0.03, -0.45), Color("d9e4ec"))
+		else:
+			for i in 4:
+				_box(rf, Vector3(0.22, 0.12, 1.2), Vector3(-0.36 + i * 0.24, 0.0, 0.0), Style.WOOD)
+			_box(rf, Vector3(1.0, 0.06, 0.12), Vector3(0, 0.07, -0.4), Style.WOOD_DARK)
+			_box(rf, Vector3(1.0, 0.06, 0.12), Vector3(0, 0.07, 0.4), Style.WOOD_DARK)
+		_rafts[key] = rf
+	rf.visible = true
+	if mat:
+		rf.position = m.position + Vector3(0, 0.1, 0)
+		rf.rotation.y = r.facing
+		return
+	var k := v.water.idx(m.position.x, m.position.z)
+	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS
+	var y := maxf(m.position.y, wy) + 0.05
+	rf.position = Vector3(m.position.x, y, m.position.z)
+	rf.rotation.y = r.facing
+	m.position.y = y + 0.12
 
 
 ## [곰팡이·뚜껑] 곰팡이 쫓는 사람: 오른손에 횃불 (걸을 땐 높이 들고, 휘두를 땐 연장 대신). 불꽃은 깜빡임
@@ -292,6 +358,9 @@ func _sync_buildings() -> void:
 		n.scale = Vector3.ONE * BUILDING_SCALE
 		# 앞(문)이 기본 카메라 쪽(방위 45°)을 보게 + 조금씩 다르게 (시뮬레이션에는 방향이 없음)
 		n.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG) + (fposmod(b.id * 0.7, 0.5) - 0.25 if not b.is_store else 0.0)
+		if b.type == "나루터" and b.has_link:          # 나루터 모델은 +x가 물 쪽 → 건너편을 보게 (A6)
+			var ld := Vector2(b.link_x - b.x, b.link_y - b.y)
+			n.rotation.y = atan2(ld.x, ld.y)        # 잔교는 모델의 +z 쪽으로 뻗는다
 		if b.built and b.upgrade_to == "":
 			_build_shape(n, b)
 		else:

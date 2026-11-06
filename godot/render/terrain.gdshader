@@ -72,6 +72,11 @@ uniform float path_far = 0.0;        // 0 가까이 ~ 1 반쯤 축소: 길 문�
 // 멀리 축소 (세상 전체): 언덕 명암 + 숲 덩어리
 uniform float far_shade = 0.0;
 uniform vec2 light_dir = vec2(-0.72, -0.69);   // 창가 방향 (병 데이터 좌표 — 언덕 명암)
+// 등불 옮기기 미리보기 (A11 — view/lamp_ctl.gd): 볕이 들 땅 = 노랑, 그늘이 될 땅 = 파랑 (지금 빛 lamp_l0 → 옮긴 뒤 lamp_l1)
+uniform float lamp_mix = 0.0;
+uniform vec2 lamp_l0 = vec2(-0.72, -0.69);
+uniform vec2 lamp_l1 = vec2(-0.72, -0.69);
+uniform float lamp_rr = 512.0;
 // 세상 전체 지도 (view/world_terrain.gd _build_maps — 키트 자리 고르기·끝까지 축소): 높이 → 언덕 명암, 숲 지도 → 수관 덩어리,
 // 거친 칸 수면 높이(R)·흐름(G) → 호수·강·습지. 거친 메시(16칸 간격)여도 픽셀마다 읽어 또렷하다.
 uniform float map_on = 0.0;
@@ -347,6 +352,13 @@ void fragment() {
 		float s = dot(g, normalize(light_dir)) * 3.0;
 		float st = floor(clamp(s, -1.5, 1.5) + 0.5);
 		c *= 1.0 + far_shade * 0.09 * st;
+	}
+	if (lamp_mix > 0.0) {
+		float g = (dot(lpos.xz, lamp_l1) - dot(lpos.xz, lamp_l0)) / lamp_rr;    // + 볕이 듦 · − 그늘이 됨
+		float k = smoothstep(0.04, 0.45, abs(g));
+		vec3 tint = g > 0.0 ? srgb_to_linear(vec3(1.0, 0.8, 0.22)) : srgb_to_linear(vec3(0.24, 0.44, 0.95));
+		float lum = dot(c, vec3(0.3, 0.55, 0.15));
+		c = mix(c, tint * (0.55 + 0.9 * lum), k * 0.55 * lamp_mix);
 	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;

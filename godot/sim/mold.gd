@@ -25,6 +25,7 @@ var startles := 0                     # 주민이 놀란 일 (쌓이면 촌장�
 var chaser_id := -1                   # 곰팡이 쫓는 사람
 var maker_id := -1                    # 지금 곰팡이약을 만드는 사람
 var omen_fog := 0.0                   # 조짐의 뿌연 유리 0~1 (화면)
+var omen_extra := 0.0                 # 이번 조짐이 망루 덕에 먼저 온 만큼 (A6 — 조짐이 그만큼 길다)
 var koji_known := false               # 누룩곰팡이를 알아봄 (아이가 발견)
 var koji_tamed := false               # 길들인 누룩곰팡이가 있다 → 빵 ×1.3
 var med_known := false                # 푸른 가루가 약이 된다는 걸 앎
@@ -142,7 +143,9 @@ func _tick(v: Village, dt: float) -> void:
 	match phase:
 		"calm":
 			omen_fog = maxf(0.0, omen_fog - dt / (0.25 * Balance.DAY))
-			if v.t >= Balance.MOLD_FIRST_DAY * Balance.DAY and v.t >= rest_until and pressure >= 1.0:
+			var lead := VillageEra.omen_lead(v)          # 망루: 조짐이 반나절 먼저 (A6) — 압력 문턱을 그만큼 낮추고 조짐을 그만큼 길게
+			if v.t >= Balance.MOLD_FIRST_DAY * Balance.DAY and v.t >= rest_until and pressure >= 1.0 - lead / (Balance.MOLD_PRESSURE_DAYS * Balance.DAY):
+				omen_extra = lead if pressure < 1.0 else 0.0
 				_start_omen(v)
 		"omen":
 			omen_fog = minf(1.0, omen_fog + dt / (0.3 * Balance.DAY))
@@ -151,11 +154,11 @@ func _tick(v: Village, dt: float) -> void:
 			if pressure < 0.5:                    # 거인이 김을 빼서 조짐이 걷힘
 				phase = "calm"
 				v.log_line("뿌옇던 하늘이 맑아졌다. 빵에 났던 털도 더 번지지 않았다.")
-			elif v.t - phase_t >= Balance.MOLD_OMEN:
+			elif v.t - phase_t >= Balance.MOLD_OMEN + omen_extra:
 				if v.is_watching():
 					_start_swarm(v)
 				else:                             # 거인이 없을 때는 새 위기가 시작되지 않고 조짐에서 기다린다 (SAVE.md 3 · 기획서 14장)
-					phase_t = v.t - Balance.MOLD_OMEN + Balance.HOUR     # → 거인이 돌아와 볼 수 있게 된 뒤 한 시간쯤에 온다
+					phase_t = v.t - Balance.MOLD_OMEN - omen_extra + Balance.HOUR     # → 거인이 돌아와 볼 수 있게 된 뒤 한 시간쯤에 온다
 		"swarm":
 			omen_fog = maxf(0.4, omen_fog - dt / Balance.DAY) if v.t < peak_end else maxf(0.0, omen_fog - dt / (0.3 * Balance.DAY))
 			_swarm_tick(v, dt)
@@ -195,6 +198,8 @@ func _start_omen(v: Village) -> void:
 	if teller != null:
 		v.speak(teller, "빵에 %s 털이 났어!" % col, 7)
 	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": "거인님, 빵에 %s 털이 났어요." % col})
+	if omen_extra > 0.0:
+		v.log_line("망루에서 먼 하늘이 뿌옇게 흐려지는 것이 먼저 보였다. 사람들은 서둘러 빵을 덮었다.")
 	v.log_line("창고의 빵에 %s 털이 돋았다. 하늘이 뿌옇게 흐려졌다." % col)
 	if not v.is_watching():
 		v.log_line("유리에 김이 서리기 시작했다.")
@@ -470,10 +475,11 @@ static func decide(v: Village, r: Resident) -> bool:
 		var b := m._nearest_wild(Vector2(r.x, r.y), Balance.MOLD_HIDE_R, false)
 		if b != null and m._hide(v, r):
 			return true
-	# 곰팡이약 만들기 — 일 없는 어른 (치료소가 아직 없다)
-	if m.med_known and m.maker_id < 0 and r.is_adult() and v.is_work_time() and r.injured_left <= 0.0:
+	# 곰팡이약 만들기 — 약초꾼이 있으면 약초꾼이 (A6), 없으면 일 없는 어른
+	var hb := VillageEra.herbalist(v)
+	if m.med_known and m.maker_id < 0 and r.is_adult() and v.is_work_time() and r.injured_left <= 0.0 and (hb == null or hb == r):
 		if float(v.stock.get(Balance.BLUE_POWDER, 0.0)) >= 1.0 and float(v.stock.get(Balance.MOLD_MED, 0.0)) < Balance.MOLD_MED_KEEP + v.people.size() / 5.0:
-			if (float(v.stock.get("빵", 0.0)) >= 1.0 or float(v.stock.get("건량", 0.0)) >= 2.0) and m.rng.randf() < (0.6 if r.job < 0 else 0.08):
+			if (float(v.stock.get("빵", 0.0)) >= 1.0 or float(v.stock.get("건량", 0.0)) >= 2.0) and m.rng.randf() < (0.6 if (r.job < 0 or hb == r) else 0.08):
 				return m._make_med(v, r)
 	return false
 
@@ -622,6 +628,12 @@ func _make_med(v: Village, r: Resident) -> bool:
 	r.doing = "푸른 가루로 약을 만드는 중"
 	var done := ResidentAI.op("mold_med_done")
 	var undo := ResidentAI.op("mold_med_undo", {"rid": r.id})
+	var hut := v.bld(r.job)
+	if hut != null and hut.type == "약초꾼" and hut.built:      # 약초꾼은 자기 오두막에서 (A6)
+		r.doing = "약초꾼 오두막에서 푸른 가루로 약을 만드는 중"
+		r.steps.append(ResidentAI.walk(hut.x + 0.9, hut.y + 0.7))
+		r.steps.append(ResidentAI.act(Balance.MOLD_MED_MAKE_TIME, "work", done, false, undo))
+		return true
 	r.steps.append(ResidentAI.walk(s.x + 1.2, s.y + 0.9))
 	r.steps.append(ResidentAI.act(Balance.MOLD_MED_MAKE_TIME, "work", done, false, undo))
 	return true

@@ -1,6 +1,6 @@
 ## 발견 도감 (PROGRESSION.md 4 · DISCOVERIES.md) — 연대기 화면의 [발견] 탭이 읽는다.
 ## 발견한 것은 이름 · 처음 발견한 주민 · 날짜, 못 한 것은 실루엣 + 한 줄 힌트.
-## 지금 시뮬레이션에 있는 발견: 소금(W1) · 누룩(곰팡이) · 푸른 가루(곰팡이약) · 얼룩버섯(하늘의 것). 나머지는 DISCOVERIES.md 3장의 자리 (힌트만).
+## 지금 시뮬레이션에 있는 발견: 소금(W1) · 누룩(곰팡이) · 푸른 가루(곰팡이약) · 얼룩버섯(하늘의 것) · 약초(F2) · 장례(P4) · 세상의 끝(S1) · 세상 끝의 샘(S2 — 망루, A6). 나머지는 DISCOVERIES.md 3장의 자리 (힌트만).
 ## 발견은 그 병의 것 (DISCOVERIES 1.4) → 넓은 세상이면 같은 병의 모든 무리를 합친다 (가장 먼저 발견한 무리·사람).
 class_name Codex
 extends RefCounted
@@ -22,19 +22,19 @@ const ENTRIES := [
 	{"id": "terrace", "name": "비탈 계단", "hint": "가파른 비탈에도 밭을 일굴 수 있을까", "icon": "", "live": false},
 	{"id": "hot_spring", "name": "땅속의 열", "hint": "겨울에도 눈이 쌓이지 않는 땅", "icon": "", "live": false},
 	{"id": "reed", "name": "갈대", "hint": "강이 스며드는 습지의 키 큰 풀", "icon": "", "live": false},
-	{"id": "herb", "name": "약초", "hint": "아픈 사람이 숲가의 쓴 풀을 씹으면", "icon": "약초", "live": false},
+	{"id": "herb", "name": "약초", "hint": "아픈 사람이 숲가의 쓴 풀을 씹으면", "icon": "약초", "live": true},
 	{"id": "planting", "name": "씨앗을 심다", "hint": "숲이 많이 줄어들면, 아이들이…", "icon": "", "live": false},
 	{"id": "livestock", "name": "가축", "hint": "사냥꾼이 어미 잃은 새끼를 만나면", "icon": "우유", "live": false},
 	{"id": "yeast", "name": "효모", "hint": "밤새 잊어버린 빵 반죽", "icon": "밀가루", "live": false},
-	{"id": "world_end", "name": "세상의 끝", "hint": "끝까지 걸어가 본 사람이 있을까", "icon": "", "live": false},
-	{"id": "world_spring", "name": "세상 끝의 샘", "hint": "강을 거슬러 끝까지 올라가면", "icon": "", "live": false},
+	{"id": "world_end", "name": "세상의 끝", "hint": "끝까지 걸어가 본 사람이 있을까", "icon": "", "live": true},
+	{"id": "world_spring", "name": "세상 끝의 샘", "hint": "강을 거슬러 끝까지 올라가면", "icon": "", "live": true},
 	{"id": "sun_path", "name": "해의 길", "hint": "해가 옮겨 가는 걸 겪은 노인", "icon": "해", "live": false},
 	{"id": "giant_shadow", "name": "거인의 그림자", "hint": "거인님이 오래 지켜보시면", "icon": "", "live": false},
 	{"id": "stars", "name": "별", "hint": "불을 다 끈 맑은 밤하늘", "icon": "", "live": false},
 	{"id": "writing", "name": "글", "hint": "노인들의 이야기가 잊히지 않게", "icon": "", "live": false},
 	{"id": "counting", "name": "셈", "hint": "물건을 자주 바꾸다 보면", "icon": "주화", "live": false},
 	{"id": "song", "name": "노래", "hint": "노래하는 사람이 셋 모이면", "icon": "", "live": false},
-	{"id": "funeral", "name": "장례", "hint": "처음으로 누군가를 떠나보낼 때", "icon": "", "live": false},
+	{"id": "funeral", "name": "장례", "hint": "처음으로 누군가를 떠나보낼 때", "icon": "", "live": true},
 ]
 
 

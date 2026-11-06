@@ -283,7 +283,7 @@ func test_world_rotation() -> void:
 	for i in 3:
 		jw.rotate_jar()
 	check(jw.water.rot == 0 and absf(jw.water.warm_at(p.x, p.y) - w0) < 1e-6, "네 번 돌리면 제자리")
-	check(v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("해가 하늘을 건너")).size() == 4, "돌릴 때마다 연대기")
+	check(v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("해가") and String(e["text"]).contains("옮겨 갔다")).size() == 4, "옮길 때마다 연대기 (\"해가 …쪽으로 옮겨 갔다\")")
 
 
 ## 시간 예산 (Mac): 몰아서 계산 하루 ≤ 약 1.5초 · 지켜볼 때 물 한 번(고운 + 거친 한 묶음)이 한 화면을 넘지 않음

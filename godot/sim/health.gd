@@ -220,6 +220,7 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 			v.warnings.append({"t": tt, "kind": "sick", "text": Balance.LINE_SICK_WARN})
 	if new_hour:
 		_hourly(v, clinic)
+		VillageEra.herb_watch(v)              # DISCOVERIES F2 약초 (앓는 사람 + 습한 숲가)
 	v.recalc_fear()
 
 
@@ -240,7 +241,7 @@ static func _heavy(v: Village, r: Resident) -> bool:
 static func _clinics(v: Village) -> Array:
 	var out: Array = []
 	for b in v.buildings:
-		if b.built and b.type == Balance.CLINIC_TYPE:
+		if VillageEra.clinic_active(v, b):        # 약초사가 있는 치료소 (A6 — sim/village_era.gd)
 			out.append(Vector2(b.x, b.y))
 	return out
 

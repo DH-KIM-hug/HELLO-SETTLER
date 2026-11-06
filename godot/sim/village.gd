@@ -138,6 +138,15 @@ var shop_seen: Array = []             # 거인이 들여다본 탭 (상점 버�
 var shop_bought: Dictionary = {}      # 이 병에 사 준 건물 수 (또 사면 ×1.5)
 var _drop_id := 0
 var _sky_acc := 0.0
+# 마을 시대 건물 (A6 — sim/village_era.gd) · 등불 옮기기 (A11 — sim/lamp.gd)
+var graves: Array = []                # 무덤 {id, name, x, y, t, yard(묘지 안), yard_id}
+var wade_secs := 0.0                  # 물을 걸어 건넌 시간 (사람×초, 반감기 하루) — 촌장의 나루터 조건
+var wedding_t := -1.0e9               # 교회 혼례 잔치 (반나절)
+var bell_t := -1.0e9                  # 교회 종이 울린 때 (화면이 소리 — 저녁 기도·혼례)
+var market_day := -1                  # 광장 장날 (병 달력 n일차)
+var lamp_hinted := false              # 등불을 처음 옮기려 할 때 노인의 귀띔을 들었다 (GD 4.6)
+var lamp_moved_t := -1.0e9            # 마지막으로 등불을 옮긴 때
+var lamp_last: Dictionary = {}        # 마지막으로 옮길 때의 미리보기 요약 {from, to, up, down} (지도 반짝임·시험)
 
 
 # ───────────────────────── 처음 세계 ─────────────────────────
@@ -285,6 +294,7 @@ func add_building(type: String, x: float, y: float, built: bool) -> Building:
 			b.ready_at = t + Balance.GROW_FIRST
 	buildings.append(b)
 	_bld_by_id[b.id] = b
+	VillageEra.on_site(self, b)          # 나루터: 건너편 물가
 	return b
 
 
@@ -761,6 +771,7 @@ func step(dt: float) -> void:
 		if p.say_t > 0.0:
 			p.say_t -= dt
 	Health.step(self, dt)
+	VillageEra.decay(self, dt)        # 걸어 건넌 물 (나루터 조건 — A6)
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
 	Mold.step(self, dt)
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
@@ -889,6 +900,7 @@ func _on_dawn() -> void:
 				key = jb.type
 			p.skills[key] = minf(Balance.SKILL_MAX, float(p.skills.get(key, 0.0)) + Balance.SKILL_RATE * p.talent * p.f("skill_growth"))
 		p.work_secs_today = 0.0
+	VillageEra.dawn(self)                 # 광장 장날 (A6)
 	_update_happiness()
 
 
@@ -1056,8 +1068,11 @@ func doubters() -> int:
 
 func _update_happiness() -> void:
 	var variety := food_types() >= 3
-	var fest := t - festival_t < Balance.FESTIVAL_DAYS * DAY
+	var fest := t - festival_t < Balance.FESTIVAL_DAYS * DAY or VillageEra.wedding_on(self)
 	var tea := flora != null and flora.tea_on(self)
+	var pz := VillageEra.first_built(self, "광장")        # 반경 행복 (A6 — BUILDINGS 6)
+	var gyd := VillageEra.first_built(self, "묘지")
+	var gm := Balance.GRIEF_GRAVE if gyd != null else 1.0
 	var cheer := {}               # 집 → 그 집 '명랑' 식구 몫의 합
 	for p in people:
 		var hh := p.f("house_happy", 0.0)
@@ -1073,7 +1088,9 @@ func _update_happiness() -> void:
 		if fest:
 			h += Balance.HAPPY_FESTIVAL * _festival_mult * p.f("festival")
 		if t < p.grief_until:
-			h += Balance.HAPPY_GRIEF
+			h += Balance.HAPPY_GRIEF * gm                 # 묘지가 있으면 슬픔이 덜하다
+		if pz != null or gyd != null:
+			h += VillageEra.place_happy(self, p, pz, gyd)
 		h += p.f("happiness", 0.0)
 		if tea:
 			h += Balance.TEA_HAPPY                        # [하늘의 것] 민들레 꽃차 (WORLD_EVENTS 2.7)
@@ -1220,6 +1237,7 @@ func on_built(b: Building) -> void:
 		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.type, josa(b.type, "이", "가")])
 	else:
 		log_line("%s%s 다 지어졌다." % [b.type, josa(b.type, "이", "가")])
+	VillageEra.on_built(self, b)          # 망루 안개·세상 끝 · 묘지·교회·광장·나루터 한 줄 (A6)
 	if in_opening():
 		thanksgiving(b)
 
@@ -1397,8 +1415,9 @@ func _marriages(dt: float) -> void:
 			if a.home != b.home:
 				a.home = -1
 				b.home = -1
-			log_line("%s%s %s%s 모닥불 앞에서 혼인을 약속했다." % [a.name, josa(a.name, "과", "와"), b.name, josa(b.name, "이", "가")])
-			speak(a, "거인님, 저희를 지켜봐 주세요", 6)
+			if not VillageEra.wedding(self, a, b):       # 교회가 있으면 교회에서 혼례 잔치 (A6)
+				log_line("%s%s %s%s 모닥불 앞에서 혼인을 약속했다." % [a.name, josa(a.name, "과", "와"), b.name, josa(b.name, "이", "가")])
+			speak(a, "거인님, 저희를 지켜봐 주세요" if aware else "우리 오래오래 함께해요", 6)
 
 
 func _shuffle(a: Array) -> void:
@@ -1536,6 +1555,7 @@ func kill(p: Resident, why: String) -> void:
 		elif Vector2(q.x - p.x, q.y - p.y).length() <= Balance.FEAR_SAW_R and not q.sleeping:
 			raise_fear(q, Balance.FEAR_SAW_DEATH)
 	recalc_fear()
+	VillageEra.on_death(self, p)          # 무덤 · 장례 행렬 · 발견 '장례' (A6 — DISCOVERIES P4)
 
 
 func idle_chatter() -> void:
@@ -1613,7 +1633,7 @@ func _owed(k: String) -> int:
 ## 들어준 소원 중 지금 지을 수 있는 것 (시대가 열린 것) — 없으면 ""
 func _wish_now() -> String:
 	for w: String in wishes:
-		if int(Balance.B[w]["era"]) <= era:
+		if Balance.B.has(w) and VillageEra.can_build(self, w):
 			return w
 	return ""
 
@@ -1624,7 +1644,7 @@ func _fav_want() -> String:
 	goods.sort_custom(func(a: String, b: String) -> bool: return float(favourites[a]) > float(favourites[b]))
 	for g: String in goods:
 		var ty: String = Balance.PRODUCER[g]
-		if int(Balance.B[ty]["era"]) > era or count_type(ty) >= 2:
+		if not VillageEra.can_build(self, ty) or count_type(ty) >= 2:
 			continue
 		if ty == "소금밭" and (not salt_known or salt_flat_near() == null):
 			continue
@@ -1693,10 +1713,14 @@ func chief_build() -> void:
 		want = "산림관"
 	elif salt_known and count_type("소금밭") == 0 and salt_flat_near() != null:
 		want = "소금밭"
+	elif VillageEra.want_early(self) != "":
+		want = VillageEra.want_early(self)    # 첫 죽음 뒤 묘지 · 자주 앓으면 약초꾼 (A6)
 	elif era >= 1 and count_type("방앗간") == 0:
 		want = "방앗간"
 	elif era >= 1 and count_type("빵집") == 0:
 		want = "빵집"
+	else:
+		want = VillageEra.want_late(self)     # 치료소 → 교회 → 광장 → 망루 → 나루터 (A6 — RESIDENT_AI 6.2)
 	if want == "":
 		return
 	var upgrade: Building = null
@@ -1726,7 +1750,7 @@ func chief_build() -> void:
 		else:
 			return
 	var d: Dictionary = Balance.B[want]
-	if int(d["era"]) > era:
+	if not VillageEra.can_build(self, want):      # 시대가 안 열렸거나 아직 못 짓는 건물 (어부·목장 … — Balance.B_LOCKED)
 		return
 	# 촌장은 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외 · 들어준 소원은 그래도 짓는다)
 	if d.get("job", false) and idle < Balance.IDLE_FOR_NEW_JOB and not (want == "농장" and food_short) and want != wish:
@@ -1806,6 +1830,14 @@ func is_free(x: float, y: float, size: float) -> bool:
 func find_spot(type: String) -> Variant:
 	var size: float = Balance.B[type]["size"]
 	var c := center
+	if type == "나루터":                       # 물가 (건너편이 보이는 곳 — A6)
+		var fp: Variant = VillageEra.ferry_spot(self)
+		if fp != null:
+			_clear_trees(fp, size)
+		return fp
+	var ec: Variant = VillageEra.spot_center(self, type)     # 약초꾼 = 습한 숲가 · 묘지 = 마을 끝 · 망루 = 안개 쪽
+	if ec != null:
+		c = ec
 	if type == "버섯꾼" and flora != null:     # [하늘의 것] 큰 버섯 곁
 		var best: Dictionary = {}
 		for s: Dictionary in flora.shrooms:
@@ -2003,33 +2035,57 @@ func path_mult(x: float, y: float) -> float:
 	return Balance.PATH_SPEED if path_at(x, y) >= Balance.PATH_AT else 1.0
 
 
-# ───────────────────────── 병 돌리기 ─────────────────────────
-## 물·지형과 함께 병 안의 모든 것이 (x, y) → (−y, x)로 돈다 (JarWater.rotate_jar)
+# ───────────────────────── 등불 옮기기 (기획서 4.6 · A11 — sim/lamp.gd) ─────────────────────────
+## 등불(해)을 병 둘레 네 자리 중 dir (0~3)로 옮긴다. 이미 그 자리면 false.
+## 넓은 세상: 데이터는 그대로, 빛만 돈다 (WorldWater.rotate_jar) — 같은 병의 모든 무리가 함께 겪는다.
+## 소형 병: 물·지형과 병 안의 모든 것이 (x, y) → (−y, x)로 돈다 (JarWater.rotate_jar — 같은 뜻).
+## 하루 세 번까지는 기적(믿음↑), 네 번째부터 두려움↑ (한 번 옮기기 = 한 번 — 몇 칸을 건너든). 깨닫기 전에는 목격(경이).
+func move_lamp(dir: int) -> bool:
+	dir = posmod(dir, 4)
+	var steps := posmod(dir - Lamp.spot(water), 4)
+	if steps == 0:
+		return false
+	var vills: Array = [self] + others if water is WorldWater else [self]
+	var pv := Lamp.preview(vills, water, dir)      # 옮기기 전에 셈한 변화 (연대기 한 줄)
+	if water is WorldWater:
+		for i in steps:
+			water.rotate_jar()
+	else:
+		for i in steps:
+			_turn_data()
+	for v: Village in vills:
+		v._after_lamp(pv)
+	giant_acted()
+	return true
+
+
+## 옛 이름 (병 돌리기 = 등불을 다음 자리로 한 칸) — 옛 시험·도구가 부름
 func rotate_jar() -> void:
-	if water is WorldWater:        # 넓은 세상: 데이터는 그대로, 빛이 돈다 (WorldWater.rotate_jar) — 화면이 병을 돌려 보여 준다
-		water.rotate_jar()
-		for v: Village in [self] + others:
-			v._fear_rotate()
-			for b in v.buildings:
-				b.farm_mult = -1.0
-			v.bless_all(0.06)
-			v.log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
-			Awakening.witness(v, "lamp")
-		giant_acted()
-		return
+	move_lamp(Lamp.spot(water) + 1)
+
+
+## 소형 병: 병 안의 모든 것을 90° 돌림 (데이터)
+func _turn_data() -> void:
 	water.rotate_jar()
 	var rp := func(o: Dictionary) -> void:
 		var x: float = o["x"]
 		o["x"] = -float(o["y"])
 		o["y"] = x
-	for list: Array in [trees, rocks, manna, drops, towers, algae]:     # [상점] 하늘에서 내려온 것도 병과 함께 돈다
+	for list: Array in [trees, rocks, manna, drops, towers, algae, graves]:     # [상점] 하늘에서 내려온 것 · 무덤도 병과 함께 돈다
 		for o: Dictionary in list:
 			rp.call(o)
 	for b in buildings:
 		var x := b.x
 		b.x = -b.y
 		b.y = x
-		b.farm_mult = -1.0
+		if b.has_link:
+			var lx := b.link_x
+			b.link_x = -b.link_y
+			b.link_y = lx
+		if b.has_spot:
+			var sx := b.spot_x
+			b.spot_x = -b.spot_y
+			b.spot_y = sx
 	for p in people:
 		var x := p.x
 		p.x = -p.y
@@ -2047,11 +2103,46 @@ func rotate_jar() -> void:
 		for i in PATH_N:
 			np[i * PATH_N + (PATH_N - 1 - j)] = paths[j * PATH_N + i]
 	paths = np
+
+
+## 옮긴 뒤 (무리마다): 두려움 규칙 · 믿음 · 밭 배율 다시 · 연대기 · 목격 · "해가 옮겨갔다!"
+func _after_lamp(pv: Dictionary) -> void:
 	_fear_rotate()
+	for b in buildings:
+		b.farm_mult = -1.0
 	bless_all(0.06)
-	log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+	lamp_moved_t = t
+	lamp_last = {"from": int(pv.get("from", 0)), "to": int(pv.get("to", 0)), "up": int(pv.get("up", 0)) + int(pv.get("new", 0)),
+		"down": int(pv.get("down", 0)) + int(pv.get("gone", 0)), "t": t}
+	stats["lamp_moves"] = int(stats.get("lamp_moves", 0)) + 1
+	log_line(Lamp.chronicle(pv))
 	Awakening.witness(self, "lamp")
-	giant_acted()
+	var scared := int(_rots[1]) > Balance.FEAR_FREE_PER_DAY
+	var said := 0
+	for r in people:
+		if said >= 2:
+			break
+		if r.sleeping or r.is_baby() or r.age < 2.5:
+			continue
+		speak(r, Balance.LINE_LAMP_FEAR if scared else (Balance.LINE_LAMP_MOVED if said == 0 else "그림자가 돌아누웠어!"), 7)
+		said += 1
+
+
+## 등불을 처음 옮기려 할 때 노인의 귀띔 (GD 4.6 — 한 번만): {who: 주민, text}. 이미 들었거나 말할 사람이 없으면 {}
+func lamp_hint() -> Dictionary:
+	if lamp_hinted:
+		return {}
+	lamp_hinted = true
+	var elder: Resident = null
+	for r in people:
+		if r.is_elder() and not r.is_baby() and r.sick_left <= 0.0 and (elder == null or r.age > elder.age):
+			elder = r
+	if elder == null:
+		elder = chief()
+	if elder == null:
+		return {}
+	var txt := Balance.LINE_LAMP_HINT if aware else Balance.LINE_LAMP_HINT_UNAWARE
+	return {"who": elder, "text": txt}
 
 
 # ───────────────────────── 제단·제물·소원·분가 (기획서 3.1 · 6.7 · 11.1, RESIDENT_AI 2.1 · 6.2) ─────────────────────────
@@ -2243,10 +2334,12 @@ func evening_offering() -> Dictionary:
 	var starving := _starving()
 	var got := {}
 	var sp := surplus()
+	var om := VillageEra.offer_mult(self)     # 교회 = 큰 제단 ×1.3 (A6)
+	VillageEra.evening_bell(self)
 	for item: String in sp:
 		if item in Balance.FOODS and starving and fear < Balance.OFFER_FEAR_FOOD:
 			continue                      # 굶주리는 마을은 식량을 바치지 않는다
-		var amt := floori(float(sp[item]) * offer_factor(item))
+		var amt := mini(floori(float(sp[item]) * offer_factor(item) * om), floori(float(stock.get(item, 0.0))))
 		if amt < 1:
 			continue
 		stock[item] = float(stock[item]) - amt

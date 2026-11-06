@@ -131,7 +131,7 @@ const START_STOCK := {"건량": 240.0, "빵": 0.0, "밀": 0.0, "통나무": 0.0,
 	"버섯": 0.0, "말린 버섯": 0.0, "빛버섯": 0.0, "민들레 잎": 0.0, "꽃잎": 0.0, "솜": 0.0, "노란 물감": 0.0, "붉은 물감": 0.0}   # 하늘의 것 (WORLD_EVENTS 2.6 · 2.7)
 ## 창고 식량 (낟알은 따로) — 먹는 순서. 생버섯은 상하므로 먼저, 말린 버섯은 오래 가므로 뒤, 민들레 잎(쓴 나물)은 굶을 때 마지막
 const FOODS := ["버섯", "건량", "빵", "밀", "말린 버섯", "민들레 잎"]
-const ENOUGH := {"통나무": 20.0, "판자": 40.0, "돌": 30.0, "물": 20.0, "밀가루": 20.0, "소금": 40.0,
+const ENOUGH := {"통나무": 20.0, "판자": 40.0, "돌": 30.0, "물": 20.0, "밀가루": 20.0, "소금": 40.0, "약초": 16.0,
 	"버섯": 80.0, "말린 버섯": 60.0, "빛버섯": 6.0, "붉은 물감": 10.0}
 ## 밀의 넉넉한 양 (BALANCE v4-4 — 농장도 다른 일터처럼 멈춘다) = 마을이 먹는 양 × 이만큼 날 (밀 + 밭에 쌓인 밀).
 ## 제물로 남기는 식량(OFFER_FOOD_KEEP_DAYS 1.5일)보다 조금 더 → 날마다 바치는 밀이 인구에 맞게 묶인다
@@ -285,7 +285,18 @@ const B := {
 	"소금밭": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 90.0, "needs_salt": true},
 	"제단": {"plank": 0, "stone": 0, "time": 9000, "era": 0, "size": 0.9},   # A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
 	"버섯꾼": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
+	# 마을 시대 건물 1차 (A6 — BUILDINGS 3.1 · 4.1 · 6, buildings_v1.xlsx '건물' 시트의 판자/돌/시간 — sim/village_era.gd)
+	"묘지": {"plank": 0, "stone": 1, "time": 30, "era": 0, "size": 1.3},    # 개척기 — 첫 사망 뒤. 반경 행복 −0.01 · 슬픔이 덜함
+	"약초꾼": {"plank": 2, "stone": 0, "time": 60, "era": 1, "size": 0.9, "job": true, "gather": true, "herb": 90.0},   # 습한 땅·숲에서 약초 (90초) · 곰팡이약도 (DISCOVERIES F2 — 약초를 알면 개척기에도)
+	"치료소": {"plank": 3, "stone": 2, "time": 150, "era": 1, "size": 1.3, "job": true},    # 약초사 — 반경 질병 회복↑ 전염↓ (HEALTH 2.4) · 앓는 사람이 와서 누움
+	"교회": {"plank": 4, "stone": 6, "time": 300, "era": 1, "size": 1.6, "job": true},     # 사제 — 큰 제단 (제물 ×1.3) · 기도 모임 · 저녁 종 · 혼례
+	"광장": {"plank": 0, "stone": 2, "time": 60, "era": 1, "size": 1.9},     # 축제·모임 자리 · 반경 행복 · 장날
+	"망루": {"plank": 2, "stone": 1, "time": 90, "era": 1, "size": 0.8},     # 둘레 안개 걷힘 · 위기 조짐 반나절 먼저 · 국경 +8 (BORDER_D)
+	"나루터": {"plank": 3, "stone": 0, "time": 90, "era": 1, "size": 1.0, "job": true},    # 뱃사공 — 강을 건너는 지름길 (뗏목)
 }
+## 아직 못 짓는 마을 시대 건물 (A6 — 들짐승·양털·철은 B3 · C3에서). 촌장은 짓지 않고, 상점은 '곧' + 이 까닭
+const B_LOCKED := {"어부": "물고기가 살아야 해요", "사냥꾼": "들짐승이 살아야 해요",
+	"목장": "양이 있어야 해요", "방직소": "양털이 있어야 해요", "대장간": "쇠가 있어야 해요"}
 
 # ───────────────────────── 행동 점수 (RESIDENT_AI 4장) ─────────────────────────
 # 점수 = 기본 × 긴급도 × 시간대 가중치 × (1 + 특징 보정) × 신앙 상태 보정, 방금 한 행동 ×0.8
@@ -386,7 +397,7 @@ const BOUGHT_BELIEF := 0.1              # (정함) 하늘에서 완성된 건물
 const FAV_ENOUGH := 1.5
 const FAV_MIN := 3.0                    # (정함) 이만큼 넘게 받은 물건부터 '좋아하신다'
 const PRODUCER := {"통나무": "나무꾼", "판자": "제재소", "돌": "채석장", "밀": "농장", "밀가루": "방앗간", "빵": "빵집", "소금": "소금밭",
-	"버섯": "버섯꾼", "말린 버섯": "버섯꾼", "빛버섯": "버섯꾼"}
+	"버섯": "버섯꾼", "말린 버섯": "버섯꾼", "빛버섯": "버섯꾼", "약초": "약초꾼"}
 # 길 (기획서 6.7 '길은 발길이 만든다'): 오솔길 값(그 칸을 걸은 거리, 최대 60)이 이 위면 흙길 — 걸음이 빨라진다
 const PATH_AT := 8.0                    # (정함)
 const PATH_SPEED := 1.15                # (정함) 흙길 위 걸음 ×
@@ -584,3 +595,45 @@ const RIDE_REST := 3.0 * DAY
 const RIDE_TIME := 120.0
 const RIDE_DIST := [12.0, 18.0]
 # ═══════════════ 하늘의 것 끝 ═══════════════
+
+# ═══════════════ 마을 시대 건물 1차 (A6 — sim/village_era.gd) ═══════════════
+const HERB_WET := 0.45                  # (정함) 약초가 나는 땅: 습기 이 위 (습지·물가) 또는 숲 가 (나무 3칸 안)
+const HERB_RANGE := 14.0                # (정함) 약초꾼이 약초를 찾아가는 거리
+const HERB_FIND_P := 0.08               # (정함) F2 약초: 앓는 사람이 습한 숲가 곁(8칸)에 있으면 병 시계 1시간마다 이 확률로 발견
+const HERB_FIND_R := 8.0
+const HERB_DISCOVERY_PTS := 10.0        # DISCOVERIES F2 보통 (+10)
+const CLINIC_BEDS := 4                  # 치료소 툇마루에 눕는 앓는 사람 수
+const CLINIC_STAFF := true              # 치료소 효과는 약초사가 있을 때만 (앓아누우면 쉼)
+const CHAPEL_OFFER := 1.3               # 교회: 저녁 제물 ×1.3 (큰 제단)
+const CHAPEL_FAITH := 65.0              # (정함) 촌장이 교회를 짓는 믿음
+const CHAPEL_POP := 12                  # (정함) 그리고 인구
+const CHAPEL_BELIEF := 0.005            # (정함) 교회에서 기도하면 믿음 더 (사제가 있을 때)
+const WEDDING_FEST := 0.5 * DAY         # 교회 혼례 = 작은 축제 (festival_t를 이만큼 짧게 — 하루 동안 행복·출산 배율)
+const PLAZA_POP := 20                   # 촌장이 광장을 짓는 인구
+const PLAZA_R := 12.0                   # (정함) 광장 반경 — 집이 이 안이면 행복 +0.05
+const PLAZA_HAPPY := 0.05
+const MARKET_EVERY := 5                 # (정함) 닷새마다 장날 (광장이 있으면 — 연대기 한 줄 · 저녁 모임)
+const GRAVE_HAPPY := -0.01              # 묘지 반경(4칸) 안 집 −1 (BUILDINGS 6)
+const GRAVE_R := 4.0
+const GRIEF_GRAVE := 0.5                # 묘지가 있으면 슬픔 행복 감소 ×0.5 (묻고 추모할 곳이 있다)
+const FUNERAL_TIME := 420.0             # 장례 행렬: 묘지 곁에 서 있는 시간 (초)
+const FUNERAL_DISCOVERY_PTS := 5.0      # DISCOVERIES P4 작은 (+5)
+const WATCH_REVEAL := 48.0              # (정함) 망루가 걷는 안개 반지름 (칸)
+const WATCH_OMEN_LEAD := 0.5 * DAY      # 망루: 위기 조짐이 반나절 먼저
+const WORLD_END_PTS := 15.0             # S1 세상의 끝 (+15)
+const WORLD_SPRING_PTS := 10.0          # S2 세상 끝의 샘 (+10)
+const WADE_SPEED := 0.4                 # 물(강·얕은 물)을 걸어서 건너면 걸음 ×0.4
+const WADE_DEPTH := 0.004               # 이보다 깊은 칸 = 물
+const FERRY_R := 2.2                    # 나루터 둘레 = 뗏목으로 건넘 (걸음 그대로)
+const FERRY_WADE_DAY := 900.0           # (정함) 하루에 물을 걸어 건넌 시간(사람×초)이 이만큼 넘고 영역에 강이 있으면 촌장이 나루터
+const FERRY_REACH := 14.0               # 나루터 건너편 물가를 찾는 거리
+# 등불 옮기기 (A11 — GD 4.6 · sim/lamp.gd)
+const LAMP_TURN_SECS := 3.0             # 그림자가 도는 시간 (현실 초 — 화면)
+const LAMP_UP := 1.25                   # 골 물이 이만큼 넘게 늘면 '굵어짐' (파랑 ↑)
+const LAMP_DOWN := 0.8                  # 이만큼 아래로 줄면 '가늘어짐' (빨강 ↓)
+const LAMP_LAKE := 0.12                 # 호수 자리 따뜻함이 이만큼 넘게 바뀌면 ▲▼
+const LAMP_FARM := 0.06                 # 농사 배율이 이만큼(비율) 넘게 바뀌면 밭 표시
+const LINE_LAMP_MOVED := "해가 옮겨갔다!"
+const LINE_LAMP_FEAR := "해가 또 자리를 바꿨어… 무서워"
+const LINE_LAMP_HINT := "거인님, 해가 옮겨 가면 그늘진 벽에서 물이 흘러내려 강이 돼요. 볕 든 쪽 강은 마르고요."
+const LINE_LAMP_HINT_UNAWARE := "해가 옮겨 가면 그늘진 벽에서 물이 흘러내려 강이 된단다. 볕 든 쪽 강은 마르고."

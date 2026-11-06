@@ -190,14 +190,16 @@ static func gather_ring(v: Village, secs: float, doing: String, only_free := fal
 	var i := 0
 	for p in ps:
 		ResidentAI.cancel(v, p)
-		var a := TAU * float(i) / float(n) + 0.3
-		var rr := RING_R + (0.7 if i % 2 == 1 and n > 10 else 0.0)
-		var q := v.altar_pos + Vector2(cos(a), sin(a)) * rr
+		var pl := VillageEra.prayer_place(v, i, n)      # 제단 둘레 고리 — 교회가 있으면 교회 앞 (A6)
+		var q: Vector2 = pl["p"]
+		var fc: Vector2 = pl["face"]
 		p.action = "pray"
 		p.last_action = "pray"
-		p.doing = doing
+		p.doing = doing if fc == v.altar_pos else doing.replace("기도하는", "교회 앞에서 기도하는")
 		p.steps.append(ResidentAI.walk(q.x, q.y))
-		p.steps.append(face_altar_step(v, q))
+		var dd := fc - q
+		var fq := q + (dd.normalized() * 0.03 if dd.length() > 0.05 else Vector2(0.0, 0.03))
+		p.steps.append(ResidentAI.walk(fq.x, fq.y))
 		p.steps.append(ResidentAI.act(secs, "pray", ResidentAI.op("pray")))
 		i += 1
 

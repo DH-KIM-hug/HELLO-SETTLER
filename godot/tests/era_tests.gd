@@ -293,7 +293,7 @@ func test_revelation_flow() -> void:
 	check(v.revelation_pending() and v.era == 0, "점수가 차면 계시를 기다림 (시대는 그대로)")
 	check(String(v.revelation.get("text", "")).contains("하늘이 무언가를 알려 주실 것 같아요"), "노인의 편지: \"%s\"" % v.revelation.get("text", ""))
 	check(has_line(v, "하늘을 올려다보았다"), "연대기: 노인들이 하늘을 올려다봄")
-	var said := v.people.any(func(r: Resident) -> bool: return r.say.contains("하늘"))
+	var said := v.people.any(func(r: Resident) -> bool: return r.is_elder() and (r.say.contains("하늘") or r.say.contains("거인님이 곧")))
 	check(said, "노인이 하늘을 보며 말함")
 	var b := through_bytes(v)
 	check(b.revelation_pending() and b.revelation == v.revelation, "저장/불러오기: 기다리는 계시 그대로")

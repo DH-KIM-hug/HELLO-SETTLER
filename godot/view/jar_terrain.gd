@@ -426,6 +426,15 @@ func _ground_mats() -> Array:
 	return [_mat] if _mat != null else []
 
 
+## 등불 옮기기 미리보기 (A11): 볕이 들 땅 노랑 · 그늘이 될 땅 파랑 (mix 0 = 끔)
+func set_lamp_preview(mix: float, l0: Vector2, l1: Vector2, rr: float) -> void:
+	for m: ShaderMaterial in _ground_mats():
+		m.set_shader_parameter("lamp_mix", mix)
+		m.set_shader_parameter("lamp_l0", l0)
+		m.set_shader_parameter("lamp_l1", l1)
+		m.set_shader_parameter("lamp_rr", rr)
+
+
 ## 오솔길 지도 → 텍스처 (소형 병: 병 전체 2R를 path_n칸이 덮음)
 func _update_paths() -> void:
 	if _mat == null:

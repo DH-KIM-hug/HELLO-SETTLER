@@ -17,12 +17,15 @@ const AMPOULE_MAX := 2
 
 ## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 이 표 (제재소·방앗간·빵집·목조주택 = 마을 시대).
 ## 어부는 시뮬레이션에 아직 없는 건물이라 '곧'으로 보인다.
-const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "어부", "제재소", "방앗간", "빵집", "목조주택"]
-const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "어부": 0, "제재소": 1, "방앗간": 1, "빵집": 1, "목조주택": 1}
+## 사냥꾼·목장·방직소·대장간도 아직 못 짓는다 (Balance.B_LOCKED — 들짐승·양털·철이 오면) → '곧' + 까닭.
+const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "어부", "제재소", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
+const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "어부": 0, "제재소": 1, "방앗간": 1, "빵집": 1, "목조주택": 1,
+	"사냥꾼": 1, "목장": 1, "방직소": 1, "대장간": 1}
 const BUILDING_REPEAT := 1.5
 const BUILDING_LINE := {"우물": "맑은 물을 길어요. 배앓이가 줄어요", "창고": "식량과 자재를 넉넉히 쌓아요", "농장": "밀이 자라는 밭",
 	"나무꾼": "나무를 베어 통나무를 날라요", "채석장": "바위를 깨 돌을 날라요", "어부": "물가에서 물고기를 잡아요",
-	"제재소": "통나무를 켜서 판자로", "방앗간": "밀을 빻아 밀가루로", "빵집": "밀가루와 물로 빵을", "목조주택": "여섯 식구가 사는 큰 집"}
+	"제재소": "통나무를 켜서 판자로", "방앗간": "밀을 빻아 밀가루로", "빵집": "밀가루와 물로 빵을", "목조주택": "여섯 식구가 사는 큰 집",
+	"사냥꾼": "숲에서 들짐승을 잡아요", "목장": "양을 쳐서 양털을", "방직소": "양털을 짜서 옷을", "대장간": "쇠를 두드려 도구를"}
 
 ## 물건 (SHOP 2.2~2.4 · WORLD_EVENTS 4.1 · 4.4). kind: food(식량 days일치 — 마을 크기 비례) · stuff(자원 amt) · pill · bandage · salt · ampoule.
 ## res = 주민이 깎아 나르는 창고 물건. size = 병 안에서의 반지름 (칸). lock = 아직 못 사는 까닭 (비면 살 수 있음)
@@ -145,6 +148,8 @@ static func card(v: Village, item: String) -> Dictionary:
 			lock = "%s 시대에" % Balance.ERAS[mini(int(BUILDING_ERA[item]), Balance.ERAS.size() - 1)]
 		var n := int(v.shop_bought.get(item, 0))
 		var inside := "완성된 %s — %s" % [item, BUILDING_LINE.get(item, "")]
+		if Balance.B_LOCKED.has(item):
+			inside += " (아직은 %s)" % Balance.B_LOCKED[item]
 		if n > 0:
 			inside += " (또 사면 값이 올라요)"
 		return {"name": item, "icon": item, "giant": "손톱만 한 %s" % item, "inside": inside,
