@@ -213,7 +213,7 @@ func giant_payload() -> Dictionary:
 		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id)})
 	return {"notes": Market.notes, "sold": Market.sold.duplicate(), "day_key": Market.day_key, "first_paid": Market.first_paid,
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
-		"draws": giant.get("draws", {}).duplicate(), "upgrades": giant.get("upgrades", []).duplicate(),
+		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(),
 		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
 
 
@@ -465,6 +465,7 @@ func load_all() -> bool:
 	Market.lamp_level = clampi(int(gp.get("lamp_level", 0)), 0, Market.LAMP_HOURS.size() - 1)   # 옛 저장엔 없음 → 12시간
 	Market.hand = (gp.get("hand", []) as Array).duplicate(true)       # 거인의 손에 든 물건 (SHOP 3 — 옛 저장엔 없음 → 빈손)
 	Market.hand_serial = int(gp.get("hand_serial", Market.hand.size()))
+	Market.set_draws(gp.get("draws", {}) as Dictionary)                # 이주민 뽑기 — 그날 횟수 · seed (옛 저장엔 없음 → 0번)
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
 		"climates": gp.get("climates", [])}
 	last_load["away"] = CatchUp.elapsed_since(float(gp.get("last_save_unix", 0.0)), Time.get_unix_time_from_system())

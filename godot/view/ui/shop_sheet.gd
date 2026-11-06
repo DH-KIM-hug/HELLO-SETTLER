@@ -28,6 +28,8 @@ var locked_box: VBoxContainer
 var toast: Label
 var hand_l: Label
 var close_btn: Button
+var odds_panel: PanelContainer         # 이주민 뽑기 공개 확률표 (기획서 11.2 — 확률 공개)
+var odds_body: VBoxContainer
 var _cards: Array = []                 # [{name, text, dim, btn}]
 var _t := 0.0
 var _glow_t := 0.0
@@ -140,6 +142,98 @@ func _build() -> void:
 	close_btn.custom_minimum_size = Vector2(96, UiTheme.TOUCH)
 	close_btn.pressed.connect(close)
 	foot.add_child(close_btn)
+	_build_odds()
+
+
+## 공개 확률표 (작은 창 — 시트 위 가운데)
+func _build_odds() -> void:
+	odds_panel = PanelContainer.new()
+	odds_panel.theme_type_variation = "Card"
+	odds_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+	odds_panel.visible = false
+	var sb := UiTheme._box(UiTheme.PAPER, UiTheme.INK, 1, 10, 12)
+	sb.shadow_color = Color(0, 0, 0, 0.25)
+	sb.shadow_size = 8
+	odds_panel.add_theme_stylebox_override("panel", sb)
+	add_child(odds_panel)
+	odds_body = VBoxContainer.new()
+	odds_body.add_theme_constant_override("separation", 6)
+	odds_panel.add_child(odds_body)
+
+
+func show_odds() -> void:
+	for c in odds_body.get_children():
+		odds_body.remove_child(c)
+		c.queue_free()
+	var head := HBoxContainer.new()
+	odds_body.add_child(head)
+	head.add_child(GameIcons.rect(Immigrants.ITEM, 30))
+	var t := _label(head, "이주민 — 공개 확률", "Section")
+	t.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	t.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	var sub := _label(odds_body, "누가 올지는 내려놓을 때 알 수 있어요. 나이·성별·특징도 무작위예요.", "Small")
+	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for sec: Array in Immigrants.odds_rows():
+		var h := _label(odds_body, String(sec[0]), "Small")
+		h.add_theme_font_override("font", UiTheme.font(true))
+		h.add_theme_color_override("font_color", UiTheme.INK_BROWN)
+		var g := GridContainer.new()
+		g.columns = 2
+		g.add_theme_constant_override("h_separation", 12)
+		g.add_theme_constant_override("v_separation", 1)
+		odds_body.add_child(g)
+		for row: Array in sec[1]:
+			var a := _label(g, String(row[0]), "Small")
+			a.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			var b := _label(g, String(row[1]), "Small")
+			b.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			b.add_theme_font_override("font", UiTheme.font(true))
+	var ps := PackedStringArray()
+	for i in Immigrants.DAILY_MAX:
+		ps.append(Shop._num(Immigrants.price_at(i)))
+	var pl := _label(odds_body, "값: 그날 %s 지폐 (하루 %d번 — 날이 바뀌면 처음 값으로)" % [" → ".join(ps), Immigrants.DAILY_MAX], "Small")
+	pl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	pl.add_theme_color_override("font_color", UiTheme.INK_SOFT)
+	var cb := Button.new()
+	cb.text = "닫기"
+	cb.focus_mode = Control.FOCUS_NONE
+	cb.custom_minimum_size = Vector2(96, UiTheme.TOUCH)
+	cb.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	cb.pressed.connect(hide_odds)
+	odds_body.add_child(cb)
+	odds_panel.visible = true
+	_layout_odds()
+
+
+func hide_odds() -> void:
+	odds_panel.visible = false
+
+
+func odds_visible() -> bool:
+	return odds_panel.visible
+
+
+func odds_text() -> String:
+	var s := ""
+	for l in odds_body.find_children("*", "Label", true, false):
+		s += (l as Label).text + "\n"
+	return s
+
+
+func _layout_odds() -> void:
+	if odds_panel == null:
+		return
+	var vs := get_viewport_rect().size
+	var w := minf(360.0, vs.x - 32.0)
+	odds_panel.anchor_left = 0.5
+	odds_panel.anchor_right = 0.5
+	odds_panel.anchor_top = 0.5
+	odds_panel.anchor_bottom = 0.5
+	odds_panel.offset_left = -w * 0.5
+	odds_panel.offset_right = w * 0.5
+	odds_panel.offset_top = -vs.y * 0.36
+	odds_panel.offset_bottom = vs.y * 0.36
+	odds_panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 
 
 func _label(parent: Node, text: String, variation := "") -> Label:
@@ -177,6 +271,7 @@ func _layout() -> void:
 		panel.offset_top = 0
 		panel.offset_bottom = 0
 	SafeArea.pad_sheet(panel, SafeArea.insets(get_viewport()).y)
+	_layout_odds()
 
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
@@ -198,6 +293,7 @@ func close() -> void:
 	if visible:
 		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
+	hide_odds()
 	closed.emit()
 
 
@@ -259,7 +355,7 @@ func _style_tabs() -> void:
 # ───────────────────────── 카드 ─────────────────────────
 func _state_sig() -> String:
 	var s := "%s|%d|%d|%s|%s|%d|%s" % [tab, int(Market.notes), Market.hand.size(), str(village.shop_open.keys()), str(village.shop_bought), village.era,
-		str(SkyDrops.active_towers(village))]
+		str(SkyDrops.active_towers(village))] + "|%d" % Immigrants.today_count()
 	return s
 
 
@@ -354,6 +450,17 @@ func _card(item: String) -> void:
 		"labels": [g, ins]})
 	if item == Shop.AMPOULE and lock == "":
 		_two(col, "", "탑은 한 병에 둘까지 · 물가는 녹조 주의").modulate = Color(1, 1, 1, 0.85)
+	if bool(c.get("odds", false)):                       # 이주민 뽑기: 확률 공개 + 오늘 남은 횟수
+		_two(col, "", "오늘 %d번 더 데려올 수 있어요" % int(c["left"]) if int(c["left"]) > 0 else "오늘은 다 데려왔어요 — 내일 처음 값으로").modulate = Color(1, 1, 1, 0.85)
+		var ob := Button.new()
+		ob.text = "확률 보기"
+		ob.focus_mode = Control.FOCUS_NONE
+		ob.mouse_filter = Control.MOUSE_FILTER_PASS
+		ob.custom_minimum_size = Vector2(0, UiTheme.TOUCH)
+		ob.pressed.connect(func() -> void:
+			GameAudio.ui_click()
+			show_odds())
+		col.add_child(ob)
 
 
 ## '거인에게는' 작은 머리말 + 글

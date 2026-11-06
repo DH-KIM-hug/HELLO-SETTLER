@@ -298,6 +298,20 @@ static func make_item(item: String) -> Node3D:
 				a.scale = Vector3.ONE * Style.RESIDENT_SCALE * 1.5
 				a.position = Vector3((i - (k - 1) * 0.5) * 0.9, 0.0, 0.3 * (i % 2))
 				a.rotation.y = 0.6 * i
+		Immigrants.ITEM:                  # 이주민: 작은 뗏목 꾸러미 (통나무 넷 + 보따리 + 웅크린 작은 사람들) — 내려앉은 뒤 반나절 사그라듦
+			for i in 4:
+				_mesh(n, _box(Vector3(0.34, 0.26, 2.3)), Color("a07a4c").lerp(Color("8a6238"), 0.3 * (i % 2)), Vector3(-0.54 + i * 0.36, 0.13, 0))
+			_mesh(n, _box(Vector3(1.6, 0.08, 0.16)), Color("6e4f2e"), Vector3(0, 0.3, 0.75))
+			_mesh(n, _box(Vector3(1.6, 0.08, 0.16)), Color("6e4f2e"), Vector3(0, 0.3, -0.75))
+			_mesh(n, _sphere(0.36, 7, 4), Color("c7a27a"), Vector3(0.38, 0.55, -0.55), Vector3.ZERO, Vector3(1.0, 0.8, 1.1))
+			_mesh(n, _sphere(0.1, 5, 3), Color("8f5a3a"), Vector3(0.38, 0.86, -0.55))
+			var cloth := [Color("8e5b4a"), Color("5f7a8c"), Color("b98e4a")]
+			for i in 3:
+				var px := -0.35 + i * 0.32
+				var pz := 0.1 + 0.25 * (i % 2)
+				var hgt := 0.32 if i == 2 else 0.46
+				_mesh(n, _sphere(0.16, 6, 4), cloth[i], Vector3(px, 0.3 + hgt * 0.5, pz), Vector3.ZERO, Vector3(1.0, hgt / 0.32 * 1.0, 1.0))
+				_mesh(n, _sphere(0.1, 6, 4), Color("e7c2a0").lerp(Color("8d5a3b"), 0.35 * i), Vector3(px, 0.3 + hgt + 0.12, pz))
 		_:
 			_mesh(n, _sphere(1.0), Color("c9a77a"), Vector3(0, 0.6, 0))
 	return n

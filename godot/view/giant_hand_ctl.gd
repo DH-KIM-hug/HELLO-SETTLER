@@ -362,7 +362,7 @@ func aim_at(sp: Vector2, touch: bool) -> void:
 		b_text.text = good if good != "" else "여기에 떨어뜨려요 — 손가락으로 끌어 자리를 옮겨요"
 		b_text.add_theme_color_override("font_color", UiTheme.INK)
 		drop_btn.disabled = false
-		drop_btn.text = "여기에 놓기" if Shop.is_building(String(_aim["item"])) else "떨어뜨리기"
+		drop_btn.text = "여기에 놓기" if Shop.is_building(String(_aim["item"])) else ("내려놓기" if String(_aim["item"]) == Immigrants.ITEM else "떨어뜨리기")
 
 
 func cancel_drop() -> void:
@@ -394,7 +394,7 @@ func confirm_drop() -> void:
 	var idx := Market.hand.find(h)
 	v.begin_giant()
 	Shop.hand_remove(id)
-	var r := SkyDrops.drop(v, item, p)
+	var r := SkyDrops.drop(v, item, p, h)
 	if not bool(r["ok"]):
 		Market.hand.insert(maxi(0, idx), h)
 	v.end_giant()

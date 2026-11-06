@@ -14,6 +14,11 @@ static var first_paid := false        # 첫 제물 웃돈을 받았다 (BALANCE 
 static var lamp_level := 0            # 등불 단계 0~3 (LAMP_HOURS)
 static var hand: Array = []           # 거인의 손에 든 물건 (SHOP 3 — 상점에서 산 것, 최대 5개, 모든 병이 함께) {id, item, paid}
 static var hand_serial := 0           # 손에 든 물건 번호
+# 이주민 뽑기 (sim/immigrants.gd — 기획서 11.2 · SAVE 1 '이주민 뽑기 횟수(그날)'): 거인 묶음의 "draws"에 저장
+static var mig_day := ""              # mig_n이 세는 현실 날짜
+static var mig_n := 0                 # 그날 뽑은 횟수 (하루 5번 · 값 ×1.5씩)
+static var mig_serial := 0            # 지금까지 뽑은 횟수 (꾸러미 seed)
+static var mig_seed := 0              # 거인의 뽑기 흐름 (0 = 처음 뽑을 때 정함)
 
 const LAMP_HOURS := [12, 16, 20, 24]                       # 단계별 등불 시간 (비운 동안 병이 흐르는 최대 시간)
 const LAMP_COST := [2000.0, 6000.0, 15000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1
@@ -28,6 +33,22 @@ static func reset(start_notes := 0.0) -> void:
 	lamp_level = 0
 	hand = []
 	hand_serial = 0
+	mig_day = ""
+	mig_n = 0
+	mig_serial = 0
+	mig_seed = 0
+
+
+## 이주민 뽑기 상태 (저장 — 거인 묶음 "draws")
+static func draws_dict() -> Dictionary:
+	return {"day": mig_day, "n": mig_n, "serial": mig_serial, "seed": mig_seed}
+
+
+static func set_draws(d: Dictionary) -> void:
+	mig_day = String(d.get("day", ""))
+	mig_n = int(d.get("n", 0))
+	mig_serial = int(d.get("serial", 0))
+	mig_seed = int(d.get("seed", 0))
 
 
 # ───────────────────────── 거인의 등불 ─────────────────────────

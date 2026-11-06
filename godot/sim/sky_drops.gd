@@ -188,6 +188,12 @@ static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 			np += 1
 	out["crush"] = crush
 	out["people"] = np
+	if String(d.get("kind", "")) == "migrant":          # 이주민: 마을 어귀(영역 안)의 빈 땅에만 — 사람 곁은 괜찮다 (sim/immigrants.gd)
+		var mk := Immigrants.spot_ok(v, p, crush)
+		if not bool(mk["ok"]):
+			return {"ok": false, "why": String(mk["why"]), "warn": "", "crush": [], "people": 0, "field": false, "size": size}
+		out["good"] = "여기에 내려놓아요 — 마을 어귀"
+		return out
 	var houses := 0
 	for b: Building in crush:
 		if b.is_house():
@@ -248,7 +254,8 @@ static func site_words(v: Village, type: String, p: Vector2) -> String:
 
 ## 떨어뜨린다 → {ok, why, drop(사전) 또는 building, crushed: 부서진 건물 수, fled: 달아난 사람 수}
 ## 뚜껑이 닫혀 있으면 안 된다 (병의 법칙). 손에서 빼는 것은 부르는 쪽 (Shop.hand_remove)
-static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
+## h = 손에 든 것 (Market.hand의 한 칸 — 이주민 뽑기는 그 seed로 누가 올지 정해짐)
+static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Dictionary:
 	if v.air == null or not v.air.lid_open:
 		return {"ok": false, "why": "뚜껑을 먼저 열어 주세요"}
 	if Shop.is_building(item):
@@ -276,13 +283,13 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 			total = roundf(maxf(1.0, float(v.people.size())) * Balance.DAY / Balance.FOOD_IV * float(d["days"]))
 		"stuff", "salt":
 			total = float(d["amt"])
-		"pill", "bandage":
+		"pill", "bandage", "migrant":
 			total = 1.0
 	var o := {}
 	if kind != "ampoule" and kind != "vein" and kind != "wild":
 		v._drop_id += 1
 		o = {"id": v._drop_id, "item": item, "x": p.x, "y": p.y, "res": res, "total": total, "left": total, "size": size,
-			"res_n": 0, "t": v.t, "dur": float(d.get("days", 1.0)) * Balance.DAY}
+			"res_n": 0, "t": v.t, "dur": (Immigrants.RAFT_DAYS if kind == "migrant" else float(d.get("days", 1.0))) * Balance.DAY}
 		v.drops.append(o)
 	match kind:
 		"pill":
@@ -312,6 +319,12 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 		"wild":
 			if v.wild != null:
 				v.wild.readd(v, String(d["species"]), int(d.get("n", 2)), p, true)
+		"migrant":                                       # 뗏목 꾸러미 + 사람들 (맞이·연대기·목격은 Immigrants가)
+			var sd := int(h.get("seed", hash([v.t, v._drop_id, v.sid])))
+			o["people"] = Immigrants.land(v, p, sd).map(func(r: Resident) -> int: return r.id)
+			v.stats["sky_drops"] = int(v.stats.get("sky_drops", 0)) + 1
+			v.end_giant()
+			return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled, "people": o["people"]}
 	_miracle(v, item, p)
 	v.end_giant()
 	return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled}
