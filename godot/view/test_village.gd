@@ -5,6 +5,8 @@
 ## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
 ## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
 ## 조작: 속도 · 밤 건너뛰기 / 개발: +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
+## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
+## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
 extends Node3D
 
 const SEED := 20261105
@@ -29,9 +31,17 @@ var _sim_ms := 0.0                   # 이번 화면에 시뮬레이션이 쓴 �
 var lineup: Node3D
 var _terrain_t := 0.0
 var _drag := false
+var detail: ResidentDetail
+var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
+var _press_pos := Vector2.ZERO
+var _tap_ok := false
+
+const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
+const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
 
 
 func _ready() -> void:
+	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	village = _make_village()
 	clock = JarClock.new(village)
 	sun = JarTerrain.make_world(self)
@@ -102,6 +112,7 @@ func _process(dt: float) -> void:
 			terrain.paths = village.paths
 			terrain.rebuild()
 	view.sync(dt)
+	_follow(dt)
 	if lineup != null:
 		for m in lineup.get_children():
 			if m is ResidentModel:
@@ -206,8 +217,8 @@ func _setup_ui() -> void:
 	ui_label.add_theme_constant_override("shadow_offset_y", 1)
 	root.add_child(ui_label)
 	notice_label = Label.new()
-	notice_label.position = Vector2(8, 548)
-	notice_label.size = Vector2(344, 24)
+	_pin_bottom(notice_label, 0.5, -172.0, 92.0)
+	notice_label.offset_right = 172.0
 	notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	notice_label.add_theme_color_override("font_color", Color("252122"))
 	var nsb := StyleBoxFlat.new()
@@ -220,7 +231,7 @@ func _setup_ui() -> void:
 	root.add_child(notice_label)
 	# 시간 (기획서 6.6) — 속도 ×1 → ×2 → ×4 → ×8, 밤 건너뛰기는 모두 잠든 밤에만 보임
 	var tbar := HBoxContainer.new()
-	tbar.position = Vector2(6, 580)
+	_pin_bottom(tbar, 0.0, 6.0, 60.0)
 	tbar.add_theme_constant_override("separation", 3)
 	root.add_child(tbar)
 	speed_btn = Button.new()
@@ -234,7 +245,7 @@ func _setup_ui() -> void:
 	skip_btn.pressed.connect(func() -> void: clock.start_skip_night())
 	tbar.add_child(skip_btn)
 	var bar := HBoxContainer.new()
-	bar.position = Vector2(6, 606)
+	_pin_bottom(bar, 0.0, 6.0, 34.0)
 	bar.add_theme_constant_override("separation", 3)
 	root.add_child(bar)
 	for spec: Array in [["개발: +1일", func() -> void: advance(Balance.DAY)],
@@ -247,6 +258,26 @@ func _setup_ui() -> void:
 		b.focus_mode = Control.FOCUS_NONE
 		b.pressed.connect(spec[1])
 		bar.add_child(b)
+	# 주민 상세 (UI 03) — 위 화면보다 앞 층
+	var dlayer := CanvasLayer.new()
+	dlayer.layer = 5
+	add_child(dlayer)
+	detail = ResidentDetail.new()
+	detail.setup(village)
+	dlayer.add_child(detail)
+	detail.follow_changed.connect(func(id: int, on: bool) -> void: follow_id = id if on else -1)
+	detail.closed.connect(func() -> void: follow_id = -1)
+
+
+## 화면 아래 가장자리에 붙임 (세로로 긴 화면에서도 아래에 — 넓히기 비율)
+static func _pin_bottom(c: Control, ax: float, x: float, from_bottom: float) -> void:
+	c.anchor_left = ax
+	c.anchor_right = ax
+	c.anchor_top = 1.0
+	c.anchor_bottom = 1.0
+	c.offset_left = x
+	c.offset_top = -from_bottom
+	c.offset_bottom = -from_bottom
 
 
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
@@ -290,7 +321,8 @@ func _update_ui() -> void:
 		if m == null or not m.visible:
 			continue
 		var p := cam.camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
-		if p.x < 0 or p.y < 40 or p.x > 360 or p.y > 600:
+		var vs := get_viewport().get_visible_rect().size
+		if p.x < 0 or p.y < 40 or p.x > vs.x or p.y > vs.y - 40:
 			continue
 		var l := Label.new()
 		l.text = r.say
@@ -312,6 +344,12 @@ func _unhandled_input(e: InputEvent) -> void:
 		var mb := e as InputEventMouseButton
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_drag = mb.pressed
+			if mb.pressed:
+				_press_pos = mb.position
+				_tap_ok = true
+			elif _tap_ok:
+				_tap_ok = false
+				_on_tap(mb.position)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			cam.zoom_by(1.15)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -319,8 +357,13 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e is InputEventMagnifyGesture:
 		cam.zoom_by((e as InputEventMagnifyGesture).factor)
 	elif e is InputEventMouseMotion and _drag:
+		if _tap_ok and (e as InputEventMouseMotion).position.distance_to(_press_pos) > TAP_SLOP:
+			_tap_ok = false
+		if not _tap_ok:
+			_stop_follow()
 		cam.pan_pixels((e as InputEventMouseMotion).relative)
 	elif e is InputEventScreenDrag:
+		_stop_follow()
 		cam.pan_pixels((e as InputEventScreenDrag).relative)
 	elif e is InputEventKey and e.pressed:
 		match (e as InputEventKey).keycode:
@@ -331,3 +374,56 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_E: cam.turn(1)
 			KEY_R: village.rotate_jar(); refresh()
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
+
+
+# ───────────────────────── 주민 누르기 · 따라가기 (UI 03) ─────────────────────────
+## 누른 곳에서 가장 가까운 주민 (화면 거리 — 발끝~머리 선분까지, 넉넉한 반지름). 없으면 null
+func pick_resident(sp: Vector2) -> Resident:
+	var best: Resident = null
+	var best_d := INF
+	for r in village.people:
+		var m: ResidentModel = view.residents.get(r.id)
+		if m == null or not m.is_visible_in_tree():
+			continue
+		var foot := m.global_position
+		if cam.camera.is_position_behind(foot):
+			continue
+		var a := cam.camera.unproject_position(foot)
+		var b := cam.camera.unproject_position(foot + Vector3(0, 1.95 * m.scale.y, 0))
+		var d := Geometry2D.get_closest_point_to_segment(sp, a, b).distance_to(sp)
+		var rad := maxf(PICK_R, absf(a.y - b.y) * 0.6)
+		if d < rad and d < best_d:
+			best_d = d
+			best = r
+	return best
+
+
+func _on_tap(sp: Vector2) -> void:
+	var r := pick_resident(sp)
+	if r != null:
+		detail.open(r)
+
+
+func _stop_follow() -> void:
+	if follow_id >= 0:
+		detail.set_following(false)
+		follow_id = -1
+
+
+## 따라가 보기: 그 주민이 패널이 가리지 않는 곳 가운데에 오도록 카메라를 부드럽게 옮긴다
+func _follow(dt: float, instant := false) -> void:
+	if follow_id < 0:
+		return
+	var r := village.person(follow_id)
+	var m: ResidentModel = view.residents.get(follow_id)
+	if r == null or m == null:
+		_stop_follow()
+		return
+	var old := cam.target
+	look_at_ground(Vector2(m.position.x, m.position.z))
+	var vs := get_viewport().get_visible_rect().size
+	cam.pan_pixels(detail.free_rect().get_center() - vs * 0.5)
+	if not instant:
+		var goal := cam.target
+		cam.target = old.lerp(goal, 1.0 - exp(-6.0 * dt))
+		cam._apply()
