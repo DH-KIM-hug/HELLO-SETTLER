@@ -260,14 +260,7 @@ static func _watch(v: Village, b: Building) -> void:
 
 ## 발견 하나 (DISCOVERIES — 도감·시대 점수·연대기). line의 %s = "이름이/가"
 static func discover(v: Village, id: String, who: Resident, pts: float, line: String) -> bool:
-	if Codex.knows(v, id):
-		return false
-	v.note_discovery(id, who)
-	if v.era < Balance.ERA_NEED.size():
-		v.era_pts = minf(Balance.ERA_NEED[v.era], v.era_pts + pts)
-	var nm := who.name if who != null else "누군가"
-	v.log_line(line % ("%s%s" % [nm, Village.josa(nm, "이", "가")]) if line.contains("%s") else line)
-	return true
+	return Discovery.make(v, id, who, line, pts)      # 기록은 한 곳 (sim/discovery.gd — 도감·시대 점수·연대기·말풍선)
 
 
 # ───────────────────────── 약초 (F2 · 약초꾼) ─────────────────────────

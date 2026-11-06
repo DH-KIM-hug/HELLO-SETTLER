@@ -77,6 +77,8 @@ var _rev_say_t := 0.0                 # 기다리는 동안 노인이 하늘을 
 var myth: Array = []                  # 창세 신화 줄 (OPENING 9 — 창조가 채울 자리. 비면 연대기의 첫 기록)
 var departed: Array = []              # 분가로 떠난 사람 {id, name, sex, age, t, to: 무리 이름, to_sid}
 var discoveries: Dictionary = {}      # 발견 id → {t, who: 주민 id, name} (sim/codex.gd — 발견 도감)
+var disc: Dictionary = {}             # 발견 조건의 상태 {trees0, bake_t, sun_t, sun_elders} (sim/discovery.gd — 옛 저장은 빈 값)
+var disc_rng := RandomNumberGenerator.new()   # 발견할 사람 고르기 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
 var faith := 50.0
 var fear := 0.0
 var stock: Dictionary = {}
@@ -214,6 +216,7 @@ func _init_prototype(seed_v: int) -> void:
 
 func _init_health(seed_v: int) -> void:
 	health_rng.seed = seed_v * 104729 + 7
+	disc_rng.seed = seed_v * 7919 + 13
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
 	flora = Flora.new(seed_v)             # [하늘의 것]
@@ -821,6 +824,7 @@ func step(dt: float) -> void:
 		_timers["lake"] = 0.0
 		lake_watch()
 		salt_discovery()
+		Discovery.hourly(self)        # 발견 W2 · F3 · F5 · S3 · P1 (DISCOVERIES — sim/discovery.gd)
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
 		for i in paths.size():
@@ -869,7 +873,7 @@ func _tree_spread() -> void:
 	var d := rng.randf_range(Balance.TREE_SPREAD_DIST[0], Balance.TREE_SPREAD_DIST[1])
 	var x := float(tr["x"]) + cos(a) * d
 	var y := float(tr["y"]) + sin(a) * d
-	var p_take := Balance.TREE_SPREAD_PER_DAY / 24.0 * (0.4 + wetness(x, y)) / 0.7
+	var p_take := Balance.TREE_SPREAD_PER_DAY / 24.0 * (0.4 + wetness(x, y)) / 0.7 * Discovery.plant_mult(self)   # 발견 F3 씨앗을 심다 ×2
 	if rng.randf() >= p_take:
 		return
 	if not water.inside(x, y, 1.5) or water.depth(water.idx(x, y)) >= 0.005 or water_at(x, y) or is_road(x, y) or path_at(x, y) > 0.0:
@@ -903,7 +907,7 @@ func _on_dawn() -> void:
 			var jb := bld(p.job)
 			if jb != null:
 				key = jb.type
-			p.skills[key] = minf(Balance.SKILL_MAX, float(p.skills.get(key, 0.0)) + Balance.SKILL_RATE * p.talent * p.f("skill_growth"))
+			p.skills[key] = minf(Balance.SKILL_MAX, float(p.skills.get(key, 0.0)) + Balance.SKILL_RATE * p.talent * p.f("skill_growth") * Discovery.skill_mult(self))     # 발견 P1 글 ×1.2
 		p.work_secs_today = 0.0
 	VillageEra.dawn(self)                 # 광장 장날 (A6)
 	_update_happiness()
@@ -1165,6 +1169,8 @@ func _update_building(b: Building, dt: float) -> void:
 		place *= Wildlife.field_mult(self, b)             # [들짐승] 토끼가 넘치면 밭 −10~−30% (울타리 ×0.3 — WILDLIFE 3)
 	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
+	if b.type == "빵집":
+		place *= Discovery.bread_mult(self)          # 발견 F5 효모 — 부푼 빵 ×1.2 (DISCOVERIES 3.3)
 	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
 	var cyc: float = d["cycle"]
 	while b.timer >= cyc:
@@ -1178,6 +1184,8 @@ func _update_building(b: Building, dt: float) -> void:
 			b.out[k] = float(b.out.get(k, 0.0)) + float(outs[k])
 		if b.type == "농장" and w != null:
 			harvest_check(w)
+		if b.type == "빵집":
+			Discovery.on_bake(self)                 # F5 효모: 첫 빵의 시각
 
 
 ## '노래꾼'이 근처에서 일하고 있으면 그 일터 +3% (자기 일터 포함, 본인 제외)
@@ -1972,13 +1980,13 @@ func salt_discovery() -> void:
 		if any.is_empty():
 			return
 		who = any[rng.randi() % any.size()]
+	Discovery.make(self, "salt", who, "", Balance.SALT_DISCOVERY_PTS)     # 도감 · 시대 점수 · 연대기 · "짜다!" (sim/codex.gd 표)
 	salt_known = true
-	note_discovery("salt", who)
-	if era < Balance.ERA_NEED.size():
-		era_pts = minf(Balance.ERA_NEED[era], era_pts + Balance.SALT_DISCOVERY_PTS)
-	log_line("%s%s 마른 호수 바닥의 하얀 흙을 손가락으로 찍어 맛보았다. 짰다! 사람들은 그것을 '소금'이라 불렀다. 호수 바닥 아래 하얀 바위가 오래도록 녹아든 것이었다." % [who.name, josa(who.name, "이", "가")])
-	log_line("어떤 이는 거인님이 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다." if doubters() > 0 else "사람들은 거인님이 호수를 거두어 소금을 남기셨다고 믿었다.")
-	speak(who, "짜다! 이 하얀 흙, 짜!", 8)
+	# 해석 (DISCOVERIES 1.6) — 깨닫기 전에는 거인 이야기가 없다
+	if not aware:
+		log_line("사람들은 짠 흙을 조금씩 모아 두었다. 고기와 생선에 뿌리면 오래 간다는 것을 곧 알게 되었다.")
+	else:
+		log_line("어떤 이는 거인님이 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다." if doubters() > 0 else "사람들은 거인님이 호수를 거두어 소금을 남기셨다고 믿었다.")
 
 
 # ───────────────────────── 판매가 (기획서 11장 — 판매는 거인만, 여기선 값 계산만) ─────────────────────────
@@ -2123,6 +2131,7 @@ func _after_lamp(pv: Dictionary) -> void:
 		b.farm_mult = -1.0
 	bless_all(0.06)
 	lamp_moved_t = t
+	Discovery.on_lamp(self)               # 발견 S3 해의 길 — 이때 있던 노인들
 	lamp_last = {"from": int(pv.get("from", 0)), "to": int(pv.get("to", 0)), "up": int(pv.get("up", 0)) + int(pv.get("new", 0)),
 		"down": int(pv.get("down", 0)) + int(pv.get("gone", 0)), "t": t}
 	stats["lamp_moves"] = int(stats.get("lamp_moves", 0)) + 1
@@ -2948,6 +2957,7 @@ func enough(k: String) -> float:
 	if k == "밀":                     # 농장도 넉넉하면 멈춘다 (BALANCE v4-4) — 마을이 먹는 양 × 1.6일 (좋아하시면 +0.15일)
 		var days := Balance.FARM_ENOUGH_DAYS + (Balance.FARM_FAV_DAYS if is_favourite(k) else 0.0)
 		return maxf(Balance.FARM_ENOUGH_MIN, _food_people() * DAY / Balance.FOOD_IV * days)
+	e *= Discovery.store_mult(self, k)  # 발견 W2 진흙 — 저장 항아리 (식량 ×1.5)
 	if is_favourite(k):
 		e *= Balance.FAV_ENOUGH       # 거인님이 좋아하시는 물건은 더 만든다 (기획서 11.1)
 	if k == "통나무" and cold_season:
@@ -3022,7 +3032,7 @@ func _fear_rotate() -> void:
 		_rots = [d, 0]
 	_rots[1] += 1
 	if _rots[1] > Balance.FEAR_FREE_PER_DAY:
-		raise_fear_all(Balance.FEAR_ROTATE)
+		raise_fear_all(Balance.FEAR_ROTATE * Discovery.lamp_fear_mult(self))     # 발견 S3 해의 길 — 두려움 ×0.5
 
 
 ## 거인이 식량을 거둠 — 굶주리는 때면 모두 +0.1 (기획서 11.1)

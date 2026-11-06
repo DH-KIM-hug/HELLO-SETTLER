@@ -194,7 +194,7 @@ static func snapshot(vv: Village) -> Dictionary:
 		if b.built:
 			built[b.id] = b.type
 	return {"t": vv.t, "pop": vv.people.size(), "ids": ids, "partners": partners, "built": built, "salt": vv.salt_known,
-		"harvest": vv.first_harvest_t >= 0.0, "faith": vv.faith, "book": vv.book.size(), "era": vv.era}
+		"harvest": vv.first_harvest_t >= 0.0, "faith": vv.faith, "book": vv.book.size(), "era": vv.era, "disc": vv.discoveries.keys()}
 
 
 static func _ga(w: String) -> String:
@@ -259,6 +259,13 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 	# 발견
 	if vv.salt_known and not b["salt"]:
 		events.append("마른 호수 바닥에서 짠 하얀 흙, '소금'을 찾았어요.")
+	for id: String in vv.discoveries:             # 그 밖의 발견 (DISCOVERIES — sim/codex.gd 표). 소금은 위 한 줄
+		if id == "salt" or id in b.get("disc", []) or (not b.has("disc") and float(vv.discoveries[id].get("t", 0.0)) < float(b["t"])):
+			continue
+		var nm := String(Codex.entry(id).get("name", ""))
+		var who := String(vv.discoveries[id].get("name", ""))
+		if nm != "":
+			events.append(("%s%s '%s'%s 찾았어요." % [who, Village.josa(who, "이", "가"), nm, Village.josa(nm, "을", "를")]) if who != "" else ("'%s'%s 찾았어요." % [nm, Village.josa(nm, "을", "를")]))
 	if vv.first_harvest_t >= 0.0 and not b["harvest"]:
 		events.append("들에서 첫 곡식을 거두었어요.")
 	for e: Dictionary in vv.book.slice(int(b["book"])):

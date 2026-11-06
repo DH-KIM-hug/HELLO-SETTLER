@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -43,7 +43,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd", "save": "res://tests/save_tests.gd",
 	"start": "res://tests/start_tests.gd", "era": "res://tests/era_tests.gd", "terrain": "res://tests/terrain_tests.gd", "shop": "res://tests/shop_tests.gd",
 	"village": "res://tests/village_era_tests.gd", "looks": "res://tests/resident_look_tests.gd",
-	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd"}
+	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "discovery": "res://tests/discovery_tests.gd"}
 
 
 func _initialize() -> void:

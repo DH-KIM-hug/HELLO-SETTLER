@@ -482,11 +482,28 @@ func _person_row(row: Dictionary, kind: String) -> Button:
 func _fill_codex() -> void:
 	var vs := villages()
 	var rows := Codex.entries(vs)
-	var c := Codex.count(vs)
+	var c := Codex.doc_count(vs)
 	var hd := _label(body, "발견 %d / %d" % [c.x, c.y], "Section")
 	hd.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	var sub := _label(body, "세상이 바뀌면, 그 자리에 있던 사람이 찾아내요.", "Small", true)
 	sub.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+	# DISCOVERIES 25종 (발견한 것 먼저, 표 순서 그대로) — 곁가지(누룩·푸른 가루·얼룩버섯·물고기 지혜)는 찾은 것만 뒤에
+	var main: Array = rows.filter(func(r: Dictionary) -> bool: return String(r["doc"]) != "")
+	var side: Array = rows.filter(func(r: Dictionary) -> bool: return String(r["doc"]) == "" and bool(r["known"]))
+	var grid := _codex_grid()
+	for want: bool in [true, false]:
+		for row: Dictionary in main:
+			if bool(row["known"]) == want:
+				grid.add_child(_codex_card(row))
+	if not side.is_empty():
+		var sh := _label(body, "그 밖에 찾은 것", "Section")
+		sh.add_theme_color_override("font_color", UiTheme.INK_BROWN)
+		var g2 := _codex_grid()
+		for row: Dictionary in side:
+			g2.add_child(_codex_card(row))
+
+
+func _codex_grid() -> GridContainer:
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 6)
@@ -494,10 +511,7 @@ func _fill_codex() -> void:
 	grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	grid.mouse_filter = Control.MOUSE_FILTER_PASS
 	body.add_child(grid)
-	for want: bool in [true, false]:          # 발견한 것 먼저 (도감 순서 그대로)
-		for row: Dictionary in rows:
-			if bool(row["known"]) == want:
-				grid.add_child(_codex_card(row))
+	return grid
 
 
 func _codex_card(row: Dictionary) -> PanelContainer:
@@ -549,4 +563,9 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 	if not known:
 		line.add_theme_font_override("font", UiTheme.hand_font())
 		line.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)
+	elif String(row.get("found", "")) != "":          # 찾은 것: 한 줄 이야기 (손글씨)
+		var fl := _label(col, String(row["found"]), "Small", true)
+		fl.add_theme_font_override("font", UiTheme.hand_font())
+		fl.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)
+		fl.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	return card

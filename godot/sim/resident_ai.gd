@@ -649,7 +649,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 			return true
 		r.steps.append(walk(sp.x, sp.y))
 		var plant := op("plant", {"x": sp.x, "y": sp.y})
-		r.steps.append(act(d["plant"], "work", plant, true))
+		r.steps.append(act(float(d["plant"]) / Discovery.plant_mult(v), "work", plant, true))     # 발견 F3 씨앗을 심다 — 두 배 빨리 심음
 		return true
 	if b.type == "채석장":
 		var rk := _nearest(v.rocks, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["amt"] > 0 and q["res"] == 0 and SkyDrops.rock_minable(v, q))

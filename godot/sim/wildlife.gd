@@ -545,7 +545,7 @@ func _hour(v: Village) -> void:
 			var have := float(q.stock.get(item, 0.0))
 			if have <= 0.0:
 				continue
-			var p := float(SPOIL[item]) * (SALT_KEEP if salt else 1.0)
+			var p := float(SPOIL[item]) * (SALT_KEEP if salt else 1.0) * Discovery.keep_mult(q)     # 발견 W2 진흙 — 질그릇 항아리 ×0.6
 			q.stock[item] = have * pow(1.0 - p, 1.0 / 24.0)
 		_howl(v, q)
 	_wise = false
