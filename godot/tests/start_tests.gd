@@ -25,7 +25,7 @@ func all() -> void:
 	var old_hook := Village.on_giant_action
 	var old_notes := Market.notes
 	StartFlow.navigate = false
-	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back"])
+	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick"])
 	_clean()
 	StartFlow.navigate = old_nav
 	StartFlow.take()
@@ -57,6 +57,10 @@ func drop(sm: GameSave) -> void:
 
 func add(path: String) -> Node:
 	var n: Node = load(path).instantiate()
+	if "world_size" in n:                 # 넓은 세상 장면: 시험은 작은 세상 (512칸 — 빨리)
+		n.set("world_size", WorldCfg.SMALL_SIZE)
+		n.set("world_seed", 3)
+		n.set("pick_spot", false)         # 키트 자리 고르기는 test_kit_pick이 따로
 	run.root.add_child(n)
 	return n
 
@@ -66,7 +70,22 @@ func remove(n: Node) -> void:
 	n.free()
 
 
-## 시험용 저장: 이름 nm, days일 흘린 병 하나
+## 시험용 저장: 이름 nm, days일 흘린 넓은 세상 하나 (작은 세상 512칸) — 첫 무리를 돌려줌
+func save_world(sm: GameSave, nm: String, days: float) -> Village:
+	var jw := JarWorld.create(3, WorldCfg.SMALL_SIZE)
+	var sp: Array[Vector2] = jw.recommended_kit_spots()
+	var v := jw.place_kit(sp[0].x, sp[0].y)
+	v.water.offline = true
+	jw.advance(days * Balance.DAY)
+	v.water.offline = false
+	var c := JarClock.new(v)
+	sm.register_jar(1, v, c, {"name": nm}, jw)
+	sm.giant["first_jar_done"] = true
+	sm.save_all(true)
+	return v
+
+
+## 시험용 저장 (옛 소형 병 — kind "jar"): 이름 nm, days일 흘린 병 하나
 func save_jar(sm: GameSave, nm: String, days: float) -> Village:
 	var v := Village.new_prototype(20261105)
 	v.water.offline = true
@@ -112,7 +131,7 @@ func test_title_button() -> void:
 	t.call("go_next")
 	check(StartFlow.last_target == StartFlow.CREATION_SCENE, "[시작하기] → 짧은 창조")
 	remove(t)
-	var v := save_jar(sm, "초록별", 2.4)
+	var v := save_world(sm, "초록별", 2.4)
 	t = add(StartFlow.TITLE_SCENE)
 	btn = t.get("button")
 	line = t.get("save_line")
@@ -121,15 +140,27 @@ func test_title_button() -> void:
 	check(bool(t.get("room").houses), "이어하기: 병 안에 작은 마을 (손 흔드는 주민)")
 	StartFlow.last_target = ""
 	t.call("go_next")
-	check(StartFlow.last_target == StartFlow.GAME_SCENE and StartFlow.mode == "continue", "[이어하기] → 병 안 (continue)")
+	check(StartFlow.last_target == StartFlow.GAME_SCENE and StartFlow.GAME_SCENE == "res://scenes/world.tscn" and StartFlow.mode == "continue", "[이어하기] → 병 안 = 넓은 세상 (continue)")
 	StartFlow.take()
 	remove(t)
+	drop(sm)
+	# 옛 소형 병 저장 (kind "jar") → 이어하기는 소형 병 장면으로 (저장을 잃지 않게)
+	sm = manager()
+	save_jar(sm, "옛 병", 1.0)
+	sm.jars.clear()
+	sm.order.clear()
+	StartFlow.last_target = ""
+	StartFlow.enter_game(null, "continue")
+	check(StartFlow.last_target == StartFlow.JAR_SCENE, "옛 소형 병 저장 → 이어하기는 소형 병 장면")
+	StartFlow.enter_game(null, "new", "새 병")
+	check(StartFlow.last_target == StartFlow.GAME_SCENE, "새 병은 언제나 넓은 세상")
+	StartFlow.take()
 	drop(sm)
 
 
 func test_continue_path() -> void:
 	var sm := manager()
-	var v := save_jar(sm, "이끼마을", 1.3)
+	var v := save_world(sm, "이끼마을", 1.3)
 	var people := v.people.size()
 	sm.jars.clear()
 	sm.order.clear()
@@ -138,6 +169,8 @@ func test_continue_path() -> void:
 	var sv: Village = s.get("village")
 	check(bool(s.get("use_save")) and s.get("entry")["mode"] == "continue", "이어하기로 들어온 병 안 장면은 저장을 쓴다")
 	check(sv != v and absf(sv.t - v.t) < 120.0 and sv.people.size() == people, "저장한 병을 불러옴 (시각 %.0f → %.0f · 인구 %d)" % [v.t, sv.t, sv.people.size()])
+	var jw: JarWorld = s.get("world")
+	check(jw != null and sm.jars[1]["kind"] == "world" and sm.jars[1]["world"] == jw and jw.water.n == WorldCfg.SMALL_SIZE, "넓은 세상 통째로 (땅·물·안개 · 지름 %d칸)" % [jw.water.n if jw != null else 0])
 	check(sm.jars.has(1) and String(sm.jars[1]["meta"]["name"]) == "이끼마을", "지구 이름 그대로")
 	check(not bool(s.get("catching")), "잠깐 비운 동안은 따라잡기가 바로 끝남 (편지 없이 병 안)")
 	remove(s)
@@ -191,3 +224,31 @@ func test_first_run_and_back() -> void:
 	check(ok and absf(lt - t_now) < 1.0, "떠나기 전에 저장됨 (병 시각 %.0f = %.0f)" % [lt, t_now])
 	sm2.free()
 	drop(sm)
+
+
+## OPENING 단계 8 '스타터킷 풀기' (최소판): 안개 없는 세상 전체 + 빛나는 추천 자리 → 고른 자리에 키트 → 안개 → 병 안
+func test_kit_pick() -> void:
+	var jw := JarWorld.create(3, WorldCfg.SMALL_SIZE)
+	var ch: Array[Dictionary] = jw.spot_choices(5)
+	check(ch.size() >= 3 and ch.size() <= 5 and String(ch[0]["reason"]) == "물가·숲 곁", "추천 자리 %d곳 · 까닭 한 마디 ('%s')" % [ch.size(), ch[0]["reason"] if not ch.is_empty() else ""])
+	var p: Vector2 = ch[ch.size() - 1]["p"]
+	var jw2 := JarWorld.create_with_kit(3, WorldCfg.SMALL_SIZE, {}, p)
+	check(jw2.primary() != null and jw2.primary().center == p, "JarWorld.create_with_kit(시드, 크기, 키트, 자리) — 고른 자리에 첫 무리")
+	var n: Node = load(StartFlow.GAME_SCENE).instantiate()
+	n.set("world_size", WorldCfg.SMALL_SIZE)
+	n.set("world_seed", 3)
+	n.set("force_pick", true)
+	run.root.add_child(n)
+	var w: JarWorld = n.get("world")
+	var seen0 := 0
+	for b in w.water.fog:
+		seen0 += 1 if b != 0 else 0
+	check(n.get("village") == null and w.settlements.is_empty() and (n.get("_pick") as Dictionary).size() > 0, "새 세상: 키트를 놓기 전엔 고르는 화면 (마을 없음, 아직 안개 없음 — 본 땅 %d칸)" % seen0)
+	n.call("choose_spot", p)
+	var v: Village = n.get("village")
+	var seen1 := 0
+	for b in w.water.fog:
+		seen1 += 1 if b != 0 else 0
+	check(v != null and v.center == p and seen1 > 0 and seen1 < w.water.fog.size() / 4, "누르면 그 자리에 키트 → 둘레만 걷히고 나머지는 안개 (본 땅 %d칸)" % seen1)
+	check((n.get("cam") as JarCamera).flying, "그 빈터로 날아 내려감")
+	remove(n)

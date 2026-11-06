@@ -160,14 +160,31 @@ func _load_or_make_village() -> Village:
 	entry = StartFlow.take()
 	var direct := is_inside_tree() and get_tree().current_scene == self
 	use_save = sm != null and sm.enabled and (entry["mode"] != "" or direct) and _saves_here()
-	if use_save and entry["mode"] != "new" and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID) and sm.jars[JAR_ID]["kind"] == "jar":
-		_loaded_clock = sm.jar_clock(JAR_ID)
-		_away = float(sm.last_load["away"])
-		return sm.jar_village(JAR_ID)
+	if use_save and entry["mode"] != "new" and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID):
+		var lv := _from_save(sm)
+		if lv != null:
+			_loaded_clock = sm.jar_clock(JAR_ID)
+			_away = float(sm.last_load["away"])
+			return lv
+		sm.jars.clear()                   # 다른 종류의 병 (넓은 세상 ↔ 소형 병) — 새 병으로
+		sm.order.clear()
+		sm.current = -1
 	return _make_village()
 
 
-## 이 장면이 저장을 쓰는가 (넓은 세상 장면은 아직 — 6단계 시험 장면)
+## 불러온 저장에서 이 장면의 병 (소형 병 = kind "jar"). 넓은 세상 장면은 "world"를 받는다 — 종류가 다르면 null (새 병)
+func _from_save(sm: GameSave) -> Village:
+	if sm.jars[JAR_ID]["kind"] != "jar":
+		return null
+	return sm.jar_village(JAR_ID)
+
+
+## 넓은 세상 장면이면 그 세상 (저장·따라잡기가 세상 전체를 다룬다) — 소형 병은 null
+func jar_world() -> JarWorld:
+	return null
+
+
+## 이 장면이 저장을 쓰는가
 func _saves_here() -> bool:
 	return true
 
@@ -178,7 +195,7 @@ func _start_save() -> void:
 	var sm := GameSave.get_instance()
 	if _loaded_clock == null:                     # 새 병: 저장 대상으로 + 첫 병이면 창세의 날 (×12)
 		var nm := String(entry.get("name", ""))
-		sm.register_jar(JAR_ID, village, clock, {"name": nm if nm != "" else "첫 병"})
+		sm.register_jar(JAR_ID, village, clock, {"name": nm if nm != "" else "첫 병"}, jar_world())
 		if sm.should_start_creation():
 			clock.start_creation_day()
 		sm.giant["first_jar_done"] = true
@@ -194,7 +211,7 @@ func begin_return(list: Array, away: float) -> void:
 	if away <= CatchUp.QUICK:                    # 10분 이하: 불러오는 동안 바로 끝
 		for c: CatchUp in list:
 			c.finish()
-		_crowd = CatchUp.on_return(village, away)
+		_crowd = _on_return_all(away)
 		refresh()
 		return
 	catching = true
@@ -225,7 +242,7 @@ func _on_caught_up(letter: Dictionary) -> void:
 	if catchup_screen != null:
 		catchup_screen.queue_free()
 		catchup_screen = null
-	_crowd = CatchUp.on_return(village, _away)
+	_crowd = _on_return_all(_away)
 	refresh()
 	show_return_letter(letter)
 	print("[저장] 비운 %s 따라잡음 — 인구 %d → %d · 큰 일 %d줄 · %s" % [CatchUp.away_words(_away), letter.get("pop0", 0), letter.get("pop1", 0),
@@ -245,6 +262,11 @@ func show_return_letter(letter: Dictionary) -> void:
 	detail.close()
 	altar_sheet.close()
 	return_letter.open(village, letter, _book_from)
+
+
+## 돌아왔을 때 주민들의 반김 (넓은 세상은 무리마다 — 환호한 주민 목록은 모두 합침)
+func _on_return_all(away: float) -> Array:
+	return CatchUp.on_return(village, away)
 
 
 func _on_letter_closed() -> void:
@@ -288,7 +310,8 @@ func refresh() -> void:
 	terrain.rebuild()
 	if glass.is_inside_tree():
 		glass.rebuild()
-	view.sync(0.0, true)
+	for vv: Array in village_views():
+		(vv[1] as VillageView).sync(0.0, true)
 
 
 func _process(dt: float) -> void:
@@ -299,14 +322,17 @@ func _process(dt: float) -> void:
 		var was_skipping := clock.skipping
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
-		view.alpha = 1.0 if clock.skipping else clampf(clock.acc / clock.step, 0.0, 1.0)
+		var al := 1.0 if clock.skipping else clampf(clock.acc / clock.step, 0.0, 1.0)
+		for vv: Array in village_views():
+			(vv[1] as VillageView).alpha = al
 		_terrain_t += dt
 		# 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림 (밤 건너뛰기 중엔 1초마다, 끝나면 바로)
 		if _terrain_t > (1.0 if clock.skipping else 4.0) or (was_skipping and not clock.skipping):
 			_terrain_t = 0.0
 			terrain.paths = village.paths
 			terrain.rebuild()
-	view.sync(dt)
+	for vv: Array in village_views():
+		(vv[1] as VillageView).sync(dt)
 	_follow(dt)
 	if lineup != null:
 		for m in lineup.get_children():
@@ -464,12 +490,12 @@ func _setup_ui() -> void:
 	dev_bar.add_theme_constant_override("v_separation", 4)
 	stack.add_child(dev_bar)
 	for spec: Array in [["+1일", func() -> void: advance(Balance.DAY)],
-			["병 돌리기", func() -> void: village.rotate_jar(); GameAudio.fx("jar_turn"); refresh()],
+			["병 돌리기", dev_rotate],
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
-			["곰팡이", func() -> void: village.mold.force_swarm(village)],     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
-			["버섯 숲", func() -> void: village.flora.grove(village)]]:      # [하늘의 것] 개발: 하룻밤 버섯 숲 바로
+			["곰팡이", func() -> void: focus_village().mold.force_swarm(focus_village())],     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
+			["버섯 숲", func() -> void: focus_village().flora.grove(focus_village())]]:      # [하늘의 것] 개발: 하룻밤 버섯 숲 바로
 		var b := _bar_button(dev_bar, spec[0], spec[1])
 		b.custom_minimum_size = Vector2(40, 32)
 		b.clip_text = false
@@ -481,10 +507,7 @@ func _setup_ui() -> void:
 	var brow := HBoxContainer.new()
 	brow.add_theme_constant_override("separation", UiTheme.GAP)
 	bottom_bar.add_child(brow)
-	var altar_btn := _bar_button(brow, "제단", func() -> void:
-		detail.close()
-		settings_sheet.close()
-		altar_sheet.open())
+	var altar_btn := _bar_button(brow, "제단", open_altar)
 	altar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	lid_btn = _bar_button(brow, "뚜껑 열기", toggle_lid)   # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
 	lid_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -512,6 +535,31 @@ func _setup_ui() -> void:
 	set_debug_mode(not OS.has_feature("mobile"))
 	get_viewport().size_changed.connect(layout_bars)
 	layout_bars()
+
+
+## 제단 시트 — 넓은 세상은 카메라가 보고 있는 무리의 제단 (focus_village)
+func open_altar() -> void:
+	detail.close()
+	settings_sheet.close()
+	altar_sheet.setup(focus_village())
+	altar_sheet.open()
+
+
+## 개발: 병 돌리기 (넓은 세상은 빛만 돈다)
+func dev_rotate() -> void:
+	village.rotate_jar()
+	GameAudio.fx("jar_turn")
+	refresh()
+
+
+## (넓은 세상) 지금 카메라가 보는 무리 — 소형 병은 하나뿐
+func focus_village() -> Village:
+	return village
+
+
+## 화면에 그려지는 무리마다 [Village, VillageView] — 소형 병은 하나
+func village_views() -> Array:
+	return [[village, view]]
 
 
 func _bar_button(parent: Node, text: String, on_press: Callable) -> Button:
@@ -635,7 +683,7 @@ func toggle_lid() -> void:
 ## [하늘의 것] 거인이 분다 — 카메라가 보는 쪽(땅 위)으로. 뚜껑이 닫혀 있으면 아무 일 없음
 func blow() -> void:
 	var f := cam.camera.global_transform.basis.z
-	var n := village.blow_seeds(Vector2(-f.x, -f.z))
+	var n := focus_village().blow_seeds(Vector2(-f.x, -f.z))
 	if n >= 0:
 		GameAudio.fx("blow")
 	if n > 0:                         # 꽃씨가 날림 (반짝이는 바람) + "눈이 온다!"
@@ -671,6 +719,13 @@ func top_text() -> String:
 	return "%s · 인구 %d · %s 지폐" % [village.fmt_time(village.t), village.people.size(), AltarSheet._num(Market.notes)]
 
 
+## 다음 알림 한 줄 (없으면 "") — 넓은 세상은 모든 무리에서 (다른 무리면 이름을 앞에)
+func next_warning() -> String:
+	if village.warnings.is_empty():
+		return ""
+	return str(village.warnings.pop_front()["text"])
+
+
 func _update_ui() -> void:
 	info_label.text = top_text()
 	if debug_mode:
@@ -690,9 +745,11 @@ func _update_ui() -> void:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
 	blow_btn.visible = village.air.lid_open    # [하늘의 것] 불기는 뚜껑이 열린 동안만
-	if not village.warnings.is_empty() and clock.notice_t <= 0.0:     # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
-		clock.notice = str(village.warnings.pop_front()["text"])
-		clock.notice_t = 6.0
+	if clock.notice_t <= 0.0:         # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
+		var w := next_warning()
+		if w != "":
+			clock.notice = w
+			clock.notice_t = 6.0
 	notice_label.visible = clock.notice_t > 0.0
 	notice_label.text = clock.notice
 	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명
@@ -700,11 +757,17 @@ func _update_ui() -> void:
 		c.queue_free()
 	var shown := 0
 	var vs := get_viewport().get_visible_rect().size
-	for r in village.people:
+	for vv: Array in village_views():
+		shown = _bubbles_of(vv[0], vv[1], vs, shown)
+
+
+## 말하고 있는 주민 머리 위 말풍선 (화면 안, 모두 합쳐 4개까지) — 지금까지 띄운 수를 돌려줌
+func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
+	for r in vil.people:
 		if r.say_t <= 0.0 or r.say == "" or shown >= 4:
 			continue
-		var m: ResidentModel = view.residents.get(r.id)
-		if m == null or not m.visible:
+		var m: ResidentModel = vw.residents.get(r.id)
+		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
 			continue
 		var p := cam.camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
 		if p.x < 0 or p.y < top_h + 20.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
@@ -722,6 +785,7 @@ func _update_ui() -> void:
 		bubbles.add_child(l)
 		l.position = Vector2(roundf(p.x - l.get_minimum_size().x * 0.5), roundf(p.y - 16))
 		shown += 1
+	return shown
 
 
 ## 화면 조작 — 휴대폰: 한 손가락 끌기 = 이동, 두 손가락 = 벌리고 오므리기 확대(+ 가운데 이동), 톡 = 주민 고르기 / 빈 곳은 유리 톡.
@@ -767,7 +831,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_N: clock.start_skip_night()
 			KEY_Q: cam.turn(-1)
 			KEY_E: cam.turn(1)
-			KEY_R: village.rotate_jar(); GameAudio.fx("jar_turn"); refresh()
+			KEY_R: dev_rotate()
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
 			KEY_T: tap_glass(true)            # 개발: 크게 친 톡 (지진)
 			KEY_F3: set_debug_mode(not debug_mode)
@@ -833,36 +897,45 @@ func _pinch_reset() -> void:
 func pick_resident(sp: Vector2) -> Resident:
 	var best: Resident = null
 	var best_d := INF
-	for r in village.people:
-		var m: ResidentModel = view.residents.get(r.id)
-		if m == null or not m.is_visible_in_tree():
-			continue
-		var foot := m.global_position
-		if cam.camera.is_position_behind(foot):
-			continue
-		var a := cam.camera.unproject_position(foot)
-		var b := cam.camera.unproject_position(foot + Vector3(0, 1.95 * m.scale.y, 0))
-		var d := Geometry2D.get_closest_point_to_segment(sp, a, b).distance_to(sp)
-		var rad := maxf(PICK_R, absf(a.y - b.y) * 0.6)
-		if d < rad and d < best_d:
-			best_d = d
-			best = r
+	for vv: Array in village_views():
+		var vw: VillageView = vv[1]
+		for r: Resident in (vv[0] as Village).people:
+			var m: ResidentModel = vw.residents.get(r.id)
+			if m == null or not m.is_visible_in_tree():
+				continue
+			var foot := m.global_position
+			if cam.camera.is_position_behind(foot):
+				continue
+			var a := cam.camera.unproject_position(foot)
+			var b := cam.camera.unproject_position(foot + Vector3(0, 1.95 * m.scale.y, 0))
+			var d := Geometry2D.get_closest_point_to_segment(sp, a, b).distance_to(sp)
+			var rad := maxf(PICK_R, absf(a.y - b.y) * 0.6)
+			if d < rad and d < best_d:
+				best_d = d
+				best = r
+				_picked = vv
 	return best
+
+
+var _picked: Array = []              # pick_resident가 고른 주민의 [Village, VillageView]
+var _follow_vv: Array = []           # 상세를 연(따라가는) 주민의 [Village, VillageView]
 
 
 func _on_tap(sp: Vector2) -> void:
 	var r := pick_resident(sp)
 	if r != null:
 		altar_sheet.close()
+		detail.setup(_picked[0])
+		_follow_vv = _picked
 		detail.open(r)
 		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
 	else:
 		tap_glass(false)              # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
 
 
-## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!")
+## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!") — 넓은 세상은 카메라가 보는 무리가 듣는다
 func tap_glass(hard: bool) -> void:
-	village.tap_glass(hard)
+	focus_village().tap_glass(hard)
 	GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")
 	GameAudio.buzz()
 	GameAudio.say("tap_hard" if hard else "tap")
@@ -878,8 +951,9 @@ func _stop_follow() -> void:
 func _follow(dt: float, instant := false) -> void:
 	if follow_id < 0:
 		return
-	var r := village.person(follow_id)
-	var m: ResidentModel = view.residents.get(follow_id)
+	var fv: Array = _follow_vv if not _follow_vv.is_empty() else [village, view]
+	var r := (fv[0] as Village).person(follow_id)
+	var m: ResidentModel = (fv[1] as VillageView).residents.get(follow_id)
 	if r == null or m == null:
 		_stop_follow()
 		return
@@ -916,6 +990,8 @@ func _update_audio() -> void:
 	var a := GameAudio.get_instance()
 	if a == null:
 		return
+	if a.village != focus_village() and not leaving:     # 넓은 세상: 카메라가 보는 무리의 소리 (불·일터·말소리)
+		a.attach(focus_village())
 	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed())
 	a.outside = GameAudio.outside_from_ppu(cam.ppu)
 	a.listener = Vector2(cam.target.x, cam.target.z)
@@ -925,11 +1001,12 @@ func _update_audio() -> void:
 func on_screen_residents() -> Array:
 	var out: Array = []
 	var vs := get_viewport().get_visible_rect().size
-	for r in village.people:
-		var m: ResidentModel = view.residents.get(r.id)
-		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
-			continue
-		var p := cam.camera.unproject_position(m.global_position)
-		if p.x >= 0.0 and p.x <= vs.x and p.y >= top_h and p.y <= vs.y - bottom_h:
-			out.append(r)
+	for vv: Array in village_views():
+		for r: Resident in (vv[0] as Village).people:
+			var m: ResidentModel = (vv[1] as VillageView).residents.get(r.id)
+			if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
+				continue
+			var p := cam.camera.unproject_position(m.global_position)
+			if p.x >= 0.0 and p.x <= vs.x and p.y >= top_h and p.y <= vs.y - bottom_h:
+				out.append(r)
 	return out

@@ -9,7 +9,7 @@ extends RefCounted
 
 var run: SceneTree
 var quick := false
-const SLOW := ["test_catchup_speed"]
+const SLOW := ["test_catchup_speed", "test_world_catchup_speed"]
 const TMP_DIR := "user://test_save"
 const FIXTURE := "res://tests/fixtures/save_v0"
 
@@ -34,7 +34,7 @@ func all() -> void:
 		"test_files_and_slots", "test_corrupt_recovery", "test_migration_v0", "test_clock_backwards", "test_giant_action_persisted",
 		"test_autosave_cost", "test_offline_no_new_crisis", "test_offline_death_cap", "test_offline_era_altar",
 		"test_creation_day", "test_catchup_and_letter", "test_lamp_upgrade", "test_offline_offerings", "test_catchup_determinism",
-		"test_return_effects", "test_catchup_speed"])
+		"test_return_effects", "test_world_files", "test_world_catchup", "test_world_giant_action", "test_catchup_speed", "test_world_catchup_speed"])
 	check(SaveCodec.errors == 0, "저장할 수 없는 값(객체·Callable)을 한 번도 만나지 않았다 (%d)" % SaveCodec.errors)
 	_clean()
 	Village.on_giant_action = old_hook
@@ -138,6 +138,140 @@ func test_world_roundtrip() -> void:
 		print("  (다른 곳) " + diff_keys(a, b, "", 6))
 	check(SaveCodec.digest(a) == SaveCodec.digest(b) and jw2.primary().others.size() == 1 and jw2.settlements[1].peers.size() == 2,
 		"넓은 세상 결정론: 불러온 뒤 한 시간 = 쉬지 않고 한 시간 (함께 걷는 무리·이웃 이어짐)")
+
+
+# ───────────────────────── 넓은 세상 = 본 게임 (저장 · 따라잡기) ─────────────────────────
+## 작은 세상(512칸) + 무리 둘을 n시간 흘린 것
+func _world2(seed_v: int, hours: float) -> JarWorld:
+	var jw := JarWorld.create(seed_v, WorldCfg.SMALL_SIZE)
+	var sp: Array[Vector2] = jw.recommended_kit_spots()
+	jw.place_kit(sp[0].x, sp[0].y)
+	if sp.size() > 1:
+		jw.place_kit(sp[1].x, sp[1].y)
+	jw.water.offline = true
+	jw.advance(hours * Balance.HOUR)
+	jw.water.offline = false
+	return jw
+
+
+## 파일로 왕복 (저장 관리자 · 두 칸 · 압축 · 거친 칸 정렬표는 저장하지 않고 다시 만듦) → 불러온 뒤 흘려도 같은 세상
+func test_world_files() -> void:
+	var sm := manager()
+	var jw := _world2(3, 10.0)
+	var v := jw.primary()
+	sm.register_jar(1, v, JarClock.new(v), {"name": "넓은 별"}, jw)
+	var t0 := Time.get_ticks_usec()
+	var p := sm.jar_payload(1)
+	var snap_ms := (Time.get_ticks_usec() - t0) / 1000.0
+	sm.save_all(true)
+	var sm2 := GameSave.new()
+	sm2.dir = TMP_DIR
+	var ok := sm2.load_all()
+	var jw2: JarWorld = sm2.jars[1]["world"] if ok and sm2.jars.has(1) else null
+	check(ok and jw2 != null and sm2.jars[1]["kind"] == "world" and jw2.settlements.size() == jw.settlements.size() and String(sm2.jars[1]["meta"]["name"]) == "넓은 별",
+		"넓은 세상 저장 파일 → 불러오기: 무리 %d곳 · 이름 그대로" % jw.settlements.size())
+	if jw2 == null:
+		sm2.free()
+		drop(sm)
+		return
+	check(jw2.water.hs == jw.water.hs and jw2.water.pre == jw.water.pre and not (p["world"]["water"] as Dictionary).has("hs"),
+		"거친 칸 높이 정렬표는 저장하지 않고 높이에서 다시 만든다 (같은 값)")
+	check(jw2.water.fog == jw.water.fog and jw2.settlements[1].people.size() == jw.settlements[1].people.size(), "안개(본 땅)·둘째 무리 주민 그대로")
+	check(SaveCodec.digest(jw.to_dict()) == SaveCodec.digest(jw2.to_dict()), "파일 왕복: 세상 사전 지문이 같다")
+	jw.advance(2.0 * Balance.HOUR)
+	jw2.advance(2.0 * Balance.HOUR)
+	var a := jw.to_dict()
+	var b := jw2.to_dict()
+	if SaveCodec.digest(a) != SaveCodec.digest(b):
+		print("  (다른 곳) " + diff_keys(a, b, "", 6))
+	check(SaveCodec.digest(a) == SaveCodec.digest(b), "결정론 (넓은 세상, 파일): 10시간 → 저장·불러오기 → 2시간 = 쉬지 않고 12시간")
+	var f := FileAccess.open(ProjectSettings.globalize_path(TMP_DIR) + "/jar_1.dat.a", FileAccess.READ)
+	print("  넓은 세상(512칸) 저장 파일 %d KB · 찍어 두기(화면 쪽) %.1f ms" % [f.get_length() / 1024 if f != null else -1, snap_ms])
+	sm2.free()
+	drop(sm)
+
+
+## 세상 전체 따라잡기: 등불 12시간만 · 모든 무리가 함께 · 거인 없음 규칙이 모든 무리에 · 끝나면 다시 봄 · 편지에 다른 무리 소식 ·
+## 나눠 흘려도 한 번에 흘려도 같은 세상 (결정론)
+func test_world_catchup() -> void:
+	var base := _world2(7, 6.0)
+	var bytes := var_to_bytes(base.to_dict())
+	var a := JarWorld.from_dict(bytes_to_var(bytes))
+	var b := JarWorld.from_dict(bytes_to_var(bytes))
+	var t0 := a.primary().t
+	var ca := CatchUp.new(a.primary(), 30.0 * Balance.HOUR, 12.0 * Balance.HOUR, a)
+	var all_off := true
+	for q in a.settlements:
+		all_off = all_off and not q.watching and q.altar_hold
+	check(all_off, "따라잡는 동안 모든 무리가 '거인 없음' (제물은 상한 없이)")
+	var l := ca.finish()
+	var cb := CatchUp.new(b.primary(), 30.0 * Balance.HOUR, 12.0 * Balance.HOUR, b)
+	while not cb.run(3.0):
+		pass
+	cb.finish()
+	var back := true
+	for q in a.settlements:
+		back = back and q.watching and not q.altar_hold and absf(q.t - t0 - 12.0 * Balance.HOUR) < 1.0
+	check(back, "등불 12시간만 흐름 · 무리마다 같은 시각 · 끝나면 다시 거인이 봄 (무리 %d곳)" % a.settlements.size())
+	check(SaveCodec.digest(a.to_dict()) == SaveCodec.digest(b.to_dict()), "세상 따라잡기 결정론: 한 번에 / 나눠서 같은 세상")
+	var ev: Array = l["events"]
+	var other_line := ev.any(func(e: String) -> bool: return e.contains(a.settlements[1].settlement_name))
+	check(int(l.get("settlements", 0)) == a.settlements.size() and other_line and ev.size() <= 6 and l["chief_id"] >= 0 and a.primary().person(int(l["chief_id"])) != null,
+		"편지: 첫 무리 촌장이 쓰고 다른 무리 소식 한 줄 (%d줄) · 세상 인구 %d → %d" % [ev.size(), int(l.get("world_pop0", 0)), int(l.get("world_pop1", 0))])
+	var crowd := CatchUp.on_return_world(a, 2.0 * Balance.DAY)
+	var both := true
+	for q in a.settlements:
+		both = both and q.festival_t == q.t
+	check(both and crowd.size() > 0, "하루 넘게 비웠으면 무리마다 귀환 축제 (환호 %d명)" % crowd.size())
+
+
+## 거인의 행동 (넓은 세상): 거인 묶음은 곧바로 디스크에, 세상은 뒤 스레드로 바로 (화면이 멈추지 않게)
+func test_world_giant_action() -> void:
+	var sm := manager()
+	var jw := _world2(3, 2.0)
+	var v := jw.settlements[1]
+	sm.register_jar(1, jw.primary(), JarClock.new(jw.primary()), {}, jw)
+	sm.save_all(true)
+	var base := ProjectSettings.globalize_path(TMP_DIR)
+	var seq0 := int(SaveFile.read_best(base + "/jar_1.dat")["seq"])
+	Market.notes = 5.0
+	var t0 := Time.get_ticks_usec()
+	v.tap_glass()                                   # 둘째 무리에서 한 행동도 그 세상의 행동
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	var g := SaveFile.read_best(base + "/giant.dat")
+	check(g["ok"] and absf(float(g["payload"]["notes"]) - 5.0) < 1e-6, "거인 묶음(지폐)은 곧바로 디스크에")
+	sm.flush()
+	var j := SaveFile.read_best(base + "/jar_1.dat")
+	check(int(j["seq"]) == seq0 + 1, "세상 저장은 뒤 스레드가 이어서 씀 (순번 %d → %d) · 화면 쪽 %.1f ms" % [seq0, int(j["seq"]), ms])
+	# 자동 저장: 넓은 세상은 큰 일 20초·돌아가며 60초 간격
+	var n0 := int(sm.stats["snaps"])
+	v.log_line("시험: 큰 일")
+	sm._now_t += 5.0
+	sm._process(0.0)
+	check(int(sm.stats["snaps"]) == n0, "큰 일이어도 20초 안엔 세상을 다시 찍지 않음")
+	sm._now_t += 20.0
+	sm._process(0.0)
+	sm.flush()
+	check(int(sm.stats["snaps"]) == n0 + 1, "20초 뒤엔 큰 일 → 세상 저장")
+	drop(sm)
+
+
+## (long) 따라잡기 빠르기 — 본 게임 크기(1024칸) 세상, 무리 둘: 정밀 12시간 / 24시간
+func test_world_catchup_speed() -> void:
+	var jw := JarWorld.create(20261106, WorldCfg.SIZE)
+	var sp: Array[Vector2] = jw.recommended_kit_spots()
+	jw.place_kit(sp[0].x, sp[0].y)
+	jw.place_kit(sp[1].x, sp[1].y)
+	jw.water.offline = true
+	jw.advance(Balance.DAY)
+	jw.water.offline = false
+	var c := CatchUp.new(jw.primary(), 12.0 * Balance.HOUR, 12.0 * Balance.HOUR, jw)
+	c.finish()
+	var c2 := CatchUp.new(jw.primary(), 24.0 * Balance.HOUR, 24.0 * Balance.HOUR, jw)
+	c2.finish()
+	print("  넓은 세상 1024칸 · 무리 %d곳 · 인구 %d: 정밀 12시간 %.2f초 · 24시간 %.2f초" % [jw.settlements.size(), jw.primary().people.size() + jw.settlements[1].people.size(),
+		c.real_ms / 1000.0, c2.real_ms / 1000.0])
+	check(c2.real_ms / 1000.0 < 15.0, "넓은 세상 따라잡기 최대(정밀 24시간) < 15초 (%.2f초)" % (c2.real_ms / 1000.0))
 
 
 ## 두 저장 사전이 처음으로 다른 곳 (시험이 실패했을 때 찾기 쉽게)

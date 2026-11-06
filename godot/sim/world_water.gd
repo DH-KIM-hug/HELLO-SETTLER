@@ -182,6 +182,18 @@ func build_world_tables() -> void:
 	_rebuild_slices()
 
 
+## 저장: 거친 칸 높이 정렬표(hs·pre)는 높이(h)에서 다시 만든다 (저장 크기 35 → 27 MB, 압축 전)
+func _save_skip() -> Array:
+	return ["hs", "pre"]
+
+
+func _after_load() -> void:
+	hs.resize(m * m * 64)
+	pre.resize(m * m * 65)
+	for c in m * m:
+		_build_coarse_cell(c)
+
+
 func _build_coarse_cell(c: int) -> void:
 	var ci := c % m
 	var cj := c / m

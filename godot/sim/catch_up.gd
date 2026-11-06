@@ -5,6 +5,8 @@
 ## 비운 동안 거인은 보고 있지 않다 (Village.watching = false): 위기 사망 하루 1명·부부 2쌍 아래로는 없음, 시대 점수 30%,
 ## 새 위기(곰팡이)는 조짐에서 기다림 — Village·Mold가 지킨다. 그동안 바친 제물은 이틀 상한 없이 쌓인다 (Village.altar_hold, SAVE.md 3.1).
 ## 쓰는 법: var c := CatchUp.new(village, elapsed) → 화면마다 c.run(ms) (true면 끝) → c.finish() = 편지 내용 → CatchUp.on_return(village, elapsed).
+## 넓은 세상: CatchUp.new(world.primary(), elapsed, -1, world) — 세상 전체(모든 무리·물)가 JarWorld.advance로 흐른다
+## (거인이 없으니 분가 편지는 하루 뒤 스스로 떠난다). 편지는 첫 무리 촌장이 쓰고 다른 무리 소식을 한 줄씩 더한다.
 class_name CatchUp
 extends RefCounted
 
@@ -23,6 +25,9 @@ var exact_left := 0.0
 var slept := 0.0                      # 등불이 꺼진 뒤 잠든 시간
 var real_ms := 0.0                    # 실제로 걸린 계산 시간
 var before: Dictionary = {}
+var world: JarWorld = null            # 넓은 세상이면 그 세상 (모든 무리가 함께)
+var befores: Dictionary = {}          # (넓은 세상) 무리 sid → snapshot
+var n_before := 1                     # (넓은 세상) 비우기 전 무리 수
 var _water_offline := false
 var _done := false
 
@@ -41,8 +46,9 @@ static func elapsed_since(last_unix: float, now_unix: float) -> float:
 
 
 ## lamp_s < 0 = 거인의 지금 등불 (Market.lamp_seconds). 시험은 다른 값을 줄 수 있다
-func _init(village: Village, elapsed: float, lamp_s := -1.0) -> void:
+func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null) -> void:
 	v = village
+	world = jw
 	away = maxf(0.0, elapsed)
 	lamp = Market.lamp_seconds() if lamp_s < 0.0 else lamp_s
 	var p := plan(away, lamp)
@@ -51,9 +57,24 @@ func _init(village: Village, elapsed: float, lamp_s := -1.0) -> void:
 	slept = p["slept"]
 	before = snapshot(v)
 	_water_offline = v.water.offline
-	v.watching = false
 	v.water.offline = true
-	v.altar_hold = true
+	if world != null:
+		n_before = world.settlements.size()
+		for q in world.settlements:
+			befores[q.sid] = snapshot(q)
+	_leave_all()
+
+
+## 모든 무리: 거인이 보고 있지 않다 · 바친 제물은 상한 없이 쌓인다
+func _leave_all() -> void:
+	for q: Village in group():
+		q.watching = false
+		q.altar_hold = true
+
+
+## 함께 흐르는 무리 (소형 병 = 하나)
+func group() -> Array:
+	return world.settlements if world != null else [v]
 
 
 func needs_screen() -> bool:
@@ -76,9 +97,16 @@ func run(budget_ms: float = 1.0e9) -> bool:
 	var t0 := Time.get_ticks_usec()
 	while not is_done():
 		var dt := minf(EXACT_CHUNK, exact_left)
-		v.advance(dt)
+		if world != null:
+			var n0 := world.settlements.size()
+			world.advance(dt)
+			if world.settlements.size() != n0:
+				_leave_all()          # 비운 동안 분가해 새로 선 무리도 거인 없이
+		else:
+			v.advance(dt)
 		exact_left -= dt
-		v.crises.clear()          # 비운 동안의 위기 알림은 화면에 띄우지 않는다 (편지가 대신)
+		for q: Village in group():
+			q.crises.clear()      # 비운 동안의 위기 알림은 화면에 띄우지 않는다 (편지가 대신)
 		if (Time.get_ticks_usec() - t0) / 1000.0 >= budget_ms:
 			break
 	real_ms += (Time.get_ticks_usec() - t0) / 1000.0
@@ -90,18 +118,59 @@ func finish() -> Dictionary:
 	if not _done:
 		_done = true
 		run()
-		v.watching = true
 		v.water.offline = _water_offline
-		v.altar_hold = false                  # 돌아온 뒤엔 제단 규칙이 평소대로 (이틀 지난 제물은 창고로)
-		v.crises.clear()
-		while v.warnings.size() > 3:          # 비운 동안 쌓인 예고는 마지막 몇 개만 (나머지는 편지에)
-			v.warnings.pop_front()
-		if slept > 0.0:
-			v.log_line(LONG_NIGHT)            # 주민은 잠든 시간을 모른다 — 연대기에 한 줄만
+		for q: Village in group():
+			q.watching = true
+			q.altar_hold = false              # 돌아온 뒤엔 제단 규칙이 평소대로 (이틀 지난 제물은 창고로)
+			q.crises.clear()
+			while q.warnings.size() > 3:      # 비운 동안 쌓인 예고는 마지막 몇 개만 (나머지는 편지에)
+				q.warnings.pop_front()
+			if slept > 0.0:
+				q.log_line(LONG_NIGHT)        # 주민은 잠든 시간을 모른다 — 연대기에 한 줄만
 	var l := letter(v, before, away)
+	if world != null:
+		_add_world(l)
 	l["lamp_h"] = int(roundf(lamp / 3600.0))
 	l["slept"] = slept
 	return l
+
+
+## (넓은 세상) 편지에 다른 무리 소식: 무리마다 한 줄 (인구 변화 + 가장 큰 일) · 비운 동안 새로 선 무리 · 세상 전체 인구
+func _add_world(l: Dictionary) -> void:
+	var events: Array = l["events"]
+	var extra: Array = []
+	var p0 := 0
+	var p1 := 0
+	for q: Village in world.settlements:
+		p1 += q.people.size()
+		if befores.has(q.sid):
+			p0 += int(befores[q.sid]["pop"])
+		if q == v:
+			continue
+		var nm := q.settlement_name if q.settlement_name != "" else "다른 무리"
+		if not befores.has(q.sid):
+			extra.append("젊은 부부들이 새 땅으로 떠나 '%s'%s 세웠어요 (%d명)." % [nm, Village.josa(nm, "을", "를"), q.people.size()])
+			continue
+		var ql := letter(q, befores[q.sid], away)
+		var b0 := int(befores[q.sid]["pop"])
+		var top := ""
+		for e: String in ql["events"]:
+			if not e in ["다들 거인님을 기다리며 하루하루 잘 지냈어요.", "아이들이 들판에서 뛰어놀았어요.", "밤마다 모닥불 앞에 모여 노래했어요.", "다들 맡은 일을 부지런히 했어요."]:
+				top = e
+				break
+		if top == "":
+			top = "모두 잘 지냈어요."
+		extra.append("%s (%d명 → %d명): %s" % [nm, b0, q.people.size(), top])
+		if not (ql["altar_line"] as String).is_empty():
+			(l["waiting"] as Array).append("%s 제단에도 제물이 있어요." % nm)
+		if q.open_letters("split").size() > 0:
+			(l["waiting"] as Array).append("%s에서도 새 땅으로 떠나고 싶다는 편지가 와 있어요." % nm)
+	# 첫 무리 소식은 4줄까지, 다른 무리 소식을 그 아래에 (모두 6줄까지)
+	l["events"] = events.slice(0, maxi(3, 6 - extra.size())) + extra.slice(0, 3)
+	l["world_pop0"] = p0
+	l["world_pop1"] = p1
+	l["settlements"] = world.settlements.size()
+	l["new_settlements"] = world.settlements.size() - n_before
 
 
 ## 로딩·귀환 화면 한 줄: 등불이 다 타고 꺼져 있었으면 "등불이 n시간 타고 꺼져 있었어요" (아니면 "")
@@ -267,6 +336,14 @@ static func away_words(s: float) -> String:
 
 
 # ───────────────────────── 돌아왔을 때 (SAVE.md 4 · RESIDENT_AI 2.2 '거인의 귀환') ─────────────────────────
+## 넓은 세상: 무리마다 (환호한 주민을 모두 합쳐 돌려줌)
+static func on_return_world(jw: JarWorld, away_s: float) -> Array:
+	var crowd: Array = []
+	for q: Village in jw.settlements:
+		crowd.append_array(on_return(q, away_s))
+	return crowd
+
+
 ## 하루 넘게: 귀환 축제 (광장에 모여 하늘을 보고 환호, 제단 가득, 믿음↑). 하루 안: 반가운 말풍선 몇 개.
 ## 일주일 넘게: 믿음이 조금 식어 있다 + 노인이 아이에게 거인 이야기를 들려준다. 돌려줌 = 환호한 주민들 (화면이 목소리를 낸다)
 static func on_return(vv: Village, away_s: float) -> Array:

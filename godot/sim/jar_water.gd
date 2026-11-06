@@ -511,12 +511,23 @@ static func _rot_grid(a: PackedFloat32Array) -> PackedFloat32Array:
 # ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
 ## 땅·물·소금 격자 전부. 넓은 세상(WorldWater)도 같은 함수 (스크립트 변수를 모두 담는다)
 func to_dict() -> Dictionary:
-	var d := SaveCodec.props(self)
+	var d := SaveCodec.props(self, _save_skip())
 	d["$kind"] = "world" if self is WorldWater else "jar"
 	return d
+
+
+## 저장하지 않는 변수 (불러올 때 다른 값에서 다시 만든다 — _after_load). 넓은 세상은 거친 칸 높이 정렬표(8 MB)를 뺀다
+func _save_skip() -> Array:
+	return []
+
+
+func _after_load() -> void:
+	pass
 
 
 static func from_dict(d: Dictionary) -> JarWater:
 	var s: JarWater = WorldWater.new() if d.get("$kind", "jar") == "world" else JarWater.new()
 	SaveCodec.apply(s, d)
+	if not d.has("hs") and s is WorldWater:
+		s._after_load()
 	return s

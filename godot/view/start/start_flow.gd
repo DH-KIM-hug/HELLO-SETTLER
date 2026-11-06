@@ -5,8 +5,9 @@
 class_name StartFlow
 extends RefCounted
 
-## 병 안 장면 — 넓은 세상으로 옮길 땐 "res://scenes/world.tscn" (한 줄)
-const GAME_SCENE := "res://scenes/test_village.tscn"
+## 병 안 장면 = 넓은 세상 (기획서 3.1 — 첫 빈터 둘레만 보이고 나머지는 안개). 옛 소형 병 저장(kind "jar")만 소형 병 장면으로 (scene_for)
+const GAME_SCENE := "res://scenes/world.tscn"
+const JAR_SCENE := "res://scenes/test_village.tscn"   # 소형 시험 병 — 시험·옛 저장 이어하기용
 const TITLE_SCENE := "res://scenes/title.tscn"
 const CREATION_SCENE := "res://scenes/creation.tscn"
 const BOOT_SCENE := "res://scenes/boot.tscn"
@@ -35,7 +36,14 @@ static var last_target := ""
 static func enter_game(tree: SceneTree, m: String, name := "") -> void:
 	mode = m
 	jar_name = clean_name(name) if m == "new" else ""
-	_go(tree, GAME_SCENE, true)
+	_go(tree, scene_for(m, GameSave.get_instance()), true)
+
+
+## 들어갈 장면: 새 병 = 넓은 세상 · 이어하기 = 저장된 병의 종류대로 (넓은 세상 "world" / 옛 소형 병 "jar")
+static func scene_for(m: String, sm: GameSave) -> String:
+	if m == "continue" and sm != null and String(sm.peek().get("kind", "world")) == "jar":
+		return JAR_SCENE
+	return GAME_SCENE
 
 
 ## 병 안 장면이 들어온 방법을 받아 간다 (한 번만 — 다음 장면·캡처 도구가 물려받지 않게)

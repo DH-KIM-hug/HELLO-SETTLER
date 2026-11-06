@@ -10,6 +10,11 @@ const RC := 32                      # 화면 조각 (칸)
 const BUDGET_MS := 4.0              # 한 화면에 조각 다시 만들기에 쓰는 시간
 const REFRESH_S := 4.0              # 보이는 조각의 물·오솔길을 이 간격으로 새로 (조각마다 돌아가며)
 const FOG_Y := 2.2                  # 안개층 높이 (땅 위)
+## 가장 멀리 (병 전체가 화면에 — 다음 단계는 병 밖·거인의 방, GIANT_ROOM 4): 조각 수백 개 대신 세상 전체를 거친 메시 하나로.
+## view_r가 이보다 크면 조각을 모두 감추고 이것만 그린다 (16칸 간격 → 1024칸 세상이 64×64 사각형). 30초마다 물을 새로.
+const WHOLE_VIEW_R := 420.0
+const WHOLE_STEP := 16
+const WHOLE_REFRESH := 30.0
 
 var ww: WorldWater
 var villages: Array = []            # 오솔길을 읽을 무리들 (Village)
@@ -27,7 +32,11 @@ var _clock := 0.0
 var _queue: Array = []
 var _fog_seen_version := -1
 var _band_h := 0.9
-var stats := {"built": 0, "ms": 0.0, "max_ms": 0.0}
+var stats := {"built": 0, "ms": 0.0, "max_ms": 0.0, "whole_ms": 0.0}
+var whole_mode := false
+var _whole_t: MeshInstance3D
+var _whole_w: MeshInstance3D
+var _whole_built := -1.0e9
 
 
 func _init(w: WorldWater) -> void:
@@ -63,6 +72,9 @@ func rebuild() -> void:
 
 ## 보이는 조각을 지금 다 만든다 (처음·캡처용)
 func update_now() -> void:
+	_set_whole(view_r > WHOLE_VIEW_R)
+	if whole_mode:
+		return
 	_plan()
 	while not _queue.is_empty():
 		_build_next()
@@ -77,11 +89,41 @@ func _process(dt: float) -> void:
 			_build_fog_block(b)
 			_mark_block_chunks(b)
 		ww.fog_dirty.clear()
+	if view_r > WHOLE_VIEW_R:
+		_set_whole(true)
+		return
+	_set_whole(false)
 	if Engine.get_process_frames() % 10 == 0 or _queue.is_empty():
 		_plan()
 	var t0 := Time.get_ticks_usec()
 	while not _queue.is_empty() and (Time.get_ticks_usec() - t0) / 1000.0 < BUDGET_MS:
 		_build_next()
+
+
+## 세상 전체 한 덩어리 메시로 그리기 켜고 끄기 (켜면 조각을 모두 감춤 — 그리는 것 하나, 새로 만드는 일 없음)
+func _set_whole(on: bool) -> void:
+	if on and (_whole_t == null or _clock - _whole_built > WHOLE_REFRESH):
+		if _whole_t == null:
+			_whole_t = MeshInstance3D.new()
+			_whole_t.material_override = _terrain_mat
+			_whole_t.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(_whole_t)
+			_whole_w = MeshInstance3D.new()
+			_whole_w.material_override = _water_mat
+			_whole_w.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(_whole_w)
+		var t0 := Time.get_ticks_usec()
+		_build_region(0, 0, ww.n, WHOLE_STEP, _whole_t, _whole_w)
+		stats["whole_ms"] = (Time.get_ticks_usec() - t0) / 1000.0
+		_whole_built = _clock
+	if on == whole_mode:
+		return
+	whole_mode = on
+	_whole_t.visible = on
+	_whole_w.visible = on
+	for ch: int in _chunks:
+		(_chunks[ch]["t"] as MeshInstance3D).visible = not on
+		(_chunks[ch]["w"] as MeshInstance3D).visible = not on
 
 
 ## 어떤 조각을 어떤 LOD로 (다시) 만들어야 하나 — 가까운 것부터
@@ -246,10 +288,13 @@ func _cell_base_w(k: int) -> Color:
 
 # ───────────────────────── 조각 메시 ─────────────────────────
 func _build_chunk(ch: int, s: int, tmi: MeshInstance3D, wmi: MeshInstance3D) -> void:
+	_build_region((ch % nrc) * RC, (ch / nrc) * RC, RC, s, tmi, wmi)
+
+
+## 칸 (i0, j0)부터 한 변 span칸 땅을 s칸 간격으로 — 조각 하나(span = RC) 또는 세상 전체 한 덩어리(span = n, WHOLE_STEP)
+func _build_region(i0: int, j0: int, span: int, s: int, tmi: MeshInstance3D, wmi: MeshInstance3D) -> void:
 	var n := ww.n
-	var i0 := (ch % nrc) * RC
-	var j0 := (ch / nrc) * RC
-	var q := RC / s                      # 한 변의 사각형 수
+	var q := span / s                    # 한 변의 사각형 수
 	var q1 := q + 1
 	var lim := ww.rr - 0.25
 	# 꼭짓점 (q+1)²
@@ -572,6 +617,8 @@ func _build_marks() -> void:
 
 ## 멀리 축소하면 높이 단계 줄(terrain.gdshader band_h)이 너무 촘촘해져 땅이 어두워진다 → 단계 간격을 넓힘 (내 재질만)
 func zoom_ppu(ppu: float) -> void:
+	if _fog_mat != null:                 # 멀리 축소하면 안개 무늬를 큰 뭉게구름으로 (깨알 무늬 방지)
+		_fog_mat.set_shader_parameter("far", clampf((3.0 - ppu) / 2.2, 0.0, 1.0))
 	var bh := 0.9 * maxf(1.0, 12.0 / maxf(ppu, 0.05))
 	if absf(bh - _band_h) > 0.01:
 		_band_h = bh

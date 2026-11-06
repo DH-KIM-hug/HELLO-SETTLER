@@ -12,6 +12,11 @@ extends Node
 
 const AUTOSAVE_EVERY := 10.0           # 현실 초 — 병 하나씩 돌아가며
 const EVENT_GAP := 1.0                 # 큰 일 저장 사이 최소 간격 (현실 초 — ×8에서 연달아 일어나도 1초에 한 번)
+## 넓은 세상 병은 한 번에 땅·물 격자 전부 (1024칸: 압축 전 약 27 MB, 파일 약 8 MB — 뒤 스레드가 씀) →
+## 큰 일 저장은 20초에 한 번까지, 돌아가며 하는 자동 저장은 60초에 한 번까지 (정함 — 기기 쓰기 양·배터리).
+## 거인의 행동은 거인 묶음(지폐)만 곧바로 디스크에, 세상은 뒤 스레드로 바로 줄 세움 (화면이 멈추지 않게)
+const WORLD_EVENT_GAP := 20.0
+const WORLD_AUTOSAVE_EVERY := 60.0
 const DIR := "user://save"
 
 static var _inst: GameSave
@@ -170,7 +175,7 @@ func peek() -> Dictionary:
 		var jr := SaveFile.read_best(_base("jar_%d" % int(pick.get("id", 1))))
 		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
-	return {"name": String(pick.get("name", "")), "day": day}
+	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar"))}
 
 
 # ───────────────────────── 찍어 두기 (화면 쪽 — 짧게) ─────────────────────────
@@ -279,8 +284,12 @@ func giant_action(v: Village) -> void:
 	if not enabled or id < 0:            # 저장 대상이 아닌 병 (시험·캡처 도구가 만든 병)
 		return
 	save_giant(false)
-	save_jar(id, false)
-	flush()
+	if jars[id]["kind"] == "world":
+		flush()                          # 거인 묶음(지폐·장터)은 곧바로 디스크에
+		save_jar(id, false)              # 세상은 뒤 스레드가 바로 이어서 (수백 ms — 화면을 멈추지 않음)
+	else:
+		save_jar(id, false)
+		flush()
 	stats["sync"] += 1
 
 
@@ -298,16 +307,32 @@ func _process(dt: float) -> void:
 	_now_t += dt
 	if not enabled or jars.is_empty():
 		return
-	for id: int in order:                  # 큰 일 → 그 병 (1초에 한 번까지)
+	for id: int in order:                  # 큰 일 → 그 병 (1초에 한 번까지 · 넓은 세상은 20초)
 		var j: Dictionary = jars[id]
-		if _serial_of(j["village"], j["world"]) != int(j["serial"]) and _now_t - float(j["event_t"]) >= EVENT_GAP:
+		var gap := WORLD_EVENT_GAP if j["kind"] == "world" else EVENT_GAP
+		if _serial_of(j["village"], j["world"]) != int(j["serial"]) and _now_t - float(j["event_t"]) >= gap and not _writing(id):
 			save_jar(id, false)
 	_auto_t += dt
-	if _auto_t >= AUTOSAVE_EVERY:           # 10초마다 병 하나씩 돌아가며 + 거인 묶음
+	if _auto_t >= AUTOSAVE_EVERY:           # 10초마다 병 하나씩 돌아가며 + 거인 묶음 (넓은 세상은 마지막 저장 60초 뒤부터)
 		_auto_t = 0.0
-		save_jar(order[_rr % order.size()], false)
+		var id: int = order[_rr % order.size()]
+		var j: Dictionary = jars[id]
+		if j["kind"] != "world" or (_now_t - float(j["event_t"]) >= WORLD_AUTOSAVE_EVERY and not _writing(id)):
+			save_jar(id, false)
 		_rr += 1
 		save_giant(false)
+
+
+## 그 병의 파일이 아직 줄 서 있다 (넓은 세상 — 앞 저장을 다 쓰기 전에 또 찍지 않는다)
+func _writing(id: int) -> bool:
+	var p := _base("jar_%d" % id)
+	_mutex.lock()
+	var busy := false
+	for job: Dictionary in _queue:
+		if String(job["path"]).begins_with(p):
+			busy = true
+	_mutex.unlock()
+	return busy
 
 
 # ───────────────────────── 뒤에서 쓰기 ─────────────────────────
@@ -532,7 +557,8 @@ func catch_up(elapsed: float) -> Array:
 		ids.erase(current)
 		ids.push_front(current)
 	for id: int in ids:
-		out.append(CatchUp.new(jars[id]["village"], elapsed))
+		var j: Dictionary = jars[id]
+		out.append(CatchUp.new(j["village"], elapsed, -1.0, j["world"] if j["kind"] == "world" else null))
 	return out
 
 

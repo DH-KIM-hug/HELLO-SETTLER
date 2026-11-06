@@ -191,6 +191,9 @@ func _fill_letter() -> void:
 	var p1 := int(data.get("pop1", 0))
 	var pl := _label("우리는 %d명 → %d명이 되었어요." % [p0, p1], "Section")
 	pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if int(data.get("settlements", 1)) > 1:      # 넓은 세상: 세상 전체
+		var wl := _label("세상 모든 무리 %d곳 · %d명 → %d명" % [int(data["settlements"]), int(data.get("world_pop0", p0)), int(data.get("world_pop1", p1))], "Small")
+		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var born: Array = data.get("born", [])
 	if not born.is_empty():
 		_label("새 얼굴", "Small")

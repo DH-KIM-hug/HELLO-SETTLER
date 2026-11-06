@@ -9,6 +9,7 @@ uniform vec3 cloud_shade : source_color = vec3(0.855, 0.886, 0.902);
 uniform vec3 haze_col : source_color = vec3(0.93, 0.95, 0.95);
 uniform float puff_scale = 0.075;
 uniform float drift = 0.012;
+uniform float far = 0.0;          // 0 가까이 ~ 1 병 전체가 보일 만큼 축소 — 잔무늬를 큰 뭉게구름으로 바꾸고 그늘을 옅게 (깨알 무늬 방지)
 
 varying vec3 wpos;
 
@@ -33,7 +34,21 @@ void vertex() {
 
 void fragment() {
 	vec2 p = wpos.xz * puff_scale + vec2(TIME * drift, TIME * drift * 0.6);
-	float n = fbm(p);
+	// 가까이·멀리 한쪽이면 잡음을 하나만 (화면을 덮는 층이라 휴대폰에서 픽셀마다 비용이 큼 — far는 화면 전체에 같은 값)
+	vec2 pf = wpos.xz * puff_scale * 0.18 + 11.0;
+	vec2 qf = wpos.xz * puff_scale * 0.3 + 3.0;
+	float n;
+	float n2;
+	if (far <= 0.001) {
+		n = fbm(p);
+		n2 = fbm(p * 1.6 + vec2(0.35, 0.2));
+	} else if (far >= 0.999) {
+		n = fbm(pf);
+		n2 = fbm(qf);
+	} else {
+		n = mix(fbm(p), fbm(pf), far);
+		n2 = mix(fbm(p * 1.6 + vec2(0.35, 0.2)), fbm(qf), far);
+	}
 	float a = COLOR.a;
 	// 뭉게 가장자리: 안개 정도 + 잡음 → 문턱
 	float e = a + (n - 0.5) * 0.55;
@@ -41,9 +56,8 @@ void fragment() {
 	float core = smoothstep(0.55 - aa, 0.55 + aa, e);
 	float halo = smoothstep(0.32 - aa, 0.32 + aa, e);
 	// 구름 안쪽 그늘 (한 단계): 해 반대쪽으로 밀린 잡음
-	float n2 = fbm(p * 1.6 + vec2(0.35, 0.2));
 	float sh = smoothstep(0.56 - fwidth(n2), 0.56 + fwidth(n2), n2);
-	vec3 c = mix(cloud_col, cloud_shade, sh * 0.85);
+	vec3 c = mix(cloud_col, cloud_shade, sh * 0.85 * (1.0 - 0.45 * far));
 	c = mix(haze_col, c, core);
 	ALBEDO = c;
 	ALPHA = max(core * 0.97, halo * 0.45);

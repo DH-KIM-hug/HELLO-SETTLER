@@ -17,6 +17,52 @@ static func create(seed_v: int, size := WorldCfg.SIZE, opts: Dictionary = {}) ->
 	return jw
 
 
+## 세상 + 첫 키트 (OPENING 단계 8 '스타터킷 풀기'): spot이 null이면 첫 추천 자리, 아니면 거인이 고른 그 자리 (세상 좌표 Vector2).
+## 자리가 안 되면(물 위·벽 곁) 첫 추천 자리로. kit = Kits.make(...) (비면 기본 키트)
+static func create_with_kit(seed_v: int, size := WorldCfg.SIZE, kit: Dictionary = {}, spot: Variant = null) -> JarWorld:
+	var jw := create(seed_v, size)
+	var p: Vector2
+	if spot is Vector2 and jw.kit_spot_ok((spot as Vector2).x, (spot as Vector2).y)["ok"]:
+		p = spot
+	else:
+		var rec := jw.recommended_kit_spots()
+		p = rec[0] if not rec.is_empty() else Vector2.ZERO
+	jw.place_kit(p.x, p.y, kit)
+	return jw
+
+
+## 키트 자리 고르기 화면이 보여 줄 추천 자리 (빛나는 자리) — [{p: Vector2, reason: "물가·숲 곁"}], 많아야 max_n곳.
+## 추천 자리(물가·숲 곁)가 모자라면 놓을 수는 있는 자리(경고가 붙는 곳)로 채운다 (reason = "물이 멀어요" 등)
+func spot_choices(max_n := 5) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for sp in recommended_kit_spots():
+		if out.size() >= max_n:
+			break
+		if out.all(func(o: Dictionary) -> bool: return (o["p"] as Vector2).distance_to(sp) >= WorldCfg.KIT_APART):
+			out.append({"p": sp, "reason": spot_reason(sp.x, sp.y)})
+	if out.size() < 3:
+		for sp in water.spots:
+			if out.size() >= 3:
+				break
+			var r := kit_spot_ok(sp.x, sp.y)
+			if r["ok"] and out.all(func(o: Dictionary) -> bool: return (o["p"] as Vector2).distance_to(sp) >= WorldCfg.KIT_APART):
+				out.append({"p": sp, "reason": spot_reason(sp.x, sp.y)})
+	return out
+
+
+## 그 자리를 한 마디로: "물가·숲 곁" (좋은 자리) · "물이 멀어요" · "숲이 멀어요" (놓을 수는 있음) · 놓을 수 없으면 그 까닭
+func spot_reason(x: float, y: float) -> String:
+	var r := kit_spot_ok(x, y)
+	if not r["ok"]:
+		return String(r["why"])
+	match String(r["warn"]):
+		"":
+			return "물가·숲 곁"
+		"곁에 물이 없어요":
+			return "물이 멀어요"
+	return String(r["warn"])
+
+
 ## 새 창조 — 새 무작위 시드 (기획서 5.1 '세상은 매번 무작위다')
 static func new_random(size := WorldCfg.SIZE) -> JarWorld:
 	return create(WorldGen.new_seed(), size)

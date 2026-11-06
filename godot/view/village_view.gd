@@ -790,6 +790,8 @@ func _sync_far() -> void:
 					var p := Vector2(gi + _hash(gi, gj, 1.0) * 0.8 - 0.4, gj + _hash(gi, gj, 2.0) * 0.8 - 0.4) * FOREST_STEP
 					if p.distance_to(c) < lim or p.distance_to(c) > FAR_MAX or not ww.revealed(p.x, p.y):
 						continue
+					if _other_closer(p, c):
+						continue
 					var fd := _world_forest(p, nz.get_noise_2d(p.x, p.y) * 0.5 + 0.5, fl)
 					if fd <= 0.0 or _hash(gi, gj, 3.0) > 0.25 + 0.75 * fd:
 						continue
@@ -804,6 +806,17 @@ func _sync_far() -> void:
 					n_far_trees += 1
 	_flush(_far, groups)
 	far_ms = (Time.get_ticks_usec() - t0) / 1000.0
+
+
+## (넓은 세상 · 무리가 여럿) 먼 숲은 가장 가까운 무리의 화면이 맡는다 — 다른 무리 마을 둘레(장식 숲·건물)와 겹치지 않게
+func _other_closer(p: Vector2, c: Vector2) -> bool:
+	var d := p.distance_squared_to(c)
+	for q: Village in v.peers:
+		if q != v:
+			var dq := p.distance_squared_to(q.center)
+			if dq < d or dq < (q.view_r + 2.0) * (q.view_r + 2.0):
+				return true
+	return false
 
 
 func _sync_manna() -> void:

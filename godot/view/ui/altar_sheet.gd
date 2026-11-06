@@ -10,6 +10,7 @@ extends Control
 
 signal closed
 signal bought(b: Building)
+signal split_requested(from: Village)   # 분가 편지 [새 땅 고르기] — 넓은 세상 장면이 받으면 거인이 땅을 고르는 화면으로
 
 const REFRESH := 0.5
 const SHEET_FRAC := 0.7                # 세로 화면: 아래 시트 높이 (화면의 70%)
@@ -336,8 +337,11 @@ func _on_grant(id: int) -> void:
 	_refresh()
 
 
-## 분가 자리 고르기 — 지금은 가까운 좋은 자리를 바로 고른다 (안개 속 자리 고르기 화면은 나중)
+## 분가 자리 고르기 — 장면이 split_requested를 받으면 거인이 땅을 누르는 화면, 아니면 가까운 좋은 자리를 바로
 func _on_split(_id: int) -> void:
+	if not split_requested.get_connections().is_empty():
+		split_requested.emit(village)
+		return
 	var jw: JarWorld = get_meta("world") if has_meta("world") else null
 	if jw == null:
 		return
