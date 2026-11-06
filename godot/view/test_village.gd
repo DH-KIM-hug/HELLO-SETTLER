@@ -1,8 +1,10 @@
-## 3단계 — 주민 (docs/GODOT_KICKOFF.md 4장)
+## 마을 장면 (3단계 주민 → 4단계 셀 채색 그림체, docs/RENDERING.md v2)
 ## 2단계 땅·물(JarTerrain) 위에서 첫 정착민 열 명이 살아간다: sim/village.gd(Village)를 돌리고 view/village_view.gd로 그린다.
-## 주민은 부품 조합 모델(view/resident_model.gd), 동작은 초당 10장. 말풍선은 화면 위 글자(갈무리).
-## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8, 밤 건너뛰기(모두 잠든 밤 → 아침까지 ×60).
-## 조작: 속도 · 밤 건너뛰기 / 개발: +1일 · 병 돌리기 · 확대 −/+ · 도트 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠로 확대. 스페이스 = 멈춤.
+## 주민은 부품 조합 모델(view/resident_model.gd), 동작은 부드럽게. 말풍선은 화면 위 글자(갈무리).
+## 그림: 공용 툰 셰이더(render/toon.gd) + 그림자 맵 한 단계 + 깊이 외곽선·밤 색·화면 유리 곡선(render/outline_post.gd). 색은 data/style.gd.
+## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
+## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
+## 조작: 속도 · 밤 건너뛰기 / 개발: +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 extends Node3D
 
 const SEED := 20261105
@@ -15,6 +17,8 @@ var view: VillageView
 var glass: JarGlass
 var cam: JarCamera
 var post_mat: ShaderMaterial
+var sun: DirectionalLight3D
+var night := 0.0                      # 지금 화면의 밤 정도 0~1 (Style.night_amount + 밤 건너뛰기 연출)
 var ui_label: Label
 var bubbles: Control
 var paused := false
@@ -30,7 +34,7 @@ var _drag := false
 func _ready() -> void:
 	village = Village.new_prototype(SEED)
 	clock = JarClock.new(village)
-	JarTerrain.make_world(self)
+	sun = JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
 	terrain = JarTerrain.new(village.water)
@@ -43,15 +47,16 @@ func _ready() -> void:
 	add_child(glass)
 	cam = JarCamera.new()
 	add_child(cam)
-	cam.set_zoom(1)                   # 기본 확대: 1칸 = 10픽셀 → 주민 약 18픽셀
+	cam.ground_radius = JarTerrain.R_EDGE
+	cam.set_zoom(1)                   # 기본 확대: 땅이 화면을 가득 채움 (하늘·병 밖이 보이지 않음)
 	look_at_ground(Vector2(1.0, 1.0))
-	post_mat = PixelPost.attach(cam.camera)
+	post_mat = OutlinePost.attach(cam.camera)
 	_setup_ui()
 
 
 func look_at_ground(p: Vector2) -> void:
 	cam.target = Vector3(p.x, terrain.ground_y(p.x, p.y), p.y)
-	cam.set_zoom(cam.zoom_i)
+	cam._apply()
 
 
 ## 시간을 흘린다 (화면은 다음 sync에서 따라옴)
@@ -71,11 +76,13 @@ func refresh() -> void:
 func _process(dt: float) -> void:
 	if not paused:
 		var t0 := Time.get_ticks_usec()
+		var was_skipping := clock.skipping
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
-		view.alpha = clampf(clock.acc / clock.step, 0.0, 1.0)
+		view.alpha = 1.0 if clock.skipping else clampf(clock.acc / clock.step, 0.0, 1.0)
 		_terrain_t += dt
-		if _terrain_t > 4.0:          # 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림
+		# 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림 (밤 건너뛰기 중엔 1초마다, 끝나면 바로)
+		if _terrain_t > (1.0 if clock.skipping else 4.0) or (was_skipping and not clock.skipping):
 			_terrain_t = 0.0
 			terrain.paths = village.paths
 			terrain.rebuild()
@@ -85,8 +92,17 @@ func _process(dt: float) -> void:
 			if m is ResidentModel:
 				(m as ResidentModel).tick(dt)
 	terrain.animate(dt)
-	glass.set_units_per_pixel(cam.units_per_pixel())
+	update_night()
 	_update_ui()
+
+
+## 밤 색 조정 (RENDERING v2 2.3 '밤 = 남색'): 시각으로 정하고, 밤 건너뛰기 중엔 진행도에 따라 하늘이 밝아짐
+func update_night() -> void:
+	night = Style.night_amount(village.hour_now())
+	if clock.skipping:
+		night = minf(night, 1.0 - smoothstep(0.45, 1.0, clock.skip_progress))
+	post_mat.set_shader_parameter("night_amount", night)
+	glass.set_night(night)
 
 
 # ───────────────────────── 모델 줄 세우기 (부품 조합 확인용) ─────────────────────────
@@ -208,8 +224,8 @@ func _setup_ui() -> void:
 	root.add_child(bar)
 	for spec: Array in [["개발: +1일", func() -> void: advance(Balance.DAY)],
 			["병 돌리기", func() -> void: village.rotate_jar(); refresh()],
-			["－", func() -> void: cam.set_zoom(cam.zoom_i - 1)], ["＋", func() -> void: cam.set_zoom(cam.zoom_i + 1)],
-			["도트", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_palette"))],
+			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
+			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))]]:
 		var b := Button.new()
 		b.text = spec[0]
@@ -218,8 +234,8 @@ func _setup_ui() -> void:
 		bar.add_child(b)
 
 
+## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
 func set_pixel_effects(on: bool) -> void:
-	post_mat.set_shader_parameter("use_palette", on)
 	post_mat.set_shader_parameter("use_outline", on)
 
 
@@ -233,7 +249,7 @@ func status_text() -> String:
 		elif p.is_elder():
 			elders += 1
 	var c := v.chief()
-	var spd := "밤 건너뛰는 중 ×%d" % int(clock.speed()) if clock.skipping else "×%d" % int(clock.speed())
+	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "×%d" % int(clock.speed())
 	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
 		v.fmt_time(v.t), spd, " (멈춤)" if paused else "",
 		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(),
@@ -243,7 +259,7 @@ func status_text() -> String:
 
 func _update_ui() -> void:
 	ui_label.text = status_text()
-	speed_btn.text = "속도 ×%d" % int(clock.speed())
+	speed_btn.text = "새벽으로…" if clock.skipping else "속도 ×%d" % int(clock.speed())
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
 	notice_label.visible = clock.notice_t > 0.0
@@ -282,9 +298,11 @@ func _unhandled_input(e: InputEvent) -> void:
 		if mb.button_index == MOUSE_BUTTON_LEFT:
 			_drag = mb.pressed
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			cam.set_zoom(cam.zoom_i + 1)
+			cam.zoom_by(1.15)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			cam.set_zoom(cam.zoom_i - 1)
+			cam.zoom_by(1.0 / 1.15)
+	elif e is InputEventMagnifyGesture:
+		cam.zoom_by((e as InputEventMagnifyGesture).factor)
 	elif e is InputEventMouseMotion and _drag:
 		cam.pan_pixels((e as InputEventMouseMotion).relative)
 	elif e is InputEventScreenDrag:

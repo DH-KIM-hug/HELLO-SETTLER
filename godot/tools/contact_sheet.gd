@@ -5,12 +5,13 @@ const GAP := 8
 const SCALE := 2
 
 
-static func make(paths: PackedStringArray, out_path: String) -> void:
+## scale: 도트 캡처는 2 (nearest 확대), 4단계 원래 해상도 캡처는 0.5 (부드럽게 축소)
+static func make(paths: PackedStringArray, out_path: String, scale: float = SCALE) -> void:
 	var imgs: Array[Image] = []
 	for p in paths:
 		var img := Image.load_from_file(p)
 		img.convert(Image.FORMAT_RGB8)
-		img.resize(img.get_width() * SCALE, img.get_height() * SCALE, Image.INTERPOLATE_NEAREST)
+		img.resize(int(img.get_width() * scale), int(img.get_height() * scale), Image.INTERPOLATE_NEAREST if scale >= 1.0 else Image.INTERPOLATE_LANCZOS)
 		imgs.append(img)
 	var w := 0
 	var h := 0

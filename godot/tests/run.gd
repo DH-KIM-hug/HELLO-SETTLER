@@ -296,35 +296,84 @@ func test_time_controls() -> void:
 	for i in 900:
 		cb.tick(0.5)
 	check(vb.is_watching() and vb.people[0].belief > b0, "×8도 지켜보는 시간 — 믿음↑ (%.3f → %.3f)" % [b0, vb.people[0].belief])
-	# 2) 밤 건너뛰기: 낮엔 못 누름 → 모두 잠든 밤에 누르면 ×60 → 아침 6시에 ×1로
-	var v2 := Village.new_prototype(1)
-	v2.water.offline = true
+	# 2) 밤 건너뛰기 (v3.7): 낮엔 못 누름 → 모두 잠든 밤에 누르면 다음 06:00까지 현실 약 3초 타임랩스 → ×1로
+	var night_v := func(seed_v: int) -> Village:
+		var vv := Village.new_prototype(seed_v)
+		vv.water.offline = true
+		vv.advance(15.0 * Balance.HOUR)            # 1일차 22:00
+		vv.water.offline = false                   # 거인이 보는 중 (물 60초 간격)
+		vv.crises.clear()
+		return vv
+	var v2: Village = night_v.call(1)
 	var c2 := JarClock.new(v2)
-	check(not c2.can_skip_night(), "낮(%s)에는 밤 건너뛰기 없음" % v2.fmt_time(v2.t))
-	v2.advance(15.0 * Balance.HOUR)               # 1일차 22:00
-	c2.v.crises.clear()
+	var vd := Village.new_prototype(1)
+	check(not JarClock.new(vd).can_skip_night(), "낮(%s)에는 밤 건너뛰기 없음" % vd.fmt_time(vd.t))
 	var waited := 0
 	while not c2.can_skip_night() and waited < 7200:
 		c2.tick(1.0)
 		waited += 1
 	check(c2.can_skip_night(), "밤에 모두 잠들면 밤 건너뛰기 버튼 (%s)" % v2.fmt_time(v2.t))
 	var slept_at := v2.fmt_time(v2.t)
+	var t_before := v2.t
+	var steps_before := c2.steps_done
 	c2.set_speed(2)
-	check(c2.start_skip_night() and c2.speed() == Balance.SKIP_NIGHT_SPEED, "누르면 ×60")
+	check(c2.start_skip_night() and c2.skipping and v2.water.offline, "누르면 건너뛰기 시작 (굵은 걸음 · 물 오프라인 간격)")
+	var span := c2.skip_span
 	var frames2 := 0
 	var t_start := Time.get_ticks_usec()
 	var worst_ms := 0.0
 	var worst_steps := 0
-	while c2.skipping and frames2 < 60 * 60 * 30:
+	var prog_ok := true
+	var last_prog := 0.0
+	while c2.skipping and frames2 < 60 * 30:
 		var tf := Time.get_ticks_usec()
 		var n := c2.tick(1.0 / 60.0)
 		worst_ms = maxf(worst_ms, (Time.get_ticks_usec() - tf) / 1000.0)
 		worst_steps = maxi(worst_steps, n)
 		frames2 += 1
+		prog_ok = prog_ok and c2.skip_progress >= last_prog
+		last_prog = c2.skip_progress
 	var cost_s := (Time.get_ticks_usec() - t_start) / 1.0e6
-	print("  밤 건너뛰기 %s → %s · 현실 %.0f초(%.1f분, 60fps) · 계산 %.1f초 · 한 화면 최대 %d걸음 %.2f ms" % [slept_at, v2.fmt_time(v2.t), frames2 / 60.0, frames2 / 3600.0, cost_s, worst_steps, worst_ms])
-	check(not c2.skipping and c2.speed() == 1.0 and v2.fmt_time(v2.t).ends_with("06:00") and v2.cal_day(v2.t) == 2, "아침(2일차 06:00)이 되면 끝나고 ×1로 (%s, ×%d)" % [v2.fmt_time(v2.t), int(c2.speed())])
-	check(c2.notice != "" and c2.dropped == 0.0, "아침 알림 '%s', 버린 시간 없음" % c2.notice)
+	print("  밤 건너뛰기 %s → %s (병 %.2f시간, 굵은 걸음 %d) · 현실 %.2f초(60fps %d화면) · 계산 %.2f초 · 한 화면 최대 %d걸음 %.1f ms" % [
+		slept_at, v2.fmt_time(v2.t), span / 3600.0, c2.steps_done - steps_before, frames2 / 60.0, frames2, cost_s, worst_steps, worst_ms])
+	check(not c2.skipping and c2.speed() == 1.0 and v2.fmt_time(v2.t).ends_with("06:00") and v2.cal_day(v2.t) == 2, "다음 새벽(2일차 06:00)에 끝나고 ×1로 (%s, ×%d)" % [v2.fmt_time(v2.t), int(c2.speed())])
+	check(absf(frames2 / 60.0 - Balance.SKIP_NIGHT_SECONDS) <= 2.0 / 60.0, "남은 밤 길이와 상관없이 현실 약 %.0f초 (%.2f초)" % [Balance.SKIP_NIGHT_SECONDS, frames2 / 60.0])
+	check(prog_ok and is_equal_approx(c2.skip_progress, 1.0) and not v2.water.offline, "진행도 0→1, 끝나면 물 간격 원래대로")
+	check(c2.notice != "" and c2.dropped == 0.0 and absf(v2.t - t_before - span) < 1e-6, "아침 알림 '%s', 버린 시간 없음" % c2.notice)
+	# 남은 밤이 짧아도 (새벽 4시에 눌러도) 약 3초
+	var v4: Village = night_v.call(1)
+	v4.water.offline = true
+	v4.advance(6.0 * Balance.HOUR)                  # 2일차 04:00
+	v4.water.offline = false
+	var c4 := JarClock.new(v4)
+	var fr4 := 0
+	if c4.start_skip_night():
+		while c4.skipping and fr4 < 60 * 30:
+			c4.tick(1.0 / 60.0)
+			fr4 += 1
+	check(fr4 > 0 and absf(fr4 / 60.0 - Balance.SKIP_NIGHT_SECONDS) <= 2.0 / 60.0 and v4.fmt_time(v4.t).ends_with("06:00"), "새벽 4시에 눌러도 약 3초 (%.2f초 → %s)" % [fr4 / 60.0, v4.fmt_time(v4.t)])
+	# 밤 건너뛰기 = 같은 구간을 오프라인처럼 몰아서 계산한 것과 똑같다 (Village.advance, 10초 걸음 + 물 300초 간격)
+	var va: Village = night_v.call(5)
+	var vb2: Village = night_v.call(5)
+	var ca := JarClock.new(va)
+	var cb2 := JarClock.new(vb2)
+	for i in 3600:
+		if ca.can_skip_night():
+			break
+		ca.tick(1.0)
+		cb2.tick(1.0)
+	check(clock_sig(va) == clock_sig(vb2), "두 병이 같은 밤에 있다 (%s)" % va.fmt_time(va.t))
+	ca.start_skip_night()
+	var span_a := ca.skip_span
+	var fps_list := [1.0 / 60.0, 1.0 / 24.0, 0.37]
+	var k_f := 0
+	while ca.skipping:
+		ca.tick(fps_list[k_f % 3])          # 화면 길이가 들쭉날쭉해도
+		k_f += 1
+	vb2.water.offline = true
+	vb2.advance(span_a)
+	vb2.water.offline = false
+	check(clock_sig(va) == clock_sig(vb2), "밤 건너뛰기 결과 = 같은 %.2f시간을 몰아서 계산한 결과 (위치·믿음·연대기·난수 · %s)" % [span_a / 3600.0, va.fmt_time(va.t)])
 	# 3) 위기(굶주림)가 시작되면 ×1로 + 알림
 	var v3 := Village.new_prototype(2)
 	v3.water.offline = true
@@ -341,11 +390,16 @@ func test_time_controls() -> void:
 	c3.tick(0.5)
 	check(c3.speed() == 1.0 and not c3.skipping and c3.last_crisis.get("kind", "") == "hunger" and c3.notice_t > 0.0, "식량이 떨어지면 ×8 → ×1 + 알림 '%s'" % c3.notice)
 	check(v3.crises.is_empty() and words_ok([c3.notice]) == "", "알림에 금지어 없음")
-	# 밤 건너뛰는 중의 위기도 ×1로
-	c2.skipping = true
-	v2.crisis("starve", "누군가 쓰러졌다")
-	c2.tick(1.0)
-	check(not c2.skipping and c2.speed() == 1.0, "밤 건너뛰는 중 위기 → ×1")
+	# 밤 건너뛰는 중의 위기도 ×1로 (건너뛰기 끝, 물 간격 원래대로)
+	var v5: Village = night_v.call(1)
+	var c5 := JarClock.new(v5)
+	while not c5.can_skip_night() and c5.steps_done < 7200:
+		c5.tick(1.0)
+	c5.start_skip_night()
+	c5.tick(0.5)
+	v5.crisis("starve", "누군가 쓰러졌다")
+	c5.tick(1.0 / 60.0)
+	check(not c5.skipping and c5.speed() == 1.0 and not v5.water.offline and c5.notice.begins_with("누군가 쓰러졌다") and v5.is_night(), "밤 건너뛰는 중 위기 → 그 자리(%s)에서 ×1 + 알림" % v5.fmt_time(v5.t))
 
 
 ## 보통 마을 30일 — 인구가 sim_life.py(밸런스 v2)가 예측한 범위에

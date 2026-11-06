@@ -31,7 +31,7 @@ func _ready() -> void:
 	glass = terrain.make_glass()
 	add_child(glass)                 # 유리는 둥글어서 돌지 않아도 같다
 	_setup_camera()
-	post_mat = PixelPost.attach(cam.camera)
+	post_mat = OutlinePost.attach(cam.camera)
 	_setup_ui()
 	rebuild()
 
@@ -74,7 +74,6 @@ func west_lake_area() -> int:
 
 
 func set_pixel_effects(on: bool) -> void:
-	post_mat.set_shader_parameter("use_palette", on)
 	post_mat.set_shader_parameter("use_outline", on)
 
 
@@ -119,8 +118,8 @@ func _setup_ui() -> void:
 	for spec: Array in [["병 돌리기", func() -> void: turn_jar()],
 			["빠르게", func() -> void: speed_i = (speed_i + 1) % SPEEDS.size()],
 			["+1일", func() -> void: advance_days(1.0)],
-			["－", func() -> void: cam.set_zoom(cam.zoom_i - 1)], ["＋", func() -> void: cam.set_zoom(cam.zoom_i + 1)],
-			["도트", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_palette"))]]:
+			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
+			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))]]:
 		var b := Button.new()
 		b.text = spec[0]
 		b.focus_mode = Control.FOCUS_NONE

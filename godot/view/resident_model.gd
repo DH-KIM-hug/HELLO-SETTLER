@@ -1,21 +1,20 @@
 ## 주민 부품 조합 3D 모델 — RENDERING.md 2.6, 기획서 7.1. 그림 기준: design/concept/4-1.png · style-test/mid_variety.png
 ## 1세트: 체형 1 · 머리 2 (짧은 머리 / 땋은 긴 머리) · 옷 2 (튜닉+바지 / 치마+앞치마) · 모자 2 (밀짚모자 / 머릿수건, + 없음).
-## 약 4등신: 키 2.1칸 (머리 0.5) → 기본 확대(1칸 = 10픽셀, 30° 내려다봄)에서 화면 약 18픽셀.
-## 동작은 초당 10장으로 끊어서 (도트 애니메이션 느낌): 걷기·나르기·일하기·앉기·먹기·기도·놀기·자기.
+## 약 4등신: 모델 키 2.1 × Style.RESIDENT_SCALE (0.5) ≈ 1.05칸 → 기본 확대에서 나무 수관 폭의 약 1/6 (RENDERING v2 2.6).
+## 셀 채색(render/toon.gd) + 화면 외곽선, 그림자는 실제 그림자 맵 (원판 없음).
+## 동작은 부드럽게 (매 화면 사인 곡선): 걷기·나르기·일하기·앉기·먹기·기도·놀기·자기.
 class_name ResidentModel
 extends Node3D
 
-const FPS := 10.0
+const STEP_HZ := 1.8              # 걸음 주기 (초당 왕복)
 const LEG_H := 0.62
 const SHOULDER_Y := 1.30
 const NECK_Y := 1.34
-const C_SHADOW := Color("324c28")
-const C_LOG := Color("8b5733")
-const C_STONE := Color("918887")
-const C_SACK := Color("eac79c")
-const C_GRAIN := Color("fffbea")
+const C_LOG := Style.WOOD
+const C_STONE := Style.ROCK
+const C_SACK := Color("ecd2a6")
+const C_GRAIN := Style.GRAIN
 
-static var _mats: Dictionary = {}
 static var _boxes: Dictionary = {}
 
 var pose: Node3D                # 몸 전체 (앉기·눕기·들썩임)
@@ -25,23 +24,14 @@ var arm_l: Node3D
 var arm_r: Node3D
 var head: Node3D
 var item: Node3D                # 들고 있는 짐
-var shadow: MeshInstance3D
 var anim := "idle"
 var _t := 0.0
-var _frame := -1
 var _item_kind := ""
+var _base_scale := 1.0
 
 
-static func mat_of(c: Color) -> StandardMaterial3D:
-	var key := c.to_html(false)
-	if not _mats.has(key):
-		var m := StandardMaterial3D.new()
-		m.albedo_color = c
-		m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-		m.roughness = 1.0
-		m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON
-		_mats[key] = m
-	return _mats[key]
+static func mat_of(c: Color) -> ShaderMaterial:
+	return Toon.mat(c)
 
 
 static func box_of(size: Vector3) -> BoxMesh:
@@ -58,7 +48,6 @@ func _part(parent: Node3D, size: Vector3, pos: Vector3, c: Color) -> MeshInstanc
 	mi.mesh = box_of(size)
 	mi.material_override = mat_of(c)
 	mi.position = pos
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
 	return mi
 
@@ -89,22 +78,6 @@ func build(head_i: int, clothes_i: int, hat_i: int, hair_i: int, skin_i: int, cl
 	var cloth := Color(Balance.CLOTH_COLORS[cloth_i % Balance.CLOTH_COLORS.size()])
 	if age >= Balance.AGE_ELDER:
 		hair = _lc("elder_hair")
-	# 그림자: 불투명한 어두운 원판 (투명은 도트 마무리에서 사라짐 — NOTES.md 1단계)
-	shadow = MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.42
-	cyl.bottom_radius = 0.42
-	cyl.height = 0.02
-	cyl.radial_segments = 10
-	cyl.rings = 1
-	shadow.mesh = cyl
-	var sm := StandardMaterial3D.new()
-	sm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	sm.albedo_color = C_SHADOW
-	shadow.material_override = sm
-	shadow.position.y = 0.03
-	shadow.scale = Vector3(1.0, 1.0, 0.75)
-	add_child(shadow)
 	pose = _pivot(self, Vector3.ZERO)
 	# 다리 (엉덩이에서 흔들림)
 	var leg_c := _lc("trouser") if clothes_i == 0 else _lc("stocking")
@@ -168,14 +141,14 @@ func build(head_i: int, clothes_i: int, hat_i: int, hair_i: int, skin_i: int, cl
 	item.visible = false
 	# 나이: 아이는 작고 머리가 크다, 아기는 더 작다
 	if age < Balance.AGE_BABY:
-		scale = Vector3.ONE * 0.42
+		_base_scale = 0.42
 		head.scale = Vector3.ONE * 1.25
 	elif age < Balance.AGE_ADULT:
-		scale = Vector3.ONE * (0.62 + 0.08 * clampf((age - 1.0) / 3.0, 0.0, 1.0))
+		_base_scale = 0.62 + 0.08 * clampf((age - 1.0) / 3.0, 0.0, 1.0)
 		head.scale = Vector3.ONE * 1.18
 	else:
-		scale = Vector3.ONE
-	_frame = -1
+		_base_scale = 1.0
+	scale = Vector3.ONE * _base_scale * Style.RESIDENT_SCALE
 	_item_kind = ""
 
 
@@ -207,22 +180,17 @@ func set_item(kind: String) -> void:
 
 
 func set_anim(a: String) -> void:
-	if a != anim:
-		anim = a
-		_frame = -1
+	anim = a
 
 
-## 화면 시간으로 돌린다 (초당 10장으로 끊어서)
+## 화면 시간으로 돌린다 (매 화면, 부드럽게)
 func tick(dt: float) -> void:
-	_t += dt
-	var f := int(_t * FPS)
-	if f != _frame:
-		_frame = f
-		apply_pose(anim, f)
+	_t += dt * Style.ANIM_SPEED
+	apply_pose(anim, _t)
 
 
-## 동작 한 장 — 모든 관절을 처음 자세로 돌린 뒤 그 동작의 f번째 장
-func apply_pose(a: String, f: int) -> void:
+## 동작 자세 — 모든 관절을 처음 자세로 돌린 뒤 그 동작의 t초 자세 (사인 곡선)
+func apply_pose(a: String, t: float) -> void:
 	if pose == null:
 		return
 	pose.position = Vector3.ZERO
@@ -230,49 +198,49 @@ func apply_pose(a: String, f: int) -> void:
 	for n: Node3D in [leg_l, leg_r, arm_l, arm_r, head]:
 		n.rotation = Vector3.ZERO
 	item.visible = _item_kind != "" and (a == "carry" or a == "idle")
-	shadow.visible = true
-	var w4 := [0.5, 0.0, -0.5, 0.0]
-	var bob4 := [0.0, 0.06, 0.0, 0.06]
+	var ph := t * TAU * STEP_HZ
+	var sw := sin(ph)
+	var bob := absf(cos(ph)) * 0.06
 	match a:
 		"walk":
-			var i := f % 4
-			leg_l.rotation.x = w4[i]
-			leg_r.rotation.x = -w4[i]
-			arm_l.rotation.x = -w4[i] * 0.7
-			arm_r.rotation.x = w4[i] * 0.7
-			pose.position.y = bob4[i]
+			leg_l.rotation.x = sw * 0.5
+			leg_r.rotation.x = -sw * 0.5
+			arm_l.rotation.x = -sw * 0.35
+			arm_r.rotation.x = sw * 0.35
+			pose.position.y = bob
 		"carry":
-			var i := f % 4
-			leg_l.rotation.x = w4[i] * 0.8
-			leg_r.rotation.x = -w4[i] * 0.8
+			leg_l.rotation.x = sw * 0.4
+			leg_r.rotation.x = -sw * 0.4
 			arm_l.rotation.x = -1.25
 			arm_r.rotation.x = -1.25
 			arm_l.rotation.z = -0.25
 			arm_r.rotation.z = 0.25
-			pose.position.y = bob4[i] * 0.7
+			pose.position.y = bob * 0.7
 			item.visible = true
 		"work":
-			var sw := [-2.5, -1.7, -0.3, -0.9]
-			var i := f % 4
-			arm_r.rotation.x = sw[i]
-			arm_l.rotation.x = sw[i] * 0.6
-			pose.rotation.x = 0.12 if i == 2 else 0.0
+			# 내려찍기: 천천히 들어 올리고 빠르게 내림
+			var c := fposmod(t * 1.1, 1.0)
+			var swing := (1.0 - smoothstep(0.0, 0.7, c)) if c < 0.7 else smoothstep(0.7, 1.0, c)
+			swing = 1.0 - swing
+			arm_r.rotation.x = lerpf(-2.5, -0.3, swing)
+			arm_l.rotation.x = lerpf(-2.5, -0.3, swing) * 0.6
+			pose.rotation.x = 0.12 * swing
 			head.rotation.x = 0.15
 		"sleep":
 			pose.rotation.x = -PI / 2.0
 			pose.position = Vector3(0, 0.2, 0.9)
-			head.rotation.y = 0.0
+			pose.position.y += sin(t * 1.3) * 0.015
 		"sit", "eat":
 			leg_l.rotation.x = -1.45
 			leg_r.rotation.x = -1.45
 			pose.position.y = -0.42
 			if a == "eat":
-				var ea := [-2.3, -1.4]
-				arm_r.rotation.x = ea[(f / 3) % 2]
+				arm_r.rotation.x = -1.85 + sin(t * 4.0) * 0.45
 				arm_l.rotation.x = -0.9
 			else:
 				arm_l.rotation.x = -0.5
 				arm_r.rotation.x = -0.5
+				head.rotation.y = sin(t * 0.4) * 0.3
 		"pray":
 			leg_l.rotation.x = 1.25
 			leg_r.rotation.x = 1.25
@@ -281,14 +249,13 @@ func apply_pose(a: String, f: int) -> void:
 			arm_r.rotation.x = -1.15
 			arm_l.rotation.z = -0.35
 			arm_r.rotation.z = 0.35
-			head.rotation.x = 0.3 if (f / 8) % 2 == 0 else 0.18
+			head.rotation.x = 0.24 + sin(t * 1.2) * 0.06
 		"play":
-			var hop := [0.0, 0.16, 0.26, 0.16]
-			var i := f % 4
-			pose.position.y = hop[i]
-			arm_l.rotation.x = -2.6 if i != 0 else -0.4
-			arm_r.rotation.x = -2.6 if i != 0 else -0.4
+			var hop := absf(sin(t * 5.0))
+			pose.position.y = hop * 0.26
+			arm_l.rotation.x = lerpf(-0.4, -2.6, hop)
+			arm_r.rotation.x = lerpf(-0.4, -2.6, hop)
 			arm_l.rotation.z = -0.4
 			arm_r.rotation.z = 0.4
 		_:
-			pass
+			pose.position.y = sin(t * 1.6) * 0.01
