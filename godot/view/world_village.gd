@@ -159,7 +159,7 @@ func _begin_pick() -> void:
 		root.add_child(disc)
 		var l := Label.new()
 		l.text = String(ch["reason"])
-		l.add_theme_font_size_override("font_size", 11)
+		l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)
 		l.add_theme_color_override("font_color", Color("242121"))
 		var sb := StyleBoxFlat.new()
 		sb.bg_color = Color("fffbea")
@@ -277,9 +277,9 @@ func _drop_kit(p: Vector2) -> void:
 		GameAudio.buzz())
 	tw.tween_property(hand, "position:y", u * 8.0, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(hand, "position:x", u * 3.0, 0.6)
+	tw.tween_callback(func() -> void: GameAudio.fx("box_open", "Room", -4.0))     # 뚜껑이 열리는 소리 (A17)
 	tw.tween_property(lid, "rotation:x", -1.8, 0.3).set_trans(Tween.TRANS_BACK)
 	tw.parallel().tween_property(lid, "position:z", -u * 0.5, 0.3)
-	tw.tween_callback(func() -> void: GameAudio.fx("box_open", "Room", -4.0))     # (소리 자리)
 	tw.tween_interval(0.35)
 	tw.tween_callback(func() -> void: _place_first_kit(p))
 
@@ -450,7 +450,7 @@ func _after_ready() -> void:
 	cam.ground_radius = WorldCfg.REVEAL_KIT + 6.0
 	cam.ppu_min = 0.3                 # 세상 전체 + 유리벽이 보이는 데까지 (병·거인의 방 단계가 붙으면 더 낮춤)
 	cam.zoom_beyond_world.connect(func(a: float) -> void: zoom_beyond_world.emit(a))
-	cam.fly_started.connect(func(_d: float) -> void: GameAudio.fx("fly_whoosh"))   # 쉭~ (소리 파일이 생기면 들림 — 지금은 자리만)
+	# 날아가기 '쉭~' (fly_whoosh)은 JarCamera.fly_to가 직접 낸다 (가까운 날아가기는 조용히 · 빠른 확대에도)
 	cam.set_zoom(1)
 	look_at_ground(village.center + Vector2(1.0, 1.0))
 	_update_limits()
@@ -693,8 +693,7 @@ func lamp_light_shown() -> Vector2:
 
 
 func lamp_apply(dir: int) -> void:
-	world.move_lamp(dir)
-	GameAudio.fx("jar_turn")
+	world.move_lamp(dir)                  # 소리(lamp_move)는 LampCtl.confirm
 	refresh()
 
 
@@ -817,7 +816,7 @@ func _setup_world_ui() -> void:
 	# [마을로 가기] (지도 아래) + 무리가 여럿일 때의 작은 목록
 	goto_btn = _bar_button(root, "마을로 가기", open_goto)
 	goto_btn.clip_text = false
-	goto_btn.add_theme_font_size_override("font_size", 11)
+	goto_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 	goto_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 32)
 	goto_list = PanelContainer.new()
 	goto_list.theme_type_variation = "TopBar"
@@ -895,7 +894,7 @@ func open_goto() -> void:
 		c.queue_free()
 	for q in world.settlements:
 		var b := _bar_button(goto_box, "%s · %d명" % [q.settlement_name, q.people.size()], fly_to_settlement.bind(q))
-		b.add_theme_font_size_override("font_size", 11)
+		b.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 		b.custom_minimum_size = Vector2(0, 36)
 	goto_list.visible = true
 

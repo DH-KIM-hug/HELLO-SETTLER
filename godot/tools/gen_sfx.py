@@ -1,7 +1,7 @@
 """ElevenLabs Sound Effects로 효과음 생성 (docs/AUDIO.md 3장). 키: ~/.config/elevenlabs/key
 사용: python3 godot/tools/gen_sfx.py [id ...]   (없으면 전부, 이미 있는 파일은 건너뜀; --force 로 다시)
 처리: ffmpeg로 앞뒤 무음 자르기 → 모노 44.1kHz → 음량 맞춤(RMS 목표, 피크 −1dB 제한) → mp3 (libmp3lame)."""
-import json, os, re, subprocess, sys, tempfile, urllib.request
+import array, json, math, os, re, subprocess, sys, tempfile, urllib.request, wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(os.path.dirname(HERE), "audio", "sfx")
@@ -51,7 +51,17 @@ SFX = {
     "coins":           (0.9, -22, False, "a few small coins clinking into a palm, cheerful jingle"),
     "paper":           (0.8, -24, False, "a small folded letter unfolding, paper rustle"),
     "chime":           (1.5, -22, False, "a clear magical wind chime sparkle, wish granted, bright and warm"),
+    # A17 (ROADMAP) — 날아가기·창조·등불·폭포·예배당
+    "fly_whoosh":      (1.6, -25, False, "a smooth airy cinematic swoosh, camera gliding fast high over a landscape like a satellite map fly-through, soft rising and falling wind"),
+    "waterfall":       (8.0, -30, True,  "a soft distant waterfall, gentle steady rushing water with light splashes, calm, seamless loop"),
+    "core_hum":        (3.0, -25, False, "a deep warm magical hum of a glowing planet core, low resonant drone swelling softly with a faint shimmer"),
+    "soil_pour":       (1.8, -25, False, "fine dry soil poured from a small cup onto a mound, soft sandy pouring hiss"),
+    "box_open":        (1.2, -22, False, "a small wooden box lid opened by hand, soft wooden creak and a gentle clack, cozy"),
+    "lamp_move":       (2.0, -25, False, "a soft warm airy whoosh with a gentle oil lamp flame flutter, ending in one faint warm chime that rings out softly"),
+    "chapel_bell":     (4.0, -28, False, "a small village chapel bell tolling twice far away in the evening, soft, distant, gentle reverb"),
+    "funeral":         (5.0, -31, False, "one soft low church bell toll far away, solemn and gentle, long natural ring-out decaying to silence"),
 }
+LOOP_XFADE = 0.5      # 반복 파일: 끝 0.5초를 처음 0.5초에 겹쳐(같은 힘 곡선) 이음매 딸깍 없앰
 
 
 def api(path, body=None):
@@ -71,6 +81,8 @@ def process(raw, dst, rms_target, loop):
         trim = "" if loop else ("silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
                                 "silenceremove=start_periods=1:start_threshold=-50dB,areverse,")
         ff(["-i", raw, "-af", trim + "aformat=channel_layouts=mono", "-ar", "44100", wav])
+        if loop:
+            wav = loop_crossfade(wav, os.path.join(td, "x.wav"))
         r = ff(["-i", wav, "-af", "volumedetect", "-f", "null", "-"])
         mean = float(re.search(r"mean_volume: (-?[\d.]+)", r.stderr).group(1))
         peak = float(re.search(r"max_volume: (-?[\d.]+)", r.stderr).group(1))
@@ -79,6 +91,25 @@ def process(raw, dst, rms_target, loop):
         fade = "" if loop else f",afade=t=out:st={max(0.0, dur - 0.04):.3f}:d=0.04"
         ff(["-i", wav, "-af", f"volume={gain:.2f}dB{fade}", "-c:a", "libmp3lame", "-b:a", "80k", dst])
         return dur, gain
+
+
+def loop_crossfade(src, dst, xf=LOOP_XFADE):
+    """반복 소리의 이음매: 끝 xf초를 처음 xf초 위에 겹친다 (길이 = 원래 − xf). 마지막 표본 다음이 곧 원래의 L−xf 자리라 끊김 없음."""
+    with wave.open(src) as w:
+        rate, n = w.getframerate(), w.getnframes()
+        a = array.array("h", w.readframes(n))
+    k = int(xf * rate)
+    out = array.array("h", a[:n - k])
+    for i in range(k):
+        t = (i + 0.5) / k
+        g_in, g_out = math.sin(t * math.pi / 2), math.cos(t * math.pi / 2)   # 같은 힘 (서로 다른 잡음 소리에 맞음)
+        out[i] = max(-32768, min(32767, int(round(a[i] * g_in + a[n - k + i] * g_out))))
+    with wave.open(dst, "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(out.tobytes())
+    return dst
 
 
 def gen(sid, force=False):

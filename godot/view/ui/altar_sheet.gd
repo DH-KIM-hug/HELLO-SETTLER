@@ -139,7 +139,8 @@ func _section(parent: Node, title: String) -> void:
 
 
 ## 한 줄 카드: 왼쪽 글(위·아래), 오른쪽 버튼
-func _card(parent: Node, top: String, sub: String, btn_text: String, on_press: Callable, enabled := true, icon := "") -> Button:
+## hand_sub = 아랫줄을 손글씨로 (주민이 쓴 편지)
+func _card(parent: Node, top: String, sub: String, btn_text: String, on_press: Callable, enabled := true, icon := "", hand_sub := false) -> Button:
 	var card := PanelContainer.new()
 	card.theme_type_variation = "Card"
 	parent.add_child(card)
@@ -156,7 +157,7 @@ func _card(parent: Node, top: String, sub: String, btn_text: String, on_press: C
 	var t := _label(col, top)
 	t.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	if sub != "":
-		var s := _label(col, sub, "Small")
+		var s := _label(col, sub, "Hand" if hand_sub else "Small")
 		s.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var b := _button(row, btn_text, false)
 	b.custom_minimum_size.x = 84
@@ -278,11 +279,11 @@ func _refresh() -> void:
 		_label(letter_box, "아직 온 편지가 없어요." if village.altar_built else "제단이 생기면 사람들이 거인님께 편지를 써요.", "Small")
 	for l: Dictionary in wl:
 		if l["kind"] == "wish":
-			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])))
+			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])), true, "", true)
 		else:
-			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "새 땅 고르기", _on_split.bind(int(l["id"])), village.water is WorldWater)
+			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "새 땅 고르기", _on_split.bind(int(l["id"])), village.water is WorldWater, "", true)
 	# 강제로 거두기 (접힌 칸)
-	force_btn.text = ("▾ " if force_open else "▸ ") + "강제로 거두기"
+	force_btn.text = ("▼ " if force_open else "▶ ") + "강제로 거두기"
 	force_box.visible = force_open
 	if force_open:
 		var warn := _label(force_box, "창고에서 직접 가져가요. 주민들은 거인님이 노하셨다고 여겨요.", "Status")
@@ -334,6 +335,7 @@ func _fill_reveal() -> void:
 	var txt := _label(col, "%s\"%s\"" % ["%s의 편지  " % who if who != "" else "", String(village.revelation.get("text", ""))])
 	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	txt.add_theme_font_override("font", UiTheme.hand_font())
+	txt.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
 	var un := Village.era_unlocks(village.era + 1)
 	if not un.is_empty():
 		var ul := _label(col, "열리는 것: " + " · ".join(un.slice(0, 8)), "Small")

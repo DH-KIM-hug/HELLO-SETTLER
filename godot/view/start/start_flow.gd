@@ -205,6 +205,6 @@ static func art(file: String) -> Texture2D:
 	return null
 
 
-## 글꼴 크기 단계 (갈무리는 도트 글꼴 — 11의 배수가 또렷하다)
+## 본문 글꼴 (UiTheme 한 곳)
 static func font(bold := false) -> Font:
 	return UiTheme.font(bold)

@@ -11,7 +11,7 @@ extends SceneTree
 const Sheet := preload("res://tools/contact_sheet.gd")
 const REF := "res://../design/concept/style-test/flat2_map_a.png"
 const SIZE := Vector2i(1600, 1000)
-const FONT := "res://fonts/Galmuri11.ttf"
+const FONT := UiTheme.FONT
 
 var mode := "family"
 var out_dir := ""
@@ -124,7 +124,7 @@ func _place(r: Resident, p: Vector3, label: String, turn := 0.25, anim := "idle"
 func _row_label(text: String, p: Vector3) -> void:
 	var lb := Label3D.new()
 	lb.text = text
-	lb.font = load("res://fonts/Galmuri11-Bold.ttf")
+	lb.font = load(UiTheme.FONT_BOLD)
 	lb.font_size = 30
 	lb.outline_size = 8
 	lb.modulate = Color("1f2d2b")

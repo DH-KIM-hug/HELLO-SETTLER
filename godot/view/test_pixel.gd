@@ -318,7 +318,7 @@ func _setup_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var theme := Theme.new()
-	var font := load("res://fonts/Galmuri11.ttf") as FontFile
+	var font := UiTheme.font()
 	theme.default_font = font
 	theme.default_font_size = 11
 	var root := Control.new()

@@ -33,8 +33,8 @@ func _ready() -> void:
 		var l := Label.new()
 		l.text = "ddoystory"
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.add_theme_font_override("font", UiTheme.font(true))
-		l.add_theme_font_size_override("font_size", 22)
+		l.add_theme_font_override("font", UiTheme.title_font())
+		l.add_theme_font_size_override("font_size", UiTheme.SIZE_TITLE + 4)
 		l.add_theme_color_override("font_color", UiTheme.INK)
 		box.add_child(l)
 		var dot := Control.new()                  # 작은 유리 방울 셋 (회사 표시)

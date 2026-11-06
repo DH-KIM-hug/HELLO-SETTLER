@@ -25,7 +25,7 @@ func all() -> void:
 	var old_id := Inquiry.id_path
 	GameSettings.path = TMP_SETTINGS
 	Inquiry.id_path = TMP_ID
-	run.timed(self, ["test_install_id", "test_mailto", "test_settings_roundtrip", "test_credits"])
+	run.timed(self, ["test_install_id", "test_mailto", "test_settings_roundtrip", "test_credits", "test_fonts"])
 	for p: String in [TMP_SETTINGS, TMP_ID, TMP_CSV]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 	GameSettings.path = old_set
@@ -109,3 +109,60 @@ func test_credits() -> void:
 	check(c == "소리: Soft Rain — Kim (Pixabay)", "크레딧 한 줄 (%s)" % c)
 	var real := SettingsSheet.credits_text("res://audio/LICENSES.csv")
 	check("ElevenLabs" in real and "(Pixabay)" not in real, "지금 audio/LICENSES.csv = ElevenLabs 음악·목소리·효과음 (픽사베이 표시 없음)")
+
+
+## 글꼴 (A14 — UI.md 글꼴 v3): 나눔스퀘어라운드 · 주아 · 나눔손글씨 펜이 불러지고, 코드에 쓴 한글·약물이 모두 글꼴(또는 대신 글꼴)에 있음
+func test_fonts() -> void:
+	for p: String in [UiTheme.FONT, UiTheme.FONT_BOLD, UiTheme.FONT_TITLE, UiTheme.FONT_HAND]:
+		check(ResourceLoader.exists(p) and load(p) is FontFile, "글꼴 파일 불러짐: %s" % p.get_file())
+	check(FileAccess.file_exists("res://fonts/LICENSES.csv"), "글꼴 라이선스 목록 (fonts/LICENSES.csv)")
+	var body := load(UiTheme.FONT) as FontFile
+	var title := load(UiTheme.FONT_TITLE) as FontFile
+	var hand := load(UiTheme.FONT_HAND) as FontFile
+	check(UiTheme.font() != null and UiTheme.font(true) != null and UiTheme.title_font() != null and UiTheme.hand_font() != null, "UiTheme 글꼴 넷 (본문·굵게·제목·손글씨)")
+	check(UiTheme.hand_font().fallbacks.size() > 0 and UiTheme.title_font().fallbacks.size() > 0, "손글씨·제목 글꼴에 없는 약물은 본문 글꼴로")
+	check(UiTheme.get_theme().default_font == UiTheme.font(), "테마 기본 글꼴 = 나눔스퀘어라운드")
+	# 코드(화면 글)에 쓰인 글자 모으기 — 따옴표 안만
+	var chars := {}
+	var files: Array = []
+	for d: String in ["res://view", "res://sim", "res://data"]:
+		_gd_files(d, files)
+	var re := RegEx.create_from_string("\"((?:[^\"\\\\\\n]|\\\\.)*)\"")
+	for f: String in files:
+		if f.get_file().begins_with("test_"):       # 개발용 장면 (test_pixel·test_water)은 빼고 — test_village는 본 게임이 물려받음
+			if f.get_file() != "test_village.gd":
+				continue
+		for m in re.search_all(FileAccess.get_file_as_string(f)):
+			for ch in m.get_string(1):
+				if ch.unicode_at(0) > 127:
+					chars[ch] = f.get_file()
+	var miss_body: Array = []
+	var miss_hand: Array = []
+	var miss_title: Array = []
+	for ch: String in chars:
+		var c := ch.unicode_at(0)
+		if c >= 0xFE00 and c <= 0xFE0F:
+			continue
+		if not body.has_char(c):
+			miss_body.append("%s(%s)" % [ch, chars[ch]])
+		if not hand.has_char(c) and not body.has_char(c):
+			miss_hand.append(ch)
+		if c >= 0xAC00 and c <= 0xD7A3 and not title.has_char(c):
+			miss_title.append(ch)
+	check(chars.size() > 500, "화면 글 글자 %d가지 모음" % chars.size())
+	check(miss_body.is_empty(), "화면 글의 모든 글자가 본문 글꼴(나눔스퀘어라운드 2,350자)에 있음 %s" % str(miss_body.slice(0, 20)))
+	check(miss_hand.is_empty(), "손글씨 + 대신 글꼴로 모든 글자 %s" % str(miss_hand.slice(0, 20)))
+	check(miss_title.is_empty(), "제목 글꼴(주아)에 화면 한글이 모두 있음 %s" % str(miss_title.slice(0, 20)))
+	var stale: Array = []
+	for f: String in files:
+		if FileAccess.get_file_as_string(f).contains("Galmuri"):
+			stale.append(f.get_file())
+	check(stale.is_empty(), "옛 도트 글꼴(갈무리)을 부르는 곳 없음 %s" % str(stale))
+
+
+func _gd_files(dir: String, out: Array) -> void:
+	for f in DirAccess.get_files_at(dir):
+		if f.ends_with(".gd"):
+			out.append(dir.path_join(f))
+	for d in DirAccess.get_directories_at(dir):
+		_gd_files(dir.path_join(d), out)

@@ -2,18 +2,18 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://ciwb3kcaxmpol"
-path="res://.godot/imported/Galmuri9.ttf-e4d34f763236389354b25c81a947fee4.fontdata"
+uid="uid://bvt7lig3k7ujr"
+path="res://.godot/imported/Jua-Regular.ttf-ed55f2c72189e445f8351327091c1fac.fontdata"
 
 [deps]
 
-source_file="res://fonts/Galmuri9.ttf"
-dest_files=["res://.godot/imported/Galmuri9.ttf-e4d34f763236389354b25c81a947fee4.fontdata"]
+source_file="res://fonts/Jua-Regular.ttf"
+dest_files=["res://.godot/imported/Jua-Regular.ttf-ed55f2c72189e445f8351327091c1fac.fontdata"]
 
 [params]
 
 Rendering=null
-antialiasing=0
+antialiasing=1
 generate_mipmaps=false
 disable_embedded_bitmaps=true
 multichannel_signed_distance_field=false
@@ -22,8 +22,8 @@ msdf_size=48
 allow_system_fallback=true
 force_autohinter=false
 modulate_color_glyphs=false
-hinting=0
-subpixel_positioning=0
+hinting=3
+subpixel_positioning=4
 keep_rounding_remainders=true
 oversampling=0.0
 Fallbacks=null

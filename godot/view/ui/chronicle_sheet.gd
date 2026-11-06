@@ -1,4 +1,4 @@
-## 연대기 화면 — docs/UI.md 07 (1차, ROADMAP A10). 양피지 + 손글씨 (손글씨 글꼴은 아직 — UiTheme.hand_font 한 곳).
+## 연대기 화면 — docs/UI.md 07 (1차, ROADMAP A10). 양피지 + 손글씨 (나눔손글씨 펜 — UiTheme.hand_font 한 곳, A14).
 ## 탭: 최근 (연대기 줄 최신부터, 병 달력 n일차마다 묶음 — 넓은 세상은 무리 이름을 붙여 모든 무리) ·
 ##      창세 신화 (창조가 적은 신화, 없으면 첫 기록 — 그것도 없으면 부드러운 빈 자리) ·
 ##      사람들 (살아 있음 · 잠듦 · 분가로 떠남 — 작은 얼굴 · 이름 · 나이, 살아 있는 사람을 누르면 주민 상세) ·
@@ -89,6 +89,7 @@ func _build() -> void:
 	outer.add_child(head)
 	title_l = _label(head, "연대기", "Title")
 	title_l.add_theme_font_override("font", UiTheme.hand_font())
+	title_l.add_theme_font_size_override("font_size", UiTheme.SIZE_TITLE + 8)
 	title_l.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	title_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	where_l = _label(head, "", "Small")
@@ -151,8 +152,8 @@ func _hand(parent: Node, text: String, size := 0) -> Label:
 	var l := _label(parent, text, "", true)
 	l.add_theme_font_override("font", UiTheme.hand_font())
 	l.add_theme_color_override("font_color", UiTheme.INK_BROWN)
-	if size > 0:
-		l.add_theme_font_size_override("font_size", size)
+	l.add_theme_font_size_override("font_size", size if size > 0 else UiTheme.SIZE_HAND)
+	l.add_theme_constant_override("line_spacing", 0)
 	return l
 
 
@@ -379,7 +380,7 @@ func _fill_myth() -> void:
 		_soft("아직 아무도 이 땅의 처음을 이야기하지 않았어요.\n언젠가 노인들이 아이들에게 들려줄 거예요.")
 		return
 	for i in lines.size():
-		var l := _hand(body, lines[i], 13)
+		var l := _hand(body, lines[i], UiTheme.SIZE_HAND + 2)
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		if i < lines.size() - 1:
 			var orn := _label(body, "·", "Small")
@@ -529,7 +530,7 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 		holder.add_child(ic)
 	else:
 		var q := Label.new()
-		q.text = "?" if not known else "✦"
+		q.text = "?" if not known else "★"
 		q.set_anchors_preset(Control.PRESET_FULL_RECT)
 		q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -547,4 +548,5 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 	line.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.25 if known else 0.4))
 	if not known:
 		line.add_theme_font_override("font", UiTheme.hand_font())
+		line.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)
 	return card

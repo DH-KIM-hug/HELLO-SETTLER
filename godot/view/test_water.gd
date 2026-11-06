@@ -97,7 +97,7 @@ func _setup_ui() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
 	var theme := Theme.new()
-	theme.default_font = load("res://fonts/Galmuri11.ttf") as FontFile
+	theme.default_font = UiTheme.font()
 	theme.default_font_size = 11
 	var root := Control.new()
 	root.set_anchors_preset(Control.PRESET_FULL_RECT)

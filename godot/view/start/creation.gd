@@ -132,7 +132,7 @@ func _button(text: String, primary: bool) -> Button:
 	var b := Button.new()
 	b.text = text
 	b.focus_mode = Control.FOCUS_NONE
-	b.custom_minimum_size = Vector2(150 if primary else 0, 48 if primary else UiTheme.TOUCH)
+	b.custom_minimum_size = Vector2(150 if primary else 64, 48 if primary else UiTheme.TOUCH)
 	if primary:
 		b.theme_type_variation = "Primary"
 		_primary(b, 24)
@@ -143,7 +143,7 @@ func _button(text: String, primary: bool) -> Button:
 
 func _primary(b: Button, radius: int) -> void:
 	b.add_theme_font_override("font", UiTheme.font(true))
-	b.add_theme_font_size_override("font_size", 11)
+	b.add_theme_font_size_override("font_size", UiTheme.SIZE)
 	for st: Array in [["normal", UiTheme.PRIMARY], ["hover", UiTheme.PRIMARY.lightened(0.08)], ["pressed", UiTheme.PRIMARY.darkened(0.15)],
 			["disabled", Color(UiTheme.PRIMARY, 0.4)]]:
 		var sb := StyleBoxFlat.new()
@@ -351,7 +351,7 @@ func go(s: String) -> void:
 			jar.soil_mi.visible = true
 			_say("흙을 덮고, 손끝으로 땅을 빚어 주세요.\n한 손가락은 쌓고, 두 손가락은 파요.")
 			step = "pour"
-			GameAudio.fx("soil_pour", "Room", -6.0)          # (소리 자리 — 파일이 생기면 들림)
+			GameAudio.fx("soil_pour", "Room", -4.0)          # 흙 붓기 (A17)
 			jar.set_pour("soil")
 			_tween_jar("soil_rise", 1.0, 1.6, func() -> void:
 				jar.set_pour("")
@@ -501,7 +501,8 @@ func set_core(sz: int) -> void:
 	plan.core = clampi(sz, 0, 2)
 	jar.show_core(plan.core)
 	_say(CreationPlan.CORE_WORDS[plan.core])
-	GameAudio.fx(["core_hum_small", "core_hum", "core_hum_big"][plan.core], "Room", -6.0)     # (소리 자리)
+	# 핵이 웅웅 (A17 core_hum) — 작은 핵은 높고 가늘게, 큰 핵은 낮고 크게
+	GameAudio.fx("core_hum", "Room", [-10.0, -6.0, -3.0][plan.core], null, [1.25, 1.0, 0.8][plan.core])
 	if plan.core == 2:
 		GameAudio.buzz()
 	for j in chips.get_child_count():
@@ -529,7 +530,7 @@ func drop_core() -> void:
 			_say(CreationPlan.CORE_WORDS[plan.core])
 			jar.rock_root.visible = true
 			jar.set_pour("stone")
-			GameAudio.fx("stones_pour", "Room", -6.0)],          # (소리 자리)
+			GameAudio.fx("soil_pour", "Room", -6.0, null, 0.7)],          # 바위가 쏟아짐 = 흙 붓는 소리를 낮게
 		[0.9, func() -> void:
 			_tween_jar_node_scale()
 			_say("단단한 바위가 핵을 감쌌어요.\n이 바위 깊은 곳에, 언젠가 누군가 곡괭이를 대겠지요.")],
@@ -837,7 +838,7 @@ func release_box(uv: Vector2) -> void:
 	_box_done = true
 	plan.animals = [CreationPlan._q(uv.x), CreationPlan._q(uv.y)]
 	WorldGen.apply_life(_world.water, _life_dict(true))
-	GameAudio.fx("box_open", "Room", -4.0)           # (소리 자리)
+	GameAudio.fx("box_open", "Room", -4.0)           # 생명 상자 열기 (A17)
 	GameAudio.fx("sheep", "Room", -14.0)
 	var ww := _world.water
 	jar.box.position = Vector3(uv.x * CreationJar.RIN * 0.5, 15.6, uv.y * CreationJar.RIN * 0.5)
@@ -946,7 +947,7 @@ func _process(dt: float) -> void:
 				if uv != null:
 					sculpt((uv as Vector2).x, (uv as Vector2).y, hold.size() >= 2 or _mouse_lower or _lower_mode, dt)
 					if fmod(Time.get_ticks_msec() / 1000.0, 0.35) < dt:
-						GameAudio.fx("soil_scrape", "Room", -12.0)      # (소리 자리)
+						GameAudio.fx("soil_pour", "Room", -16.0, null, 1.4)      # 손끝으로 흙 빚기 = 흙 소리를 높고 작게
 		"water":
 			var hold := _held()
 			if hold.size() > 0:

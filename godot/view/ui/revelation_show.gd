@@ -75,6 +75,7 @@ void fragment() {
 	_line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_line.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_line.add_theme_font_override("font", UiTheme.hand_font())
+	_line.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
 	_line.add_theme_color_override("font_color", UiTheme.INK_SOFT)
 	col.add_child(_line)
 

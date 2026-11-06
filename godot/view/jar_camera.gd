@@ -18,6 +18,10 @@ signal fly_finished(arrived: bool)
 
 const FLY_MIN := 1.2
 const FLY_MAX := 2.5
+## '쉭' 소리 (ROADMAP A17 — fly_whoosh): 날아가기 시작 · 빠르게 확대/축소할 때 (로그 확대가 초당 이만큼 넘게 바뀌면)
+const WHOOSH_FLY_DIST := 6.0        # 이보다 가까운 날아가기는 소리 없이
+const WHOOSH_ZOOM_RATE := 2.2       # log2(ppu) / 초
+const WHOOSH_GAP := 0.9             # 확대 '쉭' 사이 최소 (초)
 
 const PITCH_DEG := 48.0          # 7단계: 60° → 48° (기준 그림 flat2_map_a는 약 45° — 앞벽·나무 줄기가 보이게, 그래도 지도 시점)
 const BASE_YAW_DEG := 45.0
@@ -48,9 +52,12 @@ var zoom_log: float:
 	set(value):
 		ppu = pow(2.0, value)
 		ppu_goal = ppu
+		_last_log = value                    # 바로 옮긴 건 '쉭' 없이
 		_apply()
 var _turning: Tween
 var _spinning := false
+var _whoosh_wait := 0.5             # 장면이 막 시작할 때는 조용히
+var _last_log := 4.0
 
 
 func _ready() -> void:
@@ -64,6 +71,7 @@ func _ready() -> void:
 
 
 func _process(dt: float) -> void:
+	_whoosh_check(dt)
 	if flying:
 		_fly_step(dt)
 		return
@@ -110,6 +118,7 @@ func set_zoom(i: int, instant := true) -> void:
 	ppu_goal = float(ZOOM_PPU[zoom_i])
 	if instant:
 		ppu = ppu_goal
+		_last_log = log(ppu) / log(2.0)
 	_apply()
 
 
@@ -145,7 +154,26 @@ func fly_to(goal: Vector3, end_ppu: float) -> void:
 	var dur := clampf(lerpf(FLY_MIN, FLY_MAX, log(1.0 + screens) / log(1.0 + 60.0)), FLY_MIN, FLY_MAX)
 	_fly = {"a": target, "b": goal, "l0": l0, "l1": l1, "lift": lift, "t": 0.0, "dur": dur}
 	flying = true
+	if dist >= WHOOSH_FLY_DIST or lift > 0.3:
+		GameAudio.fx("fly_whoosh", "Room", -4.0 if lift > 0.3 else -8.0)
+		_whoosh_wait = dur                   # 나는 동안의 확대 변화로 또 울리지 않게
 	fly_started.emit(dist)
+
+
+## 빠르게 오므리거나 벌리면 '쉭' (구글 어스처럼) — 날아가기 중엔 시작할 때 한 번만
+func _whoosh_check(dt: float) -> void:
+	var l := zoom_log
+	var jump := absf(l - _last_log)
+	var rate := jump / maxf(dt, 0.001)
+	_last_log = l
+	if jump > 1.0:                           # 한 화면에 한 단계 넘게 = 코드가 바로 옮긴 것 (부드러운 확대가 아님)
+		return
+	_whoosh_wait -= dt
+	if _whoosh_wait > 0.0 or flying or dt <= 0.0:
+		return
+	if rate > WHOOSH_ZOOM_RATE:
+		GameAudio.fx("fly_whoosh", "Room", -12.0 + clampf(rate - WHOOSH_ZOOM_RATE, 0.0, 6.0))
+		_whoosh_wait = WHOOSH_GAP
 
 
 ## 날던 중이면 그 자리에서 멈춤 (화면을 누르거나 끌면)

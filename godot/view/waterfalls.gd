@@ -5,7 +5,7 @@
 ## 굵기·투명도 = 그 골의 물 양 (시뮬레이션이 골에 넣는 양과 같은 식 — WorldWater._groove_rate · JarWater.hydro_step): 그늘진 골은 굵게,
 ## 볕 드는 골은 가늘게 → 등불을 옮기면(병 돌리기) 1초 안에 굵어지거나 가늘어지는 게 보인다.
 ## 확대(ppu)에 따라: 가까이 = 전부 · 반쯤 축소 = 밝은 은빛 띠만 (화면 2 px 이상) · 세상 전체 = 1~2 px 세로 줄.
-## 소리: 가장 가까운 폭포까지 거리로 물소리 고리 (SFX_ID — 소리 파일이 생기면 들림, 지금은 자리만).
+## 소리: 가장 가까운 폭포까지 거리(+ 카메라가 멀리 물러날수록 작게)로 물소리 고리 (SFX_ID — A17, 이음매 없는 7.5초 고리).
 ## 땅 화면(JarTerrain · WorldTerrain)이 자식으로 붙이고 animate()에서 update()를 부른다. 좌표 = 병 데이터 좌표 (x, z).
 class_name Waterfalls
 extends Node3D
@@ -16,7 +16,9 @@ const FAR_PPU := 5.0                # 이보다 멀면 무늬 없는 은빛 띠
 const DETAIL_PPU := 3.0             # 이보다 멀면 웅덩이 소품(바위·거품) 숨김
 const MIST_PPU := 6.0               # 이보다 가까울 때만 물안개·무지개
 const MIN_FLUX := 0.03              # 이보다 물이 적으면 폭포 없음 (소형 병의 볕 드는 골)
-const SFX_ID := "waterfall"         # audio/sfx/waterfall.mp3 (없으면 소리 없이 자리만)
+const SFX_ID := "waterfall"         # audio/sfx/waterfall.mp3 (gen_sfx.py — 없으면 소리 없이 자리만)
+const SFX_LOUD_DB := -8.0           # 폭포 바로 곁의 크기
+const SFX_NEAR_PPU := 12.0          # 이만큼 가까이 보면 그대로, 멀리 물러나면 (세상 전체 ×0.4~) 작게
 const HEAR_R := 40.0                # 이 칸 안이면 물소리
 
 var items: Array[Dictionary] = []
@@ -320,6 +322,7 @@ func update(dt: float) -> void:
 		if float(it["w"]) > 0.0:
 			best = minf(best, (it["pool"] as Vector2).distance_to(focus) / (0.6 + 0.4 * minf(float(it["w"]), 2.0)))
 	loudness = clampf(1.0 - best / HEAR_R, 0.0, 1.0) if best < INF else 0.0
+	loudness *= hear_zoom(ppu)
 	_sound(dt)
 	last_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
@@ -376,7 +379,13 @@ func _sound(_dt: float) -> void:
 		_player.volume_db = -60.0
 		add_child(_player)
 		_player.play()
-	_player.volume_db = lerpf(-60.0, -8.0, sqrt(loudness))
+	var goal := lerpf(-60.0, SFX_LOUD_DB, sqrt(loudness))
+	_player.volume_db = move_toward(_player.volume_db, goal, 30.0 * _dt)    # 확대·날아가기 동안 부드럽게
+
+
+## 카메라가 물러난 정도로 물소리 줄이기 — 가까이 1, 기본(16) 1, 반쯤 축소(3) 약 0.4, 세상 전체 0.15
+static func hear_zoom(at_ppu: float) -> float:
+	return clampf(sqrt(at_ppu / SFX_NEAR_PPU), 0.15, 1.0)
 
 
 ## 이 폭포가 지금 화면에 보이는 폭 (칸) — 시험·캡처용
