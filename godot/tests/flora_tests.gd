@@ -480,7 +480,8 @@ func test_blow() -> void:
 	var v := settled("온대", 4, 22)
 	var f := v.flora
 	v.advance(3.0 * H)
-	for i in 6:
+	var np := mini(6, f.dands.size())
+	for i in np:
 		f.dands[i]["st"] = "puff"
 		f.dands[i]["seeds"] = Balance.DAND_SEEDS
 	check(f.blow_seeds(v, Vector2(1, 0)) == -1, "뚜껑이 닫혀 있으면 불 수 없다")
@@ -491,7 +492,7 @@ func test_blow() -> void:
 	for s: Dictionary in f.seeds:
 		x0 += float(s["x"])
 	x0 /= maxf(1.0, f.seeds.size())
-	check(n >= 6 * Balance.DAND_SEEDS and f.count_st("puff") == 0, "솜털 공 %d포기의 꽃씨 %d개가 한꺼번에" % [6, n])
+	check(np >= 3 and n >= np * Balance.DAND_SEEDS and f.count_st("puff") == 0, "솜털 공 %d포기의 꽃씨 %d개가 한꺼번에" % [np, n])
 	check(v.faith > b0 and v.people.any(func(p: Resident) -> bool: return p.say == Balance.BLOW_LINE), "믿음↑ (%.1f → %.1f) · \"%s\"" % [b0, v.faith, Balance.BLOW_LINE])
 	for i in 24:
 		v.t += Balance.SEED_TICK

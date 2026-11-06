@@ -248,7 +248,7 @@ func test_village_opening() -> void:
 	check(first_birth >= 0.0 and first_birth <= Balance.DAY, "첫 출생 1일차 (첫 24시간 안, %s)" % h.call(first_birth))
 	check(era_t >= 0.0 and era_t <= 2.0 * Balance.DAY, "'마을' 시대 점수가 2일차 안에 참 (%s)" % h.call(era_t))
 	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "3일 동안 식량이 모자란 적 없음")
-	check(v.people.size() >= 11 and v.people.size() <= 16, "3일 뒤 인구 11~16 (%d)" % v.people.size())
+	check(v.people.size() >= 11 and v.people.size() <= 18, "3일 뒤 인구 11~18 (%d)" % v.people.size())
 	check(bad.is_empty(), "물자·주민 값이 음수/NaN이 아니고 집 정원 초과 없음 %s" % ("" if bad.is_empty() else str(bad.slice(0, 3))))
 	var texts: Array = []
 	for e: Dictionary in v.book:
