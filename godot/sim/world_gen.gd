@@ -227,7 +227,8 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		var g := grooves[gi]
 		ww.groove_k.append(ww.idx(g.x, g.y))
 		ww.groove_mult.append(WorldWater.GROOVE_SPOT if gi < river_paths.size() else 1.0)
-	# 9) 거친 표 → 처음 물 (물방울 분지·부은 분지를 수면까지) · 암염
+	# 9) 높이를 1/65536 눈금에 (저장이 작아진다 — WorldPack) → 거친 표 → 처음 물 (물방울 분지·부은 분지를 수면까지) · 암염
+	ww.snap_heights()
 	ww.build_world_tables()
 	for d: Dictionary in drips:
 		_pour(ww, Vector2(d["x"], d["y"]), 9.0, H[ww.idx(d["x"], d["y"])] + 0.26)
@@ -335,7 +336,7 @@ static func flatten(ww: WorldWater, c: Vector2, r: float, at_least := -1.0e9) ->
 	for k in ww.cells_near(c, r * 1.8):
 		var d := Vector2(ww.cx(k) - c.x, ww.cy(k) - c.y).length()
 		var f := 1.0 if d <= r else 1.0 - smoothstep(r, r * 1.8, d)
-		ww.h[k] = lerpf(ww.h[k], mean, f)
+		ww.h[k] = WorldPack.snap(lerpf(ww.h[k], mean, f))      # 눈금에 (저장 — WorldPack)
 
 
 ## 처음 물: 원 (c, rad) 안의 거친 칸을 수면 lv까지

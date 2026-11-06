@@ -526,6 +526,7 @@ func _after_load() -> void:
 
 
 static func from_dict(d: Dictionary) -> JarWater:
+	d = WorldPack.unpack_water(d)                 # 누른 넓은 세상 (A16) — 옛 사전은 그대로
 	var s: JarWater = WorldWater.new() if d.get("$kind", "jar") == "world" else JarWater.new()
 	SaveCodec.apply(s, d)
 	if not d.has("hs") and s is WorldWater:

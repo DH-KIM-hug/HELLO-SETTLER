@@ -12,7 +12,7 @@ extends Node
 
 const AUTOSAVE_EVERY := 10.0           # 현실 초 — 병 하나씩 돌아가며
 const EVENT_GAP := 1.0                 # 큰 일 저장 사이 최소 간격 (현실 초 — ×8에서 연달아 일어나도 1초에 한 번)
-## 넓은 세상 병은 한 번에 땅·물 격자 전부 (1024칸: 압축 전 약 27 MB, 파일 약 8 MB — 뒤 스레드가 씀) →
+## 넓은 세상 병은 한 번에 땅·물 격자 전부 (1024칸: 형식 v2부터 WorldPack으로 눌러 파일 약 1 MB — 옛 v1은 4~8 MB, 뒤 스레드가 씀) →
 ## 큰 일 저장은 20초에 한 번까지, 돌아가며 하는 자동 저장은 60초에 한 번까지 (정함 — 기기 쓰기 양·배터리).
 ## 거인의 행동은 거인 묶음(지폐)만 곧바로 디스크에, 세상은 뒤 스레드로 바로 줄 세움 (화면이 멈추지 않게)
 const WORLD_EVENT_GAP := 20.0
@@ -416,7 +416,7 @@ func _worker() -> void:
 func _write_job(job: Dictionary) -> void:
 	var t0 := Time.get_ticks_usec()
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(dir))
-	SaveFile.write_raw(job["path"], SaveFile.pack(job["payload"], job["seq"], job["time"]))
+	SaveFile.write_raw(job["path"], SaveFile.pack(WorldPack.pack_payload(job["payload"]), job["seq"], job["time"]))   # 넓은 세상 격자는 여기서 누른다 (A16 — 뒤 스레드)
 	var ms := (Time.get_ticks_usec() - t0) / 1000.0
 	_mutex.lock()
 	stats["writes"] += 1
@@ -547,6 +547,8 @@ static func migrate(kind: String, payload: Variant, from_version: int) -> Varian
 		match ver:
 			0:
 				p = _v0_to_v1(kind, p)
+			1:
+				p = _v1_to_v2(kind, p)
 		ver += 1
 	return p
 
@@ -573,6 +575,22 @@ static func _v0_to_v1(kind: String, p: Dictionary) -> Dictionary:
 				vd["flora"] = Flora.new(sd).to_dict()
 			return {"id": int(p.get("id", 1)), "kind": "jar", "village": vd, "clock": {"speed_i": int(p.get("speed", 0)), "creation_done": true},
 				"meta": {"name": "", "creation_done": true}, "$books": [book]}
+	return p
+
+
+## v1 → v2 (A16, 2026-11-07): 넓은 세상의 땅 높이를 1/65536 눈금에 맞춘다 (WorldPack이 높이를 정수 차이로 누를 수 있게 — 다음 저장부터 작다).
+## 바뀌는 높이는 칸마다 0.00001 아래 (보이지 않음). 거친 칸 정렬표는 불러올 때 높이에서 다시 만든다. 작은 병·거인·연대기는 그대로
+static func _v1_to_v2(kind: String, p: Variant) -> Variant:
+	if kind != "jar" or not (p is Dictionary) or not ((p as Dictionary).get("world") is Dictionary):
+		return p
+	var wd: Dictionary = p["world"]
+	var water: Variant = wd.get("water")
+	if not (water is Dictionary) or not ((water as Dictionary).get("h") is PackedFloat32Array):
+		return p
+	var h: PackedFloat32Array = (water as Dictionary)["h"]
+	for k in h.size():
+		h[k] = WorldPack.snap(h[k])
+	(water as Dictionary)["h"] = h
 	return p
 
 

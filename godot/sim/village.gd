@@ -90,7 +90,7 @@ var festival_t := -1.0e9
 var _last_dawn := -1
 var _arrival_manna := false
 var trees: Array = []                 # {x, y, s: "tree"/"stump"/"sapling", g, res}
-var rocks: Array = []                 # {x, y, amt, res}
+var rocks: Array = []                 # {x, y, amt, res, ore?} — ore 없음 = 돌. 광맥 돌의 바위는 ore = 돌·소금·철광석·석탄 (SkyDrops.rock_minable)
 var buildings: Array[Building] = []
 var people: Array[Resident] = []      # 살아 있는 주민
 var dead: Array[Resident] = []
@@ -131,6 +131,7 @@ var _spread_left := Balance.HOUR      # 숲이 저절로 퍼지는지 다음에 
 # 거인의 상점·하늘에서 내려온 것 (SHOP.md · WORLD_EVENTS 1.1 · 4.1 · 4.4 — sim/shop.gd · sim/sky_drops.gd)
 var drops: Array = []                 # 바깥 크기의 물건 {id, item, x, y, res, total, left, size, res_n(깎는 사람), t, dur(효과만 — 사그라드는 시간)}
 var towers: Array = []                # 영양제 앰플 탑 {id, x, y, t}
+var veins: Array = []                 # 박힌 광맥 돌 {item, ore, x, y, amt, t} (SHOP 2.4 — 바위는 rocks에 ore를 달고)
 var algae: Array = []                 # 녹조 {x, y, t, until}
 var care: Dictionary = {}             # 돌봄 효과가 끝나는 병 시각 {pill, bandage}
 var shop_open: Dictionary = {}        # 상점 탭 → 열린 병 시각 (Shop.update_unlocks)
@@ -1855,7 +1856,7 @@ func find_spot(type: String) -> Variant:
 	elif type == "채석장":
 		var best: Dictionary = {}
 		for r: Dictionary in rocks:
-			if r["amt"] > 0 and (best.is_empty() or Vector2(r["x"], r["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
+			if r["amt"] > 0 and SkyDrops.rock_minable(self, r) and (best.is_empty() or Vector2(r["x"], r["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
 				best = r
 		if not best.is_empty():
 			c = center + (Vector2(best["x"], best["y"]) - center) * 0.8
@@ -2071,7 +2072,7 @@ func _turn_data() -> void:
 		var x: float = o["x"]
 		o["x"] = -float(o["y"])
 		o["y"] = x
-	for list: Array in [trees, rocks, manna, drops, towers, algae, graves]:     # [상점] 하늘에서 내려온 것 · 무덤도 병과 함께 돈다
+	for list: Array in [trees, rocks, manna, drops, towers, algae, graves, veins]:     # [상점] 하늘에서 내려온 것 · 무덤도 병과 함께 돈다
 		for o: Dictionary in list:
 			rp.call(o)
 	for b in buildings:

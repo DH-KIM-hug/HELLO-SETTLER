@@ -608,16 +608,33 @@ func _sync_rocks() -> void:
 		return
 	_rock_key = key
 	var groups := {}
+	var ores := {}                       # 광맥 돌의 바위 (SHOP 2.4) — 돌 색으로 (Style.ORE: 회색 돌 · 하양 소금 · 붉은 철 · 검정 석탄)
 	for r: Dictionary in v.rocks:
 		var amt: int = r["amt"]
 		if amt <= 0:
 			continue
 		var x: float = r["x"]
 		var z: float = r["y"]
-		var k := 0.8 + amt / 25.0
-		_put(groups, "rocks", x, z, k, _hash(x, z) * TAU, -0.08)
-		_put(groups, "rock_small", x + 1.1 * k, z + 0.5 * k, k * 0.8, _hash(z, x) * TAU, -0.04)
+		var k := minf(0.8 + amt / 25.0, 2.4)
+		var ore := String(r.get("ore", ""))
+		var g: Dictionary = groups
+		if ore != "":
+			if not ores.has(ore):
+				ores[ore] = {}
+			g = ores[ore]
+		_put(g, "rocks", x, z, k, _hash(x, z) * TAU, -0.08)
+		_put(g, "rock_small", x + 1.1 * k, z + 0.5 * k, k * 0.8, _hash(z, x) * TAU, -0.04)
 	_flush(_rocks, groups)
+	for ore: String in ores:
+		var node := _node(_rocks)
+		var og: Dictionary = ores[ore]
+		for gk: String in og:
+			Art.multi(node, gk, og[gk])
+		var mat := Toon.mat(Style.ORE.get(ore, Style.ORE["돌"]))
+		for c in node.get_children():         # 몸만 돌 색 (선은 그대로) — Art.multi는 몸 · 선 순서로 더한다
+			var mmi := c as MultiMeshInstance3D
+			if mmi != null and mmi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+				mmi.material_override = mat
 
 
 ## 화면 장식 전부 (장식 숲 · 소품 무리 · 물가 · 집 둘레 덤불 · 선착장 · 다리). 건물이 늘거나 병을 돌리거나 6시간마다 다시.
