@@ -172,3 +172,33 @@ func rotate_jar() -> void:
 		pv.rotate_jar()
 	else:
 		water.rotate_jar()
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+## 물(넓은 세상)은 한 번만, 무리마다 마을 사전 + 누가 누구와 함께 걷는지 (others)
+func to_dict(with_book := true) -> Dictionary:
+	var sl := []
+	var others := []
+	for s in settlements:
+		sl.append(s.to_dict(with_book, false))
+		var o := []
+		for q: Village in s.others:
+			o.append(settlements.find(q))
+		others.append(o)
+	return {"seed_v": seed_v, "water": water.to_dict(), "settlements": sl, "others": others}
+
+
+static func from_dict(d: Dictionary) -> JarWorld:
+	var jw := JarWorld.new()
+	jw.seed_v = int(d["seed_v"])
+	jw.water = JarWater.from_dict(d["water"]) as WorldWater
+	for sd: Dictionary in d["settlements"]:
+		jw.settlements.append(Village.from_dict(sd, jw.water))
+	var others: Array = d.get("others", [])
+	for i in jw.settlements.size():
+		var s := jw.settlements[i]
+		s.peers = jw.settlements
+		if i < others.size():
+			for j: Variant in others[i]:
+				s.others.append(jw.settlements[int(j)])
+	return jw

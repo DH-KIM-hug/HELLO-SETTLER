@@ -151,7 +151,10 @@ func _tick(v: Village, dt: float) -> void:
 				phase = "calm"
 				v.log_line("뿌옇던 하늘이 맑아졌다. 빵에 났던 털도 더 번지지 않았다.")
 			elif v.t - phase_t >= Balance.MOLD_OMEN:
-				_start_swarm(v)
+				if v.is_watching():
+					_start_swarm(v)
+				else:                             # 거인이 없을 때는 새 위기가 시작되지 않고 조짐에서 기다린다 (SAVE.md 3 · 기획서 14장)
+					phase_t = v.t - Balance.MOLD_OMEN + Balance.HOUR     # → 거인이 돌아와 볼 수 있게 된 뒤 한 시간쯤에 온다
 		"swarm":
 			omen_fog = maxf(0.4, omen_fog - dt / Balance.DAY) if v.t < peak_end else maxf(0.0, omen_fog - dt / (0.3 * Balance.DAY))
 			_swarm_tick(v, dt)
@@ -190,6 +193,8 @@ func _start_omen(v: Village) -> void:
 		v.speak(teller, "빵에 푸른 털이 났어!", 7)
 	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": "거인님, 빵에 푸른 털이 났어요."})
 	v.log_line("창고의 빵에 푸른 털이 돋았다. 하늘이 뿌옇게 흐려졌다.")
+	if not v.is_watching():
+		v.log_line("유리에 김이 서리기 시작했다.")
 	if lid_helped:                         # 노인의 귀띔 (WORLD_EVENTS 6장) — 해결 방법을 직접 말하지 않는다
 		for r in v.people:
 			if r.is_elder() and not r.sleeping:
@@ -386,7 +391,7 @@ func _name_chaser(v: Village) -> void:
 	v.speak(best, "제가 쫓아낼게요!", 6)
 	if episodes == 0:
 		v.log_line("촌장이 %s에게 횃불을 들려 털뭉치를 쫓게 했다. 마을에 '곰팡이 쫓는 사람'이 생겼다." % best.name)
-	ResidentAI.cancel(best)
+	ResidentAI.cancel(v, best)
 
 
 ## 누룩곰팡이 — 아이가 가까이서 보면 발견, 그 뒤로는 쫓지 않고 길들인다
@@ -505,8 +510,35 @@ func _chase(v: Village, r: Resident) -> bool:
 	if off.length() > 0.01:
 		p += off.normalized() * 0.55
 	r.steps.append(ResidentAI.walk(p.x, p.y))
-	r.steps.append(ResidentAI.act(12.0, "torch", func() -> void: _strike(v, r, id)))
+	r.steps.append(ResidentAI.act(12.0, "torch", ResidentAI.op("mold_strike", {"id": id})))
 	return true
+
+
+## 주민의 할 일 묶음 (ResidentAI.run_op가 "mold_*"를 넘겨줌) — 저장해도 그대로 이어지게 Callable 대신 값만
+func run_op(v: Village, r: Resident, o: Dictionary) -> void:
+	match String(o["op"]):
+		"mold_strike":
+			_strike(v, r, int(o["id"]))
+		"mold_med_done":
+			maker_id = -1
+			if float(v.stock.get(Balance.BLUE_POWDER, 0.0)) < 1.0:
+				return
+			if float(v.stock.get("빵", 0.0)) >= 1.0:
+				v.stock["빵"] = float(v.stock["빵"]) - 1.0
+			elif float(v.stock.get("건량", 0.0)) >= 2.0:
+				v.stock["건량"] = float(v.stock["건량"]) - 2.0
+			else:
+				return
+			v.stock[Balance.BLUE_POWDER] = float(v.stock[Balance.BLUE_POWDER]) - 1.0
+			v.stock[Balance.MOLD_MED] = float(v.stock.get(Balance.MOLD_MED, 0.0)) + Balance.MOLD_MED_OUT
+			stats["med_made"] += Balance.MOLD_MED_OUT
+			if stats["med_made"] <= Balance.MOLD_MED_OUT:
+				v.log_line("%s%s 푸른 가루를 빵에 개어 첫 '곰팡이약'을 만들었다." % [r.name, Village.josa(r.name, "이", "가")])
+		"mold_med_undo":
+			if maker_id == int(o["rid"]):
+				maker_id = -1
+		_:
+			push_error("Mold.run_op: 모르는 할 일 %s" % o["op"])
 
 
 func _strike(v: Village, r: Resident, id: int) -> void:
@@ -569,25 +601,8 @@ func _make_med(v: Village, r: Resident) -> bool:
 	r.action = "mold_med"
 	r.last_action = "mold_med"
 	r.doing = "푸른 가루로 약을 만드는 중"
-	var rid := r.id
-	var done := func() -> void:
-		maker_id = -1
-		if float(v.stock.get(Balance.BLUE_POWDER, 0.0)) < 1.0:
-			return
-		if float(v.stock.get("빵", 0.0)) >= 1.0:
-			v.stock["빵"] = float(v.stock["빵"]) - 1.0
-		elif float(v.stock.get("건량", 0.0)) >= 2.0:
-			v.stock["건량"] = float(v.stock["건량"]) - 2.0
-		else:
-			return
-		v.stock[Balance.BLUE_POWDER] = float(v.stock[Balance.BLUE_POWDER]) - 1.0
-		v.stock[Balance.MOLD_MED] = float(v.stock.get(Balance.MOLD_MED, 0.0)) + Balance.MOLD_MED_OUT
-		stats["med_made"] += Balance.MOLD_MED_OUT
-		if stats["med_made"] <= Balance.MOLD_MED_OUT:
-			v.log_line("%s%s 푸른 가루를 빵에 개어 첫 '곰팡이약'을 만들었다." % [r.name, Village.josa(r.name, "이", "가")])
-	var undo := func() -> void:
-		if maker_id == rid:
-			maker_id = -1
+	var done := ResidentAI.op("mold_med_done")
+	var undo := ResidentAI.op("mold_med_undo", {"rid": r.id})
 	r.steps.append(ResidentAI.walk(s.x + 1.2, s.y + 0.9))
 	r.steps.append(ResidentAI.act(Balance.MOLD_MED_MAKE_TIME, "work", done, false, undo))
 	return true
@@ -663,3 +678,23 @@ func force_omen(v: Village) -> void:
 func force_swarm(v: Village) -> void:
 	pressure = 1.0
 	_start_swarm(v)
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+## 난수 흐름 포함
+func to_dict() -> Dictionary:
+	var d := SaveCodec.props(self, ["blobs"])
+	var bl := []
+	for b in blobs:
+		bl.append(b.to_dict())
+	d["blobs"] = bl
+	return d
+
+
+static func from_dict(d: Dictionary) -> Mold:
+	var m := Mold.new(0)
+	SaveCodec.apply(m, d, ["blobs"])
+	m.blobs.clear()
+	for bd: Dictionary in d.get("blobs", []):
+		m.blobs.append(MoldBlob.from_dict(bd))
+	return m

@@ -25,3 +25,14 @@ func pos() -> Vector2:
 
 func alive() -> bool:
 	return state != "gone"
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self)
+
+
+static func from_dict(d: Dictionary) -> MoldBlob:
+	var b := MoldBlob.new()
+	SaveCodec.apply(b, d)
+	return b

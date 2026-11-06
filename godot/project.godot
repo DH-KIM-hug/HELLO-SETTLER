@@ -16,6 +16,8 @@ config/features=PackedStringArray("4.7", "Mobile")
 
 ; 소리·음악 (docs/AUDIO.md) — 화면 코드는 GameAudio의 정적 함수로 부른다 (자동 로드가 없으면 조용히 넘어감)
 AudioManager="*res://view/audio_manager.gd"
+; 저장 (docs/SAVE.md) — 완전 자동: 거인의 행동마다·큰 일마다·10초마다·앱이 뒤로 갈 때. 화면 코드는 GameSave.get_instance()로 부른다
+SaveManager="*res://save/save_manager.gd"
 
 [display]
 

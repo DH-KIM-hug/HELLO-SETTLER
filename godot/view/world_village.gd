@@ -27,6 +27,11 @@ func _make_village() -> Village:
 	return v
 
 
+## 넓은 세상 시험 장면은 아직 저장하지 않는다 (JarWorld 저장은 sim·SaveManager에 있음 — 화면 연결은 이 장면이 본 게임이 될 때)
+func _saves_here() -> bool:
+	return false
+
+
 func _make_terrain() -> JarTerrain:
 	wterrain = WorldTerrain.new(world.water)
 	wterrain.villages = world.settlements

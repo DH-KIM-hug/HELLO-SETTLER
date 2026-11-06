@@ -59,6 +59,17 @@ var _touch_tap := false
 var _touch_press := Vector2.ZERO
 var _pinch_d := 0.0
 var _pinch_mid := Vector2.ZERO
+# 저장과 돌아왔을 때 (docs/SAVE.md) — 이 장면이 앱의 첫 화면으로 열렸을 때만 저장을 쓴다 (캡처 도구·시험이 띄운 장면은 늘 새 병)
+const JAR_ID := 1
+var use_save := false
+var catching := false                # 비운 시간 따라잡는 중 (로딩 화면) — 시계·화면 갱신을 멈춤
+var return_letter: ReturnLetter      # '자리를 비운 동안' 편지 (SAVE.md 4)
+var catchup_screen: CatchUpScreen
+var _loaded_clock: JarClock
+var _away := 0.0
+var _book_from := 0
+var _crowd: Array = []
+var _letter_layer: CanvasLayer
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -67,8 +78,8 @@ const GEAR_HOLD := 0.6               # 톱니를 이만큼(초) 길게 누르면
 
 func _ready() -> void:
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
-	village = _make_village()
-	clock = JarClock.new(village)
+	village = _load_or_make_village()
+	clock = _loaded_clock if _loaded_clock != null else JarClock.new(village)
 	sun = JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
@@ -86,7 +97,108 @@ func _ready() -> void:
 	post_mat = OutlinePost.attach(cam.camera)
 	_setup_ui()
 	_after_ready()
+	_start_save()
 	_attach_audio()
+
+
+# ───────────────────────── 저장 · 돌아왔을 때 (docs/SAVE.md) ─────────────────────────
+## 앱의 첫 화면으로 열렸고 저장이 있으면 그 병을, 없으면 새 병 (_make_village)
+func _load_or_make_village() -> Village:
+	var sm := GameSave.get_instance()
+	use_save = sm != null and sm.enabled and is_inside_tree() and get_tree().current_scene == self and _saves_here()
+	if use_save and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID) and sm.jars[JAR_ID]["kind"] == "jar":
+		_loaded_clock = sm.jar_clock(JAR_ID)
+		_away = float(sm.last_load["away"])
+		return sm.jar_village(JAR_ID)
+	return _make_village()
+
+
+## 이 장면이 저장을 쓰는가 (넓은 세상 장면은 아직 — 6단계 시험 장면)
+func _saves_here() -> bool:
+	return true
+
+
+func _start_save() -> void:
+	if not use_save:
+		return
+	var sm := GameSave.get_instance()
+	if _loaded_clock == null:                     # 새 병: 저장 대상으로 + 첫 병이면 창세의 날 (×12)
+		sm.register_jar(JAR_ID, village, clock, {"name": "첫 병"})
+		if sm.should_start_creation():
+			clock.start_creation_day()
+		sm.giant["first_jar_done"] = true
+		sm.save_all(true)
+		return
+	begin_return(sm.catch_up(_away), _away)
+
+
+## 비운 시간 따라잡기 → (10분 넘게면) 로딩 화면 → 편지 · 귀환 축제
+func begin_return(list: Array, away: float) -> void:
+	_away = away
+	_book_from = village.book.size()
+	if away <= CatchUp.QUICK:                    # 10분 이하: 불러오는 동안 바로 끝
+		for c: CatchUp in list:
+			c.finish()
+		_crowd = CatchUp.on_return(village, away)
+		refresh()
+		return
+	catching = true
+	_save_pause(true)                 # 따라잡는 도중의 상태(거인 없음)는 저장하지 않는다 — 끝나면 바로 전부
+	_ensure_letter_layer()
+	catchup_screen = CatchUpScreen.new()
+	_letter_layer.add_child(catchup_screen)
+	catchup_screen.finished.connect(_on_caught_up)
+	catchup_screen.start(list, away)
+
+
+func _save_pause(on: bool) -> void:
+	var sm := GameSave.get_instance()
+	if use_save and sm != null:
+		sm.enabled = not on
+
+
+func _ensure_letter_layer() -> void:
+	if _letter_layer == null:
+		_letter_layer = CanvasLayer.new()
+		_letter_layer.layer = 10
+		add_child(_letter_layer)
+
+
+func _on_caught_up(letter: Dictionary) -> void:
+	catching = false
+	_save_pause(false)
+	if catchup_screen != null:
+		catchup_screen.queue_free()
+		catchup_screen = null
+	_crowd = CatchUp.on_return(village, _away)
+	refresh()
+	show_return_letter(letter)
+	print("[저장] 비운 %s 따라잡음 — 인구 %d → %d · 큰 일 %d줄 · %s" % [CatchUp.away_words(_away), letter.get("pop0", 0), letter.get("pop1", 0),
+		(letter.get("events", []) as Array).size(), village.fmt_time(village.t)])
+	var sm := GameSave.get_instance()
+	if use_save and sm != null:
+		sm.save_all(false)
+
+
+## '자리를 비운 동안' 편지 (촌장). [병 안으로]를 누르면 주민들의 환호 (귀환 축제면 여럿이)
+func show_return_letter(letter: Dictionary) -> void:
+	_ensure_letter_layer()
+	if return_letter == null:
+		return_letter = ReturnLetter.new()
+		_letter_layer.add_child(return_letter)
+		return_letter.closed.connect(_on_letter_closed)
+	detail.close()
+	altar_sheet.close()
+	return_letter.open(village, letter, _book_from)
+
+
+func _on_letter_closed() -> void:
+	if _crowd.is_empty():
+		return
+	if village.t - village.festival_t < 60.0:
+		GameAudio.say("miracle", _crowd.slice(0, 2))       # "거인님이 돌아오셨다!" — 광장의 환호
+	else:
+		GameAudio.say("hello", _crowd.slice(0, 1))
 
 
 # ── (6단계) 넓은 세상 장면(view/world_village.gd)이 바꿔 끼우는 곳 — 소형 병은 아래 그대로 ──
@@ -125,6 +237,8 @@ func refresh() -> void:
 
 
 func _process(dt: float) -> void:
+	if catching:                      # 로딩 화면이 병 시간을 흘리는 중
+		return
 	if not paused:
 		var t0 := Time.get_ticks_usec()
 		var was_skipping := clock.skipping

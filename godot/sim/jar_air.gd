@@ -186,3 +186,15 @@ func temp_shift(base: float) -> float:
 ## 유리의 김 (화면: 뿌연 유리) 0~1
 func glass_fog() -> float:
 	return clampf((humid - 0.55) / 0.35, 0.0, 1.0)
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+## 난수 흐름 포함
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self)
+
+
+static func from_dict(d: Dictionary) -> JarAir:
+	var a := JarAir.new(0)
+	SaveCodec.apply(a, d)
+	return a

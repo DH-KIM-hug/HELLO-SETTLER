@@ -546,7 +546,7 @@ static func fall_ill(v: Village, r: Resident, in_clinic := false, kind := "고�
 	if r.severe:
 		v.stats["severe"] = int(v.stats.get("severe", 0)) + 1
 	if not r.is_baby():
-		ResidentAI.cancel(r)          # 하던 일을 놓고 눕는다 (짐·예약은 되돌림)
+		ResidentAI.cancel(v, r)          # 하던 일을 놓고 눕는다 (짐·예약은 되돌림)
 		if r.age >= 2.5:
 			v.speak(r, "몸이 으슬으슬해…", 5)
 	if r.severe:

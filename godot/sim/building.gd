@@ -65,3 +65,14 @@ func out_total() -> float:
 	for k in out:
 		s += float(out[k])
 	return s
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self)
+
+
+static func from_dict(d: Dictionary) -> Building:
+	var b := Building.new()
+	SaveCodec.apply(b, d)
+	return b

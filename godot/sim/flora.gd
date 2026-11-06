@@ -537,60 +537,114 @@ func pick_task(v: Village, r: Resident, b: Building) -> bool:
 		off = Vector2(1, 0)
 	var stand := Vector2(float(s["x"]), float(s["y"])) + off.normalized() * (0.55 if s["kind"] != "빛버섯" else 0.4)
 	r.doing = "큰 버섯을 베는 중" if mode != "glow" else "빛버섯을 캐는 중"
-	var cut := func() -> void:
-		s["res"] = int(s["res"]) - 1
-		if s["gone"] or float(s["food"]) <= 0.0:
-			return
-		var amt := minf(Balance.PICK_CHUNK, float(s["food"]))
-		if mode == "glow":
-			amt = 1.0
-		s["food"] = float(s["food"]) - amt
-		var item := "버섯"
-		var got := amt
-		if mode == "dye":
-			item = "붉은 물감"
-			got = amt / 4.0
-		elif mode == "glow":
-			item = "빛버섯"
-		r.carry = item
-		r.carry_amt = got
-		if float(s["food"]) <= 0.0:
-			_spent(s)
-		var sk := float(r.skills.get("버섯꾼", 0.0))
-		r.skills["버섯꾼"] = minf(Balance.SKILL_MAX, sk + 0.02 * r.talent)     # 베면서 가려 보는 눈이 는다 (하루 숙련과 따로 조금)
-	var unres := func() -> void: s["res"] = int(s["res"]) - 1
+	var cut := ResidentAI.op("flora_cut", {"s": s, "mode": mode})
+	var unres := ResidentAI.op("flora_unres", {"q": s})
 	r.steps.append(ResidentAI.walk(stand.x, stand.y))
 	r.steps.append(ResidentAI.act(float(b.def()["pick"]), "work", cut, true, unres))
 	if mode == "dry":                          # 말림대 (버섯꾼 오두막 곁) → 반나절 뒤 말린 버섯
-		var put := func() -> void:
-			if r.carry_amt > 0.0:
-				drying.append({"b": b.id, "amt": r.carry_amt, "done": v.t + Balance.DRY_TIME})
-				stats["picked"] += r.carry_amt
-			r.carry = ""
-			r.carry_amt = 0.0
-		var undo := func() -> void:
-			if r.carry_amt > 0.0:
-				drying.append({"b": b.id, "amt": r.carry_amt, "done": v.t + Balance.DRY_TIME})
+		var put := ResidentAI.op("flora_dry_put", {"bid": b.id})
+		var undo := ResidentAI.op("flora_dry_undo", {"bid": b.id})
 		r.steps.append(ResidentAI.walk(b.x - 1.2, b.y + 0.6))
 		r.steps.append(ResidentAI.act(20.0, "work", put, false, undo))
 		return true
 	var st := v.store()
-	var drop := func() -> void:
-		if r.carry_amt > 0.0:
-			var k := r.carry
-			v.stock[k] = float(v.stock.get(k, 0.0)) + r.carry_amt
-			if k == "버섯":
-				stats["picked"] += r.carry_amt
-				if mode == "mix":
-					tainted += r.carry_amt
-					stats["mixed"] += 1
-			elif k == "붉은 물감":
-				stats["dye"] += r.carry_amt
-		r.carry = ""
-		r.carry_amt = 0.0
+	var drop := ResidentAI.op("flora_drop", {"mode": mode})
 	r.steps.append(ResidentAI.walk(st.x + 0.8, st.y + 0.6))
 	r.steps.append(ResidentAI.act(4.0, "idle", drop, false, drop))
 	return true
+
+
+## 주민의 할 일 묶음 (ResidentAI.run_op가 "flora_*"를 넘겨줌) — 저장해도 그대로 이어지게 Callable 대신 값만 붙잡는다
+func run_op(v: Village, r: Resident, o: Dictionary) -> void:
+	match String(o["op"]):
+		"flora_unres":                     # 버섯·민들레 예약 풀기
+			var q: Dictionary = o["q"]
+			q["res"] = int(q["res"]) - 1
+		"flora_cut":
+			var s: Dictionary = o["s"]
+			var mode: String = o["mode"]
+			s["res"] = int(s["res"]) - 1
+			if s["gone"] or float(s["food"]) <= 0.0:
+				return
+			var amt := minf(Balance.PICK_CHUNK, float(s["food"]))
+			if mode == "glow":
+				amt = 1.0
+			s["food"] = float(s["food"]) - amt
+			var item := "버섯"
+			var got := amt
+			if mode == "dye":
+				item = "붉은 물감"
+				got = amt / 4.0
+			elif mode == "glow":
+				item = "빛버섯"
+			r.carry = item
+			r.carry_amt = got
+			if float(s["food"]) <= 0.0:
+				_spent(s)
+			var sk := float(r.skills.get("버섯꾼", 0.0))
+			r.skills["버섯꾼"] = minf(Balance.SKILL_MAX, sk + 0.02 * r.talent)     # 베면서 가려 보는 눈이 는다 (하루 숙련과 따로 조금)
+		"flora_dry_put":
+			if r.carry_amt > 0.0:
+				drying.append({"b": int(o["bid"]), "amt": r.carry_amt, "done": v.t + Balance.DRY_TIME})
+				stats["picked"] += r.carry_amt
+			r.carry = ""
+			r.carry_amt = 0.0
+		"flora_dry_undo":
+			if r.carry_amt > 0.0:
+				drying.append({"b": int(o["bid"]), "amt": r.carry_amt, "done": v.t + Balance.DRY_TIME})
+		"flora_drop":
+			if r.carry_amt > 0.0:
+				var k := r.carry
+				v.stock[k] = float(v.stock.get(k, 0.0)) + r.carry_amt
+				if k == "버섯":
+					stats["picked"] += r.carry_amt
+					if o["mode"] == "mix":
+						tainted += r.carry_amt
+						stats["mixed"] += 1
+				elif k == "붉은 물감":
+					stats["dye"] += r.carry_amt
+			r.carry = ""
+			r.carry_amt = 0.0
+		"flora_pull":
+			var bid := int(o["bid"])
+			var m := int(weeds.get(bid, 0))
+			if m <= 0:
+				return
+			weeds.erase(bid)
+			stats["pulled"] += m
+			v.stock["민들레 잎"] = float(v.stock.get("민들레 잎", 0.0)) + 2.0 * m
+			stats["greens"] += 2.0 * m
+			if int(stats["pulled"]) == m:
+				v.log_line("%s%s 밭에 뿌리내린 하늘의 꽃을 뽑아냈다. 뿌리가 팔뚝만 했다." % [r.name, Village.josa(r.name, "이", "가")])
+		"flora_gather":
+			var d: Dictionary = o["d"]
+			d["res"] = int(d["res"]) - 1
+			match String(o["what"]):
+				"petals":
+					v.stock["꽃잎"] = float(v.stock.get("꽃잎", 0.0)) + 2.0
+					stats["petals"] += 2.0
+				"cotton":
+					var n := mini(2, int(d["seeds"]))
+					d["seeds"] = int(d["seeds"]) - n
+					v.stock["솜"] = float(v.stock.get("솜", 0.0)) + 1.0 + n * 0.5
+					stats["cotton"] += 1.0 + n * 0.5
+					if float(stats["cotton"]) <= 2.0:
+						v.log_line("%s%s 하늘 꽃의 솜털을 한 아름 안고 왔다. 옷 속에 넣으니 따뜻했다." % [r.name, Village.josa(r.name, "이", "가")])
+				"greens":
+					v.stock["민들레 잎"] = float(v.stock.get("민들레 잎", 0.0)) + 4.0
+					stats["greens"] += 4.0
+			if o["ride"]:
+				_start_ride(v, r, d)
+		"flora_landed":
+			_end_ride(int(o["rid"]))
+			r.doing = "걸어서 마을로 돌아가는 중"
+			v.speak(r, "여기가 어디지…", 5)
+		"flora_home":
+			v.log_line("%s%s 꽃씨를 타고 %s 너머로 날아갔다. 한참 뒤 걸어서 돌아왔다." % [r.name, Village.josa(r.name, "이", "가"), o["place"]])
+		"flora_abort":
+			_end_ride(int(o["rid"]))
+		_:
+			push_error("Flora.run_op: 모르는 할 일 %s" % o["op"])
 
 
 ## 다 벤 버섯: 부채버섯은 밑동에서 다시 자람 (세 번까지), 나머지는 사라짐
@@ -878,16 +932,7 @@ func weed_task(v: Village, r: Resident, b: Building) -> bool:
 		return false
 	var n := int(weeds[b.id])
 	r.doing = "밭의 큰 잡초를 뽑는 중"
-	var pull := func() -> void:
-		var m := int(weeds.get(b.id, 0))
-		if m <= 0:
-			return
-		weeds.erase(b.id)
-		stats["pulled"] += m
-		v.stock["민들레 잎"] = float(v.stock.get("민들레 잎", 0.0)) + 2.0 * m
-		stats["greens"] += 2.0 * m
-		if int(stats["pulled"]) == m:
-			v.log_line("%s%s 밭에 뿌리내린 하늘의 꽃을 뽑아냈다. 뿌리가 팔뚝만 했다." % [r.name, Village.josa(r.name, "이", "가")])
+	var pull := ResidentAI.op("flora_pull", {"bid": b.id})
 	r.steps.append(ResidentAI.walk(b.x + 0.6, b.y - 0.4))
 	r.steps.append(ResidentAI.act(Balance.WEED_PULL_TIME * (1.0 + 0.2 * (n - 1)), "work", pull, true))
 	if rng.randf() < 0.3:
@@ -944,25 +989,8 @@ func _gather(v: Village, r: Resident, d: Dictionary, hungry: bool) -> bool:
 	r.last_action = "flora"
 	r.doing = {"petals": "큰 민들레 꽃잎을 따는 중", "cotton": "민들레 솜털을 모으는 중", "greens": "민들레 잎을 뜯는 중"}[what]
 	var ride := what == "cotton" and r.is_child() and v.t - last_ride >= Balance.RIDE_REST and rng.randf() < Balance.RIDE_P
-	var pick := func() -> void:
-		d["res"] = int(d["res"]) - 1
-		match what:
-			"petals":
-				v.stock["꽃잎"] = float(v.stock.get("꽃잎", 0.0)) + 2.0
-				stats["petals"] += 2.0
-			"cotton":
-				var n := mini(2, int(d["seeds"]))
-				d["seeds"] = int(d["seeds"]) - n
-				v.stock["솜"] = float(v.stock.get("솜", 0.0)) + 1.0 + n * 0.5
-				stats["cotton"] += 1.0 + n * 0.5
-				if float(stats["cotton"]) <= 2.0:
-					v.log_line("%s%s 하늘 꽃의 솜털을 한 아름 안고 왔다. 옷 속에 넣으니 따뜻했다." % [r.name, Village.josa(r.name, "이", "가")])
-			"greens":
-				v.stock["민들레 잎"] = float(v.stock.get("민들레 잎", 0.0)) + 4.0
-				stats["greens"] += 4.0
-		if ride:
-			_start_ride(v, r, d)
-	var unres := func() -> void: d["res"] = int(d["res"]) - 1
+	var pick := ResidentAI.op("flora_gather", {"d": d, "what": what, "ride": ride})
+	var unres := ResidentAI.op("flora_unres", {"q": d})
 	var p := Vector2(float(d["x"]), float(d["y"])) + Vector2(cos(r.id * 1.7), sin(r.id * 1.7)) * 0.7
 	r.steps.append(ResidentAI.walk(p.x, p.y))
 	r.steps.append(ResidentAI.act(60.0 + rng.randf() * 40.0, "play" if r.is_child() else "work", pick, false, unres))
@@ -990,7 +1018,7 @@ func _start_ride(v: Village, r: Resident, d: Dictionary) -> void:
 	stats["rides"] += 1
 	d["seeds"] = maxi(0, int(d["seeds"]) - 1)
 	riders.append({"id": r.id, "fx": from.x, "fy": from.y, "tx": to.x, "ty": to.y, "t0": v.t})
-	ResidentAI.cancel(r)
+	ResidentAI.cancel(v, r)
 	r.action = "dand_ride"
 	r.last_action = "dand_ride"
 	r.doing = "꽃씨에 매달려 날아가는 중"
@@ -1005,13 +1033,9 @@ func _start_ride(v: Village, r: Resident, d: Dictionary) -> void:
 		place = "숲"
 	elif _near_water(v, to, 4.0):
 		place = "물가"
-	var landed := func() -> void:
-		_end_ride(rid)
-		r.doing = "걸어서 마을로 돌아가는 중"
-		v.speak(r, "여기가 어디지…", 5)
-	var home := func() -> void:
-		v.log_line("%s%s 꽃씨를 타고 %s 너머로 날아갔다. 한참 뒤 걸어서 돌아왔다." % [r.name, Village.josa(r.name, "이", "가"), place])
-	var abort := func() -> void: _end_ride(rid)
+	var landed := ResidentAI.op("flora_landed", {"rid": rid})
+	var home := ResidentAI.op("flora_home", {"place": place})
+	var abort := ResidentAI.op("flora_abort", {"rid": rid})
 	r.steps.append(ResidentAI.act(Balance.RIDE_TIME, "fly", landed, false, abort))
 	var hp := v.fire + Vector2(cos(r.id * 0.9), sin(r.id * 0.9)) * 2.0
 	r.steps.append(ResidentAI.walk(hp.x, hp.y))
@@ -1107,3 +1131,15 @@ func count_st(st: String) -> int:
 		if d["st"] == st:
 			n += 1
 	return n
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+## 난수 흐름 포함
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self)
+
+
+static func from_dict(d: Dictionary) -> Flora:
+	var f := Flora.new(0)
+	SaveCodec.apply(f, d)
+	return f

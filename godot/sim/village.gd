@@ -17,6 +17,10 @@ var gene_rng := RandomNumberGenerator.new()   # 7단계: 겉모습 유전자·�
 var health_rng := RandomNumberGenerator.new() # 건강·기후·두려움 전용 (HEALTH.md 7 — 유전·기존 흐름을 흔들지 않게)
 # 병 날짜 (HEALTH.md 1.1): 세상을 만든 현실 날짜. 테스트는 Village.default_created로 고정 (비면 기기 날짜)
 static var default_created: Dictionary = {}
+# 저장 (docs/SAVE.md 2 — 완전 자동): 거인이 무언가 하면 이 함수가 곧바로 불린다 (SaveManager가 거인 묶음 + 이 병을 쓴다)
+static var on_giant_action := Callable()
+var event_serial := 0                 # 큰 일(연대기 한 줄·위기 시작)마다 +1 — SaveManager가 보고 이 병을 곧 저장한다
+var _giant_depth := 0
 var created_date: Dictionary = {"year": 2026, "month": 4, "day": 15}
 var climate_override := ""            # 비면 물(병)의 기후대
 var cold_season := false              # 앞으로 반나절 안에 추위가 온다 (땔감 운반·나무꾼 넉넉함 — 정시마다)
@@ -365,11 +369,28 @@ func cal_day(tt: float) -> int:
 # ───────────────────────── 기록 ─────────────────────────
 func log_line(text: String) -> void:
 	book.append({"t": t, "text": text})
+	event_serial += 1
+
+
+## 거인의 행동이 끝났다 → 곧바로 저장 (여러 행동을 묶어 부르는 동안은 한 번만 — begin/end_giant)
+func giant_acted() -> void:
+	if _giant_depth == 0 and on_giant_action.is_valid():
+		on_giant_action.call(self)
+
+
+func begin_giant() -> void:
+	_giant_depth += 1
+
+
+func end_giant() -> void:
+	_giant_depth = maxi(0, _giant_depth - 1)
+	giant_acted()
 
 
 ## 위기 시작 (굶주림·재해) — 화면 쪽(JarClock)이 빨리 돌리기를 ×1로 되돌리고 알림을 띄운다
 func crisis(kind: String, text: String) -> void:
 	crises.append({"t": t, "kind": kind, "text": text})
+	event_serial += 1
 
 
 func speak(r: Resident, text: String, dur := 6.0) -> void:
@@ -1169,7 +1190,7 @@ func _deaths(dt: float) -> void:
 
 
 func kill(p: Resident, why: String) -> void:
-	ResidentAI.cancel(p)
+	ResidentAI.cancel(self, p)
 	p.dead = true
 	p.death_t = t
 	p.death_why = why
@@ -1689,6 +1710,7 @@ func rotate_jar() -> void:
 				b.farm_mult = -1.0
 			v.bless_all(0.06)
 			v.log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+		giant_acted()
 		return
 	water.rotate_jar()
 	var rp := func(o: Dictionary) -> void:
@@ -1723,6 +1745,7 @@ func rotate_jar() -> void:
 	_fear_rotate()
 	bless_all(0.06)
 	log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+	giant_acted()
 
 
 # ───────────────────────── 제단·제물·소원·분가 (기획서 3.1 · 6.7 · 11.1, RESIDENT_AI 2.1 · 6.2) ─────────────────────────
@@ -1857,6 +1880,7 @@ func grant_wish(id: int) -> bool:
 		if who != null:
 			speak(who, "거인님이 들어주셨다!", 7)
 		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], ty])
+		giant_acted()
 		return true
 	return false
 
@@ -2024,14 +2048,17 @@ func take_offering(item: String) -> float:
 	stats["taken"] = int(stats.get("taken", 0)) + 1
 	if not was and is_favourite(item):
 		log_line("사람들은 거인님이 %s%s 좋아하신다고 믿게 되었다." % [item, josa(item, "을", "를")])
+	giant_acted()
 	return got
 
 
 ## [모두 받기]
 func take_all() -> float:
 	var s := 0.0
+	begin_giant()
 	for item: String in altar_items().keys():
 		s += take_offering(item)
+	end_giant()
 	return s
 
 
@@ -2087,6 +2114,7 @@ func force_take(item: String, amt: int) -> float:
 	var awake := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	if not awake.is_empty():
 		speak(awake[econ_rng.randi() % awake.size()], "거인님이 노하셨나…", 6)
+	giant_acted()
 	return worth
 
 
@@ -2126,6 +2154,7 @@ func buy_building(type: String, spot: Variant = null) -> Building:
 	near.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
 	for i in mini(2, near.size()):
 		speak(near[i], "기적이다!" if i == 0 else "하늘에서 %s%s 내려왔어!" % [type, josa(type, "이", "가")], 7)
+	giant_acted()
 	return b
 
 
@@ -2197,7 +2226,7 @@ func split_stock(n_movers: int) -> Dictionary:
 ## 사람들을 새 무리 nv로 옮긴다 (JarWorld.split_out이 부름)
 func move_people_to(nv: Village, movers: Array[Resident]) -> void:
 	for r in movers:
-		ResidentAI.cancel(r)
+		ResidentAI.cancel(self, r)
 		if r.job >= 0:
 			var b := bld(r.job)
 			if b != null:
@@ -2514,16 +2543,22 @@ func recalc_fear() -> void:
 ## [곰팡이·뚜껑] 거인이 뚜껑을 연다 / 닫는다 (WORLD_EVENTS 3) — 열린 동안 김·연기·탁한 공기가 빠지고 방 기온이 섞인다.
 ## 안 닫으면 JarClock이 현실 1분 뒤 닫는다 (병 시계 8분 안전장치는 JarAir). 성공하면 true
 func open_lid() -> bool:
-	return air.open_lid(self)
+	var ok := air.open_lid(self)
+	giant_acted()
+	return ok
 
 
 func close_lid() -> bool:
-	return air.close_lid(self)
+	var ok := air.close_lid(self)
+	giant_acted()
+	return ok
 
 
 ## [하늘의 것] 거인이 뚜껑을 열고 dir 쪽으로 분다 — 솜털 공의 꽃씨가 한꺼번에 (WORLD_EVENTS 2.7). 날린 꽃씨 수, 닫혀 있으면 −1
 func blow_seeds(dir: Vector2) -> int:
-	return flora.blow_seeds(self, dir)
+	var n := flora.blow_seeds(self, dir)
+	giant_acted()
+	return n
 
 
 ## 거인이 유리를 톡 친다 (그날 4번째부터 모두 +0.05) · 크게 친 톡 = 지진 (모두 +0.2)
@@ -2536,6 +2571,7 @@ func tap_glass(hard := false) -> void:
 		raise_fear_all(Balance.FEAR_TAP_HARD)
 	elif _taps[1] > Balance.FEAR_FREE_PER_DAY:
 		raise_fear_all(Balance.FEAR_TAP)
+	giant_acted()
 
 
 func _fear_rotate() -> void:
@@ -2559,3 +2595,88 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 		if Vector2(r.x - x, r.y - y).length() <= radius:
 			raise_fear(r, Balance.FEAR_FLOOD)
 	recalc_fear()
+
+
+# ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
+## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
+const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "flora", "_walker", "_singers", "others", "peers",
+	"_people_by_id", "_bld_by_id", "book"]
+
+
+## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)
+func to_dict(with_book := true, with_water := true) -> Dictionary:
+	var d := SaveCodec.props(self, SAVE_SKIP)
+	if with_water:
+		d["water"] = water.to_dict()
+	d["air"] = air.to_dict()
+	d["mold"] = mold.to_dict()
+	d["flora"] = flora.to_dict()
+	var bl := []
+	for b in buildings:
+		bl.append(b.to_dict())
+	d["buildings"] = bl
+	var lists := SaveCodec.ref_lists(self)
+	var orphans: Array = []
+	var pl := []
+	for r in people:
+		var rd := r.to_dict()
+		rd["steps"] = SaveCodec.enc_steps(r.steps, lists, orphans)
+		pl.append(rd)
+	d["people"] = pl
+	var dl := []
+	for r in dead:
+		var rd := r.to_dict()
+		rd["steps"] = SaveCodec.enc_steps(r.steps, lists, orphans)
+		dl.append(rd)
+	d["dead"] = dl
+	var ol := []
+	for o: Dictionary in orphans:
+		ol.append(SaveCodec.enc(o))
+	d["_orphans"] = ol
+	var si := []
+	for r: Resident in _singers:
+		si.append(r.id)
+	d["_singers"] = si
+	if with_book:
+		d["book"] = SaveCodec.enc(book)
+	return d
+
+
+## 사전 → 마을. water_obj를 주면 그 물을 쓴다 (넓은 세상), book이 없으면 빈 연대기 (SaveManager가 연대기 파일에서 채움)
+static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
+	var v := Village.new()
+	SaveCodec.apply(v, d, SAVE_SKIP)
+	v.water = water_obj if water_obj != null else JarWater.from_dict(d["water"])
+	v.air = JarAir.from_dict(d["air"])
+	v.mold = Mold.from_dict(d["mold"])
+	v.flora = Flora.from_dict(d["flora"])
+	for bd: Dictionary in d.get("buildings", []):
+		var b := Building.from_dict(bd)
+		v.buildings.append(b)
+		v._bld_by_id[b.id] = b
+	for rd: Dictionary in d.get("people", []):
+		var r := Resident.from_dict(rd)
+		v.people.append(r)
+		v._people_by_id[r.id] = r
+	for rd: Dictionary in d.get("dead", []):
+		v.dead.append(Resident.from_dict(rd))
+	var lists := SaveCodec.ref_lists(v)
+	var orphans: Array = []
+	for od: Variant in d.get("_orphans", []):
+		orphans.append(SaveCodec.dec(od))
+	var pl: Array = d.get("people", [])
+	for i in pl.size():
+		v.people[i].steps = SaveCodec.dec_steps(pl[i].get("steps", []), v, lists, orphans)
+	var dl: Array = d.get("dead", [])
+	for i in dl.size():
+		v.dead[i].steps = SaveCodec.dec_steps(dl[i].get("steps", []), v, lists, orphans)
+	var by_id := {}
+	for r in v.dead:
+		by_id[r.id] = r
+	for r in v.people:
+		by_id[r.id] = r
+	for id: Variant in d.get("_singers", []):
+		if by_id.has(int(id)):
+			v._singers.append(by_id[int(id)])
+	v.book = SaveCodec.dec(d.get("book", []))
+	return v

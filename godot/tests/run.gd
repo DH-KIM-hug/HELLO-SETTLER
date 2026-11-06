@@ -35,7 +35,7 @@ func timed(obj: Object, names: Array) -> void:
 
 const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests/genetics_tests.gd", "health": "res://tests/health_tests.gd",
 	"economy": "res://tests/economy_tests.gd", "mold": "res://tests/mold_tests.gd", "flora": "res://tests/flora_tests.gd",
-	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd"}
+	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd", "save": "res://tests/save_tests.gd"}
 
 
 func _initialize() -> void:
@@ -57,7 +57,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_house_bottleneck", "test_determinism", "test_time_controls"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_finish(t0)

@@ -29,6 +29,33 @@ var notice := ""                      # 화면에 띄울 알림 (UI 문구)
 var notice_t := 0.0                   # 알림이 남은 현실 시간 (초)
 var last_crisis: Dictionary = {}
 var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
+# 창세의 날 (OPENING 3.0): 첫 병의 첫날(7시 → 다음 6시)은 ×12. 거인이 다른 배속을 고르거나 위기·밤 건너뛰기면 끝.
+# 끝까지 가면 ×1로 돌아오고 배속 단추를 한 줄로 알려 준다. 저장된다 (다시 켜도 되풀이하지 않음)
+var creation := false
+var creation_until := 0.0             # 끝나는 병 시각 t
+var creation_done := false            # 창세의 날을 지났다 (끝까지 갔든 거인이 바꿨든)
+
+const CREATION_SPEED := 12.0
+const CREATION_HINT := "병의 첫날이 지났어요. 이제부터는 아래 [속도] 단추로 병의 시간을 빠르게 흘릴 수 있어요."
+
+
+## 창세의 날을 시작한다 (첫 병을 막 만들었을 때만 — 두 번째 병부터는 부르지 않는다)
+func start_creation_day() -> void:
+	if creation_done:
+		return
+	creation = true
+	creation_until = v.t + time_to_dawn()
+	speed_i = 0
+
+
+func _end_creation(hint: bool) -> void:
+	if not creation:
+		return
+	creation = false
+	creation_done = true
+	if hint:
+		notice = CREATION_HINT
+		notice_t = 12.0
 
 
 func _init(village: Village) -> void:
@@ -40,18 +67,22 @@ func _init(village: Village) -> void:
 func speed() -> float:
 	if skipping:
 		return skip_span / Balance.SKIP_NIGHT_SECONDS
+	if creation:
+		return CREATION_SPEED
 	return float(Balance.SPEEDS[speed_i])
 
 
+## 배속을 정한다 — 창세의 날이었다면 끝난다 (거인이 다른 배속을 골랐거나 위기·밤 건너뛰기가 끝나 ×1로)
 func set_speed(i: int) -> void:
 	if skipping:
 		_end_skip()
+	_end_creation(false)
 	speed_i = clampi(i, 0, Balance.SPEEDS.size() - 1)
 
 
-## 배속 버튼: ×1 → ×2 → ×4 → ×8 → ×1 (밤 건너뛰는 중이면 그만두고 ×1)
+## 배속 버튼: ×1 → ×2 → ×4 → ×8 → ×1 (밤 건너뛰는 중이면 그만두고 ×1). 창세의 날(×12)에 누르면 ×1부터
 func cycle_speed() -> void:
-	if skipping:
+	if skipping or creation:
 		set_speed(0)
 	else:
 		set_speed((speed_i + 1) % Balance.SPEEDS.size())
@@ -141,6 +172,10 @@ func tick(real_dt: float) -> int:
 		if _after_step():
 			acc = 0.0                 # 배속이 바뀌었으면 쌓인 빠른 시간은 버린다
 			break
+		if creation and v.t >= creation_until - 1e-6:
+			_end_creation(true)       # 창세의 날 끝 (다음 6시) → ×1 + 배속 단추 한 줄
+			acc = 0.0
+			break
 	if n >= max_steps and acc >= step:
 		dropped += acc
 		acc = 0.0
@@ -153,7 +188,7 @@ func _after_step() -> bool:
 	if not v.crises.is_empty():
 		last_crisis = v.crises.back()
 		v.crises.clear()
-		var was_fast := skipping or speed_i > 0
+		var was_fast := skipping or speed_i > 0 or creation
 		set_speed(0)
 		notice = "%s — 시간을 1배로 되돌렸어요" % last_crisis["text"] if was_fast else String(last_crisis["text"])
 		notice_t = 8.0
@@ -172,3 +207,14 @@ func _lid_auto_close(real_dt: float) -> void:
 		lid_real = 0.0
 		notice = "뚜껑이 저절로 닫혔어요"
 		notice_t = 3.0
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self, ["v"])
+
+
+static func from_dict(village: Village, d: Dictionary) -> JarClock:
+	var c := JarClock.new(village)
+	SaveCodec.apply(c, d, ["v"])
+	return c

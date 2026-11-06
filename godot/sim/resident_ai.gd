@@ -2,6 +2,9 @@
 ## 점수 = 기본 × 긴급도 × 시간대 가중치 × (1 + 특징 보정) × 신앙 상태 보정, 방금 한 행동 ×0.8.
 ## 가장 높은 행동부터 해 보고, 할 수 없으면(일감 없음 등) 다음 행동.
 ## 행동 = 걸음(steps) 목록: {k:"walk", x, y} → 목표까지 걷기 / {k:"do", left, anim, done, cancel} → 정해진 시간 수행.
+## done·cancel은 Callable이 아니라 **할 일 묶음(op)** {op: 이름, ...값} — 저장했다가 그대로 이어 갈 수 있게 (docs/SAVE.md 1).
+##   실행은 run_op (곰팡이 "mold_*"는 Mold.run_op, 하늘의 것 "flora_*"는 Flora.run_op). 값으로 나무·바위·낟알 무더기(Dictionary)·
+##   건물(Building)을 그대로 붙잡는다 — 저장할 때 SaveCodec이 목록 자리·번호로 바꾼다.
 ## 원본: prototype/app.html decide·workTask·haulTask·buildTask·haulMannaTask
 class_name ResidentAI
 extends RefCounted
@@ -17,16 +20,127 @@ static func act(left: float, anim: String, done: Variant = null, fast := false, 
 	return {"k": "do", "left": left, "anim": anim, "done": done, "fast": fast, "cancel": cancel}
 
 
+## 할 일 묶음 하나 만들기 — ResidentAI.op("stock_add", {"k": "통나무", "amt": 1.0})
+static func op(name: String, args := {}) -> Dictionary:
+	var o := {"op": name}
+	o.merge(args)
+	return o
+
+
+## 할 일 묶음 실행 (걸음이 끝났을 때 done · 그만둘 때 cancel). o가 null이면 아무것도 안 함
+static func run_op(v: Village, r: Resident, o: Variant) -> void:
+	if o == null:
+		return
+	var d: Dictionary = o
+	var n: String = d["op"]
+	if n.begins_with("flora_"):
+		v.flora.run_op(v, r, d)
+		return
+	if n.begins_with("mold_"):
+		v.mold.run_op(v, r, d)
+		return
+	match n:
+		"stock_add":                      # 창고에 더함 (나른 물건 내려놓기 · 그만두면 되돌리기)
+			v.stock[d["k"]] = float(v.stock.get(d["k"], 0.0)) + float(d["amt"])
+		"explore_clear":
+			if v.explorer == r.id:
+				v.explorer = -1
+		"explore_look":
+			r.doing = "집으로 돌아가는 중"
+			v._reveal_at(Vector2(r.x, r.y), WorldCfg.REVEAL_LOOK, r, true)
+		"meal":
+			r.meal_done = int(d["mk"])
+		"pray":
+			r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER)
+		"chop":
+			var tr: Dictionary = d["tr"]
+			tr["s"] = "stump"
+			tr["g"] = Balance.TREE_REGROW / (0.6 + v.wetness(tr["x"], tr["y"]))
+			tr["res"] = 0
+			r.carry = "통나무"
+			r.carry_amt = 1.0
+		"unres":                          # 나무·바위 예약 풀기
+			var q: Dictionary = d["q"]
+			q["res"] = 0
+		"plant":
+			v.trees.append({"x": float(d["x"]), "y": float(d["y"]), "s": "sapling", "g": 3.0 * Balance.HOUR, "res": 0})
+		"dig":
+			var rk: Dictionary = d["rk"]
+			rk["amt"] = int(rk["amt"]) - 1
+			rk["res"] = 0
+			r.carry = "돌"
+			r.carry_amt = 1.0
+		"pick":                           # 짐을 집어 듦
+			r.carry = d["item"]
+			r.carry_amt = float(d["amt"])
+		"put":                            # 짐을 내려놓음 (drop 실행 뒤 빈손)
+			run_op(v, r, d["drop"])
+			r.carry = ""
+			r.carry_amt = 0.0
+		"store_put":                      # 손에 든 것을 창고에
+			v.stock[d["k"]] = float(v.stock.get(d["k"], 0.0)) + float(d["amt"])
+			r.carry = ""
+			r.carry_amt = 0.0
+		"site_put":
+			var b: Building = d["b"]
+			var k: String = d["k"]
+			b.incoming[k] = int(b.incoming[k]) - int(d["amt"])
+			b.delivered[k] = int(b.delivered[k]) + int(d["amt"])
+		"site_undo":
+			var b: Building = d["b"]
+			var k: String = d["k"]
+			b.incoming[k] = int(b.incoming[k]) - int(d["amt"])
+			v.stock[k] = float(v.stock[k]) + int(d["amt"])
+		"inbuf_put":
+			var b: Building = d["b"]
+			var k: String = d["k"]
+			b.in_inc[k] = float(b.in_inc[k]) - float(d["amt"])
+			b.in_buf[k] = float(b.in_buf.get(k, 0.0)) + float(d["amt"])
+		"inbuf_undo":
+			var b: Building = d["b"]
+			var k: String = d["k"]
+			b.in_inc[k] = float(b.in_inc[k]) - float(d["amt"])
+			v.stock[k] = float(v.stock[k]) + float(d["amt"])
+		"manna_pick":
+			var m: Dictionary = d["m"]
+			var take := minf(float(d["cap"]), m["amt"])
+			m["amt"] = float(m["amt"]) - take
+			m["res"] = int(m["res"]) - 1
+			r.carry = "낟알"
+			r.carry_amt = take
+		"manna_unres":
+			var m: Dictionary = d["m"]
+			m["res"] = int(m["res"]) - 1
+		"manna_put":
+			if r.carry_amt > 0.0:
+				v.manna_batches.append({"amt": r.carry_amt, "born": float(d["born"])})
+			r.carry = ""
+			r.carry_amt = 0.0
+		"manna_undo":
+			if r.carry_amt > 0.0:
+				v.manna_batches.append({"amt": r.carry_amt, "born": float(d["born"])})
+		"build":
+			var b: Building = d["b"]
+			if not b.is_site():
+				return
+			b.prog += float(d["chunk"]) * v.build_mult(b)        # 들어준 소원 ×1.5 (기획서 6.7)
+			if b.prog >= float(Balance.B[b.site_type()]["time"]):
+				v.on_built(b)
+				v.speak(r, "%s 완성!" % b.type, 5)
+		_:
+			push_error("ResidentAI.run_op: 모르는 할 일 %s" % n)
+
+
 static func near(v: Village, x: float, y: float, r := 1.2) -> Vector2:
 	var a := v.rng.randf() * TAU
 	return Vector2(x + cos(a) * r, y + sin(a) * r)
 
 
 ## 하던 일을 그만둔다 — 들고 있던 짐·예약은 되돌린다 (죽음 등)
-static func cancel(r: Resident) -> void:
+static func cancel(v: Village, r: Resident) -> void:
 	for s: Dictionary in r.steps:
 		if s.get("cancel") != null:
-			(s["cancel"] as Callable).call()
+			run_op(v, r, s["cancel"])
 	r.steps.clear()
 	r.carry = ""
 	r.carry_amt = 0.0
@@ -75,7 +189,7 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				used = need
 				r.steps.pop_front()
 				if s["done"] != null:
-					(s["done"] as Callable).call()
+					run_op(v, r, s["done"])
 			else:
 				s["left"] = float(s["left"]) - left * speed
 				used = left
@@ -261,12 +375,8 @@ static func _explore(v: Village, r: Resident) -> bool:
 	v.explorer = r.id
 	v.stats["explore"] = int(v.stats.get("explore", 0)) + 1
 	r.doing = "안개 너머를 살피러 가는 중"
-	var clear := func() -> void:
-		if v.explorer == r.id:
-			v.explorer = -1
-	var look := func() -> void:
-		r.doing = "집으로 돌아가는 중"
-		v._reveal_at(Vector2(r.x, r.y), WorldCfg.REVEAL_LOOK, r, true)
+	var clear := op("explore_clear")
+	var look := op("explore_look")
 	r.steps.append(walk(p.x, p.y))
 	r.steps.append(act(WorldCfg.EXPLORE_LOOK_TIME, "idle", look, false, clear))
 	var hp := near(v, v.fire.x, v.fire.y, 2.5)
@@ -375,7 +485,7 @@ static func _eat(v: Village, r: Resident, h: float) -> bool:
 	var p := near(v, v.fire.x, v.fire.y, 1.8)
 	r.doing = "밥 먹는 중"
 	r.steps.append(walk(p.x, p.y))
-	r.steps.append(act(Balance.MEAL_TIME * 0.5, "eat", func() -> void: r.meal_done = mk))
+	r.steps.append(act(Balance.MEAL_TIME * 0.5, "eat", op("meal", {"mk": mk})))
 	return true
 
 
@@ -383,7 +493,7 @@ static func _pray(v: Village, r: Resident) -> bool:
 	r.doing = "기도하는 중"
 	var p := near(v, v.fire.x, v.fire.y, 2.2)
 	r.steps.append(walk(p.x, p.y))
-	r.steps.append(act(600.0, "pray", func() -> void: r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER)))
+	r.steps.append(act(600.0, "pray", op("pray")))
 	if v.rng.randf() < 0.35:
 		v.speak(r, Balance.LINES_PRAY[v.rng.randi() % Balance.LINES_PRAY.size()], 6)
 	return true
@@ -428,7 +538,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 				var take := minf(4.0, floorf(b.out[k]))
 				b.out[k] = float(b.out[k]) - take
 				r.doing = "%s 나르는 중" % k
-				var put := func() -> void: v.stock[k] = float(v.stock.get(k, 0.0)) + take
+				var put := op("stock_add", {"k": k, "amt": take})
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
 	r.doing = "%s에서 일하는 중" % b.type
@@ -439,13 +549,8 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 			r.steps.append(act(120.0, "idle"))
 			return true
 		tr["res"] = 1
-		var chop := func() -> void:
-			tr["s"] = "stump"
-			tr["g"] = Balance.TREE_REGROW / (0.6 + v.wetness(tr["x"], tr["y"]))
-			tr["res"] = 0
-			r.carry = "통나무"
-			r.carry_amt = 1.0
-		var unres := func() -> void: tr["res"] = 0
+		var chop := op("chop", {"tr": tr})
+		var unres := op("unres", {"q": tr})
 		r.steps.append(walk(tr["x"] + 0.4, tr["y"] + 0.2))
 		r.steps.append(act(d["chop"], "work", chop, true, unres))
 		_drop_at_store(v, r, s, "통나무", 1.0)
@@ -458,7 +563,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 			r.steps.append(act(45.0, "idle"))
 			return true
 		r.steps.append(walk(sp.x, sp.y))
-		var plant := func() -> void: v.trees.append({"x": sp.x, "y": sp.y, "s": "sapling", "g": 3.0 * Balance.HOUR, "res": 0})
+		var plant := op("plant", {"x": sp.x, "y": sp.y})
 		r.steps.append(act(d["plant"], "work", plant, true))
 		return true
 	if b.type == "채석장":
@@ -468,12 +573,8 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 			r.steps.append(act(120.0, "idle"))
 			return true
 		rk["res"] = 1
-		var dig := func() -> void:
-			rk["amt"] = int(rk["amt"]) - 1
-			rk["res"] = 0
-			r.carry = "돌"
-			r.carry_amt = 1.0
-		var unres := func() -> void: rk["res"] = 0
+		var dig := op("dig", {"rk": rk})
+		var unres := op("unres", {"q": rk})
 		r.steps.append(walk(rk["x"] + 0.6, rk["y"] + 0.4))
 		r.steps.append(act(d["dig"], "work", dig, true, unres))
 		_drop_at_store(v, r, s, "돌", 1.0)
@@ -501,14 +602,9 @@ static func _nearest(list: Array, c: Vector2, ok: Callable) -> Dictionary:
 
 
 ## 짐 나르기 걸음: from에서 집어 to에 내려놓음. drop = 내려놓을 때, undo = 도중에 그만두면 (짐을 되돌림)
-static func _carry_steps(v: Village, r: Resident, from: Vector2, to: Vector2, item: String, amt: float, drop: Callable, undo: Callable) -> void:
-	var pick := func() -> void:
-		r.carry = item
-		r.carry_amt = amt
-	var put := func() -> void:
-		drop.call()
-		r.carry = ""
-		r.carry_amt = 0.0
+static func _carry_steps(v: Village, r: Resident, from: Vector2, to: Vector2, item: String, amt: float, drop: Dictionary, undo: Dictionary) -> void:
+	var pick := op("pick", {"item": item, "amt": amt})
+	var put := op("put", {"drop": drop})
 	r.steps.append(walk(from.x, from.y))
 	r.steps.append(act(3.0, "idle", pick))
 	r.steps.append(walk(to.x, to.y))
@@ -517,11 +613,8 @@ static func _carry_steps(v: Village, r: Resident, from: Vector2, to: Vector2, it
 
 ## 채집한 것(손에 든 것)을 창고에 내려놓는 걸음
 static func _drop_at_store(v: Village, r: Resident, s: Building, item: String, amt: float) -> void:
-	var put := func() -> void:
-		v.stock[item] = float(v.stock.get(item, 0.0)) + amt
-		r.carry = ""
-		r.carry_amt = 0.0
-	var undo := func() -> void: v.stock[item] = float(v.stock.get(item, 0.0)) + amt
+	var put := op("store_put", {"k": item, "amt": amt})
+	var undo := op("stock_add", {"k": item, "amt": amt})
 	r.steps.append(walk(s.x + 0.8, s.y + 0.6))
 	r.steps.append(act(4.0, "idle", put, false, undo))
 
@@ -560,7 +653,7 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var take := minf(cap, floorf(n))
 				b.out[k] = n - take
 				r.doing = "%s 나르는 중" % k
-				var put := func() -> void: v.stock[k] = float(v.stock.get(k, 0.0)) + take
+				var put := op("stock_add", {"k": k, "amt": take})
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
 	# ② 건설 현장 ← 창고 자재 (들어준 소원의 터 먼저)
@@ -577,12 +670,8 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				v.stock[k] = float(v.stock[k]) - take
 				b.incoming[k] = int(b.incoming[k]) + take
 				r.doing = "%s 터로 %s 나르는 중" % [b.site_type(), k]
-				var put := func() -> void:
-					b.incoming[k] = int(b.incoming[k]) - take
-					b.delivered[k] = int(b.delivered[k]) + take
-				var undo := func() -> void:
-					b.incoming[k] = int(b.incoming[k]) - take
-					v.stock[k] = float(v.stock[k]) + take
+				var put := op("site_put", {"b": b, "k": k, "amt": take})
+				var undo := op("site_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
 	# ③ 가공 건물 ← 창고 재료
@@ -596,12 +685,8 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				v.stock[k] = float(v.stock[k]) - take
 				b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
 				r.doing = "%s에 %s 나르는 중" % [b.type, k]
-				var put := func() -> void:
-					b.in_inc[k] = float(b.in_inc[k]) - take
-					b.in_buf[k] = float(b.in_buf.get(k, 0.0)) + take
-				var undo := func() -> void:
-					b.in_inc[k] = float(b.in_inc[k]) - take
-					v.stock[k] = float(v.stock[k]) + take
+				var put := op("inbuf_put", {"b": b, "k": k, "amt": take})
+				var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
 	# ④ 집 ← 창고 통나무 (땔감 — HEALTH.md 1.3, 추운 철에만). 가장 모자란 집부터
@@ -620,12 +705,8 @@ static func haul_task(v: Village, r: Resident) -> bool:
 			v.stock[k] = float(v.stock[k]) - take
 			b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
 			r.doing = "땔감 나르는 중"
-			var put := func() -> void:
-				b.in_inc[k] = float(b.in_inc[k]) - take
-				b.in_buf[k] = float(b.in_buf.get(k, 0.0)) + take
-			var undo := func() -> void:
-				b.in_inc[k] = float(b.in_inc[k]) - take
-				v.stock[k] = float(v.stock[k]) + take
+			var put := op("inbuf_put", {"b": b, "k": k, "amt": take})
+			var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take})
 			_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 			return true
 	return false
@@ -640,21 +721,10 @@ static func haul_manna_task(v: Village, r: Resident) -> bool:
 	r.doing = "하늘 낟알을 줍는 중"
 	var cap := 8.0 if r.is_child() else 20.0
 	var born: float = m["born"]
-	var pick := func() -> void:
-		var take := minf(cap, m["amt"])
-		m["amt"] = float(m["amt"]) - take
-		m["res"] = int(m["res"]) - 1
-		r.carry = "낟알"
-		r.carry_amt = take
-	var unres := func() -> void: m["res"] = int(m["res"]) - 1
-	var put := func() -> void:
-		if r.carry_amt > 0.0:
-			v.manna_batches.append({"amt": r.carry_amt, "born": born})
-		r.carry = ""
-		r.carry_amt = 0.0
-	var undo := func() -> void:
-		if r.carry_amt > 0.0:
-			v.manna_batches.append({"amt": r.carry_amt, "born": born})
+	var pick := op("manna_pick", {"m": m, "cap": cap})
+	var unres := op("manna_unres", {"m": m})
+	var put := op("manna_put", {"born": born})
+	var undo := op("manna_undo", {"born": born})
 	r.steps.append(walk(m["x"], m["y"]))
 	r.steps.append(act(40.0, "work", pick, false, unres))
 	r.steps.append(walk(s.x + 0.6, s.y + 0.7))
@@ -684,13 +754,7 @@ static func build_task(v: Village, r: Resident) -> bool:
 		chunk = 1.0
 	r.doing = "%s 짓는 중" % b.site_type()
 	var sp := near(v, b.x, b.y, 0.8 + b.size() * 0.5)
-	var work := func() -> void:
-		if not b.is_site():
-			return
-		b.prog += chunk * v.build_mult(b)        # 들어준 소원 ×1.5 (기획서 6.7)
-		if b.prog >= float(Balance.B[b.site_type()]["time"]):
-			v.on_built(b)
-			v.speak(r, "%s 완성!" % b.type, 5)
+	var work := op("build", {"b": b, "chunk": chunk})
 	r.steps.append(walk(sp.x, sp.y))
 	r.steps.append(act(chunk, "work", work, true))
 	return true

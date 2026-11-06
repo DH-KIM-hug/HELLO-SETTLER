@@ -196,3 +196,15 @@ func is_injured() -> bool:
 
 func is_moving() -> bool:
 	return not steps.is_empty() and steps[0]["k"] == "walk"
+
+
+# ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────
+## 걸음(steps)은 마을이 따로 (붙잡은 건물·나무를 번호로 바꿔야 해서 — Village.to_dict)
+func to_dict() -> Dictionary:
+	return SaveCodec.props(self, ["steps"])
+
+
+static func from_dict(d: Dictionary) -> Resident:
+	var r := Resident.new()
+	SaveCodec.apply(r, d, ["steps"])
+	return r
