@@ -1,5 +1,5 @@
 ## B3 동물 3D 모델 (art/src/build_animals.py → art/models/animals/<종>.glb). tests/run.gd가 부름 (`-- animals` = 이것만, 몇 초).
-## 종마다 부품(몸·머리·다리·꼬리 …)이 glb에 모두 있는지 · 삼각형이 예산 안인지 (물고기 60, 나머지 150~400) ·
+## 종마다 부품(몸·머리·다리·꼬리 …)이 glb에 모두 있는지 · 삼각형이 예산 안인지 (v2: 물고기 120, 나머지 400~900) ·
 ## 크기가 주민과 맞는지 (토끼는 발목~정강이, 사슴 등은 어른 어깨 아래, 들소는 사람보다 큼 — 같은 모델 단위, 어른 키 약 1.9).
 extends RefCounted
 
@@ -75,12 +75,12 @@ func test_tri_budget() -> void:
 		for pn: String in p:
 			n += _tris(p[pn]["mesh"])
 		row.append("%s %d" % [k, n])
-		var lo := 20 if k.begins_with("fish") else 150
-		var hi := 60 if k.begins_with("fish") else 400
+		var lo := 40 if k.begins_with("fish") else 400
+		var hi := 120 if k.begins_with("fish") else 900
 		if n < lo or n > hi:
 			bad.append("%s %d (%d~%d)" % [k, n, lo, hi])
 	print("  삼각형: ", ", ".join(row))
-	check(bad.is_empty(), "삼각형 예산 (물고기 ≤ 60, 나머지 150~400) %s" % ("" if bad.is_empty() else str(bad)))
+	check(bad.is_empty(), "삼각형 예산 (물고기 ≤ 120, 나머지 400~900) %s" % ("" if bad.is_empty() else str(bad)))
 
 
 func test_scale() -> void:
