@@ -300,6 +300,7 @@ func _make_terrain() -> JarTerrain:
 	var t := JarTerrain.new(village.water)
 	t.paths = village.paths
 	t.path_n = Village.PATH_N
+	t.village = village                # 겉흙(숲·밭·바위·시대)·계절 (A13)
 	return t
 
 
@@ -366,6 +367,7 @@ func update_night() -> void:
 		night = minf(night, 1.0 - smoothstep(0.45, 1.0, clock.skip_progress))
 	post_mat.set_shader_parameter("night_amount", night)
 	glass.set_night(night)
+	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
 
 
 # ───────────────────────── 모델 줄 세우기 (부품 조합 확인용) ─────────────────────────
