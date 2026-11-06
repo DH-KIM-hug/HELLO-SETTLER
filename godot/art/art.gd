@@ -12,6 +12,7 @@ extends RefCounted
 const DIR := "res://art/models/"
 const CREASE_DEG := 24.0          # 이보다 덜 꺾인 모서리엔 선 없음
 const WELD := 1000.0              # 같은 자리 판정 (1/1000칸)
+const ANIMAL_FUR := "res://art/models/animal_fur.png"     # 동물 결 그림 묶음 (art/src/pack_animal_atlas.py)
 
 ## 땅 겉모습 덮개 (A13 준비, art/src/build_ground.py) — 땅 종류마다 변형 2~3개. 원점 = 조각 가운데 땅 위, 지름 약 1.2~1.4칸.
 ## 평평한 부분은 외곽선 없음. 아직 배치 안 함 — dev가 땅 종류별로 흩뿌릴 때 이 이름을 쓴다.
@@ -97,7 +98,8 @@ static func _rel_xf(n: Node3D, root: Node) -> Transform3D:
 	return xf
 
 
-## 몸 재질: 툰(꼭짓점 색) + 뒤집은 껍데기 외곽선
+## 몸 재질: 툰(꼭짓점 색) + 뒤집은 껍데기 외곽선. 동물 v2의 털·깃털·비늘 결 그림(art/models/animal_fur.png)도 여기 —
+## 동물 꼭짓점만 UV에 표시가 있어 결을 입는다 (render/toon.gdshader). view/animal_view.gd는 이 재질을 그대로 쓴다.
 static func body_mat() -> ShaderMaterial:
 	if _body_mat == null:
 		var m := ShaderMaterial.new()
@@ -105,6 +107,8 @@ static func body_mat() -> ShaderMaterial:
 		m.set_shader_parameter("albedo", Color.WHITE)
 		Toon._light(m)
 		m.set_shader_parameter("view_fill", Style.VIEW_FILL)
+		if ResourceLoader.exists(ANIMAL_FUR):
+			m.set_shader_parameter("animal_tex", load(ANIMAL_FUR))
 		m.next_pass = hull_mat(true)
 		_body_mat = m
 	return _body_mat
@@ -173,6 +177,8 @@ class _Acc:
 	var pos := PackedVector3Array()
 	var nrm := PackedVector3Array()
 	var col := PackedColorArray()
+	var uv := PackedVector2Array()     # 동물 v2: 결 그림 자리 (UV.x ≥ 50 = 결 있음). 없는 메시는 0
+	var has_uv := false
 	var idx := PackedInt32Array()
 	var hull := PackedByteArray()      # 꼭짓점마다 껍데기 외곽선을 둘지 (0 = 없음)
 	var lpos := PackedVector3Array()
@@ -189,6 +195,9 @@ class _Acc:
 			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 			var n: PackedVector3Array = a[Mesh.ARRAY_NORMAL] if a[Mesh.ARRAY_NORMAL] != null else PackedVector3Array()
 			var c: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+			var t: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+			if not t.is_empty():
+				has_uv = true
 			var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
 			if ix.is_empty():
 				ix = PackedInt32Array(range(v.size()))
@@ -197,6 +206,7 @@ class _Acc:
 				pos.append(xf * v[i])
 				nrm.append((nb * n[i]).normalized() if not n.is_empty() else Vector3.UP)
 				col.append(c[i].linear_to_srgb() if not c.is_empty() else Color.WHITE)
+				uv.append(t[i] if not t.is_empty() else Vector2.ZERO)
 				hull.append(1 if with_hull else 0)
 			var first_tri := idx.size()
 			for i in ix:
@@ -298,6 +308,8 @@ class _Acc:
 		arr[Mesh.ARRAY_NORMAL] = nrm
 		arr[Mesh.ARRAY_COLOR] = col
 		arr[Mesh.ARRAY_CUSTOM0] = cus
+		if has_uv:
+			arr[Mesh.ARRAY_TEX_UV] = uv
 		arr[Mesh.ARRAY_INDEX] = idx
 		var fmt := Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 		var body := ArrayMesh.new()

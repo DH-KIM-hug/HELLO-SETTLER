@@ -1,0 +1,8 @@
+file,model,size,date,style_ref,subject
+src/fur_short.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"short soft animal fur: tiny dense parallel hair strokes flowing downward"
+src/fur_long.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"long shaggy coat: wavy overlapping locks flowing downward"
+src/wool_curls.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"fluffy sheep wool: dense round curl puffs"
+src/feathers.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"soft body feathers in offset shingle rows"
+src/scales.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"small overlapping fish scales with lighter rims"
+src/hide_patches.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"smooth hide: fine hair with soft blotchy patches"
+src/horn_ridges.png,codex-cli 0.163.0 (built-in image generation),1254x1254,2026-11-07,characters/textures/src/hair_straight.png (style only),"horn surface: wavy horizontal growth-ring ridges"

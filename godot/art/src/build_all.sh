@@ -15,5 +15,6 @@ for s in buildings village ground water nature residents animals giants mold ite
     | grep -E "^  |->|Error|Traceback|rror:" || true
 done
 if [ -z "$1" ] || [ "$1" = "residents" ]; then python3 "$HERE/paint_face_atlas.py" "$OUT/resident_face.png"; python3 "$HERE/pack_detail_atlas.py" "$OUT"; fi   # 주민 얼굴 · 결 그림 묶음 (Pillow)
+if [ -z "$1" ] || [ "$1" = "animals" ]; then python3 "$HERE/pack_animal_atlas.py" "$OUT"; fi   # 동물 털·깃털·비늘 결 그림 묶음 (Pillow)
 ls -1 "$OUT"/*.glb "$OUT"/room/*.glb "$OUT"/animals/*.glb | wc -l | xargs echo "glb files:"
 du -ch "$OUT"/*.glb "$OUT"/room/*.glb "$OUT"/animals/*.glb | tail -1

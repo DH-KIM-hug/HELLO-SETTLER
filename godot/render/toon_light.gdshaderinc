@@ -9,11 +9,21 @@ uniform vec3 lit_tint : source_color = vec3(1.0);
 uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float lit_threshold = 0.08;
 uniform float view_fill = 0.0;
+// TOON_WARM (toon.gdshader만): 손그림 결이 있는 동물 털은 그늘을 따뜻한 회색 쪽으로 (주민 머리카락과 같은 규칙 — 흰 양이 파랗지 않게).
+#ifdef TOON_WARM
+uniform vec3 warm_shade_tint : source_color = vec3(0.74, 0.69, 0.68);
+varying float warm_shade;
+#endif
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
 	float ndl_f = view_fill > 0.0 ? dot(NORMAL, normalize(LIGHT + VIEW * view_fill)) : ndl;
 	float shadow = (view_fill > 0.0 && ndl <= 0.3) ? 1.0 : step(0.5, ATTENUATION);
 	float lit = step(lit_threshold, ndl_f) * shadow;
-	DIFFUSE_LIGHT += mix(shade_tint, lit_tint, lit);
+#ifdef TOON_WARM
+	vec3 sh = mix(shade_tint, warm_shade_tint, warm_shade);
+#else
+	vec3 sh = shade_tint;
+#endif
+	DIFFUSE_LIGHT += mix(sh, lit_tint, lit);
 }

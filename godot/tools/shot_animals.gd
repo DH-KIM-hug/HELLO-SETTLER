@@ -1,7 +1,7 @@
 ## B3 동물 3D 모델 캡처 (art/src/build_animals.py → art/models/animals/*.glb). 게임 카메라 (48°) · 어른 주민과 크기 비교.
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_animals.gd -- <모드> [접미사]
-##   lineup : 모든 종 한 줄씩 (위: 들짐승 · 아래: 가축) + 줄 끝에 어른 주민 → godot_shots/animals_lineup<접미사>.png
-##   close  : 몇 종 가까이 (걷는 자세 = 부품 따로 움직이는지 확인)       → godot_shots/animals_close<접미사>.png
+##   lineup : 모든 종 한 줄씩 (위: 들짐승 · 아래: 가축) + 줄 끝에 어른 주민 → godot_shots/animals_v2_lineup<접미사>.png
+##   close  : 몇 종 가까이 (걷는 자세 = 부품 따로 움직이는지 확인)       → godot_shots/animals_v2_close<접미사>.png
 ## 동물 = 부품마다 MeshInstance3D (Art.parts, 재질 Art.body_mat + 선), 크기 = 모델 × Style.RESIDENT_SCALE (주민과 같은 단위).
 extends SceneTree
 
@@ -184,13 +184,14 @@ func _close() -> void:
 	var top := ["rabbit", "fawn", "deer", "wolf", "boar"]
 	var low := ["chicken", "puppy", "pig", "sheep", "dog"]
 	for i in top.size():
-		var j := _animal(top[i], _at((i - 2.0) * 0.62, 0.38), -1.25 + 0.2 * i)
+		var j := _animal(top[i], _at((i - 2.0) * 0.62 - 0.2, 0.38), -1.25 + 0.2 * i)
 		if i % 2 == 1:
 			_walk(j, 0.25)
 	for i in low.size():
-		var j := _animal(low[i], _at((i - 2.0) * 0.62, -0.42), -0.7 - 0.15 * i)
+		var j := _animal(low[i], _at((i - 2.0) * 0.62 - 0.2, -0.42), -0.7 - 0.15 * i)
 		if i % 2 == 0:
 			_walk(j, 0.25)
+	_resident(_at(1.38, 0.0))                     # v4 주민 (크기·그림체 비교)
 
 
 func _process(_d: float) -> bool:
@@ -201,7 +202,7 @@ func _process(_d: float) -> bool:
 	if frame < 14:
 		return false
 	var img := vp.get_texture().get_image()
-	var name := "animals_" + mode + suffix
+	var name := "animals_v2_" + mode + suffix
 	img.save_png(out_dir.path_join(name + ".png"))
 	print("saved ", name, " ", img.get_size())
 	return true

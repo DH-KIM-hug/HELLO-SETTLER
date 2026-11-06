@@ -10,8 +10,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 2.016,
-  "tris": 398
+  "top": 2.055,
+  "tris": 884
  },
  "boar": {
   "kind": "wild",
@@ -25,7 +25,7 @@
    "tail"
   ],
   "top": 0.746,
-  "tris": 392
+  "tris": 876
  },
  "chicken": {
   "kind": "domestic",
@@ -38,8 +38,8 @@
    "leg_r",
    "tail"
   ],
-  "top": 0.615,
-  "tris": 328
+  "top": 0.642,
+  "tris": 872
  },
  "cow": {
   "kind": "domestic",
@@ -52,8 +52,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 1.395,
-  "tris": 394
+  "top": 1.436,
+  "tris": 892
  },
  "deer": {
   "kind": "wild",
@@ -66,8 +66,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 1.666,
-  "tris": 390
+  "top": 1.732,
+  "tris": 866
  },
  "dog": {
   "kind": "domestic",
@@ -80,8 +80,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.8,
-  "tris": 348
+  "top": 0.835,
+  "tris": 790
  },
  "donkey": {
   "kind": "domestic",
@@ -94,8 +94,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 1.597,
-  "tris": 390
+  "top": 1.665,
+  "tris": 882
  },
  "fawn": {
   "kind": "wild",
@@ -108,8 +108,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.929,
-  "tris": 366
+  "top": 0.926,
+  "tris": 818
  },
  "fish_a": {
   "kind": "wild",
@@ -117,8 +117,8 @@
    "body",
    "tail"
   ],
-  "top": 0.11,
-  "tris": 46
+  "top": 0.115,
+  "tris": 106
  },
  "fish_b": {
   "kind": "wild",
@@ -126,8 +126,8 @@
    "body",
    "tail"
   ],
-  "top": 0.11,
-  "tris": 46
+  "top": 0.115,
+  "tris": 106
  },
  "pig": {
   "kind": "domestic",
@@ -140,8 +140,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.639,
-  "tris": 352
+  "top": 0.669,
+  "tris": 818
  },
  "puppy": {
   "kind": "domestic",
@@ -154,8 +154,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.466,
-  "tris": 348
+  "top": 0.471,
+  "tris": 790
  },
  "rabbit": {
   "kind": "wild",
@@ -168,8 +168,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.53,
-  "tris": 352
+  "top": 0.566,
+  "tris": 802
  },
  "sheep": {
   "kind": "domestic",
@@ -182,8 +182,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 0.86,
-  "tris": 328
+  "top": 0.91,
+  "tris": 898
  },
  "wild_sheep": {
   "kind": "wild",
@@ -196,8 +196,8 @@
    "leg_br",
    "tail"
   ],
-  "top": 1.063,
-  "tris": 372
+  "top": 1.081,
+  "tris": 886
  },
  "wolf": {
   "kind": "wild",
@@ -210,7 +210,7 @@
    "leg_br",
    "tail"
   ],
-  "top": 1.126,
-  "tris": 390
+  "top": 1.162,
+  "tris": 890
  }
 }
