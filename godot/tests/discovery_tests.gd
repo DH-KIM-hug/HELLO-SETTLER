@@ -167,13 +167,13 @@ func test_planting() -> void:
 	check(not Codex.knows(v, "planting") and not v.disc.has("low_t"), "나무가 절반 남으면 아직 (40%에서)")
 	cut.call(t0)
 	Discovery.planting_watch(v)
-	check(not Codex.knows(v, "planting") and v.disc.has("low_t"), "숲이 막 줄어든 때는 아직 (하루 넘게 줄어든 채여야)")
+	check(not Codex.knows(v, "planting") and v.disc.has("low_t"), "숲이 막 줄어든 때는 아직 (사흘 넘게 줄어든 채여야)")
 	var stump: Dictionary = v.trees.filter(func(tr: Dictionary) -> bool: return tr["s"] == "stump")[0]
 	for r in v.people:
 		r.x = float(stump["x"])
 		r.y = float(stump["y"])
 	var saps := v.trees.filter(func(tr: Dictionary) -> bool: return tr["s"] == "sapling").size()
-	v.disc["low_t"] = v.t - Balance.DAY - 1.0
+	v.disc["low_t"] = v.t - Discovery.PLANT_LOW_FOR - 1.0
 	Discovery.planting_watch(v)
 	check(Codex.knows(v, "planting") and credited(v, "planting"), "나무가 40%% 아래로 하루 → 씨앗을 심다 (%s)" % Codex.credit(row(v, "planting")))
 	check(has_line(v, "그루터기 옆에 도토리를 묻었다"), "연대기: 도토리")
