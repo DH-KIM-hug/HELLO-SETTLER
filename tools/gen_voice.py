@@ -4,7 +4,7 @@
   export ELEVENLABS_API_KEY=...            # 유료(상업 이용 가능) 요금제 키
   python3 tools/gen_voice.py --voices girl=<voice_id> boy=<voice_id> ...   # 6개 목소리 id
   python3 tools/gen_voice.py --dry          # 만들 목록만 출력
-결과: godot/audio/voice/<line>_<voice>_<n>.ogg  (원본 mp3 → ffmpeg로 피치 +4반음·속도 1.08·ogg)
+결과: godot/audio/voice/<line>_<voice>_<n>.mp3  (원본 → ffmpeg로 피치 +4반음·속도 1.08)
 """
 import argparse, json, os, subprocess, sys, urllib.request
 
@@ -12,7 +12,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LINES = os.path.join(ROOT, "design", "voice", "lines.json")
 OUT = os.path.join(ROOT, "godot", "audio", "voice")
 API = "https://api.elevenlabs.io/v1/text-to-speech/{vid}?output_format=mp3_44100_128"
-MODEL = "eleven_multilingual_v2"
+MODEL = "eleven_v3"
+KEY_FILE = os.path.expanduser("~/.config/elevenlabs/key")   # 저장소에 두지 않음 (팥죽 게임과 같은 키)
+DEFAULT_VOICES = {   # 2026-11-06 고름 (creator 요금제 — 상업 이용 가능)
+    "girl": "MIl0Flub6Sc9KSkX2A42",       # baby_Mithi — childlike, bright
+    "boy": "XjGYkUkzth8BPs29fmcV",        # baby_Teddy — playful little boy
+    "woman": "cVd39cx0VtXNC13y5Y7z",      # Hope - The Storyteller — warm, gentle
+    "man": "iP95p4xoKVk53GoZ742B",        # Chris - Charming, Down-to-Earth (premade)
+    "old_woman": "wGcFBfKz5yUQqhqr0mVy",  # Maria — octogenarian, graceful
+    "old_man": "NOpBlnGInO9m6vDvFkFC",    # Grandpa Spuds Oxley — friendly grandpa
+}
 
 
 def tts(key, vid, text, path):
@@ -30,7 +39,7 @@ def tiny(src, dst):
     af = (f"asetrate=44100*{rate:.4f},aresample=44100,atempo={1.08 / rate:.4f},"
           "silenceremove=start_periods=1:start_threshold=-45dB,areverse,"
           "silenceremove=start_periods=1:start_threshold=-45dB,areverse,loudnorm=I=-16")
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-af", af, "-c:a", "libvorbis", "-q:a", "5", dst], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", src, "-af", af, "-c:a", "libmp3lame", "-q:a", "4", dst], check=True)
 
 
 def main():
@@ -39,14 +48,14 @@ def main():
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
     data = json.load(open(LINES))
-    vids = dict(v.split("=", 1) for v in a.voices)
+    vids = {**DEFAULT_VOICES, **dict(v.split("=", 1) for v in a.voices)}
     jobs = [(ln["id"], v, i, t) for ln in data["lines"] for v in ln["voices"] for i, t in enumerate(ln["texts"])]
     print(f"{len(jobs)}개 줄")
     if a.dry:
         for j in jobs:
             print(*j)
         return
-    key = os.environ.get("ELEVENLABS_API_KEY")
+    key = os.environ.get("ELEVENLABS_API_KEY") or (open(KEY_FILE).read().strip() if os.path.exists(KEY_FILE) else None)
     if not key:
         sys.exit("ELEVENLABS_API_KEY가 없습니다")
     missing = sorted({v for _, v, _, _ in jobs} - set(vids))
@@ -54,10 +63,10 @@ def main():
         sys.exit("목소리 id가 없습니다: " + ", ".join(missing))
     os.makedirs(OUT, exist_ok=True)
     for lid, v, i, t in jobs:
-        dst = os.path.join(OUT, f"{lid}_{v}_{i}.ogg")
+        dst = os.path.join(OUT, f"{lid}_{v}_{i}.mp3")
         if os.path.exists(dst):
             continue
-        tmp = dst[:-4] + ".mp3"
+        tmp = dst[:-4] + ".raw.mp3"
         tts(key, vids[v], t, tmp)
         tiny(tmp, dst)
         os.remove(tmp)
