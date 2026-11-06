@@ -439,6 +439,23 @@ func _children_of(p: Resident) -> Array[Resident]:
 	return out
 
 
+## 형제자매 — 부모를 하나라도 같이하는 사람 (본인 빼고, 태어난 순)
+func _siblings_of(p: Resident) -> Array[Resident]:
+	var out: Array[Resident] = []
+	if p.parents.is_empty():
+		return out
+	for id: int in _index:
+		var q: Resident = _index[id]
+		if q.id == p.id:
+			continue
+		for pid in q.parents:
+			if pid in p.parents:
+				out.append(q)
+				break
+	out.sort_custom(func(a: Resident, b: Resident) -> bool: return a.born_t < b.born_t)
+	return out
+
+
 func _partner_of(p: Resident, kids: Array[Resident]) -> Resident:
 	if p.partner >= 0:
 		var q := find(p.partner)
@@ -458,7 +475,8 @@ func _fill_tree() -> void:
 	var gp: Array = _parents_of(pa[0]) + _parents_of(pa[1])
 	var kids := _children_of(r)
 	var mate := _partner_of(r, kids)
-	var people: Array = gp + pa + [r, mate] + kids
+	var sibs := _siblings_of(r)
+	var people: Array = gp + pa + [r, mate] + sibs + kids
 	var sig := ""
 	for q: Variant in people:
 		sig += ("%d%s%s;" % [q.id, "d" if q.dead else "", ",".join(q.blood)]) if q != null else "-;"
@@ -487,6 +505,13 @@ func _fill_tree() -> void:
 	me.add_child(_node(r, w, true))
 	if mate != null:
 		me.add_child(_node(mate, w))
+	if not sibs.is_empty():
+		_label(tree_box, "형제자매 %d" % sibs.size(), "Small")
+		var srow: HBoxContainer = null
+		for i in sibs.size():
+			if i % 4 == 0:
+				srow = _row()
+			srow.add_child(_node(sibs[i], w))
 	if not kids.is_empty():
 		_label(tree_box, "자녀 %d" % kids.size(), "Small")
 		var row: HBoxContainer = null
