@@ -54,6 +54,7 @@ func show_resident(r: Resident) -> void:
 	_dead = r.dead
 	modulate = UiTheme.DEAD_TINT if _dead else Color.WHITE
 	if model != null and key == _key and r.id == _rid:
+		model.set_face(ResidentModel.face_of(r))
 		return
 	_key = key
 	_rid = r.id
@@ -64,6 +65,7 @@ func show_resident(r: Resident) -> void:
 	var lk := ResidentModel.look_of(r)
 	model.build_look(lk)
 	model.rotation.y = 0.28                  # 거의 정면 (살짝 비스듬히)
+	model.set_face(ResidentModel.face_of(r))
 	model.set_anim("idle")
 	model.tick(0.0)
 	_frame()
