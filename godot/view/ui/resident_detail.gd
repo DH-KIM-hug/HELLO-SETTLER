@@ -232,6 +232,8 @@ func open(p: Resident) -> void:
 		scroll.scroll_vertical = 0
 	if following and (other or p.dead):
 		set_following(false)
+	if not visible:
+		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	_refresh()
 
@@ -239,6 +241,8 @@ func open(p: Resident) -> void:
 func close() -> void:
 	if following:
 		set_following(false)
+	if visible:
+		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
 	r = null
 	closed.emit()

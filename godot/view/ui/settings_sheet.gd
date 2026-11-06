@@ -1,5 +1,5 @@
 ## 설정 · 문의 — docs/UI.md 화면 10 + "10 문의하기 (v1)". 위 띠 오른쪽 끝 톱니(⚙)로 연다.
-## 한 장짜리 시트 두 쪽: [설정] 소리(음악·효과음) · 진동 · 언어(한국어만, 보여 주기만) · 알림 → user://settings.cfg (GameSettings)
+## 한 장짜리 시트 두 쪽: [설정] 소리(음악·효과음·목소리) · 진동 · 언어(한국어만, 보여 주기만) · 알림 → user://settings.cfg (GameSettings)
 ##                       + [문의하기] + 작은 크레딧(audio/LICENSES.csv — 비어 있으면 안 보임)
 ##                      [문의하기] 종류 하나 고르기(버그·멈춤 / 결제 / 제안 / 그 밖) · 안내 한 줄 · 받는 주소 + [복사] · [메일 쓰기](이끼 초록)
 ## 세로 화면 = 아래 시트, 가로 창 = 오른쪽 패널. 색·글꼴은 view/ui/ui_theme.gd. 빨간 점·배지 없음.
@@ -106,6 +106,7 @@ func _build_settings(body: VBoxContainer) -> void:
 	_section(body, "소리")
 	_toggle_row(body, "music", "음악")
 	_toggle_row(body, "sfx", "효과음")
+	_toggle_row(body, "voice", "목소리")
 	_section(body, "기기")
 	_toggle_row(body, "vibration", "진동")
 	_toggle_row(body, "notify", "알림")
@@ -196,6 +197,7 @@ func _toggle_row(parent: Node, key: String, text: String) -> void:
 	var b := _button(row, "", false)
 	b.custom_minimum_size.x = 84
 	b.pressed.connect(func() -> void:
+		GameAudio.ui_click()
 		settings.set(key, not bool(settings.get(key)))
 		settings.save()
 		settings.apply()
@@ -239,12 +241,16 @@ func _layout() -> void:
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
 func open() -> void:
+	if not visible:
+		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	show_page("settings")
 	_layout()
 
 
 func close() -> void:
+	if visible:
+		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
 	toast.visible = false
 	closed.emit()
@@ -322,6 +328,8 @@ static func credits_text(p := LICENSES) -> String:
 	var head := f.get_csv_line()
 	var ti := head.find("title")
 	var ai := head.find("author")
+	var ui := head.find("pixabay_url")
+	var pixabay := false
 	var out := PackedStringArray()
 	while not f.eof_reached():
 		var row := f.get_csv_line()
@@ -332,6 +340,8 @@ static func credits_text(p := LICENSES) -> String:
 		if t == "" and a == "":
 			continue
 		out.append("%s — %s" % [t, a] if a != "" else t)
+		if ui >= 0 and row.size() > ui and "pixabay" in row[ui].to_lower():
+			pixabay = true
 	if out.is_empty():
 		return ""
-	return "소리: " + " · ".join(out) + " (Pixabay)"
+	return "소리: " + " · ".join(out) + (" (Pixabay)" if pixabay else "")

@@ -107,4 +107,5 @@ func test_credits() -> void:
 	f.close()
 	var c := SettingsSheet.credits_text(TMP_CSV)
 	check(c == "소리: Soft Rain — Kim (Pixabay)", "크레딧 한 줄 (%s)" % c)
-	check(SettingsSheet.credits_text("res://audio/LICENSES.csv") == "", "지금 audio/LICENSES.csv는 비어 있음 → 안 보임")
+	var real := SettingsSheet.credits_text("res://audio/LICENSES.csv")
+	check("ElevenLabs" in real and "(Pixabay)" not in real, "지금 audio/LICENSES.csv = ElevenLabs 음악·목소리·효과음 (픽사베이 표시 없음)")

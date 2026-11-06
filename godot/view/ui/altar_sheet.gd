@@ -191,6 +191,8 @@ func _layout() -> void:
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
 func open() -> void:
+	if not visible:
+		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	_sig = ""
 	scroll.scroll_vertical = 0
@@ -198,6 +200,8 @@ func open() -> void:
 
 
 func close() -> void:
+	if visible:
+		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
 	force_open = false
 	closed.emit()
@@ -297,17 +301,23 @@ static func _num(v: float) -> String:
 
 # ───────────────────────── 누르기 ─────────────────────────
 func _on_take(item: String) -> void:
-	village.take_offering(item)
+	if village.take_offering(item) > 0.0:
+		GameAudio.fx("coins")                  # 지폐 받기 (짤랑) + "고맙습니다!" (AUDIO.md 3 · 7)
+		GameAudio.say("offering_taken")
 	_refresh()
 
 
 func _on_take_all() -> void:
-	village.take_all()
+	if village.take_all() > 0.0:
+		GameAudio.fx("coins")
+		GameAudio.say("offering_taken")
 	_refresh()
 
 
 func _on_grant(id: int) -> void:
-	village.grant_wish(id)
+	if village.grant_wish(id):
+		GameAudio.fx("chime")                  # 소원 들어줌 (맑은 차임)
+		GameAudio.say("wish_granted")
 	_refresh()
 
 
@@ -325,10 +335,15 @@ func _on_split(_id: int) -> void:
 func _on_buy(type: String) -> void:
 	var b := village.buy_building(type)
 	if b != null:
+		GameAudio.fx("drop_thud")              # 하늘에서 내려온 건물 (쿵 — 작게) + 진동 + "기적이다!"
+		GameAudio.buzz()
+		GameAudio.say("miracle")
 		bought.emit(b)
 	_refresh()
 
 
 func _on_force(item: String, n: int) -> void:
-	village.force_take(item, n)
+	if village.force_take(item, n) > 0.0:
+		GameAudio.fx("coins", "Room", -6.0)
+		GameAudio.say("forced_take")
 	_refresh()

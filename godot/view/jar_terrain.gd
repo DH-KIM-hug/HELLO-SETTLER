@@ -6,6 +6,8 @@
 class_name JarTerrain
 extends Node3D
 
+signal drop_landed(pos: Vector3)      # 물방울이 수면에 닿음 (세계 좌표 — 소리용)
+
 const R := JarWater.R
 const N := JarWater.N
 const CELL := JarWater.CELL
@@ -87,6 +89,10 @@ func animate(dt: float) -> void:
 			continue
 		var f := fmod(_anim_t * float(d["speed"]) + float(d["phase"]), 1.0)
 		var nd := d["node"] as Node3D
+		if d.has("drip"):              # 물방울이 수면에 닿음 → 소리 (AUDIO.md 3 '물방울 똑')
+			if f < float(d["f"]):
+				drop_landed.emit(nd.global_position)
+			d["f"] = f
 		if d.has("ring"):              # 수면의 동심원: 물방울이 닿은 뒤 퍼진다
 			nd.scale = Vector3(1.0, 0.05, 1.0) * lerpf(0.2, 1.2, f)
 			nd.visible = f < 0.85
@@ -375,7 +381,7 @@ func _build_marks() -> void:
 		var fn := _add(fall, drop_mat, Vector3(x, LID_Y, z))
 		var surf := (sim.h[JarWater.cell_idx(x, z)] + sim.w[JarWater.cell_idx(x, z)]) * HS
 		var phase := randf()
-		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.7})
+		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.7, "drip": true, "f": 0.0})
 		for r in 2:
 			var tm := TorusMesh.new()
 			tm.inner_radius = 0.94

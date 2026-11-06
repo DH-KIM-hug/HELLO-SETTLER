@@ -1,6 +1,7 @@
 ## 설정 값 — docs/UI.md 화면 10 (소리: 음악·효과음 따로 · 진동 · 언어 · 알림). user://settings.cfg에 저장.
 ## 쓰는 법: GameSettings.get_current() (처음 부르면 파일에서 읽음) → 값 바꾸고 save() → apply().
-## 소리 버스는 "Music"·"SFX"가 있으면 그 버스를 끄고 켠다 (지금은 소리가 아직 없음 — 버스가 생기면 그대로 먹음).
+## 소리 버스: 음악 → "Music", 효과음 → "SFX", 목소리 → "Voice" (Voice는 SFX를 거쳐 나가므로 효과음을 끄면 목소리도 꺼짐 — AUDIO.md 7).
+## 버스는 GameAudio.ensure_buses()가 만든다 (view/audio_manager.gd).
 class_name GameSettings
 extends RefCounted
 
@@ -11,6 +12,7 @@ static var _cur: GameSettings
 
 var music := true
 var sfx := true
+var voice := true                       # 주민 목소리 (AUDIO.md 7)
 var vibration := true
 var language := "ko"
 var notify := true
@@ -29,6 +31,7 @@ static func load_from(p: String) -> GameSettings:
 		return s
 	s.music = bool(cf.get_value("sound", "music", s.music))
 	s.sfx = bool(cf.get_value("sound", "sfx", s.sfx))
+	s.voice = bool(cf.get_value("sound", "voice", s.voice))
 	s.vibration = bool(cf.get_value("device", "vibration", s.vibration))
 	s.notify = bool(cf.get_value("device", "notify", s.notify))
 	var lang := str(cf.get_value("general", "language", s.language))
@@ -40,6 +43,7 @@ func save(p := "") -> Error:
 	var cf := ConfigFile.new()
 	cf.set_value("sound", "music", music)
 	cf.set_value("sound", "sfx", sfx)
+	cf.set_value("sound", "voice", voice)
 	cf.set_value("device", "vibration", vibration)
 	cf.set_value("device", "notify", notify)
 	cf.set_value("general", "language", language)
@@ -47,7 +51,8 @@ func save(p := "") -> Error:
 
 
 func apply() -> void:
-	for pair: Array in [["Music", music], ["SFX", sfx]]:
+	GameAudio.ensure_buses()
+	for pair: Array in [["Music", music], ["SFX", sfx], ["Voice", voice]]:
 		var i := AudioServer.get_bus_index(pair[0])
 		if i >= 0:
 			AudioServer.set_bus_mute(i, not pair[1])

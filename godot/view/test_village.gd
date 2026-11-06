@@ -86,6 +86,7 @@ func _ready() -> void:
 	post_mat = OutlinePost.attach(cam.camera)
 	_setup_ui()
 	_after_ready()
+	_attach_audio()
 
 
 # ── (6단계) 넓은 세상 장면(view/world_village.gd)이 바꿔 끼우는 곳 — 소형 병은 아래 그대로 ──
@@ -147,6 +148,7 @@ func _process(dt: float) -> void:
 	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]
 	_gear_hold(dt)
 	_update_ui()
+	_update_audio()
 
 
 ## 밤 색 조정 (RENDERING v2 2.3 '밤 = 남색'): 시각으로 정하고, 밤 건너뛰기 중엔 진행도에 따라 하늘이 밝아짐
@@ -293,7 +295,7 @@ func _setup_ui() -> void:
 	dev_bar.add_theme_constant_override("v_separation", 4)
 	stack.add_child(dev_bar)
 	for spec: Array in [["+1일", func() -> void: advance(Balance.DAY)],
-			["병 돌리기", func() -> void: village.rotate_jar(); refresh()],
+			["병 돌리기", func() -> void: village.rotate_jar(); GameAudio.fx("jar_turn"); refresh()],
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
@@ -349,6 +351,7 @@ func _bar_button(parent: Node, text: String, on_press: Callable) -> Button:
 	b.focus_mode = Control.FOCUS_NONE
 	b.clip_text = true
 	b.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
+	b.pressed.connect(GameAudio.ui_click)
 	b.pressed.connect(on_press)
 	parent.add_child(b)
 	return b
@@ -463,7 +466,12 @@ func toggle_lid() -> void:
 ## [하늘의 것] 거인이 분다 — 카메라가 보는 쪽(땅 위)으로. 뚜껑이 닫혀 있으면 아무 일 없음
 func blow() -> void:
 	var f := cam.camera.global_transform.basis.z
-	village.blow_seeds(Vector2(-f.x, -f.z))
+	var n := village.blow_seeds(Vector2(-f.x, -f.z))
+	if n >= 0:
+		GameAudio.fx("blow")
+	if n > 0:                         # 꽃씨가 날림 (반짝이는 바람) + "눈이 온다!"
+		GameAudio.fx("seeds_wind", "Village")
+		GameAudio.say("seeds")
 
 
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
@@ -590,9 +598,9 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_N: clock.start_skip_night()
 			KEY_Q: cam.turn(-1)
 			KEY_E: cam.turn(1)
-			KEY_R: village.rotate_jar(); refresh()
+			KEY_R: village.rotate_jar(); GameAudio.fx("jar_turn"); refresh()
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
-			KEY_T: village.tap_glass(true)    # 개발: 크게 친 톡 (지진)
+			KEY_T: tap_glass(true)            # 개발: 크게 친 톡 (지진)
 			KEY_F3: set_debug_mode(not debug_mode)
 
 
@@ -677,8 +685,17 @@ func _on_tap(sp: Vector2) -> void:
 	if r != null:
 		altar_sheet.close()
 		detail.open(r)
+		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
 	else:
-		village.tap_glass(false)      # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
+		tap_glass(false)              # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
+
+
+## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!")
+func tap_glass(hard: bool) -> void:
+	village.tap_glass(hard)
+	GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")
+	GameAudio.buzz()
+	GameAudio.say("tap_hard" if hard else "tap")
 
 
 func _stop_follow() -> void:
@@ -704,3 +721,45 @@ func _follow(dt: float, instant := false) -> void:
 		var goal := cam.target
 		cam.target = old.lerp(goal, 1.0 - exp(-6.0 * dt))
 		cam._apply()
+
+
+# ───────────────────────── 소리 (docs/AUDIO.md — view/audio_manager.gd) ─────────────────────────
+func _attach_audio() -> void:
+	var a := GameAudio.get_instance()
+	if a == null:
+		return
+	a.attach(village)
+	a.set_menu(false)
+	a.screen_residents = on_screen_residents
+	if terrain != null and not terrain.drop_landed.is_connected(_on_drop_landed):
+		terrain.drop_landed.connect(_on_drop_landed)
+
+
+func _on_drop_landed(p: Vector3) -> void:
+	var a := GameAudio.get_instance()
+	if a != null:
+		a.drip(Vector2(p.x, p.z))
+
+
+## 배속(빨리 돌리기 → 목소리 끔·효과음 줄임) · 병 밖 시점(축소 → 마을 소리 먹먹하게) · 듣는 자리
+func _update_audio() -> void:
+	var a := GameAudio.get_instance()
+	if a == null:
+		return
+	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed())
+	a.outside = GameAudio.outside_from_ppu(cam.ppu)
+	a.listener = Vector2(cam.target.x, cam.target.z)
+
+
+## 화면 안(위·아래 띠 사이)에 보이는 주민 — 목소리는 이 사람들만
+func on_screen_residents() -> Array:
+	var out: Array = []
+	var vs := get_viewport().get_visible_rect().size
+	for r in village.people:
+		var m: ResidentModel = view.residents.get(r.id)
+		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
+			continue
+		var p := cam.camera.unproject_position(m.global_position)
+		if p.x >= 0.0 and p.x <= vs.x and p.y >= top_h and p.y <= vs.y - bottom_h:
+			out.append(r)
+	return out
