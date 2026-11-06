@@ -38,10 +38,10 @@ func _process(_d: float) -> bool:
 	match step:
 		0:
 			scene.paused = true
-			# 첫날 아침 10시 (도착 18시 + 16시간)
+			# 첫날 아침 10시 (도착 7시 + 3시간)
 			var t := Time.get_ticks_msec()
-			scene.advance(16.0 * 3600.0)
-			print("16시간 계산 %d ms" % (Time.get_ticks_msec() - t))
+			scene.advance(3.0 * 3600.0)
+			print("3시간 계산 %d ms" % (Time.get_ticks_msec() - t))
 			scene.show_lineup(Vector2(-1.0, -3.0))
 			scene.look_at_ground(Vector2(-1.0, -1.3))
 			scene.cam.set_zoom(2)

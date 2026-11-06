@@ -42,6 +42,7 @@ var _fire: Node3D
 var _flames: Array[MeshInstance3D] = []
 var _check_t := 0.0
 var _anim_t := 0.0
+var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -109,7 +110,12 @@ func _sync_residents(dt: float) -> void:
 		m.visible = not inside
 		if not m.visible:
 			continue
-		m.position = Vector3(r.x, gy(r.x, r.y), r.y)
+		var x := r.x
+		var z := r.y
+		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < 3.0:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
+			x = lerpf(r.px, r.x, alpha)
+			z = lerpf(r.py, r.y, alpha)
+		m.position = Vector3(x, gy(x, z), z)
 		m.rotation.y = r.facing
 		m.set_item(r.carry)
 		m.set_anim(r.anim)

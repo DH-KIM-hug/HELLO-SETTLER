@@ -32,6 +32,8 @@ var death_why := ""
 # 행동
 var x := 0.0
 var y := 0.0
+var px := 0.0                     # 직전 걸음의 위치 (화면 보간용)
+var py := 0.0
 var steps: Array = []             # [{k:"walk", x, y} | {k:"do", left, done: Callable, fast, anim, work}]
 var action := ""                  # 지금 고른 행동 (점수표의 키)
 var last_action := ""

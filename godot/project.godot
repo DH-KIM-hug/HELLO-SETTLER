@@ -7,7 +7,7 @@ config_version=5
 
 config/name="Nazakji"
 config/description="나의 작은 지구 — 유리병 속 작은 중세 문명"
-run/main_scene="res://scenes/test_pixel.tscn"
+run/main_scene="res://scenes/test_village.tscn"
 config/features=PackedStringArray("4.7", "Mobile")
 
 [display]

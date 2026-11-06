@@ -8,8 +8,13 @@ extends RefCounted
 # ───────────────────────── 시간 ─────────────────────────
 const DAY := 86400.0
 const HOUR := 3600.0
-const START_CLOCK := 18.0 * HOUR        # 첫 정착민 도착 18시 = 해 질 녘 (OPENING 단계 8). BALANCE.md 5장 표: 18시 도착·성장 4시간 → 낟알 1회
-const STEP := 10.0                      # 시뮬레이션 한 걸음 (초). 프로토타입 goAway와 같은 10초 조각
+const START_CLOCK := 7.0 * HOUR         # 병은 자기 시계를 가진다 — 창조를 마치면 아침 7시, 첫 정착민 도착 (기획서 4.1 · OPENING 단계 8). BALANCE.md 5장 표: 6~12시 도착이면 낟알 1회
+const STEP := 10.0                      # 몰아서 계산할 때 한 걸음 (초) — 오프라인·테스트·개발 +1일. 프로토타입 goAway와 같은 10초 조각
+const WATCH_STEP := 1.0                 # (정함) 거인이 볼 때 한 걸음 (초) — JarClock이 배속과 상관없이 이 크기로만 걷는다 → ×1과 ×8 결과가 같다
+# 시간 빨리 돌리기 (기획서 6.6) — 배속은 병 시계 기준. 모든 수치는 병의 날짜
+const SPEEDS := [1.0, 2.0, 4.0, 8.0]
+const SKIP_NIGHT_SPEED := 60.0          # 밤 건너뛰기 (주민이 모두 잠든 밤 → 아침까지)
+const MAX_STEPS_PER_FRAME := 240        # (정함) 한 화면에 걷는 최대 걸음 — 넘치면 밀린 시간은 버린다 (느린 기기에서 멈추지 않게)
 const LIFE_EVERY := 60.0                # 혼인·출산·사망 판정 간격
 const JOBS_EVERY := 20.0                # 일자리·집 배정 간격
 const CHIEF_EVERY := 900.0              # 촌장 자율 건설 15분마다 (RESIDENT_AI 6.2)

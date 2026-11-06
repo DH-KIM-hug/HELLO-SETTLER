@@ -1,14 +1,14 @@
 ## 3단계 — 주민 (docs/GODOT_KICKOFF.md 4장)
 ## 2단계 땅·물(JarTerrain) 위에서 첫 정착민 열 명이 살아간다: sim/village.gd(Village)를 돌리고 view/village_view.gd로 그린다.
 ## 주민은 부품 조합 모델(view/resident_model.gd), 동작은 초당 10장. 말풍선은 화면 위 글자(갈무리).
-## 조작: 빠르게(×1·×10·×60·×600) · +1일 · 병 돌리기 · 확대 −/+ · 도트 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠로 확대.
+## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8, 밤 건너뛰기(모두 잠든 밤 → 아침까지 ×60).
+## 조작: 속도 · 밤 건너뛰기 / 개발: +1일 · 병 돌리기 · 확대 −/+ · 도트 · 모델(부품 조합 줄 세우기). 끌어서 이동, 휠로 확대. 스페이스 = 멈춤.
 extends Node3D
 
-const SPEEDS: Array[float] = [1.0, 10.0, 60.0, 600.0]
-const MAX_SIM_PER_FRAME := 120.0     # 한 화면에 최대 2분치 (느린 기기에서 멈추지 않게)
 const SEED := 20261105
 
 var village: Village
+var clock: JarClock
 var jar: Node3D
 var terrain: JarTerrain
 var view: VillageView
@@ -17,8 +17,11 @@ var cam: JarCamera
 var post_mat: ShaderMaterial
 var ui_label: Label
 var bubbles: Control
-var speed_i := 1
 var paused := false
+var speed_btn: Button
+var skip_btn: Button
+var notice_label: Label
+var _sim_ms := 0.0                   # 이번 화면에 시뮬레이션이 쓴 시간 (표시용, 평균)
 var lineup: Node3D
 var _terrain_t := 0.0
 var _drag := false
@@ -26,6 +29,7 @@ var _drag := false
 
 func _ready() -> void:
 	village = Village.new_prototype(SEED)
+	clock = JarClock.new(village)
 	JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
@@ -66,7 +70,10 @@ func refresh() -> void:
 
 func _process(dt: float) -> void:
 	if not paused:
-		village.advance(minf(SPEEDS[speed_i] * dt, MAX_SIM_PER_FRAME))
+		var t0 := Time.get_ticks_usec()
+		clock.tick(dt)
+		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
+		view.alpha = clampf(clock.acc / clock.step, 0.0, 1.0)
 		_terrain_t += dt
 		if _terrain_t > 4.0:          # 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림
 			_terrain_t = 0.0
@@ -167,12 +174,39 @@ func _setup_ui() -> void:
 	ui_label.add_theme_constant_override("shadow_offset_x", 1)
 	ui_label.add_theme_constant_override("shadow_offset_y", 1)
 	root.add_child(ui_label)
+	notice_label = Label.new()
+	notice_label.position = Vector2(8, 548)
+	notice_label.size = Vector2(344, 24)
+	notice_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	notice_label.add_theme_color_override("font_color", Color("252122"))
+	var nsb := StyleBoxFlat.new()
+	nsb.bg_color = Color("fffbea")
+	nsb.border_color = Color("252122")
+	nsb.set_border_width_all(1)
+	nsb.set_content_margin_all(3)
+	notice_label.add_theme_stylebox_override("normal", nsb)
+	notice_label.visible = false
+	root.add_child(notice_label)
+	# 시간 (기획서 6.6) — 속도 ×1 → ×2 → ×4 → ×8, 밤 건너뛰기는 모두 잠든 밤에만 보임
+	var tbar := HBoxContainer.new()
+	tbar.position = Vector2(6, 580)
+	tbar.add_theme_constant_override("separation", 3)
+	root.add_child(tbar)
+	speed_btn = Button.new()
+	speed_btn.focus_mode = Control.FOCUS_NONE
+	speed_btn.custom_minimum_size = Vector2(64, 0)
+	speed_btn.pressed.connect(func() -> void: clock.cycle_speed())
+	tbar.add_child(speed_btn)
+	skip_btn = Button.new()
+	skip_btn.text = "밤 건너뛰기"
+	skip_btn.focus_mode = Control.FOCUS_NONE
+	skip_btn.pressed.connect(func() -> void: clock.start_skip_night())
+	tbar.add_child(skip_btn)
 	var bar := HBoxContainer.new()
 	bar.position = Vector2(6, 606)
 	bar.add_theme_constant_override("separation", 3)
 	root.add_child(bar)
-	for spec: Array in [["빠르게", func() -> void: speed_i = (speed_i + 1) % SPEEDS.size()],
-			["+1일", func() -> void: advance(Balance.DAY)],
+	for spec: Array in [["개발: +1일", func() -> void: advance(Balance.DAY)],
 			["병 돌리기", func() -> void: village.rotate_jar(); refresh()],
 			["－", func() -> void: cam.set_zoom(cam.zoom_i - 1)], ["＋", func() -> void: cam.set_zoom(cam.zoom_i + 1)],
 			["도트", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_palette"))],
@@ -199,15 +233,21 @@ func status_text() -> String:
 		elif p.is_elder():
 			elders += 1
 	var c := v.chief()
-	return "%s · ×%d%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps" % [
-		v.fmt_time(v.t), int(SPEEDS[speed_i]), " (멈춤)" if paused else "",
+	var spd := "밤 건너뛰는 중 ×%d" % int(clock.speed()) if clock.skipping else "×%d" % int(clock.speed())
+	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
+		v.fmt_time(v.t), spd, " (멈춤)" if paused else "",
 		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(),
 		int(v.food_total()), int(v.stock["판자"]), int(v.stock["돌"]), int(v.stock["통나무"]),
-		Balance.ERAS[v.era], int(v.faith), c.name if c != null else "-", Engine.get_frames_per_second()]
+		Balance.ERAS[v.era], int(v.faith), c.name if c != null else "-", Engine.get_frames_per_second(), _sim_ms]
 
 
 func _update_ui() -> void:
 	ui_label.text = status_text()
+	speed_btn.text = "속도 ×%d" % int(clock.speed())
+	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
+	skip_btn.visible = clock.can_skip_night()
+	notice_label.visible = clock.notice_t > 0.0
+	notice_label.text = clock.notice
 	# 말풍선: 화면 안에서 말하고 있는 주민 몇 명
 	for c in bubbles.get_children():
 		c.queue_free()
@@ -252,6 +292,8 @@ func _unhandled_input(e: InputEvent) -> void:
 	elif e is InputEventKey and e.pressed:
 		match (e as InputEventKey).keycode:
 			KEY_SPACE: paused = not paused
+			KEY_F: clock.cycle_speed()
+			KEY_N: clock.start_skip_night()
 			KEY_Q: cam.turn(-1)
 			KEY_E: cam.turn(1)
 			KEY_R: village.rotate_jar(); refresh()

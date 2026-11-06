@@ -20,6 +20,7 @@ func _initialize() -> void:
 	test_village_opening()
 	test_house_bottleneck()
 	test_determinism()
+	test_time_controls()
 	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
 		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -132,7 +133,7 @@ func test_rotation() -> void:
 # ───────────────────────── 3단계 — 주민 ─────────────────────────
 const POP_SEEDS := [1, 2, 3]
 # tools/sim_life.py (판매 없음, 병 하나, 하루 2시간 지켜봄, 60번 평균)의 10%~90% 범위
-const POP_RANGE := {10: [16, 25], 20: [18, 49], 30: [32, 52]}
+const POP_RANGE := {10: [16, 28], 20: [18, 49], 30: [32, 52]}   # 10일 상한 28: v3.6 아침 7시 시작으로 초반이 빨라짐 (메인 세션 승인)
 
 
 func words_ok(texts: Array) -> String:
@@ -191,10 +192,14 @@ func test_village_opening() -> void:
 	print("  첫 오두막 %s · 첫 농장 %s · 첫 수확 %s · 낟알 %d번 · 첫 출생 %s · 마을 시대 %s" % [h.call(first_hut), h.call(first_farm), h.call(v.first_harvest_t), v.manna_falls, h.call(first_birth), h.call(era_t)])
 	print("  3일 뒤 인구 %d (출생 %d · 사망 %d · 굶주림 %d) · 건물 %d · 하루 계산 %.0f ms (10초 걸음, 물 60초 간격)" % [v.people.size(), v.stats["born"], v.stats["died"], v.stats["starved"], v.buildings.size(), ms / 3.0])
 	check(v.manna_falls >= 1 and v.book.any(func(e: Dictionary) -> bool: return e["t"] < 60.0 and String(e["text"]).contains("낟알")), "도착하자마자 하늘 낟알 (T0)")
-	check(first_hut >= 0.0 and first_hut < 6.0 * Balance.HOUR, "첫 오두막이 첫날 밤 안에 (도착 후 %.1f시간)" % (first_hut / 3600.0))
+	check(is_equal_approx(v.start_clock, 7.0 * Balance.HOUR) and v.fmt_time(0.0) == "1일차 07:00", "병 시계는 아침 7시에 시작 (기획서 4.1 · %s)" % v.fmt_time(0.0))
+	check(first_hut >= 0.0 and first_hut < 6.0 * Balance.HOUR, "첫 오두막이 첫날 오전에 (도착 후 %.1f시간)" % (first_hut / 3600.0))
+	check(first_farm >= 0.0 and v.cal_day(first_farm) == 1, "첫 농장이 1일차에 (%s)" % h.call(first_farm))
 	check(v.first_harvest_t >= 0.0 and v.cal_day(v.first_harvest_t) <= 2, "첫 수확 1~2일차 (%s)" % h.call(v.first_harvest_t))
-	check(v.manna_ended and v.manna_falls <= 2, "첫 수확 다음 새벽에 낟알이 그침 (%d번 내림, BALANCE 5장: 18시 도착이면 1번)" % v.manna_falls)
-	check(v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("첫 수확 축제")), "첫 수확 축제가 연대기에")
+	check(v.manna_ended and v.manna_falls == 1, "낟알은 도착 직후 한 번뿐, 첫 수확 다음 새벽에 그침 (%d번, BALANCE 5장: 7시 도착 → 1회)" % v.manna_falls)
+	var fest: Array = v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("첫 수확 축제"))
+	check(not fest.is_empty() and v.cal_day(fest[0]["t"]) == v.cal_day(v.first_harvest_t) + 1 and v.fmt_time(fest[0]["t"]).ends_with("06:00"),
+		"첫 수확 축제가 수확 다음 날 새벽 (%s)" % (h.call(fest[0]["t"]) if not fest.is_empty() else "-"))
 	check(first_birth >= 0.0 and first_birth <= Balance.DAY, "첫 출생 1일차 (첫 24시간 안, %s)" % h.call(first_birth))
 	check(era_t >= 0.0 and era_t <= 2.0 * Balance.DAY, "'마을' 시대 점수가 2일차 안에 참 (%s)" % h.call(era_t))
 	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "3일 동안 식량이 모자란 적 없음")
@@ -253,6 +258,94 @@ func test_determinism() -> void:
 	var c: String = sig.call(8)
 	check(a == b, "시드 7 두 번 → 같은 위치·연대기 (%d자)" % a.length())
 	check(a != c, "시드 8은 다르다")
+
+
+## 기획서 6.6 시간 빨리 돌리기 — JarClock
+func clock_sig(v: Village) -> String:
+	var s := "%s|%d|%d|%d|%s|%s|%s|%d|" % [str(v.t), v.people.size(), v.book.size(), v.buildings.size(), str(v.faith), str(v.era_pts), str(v.food_total()), v.rng.state]
+	for p in v.people:
+		s += "%s,%s,%s;" % [str(p.x), str(p.y), str(p.belief)]
+	return s
+
+
+func test_time_controls() -> void:
+	print("== 시간 빨리 돌리기 (기획서 6.6)")
+	# 1) ×8과 ×1 — 같은 병 시간이면 결과가 똑같다 (걸음은 늘 병 시계 1초)
+	var hours := 2.0
+	var steps := int(hours * Balance.HOUR / Balance.WATCH_STEP)
+	var sigs: Array = []
+	var real_s: Array = []
+	for spec: Array in [[0, 1.0 / 30.0], [3, 1.0 / 60.0], [3, 0.25], [1, 0.5]]:     # [속도 번호, 화면 한 장 (초)]
+		var v := Village.new_prototype(3)
+		var c := JarClock.new(v)
+		c.set_speed(spec[0])
+		var frames := 0
+		while c.steps_done < steps:
+			c.tick(spec[1])
+			frames += 1
+		sigs.append(clock_sig(v))
+		real_s.append(frames * float(spec[1]))
+		check(c.steps_done == steps and c.dropped == 0.0, "×%d 화면 %.3f초: %d걸음, 버린 시간 없음 (현실 %.0f초)" % [int(c.speed()), spec[1], c.steps_done, frames * float(spec[1])])
+	check(sigs[1] == sigs[0] and sigs[2] == sigs[0] and sigs[3] == sigs[0], "병 시간 %.0f시간: ×1 · ×8 · ×8(큰 화면) · ×2 결과가 같다 (위치·믿음·연대기·난수)" % hours)
+	check(absf(real_s[1] * 8.0 - real_s[0]) < 1.0, "×8은 현실 시간이 1/8 (×1 %.0f초 → ×8 %.0f초)" % [real_s[0], real_s[1]])
+	# 빨리 돌려도 거인이 지켜보는 시간: ×8 동안 믿음이 오른다
+	var vb := Village.new_prototype(3)
+	var b0 := vb.people[0].belief
+	var cb := JarClock.new(vb)
+	cb.set_speed(3)
+	for i in 900:
+		cb.tick(0.5)
+	check(vb.is_watching() and vb.people[0].belief > b0, "×8도 지켜보는 시간 — 믿음↑ (%.3f → %.3f)" % [b0, vb.people[0].belief])
+	# 2) 밤 건너뛰기: 낮엔 못 누름 → 모두 잠든 밤에 누르면 ×60 → 아침 6시에 ×1로
+	var v2 := Village.new_prototype(1)
+	v2.water.offline = true
+	var c2 := JarClock.new(v2)
+	check(not c2.can_skip_night(), "낮(%s)에는 밤 건너뛰기 없음" % v2.fmt_time(v2.t))
+	v2.advance(15.0 * Balance.HOUR)               # 1일차 22:00
+	c2.v.crises.clear()
+	var waited := 0
+	while not c2.can_skip_night() and waited < 7200:
+		c2.tick(1.0)
+		waited += 1
+	check(c2.can_skip_night(), "밤에 모두 잠들면 밤 건너뛰기 버튼 (%s)" % v2.fmt_time(v2.t))
+	var slept_at := v2.fmt_time(v2.t)
+	c2.set_speed(2)
+	check(c2.start_skip_night() and c2.speed() == Balance.SKIP_NIGHT_SPEED, "누르면 ×60")
+	var frames2 := 0
+	var t_start := Time.get_ticks_usec()
+	var worst_ms := 0.0
+	var worst_steps := 0
+	while c2.skipping and frames2 < 60 * 60 * 30:
+		var tf := Time.get_ticks_usec()
+		var n := c2.tick(1.0 / 60.0)
+		worst_ms = maxf(worst_ms, (Time.get_ticks_usec() - tf) / 1000.0)
+		worst_steps = maxi(worst_steps, n)
+		frames2 += 1
+	var cost_s := (Time.get_ticks_usec() - t_start) / 1.0e6
+	print("  밤 건너뛰기 %s → %s · 현실 %.0f초(%.1f분, 60fps) · 계산 %.1f초 · 한 화면 최대 %d걸음 %.2f ms" % [slept_at, v2.fmt_time(v2.t), frames2 / 60.0, frames2 / 3600.0, cost_s, worst_steps, worst_ms])
+	check(not c2.skipping and c2.speed() == 1.0 and v2.fmt_time(v2.t).ends_with("06:00") and v2.cal_day(v2.t) == 2, "아침(2일차 06:00)이 되면 끝나고 ×1로 (%s, ×%d)" % [v2.fmt_time(v2.t), int(c2.speed())])
+	check(c2.notice != "" and c2.dropped == 0.0, "아침 알림 '%s', 버린 시간 없음" % c2.notice)
+	# 3) 위기(굶주림)가 시작되면 ×1로 + 알림
+	var v3 := Village.new_prototype(2)
+	v3.water.offline = true
+	var c3 := JarClock.new(v3)
+	c3.tick(10.0)                                  # 도착 낟알
+	c3.set_speed(3)
+	for k in Balance.FOODS:
+		v3.stock[k] = 0.0
+	v3.manna.clear()
+	v3.manna_batches.clear()
+	for b in v3.buildings:
+		b.out.erase("밀")
+		b.out.erase("빵")
+	c3.tick(0.5)
+	check(c3.speed() == 1.0 and not c3.skipping and c3.last_crisis.get("kind", "") == "hunger" and c3.notice_t > 0.0, "식량이 떨어지면 ×8 → ×1 + 알림 '%s'" % c3.notice)
+	check(v3.crises.is_empty() and words_ok([c3.notice]) == "", "알림에 금지어 없음")
+	# 밤 건너뛰는 중의 위기도 ×1로
+	c2.skipping = true
+	v2.crisis("starve", "누군가 쓰러졌다")
+	c2.tick(1.0)
+	check(not c2.skipping and c2.speed() == 1.0, "밤 건너뛰는 중 위기 → ×1")
 
 
 ## 보통 마을 30일 — 인구가 sim_life.py(밸런스 v2)가 예측한 범위에

@@ -48,6 +48,7 @@ var paths := PackedFloat32Array()     # 오솔길 128×128
 var deficit := 0.0
 var last_short_t := -1.0e9            # 마지막으로 식량이 모자랐던 때
 var salt_known := false
+var crises: Array = []                # 위기가 시작됨 {t, kind, text} — JarClock이 가져가 ×1로 되돌리고 알림 (기획서 6.6)
 var stats := {"born": 0, "died": 0, "built": 0, "starved": 0, "marriages": 0, "moves": 0, "upgrades": 0}
 var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, home, occ_before, cap}
 var violations: Array = []            # 테스트용: 규칙 위반 기록
@@ -106,7 +107,7 @@ func _init_prototype(seed_v: int) -> void:
 	# 10명 중 최소 1명은 '재능' 이상 (OPENING 단계 8)
 	if people.all(func(p: Resident) -> bool: return p.grade == 0):
 		ids[4].grade = 1
-	log_line("어느 저녁, 우리 조상 열 명이 숲 가장자리에 처음 불을 피웠다.")
+	log_line("어느 새벽, 우리 조상 열 명이 숲 가장자리에 처음으로 불을 피웠다.")
 	log_line("하늘의 두 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 그늘진 세상 끝 벽에서 흘러내려 낮은 곳으로 간다. 서쪽의 큰 호수에는 흘러드는 강이 없다.")
 
 
@@ -150,6 +151,8 @@ func add_person(name: String, sex: String, age: float, trait_n: String, x: float
 	r.grade = _roll_grade()
 	r.x = x
 	r.y = y
+	r.px = x
+	r.py = y
 	r.belief = Balance.BELIEF_START if age > 0.0 else (Balance.BELIEF_BABY_WATCHED if is_watching() else Balance.BELIEF_BABY_ALONE)
 	# 겉모습
 	r.look_head = rng.randi() % Balance.LOOK_HEADS
@@ -257,6 +260,11 @@ func cal_day(tt: float) -> int:
 # ───────────────────────── 기록 ─────────────────────────
 func log_line(text: String) -> void:
 	book.append({"t": t, "text": text})
+
+
+## 위기 시작 (굶주림·재해) — 화면 쪽(JarClock)이 빨리 돌리기를 ×1로 되돌리고 알림을 띄운다
+func crisis(kind: String, text: String) -> void:
+	crises.append({"t": t, "kind": kind, "text": text})
 
 
 func speak(r: Resident, text: String, dur := 6.0) -> void:
@@ -400,6 +408,9 @@ func advance(seconds: float) -> void:
 
 
 func step(dt: float) -> void:
+	for p in people:              # 화면이 걸음 사이를 보간하도록 직전 위치
+		p.px = p.x
+		p.py = p.y
 	t += dt
 	water.advance(dt)
 	if not _arrival_manna and t >= Balance.MANNA_DELAY:
@@ -426,6 +437,8 @@ func step(dt: float) -> void:
 	var unmet := consume(need)
 	deficit = unmet / need if need > 0.0 else 0.0
 	if deficit > 0.0:
+		if t - last_short_t > HOUR:
+			crisis("hunger", "창고에 먹을 것이 떨어졌다")
 		last_short_t = t
 	for p in people:
 		if deficit > 0.0:
@@ -940,6 +953,7 @@ func _deaths(dt: float) -> void:
 				p.health = 0.05
 			else:
 				why = "굶주림"
+				crisis("starve", "%s%s 굶주림으로 쓰러졌다" % [p.name, josa(p.name, "이", "가")])
 				_starve_day = day_no()
 				stats["starved"] += 1
 		if why != "":
@@ -1264,6 +1278,7 @@ func lake_watch() -> void:
 			log_line("%s의 물가가 조금씩 물러난다. 이 호수로 흘러드는 강이 없다." % nm)
 		if basins_said[i] < 2 and f < 0.5:
 			basins_said[i] = 2
+			crisis("lake", "%s%s 절반 넘게 말랐다" % [nm, josa(nm, "이", "가")])
 			log_line("%s%s 절반 넘게 말랐다. 드러난 호수 바닥에 흰 소금기가 번진다." % [nm, josa(nm, "이", "가")])
 			var elder: Resident = null
 			for q in people:
@@ -1273,6 +1288,7 @@ func lake_watch() -> void:
 				speak(elder, "내가 어릴 적엔 저기까지 물이었지", 7)
 		if basins_said[i] < 3 and f < 0.12:
 			basins_said[i] = 3
+			crisis("lake", "%s%s 사라졌다" % [nm, josa(nm, "이", "가")])
 			log_line("%s%s 마침내 사라졌다. 그 자리에 하얀 소금 들판이 남았다. 아이들은 그곳에 호수가 있었다는 걸 믿지 않는다." % [nm, josa(nm, "이", "가")])
 
 
