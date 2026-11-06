@@ -1,4 +1,4 @@
-# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v3 — 기획서 v3.2 기준, 레트로 스타일)
+# 나의 작은 지구 — 콘셉트 아트 프롬프트 모음 (v4 — 기획서 v3.7 기준, 셀 채색 일러스트)
 
 > [기획서 v3.2](GAME_DESIGN.md)에서 **확정된 내용만** 그림으로 옮기기 위한 프롬프트. 그림이 기획서와 다르면 **기획서가 맞다** (특히 4장 '병의 자연'). 이미지 생성 AI(Midjourney, DALL·E, Stable Diffusion, Imagen 등)에 그대로 붙여 넣어 쓴다.
 > 영어 프롬프트가 대부분의 모델에서 결과가 안정적이라 영어로 쓰고, 각 장면에 한국어 설명을 붙였다.
@@ -9,20 +9,24 @@
 ## 0. 공통 스타일 (모든 프롬프트 앞에 붙이기)
 
 ```
-charming retro 1990s PC strategy game art style, isometric view, crisp pixel-art-like sprites
-with clean edges, slightly rounded shapes, natural earthy palette (grass green, straw yellow,
-soil brown, stone grey, cream), not too saturated, flat even daylight from one side (the window)
-with simple soft shadows, tiny medieval European settlers about 4 heads tall, slightly stubby but
-human proportions (when settlers appear), simple faces with small dot eyes, no blush, every settler clearly different (tunic colors
-blue, red, green, ochre, grey, purple and undyed; black, brown, blond, red and grey hair; different hats
-or none; thin, stout, tall and short builds), calm working poses, sturdy
-thatched huts with stone walls, readable silhouettes, no depth of field, warm but grounded
+clean hand-drawn anime-style cel-shaded illustration, high-angle top-down three-quarter view
+like a game map, crisp uniform thin outlines in a darker shade of each object's color (not black),
+large flat color shapes with exactly one darker teal-tinted shade tone, no hatching, no texture,
+no gradients, cool low-saturation palette: mint, sage, blue-green and deep teal greens, light
+yellow-green grass, pale sky-blue water with big flat white wave shapes, few warm accents (straw
+thatch, wood, dirt paths, orange mushrooms, pink lotus), wide open grass areas with details grouped
+in clusters (mushroom clusters, mossy rocks, ferns, stumps, clover), round two-tone tree canopies,
+flat dark teal cast shadows all falling to one side (light from the window side only), small medieval
+European settlers about 4 heads tall drawn small relative to trees (when settlers appear), simple
+faces with dot eyes, every settler clearly different (tunic colors blue, red, green, ochre, grey,
+purple and undyed; varied hair, hats and builds), calm working poses, thatched cottages with stone
+walls
 ```
 
 **네거티브 프롬프트** (지원하는 모델에서)
 ```
 text, watermark, logo, UI, modern objects, cars, guns, blood, gore, horror, neon colors,
-oversaturated, anime big eyes, blush, chibi giant heads, mascot, photorealistic, tilt-shift,
+oversaturated, saturated yellow-green, pixel art, dithering, hatching, sketchy lines, painterly, anime big eyes, blush, chibi giant heads, mascot, photorealistic, tilt-shift,
 bokeh, depth of field, golden haze, glossy plastic, cinematic lighting, hyperdetailed,
 fantasy elves, dragons, castle, sea, ocean, beach, waves
 ```
@@ -149,9 +153,9 @@ desert mud-brick house, isometric, neutral background, 3:2
 
 | # | 소재 | 프롬프트 |
 |---|---|---|
-| 7-1 | **연대기 양피지** | `an old parchment page texture with handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text, plain paper texture only, no illustrations, no village, no figures, no border scenes, 3:4` |
+| 7-1 | **연대기 양피지** | `an old parchment page drawn in flat cel-shaded illustration style with clean outlines and flat stain shapes, handwritten-style lines, warm beige, subtle stains, empty space for text, top-down, no readable text, plain paper texture only, no illustrations, no village, no figures, no border scenes, 3:4` |
 | 7-2 | **지구 카드** (폴라로이드) | `a polaroid-style card showing a glass terrarium world, blank caption area, on a wooden table, soft light, no text, any stream starts only from water trickling down the inside of the glass wall at the edge of the world, no waterfall from rocks or hills, no stream flowing out of a lake, 3:4` |
-| 7-3 | **앱 아이콘** | `mobile app icon in crisp retro pixel-art style, bold and readable at 64x64 pixels, one simple glass jar shape filling most of the frame on a plain warm cream-to-amber background, inside only a small green hill, one tiny thatched hut with a lit window and one large water droplet hanging under the lid, a thin glowing red line at the bottom, thick clean outlines, at most 10 flat colors, no people, no small details, centered, no text, 1:1` |
+| 7-3 | **앱 아이콘** | `mobile app icon in clean cel-shaded illustration style, bold and readable at 64x64 pixels, one simple glass jar shape filling most of the frame on a plain warm cream-to-amber background, inside only a small green hill, one tiny thatched hut with a lit window and one large water droplet hanging under the lid, a thin glowing red line at the bottom, thick clean outlines, at most 10 flat colors, no people, no small details, centered, no text, 1:1` |
 
 ---
 
