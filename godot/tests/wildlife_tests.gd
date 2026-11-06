@@ -1,7 +1,8 @@
 ## 들짐승·낚시·사냥 (B3 — WILDLIFE 1~6) — tests/run.gd가 부름 (`-- wildlife` = 이것만).
 ## 상한까지 늘기 · 늑대(유일한 포식자)의 균형 · 사라짐은 다시 넣기 전엔 영원 · 어부는 호수 물고기의 하루 12%까지 · 토끼 밭 피해 + 울타리 ·
 ## 사냥 (사슴 = 고기 12 · 가죽 2 · 뿔 1 · 첫 사슴 제단) · 촌장이 멈춤 · 쉬는 아이의 낚시 · 늑대 울음 (두려움만) · 넓은 세상의 무리 ·
-## 저장 왕복 · 옛 저장 · 따라잡기 = 쉬지 않고 흐른 것 · 주민 말에 금지어 없음 · 깨닫기 전엔 거인 이야기 없음.
+## 저장 왕복 · 옛 저장 · 따라잡기 = 쉬지 않고 흐른 것 · 주민 말에 금지어 없음 · 깨닫기 전엔 거인 이야기 없음 ·
+## 호수는 상한의 35~50%에서 시작 (부화) · 멧돼지가 밭을 파헤침 · 상점 '생물'의 다시 넣기 카드 · 밤의 늑대 울음 소리.
 extends RefCounted
 
 var run: SceneTree
@@ -23,7 +24,8 @@ func all() -> void:
 	print("== 들짐승·낚시·사냥 (B3)")
 	run.timed(self, ["test_seed_small", "test_seed_world", "test_growth_cap", "test_predation", "test_extinct_readd", "test_fishing_cap",
 		"test_wise_fisher", "test_rabbit_fields", "test_hunting", "test_chief_stops", "test_fun_fishing", "test_howl", "test_spoil",
-		"test_unlocked", "test_save_roundtrip", "test_old_save", "test_world_share", "test_catchup_equals_live", "test_words", "test_no_giant_before"])
+		"test_unlocked", "test_save_roundtrip", "test_old_save", "test_world_share", "test_catchup_equals_live", "test_words", "test_no_giant_before",
+		"test_fish_start", "test_boar_fields", "test_readd_shop", "test_howl_sound"])
 
 
 func proto(seed_v := 20261105) -> Village:
@@ -328,7 +330,17 @@ func test_hunting() -> void:
 	check(got >= 1 and got <= 3, "이틀 동안 사슴 %d마리 (하루 0~1)" % got)
 	check(w.total("deer") <= d0, "잡은 만큼 무리가 준다 (%d → %d)" % [d0, w.total("deer")])
 	check(float(v.stock.get("가죽", 0.0)) >= Wildlife.DEER_HIDE and float(v.stock.get("뿔", 0.0)) >= Wildlife.DEER_ANTLER, "가죽 %.0f · 뿔 %.0f" % [float(v.stock.get("가죽", 0.0)), float(v.stock.get("뿔", 0.0))])
-	check(int(w.stats["snared"]) > 0, "올무에 토끼 (%d마리 — 고기 3 · 털 1)" % int(w.stats["snared"]))
+	# 올무 (하루 0~2마리씩 — 하루가 0일 수 있다): 곁의 토끼를 넉넉히 두고 여드레 몫 (무작위 흐름이 바뀌어도 흔들리지 않게 —
+	# 예전엔 이틀 돌린 결과에 기대어 난수 흐름이 조금만 바뀌어도 0마리로 실패했다)
+	var rh := w._nearest_live(v, "rabbit", Vector2(b.x, b.y), Wildlife.SNARE_R)
+	if not rh.is_empty():
+		rh["n"] = maxi(int(rh["n"]), 30)
+	r.sick_left = 0.0                          # 이틀 사이 앓았을 수도 — 올무는 일하는 사냥꾼이 있어야
+	b.worker = r.id
+	r.job = b.id
+	for i in 8:
+		w._snares(v)
+	check(int(w.stats["snared"]) > 0 and float(b.out.get("털", 0.0)) > 0.0, "올무에 토끼 (%d마리 — 고기 3 · 털 1)" % int(w.stats["snared"]))
 	check(meat0 >= 0.0 and r.job == b.id, "사냥꾼 일터")
 
 
@@ -562,3 +574,161 @@ func test_no_giant_before() -> void:
 		texts.append(q.say)
 	var giant := texts.filter(func(tx: String) -> bool: return tx.contains("거인") or tx.contains("제단"))
 	check(giant.is_empty() and v.altar.is_empty() and has_line(v, "사슴 한 마리를 메고 돌아왔다"), "깨닫기 전: 첫 사슴·다시 넣기에 거인·제단 이야기 없음 %s" % str(giant))
+
+
+# ───────────────────────── 처음 물고기 · 멧돼지 · 다시 넣기 · 울음 소리 ─────────────────────────
+## 창조의 부화 동안 물고기가 늘어 — 호수마다 상한의 35~50%에서 시작 (어부가 며칠씩 놀지 않게)
+func test_fish_start() -> void:
+	var jw := JarWorld.create_with_kit(20261106, WorldCfg.SMALL_SIZE)
+	jw.water.offline = true
+	jw.advance(60.0)
+	var w := jw.primary().wild
+	var ok := true
+	var lo := 1.0
+	var hi := 0.0
+	var n := 0
+	for h: Dictionary in w.herds:
+		if h["kind"] != "fish" or int(h["cap"]) <= 0:
+			continue
+		var f := float(h["n"]) / float(h["cap"])
+		lo = minf(lo, f)
+		hi = maxf(hi, f)
+		ok = ok and f >= Wildlife.FISH_START_LO - 0.02
+		n += 1
+	check(n > 0 and ok and hi <= 1.0, "넓은 세상: 호수 %d곳이 상한의 %.0f~%.0f%%에서 시작" % [n, lo * 100.0, hi * 100.0])
+
+
+## 멧돼지 (WILDLIFE 1 표): 숲 곁 밭을 가끔 파헤친다 — 작은 피해 (−5~−12%, 그날 하루) + 밭마다 처음 한 번 연대기
+func test_boar_fields() -> void:
+	var v := proto(36)
+	var w := settled(v)
+	var farm: Building = null
+	for b in v.buildings:
+		if b.type == "농장" and b.built:
+			farm = b
+			break
+	if farm == null:
+		farm = built(v, "농장")
+	var farmer := staff(v, farm)
+	var h := w.add_herd("boar", farm.x + 6.0, farm.y + 4.0, 6)
+	h["cap"] = 6
+	var dug := 0
+	var worst := 1.0
+	for i in 12:
+		w._fields(v)
+		var m := Wildlife.field_mult(v, farm)
+		if m < 1.0:
+			dug += 1
+			worst = minf(worst, m)
+	check(dug >= 1 and dug < 12 and worst >= 1.0 - Wildlife.BOAR_HI - 1e-6, "멧돼지가 12일 중 %d일 밭을 파헤침 (그날 ×%.2f — 작은 피해)" % [dug, worst])
+	var lines := v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("멧돼지"))
+	check(lines.size() == 1 and bad_word([String(lines[0]["text"]), farmer.say]) == "", "연대기는 밭마다 처음 한 번: \"%s\"" % (String(lines[0]["text"]) if not lines.is_empty() else ""))
+	h["n"] = 1
+	var clean := true
+	for i in 6:
+		w._fields(v)
+		clean = clean and is_equal_approx(Wildlife.field_mult(v, farm), 1.0)
+	check(clean, "멧돼지가 줄면 (상한의 절반 아래) 밭을 건드리지 않음")
+	check(w.has_method("_livestock"), "늑대가 가축을 노리는 고리 (가축화 뒤)")
+
+
+## 상점 '생물' 탭 (SHOP 2.5): 사슴·토끼·물고기가 사라지거나 몹시 줄었을 때만 다시 넣기 카드 → 손 → 떨어뜨리면 무리가 돌아온다.
+## 깨달은 마을 "하늘에서 사슴이 내려왔다!" · 깨닫기 전엔 그냥 놀람 (거인·하늘 이야기 없이)
+func test_readd_shop() -> void:
+	var old_notes := Market.notes
+	var old_hand := Market.hand.duplicate(true)
+	for aware: bool in [true, false]:
+		Market.reset(5000.0)
+		var v := hunt_village(52 if aware else 53, aware)
+		var w := v.wild
+		Shop.update_unlocks(v)
+		var shown0 := Shop.items_in("생물", v)
+		check(not Shop.tab_open(v, "생물") and not "작은 사슴 한 쌍" in shown0 and Shop.items_in("생물").size() == 6,
+			"짐승이 넉넉하면 다시 넣기 카드가 없음 (생물 탭 닫힘)")
+		for h: Dictionary in w.herds:
+			if h["kind"] == "deer":
+				h["n"] = 0
+		w._day(v)
+		Shop.update_unlocks(v)
+		var shown := Shop.items_in("생물", v)
+		check(Shop.tab_open(v, "생물") and "작은 사슴 한 쌍" in shown and not "작은 토끼 한 쌍" in shown,
+			"사슴이 사라지면 '생물' 탭이 열리고 '작은 사슴 한 쌍'만 (%s)" % ", ".join(shown))
+		var c := Shop.card(v, "작은 사슴 한 쌍")
+		check(String(c["lock"]) == "" and int(c["price"]) == 700 and int(Shop.ITEMS["작은 토끼 한 쌍"]["price"]) == 300
+			and int(Shop.ITEMS["작은 물고기 한 줌"]["price"]) == 400, "값: 사슴 한 쌍 700 · 토끼 한 쌍 300 · 물고기 한 줌 400")
+		var r := Shop.buy(v, "작은 사슴 한 쌍")
+		check(bool(r["ok"]) and Shop.hand_count("작은 사슴 한 쌍") == 1, "사서 손에 듦")
+		v.open_lid()
+		var at := v.center + Vector2(10.0, 8.0)
+		for k in 30:
+			if bool(SkyDrops.preview(v, "작은 사슴 한 쌍", at)["ok"]):
+				break
+			at = v.center + Vector2.from_angle(k * 0.7) * (8.0 + k * 0.5)
+		var b0 := v.book.size()
+		var d := SkyDrops.drop(v, "작은 사슴 한 쌍", at)
+		Shop.hand_remove(int(r["hand_id"]))
+		check(bool(d["ok"]) and w.total("deer") == 2 and not w.gone.has("deer") and not w.needs_readd("deer"), "떨어뜨리면 사슴 한 쌍이 돌아옴 (%d)" % w.total("deer"))
+		var says: Array = []
+		for q in v.people:
+			if q.say != "":
+				says.append(q.say)
+		var texts := says.duplicate()
+		for e: Dictionary in v.book.slice(b0):
+			texts.append(String(e["text"]))
+		if aware:
+			check("하늘에서 사슴이 내려왔다!" in says, "깨달은 마을: \"하늘에서 사슴이 내려왔다!\" (%s)" % str(says))
+		else:
+			var giant := texts.filter(func(tx: String) -> bool: return tx.contains("거인") or tx.contains("하늘에서 사슴"))
+			check("어, 사슴이다! 어디서 왔을까…?" in says and giant.is_empty(), "깨닫기 전: 그냥 놀람 \"어, 사슴이다! 어디서 왔을까…?\" (%s)" % str(says))
+		check(bad_word(texts) == "", "다시 넣기 말·연대기에 금지어 없음 %s" % bad_word(texts))
+		# 물고기 한 줌: 물 위·물가에만, 가장 가까운 호수로
+		var lake := first_of(w, "fish")
+		for h: Dictionary in w.herds:
+			if h["kind"] == "fish":
+				h["n"] = 0
+		w._day(v)
+		check("작은 물고기 한 줌" in Shop.items_in("생물", v), "물고기가 다 사라지면 '작은 물고기 한 줌'")
+		var lp := Vector2(lake["x"], lake["y"])
+		var pv := SkyDrops.preview(v, "작은 물고기 한 줌", lp)
+		var far := SkyDrops.preview(v, "작은 물고기 한 줌", v.center + (v.center - lp).normalized() * 3.0)
+		check(bool(pv["ok"]) and (not bool(far["ok"]) or SkyDrops.nearest_lake(v, v.center + (v.center - lp).normalized() * 3.0, SkyDrops.WILD_FISH_R) != null),
+			"물고기는 호수 위·물가에만 놓임 (%s)" % String(far.get("why", "")))
+		SkyDrops.drop(v, "작은 물고기 한 줌", lp)
+		check(w.total("fish") == int(Shop.ITEMS["작은 물고기 한 줌"]["n"]), "물고기 한 줌 = %d마리가 호수로" % w.total("fish"))
+	Market.notes = old_notes
+	Market.hand = old_hand
+
+
+## 밤에 늑대가 울면 멀리서 작게 한 번 (소리 파일 2~3초) — 빠르게 돌릴 땐 끔
+func test_howl_sound() -> void:
+	var s := load(GameAudio.SFX_DIR + "wolf_howl.mp3") as AudioStreamMP3
+	check(s != null and s.get_length() >= 1.8 and s.get_length() <= 3.5, "늑대 울음 소리 2~3초 (%.2f초)" % (s.get_length() if s != null else 0.0))
+	var a := GameAudio.get_instance()          # 자동 로드 (GameAudio.fx가 부르는 것)
+	var mine := a == null
+	if mine:
+		a = GameAudio.new()
+		run.root.add_child(a)
+		GameAudio._inst = a                     # _initialize 땐 root가 아직 트리 밖 (_enter_tree가 안 불림) — GameAudio.fx가 이것을 부르게
+	var old_clock := a.clock_override
+	var old_speed := a.speed
+	a.clock_override = 1000.0
+	a.speed = 1.0
+	a._recent.erase("wolf_howl")
+	var v := proto(37)
+	settled(v)
+	a.attach(v)
+	v.wild.howl_t = v.t + 1.0
+	a._watch_village(0.0)
+	var played := (a._recent.get("wolf_howl", []) as Array).size()
+	a.speed = 64.0
+	v.wild.howl_t = v.t + 2.0
+	a.clock_override = 1010.0
+	a._watch_village(0.0)
+	var fast_played := (a._recent.get("wolf_howl", []) as Array).filter(func(x: float) -> bool: return x >= 1010.0).size()
+	check(played == 1 and fast_played == 0, "늑대가 울면 한 번 (%d) · 빠르게 돌릴 땐 소리 없음 (%d)" % [played, fast_played])
+	a.attach(null)
+	a.clock_override = old_clock
+	a.speed = old_speed
+	if mine:
+		GameAudio._inst = null
+		a.free()

@@ -4,6 +4,10 @@
 ## 사슴·토끼·들양·들소·멧돼지는 주민이 가까이 오면 달아난다 (숲 안쪽으로). 늑대는 울 때 머리를 든다 (Wildlife.howl_t).
 ## 물고기: 호수 위로 가끔 튀어 오르는 은빛 + 물결 동그라미. 사냥꾼이 사슴을 메고 돌아온다 (피 없이 — Wildlife.carry).
 ## 올무 = 사냥꾼 오두막 곁 작은 나뭇가지 표시 · 울타리 친 밭 = 말뚝 둘레 (Wildlife.fenced).
+## 잘 보이게 (기본 확대 — 마을 하나가 화면에): 주민처럼 짙은 갈색 둘레선 (껍데기 — 몸 빛깔 선보다 진하고 조금 두껍게) ·
+##   멀리 물러날수록 작은 종(토끼·물고기)을 조금 크게 (BOOST — 가까이 보면 제 크기) · 낮엔 마을 곁 무리의 대표가 두 마리 더 ·
+##   사슴·멧돼지는 숲 한가운데가 아니라 마을 쪽 숲 가장자리에서 풀을 뜯는다 (_home — 무리의 수·자리는 그대로, 화면만) ·
+##   새벽 (5시 반~7시 반)에 하루 한 번 사슴 한 마리가 숲가에서 나와 호숫가로 물을 마시러 간다 ('여기 봐' 순간 — _dawn_drink).
 ## VillageView가 하나씩 가진다 — 무리는 물을 흘리는 첫 무리의 화면만 그린다 (병 하나에 하나), 메고 오는 사슴·올무·울타리는 무리마다.
 class_name AnimalView
 extends Node3D
@@ -15,6 +19,17 @@ const SPEED := {"deer": 0.7, "rabbit": 0.9, "wolf": 0.8, "boar": 0.55, "sheep": 
 const FLEE_R := 5.0
 const GRAZE_R := 5.0
 const SHY := ["deer", "rabbit", "sheep", "aurochs", "boar"]
+const OUTLINE_PX := 3.4         # 짐승 둘레선 (1080p 기준 px — 주민 껍데기 1.7보다 두껍게: 기본 확대의 풀밭 위에서도 또렷이)
+## 멀리 볼 때 커지는 몫 (기본 확대에서 다 — 가까이 48 ppu쯤이면 0). 작은 종일수록 많이 (토끼는 발목 높이라 기본 확대에서 점 하나)
+const BOOST := {"rabbit": 0.9, "fish": 0.7, "deer": 0.45, "boar": 0.5, "sheep": 0.45, "wolf": 0.4, "aurochs": 0.25}
+const BOOST_NEAR_R := 14.0      # 보는 반지름이 이보다 작으면 (가까이) 제 크기
+const BOOST_FAR_R := 34.0       # 이보다 크면 (기본 확대 이상) BOOST 다
+const DAY_EXTRA := 2            # 낮에 마을 곁 (영역 + 30칸) 무리의 대표 더
+const NEAR_VILLAGE := 30.0
+const DRINK_FROM := 5.5         # 새벽 물 마시기 (시)
+const DRINK_TO := 7.5
+const DRINK_R := 32.0           # 사슴 대표에서 호숫가까지
+const DRINK_TIME := 9.0         # 물 마시는 동안 (초)
 
 var v: Village
 var vv: VillageView
@@ -27,6 +42,10 @@ var _mark_key := ""
 var _check := 0.0
 var _rng := RandomNumberGenerator.new()
 var shown := 0                  # 지금 그리는 대표 수 (캡처·측정)
+var boost_k := 0.0              # 0 가까이 ~ 1 기본 확대 이상 (BOOST)
+var _homes := {}                # 무리 id → [x, y, 화면의 풀 뜯는 자리]
+var _drink_day := -1
+var drinking := 0               # (캡처) 물 마시러 가거나 마시는 대표 수
 var enabled := true             # (측정용) 끄면 아무것도 그리지 않는다
 
 
@@ -93,19 +112,24 @@ func _pick(w: Wildlife) -> void:
 	var c: Vector2 = cv[0]
 	var vr: float = cv[1]
 	var want := {}
+	boost_k = clampf((vr - BOOST_NEAR_R) / (BOOST_FAR_R - BOOST_NEAR_R), 0.0, 1.0)
+	var day := not v.is_night()
 	if v.owns_water and vr > 0.0 and vr <= SHOW_VIEW_R:
 		var cand: Array = []
 		for h: Dictionary in w.herds:
 			if h["kind"] == "fish" or h["gone"] or int(h["n"]) <= 0 or not _seen(h):
 				continue
-			var d := Vector2(h["x"], h["y"]).distance_to(c) - _graze_r(h)
+			var d := _home(h).distance_to(c) - _graze_r(h)
 			if d < vr:
 				cand.append([d, h])
 		cand.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 		var left := MAX_REPS
 		for e: Array in cand:
 			var h: Dictionary = e[1]
-			var n := mini(Wildlife.reps(h), left)
+			var n := Wildlife.reps(h)
+			if day and _near_village(h):
+				n = mini(mini(6, n + DAY_EXTRA), int(h["n"]))       # 낮엔 마을 곁 무리가 더 보인다
+			n = mini(n, left)
 			if n <= 0:
 				break
 			want[int(h["id"])] = [h, n]
@@ -133,8 +157,55 @@ func _graze_r(h: Dictionary) -> float:
 	return minf(float(h["r"]), GRAZE_R if h["kind"] != "rabbit" else 7.0)
 
 
+## 대표가 풀을 뜯는 가운데 (화면만 — 무리의 자리·수는 Wildlife 그대로): 마을 곁 무리는 마을 쪽 가장자리로
 func _home(h: Dictionary) -> Vector2:
-	return Vector2(h["x"], h["y"])
+	var id := int(h["id"])
+	var e: Array = _homes.get(id, [])
+	if e.size() == 3 and float(e[0]) == float(h["x"]) and float(e[1]) == float(h["y"]):
+		return e[2]
+	var p := _edge_home(h)
+	_homes[id] = [float(h["x"]), float(h["y"]), p]
+	return p
+
+
+## 가장 가까운 무리 (마을) [중심, 영역 반지름] — 없으면 []
+func _village_of(p: Vector2) -> Array:
+	var best: Array = []
+	var bd := INF
+	for q: Village in (v.peers if not v.peers.is_empty() else [v]):
+		var d := q.center.distance_to(p)
+		if d < bd:
+			bd = d
+			best = [q.center, q.territory_r()]
+	return best
+
+
+func _near_village(h: Dictionary) -> bool:
+	var vc := _village_of(_home(h))
+	return not vc.is_empty() and (vc[0] as Vector2).distance_to(_home(h)) < float(vc[1]) + NEAR_VILLAGE
+
+
+## 사슴·멧돼지: 무리 가운데(숲 속)에서 마을 쪽으로 걸어 나가 처음 만나는 열린 땅 = 숲 가장자리 (마을 영역 밖까지만).
+## 늑대·들소·토끼·들양·먼 무리는 그대로
+func _edge_home(h: Dictionary) -> Vector2:
+	var c := Vector2(h["x"], h["y"])
+	var vc := _village_of(c)
+	if vc.is_empty() or not String(h["kind"]) in ["deer", "boar"]:
+		return c                                  # 토끼·들양은 제 들판 그대로 (밭가에 무리 — WILDLIFE 5)
+	var vp: Vector2 = vc[0]
+	var tr := float(vc[1])
+	var d := vp.distance_to(c)
+	if d > float(h["r"]) + tr + 40.0:
+		return c
+	var dir := (vp - c).normalized()
+	var reach := d - tr - 2.0 if d > tr + 8.0 else d * 0.7      # 영역 안의 숲이면 마을 쪽 숲가까지 (집 사이로는 안 감)
+	var s := 0.0
+	while s < reach:
+		var p := c + dir * s
+		if _land(p) and _land(p + dir * 1.5):
+			return p + dir * 1.5                    # 갓 밖 한 걸음 (숲가에서 풀을 뜯는다)
+		s += 1.5
+	return c
 
 
 ## 대표가 설 수 있는 곳: 물 밖 · 건물 밖 · 나무 갓 밑이 아닌 곳 (숲 가장자리·풀밭 — 갓에 가려 안 보이지 않게)
@@ -177,7 +248,7 @@ func _make(h: Dictionary, i: int) -> Dictionary:
 		model = "fawn"                          # 새끼 사슴 (WILDLIFE 5)
 	var root := Node3D.new()
 	add_child(root)
-	root.scale = Vector3.ONE * Style.RESIDENT_SCALE
+	root.scale = Vector3.ONE * _scale(kind)
 	var j := {}
 	var parts := Art.parts("animals/" + model)
 	for pn: String in parts:
@@ -187,7 +258,7 @@ func _make(h: Dictionary, i: int) -> Dictionary:
 		root.add_child(jn)
 		var mi := MeshInstance3D.new()
 		mi.mesh = d["mesh"]
-		mi.material_override = Art.body_mat()
+		mi.material_override = body_mat()
 		jn.add_child(mi)
 		if d["lines"] != null:
 			var li := MeshInstance3D.new()
@@ -197,13 +268,59 @@ func _make(h: Dictionary, i: int) -> Dictionary:
 		j[pn] = jn
 	var p := _rand_spot(h)
 	var r := {"node": root, "j": j, "p": p, "goal": p, "wait": _rng.randf_range(0.0, 3.0), "ph": _rng.randf() * TAU,
-		"kind": kind, "flee": 0.0, "yaw": _rng.randf() * TAU, "h": int(h["id"])}
+		"kind": kind, "flee": 0.0, "yaw": _rng.randf() * TAU, "h": int(h["id"]), "drink": 0}
 	_place(r, 0.0)
 	return r
 
 
+static var _amat: ShaderMaterial
+## 짐승 몸 재질: 툰 + 주민과 같은 짙은 갈색 둘레선 (조금 두껍게 — 풀밭·숲 그늘 위에서도 또렷이)
+static func body_mat() -> ShaderMaterial:
+	if _amat == null:
+		_amat = Art.body_mat().duplicate() as ShaderMaterial
+		var h := Art.hull_mat(false, Style.RESIDENT_LINE)
+		h.set_shader_parameter("width_px_1080p", OUTLINE_PX)
+		_amat.next_pass = h
+	return _amat
+
+
+## 대표의 크기: 주민 단위 × (멀리 볼 때 작은 종만 조금 더 — BOOST)
+func _scale(kind: String) -> float:
+	return Style.RESIDENT_SCALE * (1.0 + float(BOOST.get(kind, 0.0)) * boost_k)
+
+
+## 새벽에 하루 한 번: 마을에서 가까운 사슴 대표 하나가 호숫가로 물을 마시러 나온다 ('여기 봐' 순간)
+func _dawn_drink() -> void:
+	var hr := v.hour_now()
+	var day := v.cal_day(v.t)
+	if hr < DRINK_FROM or hr > DRINK_TO or _drink_day == day:
+		return
+	var best: Dictionary = {}
+	var bd := INF
+	for id: int in _reps:
+		for r: Dictionary in _reps[id]:
+			if r["kind"] != "deer" or float(r["flee"]) > 0.0:
+				continue
+			var vc := _village_of(r["p"])
+			var d := (vc[0] as Vector2).distance_to(r["p"]) if not vc.is_empty() else 0.0
+			if d < bd:
+				bd = d
+				best = r
+	if best.is_empty():
+		return
+	_drink_day = day
+	var sp: Variant = Wildlife.shore_point(v, best["p"], DRINK_R)
+	if sp == null:
+		return
+	best["goal"] = sp
+	best["drink"] = 1
+	best["wait"] = 0.0
+
+
 # ───────────────────────── 움직임 ─────────────────────────
 func _move(w: Wildlife, dt: float) -> void:
+	_dawn_drink()
+	drinking = 0
 	var people: Array = []
 	for q: Village in Wildlife.group(v.peers[0] if not v.peers.is_empty() else v):
 		people.append_array(q.people)
@@ -229,6 +346,7 @@ func _move(w: Wildlife, dt: float) -> void:
 			if float(r["flee"]) > 0.0:
 				r["flee"] = float(r["flee"]) - dt
 				fast = 3.0
+				r["drink"] = 0
 			var goal: Vector2 = r["goal"]
 			var to := goal - p
 			var moving := false
@@ -237,11 +355,17 @@ func _move(w: Wildlife, dt: float) -> void:
 				p += to.normalized() * step
 				r["yaw"] = atan2(to.x, to.y)
 				moving = true
+			elif int(r["drink"]) == 1:
+				r["drink"] = 2                      # 물가에 닿음 — 머리를 숙여 마신다
+				r["wait"] = DRINK_TIME
 			elif float(r["wait"]) > 0.0:
 				r["wait"] = float(r["wait"]) - dt
 			elif not h.is_empty():
+				r["drink"] = 0
 				r["goal"] = _rand_spot(h)
 				r["wait"] = _rng.randf_range(2.0, 6.0)
+			if int(r["drink"]) > 0:
+				drinking += 1
 			r["p"] = p
 			r["ph"] = float(r["ph"]) + dt * (6.0 if kind == "rabbit" else 4.0) * fast * (1.0 if moving else 0.0)
 			_place(r, dt, moving, howl and kind == "wolf")
@@ -251,6 +375,7 @@ func _place(r: Dictionary, _dt: float, moving := false, howl := false) -> void:
 	var n: Node3D = r["node"]
 	var p: Vector2 = r["p"]
 	var s := sin(float(r["ph"]))
+	n.scale = Vector3.ONE * _scale(String(r["kind"]))
 	var hop := absf(s) * 0.18 if (r["kind"] == "rabbit" and moving) else 0.0
 	n.position = Vector3(p.x, _gy(p.x, p.y) + hop, p.y)
 	n.rotation.y = float(r["yaw"]) - MODEL_YAW
@@ -265,6 +390,8 @@ func _place(r: Dictionary, _dt: float, moving := false, howl := false) -> void:
 			"head":
 				if howl:
 					jn.rotation.x = -0.75         # 늑대가 하늘을 보고 운다
+				elif int(r.get("drink", 0)) == 2 and not moving:
+					jn.rotation.x = 0.8 + 0.05 * sin(Time.get_ticks_msec() * 0.003)    # 물을 마신다 (머리를 깊이)
 				elif moving:
 					jn.rotation.x = 0.1 * s
 				else:
@@ -326,7 +453,7 @@ func jump_at(h: Dictionary) -> void:
 		return
 	var root := Node3D.new()
 	add_child(root)
-	root.scale = Vector3.ONE * Style.RESIDENT_SCALE * 1.4
+	root.scale = Vector3.ONE * _scale("fish") * 1.4
 	var parts := Art.parts("animals/" + ("fish_a" if _rng.randf() < 0.6 else "fish_b"))
 	for pn: String in parts:
 		var d: Dictionary = parts[pn]
@@ -335,7 +462,7 @@ func jump_at(h: Dictionary) -> void:
 		root.add_child(jn)
 		var mi := MeshInstance3D.new()
 		mi.mesh = d["mesh"]
-		mi.material_override = Art.body_mat()
+		mi.material_override = body_mat()
 		jn.add_child(mi)
 		if d["lines"] != null:
 			var li := MeshInstance3D.new()
@@ -500,4 +627,4 @@ func reset() -> void:
 
 ## 화면 위 수 (캡처·측정)
 func counts() -> Dictionary:
-	return {"reps": shown, "jumps": _jumps.size(), "carried": _carried.size()}
+	return {"reps": shown, "jumps": _jumps.size(), "carried": _carried.size(), "drinking": drinking, "boost": snappedf(boost_k, 0.01)}

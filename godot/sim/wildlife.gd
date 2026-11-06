@@ -13,7 +13,9 @@
 ##   피 없이: 사냥꾼이 사슴을 메고 돌아온다 (화면이 메고 오는 모습 — carry).
 ## 믿음 (4): 첫 사슴 → 깨달은 마을이면 몇 사람이 첫 고기를 제단에 바친다 (깨닫기 전엔 거인·제단 이야기가 없다).
 ##   마지막 몇 마리가 남으면 촌장이 사냥·낚시를 멈춘다 (나이 많고 숙련 높은 촌장일수록 일찍). 거인이 다시 넣어 주면 readd.
-## 가축화 (7장)는 아직 — tame 자리와 TAME_TO 표만 둔다.
+## 멧돼지 (1 표): 숲 곁의 밭을 가끔 파헤친다 (하루 −5~−12% — 토끼 피해와 겹치면 곱, 울타리 ×0.3). 밭마다 처음 한 번 연대기.
+## 처음 물고기 (1 · 창조 '부화'): 창조 때 넣은 몇 마리가 부화하는 동안 늘어 — 넓은 세상은 첫 걸음에 호수마다 상한의 35~50%에서 시작한다.
+## 가축화 (7장)는 아직 — tame 자리와 TAME_TO 표만 둔다. 늑대가 가축을 노리는 고리 (_livestock)만 있다.
 ## 이 파일 밖의 고리: Village.step (step) · Village._update_building (field_mult) · Village._update_happiness (happy) ·
 ##   Village.chief_build (want) · VillageEra.spot_center (spot_center) · ResidentAI.decide (decide) · work_task (has_work · work_task ·
 ##   fence_needed · fence_task) · ResidentAI.run_op ("wild_*") · SkyDrops._bloom (algae_hit) · JarWorld (함께 쓰기).
@@ -86,6 +88,17 @@ const FENCE_TIME := 120.0
 # 상함 (하루 몫) — 소금이 있으면 ×0.5 (절임 — 훈제는 나중)
 const SPOIL := {"생선": 0.30, "고기": 0.10}
 const SALT_KEEP := 0.5
+# 멧돼지가 밭을 파헤침 (WILDLIFE 1 표) — 숲 무리에서 이만큼 안의 밭, 무리가 상한의 절반을 넘으면 하루에 이 확률로
+const BOAR_R := 16.0
+const BOAR_AT := 0.5
+const BOAR_P := 0.35
+const BOAR_LO := 0.05
+const BOAR_HI := 0.12
+# 처음 물고기: 창조의 부화 동안 늘어 상한의 이만큼에서 시작 (WILDLIFE 1 · OPENING — 부화하는 동안 생명이 자랐다)
+const FISH_START_LO := 0.35
+const FISH_START_HI := 0.50
+# 거인이 다시 넣어 줄 만큼 줄었나 (상점 '생물' 탭 — SHOP 2.5 · WILDLIFE 1): 병 전체 수가 이 아래거나 사라짐
+const READD_LOW := {"deer": 1, "rabbit": 1, "fish": 6}         # 짝이 없어 늘 수 없음 (물고기는 몇 마리)
 # 늑대 울음
 const HOWL_R := 280.0
 const HOWL_FEAR := 0.02
@@ -109,6 +122,9 @@ const LINES := {
 	"wise": "%s 물고기가 줄어든 호수를 보고 '다 잡으면 다음 해엔 없다'며 덜 잡기 시작했다. 사람들은 이를 물고기를 아끼는 지혜라 불렀다.",
 	"readd": "하늘에서 %s%s 내려왔다!",
 	"readd_aware": "하늘에서 %s%s 내려왔다! 거인님이 숲을 다시 채워 주셨다.",
+	"readd_wonder": "어, %s%s! 어디서 왔을까…?",
+	"boar": "밤사이 멧돼지 떼가 %s 밭을 파헤쳐 놓았다. 사람들은 흙을 다시 고르며 혀를 찼다.",
+	"boar_say": "멧돼지가 밭을 다 파헤쳤어!",
 }
 
 var rng := RandomNumberGenerator.new()
@@ -124,6 +140,7 @@ var firsts: Dictionary = {}           # "deer"·"fish"·"kid_fish"·"howl" → t
 var field: Dictionary = {}            # "sid:밭 id" → 토끼 피해 0~0.3
 var fenced: Dictionary = {}           # "sid:밭 id" → 울타리 친 때
 var field_said: Dictionary = {}
+var boar_said: Dictionary = {}        # "sid:밭 id" → 멧돼지가 처음 파헤친 때 (연대기 한 번)
 var hunted: Dictionary = {}           # "sid:오두막 id" → 마지막으로 사슴을 잡은 날
 var fished: Dictionary = {}           # "sid:주민 id" → [날, 그날 잡은 수]
 var carry: Dictionary = {}            # "sid:주민 id" → 메고 오는 짐승 ("deer") — 화면
@@ -248,6 +265,11 @@ func settle(v: Village) -> void:
 	for h: Dictionary in herds:
 		_habitat(v, h)
 		h["t0"] = v.t
+		if h["kind"] == "fish" and int(h["cap"]) > 0 and v.water is WorldWater:
+			# 넓은 세상 (창조를 거친 병)만 — 소형 시험 병은 그대로. 난수 흐름은 쓰지 않는다 (호수 자리로 정한 몫 — 다른 흐름을 흔들지 않게)
+			var f := fposmod(sin(float(h["x"]) * 12.9898 + float(h["y"]) * 78.233) * 43758.5453, 1.0)
+			var start := int(roundf(int(h["cap"]) * lerpf(FISH_START_LO, FISH_START_HI, f)))
+			h["n"] = maxi(int(h["n"]), start)
 	_quotas(v)
 
 
@@ -430,6 +452,7 @@ func _day(v: Village) -> void:
 	for q: Village in group(v):
 		_fields(q)
 		_snares(q)
+		_livestock(q)
 	if log_days is Array:
 		(log_days as Array).append(counts())
 
@@ -564,7 +587,8 @@ func _fields(q: Village) -> void:
 		if b.type != "농장" or not b.built:
 			continue
 		var k := key(q, b.id)
-		var dmg := 0.0
+		var dmg := _boar_dig(q, b, k)
+		var rab := 0.0
 		for h: Dictionary in herds:
 			if h["kind"] != "rabbit" or h["gone"] or int(h["cap"]) <= 0:
 				continue
@@ -572,12 +596,13 @@ func _fields(q: Village) -> void:
 				continue
 			var ratio := float(h["n"]) / float(h["cap"])
 			if ratio > FIELD_AT:
-				dmg = maxf(dmg, lerpf(FIELD_LO, FIELD_HI, clampf((ratio - FIELD_AT) / (1.0 - FIELD_AT), 0.0, 1.0)))
+				rab = maxf(rab, lerpf(FIELD_LO, FIELD_HI, clampf((ratio - FIELD_AT) / (1.0 - FIELD_AT), 0.0, 1.0)))
+		dmg = 1.0 - (1.0 - dmg) * (1.0 - rab)
 		if fenced.has(k):
 			dmg *= FENCE_LEFT
 		if dmg > 0.0:
 			field[k] = dmg
-			if not field_said.has(k):
+			if rab > 0.0 and not field_said.has(k):
 				field_said[k] = q.t
 				var w := q.person(b.worker)
 				if w == null:
@@ -586,6 +611,36 @@ func _fields(q: Village) -> void:
 					q.speak(w, LINES["field_say"], 7)
 		else:
 			field.erase(k)
+
+
+## 멧돼지가 밭을 파헤친다 (WILDLIFE 1 표): 숲 무리가 곁에 있고 상한의 절반을 넘으면 하루에 BOAR_P 확률로 그날 −5~−12%.
+## 밭마다 처음 한 번 연대기 + 농부의 말. 피해는 그날 하루 (다음 새벽에 다시 정함)
+func _boar_dig(q: Village, b: Building, k: String) -> float:
+	var best := 0.0
+	for h: Dictionary in herds:
+		if h["kind"] != "boar" or h["gone"] or int(h["n"]) < 2 or int(h["cap"]) <= 0:
+			continue
+		if Vector2(h["x"], h["y"]).distance_to(Vector2(b.x, b.y)) > float(h["r"]) * 0.5 + BOAR_R:
+			continue
+		var ratio := float(h["n"]) / float(h["cap"])
+		if ratio >= BOAR_AT:
+			best = maxf(best, ratio)
+	if best <= 0.0 or rng.randf() >= BOAR_P:
+		return 0.0
+	if not boar_said.has(k):
+		boar_said[k] = q.t
+		var w := q.person(b.worker)
+		q.log_line(LINES["boar"] % ("농부 %s의" % w.name if w != null else "마을 가장자리"))
+		if w == null:
+			w = q.chief()
+		if w != null:
+			q.speak(w, LINES["boar_say"], 6)
+	return lerpf(BOAR_LO, BOAR_HI, clampf((best - BOAR_AT) / (1.0 - BOAR_AT), 0.0, 1.0))
+
+
+## 늑대가 가축(양·닭·돼지)을 노린다 (WILDLIFE 1 표 · 7장) — 가축화가 오면 여기서. 지금은 고리만 (가축이 없다)
+func _livestock(_q: Village) -> void:
+	pass
 
 
 static func field_mult(v: Village, b: Building) -> float:
@@ -969,14 +1024,26 @@ func _op_deer_put(v: Village, r: Resident) -> void:
 
 
 # ───────────────────────── 거인이 다시 넣어 주기 (WILDLIFE 1 · 4) ─────────────────────────
-## 사라진(또는 줄어든) 종을 다시 넣는다 — 서식지가 남아 있는 무리 자리에 두 쌍. 성공하면 true
-func readd(v: Village, kind: String, n := 4) -> bool:
+## 사라진(또는 줄어든) 종을 다시 넣는다 — 서식지가 남아 있는 무리 자리에 두 쌍. 성공하면 true.
+## at = 거인이 놓은 자리 (상점 '생물' — 그 곁 무리, 물고기는 가장 가까운 호수) · quiet = 말·연대기는 부른 쪽(SkyDrops)이 맡음
+func readd(v: Village, kind: String, n := 4, at: Variant = null, quiet := false) -> bool:
 	if not SPEC.has(kind):
 		return false
 	var h: Dictionary = {}
-	for q: Dictionary in herds:
-		if q["kind"] == kind and (h.is_empty() or int(q["cap"]) > int(h["cap"])):
-			h = q
+	if at != null:
+		var bd := INF
+		for q: Dictionary in herds:
+			if q["kind"] == kind and float(q["hab"]) > 0.0:
+				var d := Vector2(q["x"], q["y"]).distance_to(at as Vector2)
+				if d < bd:
+					bd = d
+					h = q
+	if h.is_empty():
+		for q: Dictionary in herds:
+			if q["kind"] == kind and (h.is_empty() or int(q["cap"]) > int(h["cap"])):
+				h = q
+	if h.is_empty() and kind == "fish":
+		return false                          # 호수가 없는 병
 	if h.is_empty():
 		var p := v.center + Vector2(18.0, 10.0)
 		h = add_herd(kind, p.x, p.y, 0)
@@ -984,17 +1051,39 @@ func readd(v: Village, kind: String, n := 4) -> bool:
 	h["gone"] = false
 	h["n"] = int(h["n"]) + n
 	gone.erase(kind)
+	if quiet:
+		if v.aware:
+			v.bless_all(Balance.BOUGHT_BELIEF * 0.5)
+		return true
 	var nm: String = SPEC[kind]["name"]
 	if v.aware:
 		v.log_line(LINES["readd_aware"] % [nm, Village.josa(nm, "이", "가")])
 		v.bless_all(Balance.BOUGHT_BELIEF * 0.5)
 	else:
 		v.log_line(LINES["readd"] % [nm, Village.josa(nm, "이", "가")])
+	var say := wonder_line(v, kind)
 	for r in v.people:
 		if not r.sleeping and r.age >= 2.5:
-			v.speak(r, LINES["readd"] % [nm, Village.josa(nm, "이", "가")], 7)
+			v.speak(r, say, 7)
 			break
 	return true
+
+
+## 다시 넣은 짐승을 처음 본 주민의 말: 깨달은 뒤 "하늘에서 사슴이 내려왔다!" · 깨닫기 전엔 그냥 놀람 ("어, 사슴이다! 어디서 왔을까…?")
+static func wonder_line(v: Village, kind: String) -> String:
+	var nm: String = SPEC[kind]["name"]
+	if v.aware:
+		return LINES["readd"] % [nm, Village.josa(nm, "이", "가")]
+	return LINES["readd_wonder"] % [nm, Village.josa(nm, "이다", "다")]
+
+
+## 거인이 다시 넣어 줄 만한가 (상점 '생물' 탭에 카드가 보임): 이 병에 살던 종이 사라졌거나 몹시 줄었을 때
+func needs_readd(kind: String) -> bool:
+	if not READD_LOW.has(kind) or not settled:
+		return false
+	if not herds.any(func(h: Dictionary) -> bool: return h["kind"] == kind):
+		return false                          # 처음부터 없던 종 (호수가 없는 병의 물고기 등)
+	return gone.has(kind) or total(kind) <= int(READD_LOW[kind])
 
 
 # ───────────────────────── 기타 ─────────────────────────

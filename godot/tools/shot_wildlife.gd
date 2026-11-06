@@ -3,6 +3,9 @@
 ##   wildlife_deer_forest.png (숲의 사슴 — 새끼 사슴) · wildlife_fish_jump.png (호수 위로 튀는 물고기 + 물결) ·
 ##   wildlife_fisher.png (물가의 어부) · wildlife_hunter_return.png (사슴을 메고 돌아오는 사냥꾼) ·
 ##   wildlife_rabbits_field.png (밭가의 토끼 무리 + 울타리) · wildlife_wolves_night.png (밤에 우는 늑대) · wildlife_sheet.png (모아 보기)
+## 기본 확대 (게임의 처음 확대 ppu 16 — 무리를 옮기지 않은 그대로): wildlife_default_dawn.png (새벽 호숫가로 물 마시러 나온 사슴) ·
+##   wildlife_default_village.png (낮 마을) · wildlife_default_edge.png (마을 쪽 숲 가장자리의 사슴) · wildlife_default_lake.png (호수 위 물고기)
+##   → wildlife_default_sheet.png
 ## 빠르기: 같은 마을 화면에서 짐승을 끄고 / 켜고 각 180화면의 평균 화면 시간 (수직 동기 끔) → 출력에 'fps' 줄.
 extends SceneTree
 
@@ -33,6 +36,8 @@ func _initialize() -> void:
 	scene.world_seed = 20261106
 	root.add_child(scene)
 	plan = [_setup, _settle_w, _fps_off, _fps_measure, _fps_on, _fps_measure, _fps_report,
+		_def_dawn, _settle_w, _def_dawn_find, _def_dawn_shot, _def_day, _settle_w, _def_village_shot, _def_edge, _settle_w, _def_edge_shot,
+		_def_lake, _def_lake_shot, _def_sheet,
 		_deer_go, _settle_w, _zoom_deer, _settle_w, _deer_shot, _fish_go, _fish_shot, _fisher_go, _settle_w, _fisher_shot,
 		_hunter_go, _settle_w, _hunter_shot, _rabbit_go, _settle_w, _zoom_rabbit, _settle_w, _rabbit_shot, _wolf_go, _settle_w, _zoom_wolf, _settle_w, _wolf_shot, _finish]
 
@@ -193,6 +198,124 @@ func _fps_measure() -> int:
 func _fps_report() -> int:
 	print("fps 짐승 끔 %.0f → 켬 %.0f (화면 %.2f → %.2f ms)" % [1000.0 / float(_fps.get("off", 1.0)), 1000.0 / float(_fps.get("on", 1.0)),
 		float(_fps.get("off", 0.0)), float(_fps.get("on", 0.0))])
+	return 2
+
+
+# ───────────────────────── 기본 확대 (무리를 옮기지 않음) ─────────────────────────
+const DEFAULT_PPU := 16.0
+var def_shots: PackedStringArray = []
+
+
+func _save_def(name: String) -> void:
+	_save(name)
+	def_shots.append(shots[-1])
+	var where: Array = []
+	for id: int in _av()._reps:
+		for r: Dictionary in _av()._reps[id]:
+			var sp: Vector2 = scene.cam.camera.unproject_position((r["node"] as Node3D).global_position)
+			where.append("%s%s(%.0f,%.0f)" % [r["kind"], "*" if int(r["drink"]) > 0 else "", sp.x, sp.y])
+	print("  화면의 대표: %s" % " ".join(where))
+
+
+## 마을에서 가장 가까운 사슴 무리가 풀을 뜯는 자리 (화면의 숲 가장자리)
+func _deer_home() -> Vector2:
+	var best := Vector2.INF
+	for h: Dictionary in w.herds:
+		if h["kind"] != "deer" or h["gone"] or int(h["n"]) <= 0:
+			continue
+		var p := _av()._home(h)
+		if best == Vector2.INF or p.distance_to(v.center) < best.distance_to(v.center):
+			best = p
+	return best if best != Vector2.INF else v.center
+
+
+func _def_dawn() -> int:
+	_run(fposmod(5.75 - v.hour_now(), 24.0) * 3600.0, 600.0)
+	var hm := _deer_home()
+	_look(hm.lerp(v.center, 0.25), DEFAULT_PPU)
+	_av().reset()
+	for h: Dictionary in w.herds:
+		var hp := _av()._home(h)
+		if hp.distance_to(v.center) < 90.0:
+			print("  무리 %s n %d 자리 (%.0f, %.0f) → 화면 자리 (%.0f, %.0f) 마을에서 %.0f칸 · 대표 %d" % [h["kind"], h["n"], h["x"], h["y"], hp.x, hp.y, hp.distance_to(v.center), Wildlife.reps(h)])
+	print("새벽 %s · 사슴 자리 (%.0f, %.0f) · 마을 (%.0f, %.0f)" % [v.fmt_time(v.t), hm.x, hm.y, v.center.x, v.center.y])
+	return 12
+
+
+## 물 마시러 나선 사슴을 찾아 물가 몇 걸음 앞에 (걸어가는 동안을 건너뜀 — 캡처) 두고 그쪽을 본다 (확대는 그대로)
+func _def_dawn_find() -> int:
+	var av := _av()
+	for id: int in av._reps:
+		for r: Dictionary in av._reps[id]:
+			if int(r["drink"]) > 0:
+				var goal: Vector2 = r["goal"]
+				var p: Vector2 = r["p"]
+				r["p"] = goal + (p - goal).normalized() * minf(0.3, p.distance_to(goal))
+				_look(goal.lerp(v.center, 0.15), DEFAULT_PPU)
+				print("물 마시러 나온 사슴: 물가 (%.1f, %.1f)" % [goal.x, goal.y])
+				return 30
+	print("물 마시는 사슴 없음 · 대표 %s" % str(av.counts()))
+	return 4
+
+
+func _def_dawn_shot() -> int:
+	_save_def("wildlife_default_dawn")
+	return 2
+
+
+func _def_day() -> int:
+	_run(fposmod(10.0 - v.hour_now(), 24.0) * 3600.0, 600.0)
+	_look(v.center + Vector2(1, 1), DEFAULT_PPU)
+	_av().reset()
+	return 12
+
+
+func _def_village_shot() -> int:
+	_save_def("wildlife_default_village")
+	return 2
+
+
+func _def_edge() -> int:
+	var hm := _deer_home()
+	_look(hm.lerp(v.center, 0.35), DEFAULT_PPU)
+	_av().reset()
+	return 40
+
+
+func _def_edge_shot() -> int:
+	_save_def("wildlife_default_edge")
+	return 2
+
+
+func _def_lake() -> int:
+	var b: Building = B.get("어부")
+	var h := w._lake_of(v, b) if b != null else _nearest("fish")
+	_look(Vector2(h["x"], h["y"]), DEFAULT_PPU)
+	_settle()
+	print("호수 '%s' 물고기 %d / %d" % [h["name"], h["n"], h["cap"]])
+	return 20
+
+
+var _lake_tries := 0
+
+
+## 물고기가 저절로 튀어 오를 때까지 (화면마다 확인, 최대 3000화면)
+func _def_lake_shot() -> int:
+	if _av()._jumps.is_empty() and _lake_tries < 3000:
+		_lake_tries += 1
+		step -= 1
+		return 1
+	if not _av()._jumps.is_empty():
+		var jp: Dictionary = _av()._jumps[0]
+		if float(jp["t"]) < 0.35:                   # 물 위로 막 솟는 때
+			step -= 1
+			return 1
+	_save_def("wildlife_default_lake")
+	return 2
+
+
+func _def_sheet() -> int:
+	Sheet.make(def_shots, out_dir.path_join("wildlife_default_sheet.png"), 0.5)
 	return 2
 
 

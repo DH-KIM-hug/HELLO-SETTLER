@@ -81,6 +81,14 @@ const ITEMS := {
 	"작은 소 한 쌍": {"tab": "생물", "price": 1800, "giant": "작은 소 한 쌍", "inside": "우유 · 밭 갈기 · 수레", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
 	"작은 닭 다섯": {"tab": "생물", "price": 500, "giant": "작은 닭 다섯", "inside": "달걀 — 먹을 것이 골고루", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
 	"작은 당나귀": {"tab": "생물", "price": 1000, "giant": "작은 당나귀", "inside": "짐을 날라요 — 먼 일터도 가볍게", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	# 병의 들짐승 다시 넣기 (SHOP 2.5 · WILDLIFE 1 '사라지면 돌아오지 않는다') — 그 종이 사라졌거나 몹시 줄었을 때만 진열된다
+	# (Wildlife.needs_readd). 놓은 자리 곁 무리에 (물고기는 가장 가까운 호수). kind wild · species · n 마리
+	"작은 사슴 한 쌍": {"tab": "생물", "price": 700, "giant": "작은 사슴 한 쌍", "inside": "숲가에 다시 사슴이 살아요",
+		"kind": "wild", "species": "deer", "n": 2, "size": 1.2},
+	"작은 토끼 한 쌍": {"tab": "생물", "price": 300, "giant": "작은 토끼 한 쌍", "inside": "들판에 다시 토끼가 뛰놀아요",
+		"kind": "wild", "species": "rabbit", "n": 2, "size": 1.0},
+	"작은 물고기 한 줌": {"tab": "생물", "price": 400, "giant": "작은 물고기 한 줌", "inside": "호수에 다시 물고기가 뛰어올라요 (물 위나 물가에)",
+		"kind": "wild", "species": "fish", "n": 10, "size": 1.0},
 	"이주민 뽑기": {"tab": "이주민", "price": 300, "giant": "작은 사람 하나", "inside": "마을 어귀에 내려앉는 새 이웃", "lock": "곧"},
 	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
 	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
@@ -99,6 +107,10 @@ static func update_unlocks(v: Village) -> PackedStringArray:
 		want["돌봄"] = true
 	if v.first_harvest_t >= 0.0 and day > v.cal_day(v.first_harvest_t):
 		want["땅"] = true
+	for k: String in ITEMS:
+		if wild_shown(v, k):
+			want["생물"] = true                 # 병의 짐승이 사라지거나 몹시 줄면 '생물' 탭이 열린다 (다시 넣기 카드)
+			break
 	for k: String in want:
 		if not v.shop_open.has(k):
 			v.shop_open[k] = v.t
@@ -140,15 +152,24 @@ static func mark_seen(v: Village, tab: String) -> void:
 			v.shop_seen.append(k)
 
 
-## 탭 안의 물건 이름 (보이는 순서)
-static func items_in(tab: String) -> PackedStringArray:
+## 들짐승 다시 넣기 카드인가 / 지금 보이나 (그 종이 이 병에서 사라졌거나 몹시 줄었을 때만)
+static func is_wild(item: String) -> bool:
+	return ITEMS.has(item) and String(ITEMS[item].get("kind", "")) == "wild"
+
+
+static func wild_shown(v: Village, item: String) -> bool:
+	return is_wild(item) and v != null and v.wild != null and v.wild.needs_readd(String(ITEMS[item]["species"]))
+
+
+## 탭 안의 물건 이름 (보이는 순서). 들짐승 다시 넣기 카드는 v를 주고 그 종이 줄었을 때만
+static func items_in(tab: String, v: Village = null) -> PackedStringArray:
 	var out := PackedStringArray()
 	if tab == "건물":
 		for b: String in BUILDINGS:
 			out.append(b)
 		return out
 	for k: String in ITEMS:
-		if String(ITEMS[k]["tab"]) == tab:
+		if String(ITEMS[k]["tab"]) == tab and (not is_wild(k) or wild_shown(v, k)):
 			out.append(k)
 	return out
 

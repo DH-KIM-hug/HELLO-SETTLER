@@ -92,7 +92,37 @@ func _process(_d: float) -> bool:
 	return false
 
 
+## 값들의 백분위 (q = 0~1) — 벽시계로 잰 시간은 '한 번의 최대' 대신 이것으로 (다른 일이 기기를 쓰면 한 번쯤 튄다)
+func pctl(vals: Array, q: float) -> float:
+	if vals.is_empty():
+		return 0.0
+	var s := vals.duplicate()
+	s.sort()
+	return float(s[clampi(int(ceilf(q * s.size())) - 1, 0, s.size() - 1)])
+
+
+## 시험의 임시 파일(user://test_*)은 프로세스 번호를 붙인다. 작업 트리가 여럿이어도 user:// 는 하나 (프로젝트 이름이 같다) —
+## 두 시험이 동시에 돌면 서로의 저장 폴더를 지우고 써서 가끔 실패했다 (흔들리는 시험). 끝나면 이 프로세스의 것만 지운다.
+func _clean_tmp() -> void:
+	var tag := "_%d" % OS.get_process_id()
+	var base := ProjectSettings.globalize_path("user://")
+	var da := DirAccess.open(base)
+	if da == null:
+		return
+	for f in da.get_files():
+		if f.begins_with("test_") and f.get_basename().ends_with(tag):
+			da.remove(f)
+	for d in da.get_directories():
+		if d.begins_with("test_") and d.ends_with(tag):
+			var sub := DirAccess.open(base.path_join(d))
+			if sub != null:
+				for f in sub.get_files():
+					sub.remove(f)
+			da.remove(d)
+
+
 func _finish(t0: int) -> void:
+	_clean_tmp()
 	times.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
 	print("\n오래 걸린 시험 (모드 %s):" % mode)
 	for i in mini(12, times.size()):
