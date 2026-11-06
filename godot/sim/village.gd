@@ -107,6 +107,8 @@ var _full_since := -1.0               # 영역이 90% 넘게 찬 때부터
 var _letter_id := 0
 var _people_by_id: Dictionary = {}
 var _bld_by_id: Dictionary = {}
+var _opening_chief := 0               # 첫 한 시간에 촌장이 터를 잡은 횟수 (OPENING_CHIEF_AT)
+var _spread_left := Balance.HOUR      # 숲이 저절로 퍼지는지 다음에 굴리기까지
 
 
 # ───────────────────────── 처음 세계 ─────────────────────────
@@ -163,6 +165,7 @@ func _init_prototype(seed_v: int) -> void:
 	# 10명 중 최소 1명은 '재능' 이상 (OPENING 단계 8)
 	if people.all(func(p: Resident) -> bool: return p.grade == 0):
 		ids[4].grade = 1
+	_arrive_fed()
 	log_line("어느 새벽, 우리 조상 열 명이 숲 가장자리에 처음으로 불을 피웠다.")
 	log_line("하늘의 두 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 그늘진 세상 끝 벽에서 흘러내려 낮은 곳으로 간다. 서쪽의 큰 호수에는 흘러드는 강이 없다.")
 
@@ -178,6 +181,47 @@ func _init_health(seed_v: int) -> void:
 		var d := Time.get_date_dict_from_system()
 		created_date = {"year": int(d["year"]), "month": int(d["month"]), "day": int(d["day"])}
 	_health_hour = 0
+
+
+# ───────────────────────── 첫 한 시간 (OPENING 3.1) ─────────────────────────
+## 첫 감사 기도 전의 첫 한 시간 — 어른은 곧바로 일하고, 따로 기도하지 않고, 첫 터는 천천히 지어진다
+func in_opening() -> bool:
+	return int(stats.get("thanks", 0)) == 0 and t < Balance.OPENING_END and not chief_off     # 촌장이 없으면(시험) 대본도 없다
+
+
+## 첫 한 시간에 짓는 터의 빠르기 배율 — 그 터는 OPENING_BUILD_WORK(사람×초)를 일해야 다 지어진다
+func opening_build(b: Building) -> float:
+	if not in_opening():
+		return 1.0
+	return minf(1.0, float(Balance.B[b.site_type()]["time"]) / Balance.OPENING_BUILD_WORK)
+
+
+## 정착민은 먹고 왔다 — 도착한 끼니(아침 7시)는 건너뛴다
+func _arrive_fed() -> void:
+	var mk := ResidentAI._meal_key(self, hour_now())
+	if mk >= 0:
+		for p in people:
+			p.meal_done = mk
+
+
+## 첫 감사 기도 (첫날만 — OPENING 3.1 3:30): 첫 건물이 서면 모두 하던 일을 놓고 제단 곁에 모여 허밍
+func thanksgiving(b: Building) -> void:
+	stats["thanks"] = 1
+	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.type, josa(b.type, "이", "가")])
+	var c := chief()
+	for p in people:
+		if p.is_baby() or p.sleeping or p.sick_left > 0.0:
+			continue
+		ResidentAI.cancel(self, p)
+		var a := rng.randf() * TAU
+		var q := altar_pos + Vector2(cos(a), sin(a)) * (1.4 + rng.randf() * 1.2)
+		p.action = "pray"
+		p.last_action = "pray"
+		p.doing = "감사 기도하는 중"
+		p.steps.append(ResidentAI.walk(q.x, q.y))
+		p.steps.append(ResidentAI.act(Balance.THANKS_TIME, "pray", ResidentAI.op("pray")))
+	if c != null:
+		speak(c, Balance.LINE_THANKS, 8)
 
 
 func add_building(type: String, x: float, y: float, built: bool) -> Building:
@@ -637,11 +681,7 @@ func step(dt: float) -> void:
 		_walker = p
 		ResidentAI.update(self, p, dt)
 	_walker = null
-	for tr: Dictionary in trees:
-		if tr["s"] != "tree":
-			tr["g"] -= dt
-			if tr["g"] <= 0.0:
-				tr["s"] = "tree"
+	_update_trees(dt)
 	# 주기 처리
 	for k in _timers:
 		_timers[k] += dt
@@ -653,6 +693,17 @@ func step(dt: float) -> void:
 		assign_jobs()
 		assign_homes()
 		_timers["jobs"] = 0.0
+	if _opening_chief < Balance.OPENING_CHIEF_AT.size() and t >= float(Balance.OPENING_CHIEF_AT[_opening_chief]):
+		_opening_chief += 1
+		if in_opening() and not chief_off:     # 첫 한 시간: 촌장이 15분을 기다리지 않고 곧바로 터를 잡는다 (OPENING 3.1 0:30)
+			var before := buildings.size()
+			chief_build()
+			if buildings.size() > before:
+				for p in people:              # 쉬던 어른들이 일어나 터로 (짐 나르기·짓기)
+					if p.is_adult() and p.action == "idle":
+						ResidentAI.cancel(self, p)
+				if _opening_chief == 1 and chief() != null:
+					speak(chief(), Balance.LINE_FIRST_SITE, 8)
 	if _timers["chief"] >= Balance.CHIEF_EVERY:
 		if not chief_off:             # 거인이 있든 없든 촌장이 짓는다 (기획서 6.7)
 			chief_build()
@@ -677,6 +728,57 @@ func step(dt: float) -> void:
 	_update_belief(dt)
 	for o: Village in others:        # 같은 세상의 다른 무리 (물은 이 마을이 이미 흘렸다)
 		o.step(dt)
+
+
+## 나무: 묘목은 자라 나무가 되고, 그루터기는 다시 자라지 않고 썩어 사라진다. 숲 곁 빈 땅에는 가끔 묘목이 저절로 돋는다
+func _update_trees(dt: float) -> void:
+	var rotted := false
+	for tr: Dictionary in trees:
+		if tr["s"] == "tree":
+			continue
+		tr["g"] -= dt
+		if tr["g"] <= 0.0:
+			if tr["s"] == "sapling":
+				tr["s"] = "tree"
+			elif int(tr["res"]) == 0:
+				tr["s"] = "gone"
+				rotted = true
+	if rotted:
+		trees = trees.filter(func(tr: Dictionary) -> bool: return tr["s"] != "gone")
+	_spread_left -= dt
+	if _spread_left <= 0.0:
+		_spread_left += HOUR
+		_tree_spread()
+
+
+## 숲이 저절로 퍼진다 (드물게 — 마을 하나에 하루 평균 TREE_SPREAD_PER_DAY, 촉촉한 땅일수록 잘 붙음). 한 시간에 한 번 굴림
+func _tree_spread() -> void:
+	if trees.is_empty():
+		return
+	var tr: Dictionary = trees[rng.randi() % trees.size()]
+	if tr["s"] != "tree":
+		return
+	var a := rng.randf() * TAU
+	var d := rng.randf_range(Balance.TREE_SPREAD_DIST[0], Balance.TREE_SPREAD_DIST[1])
+	var x := float(tr["x"]) + cos(a) * d
+	var y := float(tr["y"]) + sin(a) * d
+	var p_take := Balance.TREE_SPREAD_PER_DAY / 24.0 * (0.4 + wetness(x, y)) / 0.7
+	if rng.randf() >= p_take:
+		return
+	if not water.inside(x, y, 1.5) or water.depth(water.idx(x, y)) >= 0.005 or water_at(x, y) or is_road(x, y) or path_at(x, y) > 0.0:
+		return
+	for b in buildings:
+		if Vector2(b.x - x, b.y - y).length() < b.size() + 0.8:
+			return
+	if Vector2(fire.x - x, fire.y - y).length() < 3.0 or Vector2(altar_pos.x - x, altar_pos.y - y).length() < 1.5:
+		return
+	for r: Dictionary in rocks:
+		if Vector2(r["x"] - x, r["y"] - y).length() < 1.0:
+			return
+	for q: Dictionary in trees:
+		if Vector2(float(q["x"]) - x, float(q["y"]) - y).length() < 1.0:
+			return
+	trees.append({"x": x, "y": y, "s": "sapling", "g": Balance.SAPLING_GROW, "res": 0})
 
 
 func _on_dawn() -> void:
@@ -906,6 +1008,7 @@ func _update_salt_works(b: Building, dt: float, w: Resident) -> void:
 
 func on_built(b: Building) -> void:
 	stats["built"] += 1
+
 	reveal_building(b)
 	b.built_t = t
 	if b.upgrade_to != "":
@@ -924,6 +1027,8 @@ func on_built(b: Building) -> void:
 		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.type, josa(b.type, "이", "가")])
 	else:
 		log_line("%s%s 다 지어졌다." % [b.type, josa(b.type, "이", "가")])
+	if in_opening():
+		thanksgiving(b)
 
 
 # ───────────────────────── 일자리·집 ─────────────────────────
@@ -2405,7 +2510,9 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		_arrival_manna = true
 		manna_ended = true
 		first_harvest_t = 0.0
+		stats["thanks"] = 1               # 분가한 무리는 첫 한 시간 대본이 없다
 	else:
+		_arrive_fed()
 		log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
 		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
 	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)

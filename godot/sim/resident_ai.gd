@@ -54,8 +54,8 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER)
 		"chop":
 			var tr: Dictionary = d["tr"]
-			tr["s"] = "stump"
-			tr["g"] = Balance.TREE_REGROW / (0.6 + v.wetness(tr["x"], tr["y"]))
+			tr["s"] = "stump"                 # 그루터기는 다시 자라지 않고 2~3일 뒤 썩어 사라진다 (Village._update_trees)
+			tr["g"] = v.rng.randf_range(Balance.STUMP_ROT[0], Balance.STUMP_ROT[1])
 			tr["res"] = 0
 			r.carry = "통나무"
 			r.carry_amt = 1.0
@@ -63,7 +63,7 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			var q: Dictionary = d["q"]
 			q["res"] = 0
 		"plant":
-			v.trees.append({"x": float(d["x"]), "y": float(d["y"]), "s": "sapling", "g": 3.0 * Balance.HOUR, "res": 0})
+			v.trees.append({"x": float(d["x"]), "y": float(d["y"]), "s": "sapling", "g": Balance.SAPLING_GROW, "res": 0})
 		"dig":
 			var rk: Dictionary = d["rk"]
 			rk["amt"] = int(rk["amt"]) - 1
@@ -123,8 +123,8 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			var b: Building = d["b"]
 			if not b.is_site():
 				return
-			b.prog += float(d["chunk"]) * v.build_mult(b)        # 들어준 소원 ×1.5 (기획서 6.7)
-			if b.prog >= float(Balance.B[b.site_type()]["time"]):
+			b.prog += float(d["chunk"]) * v.build_mult(b) * v.opening_build(b)    # 들어준 소원 ×1.5 (기획서 6.7) · 첫 한 시간의 터는 천천히
+			if b.prog >= float(Balance.B[b.site_type()]["time"]) - 1e-3:
 				v.on_built(b)
 				v.speak(r, "%s 완성!" % b.type, 5)
 		_:
@@ -238,7 +238,10 @@ static func decide(v: Village, r: Resident) -> void:
 		var mk := _meal_key(v, h)
 		if mk >= 0 and r.meal_done != mk:
 			cand["eat"] = Balance.ACT_BASE["eat"] * Balance.W_MEAL
-	if not v.manna.is_empty() and h < 11.0 and not night and r.age >= 2.5:
+	var opening := v.in_opening()
+	# 첫 한 시간: 어른은 도착하고 잠깐만 낟알을 줍고 일하러 간다 (나머지는 아이들이 줍는다 — OPENING 3.1)
+	var manna_ok := r.is_child() or not opening or v.t < Balance.OPENING_MANNA_ADULT
+	if manna_ok and not v.manna.is_empty() and h < 11.0 and not night and r.age >= 2.5:
 		cand["manna"] = Balance.ACT_BASE["manna"] * (Balance.W_DAWN_MANNA if h < 8.0 else 1.0)
 	var hurt := r.injured_left > 0.0       # 다치면 힘쓰는 일(벌목·채석·짓기·나르기) 대신 가벼운 일 (HEALTH.md 3)
 	if r.is_adult():
@@ -252,12 +255,12 @@ static func decide(v: Village, r: Resident) -> void:
 			if site != null:
 				var g := v.build_mult(site)          # 들어준 소원의 터는 더 서둘러 짓는다
 				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
-	if not night and r.age >= 2.5:
+	if not night and r.age >= 2.5 and not opening:     # 첫 한 시간엔 따로 기도하지 않는다 — 첫 집이 서면 다 같이 감사 기도 (Village.thanksgiving)
 		var worries := 1.0 + (1.0 if v.deficit > 0.0 else 0.0) + (0.5 if r.home < 0 else 0.0)
 		# 저녁(일이 끝난 뒤) ×2, 저녁 일하는 시간엔 ×1, 낮엔 ×0.5. 믿음이 깊을수록 자주
 		var pw := Balance.W_EVENING_PRAY if h >= Balance.WORK_TO else (1.0 if h >= Balance.EVENING_FROM else 0.5)
 		cand["pray"] = Balance.ACT_BASE["pray"] * worries * pw * r.belief
-	if not night and r.age >= Balance.AGE_ADULT:
+	if not night and r.age >= Balance.AGE_ADULT and not (opening and r.is_adult()):     # 첫 한 시간의 어른은 노닥이지 않는다
 		cand["social"] = Balance.ACT_BASE["social"] * (Balance.W_EVENING_SOCIAL if h >= Balance.WORK_TO else 1.0)
 	if r.is_child() and work_t:
 		cand["play"] = Balance.ACT_BASE["play"]
@@ -305,7 +308,7 @@ static func decide(v: Village, r: Resident) -> void:
 	r.doing = "쉬는 중"
 	var p := near(v, v.fire.x, v.fire.y, 2.5)
 	r.steps.append(walk(p.x, p.y))
-	r.steps.append(act(300.0, "idle"))
+	r.steps.append(act(30.0 if v.in_opening() else 300.0, "idle"))     # 첫 한 시간엔 잠깐만 쉬고 다시 일감을 본다
 
 
 static func _meal_key(v: Village, h: float) -> int:
@@ -343,6 +346,9 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			var hm := v.bld(r.home)
 			if hm != null:
 				c = Vector2(hm.x, hm.y)
+			var pa := _working_parent(v, r)          # 일하는 엄마·아빠 곁에서 논다
+			if pa != null:
+				c = Vector2(pa.x, pa.y)
 			var p := near(v, c.x, c.y, 2.5 + v.rng.randf() * 2.0)
 			r.doing = "노는 중"
 			r.steps.append(walk(p.x, p.y))
@@ -399,6 +405,15 @@ static func _wander(v: Village, r: Resident) -> bool:
 			r.steps.append(walk(hp.x, hp.y))
 			return true
 	return false
+
+
+## 밖에서 일하고 있는 부모 (없으면 null)
+static func _working_parent(v: Village, r: Resident) -> Resident:
+	for id in r.parents:
+		var pa := v.person(id)
+		if pa != null and WORKISH.has(pa.action) and not pa.steps.is_empty():
+			return pa
+	return null
 
 
 static func _heavy_job(v: Village, r: Resident) -> bool:
@@ -749,8 +764,8 @@ static func build_task(v: Village, r: Resident) -> bool:
 	if b == null:
 		return false
 	var total: float = Balance.B[b.site_type()]["time"]
-	var chunk := minf(30.0, total - b.prog)
-	if chunk <= 0.0:
+	var chunk := minf(30.0, (total - b.prog) / (v.build_mult(b) * v.opening_build(b)))    # 남은 만큼만 (일하는 초)
+	if chunk <= 1.0:
 		chunk = 1.0
 	r.doing = "%s 짓는 중" % b.site_type()
 	var sp := near(v, b.x, b.y, 0.8 + b.size() * 0.5)

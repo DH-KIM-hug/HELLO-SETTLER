@@ -175,7 +175,7 @@ func test_pressure() -> void:
 
 # ───────────────────────── 처음 겪는 무리 ─────────────────────────
 func test_swarm_first_time() -> void:
-	var v := swarm_village()
+	var v := swarm_village(7)          # 나뉨은 확률 (하루 ×1.5) — 시드 5는 첫 한 시간 대본(OPENING 3.1) 뒤로 흐름이 바뀌어 0번이 나옴 → 나뉘는 시드로
 	var m := v.mold
 	var n0 := m.blobs.size()
 	check(n0 >= Balance.MOLD_SPAWN[0] and n0 <= Balance.MOLD_SPAWN[1] and m.phase == "swarm", "무리 %d마리가 나타남" % n0)

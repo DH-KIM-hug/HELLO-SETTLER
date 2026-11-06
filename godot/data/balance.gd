@@ -141,7 +141,10 @@ const IDLE_FOR_NEW_JOB := 2             # 직장 없는 성인이 2명 이상일
 const FARM_SAFETY := 1.3                # 농장 생산 < 소비 × 1.3 이면 식량 부족
 const FOREST_MIN := 40                  # 나무가 이만큼 아래면 산림관
 const FORESTER_STOP := 70               # 산림관은 나무가 이만큼 넘으면 쉰다
-const TREE_REGROW := 3.0 * HOUR         # 그루터기 재생 (÷ (0.6 + 습기))
+const STUMP_ROT := [2.0 * DAY, 3.0 * DAY]   # (정함) 벤 나무의 그루터기는 다시 자라지 않고 2~3일 뒤 썩어 사라진다
+const SAPLING_GROW := 3.0 * HOUR        # 묘목 → 나무 (산림관이 심은 것 · 저절로 퍼진 것)
+const TREE_SPREAD_PER_DAY := 3.0        # (정함) 숲 곁 빈 땅에 저절로 돋는 묘목 — 마을 하나에 하루 평균 이만큼 (촉촉한 땅일수록 잘 붙음)
+const TREE_SPREAD_DIST := [1.4, 3.0]    # (정함) 서 있는 나무에서 이만큼 떨어진 곳에 돋는다
 const GATHER_RANGE := 20.0
 
 # ───────────────────────── 건강·기후·두려움 (HEALTH.md) ─────────────────────────
@@ -295,6 +298,14 @@ const W_EVENING_PRAY := 2.0
 const W_EVENING_SOCIAL := 2.0
 const MEALS := [[7.0, 7.5], [12.0, 12.5], [18.5, 19.0]]
 const MEAL_TIME := 900.0
+# 첫 한 시간 (OPENING 3.1 — 창조 6분 뒤부터의 대본). 첫 감사 기도를 드리면 끝난다
+const OPENING_END := 2.0 * HOUR         # (정함) 첫 감사 기도가 이때까지 없으면 그냥 평소대로
+const OPENING_MANNA_ADULT := 3.0 * 60.0   # (정함) 도착하고 이만큼은 어른도 하늘 낟알을 줍는다 — 그 뒤엔 아이들만 줍고 어른은 일하러
+const OPENING_CHIEF_AT := [3.0 * 60.0, 4.5 * 60.0]   # (정함) 촌장이 첫 터를 잡는 때 (첫 집 · 밭 — 15분 주기를 기다리지 않음)
+const OPENING_BUILD_WORK := 14000.0     # (정함) 첫 한 시간에 잡은 터는 땅을 고르고 기둥을 처음 세우느라 이만큼(사람×초)을 일해야 다 지어진다 — 첫 오두막 ≈ 도착 40~45분
+const LINE_FIRST_SITE := "우리가 살 곳을 지을게요. 지켜봐 주세요."
+const LINE_THANKS := "거인님, 지켜봐 주셔서 고맙습니다."
+const THANKS_TIME := 300.0              # (정함) 첫 감사 기도 — 모두 제단 곁에 모여 허밍 (OPENING 3.1 3:30)
 const NIGHT_FROM := 22.0
 const NIGHT_TO := 6.0
 const WORK_FROM := 6.0

@@ -64,7 +64,7 @@ func _initialize() -> void:
 		load(SUITES[one]).new(self, q).all()
 		_finish(t0)
 		return
-	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_house_bottleneck", "test_determinism", "test_time_controls"])
+	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls"])
 	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
@@ -282,6 +282,74 @@ func test_village_opening() -> void:
 		texts.append(p.doing)
 	var wbad := words_ok(texts)
 	check(wbad == "", "연대기·주민 말에 금지어(게임·앱·플레이어·휴대폰) 없음 %s" % wbad)
+
+
+## OPENING 3.1 — 첫 한 시간: 낟알은 잠깐, 촌장은 몇 분 안에 터를 잡고, 어른은 곧바로 일하고, 첫 집이 서면 감사 기도
+func test_opening_first_hour() -> void:
+	print("== 첫 한 시간 (OPENING 3.1)")
+	for wide: bool in [false, true]:
+		var v: Village
+		if wide:
+			var jw := JarWorld.create(20261105, WorldCfg.SMALL_SIZE)
+			var rec := jw.recommended_kit_spots()
+			v = jw.place_kit(rec[0].x, rec[0].y)
+		else:
+			v = Village.new_prototype(20261105)
+		var tag := "넓은 세상" if wide else "작은 병"
+		var kit_ids := {}
+		for b in v.buildings:
+			kit_ids[b.id] = true
+		v.step_dt = 1.0
+		v.advance(5.0 * 60.0)
+		var sites := v.buildings.filter(func(b: Building) -> bool: return not kit_ids.has(b.id))
+		var adults := v.people.filter(func(p: Resident) -> bool: return p.is_adult())
+		var working := adults.filter(func(p: Resident) -> bool: return p.action in ["work", "haul", "build"])
+		var praying := v.people.filter(func(p: Resident) -> bool: return p.action == "pray")
+		var eating := v.people.filter(func(p: Resident) -> bool: return p.doing == "밥 먹는 중")
+		check(sites.size() >= 2, "%s: 5분 안에 촌장이 터를 둘 잡음 (%d)" % [tag, sites.size()])
+		check(working.size() >= adults.size() - 1, "%s: 5분에 어른이 거의 다 일함 (%d/%d)" % [tag, working.size(), adults.size()])
+		check(praying.is_empty() and eating.is_empty(), "%s: 첫 아침엔 따로 기도하거나 밥 먹지 않음 (기도 %d · 밥 %d)" % [tag, praying.size(), eating.size()])
+		var first := -1.0
+		while v.t < 60.0 * 60.0 and first < 0.0:
+			v.advance(30.0)
+			for b in v.buildings:
+				if b.built and not kit_ids.has(b.id):
+					first = v.t
+		check(first >= 35.0 * 60.0 and first <= 50.0 * 60.0, "%s: 첫 건물이 도착 35~50분에 (%.1f분)" % [tag, first / 60.0])
+		check(int(v.stats.get("thanks", 0)) == 1 and v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("감사 기도")), "%s: 첫 건물이 서면 첫 감사 기도" % tag)
+		v.advance(60.0)
+		var thank := v.people.filter(func(p: Resident) -> bool: return p.doing == "감사 기도하는 중")
+		check(thank.size() >= 6, "%s: 다 같이 제단 곁에서 감사 기도 (%d명)" % [tag, thank.size()])
+	check(words_ok([Balance.LINE_FIRST_SITE, Balance.LINE_THANKS, "감사 기도하는 중"]) == "", "첫 한 시간의 말에 금지어 없음")
+
+
+## 벤 나무는 다시 자라지 않는다 — 그루터기로 남았다가 2~3일 뒤 썩어 사라짐. 새 나무는 산림관·숲 곁 묘목뿐
+func test_stump_stays() -> void:
+	print("== 벤 나무 (그루터기는 다시 자라지 않음)")
+	var v := Village.new_prototype(3)
+	v.chief_off = true
+	v.water.offline = true
+	var r: Resident = v.people[0]
+	var tr: Dictionary = v.trees[0]
+	var spot := Vector2(tr["x"], tr["y"])
+	ResidentAI.run_op(v, r, ResidentAI.op("chop", {"tr": tr}))
+	r.carry = ""
+	r.carry_amt = 0.0
+	v.advance(Balance.DAY)
+	var here := v.trees.filter(func(q: Dictionary) -> bool: return Vector2(q["x"], q["y"]).distance_to(spot) < 0.01)
+	check(here.size() == 1 and here[0]["s"] == "stump", "벤 자리는 하루 뒤에도 그루터기 (%s)" % (here[0]["s"] if not here.is_empty() else "없음"))
+	v.advance(2.2 * Balance.DAY)
+	here = v.trees.filter(func(q: Dictionary) -> bool: return Vector2(q["x"], q["y"]).distance_to(spot) < 0.01)
+	check(here.is_empty(), "그루터기는 사흘 안에 썩어 사라짐 (%d)" % here.size())
+	# 숲은 저절로 조금씩 퍼진다 (드물게)
+	var v2 := Village.new_prototype(4)
+	v2.chief_off = true
+	v2.water.offline = true
+	var n0 := v2.trees.size()
+	v2.advance(3.0 * Balance.DAY)
+	var spread := v2.trees.size() - n0
+	print("  나무 %d → %d (3일, 촌장 없음)" % [n0, v2.trees.size()])
+	check(spread >= 1 and spread <= 25, "숲 곁에 묘목이 드물게 돋음 (3일에 %d그루 늘어남)" % spread)
 
 
 ## 집 크기 병목 (의도한 규칙): 집이 꽉 차면 '가족 + 1명'이 들어갈 집으로 옮겨야 낳는다

@@ -534,9 +534,12 @@ func test_offline_death_cap() -> void:
 		for p in v.people:
 			p.hunger = 4.0
 			p.health = minf(p.health, 0.02)
-		var d0: int = v.stats["died"]
+		var d0: int = v.dead.size()
 		v.advance(Balance.HOUR)
-		var dd: int = v.stats["died"] - d0
+		var dd := 0                         # 위기 사망만 센다 (노환은 하루 1명 규칙 밖)
+		for i in range(d0, v.dead.size()):
+			if v.dead[i].death_why != "노환":
+				dd += 1
 		by_day[v.day_no()] = int(by_day.get(v.day_no(), 0)) + dd
 		min_c = mini(min_c, couples.call())
 	var worst := 0
