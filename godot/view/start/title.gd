@@ -67,7 +67,8 @@ static func shelf_items(inf: Dictionary) -> Array:
 	var out: Array = []
 	for i in list.size():
 		if i != ci:
-			out.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int((list[i] as Dictionary).get("id", -1)), "era": int((list[i] as Dictionary).get("era", 0))})
+			var it: Dictionary = list[i]
+			out.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int(it.get("id", -1)), "era": int(it.get("era", 0)), "preview": it.get("preview", {})})
 	if bool(inf.get("pending", false)):
 		out.append({"x": (list.size() - ci) * GiantRoom.SHELF_GAP, "id": -1, "empty": true})
 	return out
@@ -90,9 +91,13 @@ func _build_room() -> void:
 	world3d.add_child(we)
 	room = GiantRoom.new()
 	world3d.add_child(room)
-	room.setup(1.0, StartFlow.now_time_of_day(), true)
+	var fresh := not bool(info["has_save"]) and not bool(info.get("creating", false))
+	room.setup(1.0, StartFlow.now_time_of_day(), not fresh)     # 맨 처음 (저장도 만들던 병도 없음): 빈 유리병 — 흙도 마을도 없이 (코르크만)
 	room.houses = bool(info["has_save"])
-	room.add_mini_village(room.houses, int(info.get("era", 0)))      # 이어하기: 병 안에 저장된 시대의 작은 마을 / 처음: 풀과 나무만
+	if room.houses:                                                    # 이어하기: 저장된 세상의 미리보기 (땅·물·숲·마을 — sim/jar_preview.gd)
+		room.add_jar_contents(info.get("preview", {}), int(info.get("era", 0)))     # 미리보기가 없는 옛 저장은 시대에 맞춘 꾸민 마을
+	elif not fresh:
+		room.add_mini_village(false, 0)                                # 만들던 병: 풀과 나무만
 	room.set_shelf_jars(shelf_items(info))                            # (C1) 선반의 다른 병들 — 넓은 세상 장면의 방과 같은 자리
 	room.set_lamp(true, JarWater.LIGHT)
 	cam = JarCamera.new()

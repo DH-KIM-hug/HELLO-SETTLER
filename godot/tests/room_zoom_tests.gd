@@ -289,7 +289,8 @@ func test_title_era() -> void:
 	var room: GiantRoom = t.get("room")
 	var names := []
 	for e in 4:
-		room.mini_village.free()
+		if room.mini_village != null:
+			room.mini_village.free()
 		room.add_mini_village(true, e)
 		names.append(room.mini_village.get_child_count())
 	check(room.mini_era == 3 and names[3] > 6, "시대마다 작은 마을 (%s)" % str(names))
