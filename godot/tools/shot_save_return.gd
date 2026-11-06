@@ -1,9 +1,10 @@
 ## 돌아왔을 때 캡처 — docs/SAVE.md 3 · 4. 마을을 하루 지켜본 뒤 거인이 이틀 반 자리를 비웠다가 돌아온 장면.
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_save_return.gd
-## (2일 6시간 비움 → 돌아온 때는 낮)
+## (2일 6시간 비움 → 등불 12시간만 흐르고 나머지는 잠듦 — "등불이 12시간 타고 꺼져 있었어요", SAVE.md 3 v1.1)
 ## 결과 (godot_shots/):
 ##   save_catchup.png — 로딩 화면 "병 안의 시간이 흐르는 중…" + 진행 막대 (따라잡는 도중)
-##   save_return.png  — 촌장의 '자리를 비운 동안' 편지 (큰 일 · 인구 변화 · 새 얼굴/떠난 얼굴 · 기다리는 것 · 단추 둘)
+##   save_return.png  — 촌장의 '자리를 비운 동안' 편지 (등불 줄 · 큰 일 · 인구 변화 · 새 얼굴/떠난 얼굴 ·
+##                      기다리는 것: 비운 동안 쌓인 제물 + 장터 값 + [모두 받기] · 단추 둘)
 ##   save_festival.png — 편지를 닫은 뒤 귀환 축제: 광장(모닥불)에 모여 하늘을 보는 주민들
 extends SceneTree
 
@@ -53,7 +54,7 @@ func _process(_d: float) -> bool:
 				step = 2
 				frame = 0
 		2:
-			if frame == 20:
+			if frame == 60:                        # 등불 줄이 다 떠오른 뒤 (0.8초)
 				_save("save_return")
 				scene.return_letter.close()
 				step = 3

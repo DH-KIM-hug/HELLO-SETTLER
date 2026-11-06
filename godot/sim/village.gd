@@ -96,7 +96,8 @@ var air: JarAir
 var mold: Mold
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
-var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array}
+var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array, away?: 거인이 비운 동안(등불 시간) 바친 것}
+var altar_hold := false               # 따라잡기 중 (SAVE.md 3.1): 비운 동안 바친 제물은 이틀이 지나도 창고로 돌아가지 않는다
 var favourites: Dictionary = {}       # 거인님이 받으신 물건 → 받은 개수 합 ('거인님은 빵을 좋아하신다')
 var letters: Array = []               # 주민의 편지 {id, kind: "wish"/"split", t, from, name, type, text, state: "open"/"granted"/"done"}
 var wishes: Array = []                # 들어준 소원 중 아직 터를 잡지 않은 건물 종류
@@ -1939,7 +1940,7 @@ func evening_offering() -> Dictionary:
 		if amt < 1:
 			continue
 		stock[item] = float(stock[item]) - amt
-		altar.append({"item": item, "amt": amt, "t": t, "by": by})
+		_put_offering(item, amt, by)
 		got[item] = amt
 	if got.is_empty() and int(stats.get("offered", 0)) == 0 and not starving:
 		_first_token(by, got)            # 첫 저녁 기도: 남는 게 없어도 만든 것 몇 개 (OPENING T3 — BALANCE v4-4)
@@ -1949,7 +1950,7 @@ func evening_offering() -> Dictionary:
 			var amt := floori(float(stock.get(item, 0.0)) * Balance.OFFER_FEAR_FOOD_SHARE)
 			if amt >= 1:
 				stock[item] = float(stock[item]) - amt
-				altar.append({"item": item, "amt": amt, "t": t, "by": by})
+				_put_offering(item, amt, by)
 				got[item] = int(got.get(item, 0)) + amt
 				dark = true
 		if dark:
@@ -1980,18 +1981,26 @@ func _first_token(by: PackedInt32Array, got: Dictionary) -> void:
 	if best == "" or amt < 1:
 		return
 	stock[best] = float(stock[best]) - amt
-	altar.append({"item": best, "amt": amt, "t": t, "by": by})
+	_put_offering(best, amt, by)
 	got[best] = amt
 
 
-## 이틀이 지난 제물은 창고로 돌아간다 ("거인님이 받지 않으셨다")
+func _put_offering(item: String, amt: int, by: PackedInt32Array) -> void:
+	var o := {"item": item, "amt": amt, "t": t, "by": by}
+	if altar_hold:
+		o["away"] = true
+	altar.append(o)
+
+
+## 이틀이 지난 제물은 창고로 돌아간다 ("거인님이 받지 않으셨다").
+## 단 거인이 비운 동안(altar_hold) 바친 것은 그대로 쌓여 기다린다 (SAVE.md 3.1) — 돌아온 뒤엔 다시 평소대로
 func _expire_offerings() -> void:
 	if altar.is_empty():
 		return
 	var keep: Array = []
 	var back := false
 	for o: Dictionary in altar:
-		if t - float(o["t"]) >= Balance.OFFER_DAYS - HOUR:
+		if t - float(o["t"]) >= Balance.OFFER_DAYS - HOUR and not (altar_hold and o.get("away", false)):
 			stock[o["item"]] = float(stock.get(o["item"], 0.0)) + float(o["amt"])
 			back = true
 		else:

@@ -1,5 +1,7 @@
 ## '자리를 비운 동안' 편지 — docs/SAVE.md 4.2. 촌장이 쓴 편지 한 장 (손글씨는 그림체가 정해질 때까지 UiTheme 글꼴).
 ## 큰 일 3~5줄 · 인구 변화 "13명 → 17명" · 새 얼굴(아기 초상) / 떠난 얼굴 · 기다리는 것(제물·소원 편지·위기 조짐) ·
+## 비운 동안 쌓인 제물은 '기다리는 것' 맨 위에 장터 값과 함께 + [모두 받기] (곧바로 지폐, 저장 — SAVE.md 3.1).
+## 등불보다 오래 비웠으면 머리에 "등불이 n시간 타고 꺼져 있었어요" (천천히 떠오름).
 ## [연대기에서 자세히] (비운 동안의 연대기를 같은 종이에) / [병 안으로] (닫힘 → closed).
 ## 쓰는 법: var l := ReturnLetter.new(); add_child(l); l.open(village, CatchUp.finish()의 편지, 연대기 시작 줄)
 class_name ReturnLetter
@@ -19,6 +21,8 @@ var body: VBoxContainer
 var chron_btn: Button
 var enter_btn: Button
 var showing_chronicle := false
+var take_btn: Button                    # 제단 [모두 받기] (제물이 있을 때만)
+var taken := 0.0                        # 편지에서 받은 지폐 (받았으면 > 0)
 
 
 func _init() -> void:
@@ -119,6 +123,7 @@ func open(v: Village, letter: Dictionary, from_line := 0) -> void:
 	data = letter
 	book_from = from_line
 	showing_chronicle = false
+	taken = 0.0
 	_fill_letter()
 	visible = true
 	_layout()
@@ -172,6 +177,11 @@ func _fill_letter() -> void:
 	var head := _label("자리를 비운 동안", "Title")
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label("거인님이 %s 비우신 사이" % CatchUp.away_words(float(data.get("away", 0.0))), "Small").horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if float(data.get("slept", 0.0)) > 0.0:
+		var lamp := _label("등불이 %d시간 타고 꺼져 있었어요" % int(data.get("lamp_h", 12)), "Small")
+		lamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		lamp.modulate.a = 0.0
+		create_tween().tween_property(lamp, "modulate:a", 1.0, 0.8)
 	_rule()
 	_label("거인님께,")
 	_label("자리를 비우신 동안 이런 일이 있었어요.")
@@ -193,9 +203,13 @@ func _fill_letter() -> void:
 			rs.append(_dead(int(l["id"])))
 		_faces(rs, true)
 	var waiting: Array = data.get("waiting", [])
-	if not waiting.is_empty():
+	var altar_line := String(data.get("altar_line", ""))
+	take_btn = null
+	if not waiting.is_empty() or altar_line != "":
 		_rule()
 		_label("기다리는 것", "Section")
+		if altar_line != "":
+			_altar_row(altar_line)
 		for w: String in waiting:
 			_label("· " + w)
 	if data.get("long", false):
@@ -204,6 +218,47 @@ func _fill_letter() -> void:
 		_label("모두 광장에 모여 거인님을 기다리고 있어요!")
 	var sign := _label("— 촌장 %s 올림" % String(data.get("chief", "")))
 	sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+
+
+## 제단 줄 + [모두 받기] — 누르면 제단의 제물을 모두 장터에 팔아 곧바로 지폐 (Village.take_all → 거인의 행동이라 바로 저장)
+func _altar_row(text: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UiTheme.GAP)
+	body.add_child(row)
+	var l := Label.new()
+	l.text = "· " + text
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(l)
+	take_btn = Button.new()
+	take_btn.focus_mode = Control.FOCUS_NONE
+	take_btn.custom_minimum_size = Vector2(92, UiTheme.TOUCH)
+	take_btn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	row.add_child(take_btn)
+	if taken > 0.0:
+		_show_taken()
+	else:
+		take_btn.text = "모두 받기"
+		take_btn.pressed.connect(take_all)
+
+
+## [모두 받기] → 받은 지폐 (이미 받았거나 제단이 비었으면 0)
+func take_all() -> float:
+	if village == null or taken > 0.0:
+		return 0.0
+	var got := village.take_all()
+	if got > 0.0:
+		taken = got
+		GameAudio.fx("coins")
+		GameAudio.say("offering_taken")
+	if take_btn != null:
+		_show_taken()
+	return got
+
+
+func _show_taken() -> void:
+	take_btn.disabled = true
+	take_btn.text = ("%s 지폐 받음" % CatchUp._num(taken)) if taken > 0.0 else "받을 것 없음"
 
 
 func _dead(id: int) -> Resident:

@@ -1,7 +1,8 @@
 ## 거인의 장터와 지갑 — 기획서 11.1 · BALANCE v3-1·v3-2. 병 밖(거인의 세상)의 것이라 **모든 병이 함께 쓴다** (static).
 ## 지폐 = 거인(플레이어)의 돈. 부락의 돈(주화)과는 다르다.
 ## 값: 같은 물건 n번째 단가 = 기본가 × 0.5^((n−1)/60). '그날' = 현실 하루 (기기 날짜), 모든 병 합산.
-## 저장·불러오기는 아직 없음 — 앱을 다시 켜면 0부터 (열린 일).
+## 저장·불러오기는 GameSave의 거인 묶음 (save/save_manager.gd).
+## 거인의 등불 (SAVE.md 3 v1.1 · SHOP.md): 거인이 자리를 비운 동안 병이 흐르는 시간 — 12시간, 지폐로 16 → 20 → 24시간 (영구, 모든 병).
 class_name Market
 extends RefCounted
 
@@ -10,6 +11,11 @@ static var sold: Dictionary = {}      # 그날 물건별 거둔 개수
 static var day_key := ""              # sold가 세는 현실 날짜
 static var today_override := ""       # 테스트: 비어 있지 않으면 이 날짜를 '오늘'로
 static var first_paid := false        # 첫 제물 웃돈을 받았다 (BALANCE v4-4 — 거인에게 한 번, Village.take_offering)
+static var lamp_level := 0            # 등불 단계 0~3 (LAMP_HOURS)
+
+const LAMP_HOURS := [12, 16, 20, 24]                       # 단계별 등불 시간 (비운 동안 병이 흐르는 최대 시간)
+const LAMP_COST := [2000.0, 6000.0, 15000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1
+const LAMP_NAMES := ["큰 기름병", "더 큰 등잔", "거인의 램프"]
 
 
 static func reset(start_notes := 0.0) -> void:
@@ -17,6 +23,34 @@ static func reset(start_notes := 0.0) -> void:
 	sold = {}
 	day_key = ""
 	first_paid = false
+	lamp_level = 0
+
+
+# ───────────────────────── 거인의 등불 ─────────────────────────
+## 지금 등불이 타는 시간 (시간)
+static func lamp_hours() -> int:
+	return int(LAMP_HOURS[clampi(lamp_level, 0, LAMP_HOURS.size() - 1)])
+
+
+## 지금 등불이 타는 시간 (초) — 비운 시간 따라잡기의 상한 (CatchUp)
+static func lamp_seconds() -> float:
+	return float(lamp_hours()) * Balance.HOUR
+
+
+## 다음 등불 {name, hours, cost} — 다 올렸으면 {}
+static func next_lamp() -> Dictionary:
+	if lamp_level >= LAMP_COST.size():
+		return {}
+	return {"name": LAMP_NAMES[lamp_level], "hours": int(LAMP_HOURS[lamp_level + 1]), "cost": float(LAMP_COST[lamp_level])}
+
+
+## 등불을 한 단계 올린다 (지폐를 낸다). 못 사면 false — 저장은 부르는 쪽 (GameSave.buy_lamp_upgrade)
+static func buy_lamp_upgrade() -> bool:
+	var nx := next_lamp()
+	if nx.is_empty() or not pay(float(nx["cost"])):
+		return false
+	lamp_level += 1
+	return true
 
 
 static func _today() -> String:

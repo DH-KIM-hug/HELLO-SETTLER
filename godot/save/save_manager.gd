@@ -144,7 +144,7 @@ func giant_payload() -> Dictionary:
 		var j: Dictionary = jars[id]
 		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", ""))})
 	return {"notes": Market.notes, "sold": Market.sold.duplicate(), "day_key": Market.day_key, "first_paid": Market.first_paid,
-		"jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
+		"lamp_level": Market.lamp_level, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": giant.get("draws", {}).duplicate(), "upgrades": giant.get("upgrades", []).duplicate(),
 		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
 
@@ -185,6 +185,15 @@ func _book_n(id: int) -> int:
 ## 거인 묶음 (지폐·장터·선반). sync = 끝날 때까지 기다림
 func save_giant(sync := true) -> void:
 	_enqueue("giant", giant_payload(), sync)
+
+
+## 등불 업그레이드 (SAVE.md 3 · SHOP.md — 지폐, 영구, 모든 병) → 샀으면 거인 묶음을 곧바로 디스크에
+func buy_lamp_upgrade() -> bool:
+	if not Market.buy_lamp_upgrade():
+		return false
+	if enabled:
+		save_giant(true)
+	return true
 
 
 ## 병 하나 (+ 연대기가 늘었으면 연대기도)
@@ -358,6 +367,7 @@ func load_all() -> bool:
 	Market.sold = (gp.get("sold", {}) as Dictionary).duplicate()
 	Market.day_key = String(gp.get("day_key", ""))
 	Market.first_paid = bool(gp.get("first_paid", false))
+	Market.lamp_level = clampi(int(gp.get("lamp_level", 0)), 0, Market.LAMP_HOURS.size() - 1)   # 옛 저장엔 없음 → 12시간
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
 		"climates": gp.get("climates", [])}
 	last_load["away"] = CatchUp.elapsed_since(float(gp.get("last_save_unix", 0.0)), Time.get_unix_time_from_system())
@@ -470,7 +480,8 @@ static func _v0_to_v1(kind: String, p: Dictionary) -> Dictionary:
 
 
 # ───────────────────────── 따라잡기 ─────────────────────────
-## 비운 시간만큼 모든 병을 따라잡을 CatchUp 목록 (지금 보던 병 먼저 — 화면이 차례로 run)
+## 비운 시간만큼 모든 병을 따라잡을 CatchUp 목록 (지금 보던 병 먼저 — 화면이 차례로 run).
+## 병은 등불이 타는 동안만 흐른다 (Market.lamp_seconds — 12~24시간), 그 뒤는 잠든 시간 (CatchUp)
 func catch_up(elapsed: float) -> Array:
 	var out: Array = []
 	var ids := order.duplicate()

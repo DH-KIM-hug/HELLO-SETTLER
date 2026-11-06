@@ -1,13 +1,15 @@
 ## 저장과 돌아왔을 때 — docs/SAVE.md. tests/run.gd가 부름 (`-- save` = 이것만, quick 1분 안).
 ## 왕복 같음 · 저장/불러오기를 끼워도 같은 결과(결정론, 병 시계 포함) · 두 칸·깨진 칸 복구 · 옛 형식(v0) 옮기기 ·
-## 시각이 뒤로 가면 0 · 비운 동안의 규칙(새 위기 없음·위기 사망 하루 1명·부부 2쌍·시대 30%·제물 이틀) · 창세의 날 ×12 ·
-## 거인의 행동은 다음 화면 전에 디스크에 · 자동 저장 한 번의 화면 쪽 비용 · 따라잡기와 편지·귀환 축제.
-## long: 요약 계산 ↔ 정밀 계산 10일 평균 (±15%) · 따라잡기 빠르기 (시간/초).
+## 시각이 뒤로 가면 0 · 비운 동안의 규칙(새 위기 없음·위기 사망 하루 1명·부부 2쌍·시대 30%) · 창세의 날 ×12 ·
+## 거인의 행동은 다음 화면 전에 디스크에 · 자동 저장 한 번의 화면 쪽 비용 · 따라잡기와 편지·귀환 축제 ·
+## 등불 (SAVE.md 3 v1.1): 12시간 상한·잠든 시간·"긴 밤"·업그레이드 24시간·저장 · 비운 동안의 제물 (3.1): 이틀 상한 없이 쌓임·편지의 [모두 받기] ·
+## 따라잡기 결정론 (나눠 흘려도 한 번에 흘려도 같음).
+## long: 따라잡기 빠르기 (정밀 24시간 — 이 기기에서 걸린 초).
 extends RefCounted
 
 var run: SceneTree
 var quick := false
-const SLOW := ["test_summary_matches_exact", "test_catchup_speed"]
+const SLOW := ["test_catchup_speed"]
 const TMP_DIR := "user://test_save"
 const FIXTURE := "res://tests/fixtures/save_v0"
 
@@ -25,15 +27,20 @@ func all() -> void:
 	print("== 저장 · 비운 시간 따라잡기 · 돌아왔을 때 (SAVE.md)")
 	var old_hook := Village.on_giant_action
 	var old_notes := Market.notes
+	var old_lamp := Market.lamp_level
+	var old_paid := Market.first_paid
+	Market.lamp_level = 0
 	run.timed(self, ["test_roundtrip", "test_determinism_save_load", "test_determinism_clock", "test_world_roundtrip",
 		"test_files_and_slots", "test_corrupt_recovery", "test_migration_v0", "test_clock_backwards", "test_giant_action_persisted",
 		"test_autosave_cost", "test_offline_no_new_crisis", "test_offline_death_cap", "test_offline_era_altar",
-		"test_creation_day", "test_catchup_and_letter", "test_return_effects",
-		"test_summary_matches_exact", "test_catchup_speed"])
+		"test_creation_day", "test_catchup_and_letter", "test_lamp_upgrade", "test_offline_offerings", "test_catchup_determinism",
+		"test_return_effects", "test_catchup_speed"])
 	check(SaveCodec.errors == 0, "저장할 수 없는 값(객체·Callable)을 한 번도 만나지 않았다 (%d)" % SaveCodec.errors)
 	_clean()
 	Village.on_giant_action = old_hook
 	Market.notes = old_notes
+	Market.lamp_level = old_lamp
+	Market.first_paid = old_paid
 
 
 func _clean() -> void:
@@ -424,8 +431,9 @@ func test_offline_era_altar() -> void:
 	c.finish()
 	var oldest := 0.0
 	for o: Dictionary in v.altar:
-		oldest = maxf(oldest, v.t - float(o["t"]))
-	check(oldest < Balance.OFFER_DAYS, "사흘 비워도 제단에는 이틀치까지만 (가장 오래된 제물 %.1f시간 전, %d묶음)" % [oldest / 3600.0, v.altar.size()])
+		if not o.get("away", false):
+			oldest = maxf(oldest, v.t - float(o["t"]))
+	check(oldest < Balance.OFFER_DAYS, "떠나기 전에 바친 제물은 비운 동안에도 이틀이 지나면 창고로 (가장 오래된 것 %.1f시간 전, %d묶음)" % [oldest / 3600.0, v.altar.size()])
 	check(v.watching and v.water.offline, "따라잡기가 끝나면 거인이 다시 본다 (watching · 물 간격은 따라잡기 전 그대로)")
 
 
@@ -465,15 +473,18 @@ func test_creation_day() -> void:
 
 # ───────────────────────── 따라잡기 · 편지 · 귀환 ─────────────────────────
 func test_catchup_and_letter() -> void:
-	var pl := CatchUp.plan(5.0 * 60.0)
-	var pl2 := CatchUp.plan(30.0 * Balance.HOUR)
-	check(pl["summary"] == 0.0 and pl["exact"] == 300.0 and pl2["summary"] == 18.0 * Balance.HOUR and pl2["exact"] == 12.0 * Balance.HOUR,
-		"비운 시간 나누기: 5분 = 정밀 5분 · 30시간 = 요약 18시간 + 정밀 12시간")
+	var lamp := 12.0 * Balance.HOUR
+	var pl := CatchUp.plan(5.0 * 60.0, lamp)
+	var pl2 := CatchUp.plan(36.0 * Balance.HOUR, lamp)
+	check(pl["exact"] == 300.0 and pl["slept"] == 0.0 and pl2["exact"] == 12.0 * Balance.HOUR and pl2["slept"] == 24.0 * Balance.HOUR,
+		"비운 시간 나누기 (등불 12시간): 5분 = 5분 흐름 · 36시간 = 12시간 흐름 + 24시간 잠듦")
+	check(Market.lamp_level == 0 and Market.lamp_seconds() == lamp, "처음 등불은 12시간")
 	var v := Village.new_prototype(51)
 	v.water.offline = true
 	v.advance(1.2 * Balance.DAY)
 	var t0 := v.t
-	var c := CatchUp.new(v, 30.0 * Balance.HOUR)
+	var book0 := v.book.size()
+	var c := CatchUp.new(v, 36.0 * Balance.HOUR)
 	var frames := 0
 	var last_p := 0.0
 	var mono := true
@@ -482,16 +493,133 @@ func test_catchup_and_letter() -> void:
 		mono = mono and c.progress() >= last_p
 		last_p = c.progress()
 	var l := c.finish()
-	check(absf(v.t - t0 - 30.0 * Balance.HOUR) < 1.0 and mono and c.progress() == 1.0, "30시간 따라잡기: 병 시간이 꼭 30시간 흐름, 진행 막대는 늘기만 (%d화면, %.1f초)" % [frames, c.real_ms / 1000.0])
+	check(absf(v.t - t0 - 12.0 * Balance.HOUR) < 1.0 and mono and c.progress() == 1.0, "36시간 비움: 병 시간은 등불만큼 꼭 12시간 흐름, 진행 막대는 늘기만 (%d화면, %.1f초)" % [frames, c.real_ms / 1000.0])
+	var nights := 0
+	for e: Dictionary in v.book.slice(book0):
+		if String(e["text"]) == CatchUp.LONG_NIGHT:
+			nights += 1
+	check(nights == 1 and int(l["lamp_h"]) == 12 and float(l["slept"]) == 24.0 * Balance.HOUR, "등불보다 오래 비우면 연대기에 \"긴 밤이 있었다.\" 한 줄 (%d) · 편지에 등불 %d시간" % [nights, int(l["lamp_h"])])
+	check(CatchUp.lamp_words(lamp, 36.0 * Balance.HOUR) == "등불이 12시간 타고 꺼져 있었어요" and CatchUp.lamp_words(lamp, 5.0 * Balance.HOUR) == "",
+		"돌아온 화면: \"등불이 12시간 타고 꺼져 있었어요\" (등불 안에 돌아오면 없음)")
+	var w := Village.new_prototype(53)
+	w.water.offline = true
+	w.advance(0.5 * Balance.DAY)
+	var wb := w.book.size()
+	CatchUp.new(w, 5.0 * Balance.HOUR).finish()
+	check(not w.book.slice(wb).any(func(e: Dictionary) -> bool: return String(e["text"]) == CatchUp.LONG_NIGHT), "등불 안에 돌아오면 '긴 밤' 줄 없음")
 	var ev: Array = l["events"]
 	check(ev.size() >= 3 and ev.size() <= 5, "편지: 큰 일 3~5줄 (%d줄)" % ev.size())
 	for e: String in ev:
 		print("    · " + e)
 	print("    인구 %d명 → %d명 · 새 얼굴 %d · 떠난 얼굴 %d · 기다리는 것 %s" % [l["pop0"], l["pop1"], l["born"].size(), l["lost"].size(), str(l["waiting"])])
 	check(int(l["pop1"]) == v.people.size() and l["chief"] != "", "편지: 인구 변화·촌장 이름")
-	var bad: String = run.words_ok(ev + l["waiting"] + [JarClock.CREATION_HINT, "병 안의 시간이 흐르는 중…"])
+	var bad: String = run.words_ok(ev + l["waiting"] + [l["altar_line"], JarClock.CREATION_HINT, "병 안의 시간이 흐르는 중…", CatchUp.LONG_NIGHT, CatchUp.lamp_words(lamp, 36.0 * Balance.HOUR)])
 	check(bad == "", "편지·알림에 금지어 없음 %s" % bad)
 	check(v.crises.is_empty() and v.warnings.size() <= 3, "비운 동안의 위기 알림은 쌓아 두지 않는다")
+
+
+## 등불 업그레이드 (SAVE.md 3 · SHOP.md): 16 → 20 → 24시간, 2,000 / 6,000 / 15,000 지폐, 영구 (거인 묶음에 저장)
+func test_lamp_upgrade() -> void:
+	var sm := manager()
+	Market.notes = 1999.0
+	check(not sm.buy_lamp_upgrade() and Market.lamp_level == 0 and Market.notes == 1999.0, "지폐가 모자라면 등불을 올리지 못한다")
+	Market.notes = 25000.0
+	var hours: Array = []
+	for i in 3:
+		var nx := Market.next_lamp()
+		check(sm.buy_lamp_upgrade(), "등불 올리기 %d번째 (%s · %d 지폐)" % [i + 1, nx["name"], int(nx["cost"])])
+		hours.append(Market.lamp_hours())
+	check(hours == [16, 20, 24] and absf(Market.notes - 2000.0) < 1e-6, "등불 16 → 20 → 24시간, 모두 23,000 지폐 (남은 %.0f)" % Market.notes)
+	check(Market.next_lamp().is_empty() and not sm.buy_lamp_upgrade() and Market.lamp_hours() == 24, "24시간이 끝 — 더 올릴 수 없다")
+	# 저장 → 다시 켜기 (거인 묶음)
+	Market.lamp_level = 0
+	sm.load_all()
+	check(Market.lamp_level == 3, "등불 단계는 저장된다 (불러온 단계 %d)" % Market.lamp_level)
+	# 24시간 등불: 36시간 비우면 24시간 흐름
+	var v := Village.new_prototype(54)
+	v.water.offline = true
+	v.advance(0.5 * Balance.DAY)
+	var t0 := v.t
+	var c := CatchUp.new(v, 36.0 * Balance.HOUR)
+	c.finish()
+	check(absf(v.t - t0 - 24.0 * Balance.HOUR) < 1.0 and c.slept == 12.0 * Balance.HOUR, "가장 큰 등불: 36시간 비우면 24시간 흐르고 12시간 잠듦 (%.1f시간)" % ((v.t - t0) / 3600.0))
+	Market.lamp_level = 0
+	drop(sm)
+
+
+## 비운 동안의 제물 (SAVE.md 3.1): 등불 시간 동안 이틀 상한 없이 쌓이고, 편지의 [모두 받기]가 장터 값 그대로 지폐로
+func test_offline_offerings() -> void:
+	var v := Village.new_prototype(55)
+	v.water.offline = true
+	v.advance(1.5 * Balance.DAY)
+	v.take_all()                                      # 떠나기 전 제단을 비움
+	var c := CatchUp.new(v, 4.0 * Balance.DAY, 4.0 * Balance.DAY)   # 시험용 긴 등불 (나흘) — 이틀 상한이 걸릴 만큼
+	check(v.altar_hold, "따라잡는 동안은 제단 상한이 쉰다")
+	var l := c.finish()
+	var days := {}
+	var oldest := 0.0
+	for o: Dictionary in v.altar:
+		if o.get("away", false):
+			days[v.cal_day(float(o["t"]))] = true
+			oldest = maxf(oldest, v.t - float(o["t"]))
+	check(days.size() >= 3 and oldest >= Balance.OFFER_DAYS, "비운 동안의 제물은 이틀치를 넘게 쌓인다 (%d번의 저녁 기도, 가장 오래된 것 %.0f시간 전)" % [days.size(), oldest / 3600.0])
+	check(not v.altar_hold and String(l["altar_line"]).contains("장터 값 약") and float(l["offer_value"]) > 0.0,
+		"편지 '기다리는 것': %s" % l["altar_line"])
+	var bad: String = run.words_ok([l["altar_line"]])
+	check(bad == "", "제단 줄에 금지어 없음 %s" % bad)
+	# 받지 않고 두면: 돌아온 뒤엔 평소대로 — 이틀 지난 제물은 창고로
+	var keep := through_bytes(v)
+	keep.water.offline = true
+	keep.advance(Balance.HOUR)
+	var stale := keep.altar.filter(func(o: Dictionary) -> bool: return keep.t - float(o["t"]) >= Balance.OFFER_DAYS - Balance.HOUR)
+	check(stale.is_empty() and keep.altar.size() < v.altar.size(), "받지 않으면 돌아온 뒤엔 평소대로 이틀 지난 제물이 창고로 (%d → %d묶음)" % [v.altar.size(), keep.altar.size()])
+	# 편지의 [모두 받기]
+	Market.first_paid = true                          # 첫 제물 웃돈은 빼고 비교 (편지의 값 = 그 순간 장터 값)
+	var n0 := Market.notes
+	var expect := float(l["offer_value"])
+	var rl := ReturnLetter.new()
+	rl.village = v
+	rl.data = l
+	var got := rl.take_all()
+	check(absf(got - expect) < 0.01 and absf(Market.notes - n0 - expect) < 0.01 and v.altar.is_empty(),
+		"[모두 받기]: 장터 값 그대로 지폐 (%.1f = %.1f), 제단은 빔" % [got, expect])
+	check(rl.take_all() == 0.0 and absf(Market.notes - n0 - expect) < 0.01, "두 번 눌러도 한 번만")
+	rl.free()
+	# 실제 등불(12시간) 안에서도 쌓이고, 편지에서 받으면 저장된다 (거인의 행동)
+	var sm := manager()
+	var w := Village.new_prototype(56)
+	w.water.offline = true
+	w.advance(1.0 * Balance.DAY)
+	w.take_all()
+	sm.register_jar(1, w, JarClock.new(w), {"name": "시험"})
+	var c2 := CatchUp.new(w, 30.0 * Balance.HOUR)
+	var l2 := c2.finish()
+	var w0 := int(sm.stats["writes"])
+	var rl2 := ReturnLetter.new()
+	rl2.village = w
+	rl2.data = l2
+	var got2 := rl2.take_all()
+	rl2.free()
+	check(got2 > 0.0 and int(sm.stats["writes"]) > int(w0), "등불 12시간 안의 제물도 편지에서 받으면 곧바로 저장 (%.0f 지폐, 쓰기 %d번)" % [got2, int(sm.stats["writes"]) - int(w0)])
+	drop(sm)
+
+
+## 따라잡기 결정론: 같은 저장에서 나눠 흘리든(화면마다 조금씩) 한 번에 흘리든 똑같은 병 — 등불 상한·잠든 시간 포함
+func test_catchup_determinism() -> void:
+	var base := Village.new_prototype(57)
+	base.water.offline = true
+	base.advance(Balance.DAY)
+	var bytes := var_to_bytes(base.to_dict())
+	var a := Village.from_dict(bytes_to_var(bytes))
+	var b := Village.from_dict(bytes_to_var(bytes))
+	var ca := CatchUp.new(a, 40.0 * Balance.HOUR)
+	ca.finish()
+	var cb := CatchUp.new(b, 40.0 * Balance.HOUR)
+	while not cb.run(5.0):
+		pass
+	cb.finish()
+	var same := var_to_bytes(a.to_dict()) == var_to_bytes(b.to_dict())
+	check(same and absf(a.t - base.t - 12.0 * Balance.HOUR) < 1.0, "따라잡기 결정론: 한 번에 / 나눠서 같은 결과 (40시간 비움 → 12시간)")
 
 
 func test_return_effects() -> void:
@@ -516,58 +644,18 @@ func test_return_effects() -> void:
 
 
 # ───────────────────────── long ─────────────────────────
-## 요약 계산의 평균이 정밀 계산과 맞는다 — 10일 인구·창고(식량+판자+돌+통나무) ±15% (SAVE.md 6)
-func test_summary_matches_exact() -> void:
-	var seeds := [100, 101, 102, 103, 104, 105]
-	var ex_pop := 0.0
-	var su_pop := 0.0
-	var ex_st := 0.0
-	var su_st := 0.0
-	var ex_s := 0.0
-	var su_s := 0.0
-	for sd: int in seeds:
-		var base := Village.new_prototype(sd)
-		base.water.offline = true
-		base.advance(Balance.DAY)
-		var bytes := var_to_bytes(base.to_dict())
-		var ex := Village.from_dict(bytes_to_var(bytes))
-		var su := Village.from_dict(bytes_to_var(bytes))
-		ex.watching = false
-		su.watching = false
-		var t0 := Time.get_ticks_usec()
-		ex.advance(10.0 * Balance.DAY)
-		ex_s += (Time.get_ticks_usec() - t0) / 1e6
-		t0 = Time.get_ticks_usec()
-		OfflineSummary.begin(su)
-		for h in 240:
-			OfflineSummary.hour(su, Balance.HOUR)
-		su_s += (Time.get_ticks_usec() - t0) / 1e6
-		ex_pop += ex.people.size()
-		su_pop += su.people.size()
-		ex_st += _storage(ex)
-		su_st += _storage(su)
-		print("  시드 %d: 인구 %d / %d · 창고 %.0f / %.0f" % [sd, ex.people.size(), su.people.size(), _storage(ex), _storage(su)])
-	var n := float(seeds.size())
-	print("  10일 계산: 정밀 %.1f초 · 요약 %.1f초 (시드 하나 평균)" % [ex_s / n, su_s / n])
-	check(absf(su_pop / ex_pop - 1.0) <= 0.15, "10일 평균 인구: 요약 %.1f · 정밀 %.1f (±15%%)" % [su_pop / n, ex_pop / n])
-	check(absf(su_st / ex_st - 1.0) <= 0.15, "10일 평균 창고: 요약 %.0f · 정밀 %.0f (±15%%)" % [su_st / n, ex_st / n])
-
-
-func _storage(v: Village) -> float:
-	return v.food_total() + float(v.stock["판자"]) + float(v.stock["돌"]) + float(v.stock["통나무"])
-
-
-## 따라잡기 빠르기: 정밀 12시간 · 요약 10일 (이 기기에서 병 시간/현실 초)
+## 따라잡기 빠르기: 가장 큰 등불 24시간 = 따라잡기의 최대 (이 기기에서 걸린 초)
 func test_catchup_speed() -> void:
+	var old := Market.lamp_level
+	Market.lamp_level = Market.LAMP_HOURS.size() - 1
 	var v := Village.new_prototype(61)
 	v.water.offline = true
 	v.advance(Balance.DAY)
-	var c := CatchUp.new(v, 12.0 * Balance.HOUR)
+	var c := CatchUp.new(v, 12.0 * Balance.HOUR, 12.0 * Balance.HOUR)
 	c.finish()
-	var ex_rate := 12.0 / (c.real_ms / 1000.0)
-	var c2 := CatchUp.new(v, 10.0 * Balance.DAY + 12.0 * Balance.HOUR)
+	var c2 := CatchUp.new(v, 3.0 * Balance.DAY)
 	c2.finish()
-	var su_h := 240.0
-	print("  정밀 12시간: %.2f초 → %.1f 병 시간/초 · 10.5일 비움(요약 10일 + 정밀 12시간): %.2f초 → 평균 %.1f 병 시간/초" % [
-		c.real_ms / 1000.0, ex_rate, c2.real_ms / 1000.0, (su_h + 12.0) / (c2.real_ms / 1000.0)])
-	check(c.real_ms / 1000.0 < 15.0, "이 기기에서 정밀 12시간 < 15초 (%.2f초)" % (c.real_ms / 1000.0))
+	Market.lamp_level = old
+	print("  정밀 12시간: %.2f초 (%.1f 병 시간/초) · 정밀 24시간(3일 비움 → 가장 큰 등불): %.2f초 (%.1f 병 시간/초)" % [
+		c.real_ms / 1000.0, 12.0 / (c.real_ms / 1000.0), c2.real_ms / 1000.0, 24.0 / (c2.real_ms / 1000.0)])
+	check(c2.exact_total == 24.0 * Balance.HOUR and c2.real_ms / 1000.0 < 15.0, "이 기기에서 따라잡기 최대(정밀 24시간) < 15초 (%.2f초)" % (c2.real_ms / 1000.0))

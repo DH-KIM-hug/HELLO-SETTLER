@@ -1,6 +1,7 @@
 ## 제단 시트 — docs/UI.md 화면 02 (v4.0: 건설 화면 대신 제단). 기획서 6.7 · 11.1.
 ## 세로 화면 = 아래에서 올라오는 시트(화면 높이 70%), 가로 창 = 오른쪽 패널. 시간은 멈추지 않고 1초에 두 번 다시 읽는다.
 ## 칸: 머리(제단 · 지폐) · 오늘의 제물(물건·개수·장터 값 [받기]) + [모두 받기] · 주민의 소원 편지 [들어준다] ·
+##     거인의 등불(비운 동안 흐르는 시간 12 → 24시간 업그레이드 — 선반 화면이 생기면 그리로, SAVE.md 3 · SHOP.md) ·
 ##     건물 사 주기(우물 600 지폐 — 자리는 지금은 촌장이 고를 자리, 거인이 고르는 화면은 나중) · 접힌 칸 [강제로 거두기] + '마을에 생기는 일'.
 ## 숫자는 경제(지폐·개수)에만. 색·글꼴은 view/ui/ui_theme.gd.
 ## 쓰는 법: add_child(AltarSheet.new()) → setup(village) → open(). 신호: closed · bought(building).
@@ -29,6 +30,7 @@ var offer_box: VBoxContainer
 var take_all_btn: Button
 var letter_box: VBoxContainer
 var shop_box: VBoxContainer
+var lamp_box: VBoxContainer
 var force_btn: Button
 var force_box: VBoxContainer
 var close_btn: Button
@@ -92,6 +94,11 @@ func _build() -> void:
 	shop_box = VBoxContainer.new()
 	shop_box.add_theme_constant_override("separation", 4)
 	body.add_child(shop_box)
+	# 거인의 등불 (임시 자리 — 선반 화면이 생기면 그리로)
+	_section(body, "거인의 등불")
+	lamp_box = VBoxContainer.new()
+	lamp_box.add_theme_constant_override("separation", 4)
+	body.add_child(lamp_box)
 	# 강제로 거두기 (접힌 칸)
 	body.add_child(HSeparator.new())
 	force_btn = _button(body, "")
@@ -219,7 +226,7 @@ func _process(dt: float) -> void:
 # ───────────────────────── 값 채우기 ─────────────────────────
 func _state_sig() -> String:
 	var items := village.altar_items()
-	var s := "%s|%d|%s|%s|%s|" % [str(items), int(Market.notes), str(force_open), _force_item, str(Market.sold)]
+	var s := "%s|%d|%s|%s|%s|%d|" % [str(items), int(Market.notes), str(force_open), _force_item, str(Market.sold), Market.lamp_level]
 	for l: Dictionary in village.open_letters():
 		s += "%d;" % int(l["id"])
 	if force_open:
@@ -236,7 +243,7 @@ func _refresh() -> void:
 	if sig == _sig:
 		return
 	_sig = sig
-	for box: Node in [offer_box, letter_box, shop_box, force_box]:
+	for box: Node in [offer_box, letter_box, shop_box, lamp_box, force_box]:
 		for c in box.get_children():
 			box.remove_child(c)
 			c.queue_free()
@@ -270,6 +277,14 @@ func _refresh() -> void:
 		if have > 0:
 			sub += " (마을에 %d채)" % have
 		_card(shop_box, ty, sub, "사 주기", _on_buy.bind(ty), Market.can_pay(cost))
+	# 거인의 등불
+	var nx := Market.next_lamp()
+	if nx.is_empty():
+		_label(lamp_box, "등불 %d시간 — 가장 큰 등불이에요. 자리를 비워도 하루 내내 병이 흘러요." % Market.lamp_hours(), "Small").autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	else:
+		var cost := float(nx["cost"])
+		_card(lamp_box, "등불 %d시간 → %d시간" % [Market.lamp_hours(), int(nx["hours"])],
+			"%s · %s 지폐 · 자리를 비운 동안 병이 흐르고 제물이 쌓이는 시간" % [nx["name"], _num(cost)], "올리기", _on_lamp, Market.can_pay(cost))
 	# 강제로 거두기 (접힌 칸)
 	force_btn.text = ("▾ " if force_open else "▸ ") + "강제로 거두기"
 	force_box.visible = force_open
@@ -339,6 +354,15 @@ func _on_buy(type: String) -> void:
 		GameAudio.buzz()
 		GameAudio.say("miracle")
 		bought.emit(b)
+	_refresh()
+
+
+## 등불 올리기 — 거인 쪽 (GameSave.buy_lamp_upgrade: 지폐를 내고 거인 묶음을 곧바로 저장). 저장 관리자가 없으면 장터만
+func _on_lamp() -> void:
+	var sm := GameSave.get_instance()
+	var ok := sm.buy_lamp_upgrade() if sm != null else Market.buy_lamp_upgrade()
+	if ok:
+		GameAudio.fx("chime")
 	_refresh()
 
 

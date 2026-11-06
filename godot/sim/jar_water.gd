@@ -46,7 +46,6 @@ var t := 0.0                            # 흐른 시간 (초)
 var start_clock := 8.0 * HOUR           # 시작 시각 (프로토타입은 실제 시각 — 여기선 고정해 결과를 재현)
 var humid := 0.5
 var offline := false
-var coarse := 0.0                       # 0보다 크면 이 간격(초)으로 — 비운 시간 요약 계산의 거친 단계 (sim/offline_summary.gd)
 var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
 
 # 계산용 표 (저장하지 않음, 병을 돌리면 다시 만든다)
@@ -218,7 +217,7 @@ func advance(seconds: float) -> void:
 		left -= dt
 		t += dt
 		_hydro_acc += dt
-		var every := coarse if coarse > 0.0 else (OFFLINE_EVERY if offline else ONLINE_EVERY)
+		var every := OFFLINE_EVERY if offline else ONLINE_EVERY
 		while _hydro_acc >= every:
 			hydro_step(every / 60.0)
 			_hydro_acc -= every

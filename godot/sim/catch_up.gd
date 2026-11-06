@@ -1,58 +1,59 @@
-## 비운 시간 따라잡기 — docs/SAVE.md 3 · 기획서 14장 · 6.6 ('병은 거인이 없어도 ×1로 흐른다').
-## 비운 현실 시간 = 병 시간. 10분 이하·12시간 이하 = 정밀 계산(10초 걸음, 물 300초 간격 — 화면 없이 최대 속도),
-## 12시간 초과 = 앞부분은 요약 계산(sim/offline_summary.gd, 1시간씩) + 마지막 12시간은 정밀 → 돌아왔을 때 화면은 늘 정밀 상태.
+## 비운 시간 따라잡기 — docs/SAVE.md 3 (v1.1 등불) · 3.1 · 기획서 14장 · 6.6.
+## 병은 거인이 없어도 ×1로 흐르지만 **거인의 등불이 타는 동안만** (Market.lamp_seconds — 12시간, 업그레이드로 16·20·24시간).
+## 그보다 오래 비우면 나머지는 잠든 시간 (병 시간이 멈춤 — 계절만 현실 달력대로 바뀐다), 연대기에 "긴 밤이 있었다." 한 줄.
+## 그래서 따라잡기는 언제나 정밀 계산 (10초 걸음, 물 300초 간격 — 화면 없이 최대 속도, 최대 24시간치).
 ## 비운 동안 거인은 보고 있지 않다 (Village.watching = false): 위기 사망 하루 1명·부부 2쌍 아래로는 없음, 시대 점수 30%,
-## 새 위기(곰팡이)는 조짐에서 기다림, 제물은 이틀치까지 — 모두 Village·Mold가 지킨다.
+## 새 위기(곰팡이)는 조짐에서 기다림 — Village·Mold가 지킨다. 그동안 바친 제물은 이틀 상한 없이 쌓인다 (Village.altar_hold, SAVE.md 3.1).
 ## 쓰는 법: var c := CatchUp.new(village, elapsed) → 화면마다 c.run(ms) (true면 끝) → c.finish() = 편지 내용 → CatchUp.on_return(village, elapsed).
 class_name CatchUp
 extends RefCounted
 
 const QUICK := 600.0                  # 10분 이하: 불러오는 동안 바로 (로딩 화면 없음)
-const EXACT_MAX := 12.0 * 3600.0      # 마지막 12시간은 정밀
 const EXACT_CHUNK := 300.0            # 정밀 계산을 한 번에 흘리는 양 (진행 막대·시간 예산 확인 간격)
-const SUMMARY_HOUR_W := 0.45          # 진행 막대 무게: 요약 1시간 ≈ 정밀 1시간의 0.45배 (Mac 측정)
-const FESTIVAL_AWAY := 24.0 * 3600.0  # 하루 넘게 비우면 귀환 축제
+const FESTIVAL_AWAY := 24.0 * 3600.0  # 하루 넘게 비우면 귀환 축제 (현실 시간 — SAVE.md 4)
 const LONG_AWAY := 7.0 * 86400.0      # 일주일 넘게 = 믿음이 조금 식어 있다
 const COOL := 0.85                    # 오래 비웠을 때 믿음 × (의심하는 사람↑ — 기획서 7장)
+const LONG_NIGHT := "긴 밤이 있었다."
 
 var v: Village
-var away := 0.0
-var summary_total := 0.0
-var exact_total := 0.0
-var summary_left := 0.0
+var away := 0.0                       # 비운 현실 시간 (초)
+var lamp := 0.0                       # 등불이 타는 시간 (초)
+var exact_total := 0.0                # 병이 흐르는 시간 = min(비운 시간, 등불)
 var exact_left := 0.0
+var slept := 0.0                      # 등불이 꺼진 뒤 잠든 시간
 var real_ms := 0.0                    # 실제로 걸린 계산 시간
 var before: Dictionary = {}
 var _water_offline := false
-var _began_summary := false
 var _done := false
 
 
-## 비운 시간을 나눈다 → {summary, exact} (초)
-static func plan(elapsed: float) -> Dictionary:
+## 비운 시간을 나눈다 → {exact 흐르는 시간, slept 잠든 시간} (초)
+static func plan(elapsed: float, lamp_s: float) -> Dictionary:
 	var e := maxf(0.0, elapsed)
-	return {"summary": maxf(0.0, e - EXACT_MAX), "exact": minf(e, EXACT_MAX)}
+	return {"exact": minf(e, lamp_s), "slept": maxf(0.0, e - lamp_s)}
 
 
-## 기기 시각으로 비운 시간: 뒤로 갔으면 0 (시각 조작), 앞으로 크게 간 것은 그냥 오래 비운 것 (SAVE.md 3)
+## 기기 시각으로 비운 시간: 뒤로 갔으면 0 (시각 조작), 앞으로 크게 간 것은 그냥 오래 비운 것 — 등불 상한까지만 흐른다 (SAVE.md 3)
 static func elapsed_since(last_unix: float, now_unix: float) -> float:
 	if last_unix <= 0.0 or now_unix <= last_unix:
 		return 0.0
 	return now_unix - last_unix
 
 
-func _init(village: Village, elapsed: float) -> void:
+## lamp_s < 0 = 거인의 지금 등불 (Market.lamp_seconds). 시험은 다른 값을 줄 수 있다
+func _init(village: Village, elapsed: float, lamp_s := -1.0) -> void:
 	v = village
 	away = maxf(0.0, elapsed)
-	var p := plan(away)
-	summary_total = p["summary"]
+	lamp = Market.lamp_seconds() if lamp_s < 0.0 else lamp_s
+	var p := plan(away, lamp)
 	exact_total = p["exact"]
-	summary_left = summary_total
 	exact_left = exact_total
+	slept = p["slept"]
 	before = snapshot(v)
 	_water_offline = v.water.offline
 	v.watching = false
 	v.water.offline = true
+	v.altar_hold = true
 
 
 func needs_screen() -> bool:
@@ -60,34 +61,24 @@ func needs_screen() -> bool:
 
 
 func is_done() -> bool:
-	return summary_left <= 1e-6 and exact_left <= 1e-6
+	return exact_left <= 1e-6
 
 
 ## 0~1 (로딩 화면 진행 막대)
 func progress() -> float:
-	var tot := summary_total / 3600.0 * SUMMARY_HOUR_W + exact_total / 3600.0
-	if tot <= 0.0:
+	if exact_total <= 0.0:
 		return 1.0
-	var done := (summary_total - summary_left) / 3600.0 * SUMMARY_HOUR_W + (exact_total - exact_left) / 3600.0
-	return clampf(done / tot, 0.0, 1.0)
+	return clampf((exact_total - exact_left) / exact_total, 0.0, 1.0)
 
 
 ## budget_ms 동안 흘린다 (화면이 멈추지 않게 나눠서). 다 끝났으면 true
 func run(budget_ms: float = 1.0e9) -> bool:
 	var t0 := Time.get_ticks_usec()
 	while not is_done():
-		if summary_left > 1e-6:
-			if not _began_summary:
-				_began_summary = true
-				OfflineSummary.begin(v)
-			var dt := minf(Balance.HOUR, summary_left)
-			OfflineSummary.hour(v, dt)
-			summary_left -= dt
-		else:
-			var dt := minf(EXACT_CHUNK, exact_left)
-			v.advance(dt)
-			exact_left -= dt
-			v.crises.clear()          # 비운 동안의 위기 알림은 화면에 띄우지 않는다 (편지가 대신)
+		var dt := minf(EXACT_CHUNK, exact_left)
+		v.advance(dt)
+		exact_left -= dt
+		v.crises.clear()          # 비운 동안의 위기 알림은 화면에 띄우지 않는다 (편지가 대신)
 		if (Time.get_ticks_usec() - t0) / 1000.0 >= budget_ms:
 			break
 	real_ms += (Time.get_ticks_usec() - t0) / 1000.0
@@ -101,10 +92,23 @@ func finish() -> Dictionary:
 		run()
 		v.watching = true
 		v.water.offline = _water_offline
+		v.altar_hold = false                  # 돌아온 뒤엔 제단 규칙이 평소대로 (이틀 지난 제물은 창고로)
 		v.crises.clear()
 		while v.warnings.size() > 3:          # 비운 동안 쌓인 예고는 마지막 몇 개만 (나머지는 편지에)
 			v.warnings.pop_front()
-	return letter(v, before, away)
+		if slept > 0.0:
+			v.log_line(LONG_NIGHT)            # 주민은 잠든 시간을 모른다 — 연대기에 한 줄만
+	var l := letter(v, before, away)
+	l["lamp_h"] = int(roundf(lamp / 3600.0))
+	l["slept"] = slept
+	return l
+
+
+## 로딩·귀환 화면 한 줄: 등불이 다 타고 꺼져 있었으면 "등불이 n시간 타고 꺼져 있었어요" (아니면 "")
+static func lamp_words(lamp_s: float, away_s: float) -> String:
+	if away_s <= lamp_s:
+		return ""
+	return "등불이 %d시간 타고 꺼져 있었어요" % int(roundf(lamp_s / 3600.0))
 
 
 # ───────────────────────── 편지 ('자리를 비운 동안', SAVE.md 4) ─────────────────────────
@@ -126,7 +130,8 @@ static func _ga(w: String) -> String:
 	return Village.josa(w, "이", "가")
 
 
-## 촌장이 쓰는 편지 — {chief, away, pop0, pop1, events[3~5], born[id], lost[{id, name, why}], waiting[줄], festival, long}
+## 촌장이 쓰는 편지 — {chief, away, pop0, pop1, events[3~5], born[id], lost[{id, name, why}], waiting[줄], festival, long,
+##   altar_line 제단 줄 ("" = 빈 제단), offerings {물건: 개수}, offer_value 장터 값 (지폐)} + finish()가 lamp_h·slept를 더한다
 static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 	var events: Array = []
 	var t0 := float(b["t"])
@@ -202,11 +207,14 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 	# 기다리는 것
 	var waiting: Array = []
 	var alt := vv.altar_items()
-	if not alt.is_empty():
+	var value := 0.0
+	var altar_line := ""
+	if not alt.is_empty():                # 제단 줄은 따로 — 편지가 [모두 받기]를 곁에 단다 (SAVE.md 3.1)
 		var parts := PackedStringArray()
 		for item: String in alt:
 			parts.append("%s %d개" % [item, int(alt[item])])
-		waiting.append("제단에 %s%s 있어요." % [", ".join(parts), Village.josa(parts[parts.size() - 1], "이", "가")])
+			value += Market.quote(item, int(alt[item]))
+		altar_line = "제단에 %s%s 있어요 (장터 값 약 %s 지폐)." % ["·".join(parts), Village.josa(parts[parts.size() - 1], "이", "가"), _num(value)]
 	var wishes := vv.open_letters("wish").size()
 	if wishes > 0:
 		waiting.append("소원 편지 %d통이 거인님을 기다려요." % wishes)
@@ -217,7 +225,19 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 	var c := vv.chief()
 	return {"chief": c.name if c != null else "", "chief_id": c.id if c != null else -1, "away": away_s,
 		"pop0": int(b["pop"]), "pop1": vv.people.size(), "events": events.slice(0, 5), "born": born, "lost": lost,
-		"waiting": waiting, "festival": away_s > FESTIVAL_AWAY, "long": away_s >= LONG_AWAY}
+		"waiting": waiting, "festival": away_s > FESTIVAL_AWAY, "long": away_s >= LONG_AWAY,
+		"altar_line": altar_line, "offerings": alt, "offer_value": value}
+
+
+## 지폐 숫자 (1,234)
+static func _num(x: float) -> String:
+	var n := int(roundf(x))
+	var s := str(absi(n))
+	var out := ""
+	while s.length() > 3:
+		out = "," + s.substr(s.length() - 3) + out
+		s = s.substr(0, s.length() - 3)
+	return ("-" if n < 0 else "") + s + out
 
 
 static func _death_words(why: String) -> String:
