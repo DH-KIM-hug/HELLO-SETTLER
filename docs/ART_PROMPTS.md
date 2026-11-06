@@ -122,7 +122,7 @@ glass wall, tiny villagers carrying sacks, morning light from one side, 16:9
 ## 5. 건물 (개척기·마을 시대)
 
 ```
-isometric sheet of small retro pixel-art medieval buildings on a neutral background: hut with thatched roof,
+isometric sheet of small cel-shaded medieval buildings on a neutral background: hut with thatched roof,
 storehouse, well with wooden frame, woodcutter's hut with log pile, forester's hut with saplings,
 quarry with stone blocks, sawmill with plank stacks, farm with wheat field, salt works on a white
 salt flat with rakes and salt mounds, windmill, bakery with chimney smoke, timber-framed house,
