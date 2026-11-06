@@ -12,7 +12,19 @@ const R := JarWater.R
 const PATH_N := 128
 
 var rng := RandomNumberGenerator.new()
-var water: JarWater
+var water: JarWater                   # 소형 병(JarWater) 또는 넓은 세상(WorldWater — JarWater를 잇는다)
+# 6단계 — 넓은 세상: 마을은 세상 좌표의 한 자리(center)에 있다. 소형 병은 (0, 0)
+var center := Vector2.ZERO            # 마을 중심 (창고 자리)
+var sid := 0                          # 무리 번호 (키트마다 하나 — 안개·만남)
+var settlement_name := ""
+var owns_water := true                # 이 마을이 물을 흘린다 (한 세상에 하나 — 나머지 무리는 others로 함께 걷는다)
+var others: Array = []                # 같은 세상의 다른 무리 (Village) — 이 마을의 걸음에 맞춰 함께 걷는다
+var explore_on := false               # [탐험] — 넓은 세상에서만 (소형 병 결과를 바꾸지 않게)
+var path_r := R                       # 오솔길 격자가 덮는 반지름 (center 기준)
+var path_n := PATH_N
+var view_r := R                       # 화면이 소품을 까는 반지름 (center 기준)
+var met: Dictionary = {}              # 만난 무리 sid → t
+var _walker: Resident = null          # 지금 걷는 주민 (안개 걷기·발견 기록용)
 var t := 0.0
 var start_clock := Balance.START_CLOCK
 var step_dt := Balance.STEP
@@ -281,22 +293,22 @@ static func josa(w: String, a: String, b: String) -> String:
 
 # ───────────────────────── 땅·물·기후 (JarWater) ─────────────────────────
 func wetness(x: float, y: float) -> float:
-	return clampf(0.12 + water.wet_c[JarWater.cell_idx(x, y)] * 0.9 - 0.1 * JarWater.sunward(x, y), 0.0, 1.0)
+	return clampf(0.12 + water.wet_k(water.idx(x, y)) * 0.9 - 0.1 * water.sun_at(x, y), 0.0, 1.0)
 
 
 func salt_at(x: float, y: float) -> float:
-	return water.salt[JarWater.cell_idx(x, y)]
+	return water.salt_k(water.idx(x, y))
 
 
 ## 농사 효율 = 따뜻함 × 습기 ÷ (1 + 소금기) — 기획서 4.4, 프로토타입 farmMult
 func farm_mult(x: float, y: float) -> float:
-	var w := JarWater.warmth(x, y)
+	var w := water.warm_at(x, y)
 	var m := wetness(x, y)
 	return clampf((0.6 + 0.6 * w) * (0.65 + 0.7 * m) / (1.0 + salt_at(x, y) * 300.0), 0.15, 1.5)
 
 
 func water_at(x: float, y: float) -> bool:
-	var k := JarWater.cell_idx(x, y)
+	var k := water.idx(x, y)
 	return water.is_lake(k) or water.is_river(k)
 
 
@@ -412,7 +424,8 @@ func step(dt: float) -> void:
 		p.px = p.x
 		p.py = p.y
 	t += dt
-	water.advance(dt)
+	if owns_water:
+		water.advance(dt)
 	if not _arrival_manna and t >= Balance.MANNA_DELAY:
 		_arrival_manna = true
 		manna_fall("arrival")
@@ -455,7 +468,9 @@ func step(dt: float) -> void:
 	for b in buildings:
 		_update_building(b, dt)
 	for p in people.duplicate():
+		_walker = p
 		ResidentAI.update(self, p, dt)
+	_walker = null
 	for tr: Dictionary in trees:
 		if tr["s"] != "tree":
 			tr["g"] -= dt
@@ -467,7 +482,7 @@ func step(dt: float) -> void:
 	if _timers["life"] >= Balance.LIFE_EVERY:
 		life_events(_timers["life"])
 		_timers["life"] = 0.0
-		trees = trees.filter(func(tr: Dictionary) -> bool: return water.w[JarWater.cell_idx(tr["x"], tr["y"])] < 0.03)   # 물에 잠긴 나무는 죽는다
+		trees = trees.filter(func(tr: Dictionary) -> bool: return water.depth(water.idx(tr["x"], tr["y"])) < 0.03)   # 물에 잠긴 나무는 죽는다
 	if _timers["jobs"] >= Balance.JOBS_EVERY:
 		assign_jobs()
 		assign_homes()
@@ -491,6 +506,8 @@ func step(dt: float) -> void:
 		_timers["speak"] = 0.0
 	_update_era(dt)
 	_update_belief(dt)
+	for o: Village in others:        # 같은 세상의 다른 무리 (물은 이 마을이 이미 흘렸다)
+		o.step(dt)
 
 
 func _on_dawn() -> void:
@@ -677,12 +694,12 @@ func _update_salt_works(b: Building, dt: float, w: Resident) -> void:
 		return
 	b.timer = 0.0
 	var got := 0.0
-	for k in water.cells:
+	for k in water.cells_near(Vector2(b.x, b.y), 3.5):
 		if got >= 0.0005:
 			break
-		if water.w[k] < 0.004 and water.salt[k] > 0.0004 and Vector2(JarWater.cell_x(k) - b.x, JarWater.cell_y(k) - b.y).length() < 3.5:
-			var tk := minf(water.salt[k], 0.0005 - got)
-			water.salt[k] -= tk
+		if water.depth(k) < 0.004 and water.salt_k(k) > 0.0004:
+			var tk := minf(water.salt_k(k), 0.0005 - got)
+			water.take_salt(k, tk)
 			got += tk
 	if got >= 0.00045:
 		b.out["소금"] = float(b.out.get("소금", 0.0)) + 1.0
@@ -694,6 +711,7 @@ func _update_salt_works(b: Building, dt: float, w: Resident) -> void:
 
 func on_built(b: Building) -> void:
 	stats["built"] += 1
+	reveal_building(b)
 	b.built_t = t
 	if b.upgrade_to != "":
 		b.type = b.upgrade_to
@@ -1110,7 +1128,7 @@ func chief_build() -> void:
 		want = "채석장"
 	elif _standing_trees() < Balance.FOREST_MIN and count_type("산림관") == 0:
 		want = "산림관"
-	elif salt_known and count_type("소금밭") == 0 and water.salt_flat() != null:
+	elif salt_known and count_type("소금밭") == 0 and salt_flat_near() != null:
 		want = "소금밭"
 	elif era >= 1 and count_type("방앗간") == 0:
 		want = "방앗간"
@@ -1185,7 +1203,7 @@ func _standing_trees() -> int:
 
 
 func is_free(x: float, y: float, size: float) -> bool:
-	if Vector2(x, y).length() > R - size - 1.2:
+	if not water.inside(x, y, size + 1.2):
 		return false
 	if water_at(x, y):
 		return false
@@ -1206,29 +1224,29 @@ func is_free(x: float, y: float, size: float) -> bool:
 ## 마을 중심에서 가까운 빈 땅부터 나선형으로. 나무꾼은 숲 옆, 채석장은 바위 옆, 농장은 따뜻하고 촉촉한 곳
 func find_spot(type: String) -> Variant:
 	var size: float = Balance.B[type]["size"]
-	var c := Vector2.ZERO
+	var c := center
 	if type == "나무꾼" or type == "산림관":
 		var best: Dictionary = {}
 		for tr: Dictionary in trees:
-			if tr["s"] == "tree" and (best.is_empty() or Vector2(tr["x"], tr["y"]).length() < Vector2(best["x"], best["y"]).length()):
+			if tr["s"] == "tree" and (best.is_empty() or Vector2(tr["x"], tr["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
 				best = tr
 		if not best.is_empty():
-			c = Vector2(best["x"], best["y"]) * 0.85
+			c = center + (Vector2(best["x"], best["y"]) - center) * 0.85
 	elif type == "채석장":
 		var best: Dictionary = {}
 		for r: Dictionary in rocks:
-			if r["amt"] > 0 and (best.is_empty() or Vector2(r["x"], r["y"]).length() < Vector2(best["x"], best["y"]).length()):
+			if r["amt"] > 0 and (best.is_empty() or Vector2(r["x"], r["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
 				best = r
 		if not best.is_empty():
-			c = Vector2(best["x"], best["y"]) * 0.8
+			c = center + (Vector2(best["x"], best["y"]) - center) * 0.8
 	elif type == "농장":
 		var best_p: Variant = null
 		var bv := 0.0
 		for k in 200:
 			var a := rng.randf() * TAU
 			var d := 3.0 + rng.randf() * 14.0
-			var x := cos(a) * d
-			var y := sin(a) * d
+			var x := center.x + cos(a) * d
+			var y := center.y + sin(a) * d
 			var val := farm_mult(x, y) - d * 0.02
 			if val > bv and is_free(x, y, size):
 				bv = val
@@ -1237,7 +1255,7 @@ func find_spot(type: String) -> Variant:
 			_clear_trees(best_p, size)
 			return best_p
 	elif type == "소금밭":
-		var f: Variant = water.salt_flat()
+		var f: Variant = salt_flat_near()
 		if f != null:
 			var fv: Vector2 = f
 			var d := 0.0
@@ -1249,7 +1267,7 @@ func find_spot(type: String) -> Variant:
 						return p
 				d += 0.5
 	var rad := 2.0
-	while rad < R:
+	while rad < path_r:
 		for k in 24:
 			var a := k / 24.0 * TAU + rad
 			var p := c + Vector2(cos(a), sin(a)) * rad
@@ -1270,6 +1288,8 @@ func lake_watch() -> void:
 		var b: Dictionary = water.basins[i]
 		var a0: int = b["area0"]
 		if a0 <= 0:
+			continue
+		if _fog_on and (not water.revealed(b["x"], b["y"], sid) or Vector2(b["x"], b["y"]).distance_to(center) > WorldCfg.LAKE_WATCH_R):
 			continue
 		var f := float(water.basin_area(b)) / a0
 		var nm: String = b["name"]
@@ -1298,10 +1318,10 @@ func salt_discovery() -> void:
 		return
 	var flat := 0
 	var fc := Vector2.ZERO
-	for k in water.cells:
-		if water.w[k] < 0.004 and water.salt[k] > 0.003:
+	for k in water.village_cells(center, view_r * 1.5):
+		if water.depth(k) < 0.004 and water.salt_k(k) > 0.003:
 			flat += 1
-			fc += Vector2(JarWater.cell_x(k), JarWater.cell_y(k))
+			fc += Vector2(water.cx(k), water.cy(k))
 	if flat < 45:
 		return
 	fc /= flat
@@ -1348,15 +1368,25 @@ static func sale_price(r: Resident, nth := 1, lineage := false, sick := false) -
 
 # ───────────────────────── 오솔길 ─────────────────────────
 func mark_path(x: float, y: float, amt: float) -> void:
-	var gx := floori((x + R) / (2.0 * R) * PATH_N)
-	var gy := floori((y + R) / (2.0 * R) * PATH_N)
-	if gx >= 0 and gy >= 0 and gx < PATH_N and gy < PATH_N:
-		paths[gy * PATH_N + gx] = minf(60.0, paths[gy * PATH_N + gx] + amt)
+	var gx := floori((x - center.x + path_r) / (2.0 * path_r) * path_n)
+	var gy := floori((y - center.y + path_r) / (2.0 * path_r) * path_n)
+	if gx >= 0 and gy >= 0 and gx < path_n and gy < path_n:
+		paths[gy * path_n + gx] = minf(60.0, paths[gy * path_n + gx] + amt)
+	if _fog_on:
+		_reveal_walk(x, y)
 
 
 # ───────────────────────── 병 돌리기 ─────────────────────────
 ## 물·지형과 함께 병 안의 모든 것이 (x, y) → (−y, x)로 돈다 (JarWater.rotate_jar)
 func rotate_jar() -> void:
+	if water is WorldWater:        # 넓은 세상: 데이터는 그대로, 빛이 돈다 (WorldWater.rotate_jar) — 화면이 병을 돌려 보여 준다
+		water.rotate_jar()
+		for v: Village in [self] + others:
+			for b in v.buildings:
+				b.farm_mult = -1.0
+			v.bless_all(0.06)
+			v.log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+		return
 	water.rotate_jar()
 	var rp := func(o: Dictionary) -> void:
 		var x: float = o["x"]
@@ -1413,3 +1443,170 @@ func check_invariants() -> PackedStringArray:
 		if float(m["amt"]) < 0.0:
 			bad.append("낟알 음수")
 	return bad
+
+
+# ───────────────────────── 6단계 — 넓은 세상의 무리 (키트) ─────────────────────────
+var _fog_on := false
+var last_explore_t := -1.0e9
+var explorer := -1                    # 지금 탐험 중인 주민 id
+var peers: Array = []                 # 같은 세상의 모든 무리 (자기 포함 — JarWorld가 채움)
+var kit: Dictionary = {}
+
+
+## 거인이 세상 지도에서 고른 자리 spot에 키트를 푼다 (JarWorld.place_kit이 부름). 좌표는 세상 좌표.
+static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> Village:
+	var v := Village.new()
+	v._init_world(ww, spot, kit_def, seed_v, sid_v)
+	return v
+
+
+func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> void:
+	rng.seed = seed_v
+	water = ww
+	kit = kit_def
+	sid = sid_v
+	center = spot
+	start_clock = ww.start_clock
+	path_r = 64.0
+	path_n = 256
+	view_r = 40.0
+	explore_on = true
+	_fog_on = true
+	stock = Kits.stock(kit_def)
+	paths.resize(path_n * path_n)
+	paths.fill(0.0)
+	var fo: Array = kit_def["fire"]
+	fire = spot + Vector2(fo[0], fo[1])
+	# 숲: 둘레 숲 무리를 나무 하나하나로 (키트 자리 바로 곁은 치움)
+	for f: Dictionary in ww.forests:
+		var fc := Vector2(f["x"], f["y"])
+		var fr: float = f["r"]
+		if fc.distance_to(spot) > WorldCfg.KIT_TREES_R + fr:
+			continue
+		var cnt := int(PI * fr * fr * float(f["dens"]) * 0.32)
+		for i in cnt:
+			var a := rng.randf() * TAU
+			var d := sqrt(rng.randf()) * fr
+			var x := fc.x + cos(a) * d
+			var y := fc.y + sin(a) * d * 0.9
+			var p := Vector2(x, y)
+			if p.distance_to(spot) < WorldCfg.KIT_CLEAR_R or p.distance_to(spot) > WorldCfg.KIT_TREES_R:
+				continue
+			if not ww.inside(x, y, 1.5) or ww.depth(ww.idx(x, y)) >= 0.005:
+				continue
+			trees.append({"x": x, "y": y, "s": "tree", "g": 0.0, "res": 0})
+	for rp in ww.rock_spots:
+		if rp.distance_to(spot) < WorldCfg.KIT_ROCKS_R and ww.depth(ww.idx(rp.x, rp.y)) < 0.005:
+			rocks.append({"x": rp.x, "y": rp.y, "amt": 20, "res": 0})
+	var guard := 0
+	while rocks.size() < 2 and guard < 50:      # 고른 자리가 추천 자리가 아니어도 바위 둘은
+		guard += 1
+		var a := rng.randf() * TAU
+		var p := spot + Vector2(cos(a), sin(a)) * rng.randf_range(10.0, 18.0)
+		if ww.inside(p.x, p.y, 2.0) and ww.depth(ww.idx(p.x, p.y)) < 0.005:
+			rocks.append({"x": p.x, "y": p.y, "amt": 20, "res": 0})
+	for b: Dictionary in ww.basins:
+		basins_said.append(0)
+	for bd: Array in kit_def["buildings"]:
+		var b := add_building(bd[0], spot.x + float(bd[1]), spot.y + float(bd[2]), true)
+		if bd[0] == "창고":
+			b.is_store = true
+		_clear_trees(Vector2(b.x, b.y), b.size())
+	var ids: Array[Resident] = []
+	for f: Array in Kits.people(kit_def):
+		ids.append(add_person(f[0], f[1], f[2], f[3], fire.x + (rng.randf() - 0.5) * 3.0, fire.y + (rng.randf() - 0.5) * 3.0, null, null))
+	if ids.size() >= 7:
+		marry(ids[0], ids[1])
+		for k in [2, 3]:
+			ids[k].parents = PackedInt32Array([ids[0].id, ids[1].id])
+		marry(ids[4], ids[5])
+		ids[6].parents = PackedInt32Array([ids[4].id, ids[5].id])
+		for k in [2, 3]:
+			_inherit_look(ids[k], ids[0], ids[1])
+		_inherit_look(ids[6], ids[4], ids[5])
+	stats["marriages"] = 0
+	if people.all(func(p: Resident) -> bool: return p.grade == 0) and ids.size() > 4:
+		ids[4].grade = 1
+	assign_homes()
+	log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+	log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
+	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)
+
+
+func salt_flat_near() -> Variant:
+	return water.salt_flat_in(center, view_r * 1.5)
+
+
+## 걷는 주민 둘레의 안개를 걷는다 (mark_path가 부름 — 안개 칸이 바뀔 때만 실제로 일함)
+## 한 걸음이 길면 (몰아서 계산 30초 = 37칸) 걸음 시작점부터 안개 칸 크기 간격으로 걷는다
+func _reveal_walk(x: float, y: float) -> void:
+	var to := Vector2(x, y)
+	if _walker != null:
+		var from := Vector2(_walker.px, _walker.py)
+		var d := from.distance_to(to)
+		var n := int(d / WorldWater.FOG)
+		for i in n:
+			_reveal_at(from.lerp(to, float(i + 1) / (n + 1)), WorldCfg.REVEAL_WALK, _walker)
+	_reveal_at(to, WorldCfg.REVEAL_WALK, _walker)
+
+
+
+func _reveal_at(p: Vector2, rad: float, who: Resident, force := false) -> void:
+	var ev: Array = water.reveal(sid, p.x, p.y, rad, force)
+	if ev.is_empty():
+		return
+	for e: Dictionary in ev:
+		_on_seen(e, who)
+
+
+func _on_seen(e: Dictionary, who: Resident) -> void:
+	var nm: String = (who.name if who != null else "")
+	var subj := ("%s%s " % [nm, josa(nm, "이", "가")]) if nm != "" else "우리는 "
+	match String(e["kind"]):
+		"lake":
+			var ln: String = e["name"]
+			if nm == "":
+				log_line("가까이에 맑은 호수가 있었다. 사람들은 그곳을 '%s'%s 불렀다." % [ln, josa(ln, "이라", "라")])
+			else:
+				log_line("%s안개 너머에서 처음 보는 호수를 찾았다. 사람들은 그곳을 '%s'%s 불렀다." % [subj, ln, josa(ln, "이라", "라")])
+		"river":
+			var rn: String = e["name"]
+			log_line("%s세상 끝 벽 쪽에서 흘러오는 물줄기를 보았다. 사람들은 그 물을 '%s'%s 불렀다." % [subj, rn, josa(rn, "이라", "라")])
+		"salt":
+			log_line("%s땅 위로 솟은 하얀 바위를 보았다. 물이 닿는 자리마다 바위가 조금씩 녹아 있었다." % subj)
+		"contact":
+			_meet(int(e["other"]), who)
+
+
+## 다른 무리와 처음 만남 (기획서 13.1 '추가 키트' — 서로 모르다 탐험으로 만남)
+func _meet(other_sid: int, who: Resident) -> void:
+	if met.has(other_sid):
+		return
+	var o: Village = null
+	for q: Village in peers:
+		if q.sid == other_sid:
+			o = q
+	if o == null:
+		return
+	met[other_sid] = t
+	o.met[sid] = t
+	var nm := who.name if who != null else "누군가"
+	log_line("%s%s 안개 너머에서 낯선 사람들의 연기를 보았다. 이 세상에 우리 말고도 사람이 있었다!" % [nm, josa(nm, "이", "가")])
+	o.log_line("우리 땅 가장자리에 낯선 이가 나타났다. 그들도 거인의 손이 내려놓은 사람들이라고 했다.")
+	if who != null:
+		speak(who, "저 너머에 사람이 있어요!", 8)
+
+
+## 탐험할 곳 (안개 가장자리) — 없으면 null
+func explore_target() -> Variant:
+	return water.fog_target(sid, center, rng, WorldCfg.EXPLORE_MAX)
+
+
+func can_explore() -> bool:
+	return explore_on and explorer < 0 and t - last_explore_t >= WorldCfg.EXPLORE_EVERY
+
+
+## 건물이 다 지어지면 둘레 안개도 걷힌다
+func reveal_building(b: Building) -> void:
+	if _fog_on:
+		_reveal_at(Vector2(b.x, b.y), WorldCfg.REVEAL_BUILD, null, true)

@@ -1,0 +1,123 @@
+## 병 하나의 넓은 세상 — 땅·물(WorldWater) + 키트로 놓인 무리들(Village). 기획서 v3.8 3.1·5.1·5.5·13.1 (6단계).
+## 세상은 창조할 때마다 새 무작위 시드 (new_random) — 시드가 같으면 같은 세상 (테스트).
+## 거인이 키트를 놓을 자리를 고른다: recommended_kit_spots() · kit_spot_ok(x, y) · place_kit(x, y, kit).
+## 첫 무리가 물을 흘리고(owns_water), 나머지 무리는 그 걸음에 맞춰 함께 걷는다 (Village.others) → JarClock은 첫 무리만 돌리면 된다.
+class_name JarWorld
+extends RefCounted
+
+var water: WorldWater
+var settlements: Array[Village] = []
+var seed_v := 0
+
+
+static func create(seed_v: int, size := WorldCfg.SIZE, opts: Dictionary = {}) -> JarWorld:
+	var jw := JarWorld.new()
+	jw.seed_v = seed_v
+	jw.water = WorldGen.generate(seed_v, size, opts)
+	return jw
+
+
+## 새 창조 — 새 무작위 시드 (기획서 5.1 '세상은 매번 무작위다')
+static func new_random(size := WorldCfg.SIZE) -> JarWorld:
+	return create(WorldGen.new_seed(), size)
+
+
+func primary() -> Village:
+	return settlements[0] if not settlements.is_empty() else null
+
+
+## 키트를 놓을 수 있는가: {ok, warn, why}. warn = 곁에 물이 없음 / 숲이 멂 (놓을 수는 있음)
+func kit_spot_ok(x: float, y: float) -> Dictionary:
+	var ww := water
+	var p := Vector2(x, y)
+	if not ww.inside(x, y, WorldCfg.KIT_EDGE):
+		return {"ok": false, "warn": "", "why": "세상 끝 벽에 너무 가까워요"}
+	for k in ww.cells_near(p, 5.0):
+		if ww.depth(k) > 0.004:
+			return {"ok": false, "warn": "", "why": "물 위에는 놓을 수 없어요"}
+	for s in settlements:
+		if s.center.distance_to(p) < WorldCfg.KIT_APART:
+			return {"ok": false, "warn": "", "why": "다른 무리와 너무 가까워요"}
+	var water_near := false
+	for k in ww.cells_near(p, WorldCfg.KIT_WATER_R):
+		if ww.is_lake(k) or ww.is_river(k):
+			water_near = true
+			break
+	if not water_near:
+		return {"ok": true, "warn": "곁에 물이 없어요", "why": ""}
+	var forest_near := false
+	for f: Dictionary in ww.forests:
+		if Vector2(f["x"], f["y"]).distance_to(p) < WorldCfg.KIT_FOREST_R + float(f["r"]) * 0.5:
+			forest_near = true
+	if not forest_near:
+		return {"ok": true, "warn": "숲이 멀어요", "why": ""}
+	return {"ok": true, "warn": "", "why": ""}
+
+
+## 추천 자리 (물가·숲 곁, 아직 비어 있는 곳) — 창조 때 세상이 여러 곳을 보장한다
+func recommended_kit_spots() -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for sp in water.spots:
+		var r := kit_spot_ok(sp.x, sp.y)
+		if r["ok"] and r["warn"] == "":
+			out.append(sp)
+	return out
+
+
+## 키트를 푼다 → 새 무리 (Village). 자리를 조금 평평하게 하고, 둘레 안개를 걷고, 그 둘레는 고운 칸으로 계산한다.
+func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
+	if kit.is_empty():
+		kit = Kits.make()
+	var p := Vector2(x, y)
+	WorldGen.flatten(water, p, WorldCfg.KIT_FLAT_R)
+	water.rebuild_coarse_around(x, y, WorldCfg.KIT_FLAT_R * 2.0 + WorldWater.F)
+	var sid := settlements.size()
+	var v := Village.new_settlement(water, p, kit, seed_v * 31 + sid * 7919 + 1, sid)
+	v.settlement_name = "%d번째 무리" % (sid + 1)
+	water.kits.append({"x": x, "y": y, "sid": sid})
+	if settlements.is_empty():
+		v.owns_water = true
+	else:
+		var pv := primary()
+		v.owns_water = false
+		v.t = pv.t
+		v._last_dawn = pv._last_dawn
+		pv.others.append(v)
+	settlements.append(v)
+	for s in settlements:
+		s.peers = settlements
+	_update_interest()
+	return v
+
+
+## 고운 계산 범위 = 무리마다 중심 둘레 + 건물 둘레 (조각 단위)
+func _update_interest() -> void:
+	var list: Array[Dictionary] = []
+	for s in settlements:
+		var r := WorldCfg.FINE_R
+		for b in s.buildings:
+			r = maxf(r, s.center.distance_to(Vector2(b.x, b.y)) + 8.0)
+		list.append({"x": s.center.x, "y": s.center.y, "r": r})
+	water.set_interest(list)
+
+
+## 시간을 흘린다 (첫 무리가 물과 다른 무리를 함께 걷게 한다). 마을이 넓어지면 고운 계산 범위를 다시 잡는다.
+func advance(seconds: float) -> void:
+	var pv := primary()
+	if pv == null:
+		water.advance(seconds)
+		return
+	var day_left := seconds
+	while day_left > 1e-6:
+		var chunk := minf(day_left, Balance.HOUR)
+		pv.advance(chunk)
+		day_left -= chunk
+		_update_interest()
+
+
+func rotate_jar() -> void:
+	var pv := primary()
+	if pv != null:
+		pv.rotate_jar()
+	else:
+		water.rotate_jar()

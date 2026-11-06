@@ -27,6 +27,12 @@ var _fire: Node3D
 var _flames: Array[MeshInstance3D] = []
 var _props: Node3D
 var _prop_key := ""
+var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
+var _far_key := -1
+var _far_t := -1.0e9
+var n_far_trees := 0
+var far_ms := 0.0
+var _wf: Array[Dictionary] = [] # 마을 둘레에 걸친 세상 숲 무리 (장식 숲 짙기용)
 var _check_t := 0.0
 var decor_ms := 0.0             # 장식을 마지막으로 다시 놓는 데 든 시간 (표시·측정용)
 var n_decor_trees := 0
@@ -56,6 +62,7 @@ func _ready() -> void:
 	_rocks = _node(self)
 	_manna = _node(self)
 	_props = _node(self)
+	_far = _node(self)
 	_build_fire()
 	sync(0.0, true)
 
@@ -77,6 +84,8 @@ func sync(dt: float, force := false) -> void:
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
+		if force:
+			_far_t = -1.0e9           # 안개만 바뀐 먼 숲도 바로 다시
 		_sync_buildings()
 		_sync_trees()
 		_sync_rocks()
@@ -261,44 +270,84 @@ static func _hash(x: float, z: float, k := 0.0) -> float:
 	return fposmod(sin(x * 12.9898 + z * 78.233 + k * 37.719) * 43758.5453, 1.0)
 
 
+## 데이터가 돈 횟수 — 소형 병(JarWater)은 병을 돌리면 데이터가 돌고, 넓은 세상(WorldWater)은 데이터 대신 병 노드가 돈다 (6단계)
+func _data_rot() -> int:
+	return 0 if v.water is WorldWater else posmod(v.water.rot, 4)
+
+
 ## 병 처음 방향 → 지금 방향 ((x, y) → (−y, x)를 rot번), 그 반대
 func _to_now(p: Vector2) -> Vector2:
 	var q := p
-	for i in posmod(v.water.rot, 4):
+	for i in _data_rot():
 		q = Vector2(-q.y, q.x)
 	return q
 
 
 func _to_orig(p: Vector2) -> Vector2:
 	var q := p
-	for i in posmod(v.water.rot, 4):
+	for i in _data_rot():
 		q = Vector2(q.y, -q.x)
 	return q
 
 
 ## 숲 짙기 0(빈 풀밭) ~ 1(깊은 숲) — 지금 좌표 p. 잡음은 처음 방향 좌표로 읽음.
-func forest_at(p: Vector2) -> float:
+static func _forest_noise() -> FastNoiseLite:
 	if _noise == null:
 		_noise = FastNoiseLite.new()
 		_noise.seed = 20261106
 		_noise.noise_type = FastNoiseLite.TYPE_SIMPLEX_SMOOTH
 		_noise.frequency = 0.075
 		_noise.fractal_octaves = 2
-	var n := _noise.get_noise_2d(_to_orig(p).x, _to_orig(p).y) * 0.5 + 0.5
+	return _noise
+
+
+func forest_at(p: Vector2) -> float:
+	_forest_noise()
+	var o := _to_orig(p)
+	var n := _noise.get_noise_2d(o.x, o.y) * 0.5 + 0.5
 	var dv := p.distance_to(v.fire)
 	for b in v.buildings:
 		dv = minf(dv, p.distance_to(Vector2(b.x, b.y)) - b.size())
+	if v.water is WorldWater:
+		# (6단계) 넓은 세상: 숲 = 세상 숲 무리(ww.forests — 지도·시뮬레이션 나무와 같은 자리) + 잡음 숲 (화면 장식).
+		# 마을에서 멀수록 짙어지는 소형 병 규칙을 쓰면 마을 둘레(view_r)에 둥근 숲 띠가 생긴다 → 잡음만, 마을 곁만 비움.
+		return _world_forest(p, n, _wf) * smoothstep(VILLAGE_CLEAR, VILLAGE_CLEAR + 6.0, dv)
 	var edge := smoothstep(VILLAGE_CLEAR, VILLAGE_CLEAR + FOREST_RAMP, dv)
 	return clampf((n + edge * 0.65 - 0.66) * 3.0, 0.0, 1.0)
 
 
+## 넓은 세상의 숲 짙기 = 잡음 숲 + 세상 숲 무리 (가장자리는 잡음으로 들쭉날쭉)
+const WORLD_NOISE_FOREST := 0.6   # 잡음이 이보다 높으면 숲 (소형 병보다 듬성듬성 — 빈 풀밭이 넓게)
+
+
+func _world_forest(p: Vector2, n: float, list: Array[Dictionary]) -> float:
+	var g := clampf((n - WORLD_NOISE_FOREST) * 3.0, 0.0, 1.0)
+	for f: Dictionary in list:
+		var r: float = f["r"] * (1.0 + 0.6 * n)
+		var d := p.distance_to(Vector2(f["x"], f["y"]))
+		g = maxf(g, clampf((r - d) / 2.5, 0.0, 1.0) * (0.6 + 0.5 * float(f["dens"])))
+	return g
+
+
+## 장식 격자 (처음 방향 좌표) — 마을 중심 v.center 둘레 v.view_r (6단계: 소형 병은 (0, 0) 둘레 32칸 그대로)
+func _grid_range(step: float) -> Rect2i:
+	var n := int(v.view_r / step) + 1
+	var c := _to_orig(v.center) / step
+	var g0 := Vector2i(roundi(c.x), roundi(c.y))
+	return Rect2i(g0.x - n, g0.y - n, 2 * n + 1, 2 * n + 1)
+
+
 ## 땅 위 장식을 놓아도 되는 곳인가 (지금 좌표)
 func _prop_ok(x: float, z: float, clear_r: float) -> bool:
-	if Vector2(x, z).length() > JarTerrain.R_EDGE - 1.2:
-		return false
-	var k := JarWater.cell_idx(x, z)
 	var w := v.water
-	if w.is_lake(k) or w.is_river(k) or w.w[k] > 0.002 or w.salt[k] > 0.0015:
+	if not w.inside(x, z, JarTerrain.R - JarTerrain.R_EDGE + 1.2):     # (6단계: 소형 병·넓은 세상 같은 함수)
+		return false
+	if Vector2(x - v.center.x, z - v.center.y).length() > v.view_r + 2.0:
+		return false
+	if w.has_fog() and not w.revealed(x, z):        # 안개 속에는 장식을 놓지 않는다 (안개 위로 나무가 삐죽 나오지 않게)
+		return false
+	var k := w.idx(x, z)
+	if w.is_lake(k) or w.is_river(k) or w.depth(k) > 0.002 or w.salt_k(k) > 0.0015:
 		return false
 	if terrain._path_at(k) > 5.0:
 		return false
@@ -378,12 +427,25 @@ func _sync_rocks() -> void:
 
 
 ## 화면 장식 전부 (장식 숲 · 소품 무리 · 물가 · 집 둘레 덤불 · 선착장 · 다리). 건물이 늘거나 병을 돌리거나 6시간마다 다시.
+## (6단계) 넓은 세상: 마을 둘레(view_r 40칸)는 키트를 놓을 때 이미 안개가 걷혀 있어(REVEAL_KIT 44칸) 안개와 상관없다.
+## 그 바깥 숲(_sync_far)은 안개가 걷힐 때 다시 — 다만 FAR_REDECOR초에 한 번까지 (탐험가가 걸을 때마다 다시 놓지 않게).
+const FAR_REDECOR := 6.0
+const FAR_MAX := 200.0            # 이 반지름 밖의 숲은 지도에만 (멀리 축소하면 어차피 점)
+
+
 func _sync_props() -> void:
+	if v.water is WorldWater:
+		_sync_far()
 	var key := "%d|%d|%d" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0)]
 	if key == _prop_key:
 		return
 	_prop_key = key
 	var t0 := Time.get_ticks_usec()
+	if v.water is WorldWater:
+		_wf.clear()
+		for f: Dictionary in (v.water as WorldWater).forests:
+			if Vector2(f["x"], f["y"]).distance_to(v.center) < v.view_r + float(f["r"]) * 1.4 + 3.0:
+				_wf.append(f)
 	var groups := {}
 	var sim_pts: Array[Vector2] = []
 	for tr: Dictionary in v.trees:
@@ -401,10 +463,17 @@ func _sync_props() -> void:
 
 ## 숲 가장자리: 잡음이 높은 곳에 나무 무리 (마을 가까이는 빈 풀밭)
 func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
-	var n := int(JarTerrain.R / FOREST_STEP) + 1
+	var g := _grid_range(FOREST_STEP)
+	# 시뮬레이션 나무·바위 곁은 비움 — 격자 칸(4칸)으로 나눠 두고 둘레만 본다 (넓은 세상은 나무가 수백 그루)
+	var near_map := {}
+	for q in sim_pts:
+		var c := Vector2i(floori(q.x / 2.0), floori(q.y / 2.0))
+		if not near_map.has(c):
+			near_map[c] = [] as Array[Vector2]
+		(near_map[c] as Array[Vector2]).append(q)
 	n_decor_trees = 0
-	for gj in range(-n, n + 1):
-		for gi in range(-n, n + 1):
+	for gj in range(g.position.y, g.end.y):
+		for gi in range(g.position.x, g.end.x):
 			var p0 := Vector2(gi + _hash(gi, gj, 1.0) * 0.8 - 0.4, gj + _hash(gi, gj, 2.0) * 0.8 - 0.4) * FOREST_STEP
 			var p := _to_now(p0)
 			var f := forest_at(p)
@@ -413,10 +482,12 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 			if not _prop_ok(p.x, p.y, 1.4):
 				continue
 			var near := false
-			for q in sim_pts:
-				if q.distance_squared_to(p) < 4.0:
-					near = true
-					break
+			var pc := Vector2i(floori(p.x / 2.0), floori(p.y / 2.0))
+			for dj in range(-1, 2):
+				for di in range(-1, 2):
+					for q: Vector2 in near_map.get(pc + Vector2i(di, dj), []):
+						if q.distance_squared_to(p) < 4.0:
+							near = true
 			if near:
 				continue
 			var h := _hash(gi, gj, 4.0)
@@ -431,9 +502,9 @@ const OPEN := ["clover", "clover", "tuft", "tuft", "tuft", "rock_small", "bush_f
 
 
 func _decor_clusters(groups: Dictionary) -> void:
-	var n := int(JarTerrain.R / PROP_STEP) + 1
-	for gj in range(-n, n + 1):
-		for gi in range(-n, n + 1):
+	var g := _grid_range(PROP_STEP)
+	for gj in range(g.position.y, g.end.y):
+		for gi in range(g.position.x, g.end.x):
 			var p0 := Vector2(gi + 0.2 + 0.6 * _hash(gi, gj, 4.0), gj + 0.2 + 0.6 * _hash(gi, gj, 5.0)) * PROP_STEP
 			var c := _to_now(p0)
 			var f := forest_at(c)
@@ -470,14 +541,17 @@ func _decor_clusters(groups: Dictionary) -> void:
 ## 물가: 호숫가 칸을 따라 이끼 돌·갈대, 수면에 연잎·연꽃 (기준 그림)
 func _decor_water(groups: Dictionary) -> void:
 	var w := v.water
-	for k in w.cells:
+	var fog := w.has_fog()
+	for k in w.village_cells(v.center, v.view_r * 1.3):     # (6단계) 소형 병은 모든 칸
 		if not w.is_lake(k):
 			continue
-		var x := JarWater.cell_x(k)
-		var z := JarWater.cell_y(k)
+		var x := w.cx(k)
+		var z := w.cy(k)
+		if fog and not w.revealed(x, z):
+			continue
 		var out := Vector2.ZERO
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			if not w.is_lake(JarWater.cell_idx(x + d.x, z + d.y)):
+			if not w.is_lake(w.idx(x + d.x, z + d.y)):
 				out += Vector2(d)
 		var o := _to_orig(Vector2(x, z))
 		var hh := _hash(o.x, o.y, 70.0)
@@ -487,8 +561,8 @@ func _decor_water(groups: Dictionary) -> void:
 				_put(groups, "rocks" if hh < 0.05 else "rock_small", p.x, p.y, 0.45 + hh * 2.0, hh * 40.0, -0.08)
 			elif hh < 0.3:
 				_put(groups, "reeds", p.x, p.y, 0.9 + hh, hh * 50.0)
-		elif w.w[k] > 0.03 and hh > 0.9:
-			var lvl := (w.h[k] + w.w[k]) * JarTerrain.HS + 0.02
+		elif w.depth(k) > 0.03 and hh > 0.9:
+			var lvl := (w.ground(k) + w.depth(k)) * JarTerrain.HS + 0.02
 			_add(groups, "lotus" if hh > 0.975 else "lily", Transform3D(Basis(Vector3.UP, hh * 50.0), Vector3(x, lvl, z)))
 
 
@@ -512,23 +586,24 @@ func _decor_yards(groups: Dictionary) -> void:
 ## 선착장 (마을 가까운 호숫가, 물 쪽으로) · 다리 (오솔길이 강을 건너는 곳)
 func _decor_crossings(groups: Dictionary) -> void:
 	var w := v.water
+	var cells := w.village_cells(v.center, v.view_r * 1.3)     # (6단계) 소형 병은 모든 칸
 	var cands: Array = []
-	for k in w.cells:
+	for k in cells:
 		if w.is_lake(k):
 			continue
-		var x := JarWater.cell_x(k)
-		var z := JarWater.cell_y(k)
+		var x := w.cx(k)
+		var z := w.cy(k)
 		var dist := Vector2(x, z).distance_to(v.fire)
-		if dist > PIER_REACH or w.salt[k] > 0.0015:
+		if dist > PIER_REACH or w.salt_k(k) > 0.0015:
 			continue
 		# 물 쪽 방향: 1~3칸 안의 호수 칸
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
 			var ok := true
 			for s in range(1, 4):
-				if not w.is_lake(JarWater.cell_idx(x + d.x * s, z + d.y * s)):
+				if not w.is_lake(w.idx(x + d.x * s, z + d.y * s)):
 					ok = false
 					break
-			if ok and w.w[JarWater.cell_idx(x + d.x * 3, z + d.y * 3)] > 0.02:
+			if ok and w.depth(w.idx(x + d.x * 3, z + d.y * 3)) > 0.02:
 				cands.append([dist, x, z, d])
 	cands.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
 	var placed: Array[Vector2] = []
@@ -547,8 +622,8 @@ func _decor_crossings(groups: Dictionary) -> void:
 		if not far or near_bld:
 			continue
 		var d: Vector2i = c[3]
-		var kw := JarWater.cell_idx(p.x + d.x, p.y + d.y)
-		var lvl := (w.h[kw] + w.w[kw]) * JarTerrain.HS
+		var kw := w.idx(p.x + d.x, p.y + d.y)
+		var lvl := (w.ground(kw) + w.depth(kw)) * JarTerrain.HS
 		var y := maxf(lvl + 0.04, gy(p.x, p.y) - 0.2)
 		var dir := Vector3(d.x, 0, d.y)
 		var origin := Vector3(p.x, y, p.y) - dir * 0.35
@@ -558,20 +633,72 @@ func _decor_crossings(groups: Dictionary) -> void:
 	# 다리: 오솔길이 가장 짙은 강 칸 하나
 	var best := -1
 	var best_p := 4.0
-	for k in w.cells:
+	for k in cells:
 		if w.is_river(k) and terrain._path_at(k) > best_p:
 			best_p = terrain._path_at(k)
 			best = k
 	n_bridges = 0
 	if best >= 0:
-		var x := JarWater.cell_x(best)
-		var z := JarWater.cell_y(best)
-		var along_x := w.is_river(JarWater.cell_idx(x + 1, z)) or w.is_river(JarWater.cell_idx(x - 1, z))
+		var x := w.cx(best)
+		var z := w.cy(best)
+		var along_x := w.is_river(w.idx(x + 1, z)) or w.is_river(w.idx(x - 1, z))
 		# 다리 모델은 x 방향으로 걸침 (강은 z 방향) → 강이 x로 흐르면 90° 돌림
 		var span := Vector3(0, 0, 1) if along_x else Vector3(1, 0, 0)
 		var y := maxf(gy(x + span.x * 1.9, z + span.z * 1.9), gy(x - span.x * 1.9, z - span.z * 1.9)) - 0.15
 		_add(groups, "bridge", Transform3D(Basis(Vector3.UP, PI / 2.0 if along_x else 0.0), Vector3(x, y, z)))
 		n_bridges = 1
+
+
+## (6단계) 마을 둘레(view_r) 밖의 세상 숲 무리 — 안개가 걷힌 곳만, 나무만 (소품·물가 장식 없음).
+## 시뮬레이션 나무가 아니다 (마을 46칸 안의 숲 무리는 시뮬레이션 나무 + 장식, 그 밖은 장식 나무만).
+func _sync_far() -> void:
+	var ww := v.water as WorldWater
+	var now := Time.get_ticks_msec() / 1000.0
+	if ww.fog_version == _far_key or now - _far_t < FAR_REDECOR:
+		return
+	_far_key = ww.fog_version
+	_far_t = now
+	var t0 := Time.get_ticks_usec()
+	var nz := _forest_noise()
+	var lim := v.view_r + 2.0
+	var c := v.center
+	var fl: Array[Dictionary] = []
+	for f: Dictionary in ww.forests:
+		if Vector2(f["x"], f["y"]).distance_to(c) < FAR_MAX + float(f["r"]) * 1.6:
+			fl.append(f)
+	var groups := {}
+	n_far_trees = 0
+	# 안개 칸(4칸)마다: 걷혔으면 그 안에 기준점이 있는 장식 숲 격자점들을 본다 (마을 둘레 장식과 같은 격자·해시)
+	var fs := float(WorldWater.FOG)
+	var q0 := Vector2i(clampi(floori((c.x - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1))
+	var q1 := Vector2i(clampi(floori((c.x + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1))
+	for qy in range(q0.y, q1.y + 1):
+		for qx in range(q0.x, q1.x + 1):
+			if ww.fog[qy * ww.fn + qx] == 0:
+				continue
+			var x0 := -ww.rr + qx * fs
+			var y0 := -ww.rr + qy * fs
+			if Vector2(x0 + fs * 0.5, y0 + fs * 0.5).distance_to(c) < lim - 4.0:
+				continue
+			for gj in range(ceili(y0 / FOREST_STEP), ceili((y0 + fs) / FOREST_STEP)):
+				for gi in range(ceili(x0 / FOREST_STEP), ceili((x0 + fs) / FOREST_STEP)):
+					var p := Vector2(gi + _hash(gi, gj, 1.0) * 0.8 - 0.4, gj + _hash(gi, gj, 2.0) * 0.8 - 0.4) * FOREST_STEP
+					if p.distance_to(c) < lim or p.distance_to(c) > FAR_MAX or not ww.revealed(p.x, p.y):
+						continue
+					var fd := _world_forest(p, nz.get_noise_2d(p.x, p.y) * 0.5 + 0.5, fl)
+					if fd <= 0.0 or _hash(gi, gj, 3.0) > 0.25 + 0.75 * fd:
+						continue
+					if not ww.inside(p.x, p.y, 1.5):
+						continue
+					var k := ww.idx(p.x, p.y)
+					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015:
+						continue
+					var h := _hash(gi, gj, 4.0)
+					var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % 3]
+					_put(groups, kind, p.x, p.y, (0.82 + 0.38 * _hash(gi, gj, 5.0)) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
+					n_far_trees += 1
+	_flush(_far, groups)
+	far_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 
 func _sync_manna() -> void:

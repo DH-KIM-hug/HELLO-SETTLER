@@ -393,6 +393,81 @@ func groove_flux() -> PackedFloat32Array:
 	return out
 
 
+# ───────────────────────── 세상 공통 읽기 (6단계) ─────────────────────────
+## Village·화면은 이 함수들로 물·땅을 읽는다 → 소형 병(JarWater)과 넓은 세상(WorldWater)이 같은 모양.
+## 좌표는 병 중심 기준 세상 좌표 (x 동서, y 남북).
+func idx(x: float, y: float) -> int:
+	return cell_idx(x, y)
+
+
+func cx(k: int) -> float:
+	return cell_x(k)
+
+
+func cy(k: int) -> float:
+	return cell_y(k)
+
+
+func depth(k: int) -> float:
+	return w[k]
+
+
+func ground(k: int) -> float:
+	return h[k]
+
+
+func salt_k(k: int) -> float:
+	return salt[k]
+
+
+func wet_k(k: int) -> float:
+	return wet_c[k]
+
+
+func take_salt(k: int, amt: float) -> void:
+	salt[k] -= amt
+
+
+func warm_at(x: float, y: float) -> float:
+	return warmth(x, y)
+
+
+func sun_at(x: float, y: float) -> float:
+	return sunward(x, y)
+
+
+func radius() -> float:
+	return R
+
+
+func inside(x: float, y: float, margin := 0.0) -> bool:
+	return Vector2(x, y).length() <= R - margin
+
+
+## 원 (c, r) 안의 칸 (k 오름차순 — 순서가 결과를 정하는 곳이 있으므로)
+func cells_near(c: Vector2, r: float) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for k in cells:
+		if Vector2(cell_x(k) - c.x, cell_y(k) - c.y).length() < r:
+			out.append(k)
+	return out
+
+
+## 마을이 둘러보는 칸 (소형 병은 전부)
+func village_cells(_c: Vector2, _r: float) -> PackedInt32Array:
+	return cells
+
+
+## 원 (c, r) 안의 가장 짠 마른 땅 — 소형 병은 병 전체 (프로토타입 saltFlat)
+func salt_flat_in(_c: Vector2, _r: float) -> Variant:
+	return salt_flat()
+
+
+## 안개·발견 (소형 병에는 안개가 없다)
+func has_fog() -> bool:
+	return false
+
+
 # ───────────────────────── 병 돌리기 (rotateJar) ─────────────────────────
 ## 병을 90° 돌린다. 빛은 그대로, 병 안의 모든 것이 (x, y) → (−y, x)로 돈다.
 ## 물방울 돌기는 뚜껑에 붙어 있으므로 병과 함께 돈다 (병 기준으로 호수 자리는 그대로).
