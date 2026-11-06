@@ -141,6 +141,7 @@ var shop_open: Dictionary = {}        # 상점 탭 → 열린 병 시각 (Shop.u
 var shop_seen: Array = []             # 거인이 들여다본 탭 (상점 버튼 옆 반짝임)
 var shop_bought: Dictionary = {}      # 이 병에 사 준 건물 수 (또 사면 ×1.5)
 var _drop_id := 0
+var migrants: Dictionary = {}         # 마지막 이주민 맞이 {t, until, mood, kind, ids} (sim/immigrants.gd — 행복 잠깐 ±)
 var _sky_acc := 0.0
 # 마을 시대 건물 (A6 — sim/village_era.gd) · 등불 옮기기 (A11 — sim/lamp.gd)
 var graves: Array = []                # 무덤 {id, name, x, y, t, yard(묘지 안), yard_id}
@@ -1104,6 +1105,7 @@ func _update_happiness() -> void:
 		if tea:
 			h += Balance.TEA_HAPPY                        # [하늘의 것] 민들레 꽃차 (WORLD_EVENTS 2.7)
 		h += Wildlife.happy(self, p)                      # [들짐승] 물가에서 낚싯대를 드리운 날 (WILDLIFE 2)
+		h += Immigrants.mood(self)                        # [이주민] 축제처럼 맞이 ↑ · 경계 ↓ (기획서 11.2 — 하루 동안)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
 			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)

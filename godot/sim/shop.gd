@@ -89,7 +89,9 @@ const ITEMS := {
 		"kind": "wild", "species": "rabbit", "n": 2, "size": 1.0},
 	"작은 물고기 한 줌": {"tab": "생물", "price": 400, "giant": "작은 물고기 한 줌", "inside": "호수에 다시 물고기가 뛰어올라요 (물 위나 물가에)",
 		"kind": "wild", "species": "fish", "n": 10, "size": 1.0},
-	"이주민 뽑기": {"tab": "이주민", "price": 300, "giant": "작은 사람 하나", "inside": "마을 어귀에 내려앉는 새 이웃", "lock": "곧"},
+	# 이주민 뽑기 (기획서 11.2 · sim/immigrants.gd) — 값은 그날 300부터 ×1.5, 하루 5번. 누가 올지는 놓을 때 드러난다 (확률 공개 — 카드의 [확률 보기])
+	"이주민 뽑기": {"tab": "이주민", "price": 300, "giant": "작은 뗏목 꾸러미 하나 — 누가 탔는지는 몰라요", "inside": "마을 어귀에 내려앉는 새 이웃 — 혼자 또는 작은 가족",
+		"kind": "migrant", "size": Immigrants.SIZE},
 	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
 	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
 }
@@ -103,6 +105,7 @@ static func update_unlocks(v: Village) -> PackedStringArray:
 	var want := {"건물": true, "먹을 것·재료": true}
 	if day >= 2:
 		want[FOOD_FULL] = true
+		want["이주민"] = true                 # 이주민 뽑기 — 2일차 (SHOP 1)
 	if int(v.stats.get("sick", 0)) > 0 or (v.mold != null and (v.mold.phase != "calm" or v.mold.episodes > 0)):
 		want["돌봄"] = true
 	if v.first_harvest_t >= 0.0 and day > v.cal_day(v.first_harvest_t):
@@ -200,19 +203,27 @@ static func card(v: Village, item: String) -> Dictionary:
 		lock2 = "곧"
 	if lock2 == "" and String(d["tab"]) == "먹을 것·재료" and not bool(d.get("day1", false)) and not v.shop_open.has(FOOD_FULL):
 		lock2 = "2일차에"
+	if lock2 == "" and item == Immigrants.ITEM and Immigrants.left_today() <= 0:
+		lock2 = "내일 또 와요"                # 하루 5번 (현실 하루)
 	if lock2 == "" and int(d.get("era", 0)) > v.era:
 		lock2 = "%s 시대에" % Balance.ERAS[mini(int(d["era"]), Balance.ERAS.size() - 1)]
 	var inside2 := String(d["inside"])
 	if String(d.get("wait", "")) != "":
 		inside2 += " (아직은 %s)" % d["wait"]
-	return {"name": item, "icon": item, "giant": String(d["giant"]), "inside": inside2, "price": price(v, item),
+	var out := {"name": item, "icon": item, "giant": String(d["giant"]), "inside": inside2, "price": price(v, item),
 		"lock": lock2, "building": false}
+	if item == Immigrants.ITEM:
+		out["odds"] = true                   # 확률 공개 — 카드에 [확률 보기]
+		out["left"] = Immigrants.left_today()
+	return out
 
 
 ## 값 (지폐) — 건물은 이 병에서 산 만큼 ×1.5씩
 static func price(v: Village, item: String) -> float:
 	if is_building(item):
 		return float(Balance.SHOP.get(item, 0)) * pow(BUILDING_REPEAT, int(v.shop_bought.get(item, 0)))
+	if item == Immigrants.ITEM:
+		return Immigrants.price()            # 그날 300 · 450 · 675 · 1,013 · 1,519
 	return float(ITEMS[item]["price"])
 
 
@@ -266,7 +277,10 @@ static func buy(v: Village, item: String) -> Dictionary:
 	if is_building(item):
 		v.shop_bought[item] = int(v.shop_bought.get(item, 0)) + 1
 	Market.hand_serial += 1
-	Market.hand.append({"id": Market.hand_serial, "item": item, "paid": cost})
+	var h := {"id": Market.hand_serial, "item": item, "paid": cost}
+	if item == Immigrants.ITEM:
+		h["seed"] = Immigrants.note_bought()   # 누가 올지는 놓을 때 드러남 (같은 seed = 같은 사람들)
+	Market.hand.append(h)
 	v.giant_acted()
 	return {"ok": true, "why": "", "hand_id": Market.hand_serial}
 
