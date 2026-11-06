@@ -1,6 +1,6 @@
 # 아이콘 세트 v1 (ROADMAP A8)
 
-물건·상점 물건·UI 도구 아이콘 90장. 256×256 투명 PNG → `godot/art/icons/<group>/<id>.png`.
+물건·상점 물건·UI 도구 아이콘 93장. 256×256 투명 PNG → `godot/art/icons/<group>/<id>.png`.
 코드는 `godot/art/icons/icons.json` (한국어 이름 → `res://` 경로, 별칭 포함)을 쓴다.
 
 - 생성: `codex exec` 내장 이미지 생성, 1536×1024 시트(4×3 / 4×2)에 평평한 마젠타 배경 → `tools/slice.py`로 키잉·잘라내기 (가장자리 픽셀은 가장 가까운 불투명 색으로 채워 마젠타 테두리 없음).
@@ -10,7 +10,7 @@
 | 묶음 | 수 | 경로 |
 |---|---|---|
 | 물건 (goods) | 43 | `godot/art/icons/goods/` |
-| 상점 물건 (shop) | 31 | `godot/art/icons/shop/` |
+| 상점 물건 (shop) | 34 | `godot/art/icons/shop/` |
 | UI 도구 (ui) | 16 | `godot/art/icons/ui/` |
 
 ## 물건 (주민 크기)
@@ -94,11 +94,14 @@
 | 이주민 뽑기 | `shop/settler_draw.png` | shop_3 |
 | 자갈 한 알 | `shop/gravel.png` | shop_1 |
 | 작은 강아지 | `shop/puppy.png` | shop_3 |
+| 작은 물고기 한 줌 | `shop/fish_handful.png` | shop_5 |
 | 작은 닭 | `shop/chicken.png` | shop_3 |
 | 작은 당나귀 | `shop/donkey.png` | shop_3 |
 | 작은 돼지 | `shop/piglet.png` | shop_3 |
+| 작은 사슴 한 쌍 | `shop/deer.png` | shop_5 |
 | 작은 소 | `shop/cow.png` | shop_3 |
 | 작은 양 | `shop/sheep.png` | shop_3 |
+| 작은 토끼 한 쌍 | `shop/rabbit.png` | shop_5 |
 | 조약돌 | `shop/pebble.png` | reroll_1 |
 | 코르크 무늬 | `shop/cork_pattern.png` | shop_2 |
 | 털실 한 가닥 | `shop/yarn.png` | shop_2 |

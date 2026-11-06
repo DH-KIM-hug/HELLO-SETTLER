@@ -9,3 +9,5 @@ shop_3,design/icons/sheets/shop_3_a.png,codex-cli 0.163.0 (built-in image genera
 ui_1,design/icons/sheets/ui_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass with re-roll: altar read as fireplace/oven -> reroll_1"
 ui_2,design/icons/sheets/ui_2_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass with re-rolls: map read as framed picture, go_village arrow too thin at 48px -> reroll_1"
 reroll_1,design/icons/sheets/reroll_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: hardtack, wine, grey_stone, pebble, white_stone, altar, go_village, map"
+shop_4,design/icons/sheets/shop_4_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,no,"reject: deer slender/spindly with thin outline, pink ear bit; fish thin outline — did not match chunky shop animals"
+shop_5,design/icons/sheets/shop_5_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: deer (spotted fawn), rabbit (grey-brown), fish_handful (two-fish alt; trio had magenta speck); extra ref = existing puppy/sheep/donkey (tools/ref_shop_animals.png)"

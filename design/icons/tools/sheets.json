@@ -590,6 +590,105 @@
      "ui"
     ]
    ]
+  },
+  {
+   "id": "shop_4",
+   "group": "shop",
+   "cols": 4,
+   "rows": 2,
+   "items": [
+    [
+     "deer",
+     "-",
+     "a tiny figurine-like slender tan-brown young deer standing, small antlers, cream spots on its back, side 3/4 view"
+    ],
+    [
+     "rabbit",
+     "-",
+     "a tiny figurine-like soft grey-brown wild rabbit sitting upright, long ears, white fluffy tail"
+    ],
+    [
+     "fish_handful",
+     "-",
+     "a tiny figurine-like trio of small lively silver-blue fish leaping together in an arc out of one small round splash of teal water, all touching as one connected object"
+    ],
+    [
+     "deer_b",
+     "-",
+     "a tiny figurine-like honey-brown deer standing alert with short branching antlers and a white chest, side 3/4 view"
+    ],
+    [
+     "rabbit_b",
+     "-",
+     "a tiny figurine-like plump light-brown hare crouching with long upright ears and a white belly"
+    ],
+    [
+     "fish_handful_b",
+     "-",
+     "a tiny figurine-like small round wooden scoop holding three little live silver-blue fish wiggling in teal water"
+    ],
+    [
+     "spare_1",
+     "-",
+     "a single acorn"
+    ],
+    [
+     "spare_2",
+     "-",
+     "a small green leaf"
+    ]
+   ],
+   "note": "rejected: slender deer/thin outline did not match shop animals; replaced by shop_5"
+  },
+  {
+   "id": "shop_5",
+   "group": "shop",
+   "cols": 4,
+   "rows": 2,
+   "extra_ref": "design/icons/tools/ref_shop_animals.png",
+   "items": [
+    [
+     "deer",
+     "작은 사슴 한 쌍",
+     "a tiny chubby figurine-like young fawn standing, chunky rounded body, short sturdy legs, big head, tan-brown with cream belly and a few cream spots, two small stubby antler nubs, side 3/4 view, same chunky proportions as the puppy and donkey in the second reference"
+    ],
+    [
+     "rabbit",
+     "작은 토끼 한 쌍",
+     "a tiny chubby figurine-like grey-brown wild rabbit sitting, round body, long upright ears with light inner ear, white puffy tail, same chunky proportions as the sheep in the second reference"
+    ],
+    [
+     "fish_handful_trio",
+     "-",
+     "a tiny chunky figurine-like group of three small plump silver-blue fish jumping together in an arc out of one round teal water splash, thick outline, all touching as one connected object"
+    ],
+    [
+     "deer_b",
+     "-",
+     "a tiny chubby figurine-like small deer standing, chunky rounded body, short sturdy legs, honey-brown with cream chest, small rounded branching antlers, side 3/4 view, same chunky style as the donkey in the second reference"
+    ],
+    [
+     "rabbit_b",
+     "-",
+     "a tiny chubby figurine-like light brown rabbit sitting, round body, long ears, white belly and white puffy tail"
+    ],
+    [
+     "fish_handful",
+     "작은 물고기 한 줌",
+     "a tiny chunky figurine-like pair of plump silver-blue fish curled side by side jumping over a small round teal water splash, thick outline, one connected object"
+    ],
+    [
+     "spare_1",
+     "-",
+     "a single acorn"
+    ],
+    [
+     "spare_2",
+     "-",
+     "a small green leaf"
+    ]
+   ],
+   "note": "chosen: deer, rabbit, fish_handful (= the two-fish alt); others unused"
   }
  ]
 }
