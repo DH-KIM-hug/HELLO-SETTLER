@@ -37,7 +37,7 @@ static func swarm_village(seed_v := 5) -> Village:
 	var v := village("열대", 4, 15, seed_v)
 	v.water.offline = true
 	v.advance(2.0 * H)                 # 09:00 — 낮
-	v.mold.force_swarm(v)
+	v.mold.force_swarm(v, "검은")
 	return v
 
 
@@ -158,8 +158,8 @@ func test_pressure() -> void:
 	check(omen_day >= Balance.MOLD_FIRST_DAY and omen_day < 3.6, "열대 병은 사흘쯤 뒤 조짐 (%.1f일 — 첫 3일은 없음)" % omen_day)
 	check(swarm_day - omen_day > 0.45 and swarm_day - omen_day < 0.6, "조짐 반나절 뒤 무리 (%.2f일)" % (swarm_day - omen_day))
 	check(max_fog > 0.8, "조짐 동안 유리가 뿌예짐 (%.2f)" % max_fog)
-	var told := w.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("빵에 푸른 털"))
-	check(told, "연대기: 빵에 푸른 털이 돋았다")
+	var told := w.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("빵에 ") and String(e["text"]).contains(" 털이 돋았다"))
+	check(told, "연대기: 빵에 (그 무리 색) 털이 돋았다")
 	# 거인이 조짐 동안 김을 빼면 조짐이 걷힌다
 	var g := village("열대")
 	g.water.offline = true
@@ -182,6 +182,7 @@ func test_swarm_first_time() -> void:
 	var sp := Vector2(v.store().x, v.store().y)
 	var near_store := m.blobs.all(func(b: MoldBlob) -> bool: return b.pos().distance_to(sp) < 10.0)
 	check(near_store, "창고 곁 그늘·젖은 땅에서 생긴다")
+	check(m.blobs.all(func(b: MoldBlob) -> bool: return b.kind == m.blobs[0].kind), "한 무리는 한 색 (%s)" % m.blobs[0].kind)
 	m.peak_end = v.t + 2.0 * D
 	v.advance(4.0 * H)
 	var gnaw := m.blobs.filter(func(b: MoldBlob) -> bool: return b.state == "gnaw").size()
@@ -201,7 +202,7 @@ func test_swarm_first_time() -> void:
 	var d := village("온대")
 	d.water.offline = true
 	d.advance(2.0 * H)
-	d.mold.force_swarm(d)
+	d.mold.force_swarm(d, "검은")
 	d.mold.peak_end = d.t + 2.0 * D
 	d.advance(D)
 	check(d.mold.stats["split"] == 0, "마른 병에서는 나뉘지 않는다 (김 %.2f)" % d.air.humid)
@@ -226,7 +227,7 @@ func test_chaser_and_adapt() -> void:
 	var m := v.mold
 	m.episodes = 1                      # 한 번 겪은 마을
 	m.blobs.clear()
-	m.force_swarm(v)
+	m.force_swarm(v, "검은")
 	v.stock["소금"] = 0.0
 	v.stock["통나무"] = 40.0
 	var ch := v.person(m.chaser_id)
@@ -431,7 +432,7 @@ func test_determinism() -> void:
 	for sp in [0, 3]:
 		var v := village("열대", 4, 15, 3)
 		v.step(1.0)
-		v.mold.force_swarm(v)
+		v.mold.force_swarm(v, "검은")
 		v.mold.episodes = 1
 		v.mold._name_chaser(v)
 		var c := JarClock.new(v)

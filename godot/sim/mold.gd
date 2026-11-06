@@ -31,6 +31,7 @@ var med_known := false                # 푸른 가루가 약이 된다는 걸 �
 var med_learned := false              # 약이 어느 병에 듣는지 앎 (몇 번 실패한 뒤)
 var med_fail := 0
 var teal_defeats := 0
+var swarm_kind := ""                  # 이번 무리의 색 — 곰팡이는 다른 색을 싫어해 한 번에 한 색만 (WORLD_EVENTS 2.1)
 var lid_helped := false               # 무리가 있을 때 하늘이 열려 무리가 흩어진 적이 있다 (노인의 귀띔)
 var tried: Dictionary = {}            # 주민 id → 약을 써 본 병의 sick_since (한 번 앓을 때 한 번)
 var stats := {"spawned": 0, "split": 0, "defeated": 0, "melted": 0, "dried": 0, "rot_food": 0.0, "rot_logs": 0.0,
@@ -188,11 +189,13 @@ func hw_now(v: Village) -> float:
 func _start_omen(v: Village) -> void:
 	phase = "omen"
 	phase_t = v.t
+	swarm_kind = _roll_kind()
+	var col := color_word(swarm_kind)
 	var teller := _awake_teller(v)
 	if teller != null:
-		v.speak(teller, "빵에 푸른 털이 났어!", 7)
-	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": "거인님, 빵에 푸른 털이 났어요."})
-	v.log_line("창고의 빵에 푸른 털이 돋았다. 하늘이 뿌옇게 흐려졌다.")
+		v.speak(teller, "빵에 %s 털이 났어!" % col, 7)
+	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": "거인님, 빵에 %s 털이 났어요." % col})
+	v.log_line("창고의 빵에 %s 털이 돋았다. 하늘이 뿌옇게 흐려졌다." % col)
 	if not v.is_watching():
 		v.log_line("유리에 김이 서리기 시작했다.")
 	if lid_helped:                         # 노인의 귀띔 (WORLD_EVENTS 6장) — 해결 방법을 직접 말하지 않는다
@@ -215,8 +218,10 @@ func _start_swarm(v: Village) -> void:
 	peak_end = v.t + lerpf(float(Balance.MOLD_PEAK[0]), float(Balance.MOLD_PEAK[1]), rng.randf())
 	var n := rng.randi_range(int(Balance.MOLD_SPAWN[0]), int(Balance.MOLD_SPAWN[1]))
 	var spots := _damp_spots(v, n)
+	if swarm_kind == "":
+		swarm_kind = _roll_kind()
 	for p: Vector2 in spots:
-		_spawn(v, p, _roll_kind(), 0.85 + 0.3 * rng.randf())
+		_spawn(v, p, swarm_kind, 0.85 + 0.3 * rng.randf())   # 한 무리는 한 색
 	if episodes >= 1 and chaser_id < 0:     # 한 번 겪은 마을: 촌장이 바로 쫓는 사람을 정한다 (처음엔 숨기만)
 		_name_chaser(v)
 	v.crisis("mold", "털뭉치 괴물 떼가 창고로 몰려왔다")
@@ -247,6 +252,16 @@ func _damp_spots(v: Village, n: int) -> Array[Vector2]:
 	while out.size() < n:
 		out.append(sp + Vector2(cos(out.size() * 1.7), sin(out.size() * 1.7)) * 3.0)
 	return out
+
+
+## 털 색 말 (조짐 대사·연대기)
+static func color_word(kind: String) -> String:
+	match kind:
+		"검은": return "검은"
+		"푸른": return "푸른"
+		"흰": return "하얀"
+		"누룩": return "노란"
+	return "푸른"
 
 
 func _roll_kind() -> String:
@@ -428,6 +443,7 @@ func _tamed_target(v: Village, b: MoldBlob) -> void:
 
 func _end_swarm(v: Village) -> void:
 	phase = "calm"
+	swarm_kind = ""
 	episodes += 1
 	pressure = 0.0
 	rest_until = v.t + Balance.MOLD_REST
@@ -675,8 +691,10 @@ func force_omen(v: Village) -> void:
 	_start_omen(v)
 
 
-func force_swarm(v: Village) -> void:
+func force_swarm(v: Village, kind := "") -> void:
 	pressure = 1.0
+	if kind != "":
+		swarm_kind = kind
 	_start_swarm(v)
 
 
