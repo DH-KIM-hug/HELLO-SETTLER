@@ -1,2 +1,3 @@
 file,title,author,pixabay_url,download_date,content_id
 voice/*.mp3,Resident voice barks (118 clips),ElevenLabs TTS (eleven_v3; voices baby_Mithi / baby_Teddy / Hope - The Storyteller / Chris / Maria / Grandpa Spuds Oxley),https://elevenlabs.io (Creator plan - commercial use),2026-11-06,none
+music/*.mp3,Background music (theme/day/night/evening/crisis/festival),ElevenLabs Music (prompts in tools/gen_music.py),https://elevenlabs.io (Creator plan - commercial use),2026-11-06,none
