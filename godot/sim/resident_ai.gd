@@ -39,6 +39,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("mold_"):
 		v.mold.run_op(v, r, d)
 		return
+	if n.begins_with("crisis_"):         # [작은 위기] 모깃불·먼지 뭉치 뜯기 (sim/small_crises.gd)
+		v.smalls.run_op(v, r, d)
+		return
 	if n.begins_with("wild_"):           # [들짐승] 낚시·사냥·울타리 (sim/wildlife.gd)
 		Wildlife.run_op(v, r, d)
 		return
@@ -237,6 +240,8 @@ static func decide(v: Village, r: Resident) -> void:
 		_sick_rest(v, r)
 		return
 	if Mold.decide(v, r):              # [곰팡이·뚜껑] 털뭉치를 피해 숨기 · 횃불로 쫓기 · 곰팡이약 만들기 (WORLD_EVENTS 2.1)
+		return
+	if SmallCrises.decide(v, r):       # [작은 위기] 물방울 아래에서 비키기 · 날벌레를 피해 숨기 · 모깃불 · 먼지 뭉치 뜯기 (WORLD_EVENTS 2.2)
 		return
 	if Flora.decide(v, r):             # [하늘의 것] 큰 민들레 꽃잎·솜털·잎 따기 (WORLD_EVENTS 2.7)
 		return

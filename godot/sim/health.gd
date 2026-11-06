@@ -159,6 +159,13 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 			_hurt(r, "추위", lc)
 		if lh > 0.0:
 			_hurt(r, "더위", lh)
+		# 밖에서 지니고 온 병: 잠복이 끝나면 앓기 시작 (WORLD_EVENTS 5 — 그 전엔 아프지도 옮기지도 않음)
+		if r.latent != "" and tt >= r.latent_until:
+			var lk := r.latent
+			r.latent = ""
+			r.latent_until = -1.0
+			if r.sick_left <= 0.0 and not r.is_immune(lk, tt):
+				fall_ill(v, r, _near_any(r, clinic, Balance.CLINIC_R), lk)
 		# 앓음 (병마다 — HEALTH.md 2.1·2.2)
 		if r.sick_left > 0.0:
 			Mold.medicine(v, r)           # [곰팡이·뚜껑] 곰팡이약을 써 본다 (HEALTH 2.5b — 듣는 병: 중증 막음·기간 ×0.5)
@@ -303,9 +310,9 @@ static func _hourly(v: Village, clinic: Array) -> void:
 	for r in v.people:
 		if r.sick_left > 0.0 and r.disease != "" and _contagious(r.disease):
 			sick.append(r)
-			if r.home >= 0:
+			if r.home >= 0:                # 치료소에 따로 누운 사람은 식구에게 덜 옮긴다 (격리 — ROADMAP B7)
 				var hm0: Dictionary = sick_home.get(r.disease, {})
-				hm0[r.home] = int(hm0.get(r.home, 0)) + 1
+				hm0[r.home] = float(hm0.get(r.home, 0.0)) + (Balance.QUARANTINE_HOME if r.doing == "치료소에 누운 중" else 1.0)
 				sick_home[r.disease] = hm0
 	var wells: Array = []
 	for b in v.buildings:
@@ -313,7 +320,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			wells.append(Vector2(b.x, b.y))
 	var occ := v.occupancy()
 	var ctx := {}
-	var wmax := _where_max()
+	var wmax := -1.0
 	for r in v.people:
 		var in_clinic := _near_any(r, clinic, Balance.CLINIC_R)
 		# 부상: 이번 시간에 힘쓴 만큼
@@ -341,6 +348,8 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			p0 *= Balance.ILL_CROWDED
 		p0 *= age_mult(r)
 		var u := v.health_rng.randf()
+		if wmax < 0.0:
+			wmax = _where_max(v.climate())
 		var mold_m := Mold.ill_mult(v, r)     # [곰팡이·뚜껑] 털뭉치 둘레: 배앓이·기침병 ×2 → 거르기 상한도 그만큼 (결과는 곰팡이 없으면 그대로)
 		var fl_m := Flora.ill_mult(v) * SkyDrops.ill_mult(v)    # [하늘의 것] 얼룩버섯을 먹은 날: 배앓이 ×5 (WORLD_EVENTS 2.6) · [상점] 녹조 배앓이↑
 		if sick.is_empty() and u >= p0 * wmax * mold_m * fl_m * r.f("illness") / 24.0:
@@ -348,7 +357,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 		if ctx.is_empty():
 			var season: String = jar_date(v)["season"]
 			var cl := v.climate()
-			ctx = {"winter": season == "겨울", "tropic_summer": season == "여름" and (cl == "열대" or cl == "아열대")}
+			ctx = {"winter": season == "겨울", "tropic_summer": season == "여름" and (cl == "열대" or cl == "아열대"), "climate": cl}
 		ctx["no_well"] = hm == null or not _near_pt(hm, wells, Balance.WELL_R)
 		ctx["hungry"] = r.hunger >= Balance.STARVING_AT
 		ctx["hot"] = r.heat >= Balance.DISEASE_EXPOSED
@@ -360,13 +369,13 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			var pd := 0.0
 			if not r.is_immune(kind, v.t):
 				var dz: Dictionary = Balance.DISEASES[kind]
-				pd = p0 * float(dz["share"]) * where_mult(dz, ctx) * Mold.kind_mult(kind, mold_m)
+				pd = p0 * share_of(kind, String(ctx["climate"])) * where_mult(dz, ctx) * Mold.kind_mult(kind, mold_m)
 				if kind == "배앓이":
 					pd *= fl_m
 				var cg := 0.0
 				if float(dz["home"]) > 0.0 or float(dz["near"]) > 0.0:
 					if r.home >= 0:
-						cg += float(dz["home"]) * int((sick_home.get(kind, {}) as Dictionary).get(r.home, 0))
+						cg += float(dz["home"]) * float((sick_home.get(kind, {}) as Dictionary).get(r.home, 0.0))
 					for s in sick:
 						if s.disease == kind and (s.home != r.home or r.home < 0):
 							if Vector2(s.x - r.x, s.y - r.y).length() <= Balance.CONTAGION_R:
@@ -391,20 +400,74 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			fall_ill(v, r, in_clinic, kind)
 
 
-static var _wmax := -1.0
+static var _wmax := {}
 
 
-## 자연 발병 배율의 최댓값 (모든 '어디서'가 참일 때 몫 × 배율의 합) — 거르기용
-static func _where_max() -> float:
-	if _wmax < 0.0:
-		_wmax = 0.0
+## 자연 발병 배율의 최댓값 (모든 '어디서'가 참일 때 몫 × 배율의 합) — 거르기용. 기후마다 (그 병에 사는 병만)
+static func _where_max(climate := "") -> float:
+	if not _wmax.has(climate):
+		var w := 0.0
 		for kind: String in Balance.DISEASE_ORDER:
 			var dz: Dictionary = Balance.DISEASES[kind]
-			var m := float(dz["share"])
+			var m := share_of(kind, climate) if climate != "" else float(dz["share"])
 			for k: String in dz["where"]:
 				m *= maxf(1.0, float(dz["where"][k]))
-			_wmax += m
-	return _wmax
+			w += m
+		_wmax[climate] = w
+	return float(_wmax[climate])
+
+
+# ───────────────────────── 병이 들어오는 길 (WORLD_EVENTS 5 · HEALTH 2.6 — ROADMAP B7) ─────────────────────────
+## 이 병이 이 기후의 병에 처음부터 사는가 (고뿔·배앓이·기침병·곪은 상처는 모든 병, 열병은 열대·아열대, 역병은 어디에도)
+static func endemic(kind: String, climate: String) -> bool:
+	if not Balance.DISEASE_ENDEMIC.has(kind):
+		return true
+	return climate in (Balance.DISEASE_ENDEMIC[kind] as Array)
+
+
+## 자연 발병의 몫 — 사는 병만. 살지 않는 병의 몫은 나머지 병에 비율대로 나눈다 (HEALTH 2.6)
+static func share_of(kind: String, climate: String) -> float:
+	if not endemic(kind, climate):
+		return 0.0
+	var all := 0.0
+	var here := 0.0
+	for k: String in Balance.DISEASE_ORDER:
+		var sh := float(Balance.DISEASES[k]["share"])
+		all += sh
+		if endemic(k, climate):
+			here += sh
+	return float(Balance.DISEASES[kind]["share"]) * (all / here if here > 0.0 else 1.0)
+
+
+## 밖에서 병을 지니고 왔다 — 하루 잠복 (아프지도 옮기지도 않음 — 거인에게는 창백한 얼굴빛). 이미 앓거나 면역이면 아무 일 없음
+static func make_latent(v: Village, r: Resident, kind: String) -> bool:
+	if r.sick_left > 0.0 or r.latent != "" or r.is_immune(kind, v.t):
+		return false
+	r.latent = kind
+	r.latent_until = v.t + Balance.LATENT
+	var by: Dictionary = v.stats.get("carried_by", {})
+	by[kind] = int(by.get(kind, 0)) + 1
+	v.stats["carried_by"] = by
+	return true
+
+
+## 거인이 넣은 먹는 물건 (각설탕·마른 약초)에 바깥의 열병이 묻어 옴 (2%) — 먹은 사람 하나가 잠복
+static func food_carry(v: Village, item: String) -> bool:
+	if not item in Balance.FOOD_FEVER_ITEMS or v.people.is_empty():
+		return false
+	if v.health_rng.randf() >= Balance.FOOD_FEVER_P:
+		return false
+	var r: Resident = v.people[v.health_rng.randi() % v.people.size()]
+	return make_latent(v, r, "열병")
+
+
+## 잠복 중인 사람이 있는 병 (사라지지 않은 병)
+static func latent_kinds(v: Village) -> Dictionary:
+	var out := {}
+	for r in v.people:
+		if r.latent != "":
+			out[r.latent] = true
+	return out
 
 
 static func _contagious(kind: String) -> bool:
@@ -489,6 +552,8 @@ static func _end_outbreaks(v: Village, cases: Dictionary) -> void:
 			var nm: String = ob["name"]
 			v.log_line("그 %s%s 이겨 낸 사람들은 다시 앓지 않았다." % [nm, Village.josa(nm, "을", "를")])
 		v.outbreaks.erase(kind)
+		if not endemic(kind, v.climate()) and not latent_kinds(v).has(kind) and int(ob["n"]) >= 2:     # 닫힌 병: 앓는 사람이 0이면 바깥의 병은 사라진다
+			v.log_line("%s%s 마을에서 자취를 감추었다." % [kind, Village.josa(kind, "은", "는")])
 
 
 ## 역병 위기 (기획서 10장 · HEALTH.md 2.4) — 자연 발병은 없다. 면역 없는 사람 중 n명이 처음 걸린다. 걸린 사람 수를 돌려줌

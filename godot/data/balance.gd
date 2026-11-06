@@ -512,6 +512,72 @@ const MOLD_MED_OUT := 2.0
 const MOLD_MED_KEEP := 4.0              # (정함) 약을 이만큼 + 인구 ÷ 5까지 쌓아 둠
 # ═══════════════ 병의 공기·곰팡이 끝 ═══════════════
 
+# ═══════════════ 작은 위기 셋 — 날벌레 · 떠돌이 물방울 · 먼지 뭉치 (WORLD_EVENTS 2.2 · 2.3 — sim/small_crises.gd, ROADMAP B5) ═══════════════
+# 모두 (정함) — 화면에는 숫자가 나오지 않는다. 공통: 첫 3일 없음 (MOLD_FIRST_DAY), 곰팡이까지 합쳐 동시에 둘까지, 끝나고 반나절 쉼, 세 번 겪으면 피해 절반
+const CRISIS_MAX_AT_ONCE := 2
+const CRISIS_REST := 0.5 * DAY
+const CRISIS_ADAPT := 3
+# 날벌레 (뚜껑을 열 때 GNAT_P로 들어옴): 조짐 = 유리 밑을 윙윙 맴돎 → 내려와 밭·창고를 먹음 (하루 10%) → 1~3일 뒤 유리에 붙어 떨어짐
+const GNAT_OMEN := 1.0 * HOUR           # 높이 맴도는 동안 (뚜껑을 다시 열면 그 틈으로 날아 나감)
+const GNAT_PEAK := [1.0 * DAY, 3.0 * DAY]
+const GNAT_MAX := 4                     # 한 병에 이만큼까지 (한 마리가 집채만 하다)
+const GNAT_SPEED := 0.9                 # 칸/초
+const GNAT_EAT_DAY := 0.10              # 밭·창고 식량 하루 10%
+const GNAT_EAT_FULL := 2                # 이만큼 먹고 있으면 하루 10% (적으면 비례)
+const GNAT_HIDE_R := 5.0                # 이 반경 안 주민은 숨는다 (일이 멈춤 — 익숙해지면 2.5)
+const GNAT_STARTLE_FEAR := 0.01
+const GNAT_SMOKER_AFTER := 30           # 처음 겪는 무리에서도 놀란 일이 이만큼 쌓이면 촌장이 '연기 피우는 사람'을 정함
+const GNAT_SMOKE_R := 4.5               # 모깃불 연기가 쫓는 반경
+const GNAT_SMOKE_TIME := 2.0 * HOUR     # 모깃불 하나가 타는 시간
+const GNAT_SMOKE_LOG := 1.0             # 모깃불 = 통나무 1 (연기는 병에 갇힌다 — air.smoke +)
+const GNAT_SMOKE_AIR := 0.02
+const GNAT_PLAGUE_P := 0.20             # 들어온 날벌레가 역병을 지닐 확률 (WORLD_EVENTS 5)
+const GNAT_FEVER_P := 0.30              # 열병이 사는 병(열대·아열대)에서는 열병을 지닐 확률
+const GNAT_BITE_R := 1.6
+const GNAT_BITE_HOUR := 0.12            # 곁에 있는 사람을 물 확률 (시간마다)
+const GNAT_WATER_BITE := 2.0            # 고인 물가에서는 ×2 (모기처럼 — 열병이 물가에서 번짐)
+const GNAT_TWEEZE_R := 3.0              # 핀셋: 누른 자리에서 이만큼 안의 날벌레를 집음
+const GNAT_TWEEZE_CLEAN := 1.2          # 이만큼 가까우면 깔끔히 — 멀면 서툴러 곁의 집이 부서질 수 있음
+const GNAT_TWEEZE_CRUSH_R := 1.8
+# 떠돌이 물방울: 압력 = 병이 식는 만큼 × 김 → 유리에 큰 물방울이 맺혀 하루 동안 부풂 (천천히 떠돎) → 떨어져 구르며 물자국 → 터져 물바다
+const DROP_HUMID_FROM := 0.30
+const DROP_NEED := 6.0                  # (식은 도 × (김 − 0.3))가 이만큼 쌓이면 맺힘
+const DROP_FALL_DAY := 0.08             # 압력이 하루 이만큼 빠짐 (마른 날)
+const DROP_OMEN := 1.0 * DAY            # 매달려 부푸는 시간 ('하루 전부터 부풂')
+const DROP_DRIFT := 0.6                 # 유리를 따라 떠도는 빠르기 (칸/시간)
+const DROP_ROLL := 30.0 * 60.0          # 떨어진 뒤 구르는 시간 (병 초)
+const DROP_ROLL_SPEED := 0.012          # 칸/초 (내리막으로)
+const DROP_R := 3.5                     # 터진 물바다 반경 (크기 1)
+const DROP_WATER := 0.06                # 물바다 칸마다 더하는 물 깊이 (크기 1 — 병의 물에서 덜어 옴: 닫힌 순환)
+const DROP_KNOCK_REACH := 10.0          # 유리를 톡 쳐서 떨어뜨릴 때 고를 수 있는 거리
+const DROP_STORE_LOSS := 0.25           # 창고가 잠기면 식량 −25%
+const DROP_EVAC_FROM := 0.5             # 이만큼 부풀면 아래 사람들이 피함 (익숙해진 마을은 조짐부터)
+# 먼지 뭉치: 압력 = 뚜껑이 열린 시간 → 조짐 (방 빛 속에 먼지가 반짝이며 내려옴) → 굴러다니는 회색 덩어리 1~3개 → 주민이 뜯어 실을 잣는다 (양털 대신)
+const DUST_LID_SECS := 6.0 * 60.0       # 뚜껑이 이만큼 열려 있으면 압력 1
+const DUST_FALL_DAY := 0.25
+const DUST_OMEN := 2.0 * HOUR
+const DUST_SPAWN := [1, 3]
+const DUST_SPEED := 0.012               # 칸/초 (느릿느릿 구름 — 1분에 칸 하나쯤)
+const DUST_LIFE := 3.0 * DAY            # 그대로 두면 이만큼 뒤 땅에 내려앉아 흙이 됨
+const DUST_FIELD_R := 1.4               # 밭과 이만큼 겹치면 밭이 덮여 자람이 멈춤
+const DUST_PULL := 0.15                 # 한 번 뜯을 때 크기 −
+const DUST_PULL_TIME := 300.0
+const DUST_YARN := 2.0                  # 한 번 뜯으면 양털(먼지 실) +2
+const DUST_MIN := 0.3
+const DUST_LEARN := 0.5 * DAY           # 아이가 만지지 않아도 이만큼 지나면 노인이 '뜯어 실을 잣던' 옛말을 떠올림
+const DUST_BLOW_PUSH := 6.0             # 거인이 불면 이만큼 밀려나고 ×0.5 (작아지면 열린 뚜껑으로 날아감)
+const DUST_FIND_R := 2.5
+# 병이 들어오는 길 (WORLD_EVENTS 5 · HEALTH 2.6 — ROADMAP B7). 앓는 사람이 0이 되면 열병·역병은 병에서 사라진다 (자연 발병 없음)
+const DISEASE_ENDEMIC := {"열병": ["열대", "아열대"], "역병": []}     # 여기 없는 병은 모든 병에 처음부터 산다
+const MIGRANT_FEVER_P := 0.05           # 열병이 사는 기후에서 온 사람의 5%가 지니고 옴
+const MIGRANT_PLAGUE_P := 0.01          # 이주민 1%가 역병
+const MIGRANT_FEVER_LANDS := 0.33       # (정함) 이주민이 열병이 사는 기후(열대·아열대)에서 왔을 몫 — 어디서 왔는지는 보이지 않는다
+const FOOD_FEVER_P := 0.02              # 먹는 물건 (각설탕·마른 약초) 2%
+const FOOD_FEVER_ITEMS := ["각설탕", "마른 약초 한 잎"]
+const LATENT := 1.0 * DAY               # 잠복 (아프지도 옮기지도 않음 — 거인에게는 창백한 얼굴빛)
+const QUARANTINE_HOME := 0.3            # 치료소에 따로 누운 사람은 식구에게 옮기는 몫 ×0.3
+# ═══════════════ 작은 위기 셋 끝 ═══════════════
+
 # ═══════════════ 하늘의 것 — 큰 버섯 · 큰 민들레 (WORLD_EVENTS 1.1 · 2.6 · 2.7 — sim/flora.gd) ═══════════════
 const FLORA_TICK := 60.0                # (정함) 버섯·민들레 계산 간격 (병 시계 초) — 걸음 크기와 상관없게
 const SEED_TICK := 5.0                  # (정함) 날리는 꽃씨 계산 간격 (병 시계 초)

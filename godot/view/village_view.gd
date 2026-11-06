@@ -42,6 +42,7 @@ var n_piers := 0
 var n_bridges := 0
 var _anim_t := 0.0
 var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.gd)
+var crisis_view: CrisisView    # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (view/crisis_view.gd)
 var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
 var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
 var animal_view: AnimalView    # [들짐승] 카메라 곁 무리의 대표·물고기·메고 오는 사슴·올무·울타리 (view/animal_view.gd)
@@ -77,6 +78,8 @@ func _ready() -> void:
 	_far = _node(self)
 	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
 	add_child(mold_view)
+	crisis_view = CrisisView.new(v)   # [작은 위기]
+	add_child(crisis_view)
 	flora_view = FloraView.new(v)   # [하늘의 것]
 	add_child(flora_view)
 	drop_view = SkyDropView.new(v, terrain)   # [상점]
@@ -103,6 +106,8 @@ func sync(dt: float, force := false) -> void:
 	_sync_residents(dt)
 	mold_view.alpha = alpha         # [곰팡이·뚜껑]
 	mold_view.sync(dt)
+	crisis_view.alpha = alpha       # [작은 위기]
+	crisis_view.sync(dt)
 	flora_view.alpha = alpha        # [하늘의 것]
 	flora_view.sync(dt)
 	if drop_view != null:
@@ -176,6 +181,7 @@ func _sync_residents(dt: float) -> void:
 		var jb0 := v.bld(r.job)                 # (A20) 직업 옷·연장 · 촌장 띠 · 표정 — 바뀔 때만 부품을 갈아 끼움
 		m.set_job(jb0.type if jb0 != null else "", r == chief)
 		m.set_face(ResidentModel.face_of(r))
+		m.set_pale(r.latent != "")      # [B7] 밖에서 병을 지니고 온 사람: 잠복 동안 창백한 얼굴빛 (거인에게만 보이는 조짐)
 		m.set_item(r.carry)
 		if r.anim == "work":
 			var jb := v.bld(r.job)

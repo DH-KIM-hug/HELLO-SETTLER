@@ -13,7 +13,7 @@ extends RefCounted
 const ALTAR := "제단"
 
 ## 목격 한 번의 경이 (안 — 안내를 따르면 창세의 날 ×12로 4~6분, 아무것도 안 하면 낟알·물방울만으로 며칠)
-const WONDER := {"tap": 15.0, "lid": 15.0, "blow": 30.0, "blow_empty": 8.0, "drop": 40.0, "lamp": 25.0, "manna": 6.0}
+const WONDER := {"tap": 15.0, "lid": 15.0, "blow": 30.0, "blow_empty": 8.0, "drop": 40.0, "lamp": 25.0, "manna": 6.0, "tweeze": 35.0}
 const WONDER_NEED := 60.0
 const WONDER_DRIP_HOUR := 0.6        # 물방울·하늘 — 시간마다 저절로 (거인이 없어도)
 const TAP_FADE := 0.6                # 그날 톡이 거듭될수록 경이가 줄어듦 (×0.6씩)

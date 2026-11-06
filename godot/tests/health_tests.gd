@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 건강·기후·두려움 (HEALTH.md)")
-	run.timed(self, ["test_calendar_and_temperature", "test_illness_rates", "test_severity", "test_outbreaks", "test_immunity", "test_exposure", "test_firewood", "test_injury", "test_fear", "test_deaths_and_text", "test_blood_src", "test_offline_protection", "test_winter_speed_equal", "test_seasons"])
+	run.timed(self, ["test_calendar_and_temperature", "test_illness_rates", "test_severity", "test_outbreaks", "test_immunity", "test_exposure", "test_firewood", "test_injury", "test_fear", "test_deaths_and_text", "test_blood_src", "test_offline_protection", "test_winter_speed_equal", "test_seasons", "test_disease_entry"])
 
 
 ## 날짜를 정해 새 마을 (Village.default_created를 잠깐 바꿈)
@@ -149,10 +149,10 @@ func test_illness_rates() -> void:
 	var sh := PackedStringArray()
 	for k: String in ["고뿔", "배앓이", "열병", "기침병"]:
 		var got := float(by.get(k, 0)) / maxf(1.0, tot)
-		var want := float(Balance.DISEASES[k]["share"])
+		var want := Health.share_of(k, v.climate())       # 온대 병엔 열병이 살지 않는다 → 그 몫은 나머지에 (HEALTH 2.6)
 		share_ok = share_ok and absf(got - want) < maxf(0.05, want * 0.3)
 		sh.append("%s %.2f" % [k, got])
-	check(share_ok, "병마다 몫 ≈ 0.50 · 0.25 · 0.15 · 0.10, 역병·곪은 상처는 저절로 안 생김 (%s, %d번)" % [", ".join(sh), tot])
+	check(share_ok and not by.has("열병"), "온대 병의 몫 ≈ 0.59 · 0.29 · 0 · 0.12 (열병은 밖에서만), 역병·곪은 상처는 저절로 안 생김 (%s, %d번)" % [", ".join(sh), tot])
 	# 같은 집 식구가 고뿔을 앓으면: 하루 +10% × 이번 유행의 전염 배율 (같은 병으로만)
 	var cdays := days / 4
 	var hh := lab(5, 4)
@@ -855,3 +855,68 @@ func test_seasons() -> void:
 	var r := ill_rate / seeds.size()
 	if not quick:     # 빠른 모드는 시드 1개·10일이라 앓는 사람이 0~3명 — 비율 판정은 전체 모드에서만
 		check(r > 0.001 and r < 0.03, "봄 마을 발병 하루 %.3f (기본 0.01 × 배율·전염)" % r)
+
+
+# ───────────────────────── 병이 들어오는 길 (WORLD_EVENTS 5 · HEALTH 2.6 — ROADMAP B7) ─────────────────────────
+func test_disease_entry() -> void:
+	check(Health.endemic("고뿔", "온대") and Health.endemic("곪은 상처", "툰드라") and Health.endemic("열병", "열대") and Health.endemic("열병", "아열대")
+		and not Health.endemic("열병", "온대") and not Health.endemic("역병", "열대"), "병 안에 사는 병: 고뿔·배앓이·기침병·곪은 상처는 어디나, 열병은 열대·아열대만, 역병은 어디에도 없음")
+	var sum_t := 0.0
+	var sum_w := 0.0
+	for k: String in Balance.DISEASE_ORDER:
+		sum_t += Health.share_of(k, "온대")
+		sum_w += Health.share_of(k, "열대")
+	check(absf(sum_t - 1.0) < 1e-6 and absf(sum_w - 1.0) < 1e-6 and Health.share_of("열병", "온대") == 0.0 and absf(Health.share_of("열병", "열대") - 0.15) < 1e-6,
+		"살지 않는 병의 몫은 나머지 병에 나눔 (온대 고뿔 %.3f · 열대 열병 %.2f)" % [Health.share_of("고뿔", "온대"), Health.share_of("열병", "열대")])
+	# 자연 발병: 온대 병엔 열병이 저절로 생기지 않고, 열대 병엔 생긴다
+	var hours := (300 if quick else 900) * 24
+	var res := {}
+	for cl: String in ["온대", "열대"]:
+		var v := lab(5, 4)
+		v.climate_override = cl
+		var by := {}
+		onsets(v, hours, [], by)
+		res[cl] = by
+	print("  자연 발병 — 온대 %s · 열대 %s" % [str(res["온대"]), str(res["열대"])])
+	check(not (res["온대"] as Dictionary).has("열병") and int((res["열대"] as Dictionary).get("열병", 0)) > 0 and not (res["열대"] as Dictionary).has("역병"), "온대 병: 열병 없음 · 열대 병: 열병이 늘 남음 · 역병은 저절로 안 생김")
+	# 잠복: 하루 동안 아프지도 옮기지도 않다가 앓기 시작
+	var w := village_on(4, 15, 3)
+	w.water.offline = true
+	var r := w.people[4]
+	check(Health.make_latent(w, r, "열병") and r.latent == "열병" and r.sick_left <= 0.0, "밖에서 지니고 온 병: 잠복 (아직 아프지 않음)")
+	check(not Health.make_latent(w, r, "역병"), "한 사람은 한 병만 지닌다")
+	w.advance(0.5 * D)
+	var spread := false
+	for q in w.people:
+		spread = spread or (q != r and q.disease == "열병")
+	check(r.sick_left <= 0.0 and not spread and not w.outbreaks.has("열병"), "잠복 동안은 옮기지 않는다")
+	w.advance(0.6 * D)
+	check(r.disease == "열병" and r.sick_left > 0.0 and r.latent == "" and w.outbreaks.has("열병"), "하루 뒤 앓기 시작 → 열병 유행 ('%s')" % str(w.outbreaks.get("열병", {}).get("name", "")))
+	# 닫힌 병: 앓는 사람이 0이 되면 바깥의 병은 사라진다 — 다시 들어오기 전까지 없다
+	var z := village_on(4, 15, 4)
+	z.water.offline = true
+	for i in 3:
+		Health.fall_ill(z, z.people[i], false, "열병")
+		z.people[i].severe = false
+	var bk := z.book.size()
+	z.advance(9.0 * D)
+	var gone := not z.outbreaks.has("열병") and z.people.all(func(q: Resident) -> bool: return q.disease != "열병")
+	var lines: Array = z.book.slice(bk).map(func(e: Dictionary) -> String: return String(e["text"]))
+	check(gone and lines.any(func(t: String) -> bool: return t.contains("열병은 마을에서 자취를 감추었다")), "앓는 사람이 0이 되면 열병은 병에서 사라짐 (연대기)")
+	# 먹는 물건 (각설탕·마른 약초) 2%
+	var f := village_on(4, 15, 5)
+	var n := 2000 if not quick else 1000
+	var got := 0
+	for i in n:
+		for q in f.people:
+			q.latent = ""
+		if Health.food_carry(f, "각설탕"):
+			got += 1
+	check(absf(float(got) / n - Balance.FOOD_FEVER_P) < 0.012 and not Health.food_carry(f, "소금 한 꼬집"), "먹는 물건에 바깥의 열병이 묻어 옴 (각설탕 %.3f ≈ 0.02 · 소금은 없음)" % (float(got) / n))
+	# 숫자는 보이지 않는다 — 상태 줄은 앓기 시작한 뒤에만, 잠복은 말이 없다
+	var lt := village_on(4, 15, 6)
+	var who := lt.people[2]
+	Health.make_latent(lt, who, "역병")
+	var st := ResidentText.status_line(who, lt)
+	var rx := RegEx.create_from_string("[0-9]+ ?%")
+	check(rx.search(st) == null and not st.contains("역병") and not st.contains("앓"), "잠복은 상태 줄에 나오지 않고 확률 숫자도 없다 ('%s')" % st)

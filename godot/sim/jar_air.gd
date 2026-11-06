@@ -2,7 +2,7 @@
 ## 화면과 분리된 순수 로직. Village.air가 하나 가진다. 난수는 자기 흐름(rng) 하나만 — 다른 흐름의 순서를 바꾸지 않는다.
 ## 닫힌 병: 김(humid)·연기(smoke)·탁한 공기(stale)는 병 시계 Balance.AIR_TICK(60초)마다 병의 상태가 정하는 목표로 천천히 다가간다.
 ## 뚜껑이 열린 동안(걸음마다): 세 값이 바깥 값으로 빠지고, 거인의 방 기온이 섞여 들어오고(Health.tick이 temp_shift를 더함),
-## 물이 조금 증발해 나간다. 열 때마다 날벌레 굴림 (지금은 기록·알림만 — 2.2). 닫지 않으면 JarClock이 현실 1분 뒤 닫는다.
+## 물이 조금 증발해 나간다. 열 때마다 날벌레 굴림 (들어오면 SmallCrises.gnat_in — 2.2). 닫지 않으면 JarClock이 현실 1분 뒤 닫는다.
 class_name JarAir
 extends RefCounted
 
@@ -18,7 +18,7 @@ var lid_mix := 0.0                    # 거인의 방 기온이 섞인 정도 0~
 var room_temp := 16.0                 # 지금 거인의 방 기온 (계절)
 var open_secs_pending := 0.0          # 다음 공기 계산 때 물을 덜어 낼 열린 시간 (초)
 var water_lost := 0.0                 # 뚜껑으로 빠져나간 물 (합)
-var gnats := 0                        # 들어온 날벌레 (2.2 — 아직 행동 없음, 표시·기록만)
+var gnats := 0                        # 날벌레가 들어오려 한 횟수 (2.2 — 위기는 sim/small_crises.gd)
 var gnat_new := false                 # 방금 날벌레가 들어옴 (화면이 가져감)
 var just_opened := false              # 화면 연출용 (방금 열림)
 var _acc := 0.0
@@ -42,9 +42,8 @@ func open_lid(v: Village) -> bool:
 	# 날벌레 (여름 8% · 봄가을 3% · 겨울 0%) — 열 때마다 한 번 굴림
 	if rng.randf() < float(Balance.GNAT_P.get(season, 0.0)):
 		gnats += 1
-		gnat_new = true
-		v.log_line("열린 하늘 틈으로 집채만 한 날개 달린 것이 윙윙거리며 날아들었다.")
-		v.warnings.append({"t": v.t, "kind": "gnat", "text": "하늘에서 윙윙 소리가 나요!"})
+		if v.smalls != null and v.smalls.gnat_in(v):     # [작은 위기] 날벌레 위기 (조짐·연대기·알림은 SmallCrises — 첫 3일·위기가 둘이면 그냥 날아 나감)
+			gnat_new = true
 	_awe(v)
 	return true
 

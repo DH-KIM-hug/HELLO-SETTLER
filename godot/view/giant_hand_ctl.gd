@@ -1,5 +1,5 @@
 ## 거인의 손 — 아래 띠 [손] 칸 (UI 01 · A9) + 손에 든 물건 떨어뜨리기 (SHOP 3 · WORLD_EVENTS 3 · 4 · A7).
-## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 (뚜껑이 열린 동안) · 등불 옮기기 /
+## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 (뚜껑이 열린 동안) · 핀셋 (열린 동안 + 날벌레) · 등불 옮기기 /
 ##   손에 든 것 (Market.hand — 5칸). 물건을 누르면 → 뚜껑이 열리고 (한 번 열고 여러 개 — 병의 법칙) 떨어뜨릴 자리 고르기:
 ##   땅 위 그림자 + 그 위에 거인의 손이 물건을 들고 기다림. 손가락으로 끌면 그림자가 따라옴, [떨어뜨리기]로 놓음.
 ##   물건 칸에서 바로 땅으로 끌어 놓으면 곧바로 떨어진다 (경고가 있으면 멈추고 묻는다).
@@ -17,6 +17,7 @@ var sc: Node                           # 장면 (TestVillage 계열)
 var tray: PanelContainer
 var lid_btn: Button
 var blow_btn: Button
+var tweeze_btn: Button                 # [작은 위기] 핀셋 — 뚜껑이 열리고 날벌레가 있을 때만 (WORLD_EVENTS 4.3)
 var lamp_btn: Button
 var hand_title: Label
 var hint: Label
@@ -60,6 +61,7 @@ func build(root: Control) -> void:
 	col.add_child(row)
 	lid_btn = _btn(row, "뚜껑 열기", "뚜껑", Callable(sc, "toggle_lid"))
 	blow_btn = _btn(row, "불기", "불기", Callable(sc, "blow"))
+	tweeze_btn = _btn(row, "핀셋", "핀셋", Callable(sc, "tweeze"))
 	lamp_btn = _btn(row, "등불 옮기기", "등불", Callable(sc, "move_lamp"))
 	col.add_child(HSeparator.new())
 	var head := HBoxContainer.new()
@@ -197,6 +199,7 @@ func refresh() -> void:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
 	blow_btn.visible = open_lid
+	tweeze_btn.visible = open_lid and v.smalls != null and not v.smalls.live("gnat").is_empty()
 	var sig := str(Market.hand)
 	if sig == _hand_sig:
 		return

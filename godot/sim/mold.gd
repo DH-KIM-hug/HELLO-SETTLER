@@ -144,7 +144,8 @@ func _tick(v: Village, dt: float) -> void:
 		"calm":
 			omen_fog = maxf(0.0, omen_fog - dt / (0.25 * Balance.DAY))
 			var lead := VillageEra.omen_lead(v)          # 망루: 조짐이 반나절 먼저 (A6) — 압력 문턱을 그만큼 낮추고 조짐을 그만큼 길게
-			if v.t >= Balance.MOLD_FIRST_DAY * Balance.DAY and v.t >= rest_until and pressure >= 1.0 - lead / (Balance.MOLD_PRESSURE_DAYS * Balance.DAY):
+			if v.t >= Balance.MOLD_FIRST_DAY * Balance.DAY and v.t >= rest_until and pressure >= 1.0 - lead / (Balance.MOLD_PRESSURE_DAYS * Balance.DAY) \
+					and SmallCrises.active_count(v) < Balance.CRISIS_MAX_AT_ONCE:     # 위기는 동시에 둘까지 (WORLD_EVENTS 2.3 — 작은 위기 셋과 합쳐)
 				omen_extra = lead if pressure < 1.0 else 0.0
 				_start_omen(v)
 		"omen":

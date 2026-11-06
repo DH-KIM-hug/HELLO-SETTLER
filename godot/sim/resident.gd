@@ -81,6 +81,8 @@ var herb_until := -1.0                # 중증: 약초가 그날 건강 감소�
 var last_disease := ""                # 마지막으로 앓은 병 (사망 원인)
 var immune: Dictionary = {}           # 병 → 면역이 끝나는 병 시각 t (Balance.IMMUNE_LIFE = 평생). 다른 병은 그대로 걸림
 var overcome := PackedStringArray()   # 이겨 낸 병 (UI '이겨 낸 병: 열병 · 고뿔')
+var latent := ""                      # 밖에서 지니고 온 병 — 잠복 중 (아프지도 옮기지도 않음, 거인에게는 창백한 얼굴빛 — WORLD_EVENTS 5 · ROADMAP B7)
+var latent_until := -1.0              # 잠복이 끝나고 앓기 시작하는 병 시각
 
 
 func is_adult() -> bool:

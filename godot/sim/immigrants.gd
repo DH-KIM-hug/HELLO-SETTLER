@@ -9,7 +9,7 @@
 ##   거인의 손이 마을 어귀(영역 안)에 작은 뗏목 꾸러미와 사람들을 내려놓는다. 집이 없으면 모닥불 곁에서 지내며 촌장이 집을 짓는다 (Village.chief_build).
 ##   마을의 맞이: 깨달은 뒤 믿음이 높으면 축제처럼 (행복 잠깐↑), 낮으면 경계 (행복 잠깐↓) · 깨닫기 전엔 낯선 사람에 술렁임 (거인 이야기 없음).
 ## 비운 동안(따라잡기)에는 아무도 오지 않는다 — 거인이 손으로 내려놓을 때만.
-## 밖에서 온 병 (HEALTH 2.6 · WORLD_EVENTS 5 — ROADMAP B7): carry_disease가 고리 (아직 아무것도 하지 않음).
+## 밖에서 온 병 (HEALTH 2.6 · WORLD_EVENTS 5 — ROADMAP B7): carry_disease — 열병·역병을 지니고 와 하루 잠복 (창백한 얼굴빛).
 class_name Immigrants
 extends RefCounted
 
@@ -229,10 +229,17 @@ static func land(v: Village, p: Vector2, seed_v: int) -> Array[Resident]:
 	return made
 
 
-## 밖에서 온 병의 고리 (HEALTH 2.6 · WORLD_EVENTS 5 — ROADMAP B7에서 채움: 그 기후의 열병 5% · 역병 1%, 하루 잠복, 거인에게는 창백한 얼굴빛)
-## 지금은 아무것도 하지 않는다. 다른 병에서 온 사람은 이 마을이 겪은 병의 면역이 없다 (Resident.immune이 빈 채로 온다).
-static func carry_disease(_v: Village, _made: Array[Resident]) -> void:
-	pass
+## 밖에서 온 병 (HEALTH 2.6 · WORLD_EVENTS 5 — ROADMAP B7): 열병이 사는 기후(열대·아열대)에서 온 사람의 5%가 열병, 누구든 1%가 역병을 지니고 온다.
+## 어디서 왔는지·누가 지녔는지는 보이지 않는다 (숫자 없음) — 하루 잠복 (아프지도 옮기지도 않음) 동안 거인에게는 창백한 얼굴빛으로만 보인다.
+## 굴림은 건강 난수 흐름 (Village.health_rng). 다른 병에서 온 사람은 이 마을이 겪은 병의 면역이 없다 (Resident.immune이 빈 채로 온다).
+static func carry_disease(v: Village, made: Array[Resident]) -> void:
+	var fever_land := v.health_rng.randf() < Balance.MIGRANT_FEVER_LANDS
+	for r in made:
+		var u := v.health_rng.randf()
+		if u < Balance.MIGRANT_PLAGUE_P:
+			Health.make_latent(v, r, Balance.PLAGUE)
+		elif fever_land and u < Balance.MIGRANT_PLAGUE_P + Balance.MIGRANT_FEVER_P:
+			Health.make_latent(v, r, "열병")
 
 
 ## 마을의 맞이 — 말 둘 · 연대기 한 줄 · 행복 잠깐 (숫자·상점 말 없음, 깨닫기 전엔 거인 이야기 없음)
