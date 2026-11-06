@@ -25,9 +25,12 @@ var dir := DIR
 var enabled := true
 ## 병 id → {kind: "jar"/"world", village, world, clock, meta, serial, book_n, event_t}
 var jars: Dictionary = {}
-var order: Array = []                  # 선반 순서 (병 id)
+var order: Array = []                  # 선반 순서 (병 id — 불러오지 않은 병도)
 var current := -1                      # 지금 보는 병
-var giant: Dictionary = {}             # 거인 묶음 중 장터(Market) 밖의 값 — 뽑기·키트 업그레이드·해금 기후·첫 병 여부 (아직 쓰는 화면 없음)
+## 선반에 놓여 쉬는 병의 요약 (병 파일을 불러오지 않은 병 — C1): id → {id, kind, name, day, era, pop, climate, sim_unix, live}.
+## 넓은 세상 병 하나가 메모리 수십 MB라 **지금 보는 병만** 불러온다 (load_all). 다른 병은 들어갈 때 (switch_jar → load_all)
+var shelf_info: Dictionary = {}
+var giant: Dictionary = {}             # 거인 묶음 중 장터(Market) 밖의 값 — 뽑기·키트 업그레이드(끈 것)·지어 본 건물·해금 기후·첫 병 여부·사 둔 빈 병 (sim/shelf.gd)
 var last_load: Dictionary = {}         # 불러온 결과 {away, fell_back: [id], lost: [id], migrated: bool}
 var stats := {"snaps": 0, "snap_ms_sum": 0.0, "snap_ms_max": 0.0, "writes": 0, "write_ms_sum": 0.0, "write_ms_max": 0.0, "sync": 0}
 var _slots: Dictionary = {}            # 파일 이름 → {slot, seq} 마지막으로 쓴(읽은) 칸
@@ -101,6 +104,7 @@ func register_jar(id: int, village: Village, clock: JarClock, meta: Dictionary =
 		"serial": _serial_of(village, world), "book_n": -1, "event_t": -1.0e9}
 	if not id in order:
 		order.append(id)
+	shelf_info.erase(id)
 	if current < 0:
 		current = id
 
@@ -122,7 +126,113 @@ func next_jar_id() -> int:
 	var n := 1
 	for id: int in jars:
 		n = maxi(n, id + 1)
+	for id: int in order:
+		n = maxi(n, id + 1)
 	return n
+
+
+## 불러온 병 id (선반 순서) — 저장·따라잡기·알림은 이것만
+func loaded_ids() -> Array:
+	var out: Array = []
+	for id: int in order:
+		if jars.has(id):
+			out.append(id)
+	return out
+
+
+# ───────────────────────── 선반 (C1 — UI 05 · 기획서 12) ─────────────────────────
+## 병 하나의 요약 (선반 카드·타이틀) — 불러온 병은 지금 값 (live = 거인이 보고 있어 흐르는 중), 아니면 쉬는 동안의 기록
+func jar_summary(id: int) -> Dictionary:
+	if jars.has(id):
+		var j: Dictionary = jars[id]
+		return {"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id), "era": _era_of(id), "pop": _pop_of(id),
+			"climate": _climate_of(id), "sim_unix": Time.get_unix_time_from_system(), "live": true}
+	return shelf_info.get(id, {})
+
+
+## 선반의 병 요약 전부 (선반 순서)
+func shelf_list() -> Array:
+	var out: Array = []
+	for id: int in order:
+		var s := jar_summary(id)
+		if not s.is_empty():
+			out.append(s)
+	return out
+
+
+## 다른 병으로 (선반 [들어가기] · 거인의 방에서 옆 병): 지금 병을 저장하고 선반에 내려놓는다 (쉬기 시작한 시각을 적음 — 들어갈 때 그만큼 따라잡음).
+## 그다음 장면을 다시 띄우면 (StartFlow "continue") load_all이 그 병을 불러온다
+func switch_jar(id: int) -> bool:
+	if not id in order:
+		return false
+	if enabled:
+		save_all(false)
+	for k: int in jars.keys():
+		_shelve(k)
+	current = id
+	if enabled:
+		save_giant(true)
+	return true
+
+
+## 불러온 병을 선반에 내려놓음 (요약만 남기고 메모리에서 뺌)
+func _shelve(id: int) -> void:
+	var s := jar_summary(id)
+	s["live"] = false
+	s["sim_unix"] = Time.get_unix_time_from_system()
+	shelf_info[id] = s
+	jars.erase(id)
+
+
+## 새 병 사기 (지폐 — 기획서 12.1): 값을 내고 빈 병을 사 둔다 (giant.pending_jar) → 빠른 창조 → 키트 자리 → 이름을 지으면 선반에.
+## 창조 도중 앱이 꺼져도 다시 내지 않는다 (선반의 [만들기])
+func buy_jar(climate := "온대") -> bool:
+	if not Shelf.climate_ready(climate):
+		return false
+	var c := Shelf.can_buy_jar(giant, order.size())
+	if not c["ok"] or not Market.pay(float(c["price"])):
+		return false
+	giant["pending_jar"] = {"climate": climate, "paid": float(c["price"]), "unix": Time.get_unix_time_from_system()}
+	if enabled:
+		save_giant(true)
+	return true
+
+
+func pending_jar() -> Dictionary:
+	return giant.get("pending_jar", {})
+
+
+## 키트 업그레이드 사기 (선반 — 영구) → 거인 묶음을 곧바로 디스크에
+func buy_upgrade(name: String) -> bool:
+	_note_built()
+	if not Shelf.buy_upgrade(giant, name):
+		return false
+	if enabled:
+		save_giant(true)
+	return true
+
+
+func set_upgrade_on(name: String, on: bool) -> void:
+	Shelf.set_on(giant, name, on)
+	if enabled:
+		save_giant(true)
+
+
+## 새 세상의 스타터킷에 넣을 업그레이드 (켠 것만 — Kits.make)
+func kit_upgrades() -> Array:
+	return Shelf.active_upgrades(giant)
+
+
+## 불러온 병들의 다 지은 건물 → 거인 묶음 '지어 본 건물' (키트 업그레이드가 열리는 조건)
+func _note_built() -> void:
+	var vs: Array = []
+	for id: int in jars:
+		var j: Dictionary = jars[id]
+		if j["world"] != null:
+			vs.append_array((j["world"] as JarWorld).settlements)
+		elif j["village"] != null:
+			vs.append(j["village"])
+	Shelf.note_built(giant, vs)
 
 
 func has_save() -> bool:
@@ -150,6 +260,7 @@ func unload() -> void:
 	flush()
 	jars.clear()
 	order.clear()
+	shelf_info.clear()
 	current = -1
 
 
@@ -159,6 +270,7 @@ func reset_all() -> void:
 	flush()
 	jars.clear()
 	order.clear()
+	shelf_info.clear()
 	current = -1
 	giant = {}
 	_slots.clear()
@@ -202,18 +314,22 @@ func peek() -> Dictionary:
 		var jr := SaveFile.read_best(_base("jar_%d" % int(pick.get("id", 1))))
 		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
-	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0))}
+	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0)), "id": int(pick.get("id", 1)),
+		"shelf": jl.duplicate(true), "pending": gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty()}
 
 
 # ───────────────────────── 찍어 두기 (화면 쪽 — 짧게) ─────────────────────────
 func giant_payload() -> Dictionary:
 	var jl := []
 	for id: int in order:
-		var j: Dictionary = jars[id]
-		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id), "era": _era_of(id)})
+		var s := jar_summary(id)
+		if not s.is_empty():
+			jl.append(s)
+	_note_built()
 	return {"notes": Market.notes, "sold": Market.sold.duplicate(), "day_key": Market.day_key, "first_paid": Market.first_paid,
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
-		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(),
+		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
+		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
 		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
 
 
@@ -226,6 +342,24 @@ func _era_of(id: int) -> int:
 			e = maxi(e, q.era)
 		return e
 	return (j["village"] as Village).era if j["village"] != null else 0
+
+
+## 병의 인구 (선반 카드 — 모든 무리)
+func _pop_of(id: int) -> int:
+	var j: Dictionary = jars[id]
+	if j["kind"] == "world" and j["world"] != null:
+		var n := 0
+		for q: Village in (j["world"] as JarWorld).settlements:
+			n += q.people.size()
+		return n
+	return (j["village"] as Village).people.size() if j["village"] != null else 0
+
+
+## 병의 기후대 (한 병 = 한 기후대 — 기획서 5.2)
+func _climate_of(id: int) -> String:
+	var j: Dictionary = jars[id]
+	var v: Village = (j["world"] as JarWorld).primary() if j["kind"] == "world" and j["world"] != null else j["village"]
+	return v.climate() if v != null else Balance.CLIMATE_DEFAULT
 
 
 ## 병의 N일째 (타이틀의 "초록별 · 12일째" — 거인 묶음에 함께 적어 둔다)
@@ -310,7 +444,7 @@ func save_jar(id: int, sync := false) -> void:
 ## 전부 (거인 + 모든 병 + 연대기) — 앱이 뒤로 갈 때
 func save_all(sync := true) -> void:
 	save_giant(false)
-	for id: int in order:
+	for id: int in loaded_ids():
 		save_jar(id, false)
 	if sync:
 		flush()
@@ -345,7 +479,7 @@ func _process(dt: float) -> void:
 	_now_t += dt
 	if not enabled or jars.is_empty():
 		return
-	for id: int in order:                  # 큰 일 → 그 병 (1초에 한 번까지 · 넓은 세상은 20초)
+	for id: int in loaded_ids():           # 큰 일 → 그 병 (1초에 한 번까지 · 넓은 세상은 20초)
 		var j: Dictionary = jars[id]
 		var gap := WORLD_EVENT_GAP if j["kind"] == "world" else EVENT_GAP
 		if _serial_of(j["village"], j["world"]) != int(j["serial"]) and _now_t - float(j["event_t"]) >= gap and not _writing(id):
@@ -353,7 +487,8 @@ func _process(dt: float) -> void:
 	_auto_t += dt
 	if _auto_t >= AUTOSAVE_EVERY:           # 10초마다 병 하나씩 돌아가며 + 거인 묶음 (넓은 세상은 마지막 저장 60초 뒤부터)
 		_auto_t = 0.0
-		var id: int = order[_rr % order.size()]
+		var ids := loaded_ids()
+		var id: int = ids[_rr % ids.size()]
 		var j: Dictionary = jars[id]
 		if j["kind"] != "world" or (_now_t - float(j["event_t"]) >= WORLD_AUTOSAVE_EVERY and not _writing(id)):
 			save_jar(id, false)
@@ -459,9 +594,12 @@ func flush() -> void:
 # ───────────────────────── 불러오기 ─────────────────────────
 ## 저장이 있으면 거인 묶음 + 모든 병 + 연대기를 읽어 jars를 채운다. 없으면 false.
 ## last_load = {away 비운 현실 초 (시각이 뒤로 갔으면 0), fell_back [병 id], lost [병 id], migrated}
-func load_all() -> bool:
+## 선반의 병은 모두 order·shelf_info로 (요약), 병 파일은 **지금 보는 병 하나만** 불러온다 (못 읽으면 선반의 다음 병).
+## with_jar = false: 거인 묶음과 선반 요약만 (새 병을 만들어 들어갈 때 — 선반의 다른 병을 잃지 않게)
+func load_all(with_jar := true) -> bool:
 	jars.clear()
 	order.clear()
+	shelf_info.clear()
 	current = -1
 	_slots.clear()
 	last_load = {"away": 0.0, "fell_back": [], "lost": [], "migrated": false}
@@ -478,14 +616,43 @@ func load_all() -> bool:
 	Market.hand_serial = int(gp.get("hand_serial", Market.hand.size()))
 	Market.set_draws(gp.get("draws", {}) as Dictionary)                # 이주민 뽑기 — 그날 횟수 · seed (옛 저장엔 없음 → 0번)
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
-		"climates": gp.get("climates", [])}
-	last_load["away"] = CatchUp.elapsed_since(float(gp.get("last_save_unix", 0.0)), Time.get_unix_time_from_system())
+		"upgrades_off": gp.get("upgrades_off", []), "built": gp.get("built", []), "climates": gp.get("climates", [])}
+	if gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty():
+		giant["pending_jar"] = (gp["pending_jar"] as Dictionary).duplicate()
+	var now := Time.get_unix_time_from_system()
+	var last := float(gp.get("last_save_unix", 0.0))
+	last_load["away"] = CatchUp.elapsed_since(last, now)
+	# 선반: 모든 병의 요약 (옛 저장의 요약엔 pop·climate·sim_unix·live가 없음 → 거인이 보던 병으로, 거인 묶음의 마지막 저장까지)
 	for jd: Dictionary in gp.get("jars", []):
 		var id := int(jd["id"])
-		if not _load_jar(id):
-			(last_load["lost"] as Array).append(id)
+		var s := jd.duplicate()
+		s["id"] = id
+		if not s.has("live"):
+			s["live"] = true
+		if not s.has("sim_unix"):
+			s["sim_unix"] = last
+		if not id in order:
+			order.append(id)
+		shelf_info[id] = s
 	var cur := int(gp.get("current", -1))
-	current = cur if jars.has(cur) else (order[0] if not order.is_empty() else -1)
+	current = cur if cur in order else (order[0] if not order.is_empty() else -1)
+	if not with_jar:
+		return true
+	var tries: Array = order.duplicate()
+	if current in tries:
+		tries.erase(current)
+		tries.push_front(current)
+	for id: int in tries:
+		var info: Dictionary = shelf_info[id]
+		if _load_jar(id):
+			current = id
+			# 비운 시간: 거인이 보던 병(live)은 거인 묶음의 마지막 저장부터, 선반에서 쉬던 병은 쉬기 시작한 때부터 (등불 상한은 CatchUp)
+			if not bool(info.get("live", true)):
+				last_load["away"] = CatchUp.elapsed_since(float(info.get("sim_unix", last)), now)
+			break
+		(last_load["lost"] as Array).append(id)
+		order.erase(id)
+		shelf_info.erase(id)
 	return not jars.is_empty()
 
 
@@ -611,7 +778,7 @@ static func _v1_to_v2(kind: String, p: Variant) -> Variant:
 ## 병은 등불이 타는 동안만 흐른다 (Market.lamp_seconds — 12~24시간), 그 뒤는 잠든 시간 (CatchUp)
 func catch_up(elapsed: float) -> Array:
 	var out: Array = []
-	var ids := order.duplicate()
+	var ids := loaded_ids()
 	if current in ids:
 		ids.erase(current)
 		ids.push_front(current)
@@ -626,7 +793,7 @@ func catch_up(elapsed: float) -> Array:
 func schedule_local_notifications() -> Dictionary:
 	var best := INF
 	var who := -1
-	for id: int in order:
+	for id: int in loaded_ids():
 		var v: Village = jars[id]["village"]
 		if v == null:
 			continue

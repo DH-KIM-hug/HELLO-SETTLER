@@ -215,7 +215,7 @@ func set_tod(t: String) -> void:
 	_place_blobs()
 	if sky_mat != null:
 		sky_mat.set_shader_parameter("light_k", 0.5 if tod == "night" else 1.0)
-	for m: ShaderMaterial in [glass_mat, lamp_glass_mat]:
+	for m: ShaderMaterial in _glass_mats():
 		m.set_shader_parameter("tint_mul", room_mul())
 
 
@@ -366,8 +366,15 @@ func set_curtain(step: int) -> void:
 		curtain.scale = Vector3(-CURTAIN_SCALE[curtain_step], 1.0, 1.0)
 	_update_beam()
 	if glass_mat != null:
-		for m: ShaderMaterial in [glass_mat, lamp_glass_mat]:
+		for m: ShaderMaterial in _glass_mats():
 			m.set_shader_parameter("tint_mul", room_mul())
+
+
+func _glass_mats() -> Array:
+	var out: Array = [glass_mat, lamp_glass_mat]
+	for e: Dictionary in shelf_jars:
+		out.append(e["glass"])
+	return out
 
 
 func _update_beam() -> void:
@@ -458,18 +465,74 @@ var mini_era := 0
 
 func add_mini_village(houses: bool, era := 0) -> void:
 	mini_era = clampi(era, 0, MINI_ERA.size() - 1)
-	mini_village = Node3D.new()
-	mini_village.position = Vector3(0, SOIL_TOP, 0)
-	mini_village.scale = Vector3.ONE * 0.3
-	root.add_child(mini_village)
+	mini_village = _make_mini(root, houses, mini_era)
+
+
+# ───────────────────────── 선반의 다른 병 (C1 — GIANT_ROOM 1 '병이 여러 개면 선반에 나란히', UI 05) ─────────────────────────
+## 지금 병(원점) 옆에 나란히 놓인 병들 — 저장된 시대에 맞춘 작은 마을이 든 꾸민 병 (타이틀의 병과 같은 꼴; 진짜 세상은 들어갈 때 불러옴).
+## items: [{x: cm (선반 위 자리), era, empty (사 두고 아직 만들지 않은 빈 병), id}]. 선반 판은 병이 놓이는 데까지 이어 붙인다
+const SHELF_GAP := 26.0                    # 병과 병 사이 (cm) — 소품(화분·물뿌리개)을 지나 옆 병
+const SHELF_L := 60.0                      # 선반 판 하나의 길이 (build_room.py)
+var shelf_jars: Array = []                 # [{node, x, id, glass}]
+var _shelf_ext: Array = []                 # 이어 붙인 선반 판
+
+
+func set_shelf_jars(items: Array) -> void:
+	for e: Dictionary in shelf_jars:
+		(e["node"] as Node).queue_free()
+	for n: Node in _shelf_ext:
+		n.queue_free()
+	shelf_jars.clear()
+	_shelf_ext.clear()
+	var lo := 0.0
+	var hi := 0.0
+	for it: Dictionary in items:
+		var x := float(it.get("x", 0.0))
+		lo = minf(lo, x)
+		hi = maxf(hi, x)
+		var n := Node3D.new()
+		n.name = "ShelfJar%d" % int(it.get("id", 0))
+		n.position = Vector3(x, 0.0, 0.0)
+		root.add_child(n)
+		var empty := bool(it.get("empty", false))
+		if not empty:
+			Art.instance(n, ROOM + "jar_soil")
+			_make_mini(n, true, int(it.get("era", 0)))
+		Art.instance(n, ROOM + "jar_cork")
+		var gm := _glass_material(JAR_BODY_TOP)
+		gm.set_shader_parameter("tint_mul", room_mul())
+		var g := _plain(ROOM + "jar_glass", Transform3D.IDENTITY, n)
+		g.material_override = gm
+		# (바닥 그림자 blob은 넣지 않음 — 옆 병 자리에서는 네모난 어두운 판으로 보였다. 원인은 아직 모름: 지금 병의 blob과 같은 재질·메시인데도)
+		_set_layers(n)
+		shelf_jars.append({"node": n, "x": x, "id": int(it.get("id", 0)), "glass": gm, "empty": empty})
+	# 선반 판: 원래 판(−30~30) 밖으로 병이 있으면 그쪽으로 판을 더 놓는다
+	var k := 1
+	while hi + JAR_OUT > SHELF_L * (k - 0.5) or lo - JAR_OUT < -SHELF_L * (k - 0.5):
+		for sgn: float in [-1.0, 1.0]:
+			var ext := Art.instance(root, ROOM + "shelf", Transform3D(Basis.IDENTITY, Vector3(sgn * SHELF_L * k, 0.0, 0.0)))
+			_set_layers(ext)
+			_shelf_ext.append(ext)
+		k += 1
+		if k > 6:
+			break
+
+
+func _make_mini(parent: Node3D, houses: bool, era: int) -> Node3D:
+	era = clampi(era, 0, MINI_ERA.size() - 1)
+	var mv := Node3D.new()
+	mv.position = Vector3(0, SOIL_TOP, 0)
+	mv.scale = Vector3.ONE * 0.3
+	parent.add_child(mv)
 	var items := [["tree_d", Vector3(5.0, 0, -6.0), 0.0], ["tree_a", Vector3(-8.0, 0, -6.0), 1.0], ["bush", Vector3(-1.0, 0, 7.5), 0.0],
 		["conifer", Vector3(11.0, 0, 0.0), 0.0], ["flowers", Vector3(1.5, 0, 9.0), 0.0], ["rocks_b", Vector3(-10.0, 0, 5.0), 0.5]]
 	var n_nature := items.size()
 	if houses:
-		items.append_array(MINI_ERA[mini_era])
+		items.append_array(MINI_ERA[era])
 	for i in items.size():
 		var e: Array = items[i]
 		if Art.exists(String(e[0])):
 			var k := 1.0 if i < n_nature else 1.7                 # 건물은 조금 크게 (병 밖에서도 시대가 읽히게)
-			Art.instance(mini_village, e[0], Transform3D(Basis(Vector3.UP, e[2]).scaled(Vector3.ONE * k), e[1]))
-	_set_layers(mini_village)
+			Art.instance(mv, e[0], Transform3D(Basis(Vector3.UP, e[2]).scaled(Vector3.ONE * k), e[1]))
+	_set_layers(mv)
+	return mv

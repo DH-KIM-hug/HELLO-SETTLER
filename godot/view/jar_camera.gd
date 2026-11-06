@@ -68,6 +68,9 @@ var room := {}
 var beyond := 0.0                   # 0 = 병 안 (①~③) ~ 1 = 거인의 방 (⑤)
 var beyond_goal := 0.0
 var b_glass := 0.42                 # 카메라가 유리를 지나는 beyond (set_room이 계산)
+## (C1) 선반 위 옆 병 보기 — ⑤에서 좌우로 밀면 바라보는 점이 선반을 따라 옆으로 (cm, 0 = 지금 병). 범위는 장면이 정함 (병이 놓인 데까지)
+var shelf_pan := 0.0
+var shelf_range := Vector2.ZERO
 ## 로그 확대 (log2 ppu) — 화면·나중 단계가 한 값으로 다룬다
 var zoom_log: float:
 	get:
@@ -276,7 +279,15 @@ func _fly_step(dt: float) -> void:
 
 
 func pan_pixels(d: Vector2) -> void:
-	if beyond > 0.0:                         # 병 밖(병·방)에서는 끌어도 카메라는 그대로 (방 고정 각)
+	if beyond > 0.0:                         # 병 밖(병·방)에서는 끌어도 카메라는 그대로 (방 고정 각) — ⑤에서 좌우 = 선반의 옆 병 (C1)
+		if beyond >= B_ROOM - 0.02 and shelf_range != Vector2.ZERO and not room.is_empty():
+			var s := float(room["s"])
+			var y0 := float(room["y0"])
+			var a := camera.unproject_position(Vector3(shelf_pan * s, y0, 0.0))
+			var b := camera.unproject_position(Vector3((shelf_pan + 1.0) * s, y0, 0.0))
+			var px_cm := maxf(absf(b.x - a.x), 0.5)
+			shelf_pan = clampf(shelf_pan - d.x / px_cm, shelf_range.x, shelf_range.y)
+			_apply()
 		return
 	# 화면에서 끈 만큼 땅 위로 이동 (화면 위쪽 = 땅에서는 멀어지는 쪽)
 	var upp := units_per_pixel()
@@ -359,7 +370,7 @@ func room_pose(b: float, t0: Vector3, size0: float, pitch0: float, yaw0: float, 
 	var u1 := smoothstep(0.0, 0.6, b)
 	var u2 := smoothstep(0.6, 1.0, b)
 	var jar_t := Vector3(0.0, y0 + 7.5 * s, 0.0)
-	var room_t := Vector3(0.0, y0 + ROOM_TY_CM * s, 0.0)
+	var room_t := Vector3(shelf_pan * s, y0 + ROOM_TY_CM * s, 0.0)
 	var tgt := t0.lerp(jar_t, u1).lerp(room_t, u2)
 	var vs := get_viewport().get_visible_rect().size if is_inside_tree() else Vector2(360, 640)
 	var asp := vs.y / maxf(1.0, vs.x)

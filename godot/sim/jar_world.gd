@@ -123,6 +123,7 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 	water.kits.append({"x": x, "y": y, "sid": sid})
 	if settlements.is_empty():
 		v.owns_water = true
+		add_kit_cups(kit.get("cups", []), p)
 	else:
 		var pv := primary()
 		v.owns_water = false
@@ -138,6 +139,38 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 		s.peers = settlements
 	_update_interest()
 	return v
+
+
+## 키트 업그레이드 '암반 컵 하나 더' (BALANCE v3-4 · SHOP 2.4 — 선반에서 산 영구 업그레이드): 컵마다 광맥 하나를 더 묻는다.
+## 철·석탄·금 = 넓은 세상 광맥 (WorldWater.veins — 창조의 광맥과 같은 기록, 광산은 읍내에) · 암염 = 땅속 소금 (물이 닿으면 녹아 흐름).
+## 자리는 첫 키트에서 40~110칸 떨어진 마른 땅 (시드로 — 같은 세상이면 같은 자리). 묻은 개수
+const CUP_KIND := {"철": "iron", "석탄": "coal", "금": "gold"}
+
+
+func add_kit_cups(cups: Array, from: Vector2) -> int:
+	if cups.is_empty():
+		return 0
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 41 + 7
+	var n := 0
+	for c: Variant in cups:
+		var placed := false
+		for i in 60:
+			var a := r.randf() * TAU
+			var d := r.randf_range(40.0, 110.0)
+			var p := from + Vector2(cos(a), sin(a)) * d
+			if not water.inside(p.x, p.y, WorldCfg.KIT_EDGE) or water.depth(water.idx(p.x, p.y)) > 0.0:
+				continue
+			if String(c) == "암염":
+				SkyDrops._bury_salt(water, p, 4.0)
+			else:
+				var kind := String(CUP_KIND.get(String(c), "iron"))
+				water.veins.append({"kind": kind, "x": p.x, "y": p.y, "r": 5.0, "amt": maxf(water.mineral_rich, 0.6) * (0.5 if kind == "gold" else 1.0), "cup": true})
+			placed = true
+			break
+		if placed:
+			n += 1
+	return n
 
 
 ## 고운 계산 범위 = 무리마다 중심 둘레 + 건물 둘레 (조각 단위)

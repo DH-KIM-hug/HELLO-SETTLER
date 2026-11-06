@@ -56,6 +56,23 @@ func _ready() -> void:
 
 
 ## 3D 거인의 방 (⑤) — 넓은 세상 장면의 병 밖과 같은 방·같은 카메라 (s = 1)
+## 선반의 다른 병 (지금 병 = 가운데, 선반 순서대로 좌우에 SHELF_GAP씩) + 사 둔 빈 병은 맨 끝
+static func shelf_items(inf: Dictionary) -> Array:
+	var list: Array = inf.get("shelf", [])
+	var cur := int(inf.get("id", -1))
+	var ci := 0
+	for i in list.size():
+		if int((list[i] as Dictionary).get("id", -1)) == cur:
+			ci = i
+	var out: Array = []
+	for i in list.size():
+		if i != ci:
+			out.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int((list[i] as Dictionary).get("id", -1)), "era": int((list[i] as Dictionary).get("era", 0))})
+	if bool(inf.get("pending", false)):
+		out.append({"x": (list.size() - ci) * GiantRoom.SHELF_GAP, "id": -1, "empty": true})
+	return out
+
+
 func _build_room() -> void:
 	world3d = Node3D.new()
 	world3d.name = "Room3D"
@@ -76,6 +93,7 @@ func _build_room() -> void:
 	room.setup(1.0, StartFlow.now_time_of_day(), true)
 	room.houses = bool(info["has_save"])
 	room.add_mini_village(room.houses, int(info.get("era", 0)))      # 이어하기: 병 안에 저장된 시대의 작은 마을 / 처음: 풀과 나무만
+	room.set_shelf_jars(shelf_items(info))                            # (C1) 선반의 다른 병들 — 넓은 세상 장면의 방과 같은 자리
 	room.set_lamp(true, JarWater.LIGHT)
 	cam = JarCamera.new()
 	world3d.add_child(cam)

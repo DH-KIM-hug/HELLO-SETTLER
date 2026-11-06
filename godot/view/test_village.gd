@@ -62,7 +62,7 @@ var _pinch_d := 0.0
 var _pinch_mid := Vector2.ZERO
 # 저장과 돌아왔을 때 (docs/SAVE.md) — 시작 흐름(StartFlow.enter_game — 타이틀의 [이어하기]·짧은 창조)으로 들어왔거나
 # 이 장면을 직접 첫 화면으로 띄웠을 때만 저장을 쓴다 (캡처 도구·시험이 띄운 장면은 늘 새 병)
-const JAR_ID := 1
+var jar_id := 1                      # 선반의 몇 번 병 (GameSave id — 첫 병 1, 선반에서 산 병은 다음 번호)
 var use_save := false
 var entry := {"mode": "", "name": ""}  # 어떻게 들어왔나 (StartFlow.take) — continue · new(+ 지구 이름) · ""(직접)
 var confirm_sheet: ConfirmSheet      # 뒤로 가기 → "거인의 방으로 돌아갈까요?" (UI.md 00)
@@ -201,23 +201,28 @@ func _load_or_make_village() -> Village:
 	entry = StartFlow.take()
 	var direct := is_inside_tree() and get_tree().current_scene == self
 	use_save = sm != null and sm.enabled and (entry["mode"] != "" or direct) and _saves_here()
-	if use_save and entry["mode"] != "new" and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID):
+	if use_save and entry["mode"] != "new" and sm.has_save() and sm.load_all() and sm.jars.has(sm.current):
+		jar_id = sm.current                # 선반에서 지금 보는 병 (C1 — 선반 [들어가기]면 그 병)
 		var lv := _from_save(sm)
 		if lv != null:
-			_loaded_clock = sm.jar_clock(JAR_ID)
+			_loaded_clock = sm.jar_clock(jar_id)
 			_away = float(sm.last_load["away"])
 			return lv
 		sm.jars.clear()                   # 다른 종류의 병 (넓은 세상 ↔ 소형 병) — 새 병으로
 		sm.order.clear()
+		sm.shelf_info.clear()
 		sm.current = -1
+		jar_id = 1
+	elif use_save and entry["mode"] == "new" and sm.has_save() and sm.load_all(false):
+		jar_id = sm.next_jar_id()          # 선반의 새 병 (C1): 거인 묶음·선반은 그대로 두고 다음 번호로
 	return _make_village()
 
 
 ## 불러온 저장에서 이 장면의 병 (소형 병 = kind "jar"). 넓은 세상 장면은 "world"를 받는다 — 종류가 다르면 null (새 병)
 func _from_save(sm: GameSave) -> Village:
-	if sm.jars[JAR_ID]["kind"] != "jar":
+	if sm.jars[jar_id]["kind"] != "jar":
 		return null
-	return sm.jar_village(JAR_ID)
+	return sm.jar_village(jar_id)
 
 
 ## 넓은 세상 장면이면 그 세상 (저장·따라잡기가 세상 전체를 다룬다) — 소형 병은 null
@@ -236,7 +241,9 @@ func _start_save() -> void:
 	var sm := GameSave.get_instance()
 	if _loaded_clock == null:                     # 새 병: 저장 대상으로 + 첫 병이면 창세의 날 (×12)
 		var nm := String(entry.get("name", ""))
-		sm.register_jar(JAR_ID, village, clock, {"name": nm if nm != "" else "첫 병"}, jar_world())
+		sm.register_jar(jar_id, village, clock, {"name": nm if nm != "" else "첫 병"}, jar_world())
+		sm.current = jar_id
+		sm.giant.erase("pending_jar")         # 사 둔 빈 병 (선반 C1)이 이제 세상이 됨
 		if sm.should_start_creation():
 			clock.start_creation_day()
 			if not village.aware:
@@ -1156,8 +1163,8 @@ func top_text() -> String:
 ## 지구 이름 (창조 때 지은 이름 — 저장의 병 이름). 없으면 "나의 작은 지구"
 func earth_name() -> String:
 	var sm := GameSave.get_instance()
-	if use_save and sm != null and sm.jars.has(JAR_ID):
-		var nm := String(sm.jars[JAR_ID]["meta"].get("name", ""))
+	if use_save and sm != null and sm.jars.has(jar_id):
+		var nm := String(sm.jars[jar_id]["meta"].get("name", ""))
 		if nm != "":
 			return nm
 	var en := String(entry.get("name", ""))
