@@ -10,7 +10,8 @@ extends Control
 
 signal closed
 signal bought(b: Building)
-signal split_requested(from: Village)   # 분가 편지 [새 땅 고르기] — 넓은 세상 장면이 받으면 거인이 땅을 고르는 화면으로
+signal split_requested(from: Village)
+signal reveal_requested(v: Village)     # [계시] (A5) — 장면이 받아 계시 연출(RevelationShow) → Village.giant_reveal   # 분가 편지 [새 땅 고르기] — 넓은 세상 장면이 받으면 거인이 땅을 고르는 화면으로
 
 const REFRESH := 0.5
 const SHEET_FRAC := 0.7                # 세로 화면: 아래 시트 높이 (화면의 70%)
@@ -30,6 +31,9 @@ var notes_l: Label
 var offer_box: VBoxContainer
 var take_all_btn: Button
 var letter_box: VBoxContainer
+var reveal_box: VBoxContainer          # 맨 위 [계시] 칸 (시대 점수가 찼을 때만 — 빛나는 카드)
+var _reveal_card: PanelContainer
+var _glow_t := 0.0
 var shop_box: VBoxContainer
 var lamp_box: VBoxContainer
 var force_btn: Button
@@ -78,6 +82,10 @@ func _build() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", UiTheme.GAP)
 	scroll.add_child(body)
+	# [계시] (A5) — 맨 위, 시대 점수가 찼을 때만
+	reveal_box = VBoxContainer.new()
+	reveal_box.add_theme_constant_override("separation", 4)
+	body.add_child(reveal_box)
 	# 오늘의 제물
 	_section(body, "오늘의 제물")
 	offer_box = VBoxContainer.new()
@@ -146,12 +154,16 @@ func _section(parent: Node, title: String) -> void:
 
 
 ## 한 줄 카드: 왼쪽 글(위·아래), 오른쪽 버튼
-func _card(parent: Node, top: String, sub: String, btn_text: String, on_press: Callable, enabled := true) -> Button:
+func _card(parent: Node, top: String, sub: String, btn_text: String, on_press: Callable, enabled := true, icon := "") -> Button:
 	var card := PanelContainer.new()
 	card.theme_type_variation = "Card"
 	parent.add_child(card)
 	var row := HBoxContainer.new()
 	card.add_child(row)
+	if icon != "" and GameIcons.has(icon):     # 물건 그림 (A8 아이콘)
+		var ic := GameIcons.rect(icon, 32)
+		ic.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		row.add_child(ic)
 	var col := VBoxContainer.new()
 	col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	col.add_theme_constant_override("separation", 2)
@@ -219,6 +231,13 @@ func _process(dt: float) -> void:
 	if not visible or village == null:
 		return
 	_t += dt
+	_glow_t += dt
+	if _reveal_card != null and is_instance_valid(_reveal_card):     # [계시] 카드가 천천히 빛남 (빨간 점 대신)
+		var sb := _reveal_card.get_theme_stylebox("panel") as StyleBoxFlat
+		if sb != null:
+			var k := 0.5 + 0.5 * sin(_glow_t * 2.4)
+			sb.shadow_color = Color(UiTheme.GLOW, 0.35 + 0.35 * k)
+			sb.shadow_size = int(6 + 6 * k)
 	if _t >= REFRESH:
 		_t = 0.0
 		_refresh()
@@ -227,7 +246,8 @@ func _process(dt: float) -> void:
 # ───────────────────────── 값 채우기 ─────────────────────────
 func _state_sig() -> String:
 	var items := village.altar_items()
-	var s := "%s|%d|%s|%s|%s|%d|" % [str(items), int(Market.notes), str(force_open), _force_item, str(Market.sold), Market.lamp_level]
+	var s := "%s|%d|%s|%s|%s|%d|%s|%s|%d|" % [str(items), int(Market.notes), str(force_open), _force_item, str(Market.sold), Market.lamp_level,
+		str(village.revelation_pending()), str(village.altar_built), village.era]
 	for l: Dictionary in village.open_letters():
 		s += "%d;" % int(l["id"])
 	if force_open:
@@ -244,13 +264,19 @@ func _refresh() -> void:
 	if sig == _sig:
 		return
 	_sig = sig
-	for box: Node in [offer_box, letter_box, shop_box, lamp_box, force_box]:
+	for box: Node in [reveal_box, offer_box, letter_box, shop_box, lamp_box, force_box]:
 		for c in box.get_children():
 			box.remove_child(c)
 			c.queue_free()
+	_reveal_card = null
+	if village.revelation_pending():
+		_fill_reveal()
 	# 오늘의 제물
 	var items := village.altar_items()
-	if items.is_empty():
+	if not village.altar_built:               # 깨달음 전 (A4b) — 제단이 아직 없다
+		var l := _label(offer_box, "아직 제단이 없어요. 사람들은 하늘 너머에 누가 있는지 몰라요." if not village.aware else "사람들이 모닥불 곁에 제단을 짓고 있어요.", "Small")
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	elif items.is_empty():
 		_label(offer_box, "제단이 비어 있어요. 저녁 기도 때 바쳐요.", "Small")
 	var total := 0.0
 	for item: String in items:
@@ -258,13 +284,13 @@ func _refresh() -> void:
 		var val := Market.quote(item, n)
 		total += val
 		var fav := "  · 좋아하시는 것" if village.is_favourite(item) else ""
-		_card(offer_box, "%s × %d" % [item, n], "장터 값 %s 지폐%s" % [_num(val), fav], "받기", _on_take.bind(item))
+		_card(offer_box, "%s × %d" % [item, n], "장터 값 %s 지폐%s" % [_num(val), fav], "받기", _on_take.bind(item), true, item)
 	take_all_btn.visible = items.size() > 1
 	take_all_btn.text = "모두 받기 (%s 지폐)" % _num(total)
 	# 소원 편지
 	var wl := village.open_letters()
 	if wl.is_empty():
-		_label(letter_box, "아직 온 편지가 없어요.", "Small")
+		_label(letter_box, "아직 온 편지가 없어요." if village.altar_built else "제단이 생기면 사람들이 거인님께 편지를 써요.", "Small")
 	for l: Dictionary in wl:
 		if l["kind"] == "wish":
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])))
@@ -300,7 +326,7 @@ func _refresh() -> void:
 			any = true
 			var n := mini(FORCE_AMT, have)
 			var sub := "창고 %d개 · %d개에 %s 지폐\n%s" % [have, n, _num(Market.quote(item, n)), village.force_preview(item, n)]
-			_card(force_box, item, sub, "거두기", _on_force.bind(item, n))
+			_card(force_box, item, sub, "거두기", _on_force.bind(item, n), true, item)
 		if not any:
 			_label(force_box, "창고에 거둘 것이 없어요.", "Small")
 
@@ -313,6 +339,66 @@ static func _num(v: float) -> String:
 		out = "," + s.substr(s.length() - 3) + out
 		s = s.substr(0, s.length() - 3)
 	return ("-" if n < 0 else "") + s + out
+
+
+## [계시] 칸 (A5): 노인의 편지 + 빛나는 [계시 내리기]. 누르면 장면이 연출을 띄운다 (reveal_requested)
+func _fill_reveal() -> void:
+	var card := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("fff4d2")
+	sb.border_color = UiTheme.GLOW.darkened(0.25)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(8)
+	sb.shadow_color = Color(UiTheme.GLOW, 0.5)
+	sb.shadow_size = 8
+	card.add_theme_stylebox_override("panel", sb)
+	reveal_box.add_child(card)
+	_reveal_card = card
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	card.add_child(col)
+	var nx: String = Balance.ERAS[mini(village.era + 1, Balance.ERAS.size() - 1)]
+	var head := _label(col, "계시 — 새 시대 '%s'" % nx, "Section")
+	head.add_theme_color_override("font_color", UiTheme.INK_BROWN)
+	var who := String(village.revelation.get("name", ""))
+	var txt := _label(col, "%s\"%s\"" % ["%s의 편지  " % who if who != "" else "", String(village.revelation.get("text", ""))])
+	txt.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	txt.add_theme_font_override("font", UiTheme.hand_font())
+	var un := Village.era_unlocks(village.era + 1)
+	if not un.is_empty():
+		var ul := _label(col, "열리는 것: " + " · ".join(un.slice(0, 8)), "Small")
+		ul.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var b := _button(col, "계시 내리기")
+	b.theme_type_variation = "Primary"
+	var gsb := StyleBoxFlat.new()
+	gsb.bg_color = UiTheme.GLOW
+	gsb.border_color = UiTheme.INK_BROWN
+	gsb.set_border_width_all(1)
+	gsb.set_corner_radius_all(6)
+	gsb.set_content_margin_all(6)
+	for st in ["normal", "hover", "pressed"]:
+		var s2 := gsb.duplicate() as StyleBoxFlat
+		if st == "hover":
+			s2.bg_color = UiTheme.GLOW.lightened(0.12)
+		elif st == "pressed":
+			s2.bg_color = UiTheme.GLOW.darkened(0.12)
+		b.add_theme_stylebox_override(st, s2)
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		b.add_theme_color_override(c, UiTheme.INK_BROWN)
+	b.pressed.connect(_on_reveal)
+
+
+func _on_reveal() -> void:
+	if not village.revelation_pending():
+		return
+	if reveal_requested.get_connections().is_empty():      # 장면이 없으면 (시험) 바로
+		if village.giant_reveal():
+			GameAudio.fx("chime")
+		_sig = ""
+		_refresh()
+		return
+	reveal_requested.emit(village)
 
 
 # ───────────────────────── 누르기 ─────────────────────────

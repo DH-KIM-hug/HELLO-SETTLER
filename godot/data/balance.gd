@@ -108,6 +108,8 @@ const ERA_POP := 0.4
 const ERA_BUILDING := 0.6
 const OFFLINE_ERA := 0.3
 const SALT_DISCOVERY_PTS := 15.0
+const REV_MURMUR := 2.0 * 3600.0     # 계시를 기다리는 동안 노인이 하늘을 보며 한마디 하는 간격 (병 시간)
+const REV_KNEEL := 45.0              # 계시 때 깨어 있는 사람이 그 자리에서 무릎 꿇고 하늘을 보는 시간 (병 초)
 
 # 땅 — 병 인구 상한 없음, 땅이 한계 (기획서 3.1)
 const LAND_USABLE := 0.5
@@ -281,6 +283,7 @@ const B := {
 	"방앗간": {"plank": 3, "stone": 3, "time": 150, "era": 1, "size": 1.2, "job": true, "in": {"밀": 1}, "out": {"밀가루": 1}, "cycle": 30.0},
 	"빵집": {"plank": 2, "stone": 3, "time": 150, "era": 1, "size": 1.2, "job": true, "in": {"밀가루": 1, "물": 1}, "out": {"빵": 1}, "cycle": 30.0},
 	"소금밭": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 90.0, "needs_salt": true},
+	"제단": {"plank": 0, "stone": 0, "time": 9000, "era": 0, "size": 0.9},   # A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
 	"버섯꾼": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
 }
 

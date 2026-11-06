@@ -96,6 +96,35 @@ func _settle(v: Village) -> void:
 		dd["st_t"] = v.t - rng.randf() * dur * 0.8          # 한살이 가운데쯤부터
 		if st == "puff":
 			dd["seeds"] = Balance.DAND_SEEDS
+	if not v.aware:
+		_first_puff(v)
+
+
+## 거인을 아직 모르는 첫 마을 (A4b — OPENING 3.1 v3 3:00 "뚜껑을 열어 꽃씨를 불어 보세요"): 마을 곁에 솜털 공 하나는 꼭 (난수 없이).
+## 철과 상관없이 — 거인의 흙에 묻어 온 씨앗이 막 여문 것
+func _first_puff(v: Village) -> void:
+	for d: Dictionary in dands:
+		if (d["st"] == "puff" or d["st"] == "closed") and Vector2(float(d["x"]), float(d["y"])).distance_to(v.center) < 14.0:
+			return
+	var best: Dictionary = {}
+	var bd := INF
+	for d: Dictionary in dands:
+		var dist := Vector2(float(d["x"]), float(d["y"])).distance_to(v.center)
+		if dist < bd:
+			bd = dist
+			best = d
+	if best.is_empty() or bd > 14.0:
+		for i in 24:
+			var a := TAU * i / 24.0
+			var p := v.center + Vector2(cos(a), sin(a)) * (6.0 + (i % 3) * 2.0)
+			if _dand_ok(v, p):
+				best = _add_dand(v, p, "puff")
+				break
+	if best.is_empty():
+		return
+	best["st"] = "puff"
+	best["st_t"] = v.t
+	best["seeds"] = Balance.DAND_SEEDS
 
 
 static func _stage_len(st: String) -> float:
@@ -731,6 +760,7 @@ func _poisoned(v: Village) -> void:
 	if elder == null:
 		elder = v.chief()
 	var en := elder.name if elder != null else "늙은이"
+	v.note_discovery("spotted_mushroom", elder)
 	v.log_line("붉은 갓에 흰 점이 박힌 버섯 조각을 먹고 %s%s 배앓이를 했다. %s%s 말했다. \"붉은 갓에 흰 점이 있는 건 먹는 게 아니다. 물감으로나 쓰거라.\"" % [who.name, Village.josa(who.name, "이", "가"), en, Village.josa(en, "이", "가")])
 	if elder != null and not elder.sleeping:
 		v.speak(elder, "붉은 갓에 흰 점이 있는 건 먹는 게 아니다", 7)
@@ -745,7 +775,7 @@ func _poisoned(v: Village) -> void:
 func _dand_ok(v: Village, p: Vector2) -> bool:
 	if not v.water.inside(p.x, p.y, 2.0) or v.water_at(p.x, p.y):
 		return false
-	if Vector2(p.x - v.fire.x, p.y - v.fire.y).length() < 3.0 or Vector2(p.x - v.altar_pos.x, p.y - v.altar_pos.y).length() < 1.8:
+	if Vector2(p.x - v.fire.x, p.y - v.fire.y).length() < 3.0 or Vector2(p.x - v.altar_pos.x, p.y - v.altar_pos.y).length() < Village.ALTAR_CLEAR + 1.6:     # 큰 민들레 잎·꽃대가 제단을 가리지 않게
 		return false
 	for b in v.buildings:
 		if Vector2(b.x - p.x, b.y - p.y).length() < b.size() + 0.7:
@@ -1093,10 +1123,11 @@ func blow_seeds(v: Village, dir: Vector2) -> int:
 			break
 		if r.sleeping or r.age < 2.5 or r.sick_left > 0.0:
 			continue
-		v.speak(r, Balance.BLOW_LINE if said == 0 else ("꽃씨가 하늘을 덮었어!" if said == 1 else "거인님의 숨결이다…"), 6)
+		var third := "거인님의 숨결이다…" if v.aware else "누가 하늘에서 숨을 불었어…"     # 거인을 모르면 (A4b)
+		v.speak(r, Balance.BLOW_LINE if said == 0 else ("꽃씨가 하늘을 덮었어!" if said == 1 else third), 6)
 		said += 1
 	if blown == 1 and n > 0:
-		v.log_line("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 거인님의 숨결이 불어오자 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.")
+		v.log_line(("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 %s 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.") % ("거인님의 숨결이 불어오자" if v.aware else "어디선가 큰 바람이 불어오자"))
 	return n
 
 

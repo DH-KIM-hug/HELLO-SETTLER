@@ -25,8 +25,8 @@ var _manna: Node3D
 var _manna_key := ""
 var _fire: Node3D
 var _flames: Array[MeshInstance3D] = []
-var _altar: Node3D              # 모닥불 곁 작은 돌 제단 (기획서 11.1) + 올려진 제물 더미
-var _altar_pile: MeshInstance3D
+var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.5 — view/altar_view.gd): 둥근 돌 단 · 짓는 모습 · 제물 더미 + 빛
+var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
 var _props: Node3D
 var _prop_key := ""
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
@@ -106,6 +106,9 @@ func sync(dt: float, force := false) -> void:
 		_sync_manna()
 		_sync_props()
 	_animate_fire()
+	if altar_view != null:
+		altar_view.sync(dt)
+		manna_fx.sync(dt)
 
 
 static func age_stage(r: Resident) -> int:
@@ -264,6 +267,8 @@ func _bld_state(b: Building) -> String:
 func _sync_buildings() -> void:
 	var seen := {}
 	for b in v.buildings:
+		if b.site_type() == Awakening.ALTAR:      # 제단은 AltarView가 그린다 (짓는 모습까지)
+			continue
 		seen[b.id] = true
 		var key := _bld_state(b)
 		if _bld_key.get(b.id, "") == key:
@@ -465,6 +470,8 @@ func _prop_ok(x: float, z: float, clear_r: float) -> bool:
 	if terrain._path_at(k) > 5.0:
 		return false
 	if Vector2(x - v.fire.x, z - v.fire.y).length() < 2.5 + clear_r:
+		return false
+	if Vector2(x - v.altar_pos.x, z - v.altar_pos.y).length() < Village.ALTAR_CLEAR + clear_r:     # 제단 돌 단 (아직 없어도 그 자리는 비움)
 		return false
 	for b in v.buildings:
 		var rr: float = b.size() * BUILDING_SCALE * (2.4 if b.type == "농장" else 1.9) + clear_r
@@ -836,16 +843,21 @@ func _sync_manna() -> void:
 	_manna_key = key
 	for c in _manna.get_children():
 		c.queue_free()
+	# 금빛 낟알 더미 (기본 확대에서 보이게 — 둥근 무더기: 바닥 고리 + 가운데 봉우리, 남은 양만큼)
 	for m: Dictionary in v.manna:
 		var x: float = m["x"]
 		var z: float = m["y"]
-		var cnt := mini(14, ceili(float(m["amt"]) / 10.0))
+		var cnt := mini(16, ceili(float(m["amt"]) / 8.0))
+		var y0 := gy(x, z)
 		for i in cnt:
-			var a := i * 2.39
-			var d := (i % 5) * 0.22
-			var px := x + cos(a) * d
-			var pz := z + sin(a) * d
-			_box(_manna, Vector3(0.16, 0.08, 0.16), Vector3(px, gy(px, pz) + 0.05, pz), Style.GRAIN)
+			var layer := 0 if i < 8 else (1 if i < 13 else 2)
+			var ring_i := i if layer == 0 else (i - 8 if layer == 1 else i - 13)
+			var ring_n := 8 if layer == 0 else (5 if layer == 1 else 3)
+			var rr := [0.62, 0.34, 0.1][layer] as float
+			var a := TAU * ring_i / ring_n + layer * 0.5
+			var px := x + cos(a) * rr
+			var pz := z + sin(a) * rr
+			_box(_manna, Vector3(0.42, 0.2, 0.42), Vector3(px, y0 + 0.1 + layer * 0.17, pz), MannaFx.GOLD if (i + layer) % 3 else MannaFx.GOLD_HI, a)
 
 
 func _build_fire() -> void:
@@ -858,23 +870,17 @@ func _build_fire() -> void:
 	_flames.append(_box(_fire, Vector3(0.18, 0.3, 0.18), Vector3(0, 0.5, 0.0), Style.FLAME2, 0.8))
 	for a in 6:
 		_box(_fire, Vector3(0.2, 0.14, 0.2), Vector3(cos(a) * 0.55, 0.07, sin(a) * 0.55), Style.STONE_DARK)
-	# 제단: 납작한 돌 두 겹 + 제물 더미 (제물이 있을 때만)
-	_altar = _node(self)
-	if Art.exists("altar"):              # Blender 모델 (art/src/build_items.py): 돌판 두 겹 + 해 무늬 + 초 두 자루 + 이끼
-		Art.instance(_altar, "altar", Transform3D(Basis(Vector3.UP, 0.2), Vector3.ZERO))
-	else:
-		_box(_altar, Vector3(0.8, 0.22, 0.55), Vector3(0, 0.11, 0), Style.STONE_DARK, 0.2)
-		_box(_altar, Vector3(0.62, 0.14, 0.42), Vector3(0, 0.29, 0), Style.STONE, 0.2)
-	_altar_pile = _box(_altar, Vector3(0.36, 0.16, 0.26), Vector3(0, 0.46, 0), Style.GRAIN, 0.5)
+	# 제단 (깨달음 뒤 주민이 짓는다 — 그 전엔 비어 있음) · 하늘 낟알 연출
+	altar_view = AltarView.new(v, terrain)
+	add_child(altar_view)
+	manna_fx = MannaFx.new(v, terrain)
+	add_child(manna_fx)
 
 
 func _animate_fire() -> void:
 	if _fire == null or _flames.is_empty():
 		return
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
-	if _altar != null:
-		_altar.position = Vector3(v.altar_pos.x, gy(v.altar_pos.x, v.altar_pos.y), v.altar_pos.y)
-		_altar_pile.visible = not v.altar.is_empty()
 	var f := int(_anim_t * 8.0) % 3
 	var hs := [1.0, 1.25, 0.85]
 	_flames[0].scale.y = hs[f]

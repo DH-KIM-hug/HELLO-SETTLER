@@ -12,6 +12,8 @@ const FONT_SMALL := "res://fonts/Galmuri9.ttf"
 const SIZE := 11
 const SIZE_SMALL := 9
 const SIZE_TITLE := 22
+## 손글씨 글꼴 자리 (UI.md 원칙 — 편지·연대기·말풍선: 나눔손글씨 펜 또는 개구, 아직 저장소에 없음). 비면 본문 글꼴
+const FONT_HAND := ""
 
 # ───────────── 색 ─────────────
 const INK := Color("252122")            # 글자·테두리
@@ -28,6 +30,12 @@ const ACCENT := Color("3e8a6e")         # [따라가 보기] 켜짐 · 설정 �
 const PRIMARY := Color("44622d")        # 주요 동작 (이끼 초록 — UI.md 원칙: [메일 쓰기])
 const BAR_PAPER := Color(0.984, 0.965, 0.902, 0.9)   # 위 띠·아래 띠 바탕 (종이색, 살짝 비침)
 const TOAST_BG := Color("252122")       # 잠깐 뜨는 알림 (먹색 바탕 + 종이색 글자)
+## 연대기 양피지 (UI 07) · 계시 빛 (A5)
+const PARCHMENT := Color("f2e3bf")
+const PARCHMENT_DEEP := Color("e6d2a3")
+const PARCHMENT_EDGE := Color("b8975e")
+const INK_BROWN := Color("4a3424")       # 양피지 위 글자 (먹 대신 갈색 잉크)
+const GLOW := Color("f4c25a")            # [계시] · 제단 버튼의 부드러운 빛 (빨간 점 대신)
 
 ## 혈통 칩: 좋은 = 초록, 나쁜 = 갈색, 서로 상쇄 = 회색
 const CHIP_GOOD := Color("4e9a5b")
@@ -65,6 +73,11 @@ static var _theme: Theme
 
 static func font(bold := false) -> Font:
 	return load(FONT_BOLD if bold else FONT)
+
+
+## 손글씨 (편지·연대기) — 글꼴이 들어오면 FONT_HAND 한 줄만 바꾼다
+static func hand_font() -> Font:
+	return load(FONT_HAND) if FONT_HAND != "" and ResourceLoader.exists(FONT_HAND) else font()
 
 
 static func _box(bg: Color, border := Color(0, 0, 0, 0), bw := 0, radius := 4, pad := 4) -> StyleBoxFlat:

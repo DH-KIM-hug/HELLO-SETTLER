@@ -255,7 +255,7 @@ static func decide(v: Village, r: Resident) -> void:
 			if site != null:
 				var g := v.build_mult(site)          # 들어준 소원의 터는 더 서둘러 짓는다
 				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
-	if not night and r.age >= 2.5 and not opening:     # 첫 한 시간엔 따로 기도하지 않는다 — 첫 집이 서면 다 같이 감사 기도 (Village.thanksgiving)
+	if not night and r.age >= 2.5 and not opening and v.altar_built:     # 제단이 생기기 전엔 기도가 없다 (A4b — 기획서 6.5). 첫 한 시간엔 따로 기도하지 않는다 — 첫 집이 서면 다 같이 감사 기도 (Village.thanksgiving)
 		var worries := 1.0 + (1.0 if v.deficit > 0.0 else 0.0) + (0.5 if r.home < 0 else 0.0)
 		# 저녁(일이 끝난 뒤) ×2, 저녁 일하는 시간엔 ×1, 낮엔 ×0.5. 믿음이 깊을수록 자주
 		var pw := Balance.W_EVENING_PRAY if h >= Balance.WORK_TO else (1.0 if h >= Balance.EVENING_FROM else 0.5)
@@ -506,8 +506,10 @@ static func _eat(v: Village, r: Resident, h: float) -> bool:
 
 static func _pray(v: Village, r: Resident) -> bool:
 	r.doing = "기도하는 중"
-	var p := near(v, v.fire.x, v.fire.y, 2.2)
+	var a := v.rng.randf() * TAU                  # 제단 둘레 고리에서 제단을 바라보며 (near와 같은 난수 하나)
+	var p := v.altar_pos + Vector2(cos(a), sin(a)) * Awakening.RING_R
 	r.steps.append(walk(p.x, p.y))
+	r.steps.append(Awakening.face_altar_step(v, p))
 	r.steps.append(act(600.0, "pray", op("pray")))
 	if v.rng.randf() < 0.35:
 		v.speak(r, Balance.LINES_PRAY[v.rng.randi() % Balance.LINES_PRAY.size()], 6)
@@ -745,7 +747,7 @@ static func haul_manna_task(v: Village, r: Resident) -> bool:
 	r.steps.append(walk(s.x + 0.6, s.y + 0.7))
 	r.steps.append(act(4.0, "idle", put, false, undo))
 	if v.rng.randf() < 0.15:
-		v.speak(r, "거인님의 낟알이다!", 5)
+		v.speak(r, "거인님의 낟알이다!" if v.aware else "하늘이 또 주었네", 5)     # 거인을 모르면 '하늘이 주는 것' (A4b)
 	return true
 
 

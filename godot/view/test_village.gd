@@ -74,6 +74,14 @@ var _away := 0.0
 var _book_from := 0
 var _crowd: Array = []
 var _letter_layer: CanvasLayer
+# A5 계시 · A10 연대기 · A4b 깨달음 (view/ui/revelation_show.gd · chronicle_sheet.gd · guide_caption.gd · view/sky_beam.gd)
+var altar_btn: Button
+var chron_btn: Button
+var chronicle: ChronicleSheet
+var rev_show: RevelationShow
+var guide_cap: GuideCaption
+var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
+var _btn_glow_t := 0.0
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -130,7 +138,7 @@ func on_back() -> void:
 	if confirm_sheet.visible:
 		confirm_sheet.answer(false)
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -198,6 +206,8 @@ func _start_save() -> void:
 		sm.register_jar(JAR_ID, village, clock, {"name": nm if nm != "" else "첫 병"}, jar_world())
 		if sm.should_start_creation():
 			clock.start_creation_day()
+			if not village.aware:
+				village.guide = {"on": true}    # 첫 병만: 톡·불기 안내 자막 (OPENING 3.1 v3) — 그 병과 함께 저장
 		sm.giant["first_jar_done"] = true
 		sm.save_all(true)
 		return
@@ -259,8 +269,11 @@ func show_return_letter(letter: Dictionary) -> void:
 		return_letter = ReturnLetter.new()
 		_letter_layer.add_child(return_letter)
 		return_letter.closed.connect(_on_letter_closed)
+		return_letter.chronicle_requested.connect(func() -> void: open_chronicle(0))     # [연대기에서 자세히] → 연대기 화면 (UI 07)
 	detail.close()
 	altar_sheet.close()
+	if chronicle != null:
+		chronicle.close()
 	return_letter.open(village, letter, _book_from)
 
 
@@ -507,8 +520,12 @@ func _setup_ui() -> void:
 	var brow := HBoxContainer.new()
 	brow.add_theme_constant_override("separation", UiTheme.GAP)
 	bottom_bar.add_child(brow)
-	var altar_btn := _bar_button(brow, "제단", open_altar)
+	altar_btn = _bar_button(brow, "제단", open_altar)
 	altar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	GameIcons.button_icon(altar_btn, "제단", 26)
+	chron_btn = _bar_button(brow, "연대기", func() -> void: open_chronicle(-1))    # (도구 5개 띠가 생기기 전 임시 자리 — UI 01)
+	chron_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	GameIcons.button_icon(chron_btn, "연대기", 26)
 	lid_btn = _bar_button(brow, "뚜껑 열기", toggle_lid)   # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
 	lid_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	blow_btn = _bar_button(brow, "불기", blow)            # [하늘의 것] 거인이 입으로 불기 — 뚜껑이 열린 동안만 보임
@@ -531,6 +548,24 @@ func _setup_ui() -> void:
 	settings_sheet = SettingsSheet.new()
 	settings_sheet.setup(village)
 	dlayer.add_child(settings_sheet)
+	chronicle = ChronicleSheet.new()
+	chronicle.setup(village, jar_world())
+	dlayer.add_child(chronicle)
+	chronicle.resident_pressed.connect(_on_chronicle_person)
+	altar_sheet.reveal_requested.connect(start_revelation)
+	var rlayer := CanvasLayer.new()       # 계시·깨달음 연출 — 띠 위, 시트 아래
+	rlayer.layer = 3
+	add_child(rlayer)
+	rev_show = RevelationShow.new()
+	rlayer.add_child(rev_show)
+	guide_cap = GuideCaption.new()
+	guide_cap.setup(village)
+	guide_cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	guide_cap.custom_minimum_size.x = 280
+	stack.add_child(guide_cap)
+	stack.move_child(guide_cap, 0)
+	for vv: Array in village_views():
+		_awake_seen[vv[0]] = (vv[0] as Village).awakened_t
 	GameSettings.get_current().apply()
 	set_debug_mode(not OS.has_feature("mobile"))
 	get_viewport().size_changed.connect(layout_bars)
@@ -541,8 +576,92 @@ func _setup_ui() -> void:
 func open_altar() -> void:
 	detail.close()
 	settings_sheet.close()
+	chronicle.close()
 	altar_sheet.setup(focus_village())
 	altar_sheet.open()
+
+
+## 연대기 (UI 07) — 넓은 세상은 카메라가 보는 무리 (최근·발견은 모든 무리). tab = −1이면 지난번 탭
+func open_chronicle(tab := -1) -> void:
+	if chronicle.visible and tab < 0:
+		chronicle.close()
+		return
+	detail.close()
+	altar_sheet.close()
+	settings_sheet.close()
+	if return_letter != null and return_letter.visible:
+		return_letter.close()
+	chronicle.setup(focus_village(), jar_world())
+	chronicle.open(tab)
+
+
+## 연대기 '사람들'에서 살아 있는 사람을 누름 → 주민 상세 (그 사람의 무리)
+func _on_chronicle_person(v: Village, r: Resident) -> void:
+	chronicle.close()
+	for vv: Array in village_views():
+		if vv[0] == v:
+			_follow_vv = vv
+	detail.setup(v)
+	detail.open(r)
+
+
+## [계시] (A5): 제단 시트를 닫고 그 무리의 광장으로 → 빛 한 줄기 + 연출 → (0.9초) 시대가 오른다 · 연대기 · 축제 음악
+func start_revelation(v: Village) -> void:
+	if rev_show.playing() or not v.revelation_pending():
+		return
+	altar_sheet.close()
+	detail.close()
+	_stop_follow()
+	look_at_ground(_square(v))
+	if rev_show.play_revelation(v):
+		beam_at(v, RevelationShow.DUR)
+
+
+## 그 무리의 광장 (모닥불)
+func _square(v: Village) -> Vector2:
+	return v.fire if v.fire.distance_to(v.center) < 30.0 else v.center
+
+
+## 하늘에서 광장으로 빛 한 줄기 (3D — 병 노드 아래 데이터 좌표: 넓은 세상이 돌아 있어도 땅과 함께)
+func beam_at(v: Village, secs: float) -> SkyBeam:
+	var sq := (_square(v) + v.altar_pos) * 0.5
+	return SkyBeam.spawn(jar, Vector3(sq.x, terrain.ground_y(sq.x, sq.y), sq.y), secs)
+
+
+## 깨달음 (A4b): 시뮬레이션이 일으키면 (Village.awakened_t가 바뀜) 화면에 빛 한 줄기 + 연대기 한 줄. 보고 있는 무리만 연출
+func _check_awakening() -> void:
+	for vv: Array in village_views():
+		var q: Village = vv[0]
+		var seen: float = _awake_seen.get(q, -1.0)
+		if q.awakened_t != seen:
+			_awake_seen[q] = q.awakened_t
+			if q.awakened_t >= 0.0 and q.t - q.awakened_t < 120.0 and q == focus_village() and not rev_show.playing():
+				beam_at(q, RevelationShow.AWAKEN_DUR)
+				rev_show.play_awakening(q)
+
+
+## 아래 띠 버튼을 부드럽게 빛냄 (빨간 점 대신 — UI 원칙): on이면 금빛 테두리가 천천히 숨 쉼
+func _glow_button(b: Button, on: bool) -> void:
+	if b == null:
+		return
+	if not on:
+		if b.has_meta("glow"):
+			b.remove_meta("glow")
+			for st in ["normal", "hover", "pressed"]:
+				b.remove_theme_stylebox_override(st)
+		return
+	var k := 0.5 + 0.5 * sin(_btn_glow_t * 2.6)
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = UiTheme.BUTTON.lerp(Color("fff1c4"), k)
+	sb.border_color = UiTheme.GLOW.darkened(0.2)
+	sb.set_border_width_all(2)
+	sb.set_corner_radius_all(6)
+	sb.set_content_margin_all(5)
+	sb.shadow_color = Color(UiTheme.GLOW, 0.3 + 0.4 * k)
+	sb.shadow_size = int(3 + 5 * k)
+	for st in ["normal", "hover", "pressed"]:
+		b.add_theme_stylebox_override(st, sb)
+	b.set_meta("glow", true)
 
 
 ## 개발: 병 돌리기 (넓은 세상은 빛만 돈다)
@@ -685,6 +804,8 @@ func blow() -> void:
 	var f := cam.camera.global_transform.basis.z
 	var n := focus_village().blow_seeds(Vector2(-f.x, -f.z))
 	if n >= 0:
+		GuideCaption.done(focus_village(), "blow")
+	if n >= 0:
 		GameAudio.fx("blow")
 	if n > 0:                         # 꽃씨가 날림 (반짝이는 바람) + "눈이 온다!"
 		GameAudio.fx("seeds_wind", "Village")
@@ -745,6 +866,14 @@ func _update_ui() -> void:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
 	blow_btn.visible = village.air.lid_open    # [하늘의 것] 불기는 뚜껑이 열린 동안만
+	_btn_glow_t += get_process_delta_time()
+	var fv := focus_village()
+	_glow_button(altar_btn, fv.revelation_pending())     # [계시]를 기다림 (A5)
+	guide_cap.setup(fv)
+	var hl := GuideCaption.highlight(fv)                 # 첫 병 안내 (A4b)
+	_glow_button(lid_btn, hl == "lid")
+	_glow_button(blow_btn, hl == "blow")
+	_check_awakening()
 	if clock.notice_t <= 0.0:         # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		var w := next_warning()
 		if w != "":
@@ -922,6 +1051,10 @@ var _follow_vv: Array = []           # 상세를 연(따라가는) 주민의 [Vi
 
 
 func _on_tap(sp: Vector2) -> void:
+	var av := pick_altar(sp)                # 제단을 누르면 제단 시트 (그 무리의)
+	if av != null:
+		open_altar_of(av)
+		return
 	var r := pick_resident(sp)
 	if r != null:
 		altar_sheet.close()
@@ -933,9 +1066,36 @@ func _on_tap(sp: Vector2) -> void:
 		tap_glass(false)              # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
 
 
+## 누른 곳이 제단(돌 단 가운데)이면 그 무리 — 제단이 서 있거나 짓는 중일 때만. 아니면 null
+const ALTAR_PICK := 26.0
+func pick_altar(sp: Vector2) -> Village:
+	for vv: Array in village_views():
+		var q: Village = vv[0]
+		var vw: VillageView = vv[1]
+		if vw.altar_view == null or (not q.altar_built and Awakening.altar_site(q) == null):
+			continue
+		var at := vw.altar_view.global_position + Vector3(0, 0.5, 0)
+		if cam.camera.is_position_behind(at):
+			continue
+		var rad := maxf(ALTAR_PICK, cam.ppu * 1.1)
+		if cam.camera.unproject_position(at).distance_to(sp) < rad:
+			return q
+	return null
+
+
+func open_altar_of(q: Village) -> void:
+	detail.close()
+	settings_sheet.close()
+	chronicle.close()
+	altar_sheet.setup(q)
+	altar_sheet.open()
+
+
 ## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!") — 넓은 세상은 카메라가 보는 무리가 듣는다
 func tap_glass(hard: bool) -> void:
 	focus_village().tap_glass(hard)
+	if not hard:
+		GuideCaption.done(focus_village(), "tap")
 	GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")
 	GameAudio.buzz()
 	GameAudio.say("tap_hard" if hard else "tap")

@@ -165,6 +165,8 @@ func _add_world(l: Dictionary) -> void:
 			(l["waiting"] as Array).append("%s 제단에도 제물이 있어요." % nm)
 		if q.open_letters("split").size() > 0:
 			(l["waiting"] as Array).append("%s에서도 새 땅으로 떠나고 싶다는 편지가 와 있어요." % nm)
+		if q.revelation_pending():
+			(l["waiting"] as Array).append("%s에서도 거인님의 계시를 기다려요." % nm)
 	# 첫 무리 소식은 4줄까지, 다른 무리 소식을 그 아래에 (모두 6줄까지)
 	l["events"] = events.slice(0, maxi(3, 6 - extra.size())) + extra.slice(0, 3)
 	l["world_pop0"] = p0
@@ -289,6 +291,8 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 		waiting.append("소원 편지 %d통이 거인님을 기다려요." % wishes)
 	if vv.open_letters("split").size() > 0:
 		waiting.append("새 땅으로 떠나고 싶다는 편지가 와 있어요.")
+	if vv.revelation_pending():           # A5: 계시는 거인만 내린다 — 비운 동안 시대 점수가 찼으면 기다림 (GD 14)
+		waiting.append("노인들이 하늘을 올려다보며 거인님의 계시를 기다려요.")
 	if vv.mold != null and vv.mold.phase == "omen":
 		waiting.append("유리에 김이 서리기 시작했어요. 빵에 푸른 털이 났어요.")
 	var c := vv.chief()

@@ -8,6 +8,7 @@ class_name ReturnLetter
 extends Control
 
 signal closed
+signal chronicle_requested             # [연대기에서 자세히] — 장면이 받으면 연대기 화면(UI 07)을 연다 (없으면 이 종이에 비운 동안의 연대기)
 
 const MAX_W := 340.0
 
@@ -137,6 +138,9 @@ func close() -> void:
 
 
 func _toggle_chronicle() -> void:
+	if not showing_chronicle and not chronicle_requested.get_connections().is_empty():
+		chronicle_requested.emit()
+		return
 	showing_chronicle = not showing_chronicle
 	if showing_chronicle:
 		_fill_chronicle()

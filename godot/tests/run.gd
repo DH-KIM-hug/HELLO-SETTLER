@@ -3,6 +3,7 @@
 ##   모드: (없음) 전체 = 빠른 시험 + 오래 걸리는 통계 시험 (모든 시험, 표본 크게) · quick 빠른 시험만 (표본 작게, 2분 남짓) ·
 ##         long 오래 걸리는 통계 시험만 (표본 크게 — 30일 인구·50개 세상·발병률 등). quick + long = 전체의 모든 확인.
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
+##         era 깨달음·계시·연대기 (A4b · A5 · A10) ·
 ##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
@@ -12,7 +13,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -39,7 +40,7 @@ func timed(obj: Object, names: Array) -> void:
 const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests/genetics_tests.gd", "health": "res://tests/health_tests.gd",
 	"economy": "res://tests/economy_tests.gd", "mold": "res://tests/mold_tests.gd", "flora": "res://tests/flora_tests.gd",
 	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd", "save": "res://tests/save_tests.gd",
-	"start": "res://tests/start_tests.gd"}
+	"start": "res://tests/start_tests.gd", "era": "res://tests/era_tests.gd"}
 
 
 func _initialize() -> void:
@@ -52,6 +53,8 @@ func _initialize() -> void:
 	var q := mode == "quick"
 	# 병 날짜를 4월 15일(봄)로 고정 — 기존 테스트가 기기 날짜에 따라 달라지지 않게 (HEALTH.md 7). 겨울 시험은 health_tests가 따로
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
+	# 기존 묶음은 '처음부터 거인을 알고 제단이 있는 마을'을 고정으로 쓴다 (A4b 이전 규칙). 깨달음·계시 묶음(era)은 이 값을 끄고 새 규칙을 본다
+	Village.start_aware = true
 	var one := ""
 	for k: String in SUITES:
 		if k in args:

@@ -177,6 +177,8 @@ func split_out(from: Village, x: float, y: float) -> Village:
 	var nv := place_kit(x, y, kit)
 	nv.settlement_name = "%d번째 무리 (분가)" % settlements.size()
 	nv._next_wish_t = nv.t + Balance.WISH_FIRST
+	nv.aware = from.aware                 # 거인을 아는 무리가 떠나면 새 땅에서 먼저 제단부터 짓는다 (A4b)
+	nv.altar_built = false
 	from.move_people_to(nv, movers)
 	_update_interest()
 	return nv

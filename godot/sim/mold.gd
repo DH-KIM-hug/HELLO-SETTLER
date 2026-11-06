@@ -418,6 +418,7 @@ func _koji(v: Village) -> void:
 			for r in v.people:
 				if r.is_child() and r.age >= 2.5 and not r.sleeping and Vector2(r.x - b.x, r.y - b.y).length() < Balance.KOJI_FIND_R:
 					koji_known = true
+					v.note_discovery("koji", r)
 					v.speak(r, "노란 털이 묻은 반죽이 부풀었어!", 7)
 					v.log_line("%s%s 노란 털뭉치가 스친 빵 반죽이 부푸는 것을 보았다. 노란 곰팡이는 나쁜 것이 아니었다." % [r.name, Village.josa(r.name, "이", "가")])
 					break
@@ -602,11 +603,13 @@ func _defeat(v: Village, r: Resident, b: MoldBlob) -> void:
 	for q in v.people:
 		if q.sick_left > 0.0 and q.disease == Balance.FESTER_KIND and Vector2(q.x - b.x, q.y - b.y).length() < 8.0:
 			med_known = true
+			v.note_discovery("blue_powder", q)
 			q.sick_left *= Balance.MOLD_MED_TIME
 			v.log_line("푸른 털 괴물이 남긴 가루가 %s의 곪은 상처를 말렸다." % q.name)
 			return
 	if teal_defeats >= Balance.MOLD_MED_DISCOVER:
 		med_known = true
+		v.note_discovery("blue_powder", r)
 		v.log_line("%s%s 푸른 털뭉치가 남긴 가루를 모아 두었다. 곪은 데 바르면 낫는다는 옛말이 있었다." % [r.name, Village.josa(r.name, "이", "가")])
 
 

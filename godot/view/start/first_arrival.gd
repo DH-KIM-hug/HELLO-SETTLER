@@ -81,11 +81,11 @@ static func first_three(v: Village) -> Array[Resident]:
 	return out
 
 
-## 한 아이가 하늘(거인)을 올려다보고 손을 흔든다 (말풍선)
+## 한 아이가 새 땅을 둘러보며 들뜬다 (말풍선) — 아직 거인을 모른다 (A4b · 기획서 6.5: 깨닫기 전엔 '거인님'이라는 말이 없다)
 func _wave() -> void:
 	for r in picks:
 		if r.is_child():
-			r.say = "거인님, 안녕!"
+			r.say = "와, 여기가 우리 새 땅이야?"
 			r.say_t = 5.0
 			GameAudio.fx("child_laugh", "Room", -6.0)
 			return

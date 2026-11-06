@@ -10,7 +10,8 @@ const DAY := Balance.DAY
 const HOUR := Balance.HOUR
 const R := JarWater.R
 const PATH_N := 128
-const ALTAR_OFFSET := Vector2(-1.6, -1.2)   # (정함) 제단 = 모닥불 곁
+const ALTAR_OFFSET := Vector2(-2.4, -1.8)   # (정함) 제단 = 모닥불 곁 — 처음 값. 실제 자리는 pick_altar_pos (건물을 피해 모닥불에서 3칸)
+const ALTAR_CLEAR := 2.1                     # 제단 둘레 비움 (돌 단 반지름 1.55 + 여유 — 건물·나무·민들레가 겹치지 않게)
 
 var rng := RandomNumberGenerator.new()
 var gene_rng := RandomNumberGenerator.new()   # 7단계: 겉모습 유전자·혈통 유전 전용 (시뮬레이션 난수 순서를 바꾸지 않게)
@@ -19,6 +20,8 @@ var health_rng := RandomNumberGenerator.new() # 건강·기후·두려움 전용
 static var default_created: Dictionary = {}
 # 저장 (docs/SAVE.md 2 — 완전 자동): 거인이 무언가 하면 이 함수가 곧바로 불린다 (SaveManager가 거인 묶음 + 이 병을 쓴다)
 static var on_giant_action := Callable()
+# 깨달음 (A4b — sim/awakening.gd): 시험 고정용. true면 예전처럼 처음부터 거인을 알고 제단이 있다 (기존 시험 묶음이 tests/run.gd에서 켬)
+static var start_aware := false
 var event_serial := 0                 # 큰 일(연대기 한 줄·위기 시작)마다 +1 — SaveManager가 보고 이 병을 곧 저장한다
 var _giant_depth := 0
 var created_date: Dictionary = {"year": 2026, "month": 4, "day": 15}
@@ -59,12 +62,28 @@ var auto_reveal := false             # 시대 점수가 차면 지켜보는 때�
 
 var era := 0
 var era_pts := 0.0
+# A4b 깨달음 (기획서 6.5 · 11.1 — sim/awakening.gd). 기본값 true = 옛 저장(제단이 있던 병)은 그대로 안다. 새 병은 Awakening.start가 끈다
+var aware := true                     # 주민이 하늘 너머의 거인을 안다 (깨달음 뒤)
+var altar_built := true               # 제단이 있다 — 그 전엔 기도·제물·소원 편지가 없다
+var wonder := 0.0                     # 경이 (목격이 쌓임 — Awakening.WONDER_NEED에서 깨달음)
+var awaken_at := -1.0                 # 경이가 찼다 → 이 시각에 깨달음 사건
+var awakened_t := -1.0
+var guide: Dictionary = {}            # 첫 병의 안내 자막 (OPENING 3.1 v3 — view/ui/guide_caption.gd): {on, tap, blow}. 비면 안내 없음
+var _wonder_taps := [-1, 0]           # [날, 그날 경이가 된 톡 수] (거듭될수록 줄어듦)
+# A5 계시 (기획서 8.3 · 6.1 · 14): 시대 점수가 다 차면 주민이 알아채고 거인의 [계시]를 기다린다. 거인만 내린다 (비운 동안은 기다림)
+var revelation: Dictionary = {}       # 계시를 기다림 {t, from: 주민 id, name, text} — 비면 기다리는 계시 없음
+var _rev_say_t := 0.0                 # 기다리는 동안 노인이 하늘을 보며 한마디 하는 다음 시각
+# A10 연대기 (UI 07 · PROGRESSION 4)
+var myth: Array = []                  # 창세 신화 줄 (OPENING 9 — 창조가 채울 자리. 비면 연대기의 첫 기록)
+var departed: Array = []              # 분가로 떠난 사람 {id, name, sex, age, t, to: 무리 이름, to_sid}
+var discoveries: Dictionary = {}      # 발견 id → {t, who: 주민 id, name} (sim/codex.gd — 발견 도감)
 var faith := 50.0
 var fear := 0.0
 var stock: Dictionary = {}
 var manna: Array = []                 # 들판의 낟알 {x, y, amt, born, res}
 var manna_batches: Array = []         # 창고에 주워 온 낟알 {amt, born}
 var manna_falls := 0
+var just_manna := false               # 화면 연출용 — 방금 하늘 낟알이 내렸다 (화면이 보고 끔)
 var first_harvest_t := -1.0
 var manna_ended := false
 var festival_t := -1.0e9
@@ -145,6 +164,7 @@ func _init_prototype(seed_v: int) -> void:
 		basins_said.append(0)
 	var st := add_building("창고", 0.0, 0.0, true)
 	st.is_store = true
+	altar_pos = pick_altar_pos()
 	# 첫 정착민 두 가족 + 노인 + 젊은이
 	var ids: Array[Resident] = []
 	for f: Array in Balance.FIRST_SETTLERS:
@@ -166,6 +186,7 @@ func _init_prototype(seed_v: int) -> void:
 	if people.all(func(p: Resident) -> bool: return p.grade == 0):
 		ids[4].grade = 1
 	_arrive_fed()
+	Awakening.start(self)
 	log_line("어느 새벽, 우리 조상 열 명이 숲 가장자리에 처음으로 불을 피웠다.")
 	log_line("하늘의 두 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 그늘진 세상 끝 벽에서 흘러내려 낮은 곳으로 간다. 서쪽의 큰 호수에는 흘러드는 강이 없다.")
 
@@ -191,7 +212,7 @@ func in_opening() -> bool:
 
 ## 첫 한 시간에 짓는 터의 빠르기 배율 — 그 터는 OPENING_BUILD_WORK(사람×초)를 일해야 다 지어진다
 func opening_build(b: Building) -> float:
-	if not in_opening():
+	if not in_opening() or b.site_type() == Awakening.ALTAR:
 		return 1.0
 	return minf(1.0, float(Balance.B[b.site_type()]["time"]) / Balance.OPENING_BUILD_WORK)
 
@@ -207,6 +228,20 @@ func _arrive_fed() -> void:
 ## 첫 감사 기도 (첫날만 — OPENING 3.1 3:30): 첫 건물이 서면 모두 하던 일을 놓고 제단 곁에 모여 허밍
 func thanksgiving(b: Building) -> void:
 	stats["thanks"] = 1
+	if not altar_built:                   # 아직 제단이 없다 (A4b) — 기도 대신 모닥불 곁에 모여 첫 집을 기뻐함 (짧게)
+		log_line("%s%s 다 지어지자 모두 모닥불 곁에 모여 손뼉을 쳤다. 우리 손으로 지은 첫 지붕이었다." % [b.type, josa(b.type, "이", "가")])
+		var cc := chief()
+		for p in people:
+			if p.is_baby() or p.sleeping or p.sick_left > 0.0:
+				continue
+			ResidentAI.cancel(self, p)
+			var q := ResidentAI.near(self, fire.x, fire.y, 1.6 + rng.randf() * 1.0)
+			p.doing = "첫 집을 기뻐하는 중"
+			p.steps.append(ResidentAI.walk(q.x, q.y))
+			p.steps.append(ResidentAI.act(Balance.THANKS_TIME * 0.4, "idle"))
+		if cc != null:
+			speak(cc, "우리 손으로 지었어!", 8)
+		return
 	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.type, josa(b.type, "이", "가")])
 	var c := chief()
 	for p in people:
@@ -214,11 +249,12 @@ func thanksgiving(b: Building) -> void:
 			continue
 		ResidentAI.cancel(self, p)
 		var a := rng.randf() * TAU
-		var q := altar_pos + Vector2(cos(a), sin(a)) * (1.4 + rng.randf() * 1.2)
+		var q := altar_pos + Vector2(cos(a), sin(a)) * (Awakening.RING_R + rng.randf() * 0.8)     # 제단 둘레 고리
 		p.action = "pray"
 		p.last_action = "pray"
 		p.doing = "감사 기도하는 중"
 		p.steps.append(ResidentAI.walk(q.x, q.y))
+		p.steps.append(Awakening.face_altar_step(self, q))     # 제단을 바라보며
 		p.steps.append(ResidentAI.act(Balance.THANKS_TIME, "pray", ResidentAI.op("pray")))
 	if c != null:
 		speak(c, Balance.LINE_THANKS, 8)
@@ -267,6 +303,8 @@ func add_person(name: String, sex: String, age: float, trait_n: String, x: float
 	r.px = x
 	r.py = y
 	r.belief = Balance.BELIEF_START if age > 0.0 else (Balance.BELIEF_BABY_WATCHED if is_watching() else Balance.BELIEF_BABY_ALONE)
+	if not aware:
+		r.belief = 0.0                    # 아직 거인을 모른다 (A4b)
 	# 겉모습
 	r.look_head = rng.randi() % Balance.LOOK_HEADS
 	r.look_clothes = 1 if sex == "f" else 0
@@ -411,7 +449,36 @@ func cal_day(tt: float) -> int:
 	return int((start_clock + tt) / DAY) - int(start_clock / DAY) + 1
 
 
+## 제단 자리: 모닥불에서 3칸 둘레를 돌며 건물·물에 겹치지 않는 첫 자리 (난수 없이). 못 찾으면 지금 자리
+func pick_altar_pos() -> Vector2:
+	for rr: float in [3.0, 3.6, 4.4]:
+		for i in 16:
+			var a := deg_to_rad(-60.0 + i * 22.5)
+			var p := fire + Vector2(cos(a), sin(a)) * rr
+			if altar_spot_ok(p):
+				return p
+	return altar_pos
+
+
+func altar_spot_ok(p: Vector2) -> bool:
+	if water == null or not water.inside(p.x, p.y, ALTAR_CLEAR + 0.5) or water_at(p.x, p.y):
+		return false
+	for b in buildings:
+		if b.site_type() == Awakening.ALTAR:
+			continue
+		if Vector2(b.x, b.y).distance_to(p) < b.size() + ALTAR_CLEAR - 0.3:
+			return false
+	return true
+
+
 # ───────────────────────── 기록 ─────────────────────────
+## 발견 도감에 적는다 (sim/codex.gd) — 처음 한 번만: 누가 · 언제
+func note_discovery(id: String, who: Resident) -> void:
+	if discoveries.has(id):
+		return
+	discoveries[id] = {"t": t, "who": who.id if who != null else -1, "name": who.name if who != null else ""}
+
+
 func log_line(text: String) -> void:
 	book.append({"t": t, "text": text})
 	event_serial += 1
@@ -596,7 +663,19 @@ func manna_fall(reason: String) -> void:
 	bless_all(Balance.BELIEF_MANNA)
 	var kids := people.filter(func(p: Resident) -> bool: return p.is_child() and not p.is_baby())
 	var who: Resident = kids[rng.randi() % kids.size()] if not kids.is_empty() else people[rng.randi() % people.size()]
-	if reason == "arrival":
+	just_manna = true                     # 화면: 금빛 낟알이 하늘에서 쏟아짐 (view/manna_fx.gd)
+	if not aware:                         # 아직 거인을 모른다 — '하늘이 주는 것' (OPENING 3.1 v3)
+		speak(who, "하늘에서 뭐가 떨어졌어!", 8)
+		for q in people:
+			if q.is_adult() and not q.sleeping and q != who:
+				speak(q, "하늘이 주는 거란다.", 8)
+				break
+		Awakening.witness(self, "manna")
+		if reason == "arrival":
+			log_line("굶주린 조상들 곁에 하늘에서 금빛 낟알이 내렸다. 사람들은 하늘이 주는 것이라 여겼다.")
+		else:
+			log_line("새벽, 들판에 하늘의 낟알이 금빛으로 깔렸다. 하늘이 또 주었다.")
+	elif reason == "arrival":
 		speak(who, "엄마, 하늘에서 뭐가 내렸어요!", 8)
 		log_line("굶주린 조상들에게 거인이 하늘에서 낟알을 내렸다.")
 	else:
@@ -724,6 +803,7 @@ func step(dt: float) -> void:
 	if _timers["speak"] >= Balance.SPEAK_EVERY:
 		idle_chatter()
 		_timers["speak"] = 0.0
+	Awakening.step(self, dt)
 	_update_era(dt)
 	_update_belief(dt)
 	for o: Village in others:        # 같은 세상의 다른 무리 (물은 이 마을이 이미 흘렸다)
@@ -770,7 +850,7 @@ func _tree_spread() -> void:
 	for b in buildings:
 		if Vector2(b.x - x, b.y - y).length() < b.size() + 0.8:
 			return
-	if Vector2(fire.x - x, fire.y - y).length() < 3.0 or Vector2(altar_pos.x - x, altar_pos.y - y).length() < 1.5:
+	if Vector2(fire.x - x, fire.y - y).length() < 3.0 or Vector2(altar_pos.x - x, altar_pos.y - y).length() < ALTAR_CLEAR:
 		return
 	for r: Dictionary in rocks:
 		if Vector2(r["x"] - x, r["y"] - y).length() < 1.0:
@@ -812,22 +892,118 @@ func _update_era(dt: float) -> void:
 	if not is_watching():
 		rate *= Balance.OFFLINE_ERA
 	era_pts = minf(Balance.ERA_NEED[era], era_pts + rate * dt / HOUR)
-	if auto_reveal and is_watching() and era_pts >= Balance.ERA_NEED[era]:
+	if era_pts < Balance.ERA_NEED[era]:
+		return
+	if auto_reveal and is_watching():
 		reveal()
+		return
+	if revelation.is_empty():
+		_revelation_notice()
+	elif is_watching() and t >= _rev_say_t:
+		_revelation_murmur()
 
 
-## 거인의 계시 — 시대 점수가 다 찼을 때만 (6.3)
-func reveal() -> bool:
-	if era >= Balance.ERA_NEED.size() or era_pts < Balance.ERA_NEED[era]:
+## 시대 점수가 다 찼다 (계시를 기다림)
+func era_full() -> bool:
+	return era < Balance.ERA_NEED.size() and era_pts >= Balance.ERA_NEED[era]
+
+
+## 계시를 기다리는가 (제단 시트 맨 위 [계시] · 아래 띠 제단 버튼의 빛)
+func revelation_pending() -> bool:
+	return not revelation.is_empty() and era_full()
+
+
+## 이 시대에 새로 열리는 건물 (Balance.B의 era가 e인 것)
+static func era_unlocks(e: int) -> PackedStringArray:
+	var out := PackedStringArray()
+	for ty: String in Balance.B:
+		if int(Balance.B[ty].get("era", 0)) == e:
+			out.append(ty)
+	return out
+
+
+## 노인들이 하늘을 올려다본다 — 편지 한 장 + 연대기 한 줄 (거인이 없어도: 돌아오면 편지가 기다린다. 계시는 거인만 — GD 14).
+## 난수를 쓰지 않는다 (다른 흐름을 흔들지 않게)
+func _revelation_notice() -> void:
+	var seers := _sky_watchers()
+	var who: Resident = seers[0] if not seers.is_empty() else chief()
+	revelation = {"t": t, "from": who.id if who != null else -1, "name": who.name if who != null else "",
+		"text": "하늘이 무언가를 알려 주실 것 같아요. 노인들이 자꾸 하늘을 올려다봐요."}
+	log_line("노인들이 자꾸 하늘을 올려다보았다. 거인님이 무언가를 알려 주실 것만 같았다.")
+	_revelation_murmur()
+
+
+## 기다리는 동안 가끔 (깨어 있는 노인 한둘이 하늘을 보며)
+func _revelation_murmur() -> void:
+	_rev_say_t = t + Balance.REV_MURMUR
+	if not is_watching():
+		return
+	var lines := ["하늘이 무언가를 알려 주실 것 같아요", "하늘을 보게. 무언가 다가오고 있어", "거인님이 곧 무언가 보여 주실 게야"]
+	var seers := _sky_watchers()
+	for i in mini(2, seers.size()):
+		var r: Resident = seers[i]
+		if not r.sleeping:
+			speak(r, lines[(int(t / HOUR) + i) % lines.size()], 7)
+
+
+## 하늘을 보는 사람: 노인부터 (나이 많은 순), 없으면 나이 많은 어른 — 아기·앓는 사람 빼고
+func _sky_watchers() -> Array[Resident]:
+	var out: Array[Resident] = []
+	for r in people:
+		if not r.is_baby() and r.sick_left <= 0.0 and r.age >= Balance.AGE_ADULT:
+			out.append(r)
+	out.sort_custom(func(a: Resident, b: Resident) -> bool: return a.age > b.age if a.age != b.age else a.id < b.id)
+	var elders: Array[Resident] = []
+	for r in out:
+		if r.is_elder():
+			elders.append(r)
+	var pick := elders if not elders.is_empty() else out
+	return pick.slice(0, 3)
+
+
+## 거인의 계시 — 시대 점수가 다 찼을 때만 (6.3). line이 비면 예전 한 줄
+func reveal(line := "") -> bool:
+	if not era_full():
 		return false
 	era += 1
 	era_pts = 0.0
+	revelation = {}
 	bless_all(0.15)
-	log_line("거인님의 계시가 내렸다. 우리는 '%s'%s 되었다." % [Balance.ERAS[era], josa(Balance.ERAS[era], "이", "가")])
+	log_line(line if line != "" else "거인님의 계시가 내렸다. 우리는 '%s'%s 되었다." % [Balance.ERAS[era], josa(Balance.ERAS[era], "이", "가")])
+	return true
+
+
+## 거인이 [계시]를 누름 (A5): 연대기 "거인이 새 시대를 열었다 — 마을" · 광장 축제 · 깨어 있는 사람은 그 자리에서 무릎 꿇고 하늘을 봄 →
+## 시대가 오른다 (촌장이 새 집 양식·새 건물을 짓기 시작). 거인이 보고 있을 때만 — 비운 동안엔 저절로 오지 않는다 (GD 14)
+func giant_reveal() -> bool:
+	if not era_full() or not is_watching():
+		return false
+	begin_giant()
+	var nx: String = Balance.ERAS[era + 1]
+	log_line("거인이 새 시대를 열었다 — %s" % nx)
+	reveal("하늘에서 한 줄기 빛이 광장으로 내려왔다. 사람들은 무릎을 꿇고 하늘을 올려다보았다. 이제 우리는 '%s'%s." % [nx, josa(nx, "이다", "다")])
+	festival_t = t
+	var spoke := 0
+	for r in people:
+		if r.sleeping or r.is_baby() or r.sick_left > 0.0:
+			continue
+		r.steps.push_front(ResidentAI.act(Balance.REV_KNEEL, "pray"))
+		if spoke < 3 and r.age >= 2.5:
+			speak(r, ["빛이다…!", "거인님이 길을 여셨다", "새 시대가 왔어!"][spoke], 8)
+			spoke += 1
+	var un := era_unlocks(era)
+	if not un.is_empty():
+		log_line("이제 %s%s 지을 수 있게 되었다." % ["·".join(un.slice(0, 6)), josa(un[mini(5, un.size() - 1)], "을", "를")])
+	end_giant()
 	return true
 
 
 func _update_belief(dt: float) -> void:
+	if not aware:                         # 거인을 모르면 믿음도 없다 (6.5)
+		for p in people:
+			p.belief = 0.0
+		faith = 0.0
+		return
 	var w := is_watching()
 	var sum := 0.0
 	for p in people:
@@ -848,6 +1024,8 @@ func bless_all(d: float) -> void:
 
 ## 부락의 신앙 상태 (RESIDENT_AI 2.3)
 func faith_state() -> String:
+	if not aware:
+		return ""
 	if fear >= 50.0:
 		return "경외" if faith >= 60.0 else "공포"
 	if faith >= 60.0:
@@ -1018,6 +1196,9 @@ func on_built(b: Building) -> void:
 		log_line("작은 옛 집을 %s%s 넓혀 지었다." % [b.type, josa(b.type, "으로", "로")])
 		return
 	b.built = true
+	if b.type == Awakening.ALTAR:          # 깨달음 뒤 주민이 지은 제단 → 첫 기도 (A4b)
+		Awakening.on_altar_built(self, b)
+		return
 	if b.type == "농장":
 		b.ready_at = t + Balance.GROW_FIRST
 		log_line("밭을 갈았다. 첫 곡식이 여물려면 반나절은 걸리겠지.")
@@ -1349,6 +1530,8 @@ func idle_chatter() -> void:
 	var awake := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	if awake.is_empty():
 		return
+	if not aware:                         # 거인을 모른다 — 믿음·의심 말은 아직 없다
+		return
 	var dbt := awake.filter(func(q: Resident) -> bool: return q.belief < Balance.DOUBT_BELOW)
 	if not dbt.is_empty() and rng.randf() < 0.6:
 		var kid: Resident = dbt[0]
@@ -1585,7 +1768,7 @@ func is_free(x: float, y: float, size: float) -> bool:
 		return false
 	if not in_territory(x, y, size):           # 영역 안에만 짓는다 (기획서 3.1)
 		return false
-	if Vector2(altar_pos.x - x, altar_pos.y - y).length() < size + 0.9:
+	if Vector2(altar_pos.x - x, altar_pos.y - y).length() < size + ALTAR_CLEAR:
 		return false
 	if water_at(x, y):
 		return false
@@ -1735,6 +1918,7 @@ func salt_discovery() -> void:
 			return
 		who = any[rng.randi() % any.size()]
 	salt_known = true
+	note_discovery("salt", who)
 	if era < Balance.ERA_NEED.size():
 		era_pts = minf(Balance.ERA_NEED[era], era_pts + Balance.SALT_DISCOVERY_PTS)
 	log_line("%s%s 마른 호수 바닥의 하얀 흙을 손가락으로 찍어 맛보았다. 짰다! 사람들은 그것을 '소금'이라 불렀다. 호수 바닥 아래 하얀 바위가 오래도록 녹아든 것이었다." % [who.name, josa(who.name, "이", "가")])
@@ -1816,6 +2000,7 @@ func rotate_jar() -> void:
 				b.farm_mult = -1.0
 			v.bless_all(0.06)
 			v.log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+			Awakening.witness(v, "lamp")
 		giant_acted()
 		return
 	water.rotate_jar()
@@ -1851,6 +2036,7 @@ func rotate_jar() -> void:
 	_fear_rotate()
 	bless_all(0.06)
 	log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+	Awakening.witness(self, "lamp")
 	giant_acted()
 
 
@@ -1871,6 +2057,9 @@ const WISH_REASON := {
 
 
 func _economy_tick() -> void:
+	if not altar_built:                   # 제단 전에는 제물도 소원 편지도 없다 (6.5 · 11.1). 분가는 그래도 (땅이 차면)
+		_check_split()
+		return
 	_expire_offerings()
 	if hour_now() >= Balance.OFFER_HOUR and cal_day(t) != _offer_day:
 		_offer_day = cal_day(t)
@@ -2028,6 +2217,8 @@ func offer_factor(item := "") -> float:
 
 ## 저녁 기도 — 제단에 제물을 올린다. 올린 것 {물건: 개수}
 func evening_offering() -> Dictionary:
+	if not altar_built:
+		return {}
 	_expire_offerings()
 	var by := PackedInt32Array()
 	for p in people:
@@ -2049,6 +2240,7 @@ func evening_offering() -> Dictionary:
 		got[item] = amt
 	if got.is_empty() and int(stats.get("offered", 0)) == 0 and not starving:
 		_first_token(by, got)            # 첫 저녁 기도: 남는 게 없어도 만든 것 몇 개 (OPENING T3 — BALANCE v4-4)
+	Awakening.gather_ring(self, Awakening.EVENING_RING, "저녁 기도하는 중", true)     # 일손을 놓은 사람들이 제단 둘레에 모여 제단을 바라봄
 	if starving and fear >= Balance.OFFER_FEAR_FOOD:     # 두려움이 높은 마을은 굶으면서도 바친다 (연대기의 어두운 이야기)
 		var dark := false
 		for item: String in ["빵", "밀", "건량"]:
@@ -2264,6 +2456,7 @@ func buy_building(type: String, spot: Variant = null) -> Building:
 		if l["kind"] == "wish" and l["type"] == type and l["state"] != "done":
 			l["state"] = "done"
 	log_line("하늘에서 %s%s 통째로 내려왔다! 사람들은 기적이라며 무릎을 꿇었다." % [type, josa(type, "이", "가")])
+	Awakening.witness(self, "drop")
 	var near := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	near.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
 	for i in mini(2, near.size()):
@@ -2368,6 +2561,8 @@ func move_people_to(nv: Village, movers: Array[Resident]) -> void:
 			l["state"] = "done"
 	_full_since = -1.0
 	var nm: String = movers[0].name
+	for r in movers:                      # 연대기 '사람들' — 분가로 떠남 (UI 07)
+		departed.append({"id": r.id, "name": r.name, "sex": r.sex, "age": r.shown_age(), "t": t, "to": nv.settlement_name, "to_sid": nv.sid})
 	log_line("%s의 가족을 비롯한 %d명이 새 땅을 찾아 떠났다. 남은 사람들은 마을 어귀까지 배웅했다." % [nm, movers.size()])
 	nv.log_line("%s의 가족을 비롯한 %d명이 옛 마을을 떠나 이 땅에 처음으로 불을 피웠다." % [nm, movers.size()])
 	recalc_fear()
@@ -2475,6 +2670,8 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		if bd[0] == "창고":
 			b.is_store = true
 		_clear_trees(Vector2(b.x, b.y), b.size())
+	altar_pos = pick_altar_pos()              # 키트 건물을 피해 모닥불 곁 (제단 돌 단이 창고에 묻히지 않게)
+	_clear_trees(altar_pos, ALTAR_CLEAR)
 	var ids: Array[Resident] = []
 	var looks := Kits.looks(kit_def)
 	for f: Array in Kits.people(kit_def):
@@ -2513,7 +2710,11 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		stats["thanks"] = 1               # 분가한 무리는 첫 한 시간 대본이 없다
 	else:
 		_arrive_fed()
-		log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+		Awakening.start(self)
+		if aware:
+			log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+		else:                             # 아직 거인을 모른다 (6.5) — 어떻게 왔는지 아무도 모른다
+			log_line("어느 아침, 우리 조상 %d명이 오두막 두 채 곁에서 눈을 떴다. 어떻게 이 땅에 왔는지 기억하는 사람은 없었다." % people.size())
 		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
 	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)
 
@@ -2660,6 +2861,8 @@ func recalc_fear() -> void:
 ## 안 닫으면 JarClock이 현실 1분 뒤 닫는다 (병 시계 8분 안전장치는 JarAir). 성공하면 true
 func open_lid() -> bool:
 	var ok := air.open_lid(self)
+	if ok:
+		Awakening.witness(self, "lid")     # 하늘이 열려 바람이 듦
 	giant_acted()
 	return ok
 
@@ -2673,6 +2876,8 @@ func close_lid() -> bool:
 ## [하늘의 것] 거인이 뚜껑을 열고 dir 쪽으로 분다 — 솜털 공의 꽃씨가 한꺼번에 (WORLD_EVENTS 2.7). 날린 꽃씨 수, 닫혀 있으면 −1
 func blow_seeds(dir: Vector2) -> int:
 	var n := flora.blow_seeds(self, dir)
+	if n >= 0:
+		Awakening.witness(self, "blow" if n > 0 else "blow_empty")     # 꽃씨가 하늘 가득 (닫혀 있으면 −1)
 	giant_acted()
 	return n
 
@@ -2683,6 +2888,8 @@ func tap_glass(hard := false) -> void:
 	if _taps[0] != d:
 		_taps = [d, 0]
 	_taps[1] += 1
+	if not hard:
+		Awakening.witness(self, "tap")     # 하늘이 울렸다 (A4b — 세게 친 톡은 두려움만)
 	if hard:
 		raise_fear_all(Balance.FEAR_TAP_HARD)
 	elif _taps[1] > Balance.FEAR_FREE_PER_DAY:
@@ -2795,4 +3002,6 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 		if by_id.has(int(id)):
 			v._singers.append(by_id[int(id)])
 	v.book = SaveCodec.dec(d.get("book", []))
+	if v.altar_built and Awakening.altar_site(v) == null and not v.altar_spot_ok(v.altar_pos):
+		v.altar_pos = v.pick_altar_pos()      # 옛 저장: 제단이 창고에 묻혀 있던 자리 → 모닥불 곁 빈자리로 (A4b — 보이게)
 	return v
