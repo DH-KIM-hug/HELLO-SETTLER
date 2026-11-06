@@ -1,5 +1,5 @@
 ## 연대기 화면 — docs/UI.md 07 (1차, ROADMAP A10). 양피지 + 손글씨 (나눔손글씨 펜 — UiTheme.hand_font 한 곳, A14).
-## 탭: 최근 (연대기 줄 최신부터, 병 달력 n일차마다 묶음 — 넓은 세상은 무리 이름을 붙여 모든 무리) ·
+## 탭: 최근 (위에서 아래로 — 오래된 것 위·새것 아래, 열면 가장 최근 날부터, 병 달력 n일차마다 묶음 — 넓은 세상은 무리 이름을 붙여 모든 무리) ·
 ##      창세 신화 (창조가 적은 신화, 없으면 첫 기록 — 그것도 없으면 부드러운 빈 자리) ·
 ##      사람들 (살아 있음 · 잠듦 · 분가로 떠남 — 작은 얼굴 · 이름 · 나이, 살아 있는 사람을 누르면 주민 상세) ·
 ##      발견 (도감: 발견한 것 = 그림 · 처음 찾은 사람 · 날, 못 한 것 = 실루엣 + 힌트 한 줄 — sim/codex.gd).
@@ -29,6 +29,7 @@ var title_l: Label
 var where_l: Label
 var tab_btns: Array[Button] = []
 var scroll: ScrollContainer
+var _last_day: Control                 # 최근 탭: 가장 최근 날 머리줄 (열 때 여기부터 아래로 읽게)
 var body: VBoxContainer
 var close_btn: Button
 
@@ -234,7 +235,7 @@ func open(t := -1) -> void:
 	_sig = ""
 	_style_tabs()
 	_refresh()
-	scroll.scroll_vertical = 0
+	_scroll_start()
 
 
 func close() -> void:
@@ -250,7 +251,17 @@ func show_tab(i: int) -> void:
 	_sig = ""
 	_style_tabs()
 	_refresh()
+	_scroll_start()
+
+
+## 열 때 처음 보이는 자리 — 최근 탭은 가장 최근 날의 머리줄(그날 일을 위에서 아래로), 다른 탭은 맨 위
+func _scroll_start() -> void:
 	scroll.scroll_vertical = 0
+	if tab != 0 or not is_instance_valid(_last_day):
+		return
+	await get_tree().process_frame
+	if is_instance_valid(_last_day):
+		scroll.scroll_vertical = maxi(0, int(_last_day.global_position.y - body.global_position.y) - 4)
 
 
 func _process(dt: float) -> void:
@@ -305,8 +316,26 @@ func _fill_recent() -> void:
 		_soft("아직 적힌 일이 없어요.")
 		return
 	var shown := 0
+	groups.reverse()                                   # 위에서 아래로 읽는다: 오래된 것 위 · 새것 아래 (사용자 결정 2026-11-07)
+	for g: Dictionary in groups:
+		shown += (g["entries"] as Array).size()
+	if Chronicle.line_count(vs) > shown:               # 더 오래된 기록은 맨 위에서 이어 붙임
+		var more := Button.new()
+		more.text = "더 오래된 기록"
+		more.focus_mode = Control.FOCUS_NONE
+		more.mouse_filter = Control.MOUSE_FILTER_PASS
+		more.custom_minimum_size = Vector2(0, UiTheme.TOUCH)
+		more.pressed.connect(func() -> void:
+			var before := body.size.y
+			limit += PAGE
+			_sig = ""
+			_refresh()
+			await get_tree().process_frame
+			scroll.scroll_vertical += int(body.size.y - before))   # 읽던 자리 그대로
+		body.add_child(more)
 	for g: Dictionary in groups:
 		var hd := HBoxContainer.new()
+		_last_day = hd
 		hd.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		hd.add_theme_constant_override("separation", 8)
 		body.add_child(hd)
@@ -320,7 +349,9 @@ func _fill_recent() -> void:
 		dl.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 		var l2 := l1.duplicate() as ColorRect
 		hd.add_child(l2)
-		for e: Dictionary in g["entries"]:
+		var es: Array = (g["entries"] as Array).duplicate()
+		es.reverse()
+		for e: Dictionary in es:
 			var row := HBoxContainer.new()
 			row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			row.add_theme_constant_override("separation", 8)
@@ -337,18 +368,6 @@ func _fill_recent() -> void:
 				var wl := _label(col, String(e["where"]), "Small")
 				wl.add_theme_color_override("font_color", UiTheme.PRIMARY)
 			_hand(col, String(e["text"]))
-			shown += 1
-	if Chronicle.line_count(vs) > shown:
-		var more := Button.new()
-		more.text = "더 오래된 기록"
-		more.focus_mode = Control.FOCUS_NONE
-		more.mouse_filter = Control.MOUSE_FILTER_PASS
-		more.custom_minimum_size = Vector2(0, UiTheme.TOUCH)
-		more.pressed.connect(func() -> void:
-			limit += PAGE
-			_sig = ""
-			_refresh())
-		body.add_child(more)
 
 
 func _clock(tt: float) -> String:
