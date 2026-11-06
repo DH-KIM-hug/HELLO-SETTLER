@@ -1,0 +1,216 @@
+{
+ "aurochs": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 2.016,
+  "tris": 398
+ },
+ "boar": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.746,
+  "tris": 392
+ },
+ "chicken": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "wing_l",
+   "wing_r",
+   "leg_l",
+   "leg_r",
+   "tail"
+  ],
+  "top": 0.615,
+  "tris": 328
+ },
+ "cow": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 1.395,
+  "tris": 394
+ },
+ "deer": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 1.666,
+  "tris": 390
+ },
+ "dog": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.8,
+  "tris": 348
+ },
+ "donkey": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 1.597,
+  "tris": 390
+ },
+ "fawn": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.929,
+  "tris": 366
+ },
+ "fish_a": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "tail"
+  ],
+  "top": 0.11,
+  "tris": 46
+ },
+ "fish_b": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "tail"
+  ],
+  "top": 0.11,
+  "tris": 46
+ },
+ "pig": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.639,
+  "tris": 352
+ },
+ "puppy": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.466,
+  "tris": 348
+ },
+ "rabbit": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.53,
+  "tris": 352
+ },
+ "sheep": {
+  "kind": "domestic",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 0.86,
+  "tris": 328
+ },
+ "wild_sheep": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 1.063,
+  "tris": 372
+ },
+ "wolf": {
+  "kind": "wild",
+  "parts": [
+   "body",
+   "head",
+   "leg_fl",
+   "leg_fr",
+   "leg_bl",
+   "leg_br",
+   "tail"
+  ],
+  "top": 1.126,
+  "tris": 390
+ }
+}
