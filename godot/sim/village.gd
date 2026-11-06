@@ -114,6 +114,7 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 var air: JarAir
 var mold: Mold
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
+var wild: Wildlife                    # [들짐승] 물고기·사슴·토끼·늑대… 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array, away?: 거인이 비운 동안(등불 시간) 바친 것}
 var altar_hold := false               # 따라잡기 중 (SAVE.md 3.1): 비운 동안 바친 제물은 이틀이 지나도 창고로 돌아가지 않는다
@@ -216,6 +217,7 @@ func _init_health(seed_v: int) -> void:
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
 	flora = Flora.new(seed_v)             # [하늘의 것]
+	wild = Wildlife.new(seed_v)           # [들짐승] (넓은 세상의 다른 무리는 JarWorld.place_kit이 첫 무리 것으로 바꿈)
 	if not default_created.is_empty():
 		created_date = {"year": int(default_created["year"]), "month": int(default_created["month"]), "day": int(default_created["day"])}
 	else:
@@ -776,6 +778,8 @@ func step(dt: float) -> void:
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
 	Mold.step(self, dt)
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
+	if owns_water:
+		Wildlife.step(self, dt)       # [들짐승] 무리 수·늑대·토끼 밭 피해·상함·늑대 울음 (WILDLIFE 1~4 — 병 하나에 한 번)
 	SkyDrops.step(self, dt)           # [상점] 하늘에서 내려온 것·돌봄·앰플 탑·녹조·진열 (SHOP · WORLD_EVENTS 4)
 	for b in buildings:
 		_update_building(b, dt)
@@ -1095,6 +1099,7 @@ func _update_happiness() -> void:
 		h += p.f("happiness", 0.0)
 		if tea:
 			h += Balance.TEA_HAPPY                        # [하늘의 것] 민들레 꽃차 (WORLD_EVENTS 2.7)
+		h += Wildlife.happy(self, p)                      # [들짐승] 물가에서 낚싯대를 드리운 날 (WILDLIFE 2)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
 			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)
@@ -1157,6 +1162,7 @@ func _update_building(b: Building, dt: float) -> void:
 			b.farm_mult = farm_mult(b.x, b.y)
 		place = b.farm_mult * Flora.weed_mult(self, b)     # [하늘의 것] 밭에 내려앉은 꽃씨 = 잡초 ×0.8 (WORLD_EVENTS 2.7)
 		place *= SkyDrops.fert_mult(self, b.x, b.y)       # [상점] 앰플 탑 둘레 비옥한 땅 ×1.5 (WORLD_EVENTS 4.4)
+		place *= Wildlife.field_mult(self, b)             # [들짐승] 토끼가 넘치면 밭 −10~−30% (울타리 ×0.3 — WILDLIFE 3)
 	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
@@ -1720,6 +1726,8 @@ func chief_build() -> void:
 		want = "방앗간"
 	elif era >= 1 and count_type("빵집") == 0:
 		want = "빵집"
+	elif Wildlife.want(self) != "":
+		want = Wildlife.want(self)            # [들짐승] 식량 다양성 — 물고기가 사는 호숫가 어부 · 사슴 무리 쪽 사냥꾼 (WILDLIFE 6)
 	else:
 		want = VillageEra.want_late(self)     # 치료소 → 교회 → 광장 → 망루 → 나루터 (A6 — RESIDENT_AI 6.2)
 	if want == "":
@@ -2098,6 +2106,8 @@ func _turn_data() -> void:
 	altar_pos = JarWater.rot_pt(altar_pos)
 	mold.rotate()                     # [곰팡이·뚜껑] 털뭉치도 병과 함께 돈다
 	flora.rotate()                    # [하늘의 것] 버섯·민들레·꽃씨도
+	if owns_water and wild != null:
+		wild.rotate()                 # [들짐승] 무리 자리도
 	var np := PackedFloat32Array()
 	np.resize(PATH_N * PATH_N)
 	for j in PATH_N:
@@ -3031,7 +3041,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "flora", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "flora", "wild", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book"]
 
 
@@ -3043,6 +3053,8 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 	d["air"] = air.to_dict()
 	d["mold"] = mold.to_dict()
 	d["flora"] = flora.to_dict()
+	if owns_water and wild != null:
+		d["wild"] = wild.to_dict()    # [들짐승] 병 하나에 한 번 (다른 무리는 첫 무리 것을 함께 — JarWorld.from_dict)
 	var bl := []
 	for b in buildings:
 		bl.append(b.to_dict())
@@ -3082,6 +3094,7 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	v.air = JarAir.from_dict(d["air"])
 	v.mold = Mold.from_dict(d["mold"])
 	v.flora = Flora.from_dict(d["flora"])
+	v.wild = Wildlife.from_dict(d["wild"]) if d.has("wild") else Wildlife.new(int(v.rng.seed % 100000))   # 옛 저장: 처음 걸음에서 무리를 놓는다
 	for bd: Dictionary in d.get("buildings", []):
 		var b := Building.from_dict(bd)
 		v.buildings.append(b)

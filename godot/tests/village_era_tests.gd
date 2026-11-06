@@ -1,5 +1,5 @@
 ## 마을 시대 건물 1차 (A6) · 등불 옮기기 (A11) — tests/run.gd가 부름 (`-- village` = 이것만). 장면(나침반·미리보기)을 띄우므로 장면 묶음.
-## 건물: 잠긴 건물(어부·사냥꾼·목장·방직소·대장간)은 짓지 않음 · 촌장의 조건 (묘지·약초꾼·치료소·교회·광장·망루·나루터) ·
+## 건물: 잠긴 건물(목장·방직소·대장간 — 어부·사냥꾼은 B3 wildlife_tests)은 짓지 않음 · 촌장의 조건 (묘지·약초꾼·치료소·교회·광장·망루·나루터) ·
 ##   약초꾼(약초·곰팡이약) · 치료소(약초사가 있을 때 반경 효과·툇마루) · 교회(제물 ×1.3·종·교회 앞 기도·혼례) · 광장(반경 행복·어울림) ·
 ##   묘지(무덤·장례 행렬·발견 '장례'·슬픔이 덜함) · 망루(안개·조짐 반나절 먼저) · 나루터(뗏목 지름길) · 저장.
 ## 등불: 같은 자리면 안 옮김 · 옛 이름 rotate_jar · 하루 세 번까지 괜찮음 (네 번째 두려움) · "해가 옮겨갔다!" · 목격(경이) ·
@@ -92,8 +92,8 @@ func test_locked() -> void:
 		check(not VillageEra.can_build(v, ty) and not Balance.B.has(ty), "%s: 못 짓는다 (%s)" % [ty, Balance.B_LOCKED[ty]])
 		var c := Shop.card(v, ty)
 		check(String(c["lock"]) == "곧" and String(c["inside"]).contains(String(Balance.B_LOCKED[ty])), "상점 카드 '곧' + 까닭: %s" % c["inside"])
-	v.wishes.append("어부")                  # 들어준 소원이어도 짓지 않음
-	v.favourites["생선"] = 20.0
+	v.wishes.append("목장")                  # 들어준 소원이어도 짓지 않음
+	v.favourites["양털"] = 20.0
 	v.advance(3.0 * Balance.DAY)
 	var bad := v.buildings.filter(func(b: Building) -> bool: return Balance.B_LOCKED.has(b.type))
 	check(bad.is_empty(), "마을 시대 사흘 — 잠긴 건물 0채 (지은 것 %d채)" % v.buildings.size())

@@ -132,6 +132,7 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 		v._health_hour = pv._health_hour
 		v._health_acc = pv._health_acc
 		pv.others.append(v)
+		v.wild = pv.wild                  # [들짐승] 병 하나에 하나 (첫 무리가 돌린다)
 	settlements.append(v)
 	for s in settlements:
 		s.peers = settlements
@@ -255,6 +256,8 @@ static func from_dict(d: Dictionary) -> JarWorld:
 	for i in jw.settlements.size():
 		var s := jw.settlements[i]
 		s.peers = jw.settlements
+		if not s.owns_water and jw.primary().owns_water:
+			s.wild = jw.primary().wild    # [들짐승] 첫 무리 것을 함께
 		if i < others.size():
 			for j: Variant in others[i]:
 				s.others.append(jw.settlements[int(j)])

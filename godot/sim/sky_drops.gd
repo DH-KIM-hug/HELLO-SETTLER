@@ -711,7 +711,9 @@ static func _bloom(v: Village, q: Vector2) -> void:
 			a["until"] = v.t + ALGAE_DAYS * Balance.DAY
 			return
 	v.algae.append({"x": q.x, "y": q.y, "t": v.t, "until": v.t + ALGAE_DAYS * Balance.DAY})
-	if v.water is WorldWater:                        # 물고기가 줄어든다 (어부 ×0.5 — 어부 건물이 생기면 이 수를 읽음)
+	if v.wild != null and v.wild.algae_hit(q):       # [들짐승] 가까운 호수의 물고기 무리가 절반 (어부가 잡는 수도 — WILDLIFE 2)
+		pass
+	elif v.water is WorldWater:                      # (무리가 아직 없을 때) 창조가 놓은 물고기 수
 		var ww := v.water as WorldWater
 		var best := -1
 		var bd := 40.0

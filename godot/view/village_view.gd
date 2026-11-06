@@ -44,6 +44,7 @@ var _anim_t := 0.0
 var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.gd)
 var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
 var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
+var animal_view: AnimalView    # [들짐승] 카메라 곁 무리의 대표·물고기·메고 오는 사슴·올무·울타리 (view/animal_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Village.graves)
@@ -79,6 +80,8 @@ func _ready() -> void:
 	add_child(flora_view)
 	drop_view = SkyDropView.new(v, terrain)   # [상점]
 	add_child(drop_view)
+	animal_view = AnimalView.new(v, self)   # [들짐승]
+	add_child(animal_view)
 	_build_fire()
 	sync(0.0, true)
 
@@ -103,6 +106,8 @@ func sync(dt: float, force := false) -> void:
 	flora_view.sync(dt)
 	if drop_view != null:
 		drop_view.sync(dt)          # [상점]
+	if animal_view != null:
+		animal_view.sync(dt)        # [들짐승]
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0

@@ -3,7 +3,7 @@
 ## 앓는 사람이 툇마루에 와서 누움) · 교회 (큰 제단: 저녁 제물 ×1.3 · 기도가 교회 앞으로 · 저녁 종 · 혼례 잔치) ·
 ## 광장 (반경 행복 · 어울림·축제 자리 · 닷새마다 장날) · 묘지 (장례 행렬 → 무덤 돌 · 슬픔이 덜함 · 반경 행복 −0.01) ·
 ## 망루 (둘레 안개 · 위기 조짐 반나절 먼저 · 세상 끝이 보이면 S1/S2) · 나루터 (강을 건너는 지름길 — 물은 걸어 건너면 느리다).
-## 어부·사냥꾼·목장·방직소·대장간은 아직 못 짓는다 (Balance.B_LOCKED — 들짐승·양털·철이 없음, B3 · C3).
+## 목장·방직소·대장간은 아직 못 짓는다 (Balance.B_LOCKED — 양털·철이 없음, C3). 어부·사냥꾼은 B3 (sim/wildlife.gd).
 ## 상태는 Village(graves · wade_secs · wedding_t · bell_t · market_day …)와 Building(link_x/y · spot_t)에 — 저장은 SaveCodec이 이름 그대로.
 ## 고리: Village.chief_build · find_spot · on_built · kill · _marriages · _update_happiness · evening_offering · _on_dawn ·
 ##       ResidentAI.update(걸음) · work_task · _sick_rest · _pray · social · Awakening.gather_ring · Health._clinics · Mold.decide · Mold._tick.
@@ -141,6 +141,8 @@ static func river_splits(v: Village) -> bool:
 # ───────────────────────── 자리 (Village.find_spot) ─────────────────────────
 ## 자리를 찾는 중심 (null = 마을 중심). 나루터는 따로 (ferry_spot)
 static func spot_center(v: Village, type: String) -> Variant:
+	if type == "어부" or type == "사냥꾼":       # [들짐승] 물가 · 사슴 무리 쪽 숲 가장자리 (sim/wildlife.gd)
+		return Wildlife.spot_center(v, type)
 	match type:
 		"약초꾼":
 			var hp: Variant = _herb_patch(v, v.center, Balance.HERB_RANGE * 1.6)
