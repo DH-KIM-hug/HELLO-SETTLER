@@ -188,7 +188,10 @@ func leave_to_title() -> void:
 	if a != null:
 		a.attach(null)
 		a.set_menu(true)
-	StartFlow.to_title(get_tree())
+	StartFlow.to_title(get_tree(), Color(1.0, 0.98, 0.93), title_cover)
+
+
+var title_cover := true              # (B1) 거인의 방까지 날아 나간 뒤면 덮개 없이 타이틀로
 
 
 # ───────────────────────── 저장 · 돌아왔을 때 (docs/SAVE.md) ─────────────────────────
@@ -375,9 +378,10 @@ func _process(dt: float) -> void:
 			_terrain_t = 0.0
 			terrain.paths = village.paths
 			terrain.rebuild()
-	for vv: Array in village_views():
-		(vv[1] as VillageView).sync(dt)
-	_follow(dt)
+	if views_live:                    # (B1) 병 밖 ④⑤에서는 마을 화면을 멈춤 (시뮬레이션은 위에서 그대로)
+		for vv: Array in village_views():
+			(vv[1] as VillageView).sync(dt)
+		_follow(dt)
 	if lineup != null:
 		for m in lineup.get_children():
 			if m is ResidentModel:
@@ -404,6 +408,18 @@ func update_night() -> void:
 	post_mat.set_shader_parameter("night_amount", night)
 	glass.set_night(night)
 	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
+
+
+## (B1 — GIANT_ROOM 4·5) 병 밖 ④⑤: 주민·건물 화면을 감추고 멈춘다 (시뮬레이션은 계속). 다시 켜면 지금 상태로 한 번에 맞춤
+var views_live := true
+
+
+func set_views_live(on: bool) -> void:
+	views_live = on
+	for vv: Array in village_views():
+		(vv[1] as VillageView).visible = on
+		if on:
+			(vv[1] as VillageView).sync(0.0, true)
 
 
 # ───────────────────────── 모델 줄 세우기 (부품 조합 확인용) ─────────────────────────
