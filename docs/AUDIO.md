@@ -28,7 +28,7 @@
 
 | 분류 | 소리 | 픽사베이 검색어 (예) |
 |---|---|---|
-| 병 | 유리 톡(약·강), 코르크 뽁(열기·닫기), 병 돌리기(유리 끌림), 물방울 똑, 물 뿌리기 | `glass tap`, `cork pop`, `water drop`, `spray bottle` |
+| 병 | 유리 톡(약·강), 코르크 뽁(열기·닫기), 등불 옮기기(등잔 끌림·불꽃 일렁임), 물방울 똑, 물 뿌리기 | `glass tap`, `cork pop`, `water drop`, `spray bottle` |
 | 거인 | 손가락 내려놓기, 물건 떨어뜨림(쿵 — 작게), 핀셋 집기, 입으로 불기 | `soft thud`, `tweezers`, `blow air` |
 | 마을 | 망치질, 톱질, 도끼, 우물 두레박, 닭·양, 아이 웃음, 종(혼례), 모닥불 | `hammer wood`, `saw wood`, `axe chop`, `church bell small`, `campfire crackle` |
 | 자연 | 새소리(아침), 귀뚜라미(밤), 물가 찰랑, 바람 없는 고요(병 안 앰비언트) | `birds morning`, `crickets night`, `lake water lapping` |
