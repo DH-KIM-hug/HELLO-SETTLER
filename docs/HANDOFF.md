@@ -21,7 +21,9 @@
 | 창조 오프닝·튜토리얼 | `docs/OPENING.md` |
 | 주민 행동 명세 (믿음·오프라인 자율 번성 포함) | `docs/RESIDENT_AI.md` |
 | 건물·생산 명세 + 데이터 | `docs/BUILDINGS.md`, `docs/buildings_v1.xlsx` |
-| 경제·인구 밸런스 v2 (생애 시뮬레이션·판매가·시대 점수·하늘 낟알) | `docs/BALANCE.md`, `docs/balance_v2.xlsx`, `tools/sim_life.py` |
+| 경제·인구 밸런스 v3 (장터 값·수입 곡선·새 병·이주민·업그레이드) + v2 (생애·시대 점수·하늘 낟알) | `docs/BALANCE.md`, `tools/balance_v3.py`, `docs/balance_v2.xlsx`, `tools/sim_life.py` |
+| 건강·기후·두려움 명세 | `docs/HEALTH.md` |
+| 혈통·겉모습 유전 | `docs/BLOODLINES.md` |
 | 아이 고유 특징 1,284종 | `docs/traits_v1.xlsx` |
 | 발견 목록 25종 | `docs/DISCOVERIES.md` |
 | UI 시안 9화면 | `docs/UI.md`, `design/ui-v1/`, https://claude.ai/artifact/5PGRb4p1aRnWraFAggNYua |
@@ -31,7 +33,8 @@
 
 ## 진행 중
 - **BM(수익 모델)은 보류** — 사용자와 차근차근 따로 정하기로 함 (2026-11-06). 유료 판매 항목은 모두 안.
-- **v3.8 큰 세상·장터·이주민·새 병** (기획서 3.1, 4.2, 11, 12.1). 아직 고칠 문서: `BALANCE.md` → 밸런스 v3 (장터 값·이주민·새 병 가격, `tools/gen_balance.py`·`sim_life.py`), `RESIDENT_AI.md`·`UI.md`(판매 화면 → 장터·이주민), `OPENING.md`, `BUILDINGS.md`의 판매 언급, `ART_PROMPTS.md`의 종이배 장면. 개발: 넓은 세상(조각 단위 지형·물, 안개), 판매가 코드 제거.
+- **v3.9 밸런스 v3 (장터) 완료** — `BALANCE.md` 맨 위 v3, `tools/balance_v3.py`. 사용자 결정 필요: **부락 인구 상한(영역 제안, 22장 2-1)**. 아직 고칠 문서: `RESIDENT_AI.md`(종이배 줄), `BUILDINGS.md`(나루터 = 종이배), `ART_PROMPTS.md`(종이배 장면), `UI.md` 05·07 (지폐 진행도·종이배로 떠남).
+- **건강·기후·두려움** (`HEALTH.md`)과 **주민 상세 UI** (`UI.md` 03 v2) — 개발 서브에이전트 진행 중 (2026-11-06).
 - **v3.6 시간 빨리 돌리기 + 병 시계** (6.6, 4.1): 창조 후 아침 7시 시작, ×1/×2/×4/×8·밤 건너뛰기, 수치는 병의 날짜 기준, 오프라인 ×1. 개발 반영 중.
 - **그림체 확정 (v3.7)**: 셀 채색 일러스트 (`style-test/flat2_map_a·b`). 콘셉트 아트 35장 다시 그리기·Godot 렌더 전환 진행 중. UI 그림체는 열린 질문.
 - 동물(퍼리) 주민안은 검토 후 **취소** — 주민은 사람 그대로 (사냥·가축 문제).
