@@ -75,13 +75,13 @@ func _build_room() -> void:
 	world3d.add_child(room)
 	room.setup(1.0, StartFlow.now_time_of_day(), true)
 	room.houses = bool(info["has_save"])
-	room.add_mini_village(room.houses)          # 이어하기: 병 안에 작은 마을 / 처음: 풀과 나무만
+	room.add_mini_village(room.houses, int(info.get("era", 0)))      # 이어하기: 병 안에 저장된 시대의 작은 마을 / 처음: 풀과 나무만
 	room.set_lamp(true, JarWater.LIGHT)
-	room.light.directional_shadow_max_distance = 120.0
 	cam = JarCamera.new()
 	world3d.add_child(cam)
 	cam.ppu_min = 360.0 / (2.0 * RR_CM * 1.15)
 	cam.set_room(1.0, 0.0)
+	cam.set_cross_yaw(room.clear_yaw())             # 넓은 세상 장면과 같은 길 (넘겨받는 자리가 같게)
 	cam.target = Vector3(0, GiantRoom.SOIL_TOP, 0)
 	cam.set_ext_zoom(cam.ext_min())
 	cam.camera.current = true

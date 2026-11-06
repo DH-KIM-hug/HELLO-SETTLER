@@ -3,6 +3,8 @@
 ##   room_zoom_1..5.png — ① 마을 · ② 넓은 땅 · ③ 세상 전체(유리벽·유리 너머 방) · ④ 유리병 · ⑤ 거인의 방
 ##   room_zoom_cross.png — ③→④ 유리를 지나는 순간 (반사광)
 ##   room_fly_1..4.png — 방에서 [마을로 가기] 날아 들어가기 (유리 지남 · 세상 위 · 내려앉기 · 도착)
+##   room_zoom_notes.png — ⑤ 유리에 붙은 편지 (비운 동안 편지 · 소원) → 편지 쪽지를 누른 뒤 room_zoom_letter.png
+## 창밖 계절 = 가을 (GiantRoom.force_season — 세 번째 인자로 바꿈: -- 390x844 morning winter)
 ## 화면 시간: 단계마다 2.5초 동안 화면 간격(수직 동기 끔 — godot ... --disable-vsync 권장)과 그리기 CPU·GPU ms (뷰포트 측정) 평균·95%.
 ## 장면 _process(시뮬레이션·땅 조각·방)는 따로 잼 (proc).
 extends SceneTree
@@ -35,6 +37,7 @@ func _initialize() -> void:
 	root.size = sz
 	DisplayServer.window_set_size(sz)
 	StartFlow.force_tod = args[1] if args.size() > 1 else "morning"
+	GiantRoom.force_season = args[2] if args.size() > 2 else "autumn"
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = SEED
 	root.add_child(scene)
@@ -85,11 +88,28 @@ func _process(dt: float) -> bool:
 				_report("단계 %d" % _stage_i)
 				_save("room_zoom_%d" % _stage_i)
 				_stage_i += 1
+				if _stage_i == 4:                    # 병 밖: 유리에 붙은 편지 (비운 동안 편지 + 소원 편지 한 통)
+					scene.village.write_wish()
+					scene._last_letter = {"away": 7200.0, "pop0": 10, "pop1": 11, "events": ["탐험가가 동쪽 숲 너머를 보고 왔다."], "chief": "도토리"}
+					scene.letter_unread = true
+					scene.room_zoom.refresh_notes()
 				if _stage_i <= 5:
 					_go_stage()
 				else:
-					step = 2
+					step = 10
 					_wait = 0.0
+		10:                                         # ⑤ 유리에 붙은 편지 → 누름
+			if _wait > 0.5:
+				_save("room_zoom_notes")
+				scene._on_tap(scene.room_zoom.notes.screen_pos(scene.cam.camera, 0))
+				step = 11
+				_wait = 0.0
+		11:
+			if _wait > 0.8:
+				_save("room_zoom_letter")
+				scene.return_letter.close()
+				step = 2
+				_wait = 0.0
 		2:                                          # 유리를 지나는 순간 (③ → ④ 손가락으로 오므림)
 			scene.cam.set_ext_zoom(_ext(3) - (scene.cam.b_glass - 0.03) * JarCamera.BEYOND_SPAN)
 			scene.cam.zoom_by(0.92)

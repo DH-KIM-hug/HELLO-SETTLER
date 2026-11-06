@@ -365,8 +365,13 @@ func room_pose(b: float, t0: Vector3, size0: float, pitch0: float, yaw0: float, 
 	var asp := vs.y / maxf(1.0, vs.x)
 	var ls := lerpf(log(size0), log(maxf(JAR_SIZE_CM, JAR_W_CM * asp) * s), u1)
 	ls = lerpf(ls, log(maxf(ROOM_SIZE_CM, ROOM_W_CM * asp) * s), u2)
-	var pitch := lerpf(pitch0, ROOM_PITCH, smoothstep(0.0, 0.75, b))
-	var yaw := yaw0 + wrapf(0.0 - yaw0, -180.0, 180.0) * smoothstep(0.05, 0.6, b)
+	# 유리를 지날 때까지는 위에서 내려다봄 (카메라가 코르크보다 높게 — 정사영 카메라 앞면에 코르크가 잘리지 않게), 지난 뒤 옆으로 내려옴
+	var pitch := lerpf(pitch0, ROOM_PITCH, smoothstep(0.3, 0.85, b))
+	# 방위: 세상 쪽 방위 → 유리를 지나는 순간엔 소품이 없는 쪽(cross_yaw — 각설탕 그릇·핀셋이 화면을 가리지 않게) → 방 정면(0°)
+	var cy := float(room.get("cross_yaw", 0.0))
+	var bg := clampf(b_glass, 0.2, 0.7)
+	var yaw := yaw0 + wrapf(cy - yaw0, -180.0, 180.0) * smoothstep(0.0, bg + 0.04, b)
+	yaw += wrapf(0.0 - cy, -180.0, 180.0) * smoothstep(bg + 0.04, 0.86, b)
 	var dist := exp(lerpf(log(d0), log(ROOM_D_CM * s), smoothstep(0.12, 0.7, b)))
 	return {"target": tgt, "size": exp(ls), "pitch": pitch, "yaw": yaw, "dist": dist}
 
@@ -392,6 +397,14 @@ func set_room(s: float, y0: float) -> void:
 		if float(pose["dist"]) * cos(pr) > GiantRoom.JAR_OUT * s:
 			b_glass = b
 			break
+	_apply()
+
+
+## 유리를 지나는 순간의 방위 (GiantRoom.clear_yaw — 소품이 없는 쪽). 등불을 옮기면 다시
+func set_cross_yaw(y: float) -> void:
+	if room.is_empty():
+		return
+	room["cross_yaw"] = y
 	_apply()
 
 

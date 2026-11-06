@@ -32,6 +32,8 @@ var out_btn: Button                  # [병 밖으로] (UI 09 — 방까지 지�
 var _tap_t := -1.0                   # 병 밖에서 병 두 번 톡 = 들어가기
 var _proc_ms := 0.0                  # 이 장면 _process 시간 (시뮬레이션 + 화면 갱신, 평균 — 성능 측정용)
 var _enter_fly := false              # 타이틀 [이어하기] → 방에서 마을로 날아 들어오는 중 (따라잡기가 끝나면)
+var _last_letter: Dictionary = {}     # 마지막 '자리를 비운 동안' 편지 (유리에 붙은 편지로 다시 읽기)
+var letter_unread := false            # 아직 안 읽음 → 병 밖(④⑤)에서 유리에 붙어 보임
 
 const LOW_CORES := 4
 const ARRIVE_PPU := 16.0             # 날아가서 내려앉는 확대 (기본 확대)
@@ -947,8 +949,12 @@ func go_outside() -> void:
 	cam.zoom_to_ext(cam.ext_min())
 
 
-## 병 밖(④⑤)에서 누름: 병을 두 번 톡 = 들어가기 (마을로 날아감) · 한 번 = 유리 톡
+## 병 밖(④⑤)에서 누름: 유리에 붙은 편지 = 그 편지 · 병을 두 번 톡 = 들어가기 (마을로 날아감) · 한 번 = 유리 톡
 func _room_tap(sp: Vector2) -> void:
+	var note := room_zoom.notes.pick(cam.camera, sp)
+	if not note.is_empty():
+		open_glass_note(note)
+		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var c := room_zoom.room.cm(Vector3(0, 7.0, 0))
 	var e := room_zoom.room.cm(Vector3(GiantRoom.JAR_OUT, 7.0, 0))
@@ -962,6 +968,59 @@ func _room_tap(sp: Vector2) -> void:
 		return
 	_tap_t = now
 	tap_glass(false)
+
+
+## 유리에 붙은 편지 (GIANT_ROOM 3 — 빨간 점 대신): 안 읽은 '자리를 비운 동안' 편지 · 계시를 기다리는 무리 · 소원 편지가 있는 무리
+func glass_note_items() -> Array:
+	var out: Array = []
+	if letter_unread and not _last_letter.is_empty():
+		out.append({"kind": "return", "key": "return", "label": "편지"})
+	for i in world.settlements.size():
+		var q: Village = world.settlements[i]
+		var who := "" if world.settlements.size() <= 1 else "\n" + q.settlement_name
+		if q.revelation_pending():
+			out.append({"kind": "reveal", "key": "reveal:%d" % i, "label": "계시" + who, "v": q})
+		var n := q.open_letters("wish").size()
+		if n > 0:
+			out.append({"kind": "wish", "key": "wish:%d" % i, "label": ("소원" if n == 1 else "소원 %d" % n) + who, "v": q})
+	return out
+
+
+## 유리에 붙은 편지를 누름 → 그 시트 (편지 = ReturnLetter · 계시·소원 = 그 무리의 제단 시트 — 맨 위에 [계시] / 소원 편지 칸)
+func open_glass_note(it: Dictionary) -> void:
+	GameAudio.fx("glass_tap_light", "Room", -10.0)
+	match String(it.get("kind", "")):
+		"return":
+			if not _last_letter.is_empty():
+				_open_return_letter(_last_letter)
+		"reveal", "wish":
+			var q: Village = it.get("v", village)
+			close_sheets(altar_sheet)
+			altar_sheet.setup(q)
+			altar_sheet.open()
+
+
+## (B1) '자리를 비운 동안' 편지: 병 밖(④⑤ 방)에 있는 동안 오면 펼치지 않고 유리에 붙여 둔다 (누르면 펼침).
+## 타이틀에서 들어와 마을로 날아 들어가는 중이면 그대로 펼침
+func show_return_letter(letter: Dictionary) -> void:
+	_last_letter = letter
+	letter_unread = true
+	if room_zoom != null and cam.stage() >= 4 and not _enter_fly:
+		room_zoom.refresh_notes()
+		return
+	_open_return_letter(letter)
+
+
+func _open_return_letter(letter: Dictionary) -> void:
+	super.show_return_letter(letter)
+	if not return_letter.closed.is_connected(_on_glass_letter_read):
+		return_letter.closed.connect(_on_glass_letter_read)
+
+
+func _on_glass_letter_read() -> void:
+	letter_unread = false
+	if room_zoom != null:
+		room_zoom.refresh_notes()
 
 
 ## 분가 편지 [새 땅 고르기] → 세상을 멀리 보여 주고 거인이 땅을 누른다

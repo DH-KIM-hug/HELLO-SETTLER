@@ -23,7 +23,8 @@ func all() -> void:
 	var old_nav := StartFlow.navigate
 	StartFlow.navigate = false
 	run.timed(self, ["test_stage_mapping", "test_continuous_path", "test_room_hidden_inside", "test_views_paused_outside",
-		"test_glass_crossing", "test_fly_from_room", "test_fly_stop_on_tap", "test_title_enter_path"])
+		"test_glass_crossing", "test_fly_from_room", "test_fly_stop_on_tap", "test_title_enter_path",
+		"test_glass_notes", "test_window_season", "test_cross_clear_of_props", "test_blob_shadows", "test_fog_thin", "test_title_era"])
 	StartFlow.navigate = old_nav
 	StartFlow.take()
 
@@ -150,6 +151,150 @@ func test_room_hidden_inside() -> void:
 	var post: ShaderMaterial = n.get("post_mat")
 	check(bool(post.get_shader_parameter("room_mask")), "⑤: 화면 셰이더가 병 안(밤 색)과 방(창밖 시각 색)을 가름")
 	remove(n)
+
+
+## 유리에 붙은 편지 (GIANT_ROOM 3): ④⑤에서만 보임 · 소원 편지 → 누르면 제단 시트 · 방에 있을 때 온 '비운 동안' 편지는 펼치지 않고 붙음 → 누르면 편지 → 읽으면 떨어짐
+func test_glass_notes() -> void:
+	var n := world()
+	var cam: JarCamera = n.get("cam")
+	var rz: RoomZoom = n.get("room_zoom")
+	var vil: Village = n.get("village")
+	cam.set_ext_zoom(cam.ext_min())
+	step(n, 0.1)
+	vil.write_wish()
+	check(not vil.open_letters("wish").is_empty(), "소원 편지 한 통 (준비)")
+	rz.refresh_notes()
+	var kinds := rz.notes.items.map(func(it: Dictionary) -> String: return String(it["kind"]))
+	check("wish" in kinds and rz.notes.visible, "⑤: 소원 편지가 유리에 붙음 (%s)" % str(kinds))
+	var wi := kinds.find("wish")
+	var sp := rz.notes.screen_pos(cam.camera, wi)
+	var vs := n.get_viewport().get_visible_rect().size
+	check(sp.x > 0.0 and sp.x < vs.x and sp.y > 0.0 and sp.y < vs.y, "쪽지가 화면 안에 보임 (%s)" % str(sp))
+	n.call("_on_tap", sp)
+	var altar: Control = n.get("altar_sheet")
+	check(altar.visible, "쪽지를 누르면 제단 시트 (소원 편지 칸)")
+	altar.call("close")
+	# 방에 있을 때 온 '자리를 비운 동안' 편지 → 펼치지 않고 유리에 붙음
+	n.call("show_return_letter", {"away": 7200.0, "pop0": 10, "pop1": 11, "events": ["시험 줄"], "chief": "시험"})
+	var rl: Control = n.get("return_letter")
+	check(rl == null or not rl.visible, "방(⑤)에서는 편지를 펼치지 않음")
+	kinds = rz.notes.items.map(func(it: Dictionary) -> String: return String(it["kind"]))
+	check(kinds.size() > 0 and kinds[0] == "return", "편지가 유리 맨 앞에 붙음 (%s)" % str(kinds))
+	n.call("_on_tap", rz.notes.screen_pos(cam.camera, 0))
+	rl = n.get("return_letter")
+	check(rl != null and rl.visible, "편지 쪽지를 누르면 '자리를 비운 동안' 편지가 펼쳐짐")
+	rl.call("close")
+	kinds = rz.notes.items.map(func(it: Dictionary) -> String: return String(it["kind"]))
+	check(not "return" in kinds, "읽고 나면 유리에서 떨어짐 (%s)" % str(kinds))
+	# ①에서는 안 보임 · 편지는 바로 펼쳐짐
+	cam.set_ext_zoom(4.0)
+	step(n, 0.1)
+	check(not rz.notes.visible, "① 마을: 유리 쪽지 안 보임")
+	n.call("show_return_letter", {"away": 7200.0, "pop0": 10, "pop1": 11, "events": [], "chief": "시험"})
+	check(rl.visible, "① 마을에서는 편지가 바로 펼쳐짐")
+	rl.call("close")
+	remove(n)
+
+
+## 창밖 계절 = 현실 달 (봄 3~5 · 여름 6~8 · 가을 9~11 · 겨울 12~2) — 타이틀 방과 넓은 세상 방이 같은 값
+func test_window_season() -> void:
+	var want := {1: "winter", 2: "winter", 3: "spring", 5: "spring", 6: "summer", 8: "summer", 9: "autumn", 11: "autumn", 12: "winter"}
+	var ok := true
+	for m: int in want:
+		ok = ok and GiantRoom.season_of_month(m) == want[m]
+	check(ok, "달 → 계절 (북반구)")
+	GiantRoom.force_season = "winter"
+	var n := world()
+	var rz: RoomZoom = n.get("room_zoom")
+	check(rz.room.season == "winter" and float(rz.room.sky_mat.get_shader_parameter("fall_amt")) > 0.0 and float(rz.room.sky_mat.get_shader_parameter("snow_cap")) > 0.5,
+		"겨울: 창밖에 눈이 내림 · 가지에 눈")
+	rz.room.set_season("autumn")
+	check(float(rz.room.sky_mat.get_shader_parameter("leaf_amt")) > 0.0 and (rz.room.sky_mat.get_shader_parameter("fall_col") as Color).r > 0.8, "가을: 낙엽")
+	rz.room.set_season("summer")
+	check(float(rz.room.sky_mat.get_shader_parameter("fall_amt")) == 0.0, "여름: 떨어지는 것 없음 (짙은 잎)")
+	remove(n)
+	GiantRoom.force_season = ""
+	var now := int(Time.get_datetime_dict_from_system()["month"])
+	check(GiantRoom.now_season() == GiantRoom.season_of_month(now), "평소엔 기기 달 (%d월 → %s)" % [now, GiantRoom.now_season()])
+
+
+## 유리를 지나는 순간 카메라는 소품(각설탕 그릇·핀셋·화분·물뿌리개)이 없는 쪽 · 위에서 내려다보며 나감 (코르크를 자르지 않음)
+func test_cross_clear_of_props() -> void:
+	var n := world()
+	var cam: JarCamera = n.get("cam")
+	var rz: RoomZoom = n.get("room_zoom")
+	cam.set_ext_zoom(log(cam.ppu_min) / log(2.0) - cam.b_glass * JarCamera.BEYOND_SPAN - 0.01)
+	var p := rz.room.root.global_transform.affine_inverse() * cam.camera.global_position        # 방 cm
+	var yaw := rad_to_deg(atan2(p.x, p.z))
+	var worst := 180.0
+	for pr: Array in rz.room.props(false):
+		var at: Vector2 = pr[0]
+		worst = minf(worst, absf(wrapf(rad_to_deg(atan2(at.x, at.y)) - yaw, -180.0, 180.0)))
+	check(worst > 45.0, "유리를 지나는 방위 %.0f° — 가장 가까운 소품과 %.0f° 떨어짐" % [yaw, worst])
+	# 정사영 카메라의 앞면(near)이 코르크를 자르지 않음 — 코르크 윗면 둘레가 모두 카메라 앞
+	var fwd := -(rz.room.root.global_transform.basis.inverse() * cam.camera.global_transform.basis.z).normalized()
+	var top := 0.0
+	for mi in rz.room.cork.find_children("*", "MeshInstance3D", true, false):
+		top = maxf(top, ((mi as MeshInstance3D).get_aabb().end.y))
+	var behind := 0
+	for i in 16:
+		var a := TAU * i / 16.0
+		for r: float in [0.0, 3.0, 4.5]:
+			if (Vector3(cos(a) * r, top, sin(a) * r) - p).dot(fwd) < 0.0:
+				behind += 1
+	check(behind == 0 and top > GiantRoom.CORK_BOTTOM, "유리를 지날 때 코르크가 카메라 앞면에 잘리지 않음 (높이 %.1f cm · 코르크 윗면 %.1f · 뒤에 %d점)" % [p.y, top, behind])
+	remove(n)
+
+
+## 타이틀과 넓은 세상 방의 빛이 같다: 창빛 실제 그림자 끔 · 소품 아래 바닥 그림자 (넘겨받을 때 그림자가 생겼다 사라지지 않게)
+func test_blob_shadows() -> void:
+	var n := world()
+	var cam: JarCamera = n.get("cam")
+	var rz: RoomZoom = n.get("room_zoom")
+	cam.set_ext_zoom(cam.ext_min())
+	step(n, 0.1)
+	var nb := rz.room.blobs.size()
+	check(not rz.room.light.shadow_enabled and nb >= 6, "넓은 세상 ⑤: 창빛 그림자 끔 · 바닥 그림자 %d개" % nb)
+	remove(n)
+	var t: Node = load(StartFlow.TITLE_SCENE).instantiate()
+	run.root.add_child(t)
+	var room: GiantRoom = t.get("room")
+	check(not room.light.shadow_enabled and room.blobs.size() == nb, "타이틀: 같은 빛 (창빛 그림자 끔 · 바닥 그림자 %d개)" % room.blobs.size())
+	run.root.remove_child(t)
+	t.free()
+
+
+## ② 넓은 땅부터 안개가 엷은 구름 (밑의 땅이 비침) · ① 마을은 흰 구름층 그대로
+func test_fog_thin() -> void:
+	check(WorldTerrain.fog_thin(16.0) == 0.0 and WorldTerrain.fog_thin(9.0) == 0.0, "① 마을: 안개는 흰 구름층")
+	check(WorldTerrain.fog_thin(3.0) == 1.0 and WorldTerrain.fog_thin(0.3) == 1.0, "② ③: 엷은 구름")
+	var n := world()
+	var cam: JarCamera = n.get("cam")
+	var wt: WorldTerrain = n.get("wterrain")
+	cam.set_ext_zoom(log(3.0) / log(2.0))
+	step(n, 0.2)
+	wt._process(0.1)
+	check(wt.under_mode and wt._whole_t.visible, "②: 안개 밑에 세상 전체 땅을 깖 (조각 자리는 비움)")
+	cam.set_ext_zoom(4.0)
+	step(n, 0.2)
+	wt._process(0.1)
+	check(not wt.under_mode, "①: 깔지 않음")
+	remove(n)
+
+
+## 타이틀 병 안의 작은 마을 = 저장된 시대 (오두막 → 목조 집 → 돌집·예배당 → 망루)
+func test_title_era() -> void:
+	var t: Node = load(StartFlow.TITLE_SCENE).instantiate()
+	run.root.add_child(t)
+	var room: GiantRoom = t.get("room")
+	var names := []
+	for e in 4:
+		room.mini_village.free()
+		room.add_mini_village(true, e)
+		names.append(room.mini_village.get_child_count())
+	check(room.mini_era == 3 and names[3] > 6, "시대마다 작은 마을 (%s)" % str(names))
+	run.root.remove_child(t)
+	t.free()
 
 
 ## ④⑤에서는 마을 화면(주민·건물)을 멈추고 감춤 — 시뮬레이션(시계)은 계속
