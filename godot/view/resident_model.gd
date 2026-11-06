@@ -1,21 +1,26 @@
-## 주민 부품 조합 3D 모델 — RENDERING.md 2.6, 기획서 7.1. 그림 기준: design/characters/*.png (A20 캐릭터 디자인 시트)
-## v2 (A20): 부품은 Blender 에셋 art/models/resident.glb (art/src/build_residents.py) — 관절마다 따로 움직이는 부품:
-##   다리 2종(바지+장화 / 크림색 각반+신) · 몸통 3종(조끼 튜닉 / 원피스+앞치마 / 긴 옷) · 팔 2종(크림 셔츠 소매 / 긴 옷 소매) ·
-##   머리 하나(얼굴형 둘 = 배율) · 얼굴 조각(눈 · 감은 눈 · 웃는 눈 · 눈썹 · 입 4종 — 표정) · 머리 모양 8종 · 수염 ·
-##   모자 5종(밀짚 / 머릿수건 / 납작모자 / 빵 모자 / 털모자) · 겉옷 4종(앞치마 · 촌장 띠 · 약초 가방 · 노인 숄) · 노인 지팡이 ·
-##   아기 바구니 · 짐 7종 · 연장 8종.
+## 주민 3D 모델 — RENDERING.md 2.6, 기획서 7.1. 그림 기준: design/characters/*.png (A20 캐릭터 디자인 시트)
+## v3 (A20 v3): 매끈하고 둥근 동화책 주민. 몸은 Blender 에셋 art/models/resident.glb (art/src/build_residents.py):
+##   뼈대 하나(엉덩이·허리·가슴·머리·팔 3마디·다리 3마디) + 뼈에 붙은 부품 메시 (가까이 LOD 약 3천 · 멀리 LOD 약 600 삼각형) +
+##   동작(Blender에서 만든 애니메이션: 숨쉬기·걷기·노인 걸음·아이 깡충·나르기·들기·도끼/괭이/망치/손일·기도·앉기·먹기·잠·손 흔들기·놀기·날기).
+##   이 주민이 고른 부품을 LOD마다 메시 하나로 합친다 (같은 조합은 공유 — 주민 한 명 = 그리기 2번 + 외곽선).
+##   얼굴 = 그림 묶음 art/models/resident_face.png (표정 칸, render/resident.gdshader). 소품(짐·연장·지팡이)은
+##   art/models/resident_props.glb (Art.parts) — 뼈(가슴·손)에 붙임.
 ## 겉모습(체형·머리·피부·옷 색)은 주민 데이터(look_* · 겉모습 유전자 · 혈통 표시)에서만 정한다 — 능력치(재주·특징·숙련·건강)와 상관없다.
-## 직업 옷(set_job)은 일터 종류에서, 표정(set_face)은 지금 상태(잠·앓음·기분)에서 — 둘 다 모델을 다시 만들지 않고 부품만 바꾼다.
-## 색: 부품의 열쇠 색을 render/resident.gdshader가 이 주민의 옷·피부·머리·수건 색으로 바꿈. 주민 한 명 = 재질 하나 (그림 파일 없음).
-## 외곽선: 뒤집은 껍데기(짙은 갈색) + 화면 깊이 외곽선. 동작은 관절 회전으로 부드럽게 (사인 곡선).
-## 크기: 모델 키 약 1.9 × Style.RESIDENT_SCALE. 삼각형: 어른 한 명 약 530~700 (build_residents.py가 표를 찍음).
+## 직업 옷(set_job)은 일터 종류에서, 표정(set_face)은 지금 상태(잠·앓음·기분·말)에서.
+## 색: 부품의 열쇠 색을 render/resident.gdshader가 이 주민의 옷·피부·머리·수건·숄 색으로 바꿈. 주민 한 명 = 재질 하나.
+## 외곽선: 뒤집은 껍데기(짙은 갈색) + 화면 깊이 외곽선. 크기: 모델 키 약 1.9 × Style.RESIDENT_SCALE.
+## LOD: 마을 확대가 LOD_PPU(칸당 화면 점) 이상이면 가까이 LOD (village_view가 set_lod) — 초상화·따라가기는 늘 가까이.
 class_name ResidentModel
 extends Node3D
 
-const STEP_HZ := 1.8              # 걸음 주기 (초당 왕복)
-const PARTS := "resident"         # art/models/resident.glb
-const ARM_X := 0.31               # 어깨 관절 가로 자리 (build_residents.py ARM_X)
-const HEAD_TILT := -0.24          # 머리를 살짝 들어 위에서 보는 카메라(48°)에도 얼굴이 보이게
+const STEP_HZ := 1.8              # 걸음 주기 (초당 왕복) — 걷기 동작 길이 20프레임/30fps = 1.5회/초 → speed_scale로 맞춤
+const PARTS := "resident_props"   # 소품: art/models/resident_props.glb (Art.parts)
+const BODY := "res://art/models/resident.glb"
+const FACE_TEX := "res://art/models/resident_face.png"
+const LOD_PPU := 24.0             # 이 확대(칸당 화면 점) 이상이면 가까이 LOD
+const HEAD_TILT := -0.3           # 머리를 살짝 들어 위에서 보는 카메라(48°)에도 얼굴이 보이게
+const NECK := Vector3(0, 1.17, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리)
+const BLEND := 0.18               # 동작 바꿀 때 섞는 시간 (초)
 
 ## 부품 고르기 표 (데이터) — look_clothes → 몸통·다리, look_head × 성별 → 머리 모양, look_hat → 모자
 const CLOTHES := [{"torso": "torso_tunic", "leg": "leg_trousers"}, {"torso": "torso_dress", "leg": "leg_stocking"}]
@@ -23,9 +28,9 @@ const HAIR_BY_LOOK := [["hair_short", "hair_bun"], ["hair_long", "hair_braids"]]
 const FACE_SHAPES := [Vector3(1.0, 1.0, 1.0), Vector3(0.94, 1.05, 0.96)]          # 둥근 · 갸름한 (머리 배율)
 const HATS := ["", "hat_straw", "hat_scarf"]
 const CAP_HAT := "hat_cap"        # 모자 없는 남자 일부
-## 체형 3종 (겉모습 유전자 '체격'에서 — 능력과 무관): 0 호리호리 · 1 다부진 · 2 둥근 → 몸통 배율
+## 체형 3종 (겉모습 유전자 '체격'에서 — 능력과 무관): 0 호리호리 · 1 다부진 · 2 둥근 → 몸통 배율 (가슴·치마 뼈)
 const BODY_SCALE := [Vector3(0.88, 1.0, 0.88), Vector3(1.04, 1.0, 1.0), Vector3(1.14, 1.0, 1.28)]
-## 노인 숄 색 (차분한 색 — 사람마다 하나. 숄은 따로 재질이라 모자·수건 색과 섞이지 않음)
+## 노인 숄 색 (차분한 색 — 사람마다 하나. 셰이더 shawl)
 const SHAWL_COLORS := ["7d8a68", "8b7560", "6c7d8a", "94785a", "7b6a7e", "6f8572"]
 ## 짐 이름 → 부품 (없으면 상자)
 const ITEMS := {"통나무": "item_log", "판자": "item_plank", "돌": "item_stone", "낟알": "item_sack", "밀": "item_sack",
@@ -52,23 +57,32 @@ const JOB_LOOK := {
 	"": {"tool": "tool_hammer"},
 }
 const DEFAULT_TOOL := "tool_hammer"
-## 표정 → 얼굴 조각 (머리 부품). 앓음은 피부도 조금 핼쑥하게 (셰이더 sick)
-const FACE_PARTS := {"": ["eyes_open", "mouth_smile"], "happy": ["eyes_happy", "mouth_grin"],
-	"sad": ["eyes_open", "brows_sad", "mouth_sad"], "sick": ["eyes_open", "brows_sad", "mouth_flat"],
-	"sleep": ["eyes_closed", "mouth_flat"]}
+## 표정 → 얼굴 그림 칸 (art/src/paint_face_atlas.py). 앓음은 피부도 조금 핼쑥하게 (셰이더 sick)
+const FACE_CELL := {"": 0, "happy": 1, "sad": 2, "sick": 3, "sleep": 4, "surprised": 5, "talking": 6}
+## 동작 (resident.glb의 애니메이션 이름) — set_anim의 이름 + 나이·연장에 따라 고름 (_clip)
+const ANIMS := ["idle", "walk", "walk_elder", "run", "carry", "hold", "work_axe", "work_hoe", "work_hammer", "work_hands",
+	"pray", "sit", "eat", "sleep", "wave", "play", "fly"]
+## 연장 → 일하는 동작
+const TOOL_ANIM := {"tool_axe": "work_axe", "tool_pick": "work_axe", "tool_hammer": "work_hammer", "tool_hoe": "work_hoe",
+	"tool_sickle": "work_hoe", "tool_peel": "work_hands", "tool_herbs": "work_hands", "tool_rod": "hold", "-": "work_hands"}
+## 머리 부품 (셰이더: 대머리·주근깨·얼굴 그림은 이 부품에만)
+const HEAD_PREFIX := ["head", "hair_", "hat_", "beard", "baby_basket"]
+## 몸 부품 이름 — 팔·다리는 _L/_R 두 짝
+const PAIRED := ["arm", "arm_robe", "leg_trousers", "leg_stocking"]
 
 static var _boxes: Dictionary = {}
 static var _hull: ShaderMaterial
 static var _hull_bald: Dictionary = {}
 static var _shader: Shader
+static var _kit: Dictionary = {}          # resident.glb에서 읽은 것 (뼈 · 부품 배열 · 스킨 · 동작)
+static var _merged: Dictionary = {}       # 부품 조합 → 합친 메시 (LOD마다)
 
-var pose: Node3D                # 몸 전체 (앉기·눕기·들썩임)
-var body: Node3D                # 몸통 + 겉옷 (체형 배율)
-var leg_l: Node3D
-var leg_r: Node3D
-var arm_l: Node3D
-var arm_r: Node3D
-var head: Node3D
+var pose: Node3D                # 몸 전체 (체형 배율 · 아기 바구니 흔들림)
+var skel: Skeleton3D
+var arm_l: Node3D               # 왼손 자리 (뼈에 붙음 — 지팡이)
+var arm_r: Node3D               # 오른손 자리 (연장 · 횃불)
+var head: Node3D                # 머리 뼈에 붙은 자리
+var chest: Node3D               # 가슴 뼈에 붙은 자리 (혈통 소품)
 var item: Node3D                # 들고 있는 짐
 var tool: Node3D                # 오른손 연장 (일할 때)
 var anim := "idle"
@@ -76,6 +90,8 @@ var mat: ShaderMaterial
 var look: Dictionary = {}       # parts_for 결과 (이 모델이 고른 부품)
 var job_key := "?"              # 지금 입은 직업 옷 (set_job)
 var face := "?"                 # 지금 표정 (set_face)
+var shown_parts: Array[String] = []   # 지금 합쳐 그리는 몸 부품
+var lod_close := true
 var _t := 0.0
 var _item_kind := ""
 var _tool_kind := "?"
@@ -84,14 +100,20 @@ var _base_scale := 1.0
 var _lean := 0.0                # 혈통 표시: '겁 많음' 움츠림 / '담대' 곧은 자세 · 노인 조금 굽음
 var _gait := 1.0                # 혈통 표시: '굼뜬' 느릿한 걸음걸이
 var _baby := false
-var _torso_mi: MeshInstance3D
-var _arm_mis: Array[MeshInstance3D] = []
-var _hat_mi: MeshInstance3D     # 본디 모자 (직업 모자를 쓰면 숨김)
-var _hair_mi: MeshInstance3D
-var _job_nodes: Array[Node3D] = []
-var _accent := Color.WHITE      # 본디 수건·모자·숄 색 (직업 모자가 바꿨다가 되돌림)
+var _child := false
+var _job := {"hat": "", "over": [], "robe": false}
+var _cues := PackedStringArray()
+var _close_mi: MeshInstance3D
+var _far_mi: MeshInstance3D
+var _player: AnimationPlayer
+var _clip_now := ""
+var _cane: Node3D
+var _post := {}                 # 동작 뒤에 덧입히는 뼈 자세 (체형 배율 · 머리 크기 · 숙임)
+var _arm_aim := Vector2.INF     # 오른팔 직접 겨눔 (횃불) — 이번 화면만
+var _skip := false
+var _skip_dt := 0.0
+var _accent := Color.WHITE      # 본디 수건·모자 색 (직업 모자가 바꿨다가 되돌림)
 var _cloth_i := 0
-var _face_mis: Dictionary = {}  # 얼굴 조각 이름 → MeshInstance3D
 
 
 ## 상자 메시 (건설 현장·더미 등 village_view가 씀)
@@ -111,15 +133,155 @@ static func _lc(key: String) -> Color:
 static func hull(bald := 0) -> ShaderMaterial:
 	if _hull == null:
 		_hull = Art.hull_mat(false, Style.RESIDENT_LINE)
+		_hull.set_shader_parameter("resident", true)
 	if bald == 0:
 		return _hull
 	if not _hull_bald.has(bald):            # 대머리 단계마다 하나 (지운 머리카락의 껍데기도 지움)
 		var h := Art.hull_mat(false, Style.RESIDENT_LINE)
+		h.set_shader_parameter("resident", true)
 		h.set_shader_parameter("bald", bald)
 		_hull_bald[bald] = h
 	return _hull_bald[bald]
 
 
+# ───────────────────────── 몸 에셋 (한 번만 읽음) ─────────────────────────
+## {"bones": [[이름, 부모, 쉴 자세]], "parts": {부품: {arrays, tris}}, "skin": Skin, "lib": AnimationLibrary}
+static func kit() -> Dictionary:
+	if not _kit.is_empty():
+		return _kit
+	var ps := load(BODY) as PackedScene
+	if ps == null:
+		push_warning("ResidentModel: 몸 에셋 없음 " + BODY)
+		return _kit
+	var root := ps.instantiate()
+	var sk := root.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	var bones: Array = []
+	for i in sk.get_bone_count():
+		bones.append([sk.get_bone_name(i), sk.get_bone_parent(i), sk.get_bone_rest(i)])
+	var bind := {}
+	var parts := {}
+	for mi: MeshInstance3D in sk.find_children("*", "MeshInstance3D", true, false):
+		var a := mi.mesh.surface_get_arrays(0)
+		var bn: PackedInt32Array = a[Mesh.ARRAY_BONES]
+		var nv := (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		var per := bn.size() / maxi(nv, 1)
+		var remap := PackedInt32Array()
+		for b in mi.skin.get_bind_count():
+			var bi := sk.find_bone(mi.skin.get_bind_name(b))
+			remap.append(bi)
+			bind[bi] = mi.skin.get_bind_pose(b)
+		var w: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
+		var bn4 := PackedInt32Array()
+		var w4 := PackedFloat32Array()
+		bn4.resize(nv * 4)
+		w4.resize(nv * 4)
+		for v in nv:
+			for k in 4:
+				bn4[v * 4 + k] = remap[bn[v * per + k]] if k < per else 0
+				w4[v * 4 + k] = w[v * per + k] if k < per else 0.0
+		var pn := String(mi.name)
+		var head_part := false
+		for p: String in HEAD_PREFIX:
+			if pn.begins_with(p):
+				head_part = true
+		var pos: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var cu := PackedFloat32Array()
+		cu.resize(nv * 4)
+		for v in nv:
+			var q := pos[v] - NECK if head_part else pos[v]
+			cu[v * 4] = q.x
+			cu[v * 4 + 1] = q.y
+			cu[v * 4 + 2] = q.z
+			cu[v * 4 + 3] = 1.0 if head_part else 0.0
+		parts[pn] = {"v": pos, "n": a[Mesh.ARRAY_NORMAL], "c": a[Mesh.ARRAY_COLOR], "uv": a[Mesh.ARRAY_TEX_UV],
+			"b": bn4, "w": w4, "cu": cu, "i": a[Mesh.ARRAY_INDEX], "tris": (a[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3}
+	var skin := Skin.new()
+	for i in bones.size():
+		skin.add_named_bind(bones[i][0], bind.get(i, sk.get_bone_global_rest(i).affine_inverse()))
+	# 동작: 길 = "Skeleton3D:뼈" (이 모델의 노드 구조), 크기 트랙은 버림 (체형 배율은 코드가 정함)
+	var ap := root.find_children("*", "AnimationPlayer", true, false)[0] as AnimationPlayer
+	var lib := AnimationLibrary.new()
+	for nm: StringName in ap.get_animation_list():
+		var src := ap.get_animation(nm)
+		var an := src.duplicate(true) as Animation
+		for t in range(an.get_track_count() - 1, -1, -1):
+			var path := an.track_get_path(t)
+			var bone := path.get_concatenated_subnames()
+			if an.track_get_type(t) == Animation.TYPE_SCALE_3D or (an.track_get_type(t) == Animation.TYPE_POSITION_3D and bone != "hips"):
+				an.remove_track(t)
+				continue
+			an.track_set_path(t, NodePath("Skeleton3D:" + bone))
+		an.loop_mode = Animation.LOOP_NONE if String(nm) == "RESET" else Animation.LOOP_LINEAR
+		lib.add_animation(nm, an)
+	root.free()
+	_kit = {"bones": bones, "parts": parts, "skin": skin, "lib": lib}
+	return _kit
+
+
+## 몸 부품 이름 목록 (시험·표가 씀)
+static func body_parts() -> Array:
+	return kit().get("parts", {}).keys()
+
+
+## 부품 조합 → 메시 하나 (뼈 무게 · 색 · 얼굴 UV · CUSTOM1). 같은 조합은 공유
+static func merged(names: Array, far: bool) -> ArrayMesh:
+	var key := ("F|" if far else "C|") + "|".join(names)
+	if _merged.has(key):
+		return _merged[key]
+	var parts: Dictionary = kit().get("parts", {})
+	var v := PackedVector3Array()
+	var n := PackedVector3Array()
+	var c := PackedColorArray()
+	var uv := PackedVector2Array()
+	var b := PackedInt32Array()
+	var w := PackedFloat32Array()
+	var cu := PackedFloat32Array()
+	var ix := PackedInt32Array()
+	for nm: String in names:
+		var p: Dictionary = parts.get(nm + ("__far" if far else ""), parts.get(nm, {}))
+		if p.is_empty():
+			continue
+		var base := v.size()
+		v.append_array(p["v"])
+		n.append_array(p["n"])
+		c.append_array(p["c"])
+		uv.append_array(p["uv"])
+		b.append_array(p["b"])
+		w.append_array(p["w"])
+		cu.append_array(p["cu"])
+		var pi: PackedInt32Array = p["i"]
+		var off := ix.size()
+		ix.append_array(pi)
+		for k in range(off, ix.size()):
+			ix[k] += base
+	var am := ArrayMesh.new()
+	if not v.is_empty():
+		var arr := []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = v
+		arr[Mesh.ARRAY_NORMAL] = n
+		arr[Mesh.ARRAY_COLOR] = c
+		arr[Mesh.ARRAY_TEX_UV] = uv
+		arr[Mesh.ARRAY_BONES] = b
+		arr[Mesh.ARRAY_WEIGHTS] = w
+		arr[Mesh.ARRAY_CUSTOM1] = cu
+		arr[Mesh.ARRAY_INDEX] = ix
+		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {},
+			Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+	_merged[key] = am
+	return am
+
+
+## 부품 조합의 삼각형 수 (시험 · 예산)
+static func tris_of(names: Array, far: bool) -> int:
+	var parts: Dictionary = kit().get("parts", {})
+	var t := 0
+	for nm: String in names:
+		t += int(parts.get(nm + ("__far" if far else ""), parts.get(nm, {})).get("tris", 0))
+	return t
+
+
+# ───────────────────────── 겉모습 고르기 (데이터) ─────────────────────────
 ## 주민 데이터에서 — 7단계: 머리색·피부·눈·머리결·주근깨·대머리·점박이는 겉모습 유전자(Genetics), 체형·소품은 혈통 표시(Bloodlines)
 func setup_from(r: Resident) -> void:
 	build_look(look_of(r))
@@ -140,73 +302,21 @@ static func look_key(r: Resident) -> int:
 	return st * 100 + Genetics.bald_stage(r.genes, r.sex, r.age) * 10 + int(Genetics.grey(r.age, early) * 4.0)
 
 
-## 지금 표정 — 잠 · 앓음(다침) · 슬픔(기분 낮음·두려움) · 기쁨(기분 높음·놀이) · 보통 ""
+## 지금 표정 — 잠 · 앓음(다침) · 말함(말풍선) · 놀람(큰 두려움) · 슬픔(기분 낮음·두려움) · 기쁨(기분 높음·놀이) · 보통 ""
 static func face_of(r: Resident) -> String:
 	if r.anim == "sleep" or r.sleeping:
 		return "sleep"
 	if r.is_sick() or r.is_injured():
 		return "sick"
+	if r.say != "" and r.say_t > 0.0:
+		return "talking"
+	if r.fear > 0.85:
+		return "surprised"
 	if r.happiness < 0.3 or r.fear > 0.6:
 		return "sad"
 	if r.happiness > 0.8 or r.anim == "play":
 		return "happy"
 	return ""
-
-
-func _mesh(parent: Node3D, part: String, at_origin := true) -> MeshInstance3D:
-	var p: Dictionary = Art.parts(PARTS).get(part, {})
-	if p.is_empty() or p["mesh"] == null:
-		return null
-	var mi := MeshInstance3D.new()
-	mi.mesh = p["mesh"]
-	mi.material_override = mat
-	if not at_origin:
-		mi.position = p["origin"]
-	parent.add_child(mi)
-	return mi
-
-
-## 머리 부품 (얼굴·머리카락·모자·수염) — 셰이더가 주근깨·대머리·흰 앞머리를 이 부품에만
-func _head_mesh(part: String) -> MeshInstance3D:
-	var mi := _mesh(head, part)
-	if mi != null:
-		mi.set_instance_shader_parameter("part_head", 1.0)
-	return mi
-
-
-## 혈통 표시용 작은 소품 (한 가지 색 툰 재질)
-func _prop(parent: Node3D, m: Mesh, c: Color, pos: Vector3, rot := Vector3.ZERO) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = m
-	mi.material_override = Toon.mat(c)
-	mi.position = pos
-	mi.rotation = rot
-	parent.add_child(mi)
-	return mi
-
-
-static func _cyl(r: float, h: float) -> CylinderMesh:
-	var key := "cyl%.3f,%.3f" % [r, h]
-	if not _boxes.has(key):
-		var c := CylinderMesh.new()
-		c.top_radius = r
-		c.bottom_radius = r
-		c.height = h
-		c.radial_segments = 6
-		c.rings = 1
-		_boxes[key] = c
-	return _boxes[key]
-
-
-func _pivot(parent: Node3D, pos: Vector3) -> Node3D:
-	var n := Node3D.new()
-	n.position = pos
-	parent.add_child(n)
-	return n
-
-
-static func origin(part: String) -> Vector3:
-	return Art.parts(PARTS).get(part, {}).get("origin", Vector3.ZERO)
 
 
 ## 예전 방식 (유전자 없이 색 번호로) — 도구·시험 장면용: head 0~1, clothes 0~1, hat 0~2 (0 = 없음), 색 번호는 Balance 색표.
@@ -283,8 +393,112 @@ static func job_look(job: String, chief := false) -> Dictionary:
 	return {"hat": j.get("hat", ""), "over": over, "robe": j.get("robe", false), "tool": j.get("tool", DEFAULT_TOOL)}
 
 
+## 머리 위를 덮는 모자(납작모자·털모자·빵 모자·수건)를 쓰면 곱슬머리는 정수리 곱슬을 뺀 부품(_under)으로, 올림머리는 짧은 머리로
+const CROWN_HATS := ["hat_cap", "hat_fisher", "hat_baker", "hat_scarf"]
+
+
+## 지금 그릴 몸 부품 (겉모습 + 직업 옷) — 데이터만
+static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStringArray()) -> Array[String]:
+	var out: Array[String] = []
+	if lk_parts.get("baby", false):
+		out.append("baby_basket")
+		return out
+	var robe: bool = job.get("robe", false)
+	for side in ["_L", "_R"]:
+		out.append(str(lk_parts["leg"]) + side)
+		out.append(("arm_robe" if robe else "arm") + side)
+	out.append("torso_robe" if robe else str(lk_parts["torso"]))
+	out.append("head")
+	var hat: String = job.get("hat", "")
+	if hat == "":
+		hat = lk_parts.get("hat", "")
+	var hair: String = lk_parts.get("hair", "")
+	if hat == "hat_scarf" and hair in ["hair_bun", "hair_short"]:
+		hair = ""
+	if hat in CROWN_HATS:
+		if hair.begins_with("hair_curly"):
+			hair += "_under"
+		elif hair == "hair_bun":
+			hair = "hair_short"
+	if hair != "":
+		out.append(hair)
+	if lk_parts.get("beard", false):
+		out.append("beard")
+	if hat != "":
+		out.append(hat)
+	if "apron" in cues and str(lk_parts["torso"]) == "torso_tunic" and not robe:
+		out.append("apron_job")
+	for o: String in job.get("over", []):
+		if not o in out:
+			out.append(o)
+	if lk_parts.get("elder", false):
+		out.append("shawl")
+	return out
+
+
 const PB_FREQ := [2.2, 2.8, 3.4, 4.0, 4.6, 5.2]     # 점박이 무늬 6종 (크기)
 const PB_CUT := [0.6, 0.63, 0.58, 0.64, 0.6, 0.62]
+
+
+# ───────────────────────── 만들기 ─────────────────────────
+func _space(bone: String) -> Node3D:
+	## 뼈에 붙은 자리 — 자식 좌표 = 모델 좌표 (쉴 자세 기준)
+	var at := BoneAttachment3D.new()
+	at.bone_name = bone
+	skel.add_child(at)
+	var sp := Node3D.new()
+	var bi := skel.find_bone(bone)
+	if bi >= 0:
+		sp.transform = skel.get_bone_global_rest(bi).affine_inverse()
+	at.add_child(sp)
+	return sp
+
+
+func _pivot(parent: Node3D, pos: Vector3) -> Node3D:
+	var n := Node3D.new()
+	n.position = pos
+	parent.add_child(n)
+	return n
+
+
+static func origin(part: String) -> Vector3:
+	return Art.parts(PARTS).get(part, {}).get("origin", Vector3.ZERO)
+
+
+## 소품 메시 (짐·연장·지팡이 — 주민 재질, 고정 색)
+func _mesh(parent: Node3D, part: String) -> MeshInstance3D:
+	var p: Dictionary = Art.parts(PARTS).get(part, {})
+	if p.is_empty() or p["mesh"] == null:
+		return null
+	var mi := MeshInstance3D.new()
+	mi.mesh = p["mesh"]
+	mi.material_override = mat
+	parent.add_child(mi)
+	return mi
+
+
+## 혈통 표시용 작은 소품 (한 가지 색 툰 재질)
+func _prop(parent: Node3D, m: Mesh, c: Color, pos: Vector3, rot := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.material_override = Toon.mat(c)
+	mi.position = pos
+	mi.rotation = rot
+	parent.add_child(mi)
+	return mi
+
+
+static func _cyl(r: float, h: float) -> CylinderMesh:
+	var key := "cyl%.3f,%.3f" % [r, h]
+	if not _boxes.has(key):
+		var c := CylinderMesh.new()
+		c.top_radius = r
+		c.bottom_radius = r
+		c.height = h
+		c.radial_segments = 8
+		c.rings = 1
+		_boxes[key] = c
+	return _boxes[key]
 
 
 ## 겉모습 사전으로 만들기 — 키: head clothes hat hair_i skin_i cloth age sex (+ genes blood)
@@ -294,23 +508,19 @@ func build_look(lk: Dictionary) -> void:
 	look = parts_for(lk)
 	job_key = "?"
 	face = "?"
-	_job_nodes.clear()
-	_face_mis.clear()
-	_arm_mis.clear()
-	_hat_mi = null
-	_hair_mi = null
-	_torso_mi = null
+	_job = {"hat": "", "over": [], "robe": false}
 	_job_tool = ""
-	var clothes_i: int = lk.get("clothes", 0)
+	_clip_now = ""
+	_post = {}
 	var hair_i: int = lk.get("hair_i", 0)
 	var skin_i: int = lk.get("skin_i", 0)
 	var cloth_i: int = lk.get("cloth", 0)
 	var age: float = lk.get("age", 10.0)
 	var sex: String = lk.get("sex", "m")
 	var g: PackedByteArray = lk.get("genes", PackedByteArray())
-	var cues: PackedStringArray = Bloodlines.looks(lk.get("blood", PackedStringArray()))
+	_cues = Bloodlines.looks(lk.get("blood", PackedStringArray()))
 	var has_g := g.size() >= Genetics.GENE_BYTES
-	var cue := func(n: String) -> bool: return n in cues
+	var cue := func(n: String) -> bool: return n in _cues
 	# 색 (유전자가 있으면 유전자에서, 없으면 예전 색표)
 	var skin := Color(Balance.SKIN_COLORS[skin_i % Balance.SKIN_COLORS.size()])
 	var hair := Color(Balance.HAIR_COLORS[hair_i % Balance.HAIR_COLORS.size()])
@@ -323,8 +533,8 @@ func build_look(lk: Dictionary) -> void:
 			st = mini(st + 2, Genetics.SKIN_TONES.size() - 1)
 		skin = Color(Genetics.SKIN_TONES[st])
 		hair = Genetics.hair_color(g, age, cue.call("silver_early"))
-		eye_a = Color(Genetics.EYE_COLORS[Genetics.eye(g)]).darkened(0.6)    # 작은 화면에서 점 눈은 짙게 (빛깔만 살짝)
-		eye_b = Color(Genetics.EYE_COLORS[Genetics.eye2(g)]).darkened(0.6)
+		eye_a = _eye_col(Color(Genetics.EYE_COLORS[Genetics.eye(g)]))     # 빛깔은 살리되 멀리서도 짙게
+		eye_b = _eye_col(Color(Genetics.EYE_COLORS[Genetics.eye2(g)]))
 		bald = Genetics.bald_stage(g, sex, age)
 	elif age >= Balance.AGE_ELDER:
 		hair = _lc("elder_hair")
@@ -355,6 +565,11 @@ func build_look(lk: Dictionary) -> void:
 	mat.set_shader_parameter("cheek", cheek)
 	mat.set_shader_parameter("bald", bald)
 	mat.set_shader_parameter("barefoot", 1.0 if cue.call("barefoot") else 0.0)
+	mat.set_shader_parameter("face_tex", load(FACE_TEX))
+	mat.set_shader_parameter("blink_seed", fposmod(float(hair_i * 7 + skin_i * 13 + cloth_i * 3) * 0.137 + age * 0.31, 1.0))
+	mat.set_shader_parameter("messy", 1.0 if cue.call("messy_hair") else 0.0)
+	if look["elder"]:
+		mat.set_shader_parameter("shawl", Color(SHAWL_COLORS[look["shawl"]]))
 	if has_g:
 		mat.set_shader_parameter("freckles", Genetics.freckle_amount(g))
 		mat.set_shader_parameter("freckle_col", skin.lerp(Color(Genetics.FRECKLE), 0.75))
@@ -367,7 +582,7 @@ func build_look(lk: Dictionary) -> void:
 			mat.set_shader_parameter("pb_skin", Color(Genetics.PIEBALD_SKIN))
 			mat.set_shader_parameter("pb_hair", Color(Genetics.PIEBALD_HAIR))
 	mat.next_pass = hull(bald)
-	# 체형: 키·체격 (연속값) + 체형 3종 (몸통 배율) + 혈통 표시 (어깨)
+	# 체형: 키·체격 (연속값) → 몸 전체 배율 · 체형 3종 + 혈통 어깨 → 가슴·치마 뼈 배율
 	var bw := 1.0
 	var hh := 1.0
 	if has_g and age >= Balance.AGE_BABY:
@@ -382,125 +597,126 @@ func build_look(lk: Dictionary) -> void:
 	_lean = 0.17 if cue.call("hunched") else (-0.05 if cue.call("upright") else (0.09 if look["elder"] else 0.0))
 	_gait = 0.7 if cue.call("slow_gait") else (0.85 if look["elder"] else 1.0)
 	_baby = look["baby"]
+	_child = age < Balance.AGE_ADULT and not _baby
 	pose = _pivot(self, Vector3.ZERO)
 	pose.scale = Vector3(bw, hh, bw)
-	body = _pivot(pose, Vector3.ZERO)
-	body.scale = Vector3(bs.x * shoulder, 1.0, bs.z)
-	var hip := origin(look["leg"])
-	var sh := origin("arm")
-	var ax := ARM_X * maxf(shoulder, 0.96 * bs.x * shoulder)
-	leg_l = _pivot(pose, hip + Vector3(-0.12 * maxf(1.0, bs.x * 0.95), 0, 0))
-	leg_r = _pivot(pose, hip + Vector3(0.12 * maxf(1.0, bs.x * 0.95), 0, 0))
-	arm_l = _pivot(pose, sh + Vector3(-ax, 0, 0))
-	arm_r = _pivot(pose, sh + Vector3(ax, 0, 0))
-	head = _pivot(pose, origin("head"))
-	arm_l.rotation.z = -0.08
-	item = _pivot(pose, origin("item_log"))
+	# 뼈대
+	var k := kit()
+	skel = Skeleton3D.new()
+	skel.name = "Skeleton3D"
+	pose.add_child(skel)
+	for b: Array in k.get("bones", []):
+		var i := skel.add_bone(b[0])
+		if int(b[1]) >= 0:
+			skel.set_bone_parent(i, b[1])
+		skel.set_bone_rest(i, b[2])
+	skel.reset_bone_poses()
+	_close_mi = MeshInstance3D.new()
+	_far_mi = MeshInstance3D.new()
+	for mi: MeshInstance3D in [_close_mi, _far_mi]:
+		mi.skin = k.get("skin")
+		mi.material_override = mat
+		skel.add_child(mi)
+		mi.skeleton = NodePath("..")
+	_player = AnimationPlayer.new()
+	pose.add_child(_player)
+	_player.root_node = NodePath("..")
+	if k.has("lib"):
+		_player.add_animation_library("", k["lib"])
+	_player.callback_mode_process = AnimationMixer.ANIMATION_CALLBACK_MODE_PROCESS_MANUAL
+	# 뼈에 붙은 자리
+	arm_r = _space("hand.R")
+	arm_l = _space("hand.L")
+	head = _space("skull")
+	chest = _space("chest")
+	item = _pivot(chest, origin("item_log"))
 	item.visible = false
-	tool = _pivot(arm_r, origin("tool_axe") - sh - Vector3(ARM_X, 0, 0))
+	tool = _pivot(arm_r, origin("tool_axe"))
 	tool.visible = false
 	_item_kind = ""
 	_tool_kind = "?"
+	_cane = null
+	set_lod(lod_close)
 	if _baby:
-		# 아기: 강보에 싸여 바구니 안 (design/characters/base_c). 관절 마디는 비워 둔다 (다른 코드가 찾음)
-		_mesh(pose, "baby_basket")
+		# 아기: 강보에 싸여 바구니 안 (design/characters/base_c)
 		_base_scale = 1.1
+		mat.set_shader_parameter("face_cell", FACE_CELL["sleep"])
+		_refresh_body()
 		scale = Vector3.ONE * _base_scale * Style.RESIDENT_SCALE
 		return
-	_torso_mi = _mesh(body, look["torso"])
-	for lg: Node3D in [leg_l, leg_r]:
-		var lm := _mesh(lg, look["leg"])
-		if lm != null and cue.call("slim_legs"):
-			lm.scale = Vector3(0.72, 1.0, 0.72)
-	for am: Node3D in [arm_l, arm_r]:
-		var amm := _mesh(am, "arm")
-		if amm != null:
-			_arm_mis.append(amm)
-			if cue.call("thick_arms"):
-				amm.scale = Vector3(1.4, 1.0, 1.4)
-	_head_mesh("head")
-	if look["hair"] != "":
-		_hair_mi = _head_mesh(look["hair"])
-		if _hair_mi != null and cue.call("messy_hair"):
-			_hair_mi.scale = Vector3(1.1, 1.08, 1.1)
-			_hair_mi.rotation.z = 0.1
-	if look["beard"]:
-		_head_mesh("beard")
-	if look["hat"] != "":
-		_hat_mi = _head_mesh(look["hat"])
-	_tuck_hair(look["hat"])
-	if look["elder"]:                       # 노인: 숄 + 지팡이 (base_c)
-		var sw := _mesh(body, "shawl")
-		if sw != null:                      # 숄만 따로 재질 (accent = 숄 색)
-			var sm := mat.duplicate() as ShaderMaterial
-			sm.set_shader_parameter("accent", Color(SHAWL_COLORS[look["shawl"]]))
-			sw.material_override = sm
-		var cane := _pivot(arm_l, origin("cane") - sh + Vector3(ARM_X, 0, 0))
-		_mesh(cane, "cane")
-	set_face("")
-	# 혈통 소품 (몸통 기준 자리: +Z 앞, y 위)
-	var front := 0.235 * bw
+	if look["elder"]:                       # 노인: 숄(몸 부품) + 지팡이 (base_c)
+		_cane = _pivot(arm_l, origin("cane"))
+		_mesh(_cane, "cane")
+	# 혈통 소품 (모델 좌표: +Z 앞, y 위 — 가슴 뼈를 따라 움직임)
+	var front := 0.27
 	if cue.call("amulet"):
-		_prop(pose, box_of(Vector3(0.09, 0.12, 0.035)), Style.WOOD, Vector3(0, 1.0, front + 0.01))
-		_prop(pose, box_of(Vector3(0.015, 0.16, 0.015)), Style.WOOD_DARK, Vector3(0, 1.13, front - 0.01), Vector3(0.3, 0, 0))
-	if cue.call("apron") and clothes_i % CLOTHES.size() == 0:
-		_mesh(body, "apron_job")
+		_prop(chest, box_of(Vector3(0.08, 0.1, 0.03)), Style.WOOD, Vector3(0, 0.88, front + 0.01))
+		_prop(chest, box_of(Vector3(0.015, 0.16, 0.015)), Style.WOOD_DARK, Vector3(0, 0.99, front - 0.03), Vector3(0.3, 0, 0))
 	if cue.call("neck_scarf"):
-		_prop(pose, _cyl(0.17, 0.09), _lc("scarf_b"), Vector3(0, 1.24, 0.0))
+		_prop(chest, _cyl(0.15, 0.08), _lc("scarf_b"), Vector3(0, 1.14, 0.0))
 	if cue.call("cloak"):
-		_prop(pose, box_of(Vector3(0.6, 0.85, 0.05)), Color("7a6650"), Vector3(0, 0.82, -0.25), Vector3(0.12, 0, 0))
+		_prop(chest, box_of(Vector3(0.62, 0.8, 0.05)), Color("7a6650"), Vector3(0, 0.72, -0.28), Vector3(0.12, 0, 0))
 	if cue.call("pipe"):
-		_prop(pose, _cyl(0.025, 0.32), Style.WOOD_DARK, Vector3(0.26 * shoulder, 0.6, 0.12), Vector3(0.4, 0, 0.3))
+		_prop(chest, _cyl(0.025, 0.32), Style.WOOD_DARK, Vector3(0.3 * shoulder, 0.55, 0.15), Vector3(0.4, 0, 0.3))
 	if cue.call("staff") and not look["elder"]:
-		var sp := _prop(arm_l, _cyl(0.035, 1.75), Style.WOOD, Vector3(0, -0.4, 0.08))
+		var sp := _prop(arm_l, _cyl(0.035, 1.75), Style.WOOD, origin("cane") + Vector3(0, 0.25, 0.04))
 		_prop(sp, box_of(Vector3(0.1, 0.1, 0.1)), Style.WOOD_DARK, Vector3(0, 0.88, 0))
 	if cue.call("bandage"):
-		_prop(arm_r, box_of(Vector3(0.13, 0.08, 0.13)), Color("f2efe6"), Vector3(0, -0.55, 0))
-	# 나이: 아이는 작고 머리가 크다. 머리는 체형 배율을 따르지 않는다
+		_prop(arm_r, box_of(Vector3(0.13, 0.08, 0.13)), Color("f2efe6"), origin("tool_axe") + Vector3(0, 0.2, 0))
+	# 뼈 자세 덧입히기 (동작 뒤 매번): 체형 · 어깨 · 팔다리 굵기 · 머리 크기
 	var hs := 1.0
-	if age < Balance.AGE_ADULT:
+	if _child:
 		_base_scale = 0.62 + 0.08 * clampf((age - 1.0) / 3.0, 0.0, 1.0)
-		hs = 1.16
+		hs = 1.2
 	else:
 		_base_scale = 1.0
 	var fs: Vector3 = FACE_SHAPES[look["face_shape"]]
 	if cue.call("round_face"):
 		fs = Vector3(1.08, 0.97, 1.02)
-	head.scale = Vector3(hs * fs.x / bw, hs * fs.y / hh, hs * fs.z / bw)
+	_post = {
+		"chest": Vector3(bs.x * shoulder, 1.0, bs.z), "skirt": Vector3(bs.x, 1.0, bs.z),
+		"skull": Vector3(hs * fs.x / bw, hs * fs.y / hh, hs * fs.z / bw),
+		"arm_dx": 0.285 * (maxf(bs.x * shoulder, 1.0) - 1.0) * 0.9, "leg_dx": 0.105 * (maxf(bs.x, 1.0) - 1.0),
+		"thick_arms": cue.call("thick_arms"), "slim_legs": cue.call("slim_legs")}
+	set_face("")
+	_refresh_body()
 	scale = Vector3.ONE * _base_scale * Style.RESIDENT_SCALE
 
 
-## 직업 옷 (일터 종류 · 촌장 띠) — 바뀔 때만 부품을 갈아 끼운다. 아기·아이는 그대로.
+## 짙은 눈 색: 유전자 색의 빛깔은 남기고 밝기는 낮게 (멀리서도 또렷한 점 눈)
+static func _eye_col(c: Color) -> Color:
+	var v := clampf(c.v, 0.0, 1.0)
+	return Color.from_hsv(c.h, minf(c.s * 0.9 + 0.1, 1.0), minf(0.12 + v * 0.3, 0.38))
+
+
+## 지금 부품 목록으로 메시를 다시 합침 (같은 조합은 공유)
+func _refresh_body() -> void:
+	shown_parts = body_list(look, _job, _cues)
+	if _close_mi != null:
+		_close_mi.mesh = merged(shown_parts, false)
+		_far_mi.mesh = merged(shown_parts, true)
+
+
+## 가까이 LOD(초상화·확대) / 멀리 LOD(마을 기본 확대)
+func set_lod(close: bool) -> void:
+	lod_close = close
+	if _close_mi != null:
+		_close_mi.visible = close
+		_far_mi.visible = not close
+
+
+## 직업 옷 (일터 종류 · 촌장 띠) — 바뀔 때만 몸 메시를 다시 고른다. 아기는 그대로.
 func set_job(job: String, chief := false) -> void:
 	var key := "%s|%s" % [job, chief]
 	if key == job_key or pose == null:
 		return
 	job_key = key
-	for n in _job_nodes:
-		if is_instance_valid(n):
-			n.queue_free()
-	_job_nodes.clear()
 	if _baby:
 		return
 	var jl := job_look(job, chief)
-	var robe: bool = jl["robe"]
-	if _torso_mi != null:
-		_torso_mi.visible = not robe
-	for a in _arm_mis:
-		a.visible = not robe
-	if robe:
-		var t := _mesh(body, "torso_robe")
-		_job_nodes.append(t)
-		for am: Node3D in [arm_l, arm_r]:
-			_job_nodes.append(_mesh(am, "arm_robe"))
-	var hat: String = jl["hat"]
-	if _hat_mi != null:
-		_hat_mi.visible = hat == ""
-	if _hair_mi != null:
-		_hair_mi.visible = not (hat == "hat_scarf" and look["hair"] in ["hair_bun", "hair_short"])
-	if hat != "":
-		_job_nodes.append(_head_mesh(hat))
+	_job = jl
 	# 직업 모자 색: 납작모자 = 옷 색 짙게 (나무꾼 갈색 모자) · 털모자 = 물빛 회청 · 그 밖 = 본디 수건 색
+	var hat: String = jl["hat"]
 	var ac := _accent
 	if hat == "hat_cap":
 		ac = Color(Balance.CLOTH_COLORS[(_cloth_i + 1) % Balance.CLOTH_COLORS.size()]).darkened(0.2)
@@ -508,50 +724,20 @@ func set_job(job: String, chief := false) -> void:
 		ac = Color("5f7d92")
 	if mat != null:
 		mat.set_shader_parameter("accent", ac)
-	_tuck_hair(hat if hat != "" else str(look["hat"]))
-	for o: String in jl["over"]:
-		_job_nodes.append(_mesh(body, o))
 	_job_tool = jl["tool"]
 	_tool_kind = "?"
-	_job_nodes = _job_nodes.filter(func(n: Node3D) -> bool: return n != null)
+	_refresh_body()
 
 
-## 머리 위를 덮는 모자(납작모자·털모자·빵 모자·수건)를 쓰면 머리카락을 조금 줄여 모자 밑으로 (밀짚모자는 그대로)
-const CROWN_HATS := ["hat_cap", "hat_fisher", "hat_baker", "hat_scarf"]
-
-
-## 곱슬머리는 모자 밑에서 정수리 곱슬 덩어리를 뺀 부품(_under)으로 바꿔 모자를 뚫고 나오지 않게
-func _tuck_hair(hat: String) -> void:
-	if _hair_mi == null:
-		return
-	var crown := hat in CROWN_HATS
-	var hp := str(look["hair"])
-	if hp.begins_with("hair_curly"):
-		var p: Dictionary = Art.parts(PARTS).get(hp + "_under" if crown else hp, {})
-		if not p.is_empty():
-			_hair_mi.mesh = p["mesh"]
-	if _hair_mi.rotation.z != 0.0:
-		return                                  # 혈통 '부스스한 머리'는 크기 그대로
-	_hair_mi.scale = Vector3.ONE * (0.9 if crown else 1.0)
-
-
-## 표정: "" 보통 · happy · sad · sick · sleep (얼굴 조각을 바꿔 끼움, 앓으면 피부를 조금 핼쑥하게)
+## 표정: "" 보통 · happy · sad · sick · sleep · surprised · talking (얼굴 그림 칸, 앓으면 피부를 조금 핼쑥하게)
 func set_face(f: String) -> void:
-	if f == face or head == null or _baby:
+	if f == face or mat == null or _baby:
 		return
-	if not FACE_PARTS.has(f):
+	if not FACE_CELL.has(f):
 		f = ""
 	face = f
-	var want: Array = FACE_PARTS[f]
-	for nm: String in _face_mis:
-		(_face_mis[nm] as Node3D).visible = nm in want
-	for nm: String in want:
-		if not _face_mis.has(nm):
-			var mi := _head_mesh(nm)
-			if mi != null:
-				_face_mis[nm] = mi
-	if mat != null:
-		mat.set_shader_parameter("sick", 1.0 if f == "sick" else 0.0)
+	mat.set_shader_parameter("face_cell", FACE_CELL[f])
+	mat.set_shader_parameter("sick", 1.0 if f == "sick" else 0.0)
 
 
 ## 들고 있는 짐 모양 (통나무·판자 / 돌 / 자루 / 바구니 / 물통 / 그 밖의 상자)
@@ -582,107 +768,132 @@ func set_anim(a: String) -> void:
 	anim = a
 
 
-## 화면 시간으로 돌린다 (매 화면, 부드럽게)
+## 횃불처럼 오른팔을 직접 겨눔 (이번 화면만 — tick 뒤에 부름). rx = 앞으로 듦(-), rz = 옆으로 벌림
+func aim_arm_r(rx: float, rz := 0.0) -> void:
+	_arm_aim = Vector2(rx, rz)
+	_apply_aim()
+
+
+## 동작 이름 → 애니메이션 (나이·연장·짐에 따라)
+func _clip(a: String) -> String:
+	match a:
+		"walk":
+			if look.get("elder", false):
+				return "walk_elder"
+			return "run" if _child else "walk"
+		"carry":
+			return "carry"
+		"work", "torch":
+			if _tool_kind == "?":
+				set_tool("")
+			return TOOL_ANIM.get(_tool_kind, "work_hammer")
+		"idle":
+			return "hold" if _item_kind != "" else "idle"
+		"sleep", "sit", "eat", "pray", "fly", "play", "wave", "run", "hold":
+			return a
+	return "idle"
+
+
+## 화면 시간으로 돌린다 (매 화면, 부드럽게 — 바뀌면 BLEND초 섞음)
 func tick(dt: float) -> void:
 	_t += dt * Style.ANIM_SPEED
-	apply_pose(anim, _t)
+	if pose == null:
+		return
+	if _baby:
+		apply_pose(anim, _t)
+		return
+	var c := _clip(anim)
+	if _player == null or not _player.has_animation(c):
+		return
+	if c != _clip_now:
+		_player.play(c, BLEND if _clip_now != "" else 0.0)
+		_clip_now = c
+	_player.speed_scale = _speed(c)
+	_skip_dt += dt
+	if not lod_close and not _skip:         # 멀리 LOD: 동작은 두 화면에 한 번 (작게 보여 티 안 남, CPU 절반)
+		_skip = true
+		return
+	_skip = false
+	_player.advance(_skip_dt * Style.ANIM_SPEED)
+	_skip_dt = 0.0
+	_after()
 
 
-## 동작 자세 — 모든 관절을 처음 자세로 돌린 뒤 그 동작의 t초 자세 (사인 곡선)
+func _speed(c: String) -> float:
+	if c == "walk" or c == "carry":
+		return STEP_HZ / 1.5 * _gait
+	if c == "walk_elder":
+		return _gait / 0.85
+	return 1.0
+
+
+## 동작 자세 — 그 동작의 t초 자세 (섞지 않음: 사진 도구 · 시험)
 func apply_pose(a: String, t: float) -> void:
 	if pose == null:
 		return
-	pose.position = Vector3.ZERO
-	pose.rotation = Vector3.ZERO
-	for n: Node3D in [leg_l, leg_r, arm_l, arm_r, head]:
-		n.rotation = Vector3.ZERO
-	head.rotation.x = HEAD_TILT
-	arm_l.rotation.z = -0.08
-	arm_r.rotation.z = 0.08
+	anim = a
 	if _baby:                           # 아기 바구니: 살짝 흔들릴 뿐
 		item.visible = false
 		tool.visible = false
-		pose.rotation.z = sin(t * 1.4) * 0.03
+		pose.rotation = Vector3(0, 0, sin(t * 1.4) * 0.03)
 		return
+	var c := _clip(a)
+	if _player == null or not _player.has_animation(c):
+		return
+	_player.speed_scale = 1.0
+	_player.play(c, 0.0)
+	_clip_now = c
+	var ln := _player.get_animation(c).length
+	_player.seek(fposmod(t * _speed(c), ln), true)
+	_after()
+
+
+## 동작 뒤: 소품 보이기 · 체형 배율 · 숙임 · 머리 들기
+func _after() -> void:
+	var a := anim
 	item.visible = _item_kind != "" and (a == "carry" or a == "idle")
-	tool.visible = a == "work"
-	if tool.visible and _tool_kind == "?":
-		set_tool("")
-	var ph := t * TAU * STEP_HZ * _gait
-	var sw := sin(ph)
-	var bob := absf(cos(ph)) * 0.05
-	match a:
-		"walk":
-			leg_l.rotation.x = sw * 0.55
-			leg_r.rotation.x = -sw * 0.55
-			arm_l.rotation.x = -sw * 0.45
-			arm_r.rotation.x = sw * 0.45
-			pose.position.y = bob
-			pose.rotation.z = sw * 0.03
-		"carry":
-			leg_l.rotation.x = sw * 0.42
-			leg_r.rotation.x = -sw * 0.42
-			arm_l.rotation.x = -1.2
-			arm_r.rotation.x = -1.2
-			arm_l.rotation.z = -0.3
-			arm_r.rotation.z = 0.3
-			pose.position.y = bob * 0.7
-			pose.rotation.x = -0.06
-			item.visible = true
-		"work":
-			# 내려찍기: 천천히 들어 올리고 빠르게 내림
-			var c := fposmod(t * 1.1, 1.0)
-			var swing := smoothstep(0.0, 0.72, c) if c < 0.72 else 1.0 - smoothstep(0.72, 0.86, c)
-			arm_r.rotation.x = lerpf(-0.5, -2.7, swing)
-			arm_l.rotation.x = lerpf(-0.4, -1.6, swing)
-			arm_l.rotation.z = -0.25
-			pose.rotation.x = lerpf(0.18, -0.08, swing)
-			head.rotation.x += 0.12
-			leg_l.rotation.x = -0.15
-			leg_r.rotation.x = 0.2
-		"sleep":
-			pose.rotation.x = -PI / 2.0
-			pose.position = Vector3(0, 0.25, 0.9)
-			pose.position.y += sin(t * 1.3) * 0.015
-		"sit", "eat":
-			leg_l.rotation.x = -1.45
-			leg_r.rotation.x = -1.45
-			pose.position.y = -0.42
-			if a == "eat":
-				arm_r.rotation.x = -1.85 + sin(t * 4.0) * 0.45
-				arm_l.rotation.x = -0.9
-			else:
-				arm_l.rotation.x = -0.5
-				arm_r.rotation.x = -0.5
-				head.rotation.y = sin(t * 0.4) * 0.3
-		"pray":
-			leg_l.rotation.x = 1.25
-			leg_r.rotation.x = 1.25
-			pose.position.y = -0.36
-			arm_l.rotation.x = -1.15
-			arm_r.rotation.x = -1.15
-			arm_l.rotation.z = -0.4
-			arm_r.rotation.z = 0.4
-			head.rotation.x += 0.24 + sin(t * 1.2) * 0.06
-		"fly":                          # [하늘의 것] 꽃씨에 매달려 둥실 — 두 팔을 머리 위로, 다리는 대롱대롱
-			arm_l.rotation.x = -2.95
-			arm_r.rotation.x = -2.95
-			arm_l.rotation.z = 0.15
-			arm_r.rotation.z = -0.15
-			leg_l.rotation.x = sin(t * 2.4) * 0.35
-			leg_r.rotation.x = -sin(t * 2.4 + 0.6) * 0.35
-			pose.rotation.z = sin(t * 1.3) * 0.08
-		"play":
-			var hop := absf(sin(t * 5.0))
-			pose.position.y = hop * 0.26
-			arm_l.rotation.x = lerpf(-0.4, -2.6, hop)
-			arm_r.rotation.x = lerpf(-0.4, -2.6, hop)
-			arm_l.rotation.z = -0.4
-			arm_r.rotation.z = 0.4
-		_:
-			pose.position.y = sin(t * 1.6) * 0.01
-			arm_l.rotation.x = sin(t * 1.1) * 0.04
-			arm_r.rotation.x = -sin(t * 1.1) * 0.04
-	if _lean != 0.0 and a != "sleep":
-		pose.rotation.x += _lean
-		head.rotation.x += _lean * 0.6
+	tool.visible = a == "work" or a == "torch"
+	if _cane != null:
+		_cane.visible = not a in ["sit", "eat", "sleep", "pray", "work", "fly", "play", "carry"]
+	_arm_aim = Vector2.INF
+	if skel == null or _post.is_empty():
+		return
+	for bn: String in ["chest", "skirt", "skull"]:
+		var i := skel.find_bone(bn)
+		if i >= 0:
+			skel.set_bone_pose_scale(i, _post[bn])
+	var dx: float = _post["arm_dx"]
+	var lx: float = _post["leg_dx"]
+	for pr: Array in [["upper_arm.L", dx], ["upper_arm.R", -dx], ["thigh.L", lx], ["thigh.R", -lx]]:
+		var i := skel.find_bone(pr[0])
+		if i >= 0 and pr[1] != 0.0:
+			skel.set_bone_pose_position(i, skel.get_bone_rest(i).origin + Vector3(pr[1], 0, 0))
+	if _post["thick_arms"]:
+		for bn: String in ["upper_arm.L", "upper_arm.R"]:
+			skel.set_bone_pose_scale(skel.find_bone(bn), Vector3(1.3, 1.0, 1.3))
+	if _post["slim_legs"]:
+		for bn: String in ["thigh.L", "thigh.R"]:
+			skel.set_bone_pose_scale(skel.find_bone(bn), Vector3(0.75, 1.0, 0.75))
+	if a != "sleep":
+		if _lean != 0.0:
+			_rot_world(skel.find_bone("spine"), Vector3.RIGHT, _lean)
+		_rot_world(skel.find_bone("skull"), Vector3.RIGHT, HEAD_TILT - _lean * 0.6)
+
+
+## 뼈를 (쉴 자세 기준) 세계 축 둘레로 더 돌림
+func _rot_world(i: int, axis: Vector3, ang: float) -> void:
+	if i < 0 or ang == 0.0:
+		return
+	var local := (skel.get_bone_global_rest(i).basis.inverse() * axis).normalized()
+	skel.set_bone_pose_rotation(i, skel.get_bone_pose_rotation(i) * Quaternion(local, ang))
+
+
+func _apply_aim() -> void:
+	if skel == null or _arm_aim == Vector2.INF:
+		return
+	var i := skel.find_bone("upper_arm.R")
+	if i < 0:
+		return
+	var B := skel.get_bone_global_rest(i).basis
+	var wr := Basis(Vector3.RIGHT, _arm_aim.x) * Basis(Vector3.BACK, _arm_aim.y)
+	skel.set_bone_pose_rotation(i, skel.get_bone_rest(i).basis.get_rotation_quaternion() * (B.inverse() * wr * B).get_rotation_quaternion())
