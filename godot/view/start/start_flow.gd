@@ -167,10 +167,24 @@ static func resume_plan(sm: GameSave = null) -> CreationPlan:
 	if sm == null:
 		sm = GameSave.get_instance()
 	var dir := sm.dir if sm != null else GameSave.DIR
-	if sm != null and sm.has_save() and not sm.peek().is_empty():     # 병이 이미 저장됨 = 창조는 끝났음 (지난 파일)
+	var pk := sm.peek() if sm != null and sm.has_save() else {}
+	if not pk.is_empty() and not bool(pk.get("pending", false)):     # 병이 이미 저장됨 = 창조는 끝났음 (지난 파일) — 사 둔 새 병을 만드는 중이면 남긴다 (C1)
 		CreationPlan.clear(dir)
 		return null
 	return CreationPlan.load_from(dir)
+
+
+## 선반에서 산 새 병 (C1 — OPENING 4 빠른 창조): 만들던 빠른 창조가 있으면 그것, 없으면 새 시드. 창조 장면으로
+static func to_new_jar(tree: SceneTree) -> void:
+	var dir := save_dir()
+	var p := CreationPlan.load_from(dir)
+	if p == null:
+		p = new_plan()
+		p.quick = true
+		p.save(dir)
+	plan = p
+	pending_world = null
+	to_creation(tree)
 
 
 ## 새 창조 (첫 병: 새 무작위 시드 · 기기에 맞는 세상 크기)
@@ -191,7 +205,8 @@ static func button_info(sm: GameSave) -> Dictionary:
 	if nm == "":
 		nm = "나의 작은 병"
 	var day := int(p.get("day", 0))
-	return {"label": "이어하기", "sub": "%s · %d일째" % [nm, day] if day > 0 else nm, "has_save": true, "era": int(p.get("era", 0))}
+	return {"label": "이어하기", "sub": "%s · %d일째" % [nm, day] if day > 0 else nm, "has_save": true, "era": int(p.get("era", 0)),
+		"id": int(p.get("id", 1)), "shelf": p.get("shelf", []), "pending": bool(p.get("pending", false))}
 
 
 ## 그림 파일 (그림 서브에이전트가 art/title/에 넣는 것) — 없으면 null (화면이 직접 그림)

@@ -79,14 +79,23 @@ func _make_village() -> Village:
 	var size := world_size if world_size > 0 else default_size()
 	world = JarWorld.create(sd, size)
 	var rec := world.recommended_kit_spots()
-	var v := world.place_kit(rec[0].x, rec[0].y, Kits.make([], kit_variant))
+	var v := world.place_kit(rec[0].x, rec[0].y, Kits.make(_kit_ups(use_save), kit_variant))
 	print("세상 시드 %d · 지름 %d칸 · 추천 자리 %d곳 · 첫 키트 %s" % [sd, size, rec.size(), str(v.center)])
 	return v
+
+
+## 새 세상의 스타터킷에 함께 놓일 키트 업그레이드 (선반에서 산 것 중 켠 것 — C1 · 기획서 5.5). 저장을 쓰지 않는 장면(시험·캡처)은 기본 키트
+func _kit_ups(saving: bool) -> Array:
+	var sm := GameSave.get_instance()
+	if not saving or sm == null or not sm.enabled:
+		return []
+	return sm.kit_upgrades()
 
 
 # ───────────────────────── 키트 자리 고르기 (OPENING 단계 8 '스타터킷 풀기' — 최소판) ─────────────────────────
 ## 안개 없는 세상 전체를 내려다보고 빛나는 추천 자리를 누른다 → 키트를 놓고 나서야 병 안 장면(위아래 띠·마을)을 만든다
 var _pick: Dictionary = {}           # 고르는 중인 화면 {root, cam, terrain, layer, marks: [[node, label, choice]], confirm, caption, t}
+var _pick_ups: Array = []            # 첫 키트에 넣을 키트 업그레이드 (선반 — C1)
 
 
 func _ready() -> void:
@@ -98,6 +107,12 @@ func _ready() -> void:
 
 func _begin_pick() -> void:
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
+	var gsm := GameSave.get_instance()
+	_pick_ups = []
+	if gsm != null and gsm.enabled and not force_pick:        # 선반에서 산 새 병 (C1): 거인 묶음(키트 업그레이드)을 먼저 — 앱을 다시 켠 뒤에도
+		if gsm.order.is_empty() and gsm.has_save():
+			gsm.load_all(false)
+		_pick_ups = gsm.kit_upgrades()
 	var sd := world_seed if world_seed != 0 else WorldGen.new_seed()
 	var size := world_size if world_size > 0 else default_size()
 	if StartFlow.pending_world != null:            # 창조 오프닝이 만든 세상 (거인의 선택이 담긴)
@@ -344,7 +359,7 @@ static func _giant_hand(u: float) -> Node3D:
 func _place_first_kit(p: Vector2) -> void:
 	var far_ppu: float = (_pick["cam"] as JarCamera).ppu
 	print("첫 키트 자리 %s (%s)" % [str(p), world.spot_reason(p.x, p.y)])
-	var v := world.place_kit(p.x, p.y, Kits.make([], kit_variant))
+	var v := world.place_kit(p.x, p.y, Kits.make(_pick_ups, kit_variant))
 	if _plan != null:                              # 이름 짓기 전 (앱이 꺼지면 이 자리에서 다시) · 주민들은 상자에서 걸어 나온다
 		_plan.spot = [p.x, p.y]
 		_plan.stage = "name"
@@ -414,6 +429,10 @@ func _on_named(nm: String) -> void:
 	_start_save()
 	CreationPlan.clear(StartFlow.save_dir())
 	StartFlow.plan = null
+	if shelf_sheet != null:
+		shelf_sheet.current_id = jar_id if use_save else -1
+	if shelf_hud != null:
+		refresh_shelf()
 	print("지구 이름 '%s'" % nm)
 
 
@@ -429,9 +448,9 @@ func _start_save() -> void:
 
 
 func _from_save(sm: GameSave) -> Village:
-	if sm.jars[JAR_ID]["kind"] != "world":
+	if sm.jars[jar_id]["kind"] != "world":
 		return null
-	world = sm.jars[JAR_ID]["world"]
+	world = sm.jars[jar_id]["world"]
 	world._update_interest()
 	return world.primary()
 
@@ -479,6 +498,157 @@ func _after_ready() -> void:
 	wterrain.set_focus(Vector2(cam.target.x, cam.target.z), cam.view_radius())
 	wterrain.update_now()
 	_setup_world_ui()
+	_setup_shelf()
+
+
+# ───────────────────────── 선반 (C1 — UI 05 · GIANT_ROOM 1 '병이 여러 개면 선반에 나란히 — 좌우로 밀어 넘김') ─────────────────────────
+## 거인의 방(⑤) 선반 위 지금 병 옆에 다른 병들 (꾸민 병 — 저장된 시대의 작은 마을) · 좌우로 밀면 옆 병 · 옆 병 아래 [들어가기].
+## 들어가면 지금 병을 저장해 선반에 내려놓고 그 병을 불러온다 (GameSave.switch_jar → 장면을 다시 — 쉬던 동안은 등불 상한까지 따라잡기).
+## 선반 시트(UI 05)의 [들어가기]·[새 병 사기]도 여기로
+var shelf_slots: Array = []          # [{x: cm, id, empty, info}] — 지금 병(x 0) 포함, 선반 순서
+var shelf_hud: PanelContainer
+var shelf_hud_l: Label
+var shelf_hud_btn: Button
+var _shelf_focus := -1               # 지금 화면 가운데의 병 자리 (shelf_slots 번호)
+
+
+func _setup_shelf() -> void:
+	shelf_sheet.current_id = jar_id if use_save else -1
+	shelf_sheet.enter_requested.connect(enter_jar)
+	shelf_sheet.make_jar_requested.connect(make_new_jar)
+	refresh_shelf()
+	var root: Control = minimap.get_parent()
+	shelf_hud = PanelContainer.new()
+	shelf_hud.theme_type_variation = "TopBar"
+	shelf_hud.mouse_filter = Control.MOUSE_FILTER_STOP
+	shelf_hud.visible = false
+	root.add_child(shelf_hud)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", UiTheme.GAP)
+	shelf_hud.add_child(row)
+	shelf_hud_l = Label.new()
+	shelf_hud_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	shelf_hud_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	row.add_child(shelf_hud_l)
+	shelf_hud_btn = _bar_button(row, "들어가기", func() -> void: _enter_focused())
+	shelf_hud_btn.custom_minimum_size = Vector2(96, UiTheme.TOUCH)
+
+
+## 선반의 병 자리를 다시 (선반 순서 그대로 — 지금 병이 가운데 0, 왼쪽 병은 −, 오른쪽 병은 +) + 사 둔 빈 병은 맨 끝
+func refresh_shelf() -> void:
+	shelf_slots.clear()
+	var sm := GameSave.get_instance()
+	var list: Array = sm.shelf_list() if use_save and sm != null else []
+	var ci := 0
+	for i in list.size():
+		if int((list[i] as Dictionary).get("id", -1)) == jar_id:
+			ci = i
+	for i in list.size():
+		var j: Dictionary = list[i]
+		shelf_slots.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int(j.get("id", -1)), "empty": false, "info": j})
+	if use_save and sm != null and not sm.pending_jar().is_empty():
+		shelf_slots.append({"x": (list.size() - ci) * GiantRoom.SHELF_GAP, "id": -1, "empty": true, "info": sm.pending_jar()})
+	if shelf_slots.is_empty():
+		shelf_slots.append({"x": 0.0, "id": jar_id, "empty": false, "info": {}})
+	var others: Array = []
+	var lo := 0.0
+	var hi := 0.0
+	for s: Dictionary in shelf_slots:
+		lo = minf(lo, float(s["x"]))
+		hi = maxf(hi, float(s["x"]))
+		if float(s["x"]) != 0.0:
+			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0))})
+	if room_zoom != null:
+		room_zoom.room.set_shelf_jars(others)
+	cam.shelf_range = Vector2(lo, hi) if others.size() > 0 else Vector2.ZERO
+	cam.shelf_pan = clampf(cam.shelf_pan, lo, hi)
+
+
+## 화면 가운데에 가장 가까운 병 자리
+func shelf_focus() -> Dictionary:
+	var best: Dictionary = {}
+	var bd := INF
+	for s: Dictionary in shelf_slots:
+		var d := absf(float(s["x"]) - cam.shelf_pan)
+		if d < bd:
+			bd = d
+			best = s
+	return best
+
+
+## 선반 밀기: 손을 떼면 가장 가까운 병으로 미끄러져 멈춤 · 방(⑤)을 떠나면 지금 병으로 돌아옴 · 옆 병이면 아래에 이름과 [들어가기]
+func _shelf_process(dt: float) -> void:
+	if room_zoom == null or shelf_hud == null:
+		return
+	var in_room := cam.beyond >= JarCamera.B_ROOM - 0.02 and not cam.flying
+	var held := not _touches.is_empty() or _drag
+	var goal := 0.0
+	if in_room:
+		var f := shelf_focus()
+		goal = float(f.get("x", 0.0))
+	if not held or not in_room:
+		var np := lerpf(cam.shelf_pan, goal, 1.0 - exp(-10.0 * dt))
+		if absf(np - goal) < 0.02:
+			np = goal
+		if np != cam.shelf_pan:
+			cam.shelf_pan = np
+			cam._apply()
+	var f2 := shelf_focus() if in_room else {}
+	var show := in_room and not f2.is_empty() and float(f2["x"]) != 0.0 and absf(cam.shelf_pan - float(f2["x"])) < GiantRoom.SHELF_GAP * 0.35
+	shelf_hud.visible = show
+	if show:
+		if bool(f2["empty"]):
+			shelf_hud_l.text = "사 둔 빈 병 · %s\n아직 세상이 없어요" % String((f2["info"] as Dictionary).get("climate", "온대"))
+			shelf_hud_btn.text = "만들기"
+		else:
+			var ln := ShelfSheet.jar_lines(f2["info"])
+			shelf_hud_l.text = "%s\n%s" % [ln[0], ln[1]]
+			shelf_hud_btn.text = "들어가기"
+		var vs := get_viewport().get_visible_rect().size
+		shelf_hud.position = Vector2(12.0, vs.y - bottom_h - 92.0)
+		shelf_hud.size = Vector2(vs.x - 24.0, 0.0)
+
+
+func _enter_focused() -> void:
+	var f := shelf_focus()
+	if f.is_empty():
+		return
+	if bool(f["empty"]):
+		make_new_jar()
+	elif int(f["id"]) != jar_id:
+		enter_jar(int(f["id"]))
+
+
+## 다른 병으로 들어간다 (선반 시트 [들어가기] · 방에서 옆 병): 지금 병을 저장해 선반에 내려놓고 그 병으로 장면을 다시 (이어하기와 같은 길 —
+## 방에서 시작해 그 병의 마을로 날아 들어감, 쉬던 동안은 등불 상한까지 따라잡기 + 편지)
+func enter_jar(id: int) -> bool:
+	var sm := GameSave.get_instance()
+	if leaving or not use_save or sm == null or id == jar_id or not id in sm.order:
+		return false
+	leaving = true
+	paused = true
+	shelf_sheet.visible = false
+	sm.switch_jar(id)
+	GameAudio.fx("glass_tap_light", "Room", -6.0)
+	StartFlow.enter_game(get_tree(), "continue")
+	return true
+
+
+## 새 병 (산 직후 · 사 둔 빈 병 [만들기]): 지금 병을 저장해 내려놓고 빠른 창조로 (OPENING 4) → 키트 자리 → 이름 → 그 병 안
+func make_new_jar() -> bool:
+	var sm := GameSave.get_instance()
+	if leaving or not use_save or sm == null or sm.pending_jar().is_empty():
+		return false
+	leaving = true
+	paused = true
+	shelf_sheet.visible = false
+	sm.unload()
+	var a := GameAudio.get_instance()
+	if a != null:
+		a.attach(null)
+		a.set_menu(true)
+	StartFlow.to_new_jar(get_tree())
+	return true
 
 
 # ───────────────────────── 무리마다 화면 ─────────────────────────
@@ -558,6 +728,7 @@ func _process(dt: float) -> void:
 	_lid_follow()
 	if room_zoom != null:
 		room_zoom.update(dt)
+		_shelf_process(dt)
 		if _enter_fly and not catching and not leaving:
 			_enter_fly = false
 			fly_to_settlement(village)
@@ -956,18 +1127,26 @@ func _room_tap(sp: Vector2) -> void:
 		open_glass_note(note)
 		return
 	var now := Time.get_ticks_msec() / 1000.0
-	var c := room_zoom.room.cm(Vector3(0, 7.0, 0))
-	var e := room_zoom.room.cm(Vector3(GiantRoom.JAR_OUT, 7.0, 0))
+	var f := shelf_focus()
+	var fx := float(f.get("x", 0.0))                  # 옆 병을 보고 있으면 그 병 (C1)
+	var c := room_zoom.room.cm(Vector3(fx, 7.0, 0))
+	var e := room_zoom.room.cm(Vector3(fx + GiantRoom.JAR_OUT, 7.0, 0))
 	var cp := cam.camera.unproject_position(c)
 	var on_jar := absf(sp.x - cp.x) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.05 and absf(sp.y - cp.y) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.4
 	if not on_jar:
 		return
 	if _tap_t > 0.0 and now - _tap_t < DOUBLE_TAP:
 		_tap_t = -1.0
-		fly_to_settlement(focus_village())
+		if fx != 0.0:
+			_enter_focused()
+		else:
+			fly_to_settlement(focus_village())
 		return
 	_tap_t = now
-	tap_glass(false)
+	if fx != 0.0:
+		GameAudio.fx("glass_tap_light", "Room", -6.0)     # 옆 병 유리 톡 (그 병의 주민은 지금 자는 중 — 들어가면 깨어남)
+	else:
+		tap_glass(false)
 
 
 ## 유리에 붙은 편지 (GIANT_ROOM 3 — 빨간 점 대신): 안 읽은 '자리를 비운 동안' 편지 · 계시를 기다리는 무리 · 소원 편지가 있는 무리

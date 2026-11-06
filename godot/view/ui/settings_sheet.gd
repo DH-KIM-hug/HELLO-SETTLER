@@ -329,7 +329,10 @@ func pick_kind(k: String) -> void:
 
 
 func current_info() -> Dictionary:
-	return Inquiry.info(jars, village.day_no() if village != null else 1)
+	var sm := GameSave.get_instance()
+	var n := sm.order.size() if sm != null and not sm.order.is_empty() else jars      # 선반의 병 수 (C1)
+	return Inquiry.info(n, village.day_no() if village != null else 1)
+
 
 
 func send_mail() -> void:

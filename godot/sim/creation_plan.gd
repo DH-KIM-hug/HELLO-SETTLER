@@ -29,6 +29,7 @@ var fish: Array = []                    # [u, v] 물고기 병을 기울인 곳
 var spot: Array = []                    # [x, y] 스타터킷 자리 (세상 좌표)
 var climate := "temperate"              # 첫 병은 온대 고정 (GAME_DESIGN 5.3) — 두 번째 병부터 태양 단계가 정함
 var jar_name := ""
+var quick := false                      # 두 번째 병부터 — 빠른 창조 (OPENING 4: 한 화면에 핵·땅·물·기후·씨앗)
 
 
 static func make(seed_v: int, size: int) -> CreationPlan:
@@ -247,6 +248,7 @@ func to_dict() -> Dictionary:
 	d["spot"] = spot.duplicate()
 	d["climate"] = climate
 	d["name"] = jar_name
+	d["quick"] = quick
 	d["water_raw"] = water
 	return d
 
@@ -275,6 +277,7 @@ static func from_dict(d: Dictionary) -> CreationPlan:
 	p.spot = [float(sp[0]), float(sp[1])] if sp.size() == 2 else []
 	p.climate = String(d.get("climate", "temperate"))
 	p.jar_name = String(d.get("name", ""))
+	p.quick = bool(d.get("quick", false))
 	return p
 
 

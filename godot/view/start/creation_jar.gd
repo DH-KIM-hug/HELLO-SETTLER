@@ -366,6 +366,7 @@ func set_pour(kind: String, at := Vector3(0, 17.5, 0)) -> void:
 # ───────────────────────── 카메라 ─────────────────────────
 const SHOTS := {
 	"wide": {"yaw": 0.0, "pitch": 0.2, "dist": 78.0, "ty": 10.0},
+	"quick": {"yaw": 0.0, "pitch": 0.42, "dist": 44.0, "ty": -3.5},          # 빠른 창조 (C1 — 아래 반은 고르기 칸이라 병을 위쪽에)
 	"core": {"yaw": 0.0, "pitch": 0.16, "dist": 42.0, "ty": 11.0},
 	"soil": {"yaw": 0.0, "pitch": 0.62, "dist": 30.0, "ty": 3.0},
 	"water": {"yaw": 0.0, "pitch": 0.66, "dist": 35.0, "ty": 3.4},

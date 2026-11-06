@@ -81,7 +81,9 @@ func _ready() -> void:
 		a.set_menu(true)
 	get_viewport().size_changed.connect(layout)
 	layout()
-	if plan.stage_index() <= 0:
+	if plan.quick and plan.stage_index() <= 0:
+		_quick()
+	elif plan.stage_index() <= 0:
 		_intro()
 	else:
 		_resume()
@@ -229,6 +231,12 @@ func layout() -> void:
 		chips.reset_size()
 		chips.position = Vector2((vs.x - chips.size.x) * 0.5, row_y - 10.0 - chips.size.y)
 		above = chips.position.y
+	if quick_box != null and quick_box.visible:
+		var qw := minf(344.0, vs.x - 20.0)
+		quick_box.custom_minimum_size.x = qw
+		quick_box.reset_size()
+		quick_box.position = Vector2((vs.x - qw) * 0.5, above - 10.0 - quick_box.size.y)
+		above = quick_box.position.y
 	caption.custom_minimum_size.x = minf(330.0, vs.x - 32.0)
 	caption.size = Vector2(caption.custom_minimum_size.x, 0)
 	caption.reset_size()
@@ -402,11 +410,165 @@ func go(s: String) -> void:
 	layout()
 
 
+# ───────────────────────── 빠른 창조 (OPENING 4 — 두 번째 병부터) ─────────────────────────
+## 단계 1~7을 한 화면에: 핵 크기 / 땅 / 물 / 기후대 / 씨앗 → [만들기] (배양 타임랩스 없이 세상을 만들고 키트 자리로).
+## [정성 들여 만들기] = 첫 창조처럼 단계별로 (plan.quick = false)
+const QUICK_LAND := ["너른 들", "언덕", "산과 골짜기"]
+const QUICK_WATER := ["조금", "알맞게", "넉넉히"]
+const QUICK_WATER_V := [0.25, 0.45, 0.68]
+const QUICK_SEEDS := ["알아서", "숲을 더", "풀밭을 더"]
+var quick_box: PanelContainer
+var quick_sel := {"core": 1, "land": 1, "water": 1, "seeds": 0}
+
+
+func _quick() -> void:
+	step = "quick"
+	_update_dots()
+	dots.visible = false
+	jar.shot("quick", 0.0)
+	jar.soil_mi.visible = true
+	jar.soil_rise = 1.0
+	jar.mark_dirty()
+	_say("새 병이에요. 이번엔 한 번에 골라 볼까요?")
+	_build_quick_box()
+	alt_btn.text = "정성 들여 만들기"
+	alt_btn.visible = true
+	_show_next(true, "만들기")
+	layout()
+
+
+func _build_quick_box() -> void:
+	if quick_box != null:
+		quick_box.queue_free()
+	quick_box = PanelContainer.new()
+	quick_box.theme_type_variation = "Card"
+	quick_box.mouse_filter = Control.MOUSE_FILTER_STOP
+	ui.add_child(quick_box)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 6)
+	quick_box.add_child(col)
+	_quick_row(col, "핵", ["작게", "보통", "크게"], "core")
+	_quick_row(col, "땅", QUICK_LAND, "land")
+	_quick_row(col, "물", QUICK_WATER, "water")
+	var cr := HBoxContainer.new()
+	cr.add_theme_constant_override("separation", 6)
+	col.add_child(cr)
+	var cl := Label.new()
+	cl.text = "기후"
+	cl.custom_minimum_size.x = 40
+	cr.add_child(cl)
+	var cb := Button.new()
+	cb.text = "온대"
+	cb.toggle_mode = true
+	cb.button_pressed = true
+	cb.focus_mode = Control.FOCUS_NONE
+	cb.custom_minimum_size = Vector2(64, UiTheme.TOUCH - 4)
+	cr.add_child(cb)
+	var soon := Label.new()
+	soon.text = "다른 기후는 곧"
+	soon.theme_type_variation = "Small"
+	soon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	cr.add_child(soon)
+	_quick_row(col, "씨앗", QUICK_SEEDS, "seeds")
+
+
+func _quick_row(parent: Node, title: String, items: Array, key: String) -> void:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 6)
+	parent.add_child(row)
+	var l := Label.new()
+	l.text = title
+	l.custom_minimum_size.x = 40
+	row.add_child(l)
+	var btns: Array[Button] = []
+	for i in items.size():
+		var b := Button.new()
+		b.text = items[i]
+		b.toggle_mode = true
+		b.button_pressed = i == int(quick_sel[key])
+		b.focus_mode = Control.FOCUS_NONE
+		b.custom_minimum_size = Vector2(0, UiTheme.TOUCH - 4)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.clip_text = false
+		b.pressed.connect(GameAudio.ui_click)
+		row.add_child(b)
+		btns.append(b)
+	for i in btns.size():
+		btns[i].pressed.connect(func() -> void: set_quick(key, i))
+
+
+## 빠른 창조 고르기 하나 (시험·캡처도 부름) — 핵은 병 안 빛, 땅은 흙 모양, 물은 수면이 바로 바뀐다
+func set_quick(key: String, i: int) -> void:
+	quick_sel[key] = i
+	if quick_box != null:
+		var col := quick_box.get_child(0)
+		var rows := {"core": 0, "land": 1, "water": 2, "seeds": 4}
+		if rows.has(key):
+			var row := col.get_child(int(rows[key]))
+			for j in row.get_child_count() - 1:
+				(row.get_child(j + 1) as Button).button_pressed = j == i
+	_apply_quick()
+
+
+func _apply_quick() -> void:
+	plan.core = int(quick_sel["core"])
+	match int(quick_sel["land"]):
+		0:
+			plan.sculpt.fill(0.0)
+		1:
+			plan.auto_sculpt(1)
+			for k in plan.sculpt.size():
+				plan.sculpt[k] *= 0.5
+		_:
+			plan.auto_sculpt(2)
+	plan.water = float(QUICK_WATER_V[int(quick_sel["water"])])
+	if plan.drips.is_empty():
+		for d: Array in [[-0.35, 0.25], [0.4, -0.2]]:
+			plan.drips.append(d)
+	for k: String in ["moss", "grass", "tree"]:
+		plan.seeds[k] = []
+	var kind := ["", "tree", "grass"][int(quick_sel["seeds"])] as String
+	if kind != "":
+		for i in 14:
+			var a := i / 14.0 * TAU
+			plan.add_seed(kind, cos(a) * 0.55, sin(a) * 0.55)
+	plan.climate = "temperate"
+	jar.mark_dirty()
+
+
+## [만들기]: 고른 대로 세상을 만들고 (배양 연출 없이 — 잠깐 기다림) 키트 자리 고르기로
+func quick_make() -> void:
+	_apply_quick()
+	if quick_box != null:
+		quick_box.visible = false
+	alt_btn.visible = false
+	_show_next(false)
+	step = "quick_gen"
+	jar.cork.visible = true
+	jar.set_mist(0.6)
+	jar.shot("lapse", 0.0 if instant else 1.0)
+	_say("뚜껑을 닫으니 병 안에 세상이 자라요…")
+	_start_gen()
+
+
+## [정성 들여 만들기]: 첫 창조처럼 단계별로
+func quick_to_full() -> void:
+	plan.quick = false
+	plan.save(StartFlow.save_dir())
+	if quick_box != null:
+		quick_box.queue_free()
+		quick_box = null
+	dots.visible = true
+	_intro()
+
+
 ## [다음] — 단계마다 기본값으로 마무리하고 넘어감
 func next() -> void:
 	if leaving:
 		return
 	match step:
+		"quick":
+			quick_make()
 		"core":
 			drop_core()
 		"soil":
@@ -447,6 +609,9 @@ func next() -> void:
 
 
 func _on_alt() -> void:
+	if step == "quick":
+		quick_to_full()
+		return
 	if step == "soil":
 		_auto_n += 1
 		plan.auto_sculpt(_auto_n)
@@ -668,6 +833,19 @@ func _poll_gen() -> void:
 func _on_gen_done(jw: JarWorld) -> void:
 	_world = jw
 	jar.take_world(jw.water)
+	if step == "quick_gen":                # 빠른 창조: 다 자란 모습으로 바로 → 키트 자리
+		jar.morph = 1.0
+		jar.lake_rise = 1.0
+		jar.damp = 1.0
+		jar.water_show = 0.0
+		jar.place_rivers(1.0)
+		jar.place_lakes(1.0)
+		jar.set_mist(0.0)
+		jar.green = 1.0
+		jar.plant_trees()
+		jar.mark_dirty()
+		leave()
+		return
 	if step == "wait":                     # 다시 켰을 때: 그 단계의 모습으로
 		jar.shot("top", 0.0 if instant else 1.0)
 		jar.morph = 1.0
