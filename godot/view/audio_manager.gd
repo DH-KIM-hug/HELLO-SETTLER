@@ -419,8 +419,23 @@ func play_sfx(id: String, bus := "Room", vol_db := 0.0, at: Variant = null) -> v
 	p.stream = s
 	p.bus = bus
 	p.volume_db = vol_db
-	p.pitch_scale = rng.randf_range(0.94, 1.06)
+	p.pitch_scale = tap_note() if id == "glass_tap_light" else rng.randf_range(0.94, 1.06)
 	_play(p)
+
+
+## 유리 톡 멜로디 — 잇달아 두드리면 '반짝반짝 작은 별'(옛 동요, 저작권 없음)을 한 음씩. 1.5초 쉬면 처음부터.
+const TAP_TUNE := [0, 0, 7, 7, 9, 9, 7, 5, 5, 4, 4, 2, 2, 0]     # 반음 (도 도 솔 솔 라 라 솔 / 파 파 미 미 레 레 도)
+var _tap_i := 0
+var _tap_t := -10.0
+
+func tap_note() -> float:
+	var t := now()
+	if t - _tap_t > 1.5:
+		_tap_i = 0
+	_tap_t = t
+	var n: int = TAP_TUNE[_tap_i % TAP_TUNE.size()]
+	_tap_i += 1
+	return pow(2.0, (n - 3) / 12.0)       # 가운데쯤 (−3반음 기준)
 
 
 func _free_player(pool: Array[AudioStreamPlayer]) -> AudioStreamPlayer:
