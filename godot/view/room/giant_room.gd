@@ -33,8 +33,32 @@ const TOD := {
 		"light_from": Vector3(-26.0, 40.0, 14.0)},
 }
 
+## 창밖 계절 (현실 달 — GIANT_ROOM 1·5): 하늘 셰이더(가지·떨어지는 것) + 먼 나무 줄 색 (창틀 메시 꼭짓점 색 a8d49a · 93c78a를 바꿈)
+const SEASON := {
+	"spring": {"trees": [Color("f3c4d0"), Color("a9d68f")], "fall": 0.16, "fall_speed": 0.55, "fall_size": 0.16, "fall_stretch": 1.9,
+		"fall_col": Color("f7c3d1"), "fall_col2": Color("fde6ec"), "branch": Color("7a5644"), "leaf": Color("f4b9c9"), "leaf2": Color("fbe0e7"), "leaf_amt": 1.0,
+		"snow_cap": 0.0, "haze": 0.0},
+	"summer": {"trees": [Color("78b86a"), Color("5b9f5e")], "fall": 0.0, "fall_speed": 0.5, "fall_size": 0.14, "fall_stretch": 1.0,
+		"fall_col": Color("ffffff"), "fall_col2": Color("ffffff"), "branch": Color("6e4f3c"), "leaf": Color("5fae62"), "leaf2": Color("7cc472"), "leaf_amt": 1.0,
+		"snow_cap": 0.0, "haze": 0.0},
+	"autumn": {"trees": [Color("eba556"), Color("d77a4c")], "fall": 0.13, "fall_speed": 0.6, "fall_size": 0.2, "fall_stretch": 1.8,
+		"fall_col": Color("e8893e"), "fall_col2": Color("d65a3c"), "branch": Color("6e4f3c"), "leaf": Color("ec9a45"), "leaf2": Color("d9643f"), "leaf_amt": 0.7,
+		"snow_cap": 0.0, "haze": 0.0},
+	"winter": {"trees": [Color("eef3f2"), Color("d3e1e4")], "fall": 0.3, "fall_speed": 0.9, "fall_size": 0.12, "fall_stretch": 1.0,
+		"fall_col": Color("ffffff"), "fall_col2": Color("eef4fb"), "branch": Color("5e4537"), "leaf": Color("ffffff"), "leaf2": Color("ffffff"), "leaf_amt": 0.0,
+		"snow_cap": 1.0, "haze": 0.35},
+}
+const TREE_GREENS := [Color("a8d49a"), Color("93c78a")]
+static var force_season := ""                # 캡처·시험: 창밖 계절 고정 ("" = 현실 달)
+
 var scale_s := 1.0
 var tod := "morning"
+var season := "spring"
+var window_frame: Node3D
+var _frame_mesh: ArrayMesh                 # 창틀 원래 메시 (계절마다 나무 줄 색만 바꾼 사본을 씀)
+var _frame_mi: MeshInstance3D
+var blobs: Array = []                      # 바닥 그림자 [MeshInstance3D, 소품 자리(Vector2) 또는 -1 = 등불, 반지름, 높이]
+var blob_mat: ShaderMaterial
 var root: Node3D                           # cm 공간 (scale_s배)
 var light: DirectionalLight3D              # 창빛 (층 2만)
 var curtain: Node3D
@@ -70,7 +94,11 @@ func setup(s: float, time_of_day: String, with_soil := true) -> void:
 	for mi in wall.find_children("*", "GeometryInstance3D", true, false):
 		(mi as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF    # 벽은 받기만 (그림자 깊이 범위가 넓어지지 않게)
 	Art.instance(root, ROOM + "shelf")
-	Art.instance(root, ROOM + "window_frame", Transform3D(y, WINDOW_AT))
+	window_frame = Art.instance(root, ROOM + "window_frame", Transform3D(y, WINDOW_AT))
+	for c in window_frame.get_children():
+		if c is MeshInstance3D and _frame_mi == null:
+			_frame_mi = c
+			_frame_mesh = (c as MeshInstance3D).mesh as ArrayMesh
 	var sky := _plain(ROOM + "window_sky", Transform3D(y, WINDOW_AT + Vector3(0, 0, 0.32)))
 	sky_mat = ShaderMaterial.new()
 	sky_mat.shader = load("res://render/room_sky.gdshader")
@@ -123,15 +151,17 @@ func setup(s: float, time_of_day: String, with_soil := true) -> void:
 	light = DirectionalLight3D.new()
 	light.light_cull_mask = LAYER_BIT
 	light.light_specular = 0.0
-	light.shadow_enabled = true
+	light.shadow_enabled = false               # 실제 그림자 대신 바닥 그림자(blob) — 타이틀(s = 1)과 넓은 세상(s ≈ 91)이 똑같이 보이게
 	light.shadow_bias = 0.03
 	light.shadow_normal_bias = 1.0
 	light.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	light.directional_shadow_max_distance = minf(8190.0, 100.0 * s)     # 엔진 한계 8192 — 넓은 세상(s≈91)은 카메라가 방 가까이(ROOM_D_CM)
 	light.directional_shadow_pancake_size = 30.0 * s
 	add_child(light)
+	_make_blobs()
 	_set_layers(root)
 	set_tod(time_of_day)
+	set_season(now_season())
 	set_lamp(true, lamp_dir)
 	set_curtain(0)
 
@@ -182,8 +212,128 @@ func set_tod(t: String) -> void:
 	var from: Vector3 = p["light_from"]
 	light.look_at_from_position(from.normalized() * 50.0, Vector3.ZERO, Vector3.UP)
 	_update_beam()
+	_place_blobs()
+	if sky_mat != null:
+		sky_mat.set_shader_parameter("light_k", 0.5 if tod == "night" else 1.0)
 	for m: ShaderMaterial in [glass_mat, lamp_glass_mat]:
 		m.set_shader_parameter("tint_mul", room_mul())
+
+
+## 현실 달 → 계절 (북반구: 3~5 봄 · 6~8 여름 · 9~11 가을 · 12~2 겨울)
+static func season_of_month(m: int) -> String:
+	if m >= 3 and m <= 5:
+		return "spring"
+	if m >= 6 and m <= 8:
+		return "summer"
+	if m >= 9 and m <= 11:
+		return "autumn"
+	return "winter"
+
+
+static func now_season() -> String:
+	if force_season != "":
+		return force_season
+	return season_of_month(int(Time.get_datetime_dict_from_system()["month"]))
+
+
+## 창밖 계절: 하늘(가지·꽃잎·낙엽·눈) + 먼 나무 줄 색
+func set_season(se: String) -> void:
+	season = se if SEASON.has(se) else "spring"
+	paint_season(sky_mat, season)
+	sky_mat.set_shader_parameter("light_k", 0.5 if tod == "night" else 1.0)
+	if _frame_mi != null and _frame_mesh != null:
+		_frame_mi.mesh = _season_frame(_frame_mesh, season)
+
+
+## 창밖 계절 재질 값 (창조 장면 등 다른 창도 같이 쓸 수 있게)
+static func paint_season(m: ShaderMaterial, se: String) -> void:
+	var p: Dictionary = SEASON.get(se, SEASON["spring"])
+	m.set_shader_parameter("fall_amt", p["fall"])
+	m.set_shader_parameter("fall_speed", p["fall_speed"])
+	m.set_shader_parameter("fall_size", p["fall_size"])
+	m.set_shader_parameter("fall_stretch", p["fall_stretch"])
+	m.set_shader_parameter("fall_col", p["fall_col"])
+	m.set_shader_parameter("fall_col2", p["fall_col2"])
+	m.set_shader_parameter("branch_on", 1.0)
+	m.set_shader_parameter("branch_col", p["branch"])
+	m.set_shader_parameter("leaf_col", p["leaf"])
+	m.set_shader_parameter("leaf_col2", p["leaf2"])
+	m.set_shader_parameter("leaf_amt", p["leaf_amt"])
+	m.set_shader_parameter("snow_cap", p["snow_cap"])
+	m.set_shader_parameter("season_haze", p["haze"])
+
+
+static var _frame_cache := {}
+
+
+## 창틀 메시의 먼 나무 줄(초록 두 색) 꼭짓점 색만 계절 색으로 바꾼 사본 (계절마다 한 번 — 작은 메시)
+static func _season_frame(src: ArrayMesh, se: String) -> ArrayMesh:
+	var key := "%d:%s" % [src.get_instance_id(), se]
+	if _frame_cache.has(key):
+		return _frame_cache[key]
+	var out := ArrayMesh.new()
+	var greens: Array = SEASON[se]["trees"]
+	for si in src.get_surface_count():
+		var a := src.surface_get_arrays(si)
+		var cols: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+		for i in cols.size():
+			var cc := cols[i]
+			for k in TREE_GREENS.size():
+				var g: Color = TREE_GREENS[k]
+				# 면마다 조금 어둡게 칠한 것까지 (같은 색 비율)
+				var lum := (cc.r + cc.g + cc.b) / maxf(g.r + g.g + g.b, 0.001)
+				if lum > 0.6 and lum < 1.2 and absf(cc.r / lum - g.r) + absf(cc.g / lum - g.g) + absf(cc.b / lum - g.b) < 0.05:
+					var n: Color = greens[k]
+					cols[i] = Color(n.r * lum, n.g * lum, n.b * lum, cc.a)
+					break
+		a[Mesh.ARRAY_COLOR] = cols
+		var fmt := Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT      # Art._Acc.build와 같음
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a, [], {}, fmt)
+		out.surface_set_material(si, src.surface_get_material(si))
+	_frame_cache[key] = out
+	return out
+
+
+# ───────────────────────── 바닥 그림자 (blob) ─────────────────────────
+## 창빛 그림자 대신 소품 아래 부드러운 그림자 — 창 반대쪽으로 조금 밀림 (높은 물건일수록). 타이틀·넓은 세상 같은 모양
+func _make_blobs() -> void:
+	blob_mat = ShaderMaterial.new()
+	blob_mat.shader = load("res://render/room_blob.gdshader")
+	blob_mat.render_priority = -1
+	var list: Array = [[Vector2.ZERO, 6.9, 13.0]]                  # 병
+	var heights := [10.0, 7.0, 0.8, 3.6]                            # 화분 · 물뿌리개 · 핀셋 · 각설탕 그릇
+	var ps := props(false)
+	for i in ps.size():
+		list.append([ps[i][0], float(ps[i][1]) * (0.75 if i == 2 else 1.0), heights[i]])
+	list.append([null, 3.4, 10.0])                                  # 등불 (자리는 등불을 따라)
+	for e: Array in list:
+		var mi := MeshInstance3D.new()
+		var pm := PlaneMesh.new()
+		pm.size = Vector2.ONE
+		mi.mesh = pm
+		mi.material_override = blob_mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		(lamp if e[0] == null else root).add_child(mi)
+		blobs.append([mi, e[0], e[1], e[2]])
+	_place_blobs()
+
+
+func _place_blobs() -> void:
+	if blobs.is_empty():
+		return
+	var from: Vector3 = TOD[tod]["light_from"]
+	var away := -Vector2(from.x, from.z).normalized()
+	var slope := Vector2(from.x, from.z).length() / maxf(from.y, 1.0)     # 빛이 낮을수록 그림자가 길게
+	for b: Array in blobs:
+		var mi: MeshInstance3D = b[0]
+		var r: float = b[2]
+		var h: float = b[3]
+		var off := away * minf(h * slope * 0.22, r * 0.6)
+		var at: Vector2 = Vector2.ZERO if b[1] == null else b[1]
+		mi.position = Vector3(at.x + off.x, 0.06, at.y + off.y)
+		var ang := atan2(away.y, away.x)
+		mi.rotation = Vector3(0.0, -ang, 0.0)
+		mi.scale = Vector3(r * 2.2 + off.length() * 1.2, 1.0, r * 2.2)
 
 
 ## 창밖 하늘 재질 (창조 장면 view/start/creation_jar.gd도 씀)
@@ -238,6 +388,34 @@ func set_lamp(lit: bool, light_dir: Vector2) -> void:
 	lamp_glow.visible = lit
 
 
+## 선반 위 소품 (병 둘레, cm): 자리 · 반지름 — 유리를 지나는 카메라 방위 고르기(clear_yaw)와 바닥 그림자(blob)가 씀
+func props(with_lamp := true) -> Array:
+	var out: Array = [[Vector2(8.2, -7.8), 4.6], [Vector2(-13.0, -6.0), 4.0], [Vector2(3.0, 8.6), 3.0], [Vector2(7.4, 7.2), 4.2]]
+	if with_lamp and lamp != null:
+		out.append([Vector2(lamp.position.x, lamp.position.z), 3.6])
+	return out
+
+
+## 병 앞쪽 반원(−90°~90°)에서 소품과 가장 먼 방위 (도, 0 = 방 정면 +z) — 유리를 지나는 순간 소품이 화면을 덮지 않게.
+## 같으면 near에 가까운 쪽. 등불은 넣지 않는다 — 타이틀과 넓은 세상 장면이 같은 길이어야 (넘겨받는 자리 ④가 어긋나지 않게)
+func clear_yaw(near := 0.0) -> float:
+	var best := 0.0
+	var best_v := -INF
+	for i in 37:
+		var y := -90.0 + i * 5.0
+		var worst := 180.0
+		for p: Array in props(false):
+			var at: Vector2 = p[0]
+			var py := rad_to_deg(atan2(at.x, at.y))
+			var widen := rad_to_deg(atan2(float(p[1]), at.length()))     # 큰 소품일수록 넓게 피함
+			worst = minf(worst, absf(wrapf(py - y, -180.0, 180.0)) - widen)
+		var v := minf(worst, 75.0) - absf(wrapf(y - near, -180.0, 180.0)) * 0.08
+		if v > best_v:
+			best_v = v
+			best = y
+	return best
+
+
 ## 병 안에서 볼 때 유리 너머가 흐릿하게 (0~1)
 func set_haze(h: float) -> void:
 	glass_mat.set_shader_parameter("haze", h)
@@ -266,17 +444,32 @@ func jar_volume() -> Dictionary:
 	return {"center": c, "radius": JAR_IN * scale_s * 1.01, "bottom": c.y + 0.3 * scale_s, "top": c.y + CORK_BOTTOM * scale_s}
 
 
-## 타이틀: 병 안의 작은 마을 (preview_room과 같은 배치 — 넓은 세상 장면에서는 진짜 땅이 들어감)
-func add_mini_village(houses: bool) -> void:
+## 타이틀: 병 안의 작은 마을 (preview_room과 같은 배치 — 넓은 세상 장면에서는 진짜 땅이 들어감).
+## 이어하기면 저장된 병의 시대(era)에 맞춘 마을 — 개척기 오두막·우물 → 마을 목조 집·밭 → 읍내 돌집·예배당·광장 → 영지 망루.
+## (진짜 세상을 타이틀에서 불러 낮은 LOD로 그리는 건 1024칸 세상에서 불러오기만 100 ms 넘게 걸려서 — 휴대폰 150 ms 예산 밖 — 꾸민 마을로)
+const MINI_ERA := [
+	[["hut", Vector3(-3.5, 0, 2.0), 0.3], ["well", Vector3(4.0, 0, 5.0), -0.4], ["woodpile", Vector3(-7.5, 0, -1.0), 0.6], ["field_green", Vector3(5.0, 0, -1.5), 0.2]],
+	[["house_timber", Vector3(-3.5, 0, 2.0), 0.3], ["cottage_a", Vector3(-7.0, 0, -2.5), 1.1], ["well", Vector3(4.0, 0, 5.0), -0.4], ["field_ripe", Vector3(5.0, 0, -1.5), 0.2]],
+	[["plaza", Vector3(0.5, 0, 1.0), 0.0], ["house_stone", Vector3(-4.0, 0, 1.5), 0.3], ["house_timber", Vector3(-6.5, 0, -3.5), 1.1], ["chapel", Vector3(4.5, 0, -2.5), -0.5], ["field_ripe", Vector3(6.0, 0, 5.0), 0.2]],
+	[["plaza", Vector3(0.5, 0, 1.0), 0.0], ["house_stone", Vector3(-4.0, 0, 1.5), 0.3], ["house_stone", Vector3(-6.5, 0, -3.5), 1.1], ["chapel", Vector3(4.5, 0, -2.5), -0.5], ["watchtower", Vector3(7.5, 0, 3.5), 0.4]],
+]
+var mini_era := 0
+
+
+func add_mini_village(houses: bool, era := 0) -> void:
+	mini_era = clampi(era, 0, MINI_ERA.size() - 1)
 	mini_village = Node3D.new()
 	mini_village.position = Vector3(0, SOIL_TOP, 0)
 	mini_village.scale = Vector3.ONE * 0.3
 	root.add_child(mini_village)
 	var items := [["tree_d", Vector3(5.0, 0, -6.0), 0.0], ["tree_a", Vector3(-8.0, 0, -6.0), 1.0], ["bush", Vector3(-1.0, 0, 7.5), 0.0],
 		["conifer", Vector3(11.0, 0, 0.0), 0.0], ["flowers", Vector3(1.5, 0, 9.0), 0.0], ["rocks_b", Vector3(-10.0, 0, 5.0), 0.5]]
+	var n_nature := items.size()
 	if houses:
-		items.append_array([["cottage_a", Vector3(-3.5, 0, 2.0), 0.3], ["well", Vector3(4.0, 0, 5.0), -0.4]])
-	for e: Array in items:
+		items.append_array(MINI_ERA[mini_era])
+	for i in items.size():
+		var e: Array = items[i]
 		if Art.exists(String(e[0])):
-			Art.instance(mini_village, e[0], Transform3D(Basis(Vector3.UP, e[2]), e[1]))
+			var k := 1.0 if i < n_nature else 1.7                 # 건물은 조금 크게 (병 밖에서도 시대가 읽히게)
+			Art.instance(mini_village, e[0], Transform3D(Basis(Vector3.UP, e[2]).scaled(Vector3.ONE * k), e[1]))
 	_set_layers(mini_village)

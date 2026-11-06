@@ -30,10 +30,13 @@ var views_live := true
 var _sun_mask := 0
 var _tod_t := 0.0
 var _glass_off := false
-## 방 창빛 그림자 (④⑤). 끔: 세상 크기(s≈91)로 키운 방에서는 그림자 맵이 벽 아래쪽을 통째로 그늘로 칠하는 문제가 있어서
+## 방 창빛 그림자 (④⑤). 끔 — 방은 타이틀과 같이 바닥 그림자(blob, GiantRoom._make_blobs)만 (넘겨받을 때 빛이 같게): 세상 크기(s≈91)로 키운 방에서는 그림자 맵이 벽 아래쪽을 통째로 그늘로 칠하는 문제가 있어서
 ## (타이틀 s = 1은 괜찮음 — tools/debug_room_scale.gd로 재현). 휴대폰 성능에도 이득 (그림자 맵 한 장 덜 그림)
 var room_shadows := false
 var stats := {"crossings": 0}
+var notes: GlassNotes                 # 유리에 붙은 편지 (④⑤ — GIANT_ROOM 3)
+var _notes_t := 1.0e9
+const NOTES_EVERY := 0.5              # 붙일 것을 다시 묻는 간격 (초)
 
 
 func setup(sc: Node, rr: float, ground_fn: Callable, light_dir: Vector2) -> void:
@@ -60,11 +63,15 @@ func setup(sc: Node, rr: float, ground_fn: Callable, light_dir: Vector2) -> void
 	room.setup(s, StartFlow.now_time_of_day(), true)
 	room.set_lamp(true, light_dir)
 	room.visible = false
+	notes = GlassNotes.new()
+	notes.name = "GlassNotes"
+	room.root.add_child(notes)
 	_sun_mask = sun.light_cull_mask
 	sun.light_cull_mask = _sun_mask & ~GiantRoom.LAYER_BIT          # 병 안 해(등불)는 방을 비추지 않는다
 	# 세상 전체가 화면 폭에 들어오는 데까지가 ③ (그 너머는 beyond)
 	cam.ppu_min = 360.0 / (2.0 * rr * 1.15)
 	cam.set_room(s, y0)
+	cam.set_cross_yaw(room.clear_yaw())
 	post.set_shader_parameter("room_gap", Style.OUTLINE_GAP * s)
 	var v := room.jar_volume()
 	post.set_shader_parameter("jar_center", v["center"])
@@ -90,6 +97,11 @@ func update(dt: float) -> void:
 	room.light.visible = stage >= 3
 	room.light.shadow_enabled = stage >= 4 and room_shadows
 	room.set_haze(1.0 if inside else 0.0)
+	# 유리에 붙은 편지: ④⑤ (병 밖에서만 보임)
+	notes.visible = stage >= 4
+	_notes_t += dt
+	if notes.visible and _notes_t >= NOTES_EVERY:
+		refresh_notes()
 	# 마을 화면: ④⑤는 멈춤 (시뮬레이션은 계속)
 	var live := stage <= 3
 	if live != views_live:
@@ -142,6 +154,13 @@ func update(dt: float) -> void:
 	var a := GameAudio.get_instance()
 	if a != null:
 		a.room_view = stage >= 4
+
+
+## 붙일 편지를 장면에 다시 물음 (장면의 glass_note_items — [{kind, key, label, ...}])
+func refresh_notes() -> void:
+	_notes_t = 0.0
+	if scene != null and scene.has_method("glass_note_items"):
+		notes.sync(scene.call("glass_note_items"))
 
 
 ## 마을 소리 먹먹함 (AUDIO 1): 병 안에서는 멀리 축소할수록 조금 (거리), 유리를 지나면 완전히

@@ -10,6 +10,9 @@ uniform vec3 haze_col : source_color = vec3(0.93, 0.95, 0.95);
 uniform float puff_scale = 0.075;
 uniform float drift = 0.012;
 uniform float far = 0.0;
+// (B1 다듬기) 0 가까이 ~ 1 넓은 땅·세상 전체·병 밖: 안개를 '땅 위의 엷은 구름·물안개'로 — 흰 원판 대신 밑의 땅 색·높이가 비치고,
+// 구름 사이로 틈이 나고, 그늘 면은 부드럽게. 구름 무늬가 천천히 흐른다 (drift). view/world_terrain.gd zoom_ppu가 넣음.
+uniform float thin = 0.0;
 // 등불 옮기기 미리보기 (A11 — view/lamp_ctl.gd): 안개 위에도 볕이 들 땅 노랑 · 그늘이 될 땅 파랑 (wpos = 병 데이터 좌표)
 uniform float lamp_mix = 0.0;
 uniform vec2 lamp_l0 = vec2(-0.72, -0.69);
@@ -70,6 +73,21 @@ void fragment() {
 		vec3 tint = g > 0.0 ? vec3(1.0, 0.84, 0.36) : vec3(0.45, 0.62, 0.98);
 		c = mix(c, tint * (0.75 + 0.25 * c.r), k * 0.6 * lamp_mix);
 	}
+	float alpha = max(core * 0.97, halo * 0.45);
+	if (thin > 0.001) {
+		// 엷은 구름: 큰 덩이 잡음(흐름)으로 틈을 내고, 덩이 안쪽은 반투명 · 그늘 면은 푸른 회색으로 부드럽게
+		vec2 q = wpos.xz * puff_scale * 0.11 + vec2(TIME * drift * 0.35, -TIME * drift * 0.2) + 7.0;
+		float big = fbm(q);
+		float gap = smoothstep(0.44, 0.56, big);                 // 0 틈 ~ 1 구름 덩이
+		// 덩이 가장자리: 창가 반대쪽(그늘 면)을 푸른 회색으로 — 잡음을 조금 밀어 읽은 값과의 차이
+		float bs = fbm(q + vec2(0.05, 0.04));
+		float shade = smoothstep(0.0, 0.05, bs - big) * gap;
+		float soft = smoothstep(0.3, 0.75, n2) * 0.5 + shade * 0.6;
+		vec3 tc = mix(cloud_col, cloud_shade, clamp(soft, 0.0, 1.0));
+		c = mix(c, mix(haze_col, tc, gap), thin);
+		float body = mix(0.1, 0.62, gap) * core + 0.08 * halo;  // 틈은 옅은 물안개만 (땅이 또렷), 덩이는 반쯤 가림
+		alpha = mix(alpha, min(body, 0.66), thin);
+	}
 	ALBEDO = c;
-	ALPHA = max(core * 0.97, halo * 0.45);
+	ALPHA = alpha;
 }

@@ -202,7 +202,7 @@ func peek() -> Dictionary:
 		var jr := SaveFile.read_best(_base("jar_%d" % int(pick.get("id", 1))))
 		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
-	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar"))}
+	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0))}
 
 
 # ───────────────────────── 찍어 두기 (화면 쪽 — 짧게) ─────────────────────────
@@ -210,11 +210,22 @@ func giant_payload() -> Dictionary:
 	var jl := []
 	for id: int in order:
 		var j: Dictionary = jars[id]
-		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id)})
+		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id), "era": _era_of(id)})
 	return {"notes": Market.notes, "sold": Market.sold.duplicate(), "day_key": Market.day_key, "first_paid": Market.first_paid,
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(),
 		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
+
+
+## 병의 시대 (타이틀 병 안의 작은 마을 모습 — B1. 넓은 세상은 무리 중 가장 앞선 시대)
+func _era_of(id: int) -> int:
+	var j: Dictionary = jars[id]
+	if j["kind"] == "world" and j["world"] != null:
+		var e := 0
+		for q: Village in (j["world"] as JarWorld).settlements:
+			e = maxi(e, q.era)
+		return e
+	return (j["village"] as Village).era if j["village"] != null else 0
 
 
 ## 병의 N일째 (타이틀의 "초록별 · 12일째" — 거인 묶음에 함께 적어 둔다)

@@ -91,6 +91,13 @@ uniform vec3 canopy_lit : source_color = vec3(0.4, 0.79, 0.54);
 uniform vec3 canopy_dark : source_color = vec3(0.16, 0.52, 0.47);
 uniform vec3 lake_col : source_color = vec3(0.42, 0.78, 0.82);
 uniform vec3 lake_edge : source_color = vec3(0.31, 0.62, 0.68);
+#ifdef WHOLE_UNDER
+// (B1 다듬기) ② 넓은 땅: 세상 전체 메시를 조각들 아래에 깔아 안개 밑 땅이 비쳐 보이게 — 조각이 있는 곳(hole_mask 1)은 버림.
+// 이 정의는 view/world_terrain.gd가 세상 전체 재질에만 붙인다 (조각 재질은 discard 없이 — 휴대폰 이른 깊이 시험).
+uniform sampler2D hole_mask : filter_nearest, repeat_disable;
+uniform float hole_on = 0.0;
+uniform float sink = 0.0;
+#endif
 
 varying vec3 wpos;
 varying vec3 lpos;                   // 병 데이터 좌표 (조각 메시 좌표 — 병을 돌려도 땅과 함께)
@@ -160,6 +167,9 @@ float path_at(sampler2D t, vec4 r, vec2 p) {
 }
 
 void vertex() {
+#ifdef WHOLE_UNDER
+	VERTEX.y -= sink;
+#endif
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	lpos = VERTEX;
 	lnorm = NORMAL;
@@ -169,6 +179,11 @@ void vertex() {
 }
 
 void fragment() {
+#ifdef WHOLE_UNDER
+	if (hole_on > 0.5 && texture(hole_mask, (lpos.xz - map_rect.xy) / map_rect.z).r > 0.5) {
+		discard;
+	}
+#endif
 	vec3 c = srgb_to_linear(COLOR.rgb);
 	if (up > 0.35) {
 		vec2 p = lpos.xz;

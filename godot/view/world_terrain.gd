@@ -26,6 +26,11 @@ const M := 2                        # 조각 표본 가장자리 (물가 거리�
 const FM := 2                       # 숲 지도 한 픽셀 = 2칸
 const PREWARM_R := 40.0             # 멀리 있는 동안 미리 만들어 두는 첫 마을 둘레 (칸)
 const VMAP_EVERY := 2.0             # 무리의 밭·바위·나무 지도를 다시 볼 간격 (초)
+## (B1 다듬기) 넓은 땅 ②부터 안개가 엷은 구름이 된다 (fog.gdshader thin) — 그 밑에 땅이 있어야 하므로, 안개에 덮인 조각(땅을 만들지 않음)
+## 자리에는 세상 전체 메시를 조금 낮춰(UNDER_SINK) 깔아 둔다. 조각이 있는 곳은 hole_mask로 버림 (겹쳐 그리지 않음).
+const THIN_PPU := 7.0               # 이보다 멀면 안개가 엷어지기 시작
+const THIN_FULL_PPU := 3.5          # 이보다 멀면 다 엷음
+const UNDER_SINK := 0.0
 
 var ww: WorldWater
 var villages: Array = []            # 오솔길을 읽을 무리들 (Village)
@@ -62,6 +67,11 @@ var _vmap_t := 1.0e9
 var _cover_dirty := false
 var _cover_t := 0.0
 var prewarm := true                 # 멀리 축소해 있는 동안 첫 마을 둘레를 미리 만듦
+var under_mode := false             # ② 넓은 땅: 조각 아래 세상 전체 메시 (안개 밑 땅)
+var _hole_img: Image
+var _hole_tex: ImageTexture
+var _hole_dirty := true
+static var _under_shader: Shader
 
 
 func _init(w: WorldWater) -> void:
@@ -75,6 +85,10 @@ func _ready() -> void:
 	_terrain_mat = Toon.terrain_mat()
 	_mat = _terrain_mat
 	_whole_mat = Toon.terrain_mat()
+	_whole_mat.shader = under_shader()
+	_hole_img = Image.create(nrc, nrc, false, Image.FORMAT_R8)
+	_hole_tex = ImageTexture.create_from_image(_hole_img)
+	_whole_mat.set_shader_parameter("hole_mask", _hole_tex)
 	_water_mat = Toon.water_mat()
 	_fog_mat = ShaderMaterial.new()
 	_fog_mat.shader = load("res://render/fog.gdshader")
@@ -122,6 +136,7 @@ func update_now() -> void:
 	_set_whole(view_r > WHOLE_VIEW_R)
 	if whole_mode:
 		return
+	_set_under(view_ppu < THIN_PPU)
 	_plan()
 	if not _job.is_empty():
 		_run_job(_job, -1)
@@ -129,6 +144,46 @@ func update_now() -> void:
 	while not _queue.is_empty():
 		_build_next(-1)
 	_rebuild_cover()
+	_upload_holes()
+
+
+## 세상 전체 재질 = 땅 셰이더 + WHOLE_UNDER (② 조각 아래에 깔 때 조각 자리를 버림 · 조금 낮춤)
+static func under_shader() -> Shader:
+	if _under_shader == null:
+		var base: Shader = load("res://render/terrain.gdshader")
+		_under_shader = Shader.new()
+		_under_shader.code = base.code.replace("shader_type spatial;", "shader_type spatial;\n#define WHOLE_UNDER")
+	return _under_shader
+
+
+## ② 넓은 땅: 조각 아래 세상 전체 메시 켜고 끄기 (③ 세상 전체(whole_mode)는 따로 — 그땐 그것만)
+func _set_under(on: bool) -> void:
+	on = on and show_fog and not reveal_all and not whole_mode
+	if on and not _whole_ready:
+		_whole_step(-1)
+	if on == under_mode:
+		if on and _hole_dirty:
+			_upload_holes()
+		return
+	under_mode = on
+	_whole_t.visible = on or whole_mode
+	_whole_mat.set_shader_parameter("hole_on", 1.0 if on else 0.0)
+	_whole_mat.set_shader_parameter("sink", UNDER_SINK if on else 0.0)
+	if on:
+		_upload_holes()
+
+
+## 조각 땅이 있는 곳 = 1 (세상 전체 메시가 그 자리를 버림)
+func _upload_holes() -> void:
+	_hole_dirty = false
+	if _hole_img == null:
+		return
+	_hole_img.fill(Color(0, 0, 0))
+	for ch: int in _chunks:
+		var cur: Dictionary = _chunks[ch]
+		if not bool(cur["fogged"]) and (cur["t"] as MeshInstance3D).mesh != null:
+			_hole_img.set_pixel(ch % nrc, ch / nrc, Color(1, 0, 0))
+	_hole_tex.update(_hole_img)
 
 
 func _process(dt: float) -> void:
@@ -151,6 +206,7 @@ func _process(dt: float) -> void:
 		_frame_stat(t0)
 		return
 	_set_whole(false)
+	_set_under(view_ppu < THIN_PPU)
 	if Engine.get_process_frames() % 10 == 0 or (_queue.is_empty() and _job.is_empty()):
 		_plan()
 	while (Time.get_ticks_usec() - t0) / 1000.0 < BUDGET_MS:
@@ -227,6 +283,10 @@ func _set_whole(on: bool) -> void:
 	if on == whole_mode:
 		return
 	whole_mode = on
+	if on and under_mode:
+		under_mode = false
+		_whole_mat.set_shader_parameter("hole_on", 0.0)
+		_whole_mat.set_shader_parameter("sink", 0.0)
 	_whole_t.visible = on
 	for ch: int in _chunks:
 		(_chunks[ch]["t"] as MeshInstance3D).visible = not on
@@ -358,6 +418,7 @@ func _build_next(deadline_us: int) -> void:
 		cur["built_t"] = _clock
 		(cur["t"] as MeshInstance3D).mesh = null
 		(cur["w"] as MeshInstance3D).mesh = null
+		_hole_dirty = true
 		if not (cur["cover"] as Dictionary).is_empty():
 			cur["cover"] = {}
 			_cover_dirty = true
@@ -378,6 +439,8 @@ func _finish_job() -> void:
 		return
 	var cur: Dictionary = _chunks[ch]
 	cur["lod"] = job["lod"]
+	if bool(cur["fogged"]) or int(cur["lod"]) == 0:
+		_hole_dirty = true
 	cur["fogged"] = false
 	cur["built_t"] = _clock
 	var had := not (cur["cover"] as Dictionary).is_empty()
@@ -1353,8 +1416,9 @@ func _build_marks() -> void:
 ## 반쯤 축소(×3)에서도 오솔길이 읽히게 길 문턱을 낮추고 테두리를 진하게 (A18) · 땅 덮개는 가까이에서만
 func zoom_ppu(ppu: float) -> void:
 	view_ppu = ppu
-	if _fog_mat != null:                 # 멀리 축소하면 안개 무늬를 큰 뭉게구름으로 (깨알 무늬 방지)
+	if _fog_mat != null:                 # 멀리 축소하면 안개 무늬를 큰 뭉게구름으로 (깨알 무늬 방지) + 엷은 구름 (밑의 땅이 비침)
 		_fog_mat.set_shader_parameter("far", clampf((3.0 - ppu) / 2.2, 0.0, 1.0))
+		_fog_mat.set_shader_parameter("thin", fog_thin(ppu))
 	var bh := 0.9 * maxf(1.0, 12.0 / maxf(ppu, 0.05))
 	if absf(bh - _band_h) > 0.01:
 		_band_h = bh
@@ -1368,6 +1432,12 @@ func zoom_ppu(ppu: float) -> void:
 			_rebuild_cover()
 	if waterfalls != null:
 		waterfalls.ppu = ppu
+
+
+## 안개가 엷은 정도 (0 ① 마을 — 흰 구름층 ~ 1 ② 넓은 땅부터 — 땅이 비치는 엷은 구름)
+static func fog_thin(ppu: float) -> float:
+	var k := clampf((THIN_PPU - ppu) / (THIN_PPU - THIN_FULL_PPU), 0.0, 1.0)
+	return k * k * (3.0 - 2.0 * k)
 
 
 ## 카메라 둘레 (보이는 땅): 화면 쪽에서 매 화면 알려 준다

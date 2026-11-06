@@ -191,7 +191,7 @@ static func button_info(sm: GameSave) -> Dictionary:
 	if nm == "":
 		nm = "나의 작은 병"
 	var day := int(p.get("day", 0))
-	return {"label": "이어하기", "sub": "%s · %d일째" % [nm, day] if day > 0 else nm, "has_save": true}
+	return {"label": "이어하기", "sub": "%s · %d일째" % [nm, day] if day > 0 else nm, "has_save": true, "era": int(p.get("era", 0))}
 
 
 ## 그림 파일 (그림 서브에이전트가 art/title/에 넣는 것) — 없으면 null (화면이 직접 그림)
