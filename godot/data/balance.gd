@@ -136,6 +136,90 @@ const FORESTER_STOP := 70               # 산림관은 나무가 이만큼 넘�
 const TREE_REGROW := 3.0 * HOUR         # 그루터기 재생 (÷ (0.6 + 습기))
 const GATHER_RANGE := 20.0
 
+# ───────────────────────── 건강·기후·두려움 (HEALTH.md) ─────────────────────────
+# 병 날짜·온도 (HEALTH.md 1.1·1.2) — 온도 = 기후대 바탕 + 계절(코사인, 1월 15일 가장 추움) + 낮밤(4시 가장 추움, 14시 가장 따뜻) + 자리(따뜻함 0~1 → +0~+3)
+const CLIMATES := {                     # 기후대: [바탕(연평균), 계절 폭 ±, 낮밤 폭 ±] (HEALTH.md)
+	"온대": [12.0, 11.0, 4.0], "냉대": [3.0, 15.0, 4.0], "아열대": [18.0, 8.0, 5.0],
+	"열대": [26.0, 2.0, 3.0], "툰드라": [-6.0, 14.0, 3.0], "사막": [24.0, 10.0, 9.0]}
+const CLIMATE_DEFAULT := "온대"
+const COLDEST_DOY := 14                 # 1월 15일 (1월 1일 = 0)
+const COLDEST_HOUR := 4.0
+const WARMEST_HOUR := 14.0
+const SPOT_WARM := 3.0                  # 기후 지도 따뜻함 1 → +3
+const SEASONS := ["겨울", "겨울", "봄", "봄", "봄", "여름", "여름", "여름", "가을", "가을", "가을", "겨울"]   # 1~12월
+# 노출 (HEALTH.md 1.3·1.4)
+const COLD_FROM := 5.0                  # 추위 정도 = (5 − 온도) ÷ 10
+const COLD_DIV := 10.0
+const HEAT_FROM := 30.0                 # 더위 정도 = (온도 − 30) ÷ 8
+const HEAT_DIV := 8.0
+const EXPOSE_MAX := 2.0
+const PROTECT_HOUSE_FUEL := [0.2, 0.5]  # [추위, 더위] 집 안 + 땔감 있음
+const PROTECT_HOUSE_COLD := [0.6, 0.5]  # 집 안 + 땔감 없음
+const PROTECT_FIRE := [0.5, 1.0]        # 모닥불 반경 3칸
+const PROTECT_SHADE := [1.0, 0.6]       # 나무 그늘 반경 1.5칸
+const FIRE_R := 3.0
+const SHADE_R := 1.5
+const HOUSE_IN_R := 0.6                 # (정함) 집 크기 + 이만큼 안이면 '집 안'
+const EXPOSE_HEALTH_DAY := 0.25         # 남은 정도 1.0으로 하루 → 건강 −0.25
+const FRAIL_AGE_MULT := 1.5             # 아기·노인 (노출·발병 모두)
+const EXPOSE_BLOCKS_HEAL := 0.15        # (정함) 혈통·나이를 곱한 남은 정도가 이 이상이면 저절로 낫지 않는다 (기존 12시간 회복이 −0.25/일을 지워 버리지 않게)
+const SHELTER_AT := 0.5                 # 밖의 추위·더위 정도가 이 위면 집·불가로 가는 점수↑
+const SHELTER_SCORE := 12.0             # (정함) 점수 = 12 × 밖의 정도 (일 6 × 1.5 = 9를 정도 0.75에서 넘음)
+const HEAT_REST_HOURS := [12.0, 15.0]   # 더위 0.5↑이면 한낮에 쉬는 점수↑
+# 땔감 (HEALTH.md 1.3 · BUILDINGS 7장)
+const FUEL_EVERY := 600.0               # 추위 정도 > 0인 동안 집 1채당 10분마다 통나무 1개
+const FUEL_STONE := 0.5                 # 석조 주택 ×0.5
+const FUEL_TARGET := 36.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
+const FUEL_STOCK_PER_HOUSE := 24.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
+const FUEL_SEASON_LOOKAHEAD := 0.5 * DAY   # (정함) 지금부터 이 시간 안에 추위가 오면 '추운 철'
+# 질병 (HEALTH.md 2)
+const ILL_DAY := 0.02                   # 한 사람 하루 2% (병 시계 1시간마다 나눠 굴림)
+const ILL_HUNGRY := 2.0
+const ILL_WEAK := 1.5                   # 건강 0.5 미만
+const ILL_WEAK_BELOW := 0.5
+const ILL_NO_WELL := 1.3                # 우물 반경 밖 집 (집 없음도)
+const ILL_CROWDED := 1.2                # 집 정원이 꽉 참
+const ILL_TROPICAL := 1.3
+const WELL_R := 12.0                    # (정함) 우물 반경
+const ILL_DAYS := 3.0                   # 앓는 기간 (병약 = 회복 배율 ÷ → ×1.5)
+const ILL_HEALTH_DAY := 0.15            # 앓는 동안 건강 하루 −0.15
+const ILL_HEALTH_CLINIC := 0.05         # 치료소 반경
+const CLINIC_TIME := 0.6                # 치료소 반경: 기간 ×0.6
+const CLINIC_R := 10.0                  # (정함) 치료소 반경 — 치료소 건물이 생기면
+const CLINIC_TYPE := "치료소"
+const HERB := "약초"                     # 창고에 있으면 앓는 사람이 1개 먹음 → 남은 기간 절반 (한 번만)
+const CONTAGION_HOME := 0.15            # 같은 집 식구가 앓음: 하루 +15% (앓는 식구마다)
+const CONTAGION_NEAR := 0.03            # 반경 2칸에서 함께 있음: 하루 +3%
+const CONTAGION_R := 2.0
+const CONTAGION_CLINIC := 0.5
+const SICK_WARN := 0.2                  # 앓는 사람이 20% 넘으면 말풍선·편지 + 두려움
+# 부상 (HEALTH.md 3)
+const INJURY_HOUR := 0.003              # 힘쓰는 일 병 시계 1시간마다 0.3%
+const INJURY_HEALTH := 0.1
+const INJURY_DAYS := 2.0
+const INJURY_SLOW := 0.5                # 걸음·일 속도 ×0.5
+# 두려움 (HEALTH.md 4)
+const FEAR_TAP := 0.05                  # 유리 톡 (그날 4번째부터)
+const FEAR_TAP_HARD := 0.2              # 크게 친 톡 (지진)
+const FEAR_ROTATE := 0.1                # 병 돌리기 (그날 4번째부터)
+const FEAR_FREE_PER_DAY := 3            # 그날 3번까지는 괜찮다
+const FEAR_TAKE_FOOD := 0.1             # 굶주릴 때 식량을 거둠
+const FEAR_FAMILY_DEATH := 0.2
+const FEAR_SAW_DEATH := 0.05
+const FEAR_SAW_R := 6.0
+const FEAR_FLOOD := 0.15
+const FEAR_SICK_DAY := 0.05             # 앓는 사람이 20% 넘음 — 하루 +0.05
+const FEAR_HALF := 12.0 * HOUR          # 반감기
+const FEAR_FESTIVAL := 1.0 * DAY        # (정함) 축제가 열린 뒤 이 시간 동안은 '축제에 함께함' (두 배 빨리 내려감)
+const FEAR_HIGH := 0.6                  # 일 점수 ×0.7, 가끔 집으로 숨음
+const FEAR_WORK := 0.7
+const FEAR_HIDE_P := 0.15               # (정함) 결정할 때 이 확률로 숨을 곳을 찾음
+const FEAR_HAPPY := -0.1                # 행복 −0.1 × 두려움
+const HEALTH_TICK := 60.0               # (정함) 건강 계산 간격 (병 시계 초) — 걸음 크기와 상관없게
+const LINE_FEAR := "하늘이 또 울렸어… 무서워"
+const LINE_SICK_WARN := "기침하는 사람이 늘었어요."
+const FISH_BLOOD := 1.2                 # (HEALTH.md 5) 물가 사람 어업 +20% — 어부 오두막이 아직 없어 값만 둔다
+
 # ───────────────────────── 건물 ─────────────────────────
 # plank/stone/time = 건설 (BUILDINGS.md 3.3 · gen_buildings.py), size = 차지하는 반지름(칸, 프로토타입),
 # cycle = 1회 시간(초), in/out = 레시피 (BUILDINGS.md 4.1)
@@ -214,7 +298,7 @@ const LINES_PRAY := ["거인님, 오늘도 지켜주세요", "거인님, 비를 
 const LINES_DOUBT := ["거인 같은 건 없어", "그냥 하늘이야", "본 적도 없는걸", "하늘 물방울은 원래 떨어지는 거야"]
 const LINES_WATCHED := ["거인님이 보고 계신다", "하늘에 큰 그림자가…", "오늘은 하늘이 따뜻해"]
 const LINE_ELDER_SCOLD := "저 하늘의 그림자를 봐라"
-const FORBIDDEN_WORDS := ["게임", "앱", "플레이어", "휴대폰"]
+const FORBIDDEN_WORDS := ["게임", "앱", "플레이어", "휴대폰", "키트", "상자", "구매"]   # 키트·상자·구매: HEALTH 작업 때 더함 (주민은 거인의 물건을 모른다)
 
 # ───────────────────────── 겉모습 (RENDERING 2.6 — 부품 조합 1세트) ─────────────────────────
 const LOOK_HEADS := 2                   # 짧은 머리 / 땋은 긴 머리

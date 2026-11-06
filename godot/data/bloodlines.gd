@@ -6,7 +6,7 @@
 ## 항목: id · name · good · pair(짝 id, 없으면 "") · stat(바꾸는 능력) · value(배율 또는 값) · extra(같은 능력의 딸린 값) · look(겉모습 표시) ·
 ##       stub(true = 그 능력이 시뮬레이션에 아직 없음 — 효과는 fx에 담기지만 아무도 읽지 않음)
 ## 능력 이름 (Resident.fx 의 키, 기본값):
-##   illness 병·부상 확률 ×(1) · heal 회복 빠르기 ×(1) · lifespan 수명 ×(1) · carry 한 번에 나르는 짐 ×(1) ·
+##   illness 병·부상 확률 ×(1) · heal 회복 빠르기 ×(1, 앓는 기간은 ÷ — 병약 ×1.5) · lifespan 수명 ×(1) · carry 한 번에 나르는 짐 ×(1) ·
 ##   carry_work 짐 나르며 걷기·힘쓰는 일(나무꾼·채석장·짓기) ×(1) · walk 걸음 ×(1) · craft 공방 일(제재소·방앗간·빵집) ×(1) ·
 ##   skill_growth 숙련 성장 ×(1) · fert 개인 출산 배율 [하한, 상한]으로 타고남 · food 식량 소비 ×(1) ·
 ##   cold / heat 추위·더위 불이익 ×(1, 0 = 없음) · fear_rise 두려움 오름 ×(1) · belief_up / belief_down 믿음 오름·떨어짐 ×(1) ·
@@ -29,8 +29,8 @@ const SINGER_RANGE := 8.0        # 노래꾼이 일하는 곳에서 이 거리 �
 
 const LIST := [
 	# ── 짝 (12쌍) ──
-	{"id": "sturdy", "name": "강인한", "good": true, "pair": "frail", "stat": "illness", "value": 0.7, "look": "red_cheeks", "stub": true},
-	{"id": "frail", "name": "병약", "good": false, "pair": "sturdy", "stat": "illness", "value": 1.3, "extra": {"heal": 0.75}, "look": "pale", "stub": true},
+	{"id": "sturdy", "name": "강인한", "good": true, "pair": "frail", "stat": "illness", "value": 0.7, "look": "red_cheeks"},
+	{"id": "frail", "name": "병약", "good": false, "pair": "sturdy", "stat": "illness", "value": 1.3, "extra": {"heal": 1.0 / 1.5}, "look": "pale"},
 	{"id": "long_lived", "name": "장수", "good": true, "pair": "short_lived", "stat": "lifespan", "value": 1.15, "look": "silver_early"},
 	{"id": "short_lived", "name": "단명", "good": false, "pair": "long_lived", "stat": "lifespan", "value": 0.8, "look": "skinny"},
 	{"id": "strong", "name": "힘센", "good": true, "pair": "weak", "stat": "carry", "value": 1.5, "look": "broad_shoulders"},
@@ -45,12 +45,12 @@ const LIST := [
 	{"id": "barren", "name": "난산", "good": false, "pair": "fertile", "stat": "fert", "value": [0.4, 0.8], "look": ""},
 	{"id": "light_eater", "name": "소식", "good": true, "pair": "glutton", "stat": "food", "value": 0.85, "look": "slender"},
 	{"id": "glutton", "name": "대식가", "good": false, "pair": "light_eater", "stat": "food", "value": 1.2, "look": "belly"},
-	{"id": "cold_hardy", "name": "추위 견딤", "good": true, "pair": "cold_weak", "stat": "cold", "value": 0.0, "look": "thick_brows", "stub": true},
-	{"id": "cold_weak", "name": "추위 탐", "good": false, "pair": "cold_hardy", "stat": "cold", "value": 2.0, "look": "neck_scarf", "stub": true},
-	{"id": "heat_hardy", "name": "더위 견딤", "good": true, "pair": "heat_weak", "stat": "heat", "value": 0.0, "look": "tanned", "stub": true},
-	{"id": "heat_weak", "name": "더위 탐", "good": false, "pair": "heat_hardy", "stat": "heat", "value": 2.0, "look": "brim_hat", "stub": true},
-	{"id": "bold", "name": "담대", "good": true, "pair": "timid", "stat": "fear_rise", "value": 0.5, "look": "upright", "stub": true},
-	{"id": "timid", "name": "겁 많음", "good": false, "pair": "bold", "stat": "fear_rise", "value": 1.5, "look": "hunched", "stub": true},
+	{"id": "cold_hardy", "name": "추위 견딤", "good": true, "pair": "cold_weak", "stat": "cold", "value": 0.0, "look": "thick_brows"},
+	{"id": "cold_weak", "name": "추위 탐", "good": false, "pair": "cold_hardy", "stat": "cold", "value": 2.0, "look": "neck_scarf"},
+	{"id": "heat_hardy", "name": "더위 견딤", "good": true, "pair": "heat_weak", "stat": "heat", "value": 0.0, "look": "tanned"},
+	{"id": "heat_weak", "name": "더위 탐", "good": false, "pair": "heat_hardy", "stat": "heat", "value": 2.0, "look": "brim_hat"},
+	{"id": "bold", "name": "담대", "good": true, "pair": "timid", "stat": "fear_rise", "value": 0.5, "look": "upright"},
+	{"id": "timid", "name": "겁 많음", "good": false, "pair": "bold", "stat": "fear_rise", "value": 1.5, "look": "hunched"},
 	{"id": "pious", "name": "경건", "good": true, "pair": "doubting", "stat": "belief_up", "value": 1.3, "extra": {"belief_down": 0.7}, "look": "amulet"},
 	{"id": "doubting", "name": "의심 많은", "good": false, "pair": "pious", "stat": "belief_up", "value": 0.7, "extra": {"belief_down": 1.3}, "look": "frown"},
 	# ── 짝 없는 좋은 혈통 (6) ──
@@ -68,7 +68,7 @@ const LIST := [
 ## 더하는 값 (나머지는 곱하는 배율)
 const ADDITIVE := {"happiness": true, "house_happy": true, "work_aura": true, "wander": true, "wake_late": true}
 ## 아직 시뮬레이션에 없는 능력 (효과는 fx에 담기지만 읽는 곳이 없음)
-const STUB_STATS := ["illness", "cold", "heat", "fear_rise", "fishing"]
+const STUB_STATS := ["fishing"]            # 어부 오두막이 생기면 (HEALTH.md 5). 병·부상·추위·더위·두려움은 sim/health.gd가 읽는다
 
 static var _by_id: Dictionary = {}
 static var _good: PackedStringArray = []

@@ -102,6 +102,9 @@ static func decide(v: Village, r: Resident) -> void:
 	if r.is_baby():
 		_baby(v, r)
 		return
+	if r.sick_left > 0.0:             # 앓는 동안 일하지 않고 집(없으면 모닥불 곁)에서 쉼 (HEALTH.md 2)
+		_sick_rest(v, r)
+		return
 	var night := v.is_night()
 	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
 	if late > 0.0 and h >= Balance.NIGHT_TO and h < Balance.NIGHT_TO + late:
@@ -118,10 +121,11 @@ static func decide(v: Village, r: Resident) -> void:
 			cand["eat"] = Balance.ACT_BASE["eat"] * Balance.W_MEAL
 	if not v.manna.is_empty() and h < 11.0 and not night and r.age >= 2.5:
 		cand["manna"] = Balance.ACT_BASE["manna"] * (Balance.W_DAWN_MANNA if h < 8.0 else 1.0)
+	var hurt := r.injured_left > 0.0       # 다치면 힘쓰는 일(벌목·채석·짓기·나르기) 대신 가벼운 일 (HEALTH.md 3)
 	if r.is_adult():
-		if r.job >= 0 and work_task(v, r, true):
+		if r.job >= 0 and not (hurt and _heavy_job(v, r)) and work_task(v, r, true):
 			cand["work"] = Balance.ACT_BASE["work"] * (Balance.W_DAY_WORK if work_t else Balance.W_NIGHT_WORK)
-		if work_t:
+		if work_t and not hurt:
 			var n := haul_requests(v)
 			if n > 0:
 				cand["haul"] = Balance.ACT_BASE["haul"] * minf(1.5, 1.0 + 0.1 * n) * Balance.W_DAY_WORK
@@ -146,11 +150,27 @@ static func decide(v: Village, r: Resident) -> void:
 	# 방랑벽 (혈통): 가끔 일을 놓고 멀리 걸어감
 	if work_t and r.is_adult() and r.f("wander", 0.0) > 0.0 and v.gene_rng.randf() < Bloodlines.WANDER_P:
 		cand["wander"] = 100.0
+	# 추위·더위 (HEALTH.md 1.4): 밖의 정도가 0.5를 넘으면 집·불가로 (일을 일찍 접음). 더위는 한낮(12~15시)에 쉼
+	if not night and r.age >= 2.5:
+		var od := Health.outdoor(v, r.x, r.y)
+		var sh := 0.0
+		if od.x > Balance.SHELTER_AT:
+			sh = od.x
+		if od.y > Balance.SHELTER_AT and h >= Balance.HEAT_REST_HOURS[0] and h < Balance.HEAT_REST_HOURS[1]:
+			sh = maxf(sh, od.y)
+		if sh > 0.0:
+			cand["shelter"] = Balance.SHELTER_SCORE * sh
+	# 두려움 0.6↑ (HEALTH.md 4): 일 점수 ×0.7, 가끔 집으로 숨음
+	var afraid := r.fear >= Balance.FEAR_HIGH
+	if afraid and not night and r.age >= 2.5 and v.health_rng.randf() < Balance.FEAR_HIDE_P:
+		cand["hide"] = 100.0
 	# 보정
 	var fs: Dictionary = Balance.FAITH_STATE_MOD.get(v.faith_state(), {})
 	var order: Array = []
 	for k: String in cand:
 		var s: float = cand[k] * (1.0 + float(r.trait_mod.get(k, 0.0))) * float(fs.get(k, 1.0))
+		if afraid and k == "work":
+			s *= Balance.FEAR_WORK
 		if k == r.last_action:
 			s *= Balance.REPEAT_MULT
 		s += v.rng.randf() * 0.2
@@ -209,6 +229,10 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			r.steps.append(walk(p.x, p.y))
 			r.steps.append(act(120.0 + v.rng.randf() * 240.0, "play"))
 			return true
+		"shelter":
+			return _shelter(v, r)
+		"hide":
+			return _hide(v, r)
 		"explore":
 			return _explore(v, r)
 		"wander":
@@ -260,6 +284,53 @@ static func _wander(v: Village, r: Resident) -> bool:
 			r.steps.append(walk(hp.x, hp.y))
 			return true
 	return false
+
+
+static func _heavy_job(v: Village, r: Resident) -> bool:
+	var jb := v.bld(r.job)
+	return jb != null and (jb.type == "나무꾼" or jb.type == "채석장")
+
+
+## 앓는 사람: 집에 누움 (집이 없으면 모닥불 곁)
+static func _sick_rest(v: Village, r: Resident) -> void:
+	var hm := v.bld(r.home)
+	var p := Vector2(hm.x, hm.y + 0.3) if (hm != null and hm.built) else near(v, v.fire.x, v.fire.y, 1.4)
+	r.action = "sick"
+	r.doing = "앓아누운 중" if (hm != null and hm.built) else "모닥불 곁에 앓아누운 중"
+	r.sleeping = v.is_night()
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(minf(600.0, maxf(60.0, r.sick_left)), "sleep"))
+
+
+## 추위·더위를 피해 집으로 (집이 없거나 불 땔 땔감이 없으면 추울 땐 모닥불 곁)
+static func _shelter(v: Village, r: Resident) -> bool:
+	var hm := v.bld(r.home)
+	var od := Health.outdoor(v, r.x, r.y)
+	var cold := od.x >= od.y
+	var p: Vector2
+	if hm != null and hm.built and (not cold or hm.fuel_on or float(hm.in_buf.get("통나무", 0.0)) >= 1.0):
+		p = Vector2(hm.x, hm.y + 0.3)
+		r.doing = "집에서 몸을 녹이는 중" if cold else "집 안에서 더위를 피하는 중"
+	elif cold:
+		p = near(v, v.fire.x, v.fire.y, 1.6)
+		r.doing = "모닥불 곁에서 몸을 녹이는 중"
+	else:
+		return false
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(1200.0, "sit"))
+	return true
+
+
+## 두려움: 집으로 숨는다
+static func _hide(v: Village, r: Resident) -> bool:
+	var hm := v.bld(r.home)
+	if hm == null or not hm.built:
+		return false
+	r.doing = "집에 숨어 있는 중"
+	v.speak(r, Balance.LINE_FEAR, 5)
+	r.steps.append(walk(hm.x, hm.y + 0.3))
+	r.steps.append(act(900.0, "sit"))
+	return true
 
 
 static func _baby(v: Village, r: Resident) -> void:
@@ -315,7 +386,7 @@ static func _pray(v: Village, r: Resident) -> bool:
 
 # ───────────────────────── 일 ─────────────────────────
 static func _full(v: Village, k: String) -> bool:
-	return Balance.ENOUGH.has(k) and float(v.stock.get(k, 0.0)) >= Balance.ENOUGH[k]
+	return Balance.ENOUGH.has(k) and float(v.stock.get(k, 0.0)) >= v.enough(k)     # 추운 철엔 통나무를 더 (땔감 — HEALTH.md 1.3)
 
 
 ## 직장 일 — dry=true면 일감이 있는지만 본다
@@ -460,6 +531,8 @@ static func haul_requests(v: Village) -> int:
 			for k in b.def()["in"]:
 				if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < 3.0 and float(v.stock.get(k, 0.0)) >= 1.0:
 					n += 1
+		if v.cold_season and Health.fuel_lack(v, b) >= 1.0 and float(v.stock.get("통나무", 0.0)) >= 1.0:
+			n += 1
 	return n
 
 
@@ -520,6 +593,30 @@ static func haul_task(v: Village, r: Resident) -> bool:
 					v.stock[k] = float(v.stock[k]) + take
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
+	# ④ 집 ← 창고 통나무 (땔감 — HEALTH.md 1.3, 추운 철에만). 가장 모자란 집부터
+	if v.cold_season and float(v.stock.get("통나무", 0.0)) >= 1.0:
+		var best: Building = null
+		var bl := 0.0
+		for b in v.buildings:
+			var lack := Health.fuel_lack(v, b)
+			if lack >= 1.0 and lack > bl:
+				bl = lack
+				best = b
+		if best != null:
+			var b := best
+			var k := "통나무"
+			var take := minf(minf(cap, floorf(bl)), floorf(v.stock[k]))
+			v.stock[k] = float(v.stock[k]) - take
+			b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
+			r.doing = "땔감 나르는 중"
+			var put := func() -> void:
+				b.in_inc[k] = float(b.in_inc[k]) - take
+				b.in_buf[k] = float(b.in_buf.get(k, 0.0)) + take
+			var undo := func() -> void:
+				b.in_inc[k] = float(b.in_inc[k]) - take
+				v.stock[k] = float(v.stock[k]) + take
+			_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
+			return true
 	return false
 
 

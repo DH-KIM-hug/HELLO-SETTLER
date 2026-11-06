@@ -13,6 +13,19 @@ const PATH_N := 128
 
 var rng := RandomNumberGenerator.new()
 var gene_rng := RandomNumberGenerator.new()   # 7단계: 겉모습 유전자·혈통 유전 전용 (시뮬레이션 난수 순서를 바꾸지 않게)
+var health_rng := RandomNumberGenerator.new() # 건강·기후·두려움 전용 (HEALTH.md 7 — 유전·기존 흐름을 흔들지 않게)
+# 병 날짜 (HEALTH.md 1.1): 세상을 만든 현실 날짜. 테스트는 Village.default_created로 고정 (비면 기기 날짜)
+static var default_created: Dictionary = {}
+var created_date: Dictionary = {"year": 2026, "month": 4, "day": 15}
+var climate_override := ""            # 비면 물(병)의 기후대
+var cold_season := false              # 앞으로 반나절 안에 추위가 온다 (땔감 운반·나무꾼 넉넉함 — 정시마다)
+var sick_share := 0.0                 # 앓는 사람 비율
+var warnings: Array = []              # 말풍선·편지로 띄울 위기 예고 {t, kind, text} (화면이 가져감)
+var _health_acc := 0.0
+var _health_hour := 0
+var _sick_warn_day := -1
+var _taps := [-1, 0]                  # [날, 그날 톡 횟수]
+var _rots := [-1, 0]                  # [날, 그날 돌리기 횟수]
 var _singers: Array = []              # 노래꾼 혈통 주민 (life_events마다 다시)
 var _festival_mult := 1.0             # 마을에 노래꾼이 있으면 축제 효과 ×1.2
 var water: JarWater                   # 소형 병(JarWater) 또는 넓은 세상(WorldWater — JarWater를 잇는다)
@@ -84,6 +97,7 @@ static func new_prototype(seed_v: int = 20261105) -> Village:
 func _init_prototype(seed_v: int) -> void:
 	rng.seed = seed_v
 	gene_rng.seed = seed_v * 7919 + 101
+	_init_health(seed_v)
 	water = JarWater.new_prototype_world()
 	water.start_clock = start_clock
 	water.t = 0.0
@@ -127,6 +141,16 @@ func _init_prototype(seed_v: int) -> void:
 		ids[4].grade = 1
 	log_line("어느 새벽, 우리 조상 열 명이 숲 가장자리에 처음으로 불을 피웠다.")
 	log_line("하늘의 두 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 그늘진 세상 끝 벽에서 흘러내려 낮은 곳으로 간다. 서쪽의 큰 호수에는 흘러드는 강이 없다.")
+
+
+func _init_health(seed_v: int) -> void:
+	health_rng.seed = seed_v * 104729 + 7
+	if not default_created.is_empty():
+		created_date = {"year": int(default_created["year"]), "month": int(default_created["month"]), "day": int(default_created["day"])}
+	else:
+		var d := Time.get_date_dict_from_system()
+		created_date = {"year": int(d["year"]), "month": int(d["month"]), "day": int(d["day"])}
+	_health_hour = 0
 
 
 func add_building(type: String, x: float, y: float, built: bool) -> Building:
@@ -203,14 +227,36 @@ func _inherit_look(r: Resident, a: Resident, b: Resident) -> void:
 		if not id in pb:
 			pb.append(id)
 	r.parent_blood = pb
+	r.parent_blood_sex = {}
+	for q: Resident in ([a, b] if b != a else [a]):
+		for id in q.blood:
+			if not r.parent_blood_sex.has(id):
+				r.parent_blood_sex[id] = q.sex
 	var grand := a.parent_blood.duplicate()
 	grand.append_array(b.parent_blood)
 	set_blood(r, Bloodlines.inherit(gene_rng, a.blood, b.blood if b != a else PackedStringArray(), grand))
+	# 혈통이 어디서 왔나 (화면용 — 난수를 쓰지 않는다). 부모 둘 다 가졌으면 아이 번호로 번갈아
+	r.blood_src = {}
+	for id in r.blood:
+		var in_a := id in a.blood
+		var in_b := b != a and id in b.blood
+		if in_a or in_b:
+			var who: Resident = a if (in_a and (not in_b or r.id % 2 == 0)) else b
+			r.blood_src[id] = "mother" if who.sex == "f" else "father"
+		elif a.parent_blood_sex.has(id) or b.parent_blood_sex.has(id):
+			var sx: String = a.parent_blood_sex.get(id, b.parent_blood_sex.get(id, "m"))
+			r.blood_src[id] = "grandmother" if sx == "f" else "grandfather"
+		else:
+			r.blood_src[id] = "new"
 
 
-## 혈통을 정한다 — 효과(fx)와, '다산'·'난산'이면 타고난 출산 배율
-func set_blood(r: Resident, b: PackedStringArray) -> void:
+## 혈통을 정한다 — 효과(fx)와, '다산'·'난산'이면 타고난 출산 배율. src = 모두 같은 출처 ("kit"·"migrant"…, 비면 그대로)
+func set_blood(r: Resident, b: PackedStringArray, src := "") -> void:
 	r.set_blood(b)
+	if src != "":
+		r.blood_src = {}
+		for id in b:
+			r.blood_src[id] = src
 	var fr: Variant = r.fx.get("fert")
 	if fr is Array:
 		r.fert = gene_rng.randf_range(float(fr[0]), float(fr[1]))
@@ -493,14 +539,16 @@ func step(dt: float) -> void:
 			p.hunger = maxf(0.0, p.hunger - dt / Balance.FOOD_IV)
 		if p.hunger >= Balance.STARVING_AT:
 			p.health -= dt / Balance.STARVE_HEALTH_TIME
+			p.harm["굶주림"] = float(p.harm.get("굶주림", 0.0)) + dt / Balance.STARVE_HEALTH_TIME
 			if p.is_child() and not p.stunted and p.genes.size() >= Genetics.GENE_BYTES:     # 어릴 때 굶주리면 키 −0.05 (겉모습만)
 				p.stunted = true
 				p.genes[Genetics.HEIGHT] = maxi(0, p.genes[Genetics.HEIGHT] - roundi(Genetics.STUNT * 255.0))
-		else:
+		elif Health.can_heal(p):         # 앓는 중·추위·더위 속에서는 저절로 낫지 않는다 (HEALTH.md 1.4 · 2)
 			p.health = minf(1.0, p.health + dt * p.f("heal") / Balance.HEAL_TIME)
 		p.age += dt / DAY
 		if p.say_t > 0.0:
 			p.say_t -= dt
+	Health.step(self, dt)
 	for b in buildings:
 		_update_building(b, dt)
 	for p in people.duplicate():
@@ -603,7 +651,7 @@ func _update_belief(dt: float) -> void:
 		p.belief = clampf(p.belief, 0.0, 1.0)
 		sum += p.belief
 	faith = sum / people.size() * 100.0 if not people.is_empty() else 0.0
-	fear = maxf(0.0, fear - dt / Balance.FEAR_DECAY_TIME)
+	# 부락의 두려움(0~100) = 주민 두려움 평균 × 100 — sim/health.gd가 사람마다 내린다 (HEALTH.md 4)
 
 
 func bless_all(d: float) -> void:
@@ -650,6 +698,7 @@ func _update_happiness() -> void:
 		if t < p.grief_until:
 			h += Balance.HAPPY_GRIEF
 		h += p.f("happiness", 0.0)
+		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
 			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)
 		p.happiness = clampf(h, 0.0, 1.0)
@@ -688,6 +737,8 @@ func _update_building(b: Building, dt: float) -> void:
 	if not d.get("job", false) or not d.has("out") or d.get("gather", false) or b.worker < 0:
 		return
 	var w := person(b.worker)
+	if w != null and w.sick_left > 0.0:
+		return                        # 일꾼이 앓아누우면 일터가 쉰다 (HEALTH.md 2)
 	if b.type == "소금밭":
 		_update_salt_works(b, dt, w)
 		return
@@ -1027,14 +1078,20 @@ func _deaths(dt: float) -> void:
 			if rng.randf() < pd * dt / DAY or la > Balance.DEATH_MAX_AGE:
 				why = "노환"
 		if why == "" and p.health <= 0.0:
-			# 거인이 없을 때: 위기 사망은 하루 1명까지, 부부 2쌍 아래로는 일어나지 않음 (멸망 방지)
+			# 거인이 없을 때: 위기 사망(굶주림·병·추위·더위)은 하루 1명까지, 부부 2쌍 아래로는 일어나지 않음 (멸망 방지)
 			if not is_watching() and (couples <= Balance.OFFLINE_MIN_COUPLES or _starve_day == day_no()):
 				p.health = 0.05
+				stats["spared"] = int(stats.get("spared", 0)) + 1
 			else:
-				why = "굶주림"
-				crisis("starve", "%s%s 굶주림으로 쓰러졌다" % [p.name, josa(p.name, "이", "가")])
+				why = Health.death_cause(p)
+				var what: String = {"굶주림": "굶주림으로", "병": "병으로", "추위": "추위에", "더위": "더위에"}.get(why, "굶주림으로")
+				crisis("starve" if why == "굶주림" else ("sick" if why == "병" else why), "%s%s %s 쓰러졌다" % [p.name, josa(p.name, "이", "가"), what])
 				_starve_day = day_no()
-				stats["starved"] += 1
+				if why == "굶주림":
+					stats["starved"] += 1
+				var key: String = {"병": "died_sick", "추위": "died_cold", "더위": "died_heat"}.get(why, "")
+				if key != "":
+					stats[key] = int(stats.get(key, 0)) + 1
 		if why != "":
 			kill(p, why)
 
@@ -1062,10 +1119,28 @@ func kill(p: Resident, why: String) -> void:
 	_people_by_id.erase(p.id)
 	dead.append(p)
 	var age := p.shown_age()
-	if why == "노환":
-		log_line("%s(%d세)%s 잠들 듯 숨을 거두었다." % [p.name, age, josa(p.name, "이", "가")])
-	else:
-		log_line("%s(%d세)%s 굶주림 끝에 숨을 거두었다." % [p.name, age, josa(p.name, "이", "가")])
+	var ga := josa(p.name, "이", "가")
+	var nb := josa(p.name, "은", "는")
+	match why:
+		"노환":
+			log_line("%s(%d세)%s 잠들 듯 숨을 거두었다." % [p.name, age, ga])
+		"병":
+			log_line("%s(%d세)%s 앓아누운 끝에 끝내 일어나지 못했다." % [p.name, age, ga])
+		"추위":
+			var ssn: String = jar_date()["season"]
+			log_line("%s, %s(%d세)%s 끝내 따뜻해지지 못했다." % ["그 겨울" if ssn == "겨울" else "그 추운 날", p.name, age, nb])
+		"더위":
+			var ssn: String = jar_date()["season"]
+			log_line("%s, %s(%d세)%s 끝내 더위를 이기지 못했다." % ["그 여름" if ssn == "여름" else "그 무더운 날", p.name, age, nb])
+		_:
+			log_line("%s(%d세)%s 굶주림 끝에 숨을 거두었다." % [p.name, age, ga])
+	# 두려움: 가족(부모·자식·배우자·형제) +0.2, 반경 6칸에서 본 사람 +0.05 (HEALTH.md 4)
+	for q in people:
+		if q.id == p.partner or q.id in p.parents or p.id in q.parents or _siblings(p, q):
+			raise_fear(q, Balance.FEAR_FAMILY_DEATH)
+		elif Vector2(q.x - p.x, q.y - p.y).length() <= Balance.FEAR_SAW_R and not q.sleeping:
+			raise_fear(q, Balance.FEAR_SAW_DEATH)
+	recalc_fear()
 
 
 func idle_chatter() -> void:
@@ -1443,6 +1518,7 @@ func rotate_jar() -> void:
 	if water is WorldWater:        # 넓은 세상: 데이터는 그대로, 빛이 돈다 (WorldWater.rotate_jar) — 화면이 병을 돌려 보여 준다
 		water.rotate_jar()
 		for v: Village in [self] + others:
+			v._fear_rotate()
 			for b in v.buildings:
 				b.farm_mult = -1.0
 			v.bless_all(0.06)
@@ -1475,6 +1551,7 @@ func rotate_jar() -> void:
 		for i in PATH_N:
 			np[i * PATH_N + (PATH_N - 1 - j)] = paths[j * PATH_N + i]
 	paths = np
+	_fear_rotate()
 	bless_all(0.06)
 	log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
 
@@ -1524,6 +1601,7 @@ static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, s
 func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> void:
 	rng.seed = seed_v
 	gene_rng.seed = seed_v * 7919 + 101
+	_init_health(seed_v)
 	water = ww
 	kit = kit_def
 	sid = sid_v
@@ -1595,8 +1673,12 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 	# 키트 혈통: 가족 전원이 같은 혈통 (기본 키트는 없음). 키트로 오는 사람에게 나쁜 혈통은 없다
 	var kb := Kits.blood(kit_def)
 	for r in ids:
-		set_blood(r, kb)
+		set_blood(r, kb, "kit")
 		r.parent_blood = kb.duplicate() if r.parents.size() > 0 else PackedStringArray()
+		r.parent_blood_sex = {}
+		if r.parents.size() > 0:
+			for id in kb:
+				r.parent_blood_sex[id] = "m"
 	stats["marriages"] = 0
 	if people.all(func(p: Resident) -> bool: return p.grade == 0) and ids.size() > 4:
 		ids[4].grade = 1
@@ -1688,3 +1770,87 @@ func can_explore(r: Resident = null) -> bool:
 func reveal_building(b: Building) -> void:
 	if _fog_on:
 		_reveal_at(Vector2(b.x, b.y), WorldCfg.REVEAL_BUILD, null, true)
+
+
+# ───────────────────────── 건강·기후·두려움 (docs/HEALTH.md — 계산은 sim/health.gd) ─────────────────────────
+## 병 날짜 {year, month, day, season("봄/여름/가을/겨울")} — 세상을 만든 날 + 병 시계로 흐른 날 수
+func jar_date() -> Dictionary:
+	return Health.jar_date(self)
+
+
+## 그 자리의 온도 (°C 느낌) = 기후대 바탕 + 계절 + 낮밤 + 자리(따뜻함 0~1 → +0~+3)
+func temperature_at(x: float, y: float) -> float:
+	return Health.temperature_at(self, x, y)
+
+
+## 기후대 (Balance.CLIMATES의 키) — 병(물)이 정한다. 기본 온대
+func climate() -> String:
+	if climate_override != "":
+		return climate_override
+	if water != null and Balance.CLIMATES.has(water.climate):
+		return water.climate
+	return Balance.CLIMATE_DEFAULT
+
+
+## 창고 물자의 '넉넉함' — 추운 철에는 통나무를 집마다 더 쌓는다 (땔감)
+func enough(k: String) -> float:
+	var e: float = Balance.ENOUGH.get(k, INF)
+	if k == "통나무" and cold_season:
+		e += houses().size() * Balance.FUEL_STOCK_PER_HOUSE
+	return e
+
+
+func raise_fear(r: Resident, amt: float) -> void:
+	r.fear = clampf(r.fear + amt * r.f("fear_rise"), 0.0, 1.0)      # 담대 ×0.5 · 겁 많음 ×1.5 (내려감은 같음)
+
+
+func raise_fear_all(amt: float) -> void:
+	for r in people:
+		raise_fear(r, amt)
+	recalc_fear()
+
+
+## 부락의 두려움 0~100 = 주민 두려움 평균 × 100 (신앙 상태가 그대로 쓴다)
+func recalc_fear() -> void:
+	if people.is_empty():
+		fear = 0.0
+		return
+	var s := 0.0
+	for r in people:
+		s += r.fear
+	fear = s / people.size() * 100.0
+
+
+## 거인이 유리를 톡 친다 (그날 4번째부터 모두 +0.05) · 크게 친 톡 = 지진 (모두 +0.2)
+func tap_glass(hard := false) -> void:
+	var d := cal_day(t)
+	if _taps[0] != d:
+		_taps = [d, 0]
+	_taps[1] += 1
+	if hard:
+		raise_fear_all(Balance.FEAR_TAP_HARD)
+	elif _taps[1] > Balance.FEAR_FREE_PER_DAY:
+		raise_fear_all(Balance.FEAR_TAP)
+
+
+func _fear_rotate() -> void:
+	var d := cal_day(t)
+	if _rots[0] != d:
+		_rots = [d, 0]
+	_rots[1] += 1
+	if _rots[1] > Balance.FEAR_FREE_PER_DAY:
+		raise_fear_all(Balance.FEAR_ROTATE)
+
+
+## 거인이 식량을 거둠 — 굶주리는 때면 모두 +0.1 (기획서 11.1)
+func on_food_taken() -> void:
+	if deficit > 0.0 or t - last_short_t < Balance.STARVED_RECENT:
+		raise_fear_all(Balance.FEAR_TAKE_FOOD)
+
+
+## 물 뿌리기가 집을 잠기게 함 — 반경 안 주민 +0.15
+func on_house_flooded(x: float, y: float, radius: float) -> void:
+	for r in people:
+		if Vector2(r.x - x, r.y - y).length() <= radius:
+			raise_fear(r, Balance.FEAR_FLOOD)
+	recalc_fear()

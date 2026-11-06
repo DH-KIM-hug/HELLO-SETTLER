@@ -46,6 +46,7 @@ var t := 0.0                            # 흐른 시간 (초)
 var start_clock := 8.0 * HOUR           # 시작 시각 (프로토타입은 실제 시각 — 여기선 고정해 결과를 재현)
 var humid := 0.5
 var offline := false
+var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
 
 # 계산용 표 (저장하지 않음, 병을 돌리면 다시 만든다)
 var cells := PackedInt32Array()         # 원 안의 칸 (k 오름차순 — 프로토타입과 같은 순서)

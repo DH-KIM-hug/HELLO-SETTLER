@@ -21,6 +21,8 @@ var is_store := false
 var farm_mult := -1.0                 # 농사 배율 캐시 (병을 돌리면 다시 계산)
 var upgrade_to := ""                  # 개축 중이면 새 종류 (그동안도 사람이 산다)
 var built_t := -1.0
+var fuel_on := false                  # 집: 지금 불을 때고 있다 (땔감 있음 — HEALTH.md 1.3). 땔감 = in_buf["통나무"]
+var fuel_acc := 0.0                   # 집: 다음 통나무까지 탄 몫 (1 = 통나무 하나)
 
 
 func def() -> Dictionary:

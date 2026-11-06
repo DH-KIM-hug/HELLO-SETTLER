@@ -60,6 +60,19 @@ var blood := PackedStringArray()      # 혈통 id (최대 2)
 var parent_blood := PackedStringArray()   # 부모 둘이 가진 혈통 (아이의 격세유전용 — 조부모 혈통 = 부모의 parent_blood)
 var fx: Dictionary = {}               # 효과가 있는 혈통의 능력 값 (Bloodlines.effects)
 var stunted := false                  # 어릴 때 굶주려 키 −0.05 (한 번)
+var blood_src: Dictionary = {}        # 혈통 id → 어디서 왔나: "father" "mother" "grandfather" "grandmother" "new" "kit" "migrant"
+var parent_blood_sex: Dictionary = {} # 부모 중 누가 가졌나 (혈통 id → "m"/"f") — 아이의 blood_src 'grandfather/grandmother'용
+
+# 건강·기후·두려움 (docs/HEALTH.md — sim/health.gd가 바꾼다. 화면은 읽기만)
+var sick_left := 0.0                  # 앓는 남은 병 시간 (초), 0 = 건강
+var sick_since := -1.0                # 앓기 시작한 병 시각 t
+var injured_left := 0.0               # 다친 남은 병 시간 (초)
+var fear := 0.0                       # 두려움 0~1
+var cold := 0.0                       # 지금 막고 남은 추위 정도 0~2 (혈통·나이 곱하기 전)
+var heat := 0.0                       # 지금 막고 남은 더위 정도 0~2
+var herb_used := false                # 이번 병에 약초를 먹었나 (한 번만)
+var heavy_secs := 0.0                 # 이번 시간에 힘쓰는 일을 한 초 (부상 굴림용)
+var harm: Dictionary = {}             # 최근 건강을 깎은 원인 → 양 (사망 원인 고르기)
 
 
 func is_adult() -> bool:
@@ -111,6 +124,8 @@ func walk_speed() -> float:
 	elif age < Balance.AGE_ADULT:
 		s *= Balance.WALK_CHILD
 	s *= f("walk")
+	if injured_left > 0.0:
+		s *= Balance.INJURY_SLOW       # 다침: 걸음 ×0.5 (HEALTH.md 3)
 	if carry != "":
 		s *= f("carry_work")       # '허약': 짐 나르기 −20%
 	return s
@@ -129,6 +144,8 @@ const HEAVY_JOBS := {"나무꾼": true, "채석장": true, "짓기": true}
 
 func job_speed(kind: String) -> float:
 	var s := work_mult
+	if injured_left > 0.0:
+		s *= Balance.INJURY_SLOW       # 다침: 일 속도 ×0.5 (HEALTH.md 3)
 	if fx.is_empty():
 		return s
 	if CRAFT_JOBS.has(kind):
@@ -142,6 +159,14 @@ func job_speed(kind: String) -> float:
 	if kind == "우물":
 		s *= f("water")
 	return s
+
+
+func is_sick() -> bool:
+	return sick_left > 0.0
+
+
+func is_injured() -> bool:
+	return injured_left > 0.0
 
 
 func is_moving() -> bool:

@@ -82,6 +82,9 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 		v.owns_water = false
 		v.t = pv.t
 		v._last_dawn = pv._last_dawn
+		v.created_date = pv.created_date.duplicate()      # 한 병 = 한 달력 (HEALTH.md 1.1)
+		v._health_hour = pv._health_hour
+		v._health_acc = pv._health_acc
 		pv.others.append(v)
 	settlements.append(v)
 	for s in settlements:

@@ -215,6 +215,7 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	# 11) 뚜껑 닫기 타임랩스: 거친 칸만으로 며칠 (오프라인 간격)
 	ww.offline = true
 	ww.start_clock = Balance.START_CLOCK
+	ww.climate = String(o.get("climate", Balance.CLIMATE_DEFAULT))     # 창조 때 고른 기후대 (HEALTH.md 1.2)
 	var days: float = o["settle_days"]
 	if days > 0.0:
 		ww.advance(days * JarWater.DAY)

@@ -1,5 +1,5 @@
 ## 시뮬레이션 테스트 (헤드리스) — 실패하면 0이 아닌 값으로 끝난다.
-## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 유전·혈통만: -- genetics)
+## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health)
 extends SceneTree
 
 const DAYS := 9
@@ -14,6 +14,13 @@ func check(ok: bool, what: String) -> void:
 
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
+	# 병 날짜를 4월 15일(봄)로 고정 — 기존 테스트가 기기 날짜에 따라 달라지지 않게 (HEALTH.md 7). 겨울 시험은 health_tests가 따로
+	Village.default_created = {"year": 2026, "month": 4, "day": 15}
+	if "health" in OS.get_cmdline_user_args():         # -- health : 건강·기후·두려움 테스트만 (HEALTH.md)
+		load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
+		quit(1 if fails > 0 else 0)
+		return
 	if "world" in OS.get_cmdline_user_args():          # -- world : 넓은 세상 테스트만 (6단계 개발용)
 		load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -35,6 +42,8 @@ func _initialize() -> void:
 	load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	# 7단계 — 겉모습 유전자 · 혈통 (tests/genetics_tests.gd)
 	load("res://tests/genetics_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+	# 건강·기후·두려움 (tests/health_tests.gd)
+	load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
 		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
