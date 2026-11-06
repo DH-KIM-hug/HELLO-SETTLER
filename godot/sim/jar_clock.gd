@@ -28,6 +28,7 @@ var dropped := 0.0                    # 화면이 느려 버린 병 시간 (초)
 var notice := ""                      # 화면에 띄울 알림 (UI 문구)
 var notice_t := 0.0                   # 알림이 남은 현실 시간 (초)
 var last_crisis: Dictionary = {}
+var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
 
 
 func _init(village: Village) -> void:
@@ -127,6 +128,7 @@ func _tick_skip(real_dt: float) -> int:
 func tick(real_dt: float) -> int:
 	if notice_t > 0.0:
 		notice_t = maxf(0.0, notice_t - real_dt)
+	_lid_auto_close(real_dt)
 	if skipping:
 		return _tick_skip(real_dt)
 	acc += real_dt * speed()
@@ -157,3 +159,16 @@ func _after_step() -> bool:
 		notice_t = 8.0
 		changed = was_fast
 	return changed
+
+
+## [곰팡이·뚜껑] 안 닫으면 현실 1분 뒤 저절로 닫힘 (배속과 상관없이 현실 시간 — 병 시계 안전장치는 JarAir)
+func _lid_auto_close(real_dt: float) -> void:
+	if v.air == null or not v.air.lid_open:
+		lid_real = 0.0
+		return
+	lid_real += real_dt
+	if lid_real >= Balance.LID_AUTO_CLOSE_REAL:
+		v.close_lid()
+		lid_real = 0.0
+		notice = "뚜껑이 저절로 닫혔어요"
+		notice_t = 3.0

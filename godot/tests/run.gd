@@ -1,5 +1,5 @@
 ## 시뮬레이션 테스트 (헤드리스) — 실패하면 0이 아닌 값으로 끝난다.
-## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 영역·제물·소원만: -- economy · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health)
+## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 영역·제물·소원만: -- economy · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health · 공기·뚜껑·곰팡이만: -- mold)
 extends SceneTree
 
 const DAYS := 9
@@ -18,6 +18,11 @@ func _initialize() -> void:
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	if "health" in OS.get_cmdline_user_args():         # -- health : 건강·기후·두려움 테스트만 (HEALTH.md)
 		load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
+		quit(1 if fails > 0 else 0)
+		return
+	if "mold" in OS.get_cmdline_user_args():           # -- mold : 병의 공기·뚜껑·곰팡이 무리만 (WORLD_EVENTS 2.1 · 3)
+		load("res://tests/mold_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
 		quit(1 if fails > 0 else 0)
 		return
@@ -51,6 +56,8 @@ func _initialize() -> void:
 	load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	# v4.0 — 영역·자율 건설·소원·길·제물·장터·분가 (tests/economy_tests.gd)
 	load("res://tests/economy_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+	# 병의 공기·뚜껑·곰팡이 무리 (tests/mold_tests.gd)
+	load("res://tests/mold_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
 		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])

@@ -41,6 +41,9 @@ var n_decor_trees := 0
 var n_piers := 0
 var n_bridges := 0
 var _anim_t := 0.0
+var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.gd)
+var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
+var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 
 
@@ -65,6 +68,8 @@ func _ready() -> void:
 	_manna = _node(self)
 	_props = _node(self)
 	_far = _node(self)
+	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
+	add_child(mold_view)
 	_build_fire()
 	sync(0.0, true)
 
@@ -83,6 +88,8 @@ func gy(x: float, z: float) -> float:
 func sync(dt: float, force := false) -> void:
 	_anim_t += dt
 	_sync_residents(dt)
+	mold_view.alpha = alpha         # [곰팡이·뚜껑]
+	mold_view.sync(dt)
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
@@ -135,13 +142,91 @@ func _sync_residents(dt: float) -> void:
 		if r.anim == "work":
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
-		m.set_anim(r.anim)
+		m.set_anim("work" if r.anim == "torch" else r.anim)
 		m.tick(dt)
+		_torch(r, m)
+	for id in _torches.keys():
+		if not seen.has(id) or not is_instance_valid(_torches[id]):
+			_torches.erase(id)
+	for id in _torch_glows.keys():
+		if not seen.has(id):
+			(_torch_glows[id] as Node3D).queue_free()
+			_torch_glows.erase(id)
 	for id in residents.keys():
 		if not seen.has(id):
 			(residents[id] as Node3D).queue_free()
 			residents.erase(id)
 			_res_key.erase(id)
+
+
+## [곰팡이·뚜껑] 곰팡이 쫓는 사람: 오른손에 횃불 (걸을 땐 높이 들고, 휘두를 땐 연장 대신). 불꽃은 깜빡임
+func _torch(r: Resident, m: ResidentModel) -> void:
+	var on := r.action == "mold_chase" and m.visible
+	var tn: Node3D = _torches.get(r.id)
+	if not on:
+		if tn != null and is_instance_valid(tn):
+			tn.visible = false
+		var g0: Node3D = _torch_glows.get(r.id)
+		if g0 != null and is_instance_valid(g0):
+			g0.visible = false
+		return
+	if tn == null or not is_instance_valid(tn):
+		tn = Node3D.new()
+		m.tool.get_parent().add_child(tn)
+		tn.position = m.tool.position
+		_box(tn, Vector3(0.13, 0.95, 0.13), Vector3(0, 0.05, 0.0), Style.WOOD_DARK)
+		_box(tn, Vector3(0.22, 0.16, 0.22), Vector3(0, 0.5, 0.0), Style.WOOD)
+		_box(tn, Vector3(0.42, 0.5, 0.42), Vector3(0, 0.78, 0.0), Style.FLAME, 0.4).name = "f1"
+		_box(tn, Vector3(0.22, 0.34, 0.22), Vector3(0, 0.95, 0.0), Style.FLAME2, 0.9).name = "f2"
+		_torches[r.id] = tn
+	# 횃불 빛: 발밑의 따뜻한 빛 웅덩이 (툰 빛을 흔들지 않게 빛 대신 반투명 원판)
+	var glow: MeshInstance3D = _torch_glows.get(r.id)
+	if glow == null or not is_instance_valid(glow):
+		glow = MeshInstance3D.new()
+		var disc := PlaneMesh.new()
+		disc.size = Vector2(2.6, 2.6)
+		glow.mesh = disc
+		glow.material_override = _glow_mat()
+		glow.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(glow)
+		_torch_glows[r.id] = glow
+	glow.visible = true
+	glow.position = m.position + Vector3(0, 0.03, 0)
+	glow.scale = Vector3.ONE * (0.95 + 0.08 * sin(_anim_t * 13.0 + r.id))
+	tn.visible = true
+	m.tool.visible = false
+	if r.anim == "torch":                 # 휘두르기: 횃불을 앞으로 내밀었다 거뒀다 (불꽃은 늘 위로)
+		m.arm_r.rotation.x = -1.25 + 0.4 * sin(_anim_t * 8.0 + r.id)
+	else:                                 # 걸을 때: 횃불을 앞으로 높이
+		m.arm_r.rotation.x = -1.6
+	m.arm_r.rotation.z = 0.2
+	tn.rotation.x = -m.arm_r.rotation.x
+	var f := int(_anim_t * 10.0 + r.id) % 3
+	var hs := [1.0, 1.3, 0.8]
+	var f1 := tn.get_node("f1") as Node3D
+	var f2 := tn.get_node("f2") as Node3D
+	f1.scale.y = hs[f]
+	f2.scale.y = hs[(f + 1) % 3]
+
+
+static var _glow: ShaderMaterial
+
+
+## 횃불 빛 웅덩이: 가운데가 밝고 가장자리로 사라지는 따뜻한 원 (더하기 섞기, 도트처럼 몇 단계로 끊음)
+static func _glow_mat() -> ShaderMaterial:
+	if _glow == null:
+		var sh := Shader.new()
+		sh.code = """shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, shadows_disabled;
+void fragment() {
+	float d = length(UV - 0.5) * 2.0;
+	float a = floor(clamp(1.0 - d, 0.0, 1.0) * 4.0) / 4.0;
+	ALBEDO = vec3(1.0, 0.6, 0.22);
+	ALPHA = a * 0.38;
+}"""
+		_glow = ShaderMaterial.new()
+		_glow.shader = sh
+	return _glow
 
 
 # ───────────────────────── 건물 ─────────────────────────

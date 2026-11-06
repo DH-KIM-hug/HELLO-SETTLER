@@ -33,6 +33,8 @@ var _terrain_t := 0.0
 var _drag := false
 var detail: ResidentDetail
 var altar_sheet: AltarSheet          # 제단 시트 (UI 02 — 제물 받기·소원 들어주기·건물 사 주기·강제로 거두기)
+var air_overlay: JarAirOverlay       # [곰팡이·뚜껑] 서린 김·누런 하늘·열린 뚜껑의 빛 (view/jar_air_overlay.gd)
+var lid_btn: Button                  # [곰팡이·뚜껑] 뚜껑 열기/닫기 (WORLD_EVENTS 3)
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
 var _tap_ok := false
@@ -120,6 +122,7 @@ func _process(dt: float) -> void:
 				(m as ResidentModel).tick(dt)
 	terrain.animate(dt)
 	update_night()
+	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]
 	_update_ui()
 
 
@@ -206,6 +209,9 @@ func _setup_ui() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = theme
 	layer.add_child(root)
+	air_overlay = JarAirOverlay.new()   # [곰팡이·뚜껑] 3D 위, 말풍선·버튼 아래
+	air_overlay.setup(village)
+	root.add_child(air_overlay)
 	bubbles = Control.new()
 	bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -252,6 +258,11 @@ func _setup_ui() -> void:
 		detail.close()
 		altar_sheet.open())
 	tbar.add_child(altar_btn)
+	lid_btn = Button.new()              # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
+	lid_btn.text = "뚜껑 열기"
+	lid_btn.focus_mode = Control.FOCUS_NONE
+	lid_btn.pressed.connect(toggle_lid)
+	tbar.add_child(lid_btn)
 	var bar := HBoxContainer.new()
 	_pin_bottom(bar, 0.0, 6.0, 34.0)
 	bar.add_theme_constant_override("separation", 3)
@@ -260,7 +271,8 @@ func _setup_ui() -> void:
 			["병 돌리기", func() -> void: village.rotate_jar(); refresh()],
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
-			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))]]:
+			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
+			["곰팡이", func() -> void: village.mold.force_swarm(village)]]:     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
 		var b := Button.new()
 		b.text = spec[0]
 		b.focus_mode = Control.FOCUS_NONE
@@ -292,6 +304,15 @@ static func _pin_bottom(c: Control, ax: float, x: float, from_bottom: float) -> 
 	c.offset_bottom = -from_bottom
 
 
+## [곰팡이·뚜껑] 뚜껑 열기 / 닫기 (WORLD_EVENTS 3)
+func toggle_lid() -> void:
+	if village.air.lid_open:
+		village.close_lid()
+	else:
+		village.open_lid()
+		clock.lid_real = 0.0
+
+
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
 func set_pixel_effects(on: bool) -> void:
 	post_mat.set_shader_parameter("use_outline", on)
@@ -320,6 +341,12 @@ func _update_ui() -> void:
 	speed_btn.text = "새벽으로…" if clock.skipping else "속도 ×%d" % int(clock.speed())
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
+	if village.air.lid_open:             # [곰팡이·뚜껑] 저절로 닫힐 때까지 남은 현실 초
+		lid_btn.text = "뚜껑 닫기 %d" % ceili(Balance.LID_AUTO_CLOSE_REAL - clock.lid_real)
+		lid_btn.modulate = Color(1, 0.9, 0.6)
+	else:
+		lid_btn.text = "뚜껑 열기"
+		lid_btn.modulate = Color.WHITE
 	if not village.warnings.is_empty() and clock.notice_t <= 0.0:     # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		clock.notice = str(village.warnings.pop_front()["text"])
 		clock.notice_t = 6.0

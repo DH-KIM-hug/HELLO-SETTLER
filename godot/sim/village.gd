@@ -87,6 +87,9 @@ var _starve_day := -1
 var _timers := {"life": 0.0, "jobs": 0.0, "chief": 0.0, "lake": 0.0, "decay": 0.0, "speak": 0.0, "econ": 0.0}
 # v4.0 — 제단·제물·소원·분가 (기획서 6.7 · 11.1 · 3.1). 계산은 아래 '제단' 절
 var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
+# [곰팡이·뚜껑] 병의 공기(김·연기·탁한 공기·뚜껑)와 곰팡이 무리 — WORLD_EVENTS 2.1 · 3 (sim/jar_air.gd · sim/mold.gd, 난수도 각자)
+var air: JarAir
+var mold: Mold
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array}
 var favourites: Dictionary = {}       # 거인님이 받으신 물건 → 받은 개수 합 ('거인님은 빵을 좋아하신다')
@@ -160,6 +163,8 @@ func _init_prototype(seed_v: int) -> void:
 
 func _init_health(seed_v: int) -> void:
 	health_rng.seed = seed_v * 104729 + 7
+	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
+	mold = Mold.new(seed_v)
 	if not default_created.is_empty():
 		created_date = {"year": int(default_created["year"]), "month": int(default_created["month"]), "day": int(default_created["day"])}
 	else:
@@ -594,6 +599,8 @@ func step(dt: float) -> void:
 		if p.say_t > 0.0:
 			p.say_t -= dt
 	Health.step(self, dt)
+	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
+	Mold.step(self, dt)
 	for b in buildings:
 		_update_building(b, dt)
 	for p in people.duplicate():
@@ -807,6 +814,8 @@ func _update_building(b: Building, dt: float) -> void:
 		if b.farm_mult < 0.0:
 			b.farm_mult = farm_mult(b.x, b.y)
 		place = b.farm_mult
+	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
+		place *= Balance.KOJI_BREAD
 	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
 	var cyc: float = d["cycle"]
 	while b.timer >= cyc:
@@ -1674,6 +1683,7 @@ func rotate_jar() -> void:
 				rp.call(s)
 	fire = JarWater.rot_pt(fire)
 	altar_pos = JarWater.rot_pt(altar_pos)
+	mold.rotate()                     # [곰팡이·뚜껑] 털뭉치도 병과 함께 돈다
 	var np := PackedFloat32Array()
 	np.resize(PATH_N * PATH_N)
 	for j in PATH_N:
@@ -2438,6 +2448,16 @@ func recalc_fear() -> void:
 	for r in people:
 		s += r.fear
 	fear = s / people.size() * 100.0
+
+
+## [곰팡이·뚜껑] 거인이 뚜껑을 연다 / 닫는다 (WORLD_EVENTS 3) — 열린 동안 김·연기·탁한 공기가 빠지고 방 기온이 섞인다.
+## 안 닫으면 JarClock이 현실 1분 뒤 닫는다 (병 시계 8분 안전장치는 JarAir). 성공하면 true
+func open_lid() -> bool:
+	return air.open_lid(self)
+
+
+func close_lid() -> bool:
+	return air.close_lid(self)
 
 
 ## 거인이 유리를 톡 친다 (그날 4번째부터 모두 +0.05) · 크게 친 톡 = 지진 (모두 +0.2)

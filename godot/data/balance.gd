@@ -381,7 +381,8 @@ const OFFER_FEAR_FOOD_SHARE := 0.1      # (정함) 그때 바치는 식량 몫
 # 장터 값 (BALANCE v3-1 표) — 지폐. 물은 거두지 않는다. 건량은 표에 없어 정함 (밀 + 말리기)
 const PRICE := {"밀": 1.0, "돌": 1.2, "건량": 1.2, "생선": 1.3, "약초": 1.5, "밀가루": 1.7, "고기": 1.7, "통나무": 1.8,
 	"양털": 2.5, "판자": 2.6, "빵": 3.2, "맥주": 3.2, "철광석": 3.5, "석탄": 3.5, "돼지": 4.0, "소금": 4.5,
-	"옷": 8.5, "철": 10.4, "도구": 16.9}
+	"옷": 8.5, "철": 10.4, "도구": 16.9,
+	"곰팡이약": 8.0}                         # 곰팡이약 (WORLD_EVENTS 2.1 — 안)
 const MARKET_HALF := 60.0               # 같은 물건 n번째 단가 = 기본가 × 0.5^((n−1)/60), 현실 하루·모든 병 합산
 # 강제로 거두기 (기획서 11.1): 장터 값 100지폐어치마다 모두 믿음 −0.01 · 두려움 +0.02, 굶주릴 때 식량이면 ×3
 const FORCE_PER := 100.0
@@ -390,3 +391,72 @@ const FORCE_FEAR := 0.02
 const FORCE_FOOD_STARVING := 3.0
 # 건물 사 주기 (BALANCE v3-4 키트 업그레이드 값을 상점 값으로 — 안)
 const SHOP := {"우물": 600, "농장": 1000, "나무꾼": 1000, "제재소": 2500, "방앗간": 4000, "빵집": 4000}
+
+# ═══════════════ 병의 공기·뚜껑·곰팡이 무리 (WORLD_EVENTS 2.1 · 2.3 · 3 — sim/jar_air.gd · sim/mold.gd) ═══════════════
+# 병의 공기: 김(습기)·연기·탁한 공기 0~1. 병 시계 AIR_TICK마다 목표값으로 천천히 다가감 (닫힌 병 — 저절로는 빠지지 않는다)
+const AIR_TICK := 60.0                  # (정함) 공기·곰팡이 계산 간격 (병 시계 초) — 걸음 크기와 상관없게
+const HUMID_BASE := 0.25                # (정함) 김 목표 = 바탕 + 땅의 젖음 × 0.55 + 기후 + 물방울 순환
+const HUMID_WET := 0.55
+const HUMID_CLIMATE := {"열대": 0.30, "아열대": 0.15, "온대": 0.0, "냉대": -0.05, "툰드라": -0.10, "사막": -0.25}
+const HUMID_CYCLE := 0.08               # 닫힌 병의 하루 물 순환 (water.humid) 영향
+const HUMID_TAU := 6.0 * HOUR           # (정함) 김이 목표로 다가가는 빠르기
+const SMOKE_TAU := 3.0 * HOUR
+const STALE_TAU := 8.0 * HOUR
+# 뚜껑 (WORLD_EVENTS 3): 열린 동안 김·연기·탁한 공기 → 바깥 값, 거인의 방 온기가 섞여 들어옴, 물이 조금 빠져나감
+const LID_AUTO_CLOSE_REAL := 60.0       # 안 닫으면 현실 1분 뒤 저절로 닫힘 (JarClock)
+const LID_SAFETY_CLOSE := 8.0 * 60.0    # (정함) 병 시계로 8분 넘게 열려 있으면 닫힘 (오프라인·몰아서 계산 안전장치)
+const LID_DRAIN_TAU := 120.0            # (정함) 열린 동안 공기가 바깥 값으로 다가가는 빠르기 (병 시계 초)
+const OUTSIDE_HUMID := 0.35             # 거인의 방 공기
+const LID_MIX_MAX := 0.7                # (정함) 열린 동안 방 온도가 섞이는 정도 (최대)
+const LID_MIX_TAU := 30.0               # 열면 이만큼에 걸쳐 섞임이 오른다
+const LID_MIX_HALF := 15.0 * 60.0       # 닫은 뒤 섞임의 반감기 (잠깐 추위·온기)
+const ROOM_TEMP := {"겨울": -2.0, "봄": 14.0, "여름": 26.0, "가을": 13.0}   # (정함) 뚜껑으로 들어오는 거인의 방 공기 (겨울 = 창가의 찬바람)
+const LID_WATER_LOSS := 0.0006          # (정함) 열린 1초마다 병 물의 이 몫이 증발해 나감 (1분 ≈ 3.5%)
+const GNAT_P := {"여름": 0.08, "봄": 0.03, "가을": 0.03, "겨울": 0.0}       # 열 때마다 날벌레 (2.2 — 지금은 표시·기록만)
+const LID_AWE_LINE := "하늘이 열렸다!"
+# 곰팡이 무리 (2.1): 압력 = 김 × 따뜻함이 PRESSURE_AT 넘는 동안 쌓임 → 사흘쯤 높으면 조짐 (반나절) → 무리 (1~3일)
+const MOLD_WARM_FROM := 8.0             # (정함) 따뜻함 = (온도 − 8) ÷ 16 (0~1.3)
+const MOLD_WARM_DIV := 16.0
+const MOLD_PRESSURE_AT := 0.5           # (정함) 김 × 따뜻함이 이 위면 압력이 쌓이기 시작
+const MOLD_PRESSURE_FULL := 0.6         # 이 위면 '높음' — 사흘에 압력 1
+const MOLD_PRESSURE_DAYS := 3.0
+const MOLD_PRESSURE_FALL := 2.0         # 낮으면 이틀에 1씩 빠짐
+const MOLD_FIRST_DAY := 3.0             # 첫 3일은 위기 없음 (2.3 오프닝 보호)
+const MOLD_REST := 0.5 * DAY            # 끝나고 최소 반나절 쉼
+const MOLD_OMEN := 0.5 * DAY            # 조짐 (유리가 뿌예지고 빵에 털이 남)
+const MOLD_PEAK := [1.0 * DAY, 3.0 * DAY]   # 한창 (병 시계)
+const MOLD_SPAWN := [3, 6]              # 처음 나오는 무리 수
+const MOLD_MAX := 24                    # (정함) 한 병에 이만큼까지
+const MOLD_KINDS := ["검은", "푸른", "흰", "누룩"]
+const MOLD_KIND_W := [0.5, 0.25, 0.15, 0.10]    # (정함) 검은곰팡이가 가장 흔함
+const MOLD_SPLIT_DAY := 1.5             # 습하면 하루 ×1.5
+const MOLD_SPLIT_HUMID := 0.6           # (정함) 김이 이 위일 때만 나뉨
+const MOLD_ROT_DAY := 0.05              # 창고 식량·통나무 하루 5%
+const MOLD_ROT_FULL := 4                # (정함) 창고에 이만큼 모이면 하루 5% (적으면 비례)
+const MOLD_ILL_R := 4.0                 # (정함) 이 반경 안 주민은 포자 → 배앓이·기침병 ×2
+const MOLD_ILL_MULT := 2.0
+const MOLD_ILL_KINDS := ["배앓이", "기침병"]
+const MOLD_SPEED := 0.55                # (정함) 칸/초 (주민 걸음의 절반쯤 — 통통 튐)
+const MOLD_SUN_SLOW := 0.6              # 볕 드는 쪽 (sun 1)에서 ×(1 − 0.6)
+const MOLD_SIZE_MIN := 0.35             # 이보다 쪼그라들면 사라짐
+const MOLD_TORCH := 0.3                 # (정함) 횃불 한 번에 크기 −0.3
+const MOLD_DRY_SHRINK := 0.25           # (정함) 뚜껑이 열린 1분마다 크기 −0.25 (마른 공기) + 흩어짐
+const MOLD_STARTLE_R := 3.0             # 주민이 이만큼 가까이 오면 털이 곤두섬·주민은 놀람
+const MOLD_HIDE_R := 6.0                # 처음 겪는 마을: 이 반경 안 주민이 숨음
+const MOLD_CHASER_AFTER := 720          # (정함) 처음 겪는 무리에서도 놀란 일이 이만큼 쌓이면 (오래 버티면) 촌장이 '곰팡이 쫓는 사람'을 정함 — 보통은 두 번째 무리부터
+const MOLD_ADAPT := 3                   # 세 번 겪으면 피해 절반 (2.3)
+const MOLD_SKILL := "곰팡이 쫓기"
+const MOLD_TORCH_LOG := 1.0             # 횃불 하나 = 통나무 1
+# 누룩곰팡이 (길들임) · 푸른곰팡이 약
+const KOJI_BREAD := 1.3                 # 길들이면 빵 ×1.3
+const KOJI_FIND_R := 4.0                # 아이가 이만큼 가까이서 보면 발견
+const BLUE_POWDER := "푸른 가루"
+const MOLD_MED := "곰팡이약"
+const MOLD_MED_KINDS := ["곪은 상처", "기침병", "역병"]   # HEALTH 2.5b — 세균성에만
+const MOLD_MED_TIME := 0.5              # 앓는 기간 ×0.5 (중증도 막음)
+const MOLD_MED_LEARN := 3               # 듣지 않는 병에 이만큼 써 보면 마을이 배움
+const MOLD_MED_DISCOVER := 3            # 곪은 상처를 앓는 사람이 없어도 푸른곰팡이를 이만큼 쫓으면 약초꾼이 알아챔
+const MOLD_MED_MAKE_TIME := 600.0       # 약 만들기 (병 시계 초) — 푸른 가루 1 + 빵 1 (빵이 없으면 건량 2) → 곰팡이약 2
+const MOLD_MED_OUT := 2.0
+const MOLD_MED_KEEP := 4.0              # (정함) 약을 이만큼 + 인구 ÷ 5까지 쌓아 둠
+# ═══════════════ 병의 공기·곰팡이 끝 ═══════════════

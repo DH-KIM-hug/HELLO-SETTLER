@@ -55,7 +55,10 @@ static func base_temp(v: Village, tt: float) -> float:
 
 
 static func temperature_at(v: Village, x: float, y: float) -> float:
-	return base_temp(v, v.t) + Balance.SPOT_WARM * v.water.warm_at(x, y)
+	var tb := base_temp(v, v.t)
+	if v.air != null:
+		tb += v.air.temp_shift(tb)        # [곰팡이·뚜껑] 뚜껑으로 섞여 든 거인의 방 기온 (WORLD_EVENTS 3)
+	return tb + Balance.SPOT_WARM * v.water.warm_at(x, y)
 
 
 static func cold_of(temp: float) -> float:
@@ -118,6 +121,8 @@ static func step(v: Village, dt: float) -> void:
 
 static func tick(v: Village, dt: float, tt: float) -> void:
 	var tb := base_temp(v, tt)
+	if v.air != null:
+		tb += v.air.temp_shift(tb)        # [곰팡이·뚜껑] 뚜껑이 열리면 방 기온이 섞인다 (겨울엔 잠깐 추위)
 	var hr := floori(tt / Balance.HOUR)
 	var new_hour := hr > v._health_hour
 	if new_hour:
@@ -152,6 +157,7 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 			_hurt(r, "더위", lh)
 		# 앓음 (병마다 — HEALTH.md 2.1·2.2)
 		if r.sick_left > 0.0:
+			Mold.medicine(v, r)           # [곰팡이·뚜껑] 곰팡이약을 써 본다 (HEALTH 2.5b — 듣는 병: 중증 막음·기간 ×0.5)
 			n_sick += 1
 			cases[r.disease] = int(cases.get(r.disease, 0)) + 1
 			var dz: Dictionary = Balance.DISEASES.get(r.disease, Balance.DISEASES["고뿔"])
@@ -330,7 +336,8 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			p0 *= Balance.ILL_CROWDED
 		p0 *= age_mult(r)
 		var u := v.health_rng.randf()
-		if sick.is_empty() and u >= p0 * wmax * r.f("illness") / 24.0:
+		var mold_m := Mold.ill_mult(v, r)     # [곰팡이·뚜껑] 털뭉치 둘레: 배앓이·기침병 ×2 → 거르기 상한도 그만큼 (결과는 곰팡이 없으면 그대로)
+		if sick.is_empty() and u >= p0 * wmax * mold_m * r.f("illness") / 24.0:
 			continue                  # 어떤 '어디서' 배율이어도 안 걸림
 		if ctx.is_empty():
 			var season: String = jar_date(v)["season"]
@@ -347,7 +354,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			var pd := 0.0
 			if not r.is_immune(kind, v.t):
 				var dz: Dictionary = Balance.DISEASES[kind]
-				pd = p0 * float(dz["share"]) * where_mult(dz, ctx)
+				pd = p0 * float(dz["share"]) * where_mult(dz, ctx) * Mold.kind_mult(kind, mold_m)
 				var cg := 0.0
 				if float(dz["home"]) > 0.0 or float(dz["near"]) > 0.0:
 					if r.home >= 0:

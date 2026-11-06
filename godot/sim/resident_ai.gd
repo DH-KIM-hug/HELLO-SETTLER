@@ -106,6 +106,8 @@ static func decide(v: Village, r: Resident) -> void:
 	if r.sick_left > 0.0:             # 앓는 동안 일하지 않고 집(없으면 모닥불 곁)에서 쉼 (HEALTH.md 2)
 		_sick_rest(v, r)
 		return
+	if Mold.decide(v, r):              # [곰팡이·뚜껑] 털뭉치를 피해 숨기 · 횃불로 쫓기 · 곰팡이약 만들기 (WORLD_EVENTS 2.1)
+		return
 	var night := v.is_night()
 	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
 	if late > 0.0 and h >= Balance.NIGHT_TO and h < Balance.NIGHT_TO + late:
