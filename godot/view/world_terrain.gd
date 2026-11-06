@@ -603,7 +603,7 @@ func _build_marks() -> void:
 		var k := ww.idx(x, z)
 		var surf := (ww.h[k] + ww.depth(k)) * HS
 		var phase := randf()
-		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.7})
+		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "big": true})
 		for r in 2:
 			var tm := TorusMesh.new()
 			tm.inner_radius = 0.94

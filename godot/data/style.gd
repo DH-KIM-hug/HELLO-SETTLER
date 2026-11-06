@@ -44,7 +44,7 @@ const WATER_FOAM := Color("e2f6f5")        # 큰 흰 물결 무늬 (기준 d2f2f
 const WAVE_SCALE := 0.3                   # 물결 무늬 크기 (세계 단위당)
 const WAVE_SPEED := 0.025                  # 물결이 흐르는 빠르기
 const WAVE_AMOUNT := 0.14                  # 흰 무늬가 덮는 비율 (0~1)
-const DROP := Color("cdeef2")
+const DROP := Color("7fc8de")             # 물방울 — 눈처럼 하얗지 않게 물빛 (사용자 피드백 2026-11-07)
 
 # ───────────── 나무·소품 ─────────────
 const LEAF_TOP := Color("66c98a")          # 수관 위쪽 (밝은 민트, 기준 60c686)

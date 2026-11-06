@@ -96,6 +96,16 @@ func animate(dt: float) -> void:
 		if d.has("ring"):              # 수면의 동심원: 물방울이 닿은 뒤 퍼진다
 			nd.scale = Vector3(1.0, 0.05, 1.0) * lerpf(0.2, 1.2, f)
 			nd.visible = f < 0.85
+		elif d.has("big"):             # 뚜껑 돌기의 큰 물방울: 매달려 부풀다가(눈송이처럼 떠다니지 않게) 중력으로 확 떨어져 길쭉하게
+			const HANG := 0.55                 # 한 주기 중 매달려 부푸는 몫
+			if f < HANG:
+				var g := f / HANG
+				nd.position.y = float(d["top"])
+				nd.scale = Vector3(0.6 + 0.5 * g, 0.6 + 0.7 * g, 0.6 + 0.5 * g)
+			else:
+				var u := (f - HANG) / (1.0 - HANG)
+				nd.position.y = lerpf(d["top"], d["bottom"], u * u)
+				nd.scale = Vector3(0.85, 1.2 + 2.2 * u, 0.85)   # 빨라질수록 길쭉 (빗방울)
 		else:
 			nd.position.y = lerpf(d["top"], d["bottom"], f * f)
 
@@ -381,7 +391,7 @@ func _build_marks() -> void:
 		var fn := _add(fall, drop_mat, Vector3(x, LID_Y, z))
 		var surf := (sim.h[JarWater.cell_idx(x, z)] + sim.w[JarWater.cell_idx(x, z)]) * HS
 		var phase := randf()
-		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.7, "drip": true, "f": 0.0})
+		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "drip": true, "big": true, "f": 0.0})
 		for r in 2:
 			var tm := TorusMesh.new()
 			tm.inner_radius = 0.94
