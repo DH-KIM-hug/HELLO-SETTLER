@@ -1,7 +1,7 @@
 ## 첫 주민이 내려온 뒤 (OPENING 단계 8 연출 끝 · 단계 9) — 넓은 세상 장면(world_village)이 키트를 놓고 날아 내려간 다음 띄운다.
 ##   watch  아래 자막 "이 세상에 살 사람들을 데려왔어요." — 주민들이 상자 자리에서 걸어 나옴 · 한 아이가 하늘(거인)을 보고 손을 흔듦 (말풍선)
 ##   meet   첫 주민 3명 (어른 남·여 + 아이): 이름 (나이) — 고유 특징 한 줄. 누르면 다음
-##   name   "이 지구에 이름을 지어 주세요" — 추천 이름 · [다른 이름] · [이 이름으로] (최대 10자, 부적절한 말은 "다른 이름은 어때요?")
+##   name   "이 지구의 이름을 지어 주세요" — 추천 이름 · [다른 이름] · [이 이름으로] (최대 10자, 부적절한 말은 "다른 이름은 어때요?")
 ##   card   지구 카드 (폴라로이드): 이름 · 날짜 · 핵 · 광맥 · 물 · 기후 · 첫 주민 10명 → [병 안으로] → done(이름)
 ## 화면 위쪽에 카드 (휴대폰 자판이 아래를 가림). 시험: meet_next() · confirm_name() · finish()를 바로 부름.
 class_name FirstArrival
@@ -155,7 +155,7 @@ func show_name() -> void:
 	step = "name"
 	caption.visible = false
 	_clear_card()
-	_card_label("이 지구에 이름을 지어 주세요", UiTheme.SIZE, true)
+	_card_label("이 지구의 이름을 지어 주세요", UiTheme.SIZE, true)
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 6)
 	card_box.add_child(row)
