@@ -1,5 +1,6 @@
 ## 주민 초상 — 그 주민의 모델(ResidentModel)을 정면 가까이, 천천히 숨 쉬게. 따로 쓰는 작은 3D 세상(SubViewport)에 그린다.
 ## 겉모습 단계(ResidentModel.look_key)가 바뀌면 다시 만든다. 잠든(죽은) 사람은 회색으로.
+## A20 v4: 늘 가까이 LOD + 직업 옷(일터 종류 · 촌장 띠)을 입고, 시트처럼 앞쪽 왼편 위에서 비추는 3/4 빛 (얼굴·옷 결이 보이게).
 class_name ResidentPortrait
 extends SubViewportContainer
 
@@ -11,6 +12,7 @@ var _key := -999999
 var _rid := -1
 var _t := 0.0
 var _dead := false
+var _job := "?"
 
 
 func _init() -> void:
@@ -36,8 +38,10 @@ func _init() -> void:
 	vp.add_child(we)
 	var sun := DirectionalLight3D.new()
 	sun.light_specular = 0.0
+	sun.shadow_enabled = false
 	vp.add_child(sun)
-	sun.look_at_from_position(Vector3(1.2, 2.0, 2.5), Vector3.ZERO, Vector3.UP)
+	# 3/4 앞 빛: 카메라 쪽 왼편 위 (모델은 살짝 오른쪽으로 돌아 있음) — 얼굴과 몸 앞이 밝고 오른쪽 옆에 그늘 한 단계
+	sun.look_at_from_position(Vector3(-1.6, 2.2, 3.0), Vector3.ZERO, Vector3.UP)
 	cam = Camera3D.new()
 	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 	cam.near = 0.1
@@ -47,7 +51,8 @@ func _init() -> void:
 	vp.add_child(holder)
 
 
-func show_resident(r: Resident) -> void:
+## job = 일터 종류 (Building.type, "" = 일자리 없음), chief = 촌장 띠
+func show_resident(r: Resident, job := "", chief := false) -> void:
 	if r == null:
 		return
 	var key := ResidentModel.look_key(r)
@@ -55,6 +60,7 @@ func show_resident(r: Resident) -> void:
 	modulate = UiTheme.DEAD_TINT if _dead else Color.WHITE
 	if model != null and key == _key and r.id == _rid:
 		model.set_face(ResidentModel.face_of(r))
+		set_job(job, chief)
 		return
 	_key = key
 	_rid = r.id
@@ -64,11 +70,24 @@ func show_resident(r: Resident) -> void:
 	holder.add_child(model)
 	var lk := ResidentModel.look_of(r)
 	model.build_look(lk)
-	model.rotation.y = 0.28                  # 거의 정면 (살짝 비스듬히)
+	model.set_lod(true)                      # 초상화는 늘 가까이 LOD
+	_job = "?"
+	set_job(job, chief)
+	model.rotation.y = 0.32                  # 3/4 앞 (살짝 비스듬히)
 	model.set_face(ResidentModel.face_of(r))
 	model.set_anim("idle")
 	model.tick(0.0)
 	_frame()
+
+
+## 직업 옷 갈아입기 (바뀔 때만)
+func set_job(job: String, chief := false) -> void:
+	var k := "%s|%s" % [job, chief]
+	if model == null or k == _job:
+		return
+	_job = k
+	model.set_job(job, chief)
+	model.tick(0.0)
 
 
 ## 머리와 어깨가 칸에 차도록 — 모델 크기(아이·어른)를 재서 맞춤

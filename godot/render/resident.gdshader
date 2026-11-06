@@ -14,10 +14,31 @@
 //   표정 = 칸 번호 face_cell (0 보통 1 기쁨 2 슬픔 3 앓음 4 잠 5 놀람 6 말함, 7 = 눈 깜빡임 — 시간으로 가끔).
 //   (0, 0.25, b) = 노인 숄 색. messy = 혈통 '부스스한 머리' (머리카락을 바깥으로 조금 부풀림).
 //   소품(짐·연장·지팡이)은 CUSTOM1이 없음 → 0 = 머리 부품 아님.
+// A20 v4: 손으로 그린 결 (머리카락 결·곱슬·땋은 머리·수염 / 옷감·주름·앞치마·말아 올린 소매·가죽 띠·주머니·두건·뜨개·밀짚·양모)
+//   = 회색 그림 묶음 두 장 (art/models/resident_hair.png · resident_cloth.png, art/src/pack_detail_atlas.py) — 꼭짓점 색 알파 =
+//   칸 번호 ((칸 + 0.5) / 32, 1 = 결 없음, 0~15 머리카락 · 16~31 옷감), UV2 = 칸 안의 무늬 자리 (되풀이). 색 = 물들인 색 × 결.
+//   화면에서 아주 작아지면(멀리) 결을 줄여 반짝이지 않게. 피부(얼굴)에는 결 없음.
+//   머리카락의 그늘 색은 따뜻한 회색 (공용 청록 그늘이면 흰머리·은발이 파랗게 됨) — 그래서 빛 함수를 여기 둔다 (toon_light와 같은 규칙).
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled, cull_back;
 
-#include "res://render/toon_light.gdshaderinc"
+uniform vec3 lit_tint : source_color = vec3(1.0);
+uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
+uniform float lit_threshold = 0.08;
+uniform float view_fill = 0.0;
+uniform vec3 hair_shade : source_color = vec3(0.74, 0.69, 0.68);   // 머리카락 그늘 (따뜻한 회색)
+uniform sampler2D hair_tex : hint_default_white, filter_linear_mipmap, repeat_disable;
+uniform sampler2D cloth_tex : hint_default_white, filter_linear_mipmap, repeat_disable;
+uniform float detail = 1.0;            // 결 세기 (0 = 예전처럼 평평한 색)
+varying float warm_shade;              // 1 = 머리카락 (그늘 색을 따뜻하게)
+
+void light() {
+	float ndl = dot(NORMAL, LIGHT);
+	float ndl_f = view_fill > 0.0 ? dot(NORMAL, normalize(LIGHT + VIEW * view_fill)) : ndl;
+	float shadow = (view_fill > 0.0 && ndl <= 0.3) ? 1.0 : step(0.5, ATTENUATION);
+	float lit = step(lit_threshold, ndl_f) * shadow;
+	DIFFUSE_LIGHT += mix(mix(shade_tint, hair_shade, warm_shade), lit_tint, lit);
+}
 
 uniform vec3 cloth : source_color = vec3(0.27, 0.46, 0.62);
 uniform vec3 skin : source_color = vec3(0.93, 0.69, 0.43);
@@ -82,6 +103,26 @@ void vertex() {
 	}
 }
 
+// 결 그림: 칸(알파) + 자리(UV2) → 밝기 배율 (평균 1). dx·dy = UV2의 화면 미분 (가지 밖에서 구함)
+float detail_k(float a, vec2 uv, vec2 dx, vec2 dy) {
+	if (a > 0.985 || detail <= 0.0) {
+		return 1.0;
+	}
+	int cell = int(a * 32.0);
+	int c = cell % 16;
+	vec2 base = vec2(float(c % 4), float(c / 4));
+	const float S = 120.0 / 512.0;     // 칸 안의 무늬 크기 (128 칸 - 여백 4×2)
+	vec2 auv = (base * 128.0 + 4.0) / 512.0 + fract(uv) * S;
+	vec2 gx = dx * S;
+	vec2 gy = dy * S;
+	float t = cell < 16 ? textureGrad(hair_tex, auv, gx, gy).r : textureGrad(cloth_tex, auv, gx, gy).r;
+	float k = t * 1.4;
+	// 화소당 무늬 텍셀이 많으면(작게 보임) 결을 줄임
+	float tpp = max(length(gx), length(gy)) * 512.0;
+	float fade = 1.0 - smoothstep(2.5, 7.0, tpp);
+	return mix(1.0, k, detail * fade);
+}
+
 // 얼굴 그림: 피부 위에 홍조 → 흰자·반짝임 → 눈동자 → 먹선
 vec3 face(vec3 s, vec2 uv, float t, vec3 eye) {
 	int cell = face_cell;
@@ -103,6 +144,10 @@ void fragment() {
 	vec3 k = COLOR.rgb;
 	vec3 c = srgb_to_linear(k);
 	bool head = part_head > 0.5;
+	vec2 duv_x = dFdx(UV2);
+	vec2 duv_y = dFdy(UV2);
+	float dk = detail_k(COLOR.a, UV2, duv_x, duv_y);
+	warm_shade = 0.0;
 	// 점박이 무늬 (부품 좌표 + 사람마다 다른 자리·크기)
 	float pb = 0.0;
 	if (piebald > 0.5) {
@@ -148,6 +193,7 @@ void fragment() {
 		}
 		hc = mix(hc, pb_hair, pb);
 		c = hc * srgb_to_linear(vec3(k.b));
+		warm_shade = 1.0;
 	} else if (k.r < 0.03 && abs(k.g - 0.25) < 0.05) {
 		c = shawl * srgb_to_linear(vec3(k.b));
 	} else if (k.r < 0.03 && abs(k.g - 0.5) < 0.05) {
@@ -158,6 +204,12 @@ void fragment() {
 		c = cheek;
 	} else if (barefoot > 0.5 && near_col(k, vec3(0.290, 0.204, 0.149))) {   // 신발 (LOOK_FIXED.boot) → 맨발
 		c = skin * 0.92;
+	}
+	bool is_skin = k.r > 0.97 && k.g < 0.03;
+	if (!is_skin) {
+		c *= dk;
+		// 짙은 머리카락은 곱하기만으로는 결이 안 보임 → 밝은 결(윤기)을 조금 더해 줌
+		c += vec3(max(dk - 1.0, 0.0)) * 0.05 * warm_shade;
 	}
 	ALBEDO = c;
 	ROUGHNESS = 1.0;
