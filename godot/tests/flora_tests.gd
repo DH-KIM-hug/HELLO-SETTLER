@@ -397,7 +397,7 @@ func test_dand_winter() -> void:
 	var n_sp := sp.flora.count_st("flower") + sp.flora.count_st("closed") + sp.flora.count_st("puff")
 	var su := settled("온대", 8, 18)
 	var b_sp := sp.flora.bloom_w(sp)
-	check(n_sp >= 5 and b_sp > su.flora.bloom_w(su) * 2.0, "4월엔 처음부터 꽃이 핀 포기 %d · 피는 정도 봄 %.2f > 여름 %.2f" % [n_sp, b_sp, su.flora.bloom_w(su)])
+	check(n_sp >= Balance.DAND_START - 2 and b_sp > su.flora.bloom_w(su) * 2.0, "4월엔 처음부터 꽃이 핀 포기 %d · 피는 정도 봄 %.2f > 여름 %.2f" % [n_sp, b_sp, su.flora.bloom_w(su)])
 
 
 ## 닫힌 병엔 바람이 없다: 볕 쪽에서 오르고 그늘 쪽에 내려앉는 둥근 기류 (결정론)

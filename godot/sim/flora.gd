@@ -83,7 +83,7 @@ func _settle(v: Village) -> void:
 	while dands.size() < Balance.DAND_START and tries < 400:
 		tries += 1
 		var a := rng.randf() * TAU
-		var d := 5.0 + sqrt(rng.randf()) * 18.0
+		var d := 4.0 + sqrt(rng.randf()) * 10.0          # 적게, 마을 가까이 (보이게)
 		var p := v.center + Vector2(cos(a), sin(a)) * d
 		if not _dand_ok(v, p):
 			continue
