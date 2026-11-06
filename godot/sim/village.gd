@@ -21,6 +21,7 @@ var climate_override := ""            # 비면 물(병)의 기후대
 var cold_season := false              # 앞으로 반나절 안에 추위가 온다 (땔감 운반·나무꾼 넉넉함 — 정시마다)
 var sick_share := 0.0                 # 앓는 사람 비율
 var warnings: Array = []              # 말풍선·편지로 띄울 위기 예고 {t, kind, text} (화면이 가져감)
+var outbreaks: Dictionary = {}        # 병 → 지금 유행 {c 전염 배율, l 치사율, s 독함 0~1, name, t, n, won} (HEALTH.md 2.5 — sim/health.gd)
 var _health_acc := 0.0
 var _health_hour := 0
 var _sick_warn_day := -1
@@ -1058,6 +1059,7 @@ func _give_birth(w: Resident, h: Building) -> void:
 	var baby := add_person(nm, sex, 0.0, "", h.x, h.y, w, dad if dad != null else w)
 	baby.parents = PackedInt32Array([w.id, w.partner])
 	baby.home = h.id
+	Health.inherit_immunity(baby, w, t)     # 엄마의 면역을 1일 동안 (HEALTH.md 2.3)
 	stats["born"] += 1
 	log_line("%s%s %s%s 낳았다. 아이는 '%s' 아이였다." % [w.name, josa(w.name, "이", "가"), nm, josa(nm, "을", "를"), baby.trait_name])
 	if Genetics.piebald(baby.genes):
@@ -1084,12 +1086,13 @@ func _deaths(dt: float) -> void:
 				stats["spared"] = int(stats.get("spared", 0)) + 1
 			else:
 				why = Health.death_cause(p)
-				var what: String = {"굶주림": "굶주림으로", "병": "병으로", "추위": "추위에", "더위": "더위에"}.get(why, "굶주림으로")
-				crisis("starve" if why == "굶주림" else ("sick" if why == "병" else why), "%s%s %s 쓰러졌다" % [p.name, josa(p.name, "이", "가"), what])
+				var ill := Health.is_illness(why)        # 병이면 병 이름 (HEALTH.md 2.4)
+				var what: String = (why + Health.ro(why)) if ill else {"굶주림": "굶주림으로", "추위": "추위에", "더위": "더위에"}.get(why, "굶주림으로")
+				crisis("starve" if why == "굶주림" else ("sick" if ill else why), "%s%s %s 쓰러졌다" % [p.name, josa(p.name, "이", "가"), what])
 				_starve_day = day_no()
 				if why == "굶주림":
 					stats["starved"] += 1
-				var key: String = {"병": "died_sick", "추위": "died_cold", "더위": "died_heat"}.get(why, "")
+				var key: String = "died_sick" if ill else {"추위": "died_cold", "더위": "died_heat"}.get(why, "")
 				if key != "":
 					stats[key] = int(stats.get(key, 0)) + 1
 		if why != "":
@@ -1121,7 +1124,10 @@ func kill(p: Resident, why: String) -> void:
 	var age := p.shown_age()
 	var ga := josa(p.name, "이", "가")
 	var nb := josa(p.name, "은", "는")
-	match why:
+	match ("질병" if Balance.DISEASES.has(why) else why):
+		"질병":      # "한스가 기침병으로 숨을 거두었다." (이번 유행의 이름 — HEALTH.md 2.4·2.5)
+			var dn := p.disease_name if p.disease_name != "" else why
+			log_line("%s(%d세)%s %s%s 숨을 거두었다." % [p.name, age, ga, dn, Health.ro(dn)])
 		"노환":
 			log_line("%s(%d세)%s 잠들 듯 숨을 거두었다." % [p.name, age, ga])
 		"병":

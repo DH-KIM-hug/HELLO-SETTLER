@@ -1,5 +1,6 @@
 ## 건강·기후·두려움 — docs/HEALTH.md (병 날짜·온도·노출·땔감·질병·부상·사람마다 두려움).
 ## 화면과 분리된 순수 로직. 상태는 Village(달력·난수·타이머)와 Resident(sick_left·injured_left·fear·cold·heat)에 있다.
+## 질병 v1.3 (HEALTH.md 2): 병마다 표는 Balance.DISEASES. 앓는 병·중증·면역은 Resident(disease·severe·immune·overcome), 유행(독함)은 Village.outbreaks.
 ## 난수는 Village.health_rng 하나만 쓴다 (유전·기존 흐름을 흔들지 않게 — HEALTH.md 7).
 ## 계산은 병 시계 Balance.HEALTH_TICK(60초) 간격의 고정 걸음 → 걸음 크기(×1의 1초, 몰아서 계산의 10·30초)와 상관없이 같은 때에 일어난다.
 ## 발병·부상 굴림은 병 시계 정시(1시간)마다.
@@ -127,6 +128,7 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 	var clinic := _clinics(v)
 	var half := pow(0.5, dt / Balance.DAY)
 	var fest := tt - v.festival_t < Balance.FEAR_FESTIVAL
+	var cases := {}
 	for r in v.people:
 		# 노출
 		var tp := tb + Balance.SPOT_WARM * v.water.warm_at(r.x, r.y)
@@ -148,18 +150,37 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 			_hurt(r, "추위", lc)
 		if lh > 0.0:
 			_hurt(r, "더위", lh)
-		# 앓음
+		# 앓음 (병마다 — HEALTH.md 2.1·2.2)
 		if r.sick_left > 0.0:
 			n_sick += 1
+			cases[r.disease] = int(cases.get(r.disease, 0)) + 1
+			var dz: Dictionary = Balance.DISEASES.get(r.disease, Balance.DISEASES["고뿔"])
 			var in_clinic := _near_any(r, clinic, Balance.CLINIC_R)
-			_hurt(r, "병", (Balance.ILL_HEALTH_CLINIC if in_clinic else Balance.ILL_HEALTH_DAY) * dt / Balance.DAY)
-			if not r.herb_used and float(v.stock.get(Balance.HERB, 0.0)) >= 1.0:
-				v.stock[Balance.HERB] = float(v.stock[Balance.HERB]) - 1.0
-				r.herb_used = true
-				r.sick_left *= 0.5
+			var loss: float
+			var has_herb := float(v.stock.get(Balance.HERB, 0.0)) >= 1.0
+			if r.severe:
+				loss = Balance.SEVERE_HEALTH_CLINIC if in_clinic else Balance.SEVERE_HEALTH_DAY
+				if tt >= r.herb_until and has_herb:     # 중증: 약초 1개 = 하루치 감소를 막음 (첫 개는 기간도 절반)
+					v.stock[Balance.HERB] = float(v.stock[Balance.HERB]) - 1.0
+					r.herb_until = tt + Balance.DAY
+					if not r.herb_used:
+						r.herb_used = true
+						r.sick_left *= 0.5
+				if tt < r.herb_until:
+					loss = 0.0
+			else:
+				loss = float(dz["health"])
+				if in_clinic:
+					loss = minf(loss, Balance.ILL_HEALTH_CLINIC)
+				if not r.herb_used and has_herb:
+					v.stock[Balance.HERB] = float(v.stock[Balance.HERB]) - 1.0
+					r.herb_used = true
+					r.sick_left *= 0.5
+			if loss > 0.0:
+				_hurt(r, "병", loss * dt / Balance.DAY)
 			r.sick_left = maxf(0.0, r.sick_left - dt)
 			if r.sick_left <= 0.0:
-				v.stats["recovered"] = int(v.stats.get("recovered", 0)) + 1
+				recover(v, r, tt)
 		if r.injured_left > 0.0:
 			r.injured_left = maxf(0.0, r.injured_left - dt)
 		# 힘쓰는 일 (부상 굴림용)
@@ -171,6 +192,7 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 			r.fear *= pow(0.5, dt * sp / Balance.FEAR_HALF)
 			if r.fear < 1e-4:
 				r.fear = 0.0
+	_end_outbreaks(v, cases)
 	v.stats["sick_secs"] = float(v.stats.get("sick_secs", 0.0)) + n_sick * dt
 	v.stats["person_secs"] = float(v.stats.get("person_secs", 0.0)) + v.people.size() * dt
 	# 앓는 사람이 20% 넘음: 모두 하루 +0.05, 하루 한 번 말
@@ -261,20 +283,26 @@ static func fuel_lack(v: Village, b: Building) -> float:
 
 
 # ───────────────────────── 질병·부상 굴림 (2 · 3) — 정시마다 ─────────────────────────
+## 병마다의 발병 = 하루 1% × 공통 배율 × 몫 × '어디서' 배율 + 같은 병 전염 (식구·반경 2칸) × 유행의 전염 배율.
+## 한 사람에 난수 하나로 '걸리나'를 굴리고, 걸리면 하나 더로 '무슨 병'을 고른다 (병 순서 고정 — 결정론).
+## 빠르게: 옮는 병을 앓는 사람이 없으면 '어디서' 배율의 최댓값으로 먼저 걸러 낸다 (같은 난수 하나 — 결과는 똑같음)
 static func _hourly(v: Village, clinic: Array) -> void:
-	var sick_home := {}
+	var sick_home := {}               # 병 → {집 id → 앓는 식구 수}
 	var sick: Array[Resident] = []
 	for r in v.people:
-		if r.sick_left > 0.0:
+		if r.sick_left > 0.0 and r.disease != "" and _contagious(r.disease):
 			sick.append(r)
 			if r.home >= 0:
-				sick_home[r.home] = int(sick_home.get(r.home, 0)) + 1
+				var hm0: Dictionary = sick_home.get(r.disease, {})
+				hm0[r.home] = int(hm0.get(r.home, 0)) + 1
+				sick_home[r.disease] = hm0
 	var wells: Array = []
 	for b in v.buildings:
 		if b.built and b.type == "우물":
 			wells.append(Vector2(b.x, b.y))
 	var occ := v.occupancy()
-	var tropical := v.climate() == "열대"
+	var ctx := {}
+	var wmax := _where_max()
 	for r in v.people:
 		var in_clinic := _near_any(r, clinic, Balance.CLINIC_R)
 		# 부상: 이번 시간에 힘쓴 만큼
@@ -287,36 +315,96 @@ static func _hourly(v: Village, clinic: Array) -> void:
 				_hurt(r, "부상", hit)
 				v.stats["injured"] = int(v.stats.get("injured", 0)) + 1
 				v.speak(r, "아야, 다리를 삐었어…", 5)
+				# 10%는 덧나 곪은 상처 (HEALTH.md 3) — 이미 앓는 중이면 그대로
+				if v.health_rng.randf() < Balance.FESTER and r.sick_left <= 0.0:
+					fall_ill(v, r, in_clinic, Balance.FESTER_KIND)
 		if r.sick_left > 0.0:
 			continue
-		var p := Balance.ILL_DAY
-		if r.hunger >= Balance.STARVING_AT:
-			p *= Balance.ILL_HUNGRY
-		if r.health < Balance.ILL_WEAK_BELOW:
-			p *= Balance.ILL_WEAK
-		if r.cold + r.heat > 0.0:
-			p *= 1.0 + r.cold + r.heat
 		var hm := v.bld(r.home)
-		if hm == null or not _near_pt(hm, wells, Balance.WELL_R):
-			p *= Balance.ILL_NO_WELL
+		var p0 := Balance.ILL_DAY
+		if r.hunger >= Balance.STARVING_AT:
+			p0 *= Balance.ILL_HUNGRY
+		if r.health < Balance.ILL_WEAK_BELOW:
+			p0 *= Balance.ILL_WEAK
 		if hm != null and int(occ.get(hm.id, 0)) >= hm.cap():
-			p *= Balance.ILL_CROWDED
-		p *= age_mult(r)
-		if tropical:
-			p *= Balance.ILL_TROPICAL
-		# 전염: 같은 집 식구 (앓는 식구마다) · 반경 2칸에 앓는 사람
-		var cg := 0.0
-		if r.home >= 0:
-			cg += Balance.CONTAGION_HOME * int(sick_home.get(r.home, 0))
-		for s in sick:
-			if s.home != r.home or r.home < 0:
-				if Vector2(s.x - r.x, s.y - r.y).length() <= Balance.CONTAGION_R:
-					cg += Balance.CONTAGION_NEAR
-		if in_clinic:
-			cg *= Balance.CONTAGION_CLINIC
-		p = (p + cg) * r.f("illness")
-		if v.health_rng.randf() < p / 24.0:
-			fall_ill(v, r, in_clinic)
+			p0 *= Balance.ILL_CROWDED
+		p0 *= age_mult(r)
+		var u := v.health_rng.randf()
+		if sick.is_empty() and u >= p0 * wmax * r.f("illness") / 24.0:
+			continue                  # 어떤 '어디서' 배율이어도 안 걸림
+		if ctx.is_empty():
+			var season: String = jar_date(v)["season"]
+			var cl := v.climate()
+			ctx = {"winter": season == "겨울", "tropic_summer": season == "여름" and (cl == "열대" or cl == "아열대")}
+		ctx["no_well"] = hm == null or not _near_pt(hm, wells, Balance.WELL_R)
+		ctx["hungry"] = r.hunger >= Balance.STARVING_AT
+		ctx["hot"] = r.heat >= Balance.DISEASE_EXPOSED
+		ctx["cold"] = r.cold >= Balance.DISEASE_EXPOSED
+		ctx["elder"] = r.is_elder()
+		var ps: Array[float] = []
+		var total := 0.0
+		for kind: String in Balance.DISEASE_ORDER:
+			var pd := 0.0
+			if not r.is_immune(kind, v.t):
+				var dz: Dictionary = Balance.DISEASES[kind]
+				pd = p0 * float(dz["share"]) * where_mult(dz, ctx)
+				var cg := 0.0
+				if float(dz["home"]) > 0.0 or float(dz["near"]) > 0.0:
+					if r.home >= 0:
+						cg += float(dz["home"]) * int((sick_home.get(kind, {}) as Dictionary).get(r.home, 0))
+					for s in sick:
+						if s.disease == kind and (s.home != r.home or r.home < 0):
+							if Vector2(s.x - r.x, s.y - r.y).length() <= Balance.CONTAGION_R:
+								cg += float(dz["near"])
+					if cg > 0.0:
+						cg *= float(outbreak(v, kind)["c"])
+						if in_clinic:
+							cg *= Balance.CONTAGION_CLINIC
+				pd = (pd + cg) * r.f("illness")
+			ps.append(pd)
+			total += pd
+		if total > 0.0 and u < total / 24.0:
+			var pick := v.health_rng.randf() * total
+			var kind: String = Balance.DISEASE_ORDER[0]
+			for i in ps.size():
+				if ps[i] <= 0.0:
+					continue
+				kind = Balance.DISEASE_ORDER[i]
+				pick -= ps[i]
+				if pick < 0.0:
+					break
+			fall_ill(v, r, in_clinic, kind)
+
+
+static var _wmax := -1.0
+
+
+## 자연 발병 배율의 최댓값 (모든 '어디서'가 참일 때 몫 × 배율의 합) — 거르기용
+static func _where_max() -> float:
+	if _wmax < 0.0:
+		_wmax = 0.0
+		for kind: String in Balance.DISEASE_ORDER:
+			var dz: Dictionary = Balance.DISEASES[kind]
+			var m := float(dz["share"])
+			for k: String in dz["where"]:
+				m *= maxf(1.0, float(dz["where"][k]))
+			_wmax += m
+	return _wmax
+
+
+static func _contagious(kind: String) -> bool:
+	var dz: Dictionary = Balance.DISEASES.get(kind, {})
+	return not dz.is_empty() and (float(dz["home"]) > 0.0 or float(dz["near"]) > 0.0)
+
+
+## '어디서' 배율 (HEALTH.md 2.1) — ctx의 참인 항목마다 곱함
+static func where_mult(dz: Dictionary, ctx: Dictionary) -> float:
+	var m := 1.0
+	var wh: Dictionary = dz["where"]
+	for k: String in wh:
+		if bool(ctx.get(k, false)):
+			m *= float(wh[k])
+	return m
 
 
 static func _near_pt(b: Building, pts: Array, rad: float) -> bool:
@@ -326,18 +414,202 @@ static func _near_pt(b: Building, pts: Array, rad: float) -> bool:
 	return false
 
 
-static func fall_ill(v: Village, r: Resident, in_clinic := false) -> void:
-	r.sick_left = Balance.ILL_DAYS * Balance.DAY / maxf(0.1, r.f("heal")) * (Balance.CLINIC_TIME if in_clinic else 1.0)
+# ───────────────────────── 유행 (2.5 ①) ─────────────────────────
+## 삼각 분포의 역누적 (u 0~1, 폭 a~b, 최빈값 c)
+static func tri(u: float, a: float, b: float, c: float) -> float:
+	if b <= a:
+		return a
+	c = clampf(c, a, b)
+	var fc := (c - a) / (b - a)
+	if u < fc:
+		return a + sqrt(u * (b - a) * (c - a))
+	return b - sqrt((1.0 - u) * (b - a) * (b - c))
+
+
+## 이 병의 유행 독함 (값 하나를 한 번 굴려 전염 배율·치사율 둘 다 정함). 0~1 = 치사율이 폭의 어디쯤 (치사율 폭이 없으면 전염 배율)
+static func roll_strain(kind: String, u: float) -> Dictionary:
+	var dz: Dictionary = Balance.DISEASES[kind]
+	var cr: Array = dz["contagion_range"]
+	var lr: Array = dz["lethal_range"]
+	var c := tri(u, float(cr[0]), float(cr[1]), 1.0)
+	var l := tri(u, float(lr[0]), float(lr[1]), float(dz["lethal"]))
+	var s := 0.5
+	if float(lr[1]) > float(lr[0]):
+		s = (l - float(lr[0])) / (float(lr[1]) - float(lr[0]))
+	elif float(cr[1]) > float(cr[0]):
+		s = (c - float(cr[0])) / (float(cr[1]) - float(cr[0]))
+	var nm := kind
+	if s >= 0.75 and str(dz["strong"]) != "":
+		nm = str(dz["strong"])
+	elif s <= 0.25 and str(dz["mild"]) != "":
+		nm = str(dz["mild"])
+	return {"c": c, "l": l, "s": s, "name": nm}
+
+
+## 지금 이 병의 유행 — 없으면 새로 시작 (독함을 건강 난수로 한 번 굴림). 곪은 상처는 상처마다 같아 유행이 없다
+static func outbreak(v: Village, kind: String) -> Dictionary:
+	if v.outbreaks.has(kind):
+		return v.outbreaks[kind]
+	var ob := roll_strain(kind, v.health_rng.randf())
+	ob["t"] = v.t
+	ob["n"] = 0
+	ob["won"] = 0
+	if kind == Balance.FESTER_KIND:
+		return ob
+	v.outbreaks[kind] = ob
+	var dz: Dictionary = Balance.DISEASES[kind]
+	var nm: String = ob["name"]
+	if kind == Balance.PLAGUE or nm == str(dz["strong"]) or (nm == str(dz["mild"]) and float(dz["lethal"]) >= 0.05):
+		v.log_line("%s%s 돌기 시작했다." % [nm, Village.josa(nm, "이", "가")])
+	return ob
+
+
+## 그 병을 앓는 사람이 0이 되면 유행이 끝난다 (다음 유행은 새로 굴림)
+static func _end_outbreaks(v: Village, cases: Dictionary) -> void:
+	for kind: String in v.outbreaks.keys():
+		if int(cases.get(kind, 0)) > 0:
+			continue
+		var ob: Dictionary = v.outbreaks[kind]
+		if float(Balance.DISEASES[kind]["immune_days"]) == Balance.IMMUNE_LIFE and int(ob["won"]) >= 2:
+			var nm: String = ob["name"]
+			v.log_line("그 %s%s 이겨 낸 사람들은 다시 앓지 않았다." % [nm, Village.josa(nm, "을", "를")])
+		v.outbreaks.erase(kind)
+
+
+## 역병 위기 (기획서 10장 · HEALTH.md 2.4) — 자연 발병은 없다. 면역 없는 사람 중 n명이 처음 걸린다. 걸린 사람 수를 돌려줌
+static func start_plague(v: Village, n := Balance.PLAGUE_FIRST) -> int:
+	var pool: Array[Resident] = []
+	for r in v.people:
+		if r.sick_left <= 0.0 and not r.is_immune(Balance.PLAGUE, v.t):
+			pool.append(r)
+	var got := 0
+	while got < n and not pool.is_empty():
+		var r: Resident = pool[v.health_rng.randi() % pool.size()]
+		pool.erase(r)
+		fall_ill(v, r, false, Balance.PLAGUE)
+		got += 1
+	return got
+
+
+# ───────────────────────── 앓기 시작·중증·낫기 ─────────────────────────
+## 나이 칸: 0 아기 · 1 아이 · 2 어른 · 3 노인
+static func age_class(r: Resident) -> int:
+	if r.is_baby():
+		return 0
+	if r.is_child():
+		return 1
+	if r.is_elder():
+		return 3
+	return 2
+
+
+## 중증 확률 (HEALTH.md 2.2 · 2.5) = 유행의 치사율 × 병마다 나이 배율 × 굶주림 ×2 · 건강 0.5 미만 ×1.5 · 강인한 ×0.7 / 병약 ×1.3
+static func severe_p(r: Resident, kind: String, lethal: float) -> float:
+	var p := lethal * float((Balance.DISEASES[kind]["age_severity"] as Array)[age_class(r)])
+	if r.hunger >= Balance.STARVING_AT:
+		p *= Balance.ILL_HUNGRY
+	if r.health < Balance.ILL_WEAK_BELOW:
+		p *= Balance.ILL_WEAK
+	return clampf(p * r.f("illness"), 0.0, 1.0)
+
+
+static func fall_ill(v: Village, r: Resident, in_clinic := false, kind := "고뿔") -> void:
+	var dz: Dictionary = Balance.DISEASES[kind]
+	var ob := outbreak(v, kind)
+	ob["n"] = int(ob["n"]) + 1
+	r.disease = kind
+	r.disease_name = ob["name"]
+	r.last_disease = kind
+	r.sick_left = float(dz["days"]) * Balance.DAY / maxf(0.1, r.f("heal")) * (Balance.CLINIC_TIME if in_clinic else 1.0)
 	r.sick_since = v.t
 	r.herb_used = false
+	r.herb_until = -1.0
+	r.severe = v.health_rng.randf() < severe_p(r, kind, float(ob["l"]))
 	v.stats["sick"] = int(v.stats.get("sick", 0)) + 1
+	var by: Dictionary = v.stats.get("sick_by", {})
+	by[kind] = int(by.get(kind, 0)) + 1
+	v.stats["sick_by"] = by
+	if r.severe:
+		v.stats["severe"] = int(v.stats.get("severe", 0)) + 1
 	if not r.is_baby():
 		ResidentAI.cancel(r)          # 하던 일을 놓고 눕는다 (짐·예약은 되돌림)
 		if r.age >= 2.5:
 			v.speak(r, "몸이 으슬으슬해…", 5)
+	if r.severe:
+		_severe_notice(v, r)
 
 
-## 건강이 0이 된 사람의 사망 원인 — 최근 건강을 가장 많이 깎은 것 (부상만으로는 죽지 않는다 → 나머지 중에서)
+## 중증 환자를 말풍선·편지로 알린다 ("마르타가 열병으로 몹시 아파요.") — 거인이 도울 기회 (HEALTH.md 2.2)
+static func _severe_notice(v: Village, r: Resident) -> void:
+	var text := severe_line(r)
+	v.warnings.append({"t": v.t, "kind": "severe", "text": text, "who": r.id})
+	if v.warnings.size() > 20:          # 화면이 가져가지 않는 동안(오프라인·시험) 끝없이 쌓이지 않게
+		v.warnings.pop_front()
+	var teller: Resident = null
+	for q in v.people:
+		if q == r or q.sleeping or q.sick_left > 0.0 or q.age < 2.5:
+			continue
+		if teller == null or (q.home == r.home and teller.home != r.home):
+			teller = q
+		if teller.home == r.home and r.home >= 0:
+			break
+	if teller != null:
+		v.speak(teller, text, 7)
+
+
+static func severe_line(r: Resident) -> String:
+	var nm := r.disease_name if r.disease_name != "" else r.disease
+	return "%s%s %s%s 몹시 아파요." % [r.name, Village.josa(r.name, "이", "가"), nm, ro(nm)]
+
+
+## 나음: 그 병에만 면역 (표의 기간, 평생은 죽을 때까지) · '이겨 낸 병'에 더함
+static func recover(v: Village, r: Resident, tt: float) -> void:
+	v.stats["recovered"] = int(v.stats.get("recovered", 0)) + 1
+	var kind := r.disease
+	if Balance.DISEASES.has(kind):
+		var im := float(Balance.DISEASES[kind]["immune_days"])
+		if im == Balance.IMMUNE_LIFE:
+			r.immune[kind] = Balance.IMMUNE_LIFE
+		elif im > 0.0:
+			r.immune[kind] = tt + im * Balance.DAY
+		if not kind in r.overcome:
+			r.overcome.append(kind)
+		if v.outbreaks.has(kind):
+			v.outbreaks[kind]["won"] = int(v.outbreaks[kind]["won"]) + 1
+	r.sick_left = 0.0
+	r.disease = ""
+	r.disease_name = ""
+	r.severe = false
+	r.herb_until = -1.0
+
+
+## 아기는 엄마의 면역을 태어나서 1일(아기 시기) 동안 물려받는다 (유전 아님 — HEALTH.md 2.3)
+static func inherit_immunity(baby: Resident, mom: Resident, t: float) -> void:
+	var until := t + Balance.AGE_BABY * Balance.DAY
+	for kind: String in mom.immune:
+		if mom.is_immune(kind, t):
+			var u := float(mom.immune[kind])
+			baby.immune[kind] = until if u == Balance.IMMUNE_LIFE else minf(u, until)
+
+
+## '으로/로' (받침 없음·ㄹ받침 → 로)
+static func ro(w: String) -> String:
+	if w.is_empty():
+		return "로"
+	var c := w.unicode_at(w.length() - 1) - 0xAC00
+	if c < 0 or c >= 11172:
+		return "로"
+	var jong := c % 28
+	return "로" if (jong == 0 or jong == 8) else "으로"
+
+
+## 병으로 죽음인가 ("병" 또는 병 이름)
+static func is_illness(why: String) -> bool:
+	return why == "병" or Balance.DISEASES.has(why)
+
+
+## 건강이 0이 된 사람의 사망 원인 — 최근 건강을 가장 많이 깎은 것 (부상만으로는 죽지 않는다 → 나머지 중에서).
+## 병이면 병 이름 (앓는 중인 병, 아니면 마지막으로 앓은 병)
 static func death_cause(r: Resident) -> String:
 	var best := ""
 	var bv := 0.0
@@ -348,4 +620,8 @@ static func death_cause(r: Resident) -> String:
 			best = k
 	if best == "":
 		best = "병" if r.sick_left > 0.0 else "굶주림"
+	if best == "병":
+		var kind := r.disease if (r.sick_left > 0.0 and r.disease != "") else r.last_disease
+		if kind != "":
+			return kind
 	return best

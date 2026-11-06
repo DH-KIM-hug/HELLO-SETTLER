@@ -93,10 +93,14 @@ static func status_line(r: Resident, v: Village) -> String:
 	var out := PackedStringArray()
 	if num(r, "sick_left") > 0.0:
 		var since := num(r, "sick_since", -1.0)
+		var nm: String = str(r.get("disease_name")) if has(r, "disease_name") else ""
+		var head := "앓고 있음" if nm == "" else "%s%s 앓고 있음" % [nm, Village.josa(nm, "을", "를")]
 		if since >= 0.0 and v != null:
-			out.append("앓고 있음 (%d일째)" % (int((v.t - since) / Balance.DAY) + 1))
+			out.append("%s (%d일째)" % [head, int((v.t - since) / Balance.DAY) + 1])
 		else:
-			out.append("앓고 있음")
+			out.append(head)
+		if has(r, "severe") and bool(r.get("severe")):
+			out.append("몹시 아픔")
 	if num(r, "injured_left") > 0.0:
 		out.append("다리를 다침")
 	if num(r, "cold") >= 0.3:
@@ -110,6 +114,16 @@ static func status_line(r: Resident, v: Village) -> String:
 	if out.is_empty():
 		return r.doing
 	return " · ".join(out.slice(0, 2))
+
+
+## 이겨 낸 병 (UI 03 — 상태 줄 아래 작게). 숫자(면역 기간)는 보이지 않는다 (HEALTH.md 6)
+static func overcome_line(r: Resident) -> String:
+	if r.dead or not has(r, "overcome"):
+		return ""
+	var ov: PackedStringArray = r.get("overcome")
+	if ov.is_empty():
+		return ""
+	return "이겨 낸 병: " + " · ".join(ov)
 
 
 static func death_word(r: Resident) -> String:

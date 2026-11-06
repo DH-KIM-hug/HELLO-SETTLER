@@ -308,6 +308,9 @@ func _update_ui() -> void:
 	speed_btn.text = "새벽으로…" if clock.skipping else "속도 ×%d" % int(clock.speed())
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
+	if not village.warnings.is_empty() and clock.notice_t <= 0.0:     # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
+		clock.notice = str(village.warnings.pop_front()["text"])
+		clock.notice_t = 6.0
 	notice_label.visible = clock.notice_t > 0.0
 	notice_label.text = clock.notice
 	# 말풍선: 화면 안에서 말하고 있는 주민 몇 명
@@ -374,6 +377,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_E: cam.turn(1)
 			KEY_R: village.rotate_jar(); refresh()
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
+			KEY_T: village.tap_glass(true)    # 개발: 크게 친 톡 (지진)
 
 
 # ───────────────────────── 주민 누르기 · 따라가기 (UI 03) ─────────────────────────
@@ -402,6 +406,8 @@ func _on_tap(sp: Vector2) -> void:
 	var r := pick_resident(sp)
 	if r != null:
 		detail.open(r)
+	else:
+		village.tap_glass(false)      # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
 
 
 func _stop_follow() -> void:

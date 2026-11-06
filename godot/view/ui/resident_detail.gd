@@ -317,6 +317,9 @@ func _refresh() -> void:
 		row.visible = val >= 0.0 and not r.dead
 		pb.value = clampf(val, 0.0, 1.0)
 	status_l.text = ResidentText.status_line(r, village)
+	var ov := ResidentText.overcome_line(r)          # 그 아래 작게 '이겨 낸 병: 열병 · 고뿔' (UI.md 03)
+	if ov != "":
+		status_l.text += "\n" + ov
 	# 고유 특징
 	for c in trait_box.get_children():
 		c.queue_free()

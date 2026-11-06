@@ -172,27 +172,60 @@ const FUEL_STONE := 0.5                 # 석조 주택 ×0.5
 const FUEL_TARGET := 36.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
 const FUEL_STOCK_PER_HOUSE := 24.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
 const FUEL_SEASON_LOOKAHEAD := 0.5 * DAY   # (정함) 지금부터 이 시간 안에 추위가 오면 '추운 철'
-# 질병 (HEALTH.md 2)
-const ILL_DAY := 0.01                   # 한 사람 하루 1% (병 시계 1시간마다 나눠 굴림) — v1.1: 2% → 1%
-const ILL_HUNGRY := 2.0
-const ILL_WEAK := 1.5                   # 건강 0.5 미만
+# ═══════════════ 질병 (HEALTH.md 2 — v1.3: 병마다 전염·기간·치사율·면역·확률 스펙트럼) ═══════════════
+const ILL_DAY := 0.01                   # 한 사람 하루 1% (병 시계 1시간마다 나눠 굴림) → 아래 '몫'으로 나눔
+const ILL_HUNGRY := 2.0                 # 공통 배율 (발병·중증 모두): 굶주림 ×2
+const ILL_WEAK := 1.5                   # 건강 0.5 미만 ×1.5
 const ILL_WEAK_BELOW := 0.5
-const ILL_NO_WELL := 1.3                # 우물 반경 밖 집 (집 없음도)
-const ILL_CROWDED := 1.2                # 집 정원이 꽉 참
-const ILL_TROPICAL := 1.3
-const WELL_R := 12.0                    # (정함) 우물 반경
-const ILL_DAYS := 3.0                   # 앓는 기간 (병약 = 회복 배율 ÷ → ×1.5)
-const ILL_HEALTH_DAY := 0.15            # 앓는 동안 건강 하루 −0.15
-const ILL_HEALTH_CLINIC := 0.05         # 치료소 반경
+const ILL_CROWDED := 1.2                # 집 정원이 꽉 참 (발병만)
+const WELL_R := 12.0                    # (정함) 우물 반경 — 집이 밖이면 배앓이 ×2
+const DISEASE_EXPOSED := 0.15           # (정함) 남은 추위·더위 정도가 이 이상이면 '노출 중' (기침병 ×3 · 배앓이 ×2)
+const ILL_HEALTH_CLINIC := 0.05         # 치료소 반경: 가벼운 병 건강 감소는 하루 이만큼까지
+const SEVERE_HEALTH_DAY := 0.4          # 중증: 건강 하루 −0.4
+const SEVERE_HEALTH_CLINIC := 0.15      # 중증 + 치료소 반경: 하루 −0.15
+const IMMUNE_LIFE := -1.0               # immune_days·Resident.immune 값이 이것이면 평생
 const CLINIC_TIME := 0.6                # 치료소 반경: 기간 ×0.6
 const CLINIC_R := 10.0                  # (정함) 치료소 반경 — 치료소 건물이 생기면
 const CLINIC_TYPE := "치료소"
-const HERB := "약초"                     # 창고에 있으면 앓는 사람이 1개 먹음 → 남은 기간 절반 (한 번만)
-const CONTAGION_HOME := 0.08            # 같은 집 식구가 앓음: 하루 +8% (앓는 식구마다) — v1.1: 15% → 8%
-const CONTAGION_NEAR := 0.02            # 반경 2칸에서 함께 있음: 하루 +2%
-const CONTAGION_R := 2.0
-const CONTAGION_CLINIC := 0.5
+const HERB := "약초"                     # 창고에 있으면 앓는 사람이 1개 먹음 → 남은 기간 절반 (한 번만). 중증이면 하루 1개씩 → 그날 건강 감소를 막음
+const CONTAGION_R := 2.0                # 반경 2칸 전염
+const CONTAGION_CLINIC := 0.5           # 치료소 반경: 전염 ×0.5
 const SICK_WARN := 0.2                  # 앓는 사람이 20% 넘으면 말풍선·편지 + 두려움
+const FESTER := 0.1                     # 부상의 10%가 덧나 곪은 상처 (HEALTH.md 3)
+const FESTER_KIND := "곪은 상처"
+const PLAGUE := "역병"                   # 자연 발병 없음 — 위기만 (Health.start_plague)
+const PLAGUE_FIRST := 3                 # (정함) 역병 위기: 처음 걸리는 사람 수
+## 병마다 (HEALTH.md 2.1 · 2.5). 주민은 원인을 모른다 → 이름은 증상으로.
+##   share: 자연 발병 1%를 나누는 몫 (0 = 자연 발병 없음)
+##   where: '어디서' 배율 — winter(겨울) · no_well(집이 우물 반경 밖) · hungry(굶주림) · hot(더위 노출) · tropic_summer(열대·아열대 여름) · cold(추위 노출) · elder(노인)
+##   home / near: 하루 전염 (앓는 식구 한 명마다 / 반경 2칸의 앓는 사람마다) — 같은 병으로만, 면역이 있으면 안 걸림
+##   days: 앓는 기간 · health: 가벼울 때 건강 하루 감소 · lethal: 치사율 가운데 값 (중증 확률)
+##   immune_days: 나은 뒤 그 병에만 면역 (0 없음 · IMMUNE_LIFE 평생)
+##   contagion_range / lethal_range: 유행 독함의 폭 (삼각 분포, 최빈값 = 표의 가운데 값 home·near ×1 · lethal)
+##   age_severity: 중증 확률의 나이 배율 [아기, 아이, 어른, 노인]
+##   strong / mild: 독함이 폭의 위쪽 / 아래쪽 1/4일 때의 이름 (연대기·편지·상태 줄). "" = 그대로
+const DISEASES := {
+	"고뿔": {"share": 0.50, "where": {"winter": 2.0}, "home": 0.10, "near": 0.03, "days": 2.0, "health": 0.05,
+		"lethal": 0.0, "immune_days": 10.0, "contagion_range": [0.7, 1.6], "lethal_range": [0.0, 0.01],
+		"age_severity": [3.0, 1.0, 0.5, 2.0], "strong": "독한 고뿔", "mild": "가벼운 고뿔"},
+	"배앓이": {"share": 0.25, "where": {"no_well": 2.0, "hungry": 2.0, "hot": 2.0}, "home": 0.0, "near": 0.0, "days": 2.0, "health": 0.10,
+		"lethal": 0.01, "immune_days": 0.0, "contagion_range": [1.0, 1.0], "lethal_range": [0.005, 0.03],
+		"age_severity": [3.0, 1.5, 0.5, 1.5], "strong": "독한 배앓이", "mild": "가벼운 배앓이"},
+	"열병": {"share": 0.15, "where": {"tropic_summer": 2.0}, "home": 0.08, "near": 0.02, "days": 4.0, "health": 0.15,
+		"lethal": 0.05, "immune_days": IMMUNE_LIFE, "contagion_range": [0.5, 2.0], "lethal_range": [0.02, 0.15],
+		"age_severity": [1.0, 1.0, 1.5, 1.0], "strong": "불같은 열병", "mild": "가벼운 열병"},
+	"기침병": {"share": 0.10, "where": {"cold": 3.0, "elder": 2.0}, "home": 0.05, "near": 0.01, "days": 6.0, "health": 0.12,
+		"lethal": 0.08, "immune_days": 30.0, "contagion_range": [0.8, 1.3], "lethal_range": [0.05, 0.12],
+		"age_severity": [1.5, 0.5, 1.0, 3.0], "strong": "모진 기침병", "mild": "가벼운 기침병"},
+	"곪은 상처": {"share": 0.0, "where": {}, "home": 0.0, "near": 0.0, "days": 4.0, "health": 0.10,
+		"lethal": 0.10, "immune_days": 0.0, "contagion_range": [1.0, 1.0], "lethal_range": [0.10, 0.10],
+		"age_severity": [1.0, 1.0, 1.0, 1.5], "strong": "", "mild": ""},
+	"역병": {"share": 0.0, "where": {}, "home": 0.30, "near": 0.10, "days": 5.0, "health": 0.20,
+		"lethal": 0.30, "immune_days": IMMUNE_LIFE, "contagion_range": [0.6, 1.5], "lethal_range": [0.15, 0.50],
+		"age_severity": [1.5, 1.0, 1.0, 2.0], "strong": "검은 역병", "mild": "가벼운 역병"},
+}
+const DISEASE_ORDER := ["고뿔", "배앓이", "열병", "기침병", "곪은 상처", "역병"]   # 굴림 순서 고정 (결정론)
+# ═══════════════ 질병 표 끝 ═══════════════
 # 부상 (HEALTH.md 3)
 const INJURY_HOUR := 0.003              # 힘쓰는 일 병 시계 1시간마다 0.3%
 const INJURY_HEALTH := 0.1

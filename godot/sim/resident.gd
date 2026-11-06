@@ -73,6 +73,14 @@ var heat := 0.0                       # 지금 막고 남은 더위 정도 0~2
 var herb_used := false                # 이번 병에 약초를 먹었나 (한 번만)
 var heavy_secs := 0.0                 # 이번 시간에 힘쓰는 일을 한 초 (부상 굴림용)
 var harm: Dictionary = {}             # 최근 건강을 깎은 원인 → 양 (사망 원인 고르기)
+# 병마다 (HEALTH.md 2 v1.3)
+var disease := ""                     # 지금 앓는 병 (Balance.DISEASES 키) — sick_left > 0일 때만
+var disease_name := ""                # 이번 유행의 이름 ("불같은 열병"·"열병" — 상태 줄·연대기)
+var severe := false                   # 중증 (걸리는 순간 굴림)
+var herb_until := -1.0                # 중증: 약초가 그날 건강 감소를 막는 끝 시각
+var last_disease := ""                # 마지막으로 앓은 병 (사망 원인)
+var immune: Dictionary = {}           # 병 → 면역이 끝나는 병 시각 t (Balance.IMMUNE_LIFE = 평생). 다른 병은 그대로 걸림
+var overcome := PackedStringArray()   # 이겨 낸 병 (UI '이겨 낸 병: 열병 · 고뿔')
 
 
 func is_adult() -> bool:
@@ -163,6 +171,23 @@ func job_speed(kind: String) -> float:
 
 func is_sick() -> bool:
 	return sick_left > 0.0
+
+
+## 지금(병 시각 t) 이 병에 면역인가
+func is_immune(kind: String, t: float) -> bool:
+	if not immune.has(kind):
+		return false
+	var u := float(immune[kind])
+	return u == Balance.IMMUNE_LIFE or t < u
+
+
+## 지금 면역이 있는 병 이름들 (Balance.DISEASE_ORDER 순서)
+func immune_list(t: float) -> PackedStringArray:
+	var out := PackedStringArray()
+	for k: String in Balance.DISEASE_ORDER:
+		if is_immune(k, t):
+			out.append(k)
+	return out
 
 
 func is_injured() -> bool:

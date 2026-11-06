@@ -21,6 +21,9 @@ func all() -> void:
 	print("== 건강·기후·두려움 (HEALTH.md)")
 	test_calendar_and_temperature()
 	test_illness_rates()
+	test_severity()
+	test_outbreaks()
+	test_immunity()
 	test_exposure()
 	test_firewood()
 	test_injury()
@@ -101,8 +104,9 @@ static func lab(houses: int, per_house: int, month := 4, day := 15, seed_v := 1)
 	return v
 
 
-## 정시 굴림을 hours번 — 앓기 시작한 사람 수. keep_sick = 이 사람들은 늘 앓는 중 (전염원)
-func onsets(v: Village, hours: int, keep_sick: Array = []) -> int:
+## 정시 굴림을 hours번 — 앓기 시작한 사람 수. keep_sick = 이 사람들은 늘 앓는 중 (전염원, 앓는 병은 미리 정해 둠)
+## by = 병마다 센 수를 담을 사전 (주면)
+func onsets(v: Village, hours: int, keep_sick: Array = [], by: Variant = null) -> int:
 	var n := 0
 	for i in hours:
 		for r in keep_sick:
@@ -111,14 +115,34 @@ func onsets(v: Village, hours: int, keep_sick: Array = []) -> int:
 		for r in v.people:
 			if r.sick_left > 0.0 and not r in keep_sick:
 				n += 1
+				if by is Dictionary:
+					by[r.disease] = int(by.get(r.disease, 0)) + 1
 				r.sick_left = 0.0
+				r.disease = ""
+				r.severe = false
 	return n
+
+
+## 병마다 '어디서' 배율을 넣은 전체 발병 배율 (몫 × 배율의 합) — ctx 예: {"elder": true}
+static func where_total(ctx: Dictionary) -> float:
+	var s := 0.0
+	for k: String in Balance.DISEASE_ORDER:
+		var dz: Dictionary = Balance.DISEASES[k]
+		s += float(dz["share"]) * Health.where_mult(dz, ctx)
+	return s
+
+
+## 앓는 사람으로 만든다 (병을 정해 — 전염원)
+static func make_sick(v: Village, r: Resident, kind: String) -> void:
+	Health.fall_ill(v, r, false, kind)
+	r.severe = false
 
 
 func test_illness_rates() -> void:
 	var days := 1000 if quick else 2500     # 발병 1%/일 — 표본 오차를 ±10% 안으로
 	var v := lab(5, 4)
-	var n_base := onsets(v, days * 24)
+	var by := {}
+	var n_base := onsets(v, days * 24, [], by)
 	var base := float(n_base) / (v.people.size() * days)
 	check(absf(base - Balance.ILL_DAY) < Balance.ILL_DAY * 0.15, "기본 발병 하루 %.4f ≈ 1%% (%d명 × %d일, %d번)" % [base, v.people.size(), days, n_base])
 	var rates := {}
@@ -126,41 +150,81 @@ func test_illness_rates() -> void:
 		var w := lab(5, 4)
 		for r in w.people:
 			r.set_blood(PackedStringArray([bl]))
-		rates[bl] = float(onsets(w, days * 24)) / (w.people.size() * days)
+		rates[bl] = float(onsets(w, days * 24, [], by)) / (w.people.size() * days)
 	check(absf(rates["sturdy"] / base - 0.7) < 0.12, "강인한 ×%.2f ≈ ×0.7" % (rates["sturdy"] / base))
 	check(absf(rates["frail"] / base - 1.3) < 0.15, "병약 ×%.2f ≈ ×1.3" % (rates["frail"] / base))
-	# 같은 집 식구가 앓으면 하루 +15%
+	# 병마다 몫 (봄·우물 곁·배부름 → '어디서' 배율 없음): 고뿔 50 · 배앓이 25 · 열병 15 · 기침병 10, 곪은 상처·역병은 자연 발병 없음
+	var tot := 0
+	for k: String in by:
+		tot += int(by[k])
+	var share_ok := not by.has("역병") and not by.has("곪은 상처")
+	var sh := PackedStringArray()
+	for k: String in ["고뿔", "배앓이", "열병", "기침병"]:
+		var got := float(by.get(k, 0)) / maxf(1.0, tot)
+		var want := float(Balance.DISEASES[k]["share"])
+		share_ok = share_ok and absf(got - want) < maxf(0.05, want * 0.3)
+		sh.append("%s %.2f" % [k, got])
+	check(share_ok, "병마다 몫 ≈ 0.50 · 0.25 · 0.15 · 0.10, 역병·곪은 상처는 저절로 안 생김 (%s, %d번)" % [", ".join(sh), tot])
+	# 같은 집 식구가 고뿔을 앓으면: 하루 +10% × 이번 유행의 전염 배율 (같은 병으로만)
 	var cdays := days / 4
 	var hh := lab(5, 4)
 	var src: Array = []
 	for i in 5:
 		src.append(hh.people[i * 4])
-	var n_c := onsets(hh, cdays * 24, src)
+		make_sick(hh, hh.people[i * 4], "고뿔")
+	var cby := {}
+	var n_c := onsets(hh, cdays * 24, src, cby)
 	var crate := float(n_c) / ((hh.people.size() - src.size()) * cdays)
-	check(crate > base * 5.0 and absf(crate - (Balance.ILL_DAY + Balance.CONTAGION_HOME)) < 0.03, "식구가 앓으면 발병 하루 %.3f (≈ 0.01 + 0.08)" % crate)
-	# 배율: 아기·노인 ×1.5, 굶주림 ×2, 우물 반경 밖 ×1.3
+	var cm := float(hh.outbreaks["고뿔"]["c"])
+	var want_c := Balance.ILL_DAY + float(Balance.DISEASES["고뿔"]["home"]) * cm
+	var cold_rate := float(cby.get("고뿔", 0)) / ((hh.people.size() - src.size()) * cdays)
+	check(crate > base * 4.0 and absf(crate - want_c) < want_c * 0.25, "식구가 고뿔을 앓으면 발병 하루 %.3f (≈ 0.01 + 0.10 × 유행 %.2f = %.3f)" % [crate, cm, want_c])
+	check(cold_rate > 0.85 * (crate - Balance.ILL_DAY), "옮은 병은 고뿔 (고뿔 하루 %.3f / 전체 %.3f)" % [cold_rate, crate])
+	# 안 옮는 병 (배앓이) 식구는 전염 없음
+	var bw := lab(5, 4)
+	var bsrc: Array = []
+	for i in 5:
+		bsrc.append(bw.people[i * 4])
+		make_sick(bw, bw.people[i * 4], "배앓이")
+	var brate := float(onsets(bw, cdays * 24, bsrc)) / ((bw.people.size() - bsrc.size()) * cdays)
+	check(brate < Balance.ILL_DAY * 2.0, "배앓이는 사람끼리 안 옮음 (식구 발병 하루 %.4f ≈ 0.01)" % brate)
+	# 면역이 있으면 걸리지 않는다 — 열병 앓는 식구 곁, 열병 평생 면역
+	var im := lab(5, 4)
+	var isrc: Array = []
+	for i in 5:
+		isrc.append(im.people[i * 4])
+		make_sick(im, im.people[i * 4], "열병")
+	for r in im.people:
+		if not r in isrc:
+			r.immune["열병"] = Balance.IMMUNE_LIFE
+	var iby := {}
+	var n_i := onsets(im, cdays * 24, isrc, iby)
+	check(not iby.has("열병") and n_i < (im.people.size() - 5) * cdays * Balance.ILL_DAY * 2.0, "열병 면역이면 열병 앓는 식구 곁에서도 열병에 안 걸림 (다른 병 %d번: %s)" % [n_i, str(iby)])
+	# 배율: 아기·노인 ×1.5 (+ 기침병 노인 ×2), 굶주림 ×2 (+ 배앓이 굶주림 ×2)
 	var e := lab(5, 4)
 	for r in e.people:
 		r.age = 22.0
 	var erate := float(onsets(e, days * 24)) / (e.people.size() * days)
-	check(absf(erate / base - 1.5) < 0.18, "노인 ×%.2f ≈ ×1.5" % (erate / base))
+	var want_e := 1.5 * where_total({"elder": true})
+	check(absf(erate / base - want_e) < want_e * 0.15, "노인 ×%.2f ≈ ×%.2f (1.5 × 기침병 ×2)" % [erate / base, want_e])
 	var hu := lab(5, 4)
 	for r in hu.people:
 		r.hunger = 3.5
 	var hrate := float(onsets(hu, days * 24)) / (hu.people.size() * days)
-	check(absf(hrate / base - 2.0) < 0.25, "굶주림 ×%.2f ≈ ×2" % (hrate / base))
-	# 앓는 기간 3일 (병약 ×1.5), 그동안 건강 하루 −0.15, 일하지 않음
+	var want_h := 2.0 * where_total({"hungry": true})
+	check(absf(hrate / base - want_h) < want_h * 0.15, "굶주림 ×%.2f ≈ ×%.2f (2 × 배앓이 ×2)" % [hrate / base, want_h])
+	# 앓는 기간 = 병마다 (열병 4일, 병약 ×1.5), 가벼우면 건강 하루 −0.15 (열병), 일하지 않음
 	var s := lab(1, 2)
 	var p := s.people[0]
 	var q := s.people[1]
 	q.set_blood(PackedStringArray(["frail"]))
-	Health.fall_ill(s, p)
-	Health.fall_ill(s, q)
-	check(is_equal_approx(p.sick_left, 3.0 * D) and is_equal_approx(q.sick_left, 4.5 * D), "앓는 기간 3일 · 병약 4.5일 (%.2f · %.2f일)" % [p.sick_left / D, q.sick_left / D])
+	make_sick(s, p, "열병")
+	make_sick(s, q, "열병")
+	check(is_equal_approx(p.sick_left, 4.0 * D) and is_equal_approx(q.sick_left, 6.0 * D) and p.disease == "열병", "열병 앓는 기간 4일 · 병약 6일 (%.2f · %.2f일)" % [p.sick_left / D, q.sick_left / D])
 	var h0 := p.health
 	for i in 24 * 60:
 		Health.tick(s, 60.0, s.t)
-	check(absf((h0 - p.health) - 0.15) < 0.005 and absf(p.sick_left - 2.0 * D) < 1.0, "앓는 하루: 건강 −%.3f (0.15), 남은 기간 %.2f일" % [h0 - p.health, p.sick_left / D])
+	check(absf((h0 - p.health) - 0.15) < 0.005 and absf(p.sick_left - 3.0 * D) < 1.0, "열병 앓는 하루: 건강 −%.3f (0.15), 남은 기간 %.2f일" % [h0 - p.health, p.sick_left / D])
 	check(not Health.can_heal(p), "앓는 동안은 저절로 낫지 않는다")
 	ResidentAI.decide(s, p)
 	check(p.action == "sick" and p.doing.contains("앓아누운"), "앓는 사람은 집에 눕는다 (%s)" % p.doing)
@@ -169,6 +233,195 @@ func test_illness_rates() -> void:
 	var left := p.sick_left
 	Health.tick(s, 60.0, s.t)
 	check(absf(p.sick_left - (left * 0.5 - 60.0)) < 1.0 and p.herb_used and float(s.stock["약초"]) < 2.0, "약초 하나 → 남은 기간 절반 (%.2f → %.2f일)" % [left / D, p.sick_left / D])
+
+
+# ───────────────────────── 2.2 중증 · 2.5 나이 배율 ─────────────────────────
+## n명이 이 병에 걸리게 해 중증 비율을 잰다 (유행 치사율은 표의 가운데 값으로 고정)
+func severe_rate(kind: String, age: float, n: int, setup: Callable = Callable()) -> float:
+	var v := lab(1, 4)
+	v.outbreaks[kind] = {"c": 1.0, "l": float(Balance.DISEASES[kind]["lethal"]), "s": 0.5, "name": kind, "t": 0.0, "n": 0, "won": 0}
+	var r := v.people[0]
+	r.age = age
+	if setup.is_valid():
+		setup.call(r)
+	var k := 0
+	for i in n:
+		Health.fall_ill(v, r, false, kind)
+		if r.severe:
+			k += 1
+		r.sick_left = 0.0
+	return float(k) / n
+
+
+func test_severity() -> void:
+	var n := 3000 if quick else 8000
+	var ad := severe_rate("기침병", 10.0, n)
+	var el := severe_rate("기침병", 22.0, n)
+	var ch := severe_rate("기침병", 2.0, n)
+	check(absf(ad - 0.08) < 0.08 * 0.3 and absf(el - 0.24) < 0.24 * 0.2, "기침병 중증: 어른 %.3f ≈ 0.08 · 노인 %.3f ≈ 0.24 (×3)" % [ad, el])
+	check(el > ad * 2.0 and ch < ad, "기침병은 노인을 데려간다 (노인 %.3f > 어른 %.3f > 아이 %.3f)" % [el, ad, ch])
+	var fa := severe_rate("열병", 10.0, n)
+	var fe := severe_rate("열병", 22.0, n)
+	check(absf(fa - 0.075) < 0.075 * 0.3 and fa > fe, "열병은 일하는 어른이 더 위험 (어른 %.3f ≈ 0.075 > 노인 %.3f)" % [fa, fe])
+	var fh := severe_rate("열병", 10.0, n, func(r: Resident) -> void: r.hunger = 3.5)
+	var fs := severe_rate("열병", 10.0, n, func(r: Resident) -> void: r.set_blood(PackedStringArray(["sturdy"])))
+	check(absf(fh / fa - 2.0) < 0.6 and absf(fs / fa - 0.7) < 0.25, "중증 배율: 굶주림 ×%.2f (2) · 강인한 ×%.2f (0.7)" % [fh / fa, fs / fa])
+	check(severe_rate("고뿔", 10.0, 200) == 0.0, "고뿔 가운데 값(치사율 0)이면 중증 없음")
+	# 중증: 건강 하루 −0.4, 약초 1개 = 그날 감소를 막음
+	var v := lab(1, 2)
+	var p := v.people[0]
+	var q := v.people[1]
+	Health.fall_ill(v, p, false, "역병")
+	p.severe = true
+	var h0 := p.health
+	for i in 12 * 60:
+		v.t += 60.0
+		Health.tick(v, 60.0, v.t)
+	check(absf((h0 - p.health) - 0.2) < 0.005, "중증 반나절: 건강 −%.3f (하루 0.4)" % (h0 - p.health))
+	v.stock["약초"] = 1.0
+	var h1 := p.health
+	for i in 12 * 60:
+		v.t += 60.0
+		Health.tick(v, 60.0, v.t)
+	check(p.health == h1 and float(v.stock["약초"]) < 1.0, "약초를 먹은 중증 환자는 그날 건강이 줄지 않음 (%.3f → %.3f)" % [h1, p.health])
+	# 알림: 편지(warnings)와 식구의 말풍선 — "…가 열병으로 몹시 아파요."
+	var nv := lab(1, 2)
+	nv.outbreaks["열병"] = {"c": 1.0, "l": 1.0, "s": 0.5, "name": "열병", "t": 0.0, "n": 0, "won": 0}
+	var pt := nv.people[0]
+	var fam := nv.people[1]
+	pt.name = "마르타"
+	Health.fall_ill(nv, pt, false, "열병")
+	var w: Dictionary = nv.warnings.back() if not nv.warnings.is_empty() else {}
+	var line: String = w.get("text", "")
+	check(pt.severe and w.get("kind", "") == "severe" and line == "마르타가 열병으로 몹시 아파요.", "중증이면 편지: '%s'" % line)
+	check(fam.say == line, "중증 알림 말풍선 (식구가 말함: '%s')" % fam.say)
+	# 사망 원인 = 병 이름 (연대기·위기 알림)
+	var d := lab(1, 2, 1, 20)
+	d.watching = true
+	for k: String in ["기침병", "고뿔"]:
+		d.outbreaks[k] = {"c": 1.0, "l": 0.0, "s": 0.5, "name": k, "t": 0.0, "n": 0, "won": 0}
+	var a := d.people[0]
+	var b := d.people[1]
+	a.name = "한스"
+	b.name = "마르타"
+	Health.fall_ill(d, a, false, "기침병")
+	Health.fall_ill(d, b, false, "고뿔")
+	for r in [a, b]:
+		r.harm = {"병": 1.0}
+		r.health = -0.1
+	d._deaths(60.0)
+	var texts := PackedStringArray()
+	for e: Dictionary in d.book:
+		texts.append(e["text"])
+	for e: Dictionary in d.crises:
+		texts.append(e["text"])
+	var joined := "\n".join(texts)
+	check(joined.contains("한스(") and joined.contains("기침병으로 숨을 거두었다.") and joined.contains("고뿔로 숨을 거두었다.") and joined.contains("한스가 기침병으로 쓰러졌다"), "연대기: 병 이름으로 (기침병으로 · 고뿔로)")
+	check(a.death_why == "기침병" and int(d.stats.get("died_sick", 0)) == 2, "death_why = 병 이름 (%s), 통계 died_sick %d" % [a.death_why, d.stats.get("died_sick", 0)])
+	check(Health.ro("열병") == "으로" and Health.ro("고뿔") == "로" and Health.ro("배앓이") == "로" and Health.ro("곪은 상처") == "로", "조사 으로/로 (열병으로 · 고뿔로 · 배앓이로)")
+
+
+# ───────────────────────── 2.5 ① 유행 독함 ─────────────────────────
+func test_outbreaks() -> void:
+	# 폭 안 · 삼각 분포 (평균 ≈ (아래 + 위 + 가운데) / 3)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var ok := true
+	var means := PackedStringArray()
+	for k: String in Balance.DISEASE_ORDER:
+		var dz: Dictionary = Balance.DISEASES[k]
+		var cr: Array = dz["contagion_range"]
+		var lr: Array = dz["lethal_range"]
+		var sum := 0.0
+		var m := 2000
+		for i in m:
+			var st := Health.roll_strain(k, rng.randf())
+			ok = ok and float(st["c"]) >= float(cr[0]) - 1e-9 and float(st["c"]) <= float(cr[1]) + 1e-9
+			ok = ok and float(st["l"]) >= float(lr[0]) - 1e-9 and float(st["l"]) <= float(lr[1]) + 1e-9
+			sum += float(st["l"])
+		var want := (float(lr[0]) + float(lr[1]) + float(dz["lethal"])) / 3.0
+		ok = ok and absf(sum / m - want) <= want * 0.08 + 1e-4
+		means.append("%s %.3f" % [k, sum / m])
+	check(ok, "유행 독함은 병마다 폭 안, 가운데가 흔함 (치사율 평균 %s)" % ", ".join(means))
+	check(Health.roll_strain("열병", 0.99)["name"] == "불같은 열병" and Health.roll_strain("역병", 0.99)["name"] == "검은 역병" and Health.roll_strain("고뿔", 0.995)["name"] == "독한 고뿔", "위쪽 1/4 이름: 불같은 열병 · 검은 역병 · 독한 고뿔")
+	check(Health.roll_strain("열병", 0.02)["name"] == "가벼운 열병" and Health.roll_strain("열병", 0.4)["name"] == "열병" and Health.roll_strain("곪은 상처", 0.99)["name"] == "곪은 상처", "아래쪽 1/4 = 가벼운 열병 · 가운데 = 열병 · 곪은 상처는 그대로")
+	# 한 유행 안에서는 모두 같은 독함 (옮은 사람도) → 앓는 사람이 0이 되면 끝, 다음은 새로 굴림
+	var v := lab(5, 4)
+	var src: Array = []
+	for i in 5:
+		src.append(v.people[i * 4])
+		make_sick(v, v.people[i * 4], "열병")
+	var ob: Dictionary = v.outbreaks["열병"]
+	var same := true
+	var caught := 0
+	for h in (200 if quick else 500):
+		Health._hourly(v, [])
+		for r in v.people:
+			if r.sick_left > 0.0 and r.disease == "열병" and not r in src:
+				caught += 1
+				same = same and r.disease_name == ob["name"]
+				r.sick_left = 0.0
+				r.disease = ""
+		same = same and v.outbreaks["열병"] == ob
+	check(same and caught > 0, "열병 유행 하나: 옮은 %d명 모두 같은 독함 ('%s', 전염 ×%.2f · 치사율 %.3f)" % [caught, ob["name"], ob["c"], ob["l"]])
+	for r in v.people:
+		r.sick_left = 0.0
+	Health.tick(v, 60.0, v.t)
+	check(not v.outbreaks.has("열병"), "앓는 사람이 0이 되면 유행이 끝난다")
+	make_sick(v, v.people[1], "열병")
+	check(v.outbreaks.has("열병") and v.outbreaks["열병"] != ob, "다음 유행은 새로 굴림")
+	# 역병은 위기로만
+	var pl := lab(2, 4)
+	var got := Health.start_plague(pl)
+	var n_pl := 0
+	for r in pl.people:
+		if r.disease == "역병" and r.sick_left > 0.0:
+			n_pl += 1
+	check(got == Balance.PLAGUE_FIRST and n_pl == got and pl.outbreaks.has("역병"), "역병 위기: 처음 %d명이 걸림 ('%s')" % [n_pl, pl.outbreaks["역병"]["name"]])
+
+
+# ───────────────────────── 2.3 면역 ─────────────────────────
+func test_immunity() -> void:
+	var v := lab(1, 4)
+	var a := v.people[0]
+	var b := v.people[1]
+	var c := v.people[2]
+	make_sick(v, a, "열병")
+	make_sick(v, b, "고뿔")
+	make_sick(v, c, "배앓이")
+	for i in 6 * 24 * 60:
+		v.t += 60.0
+		Health.tick(v, 60.0, v.t)
+	check(a.sick_left <= 0.0 and b.sick_left <= 0.0 and c.sick_left <= 0.0 and a.disease == "", "모두 나음")
+	var t0 := v.t
+	check(a.is_immune("열병", t0 + 1000.0 * D) and not a.is_immune("고뿔", t0), "열병은 평생 면역, 다른 병은 그대로")
+	check(b.is_immune("고뿔", t0 + 3.0 * D) and not b.is_immune("고뿔", t0 + 11.0 * D), "고뿔 면역은 10일")
+	check(c.immune_list(t0).is_empty() and "배앓이" in c.overcome, "배앓이는 면역 없음 (이겨 낸 병에는 남음)")
+	check(Array(a.immune_list(t0)) == ["열병"], "면역 목록 %s" % str(a.immune_list(t0)))
+	# 아기는 엄마의 면역을 1일 동안
+	a.sex = "f"
+	a.immune["고뿔"] = t0 + 0.5 * D
+	var h := v.bld(a.home)
+	v._give_birth(a, h)
+	var baby: Resident = v.people.back()
+	check(baby.is_baby() and baby.is_immune("열병", t0 + 0.9 * D) and not baby.is_immune("열병", t0 + 1.1 * D), "아기: 엄마의 열병 면역을 1일 동안")
+	check(baby.is_immune("고뿔", t0 + 0.4 * D) and not baby.is_immune("고뿔", t0 + 0.6 * D) and not baby.is_immune("기침병", t0), "아기: 엄마 면역이 먼저 끝나면 같이 끝남, 엄마에게 없는 면역은 없음")
+	var mig := Resident.new()
+	check(mig.immune.is_empty() and mig.overcome.is_empty(), "새로 온 사람은 이 마을이 겪은 병의 면역이 없다")
+	# 화면 말 (숫자 없음)
+	make_sick(v, b, "열병")
+	b.severe = true
+	b.disease_name = "불같은 열병"
+	var st := ResidentText.status_line(b, v)
+	var ov := ResidentText.overcome_line(a)
+	check(st.begins_with("불같은 열병을 앓고 있음 (1일째)") and st.contains("몹시 아픔"), "상태 줄: '%s'" % st)
+	check(ov == "이겨 낸 병: 열병", "이겨 낸 병 줄: '%s'" % ov)
+	b.overcome = PackedStringArray(["열병", "고뿔"])
+	check(ResidentText.overcome_line(b) == "이겨 낸 병: 열병 · 고뿔", "이겨 낸 병: 열병 · 고뿔")
+	var digits := false
+	for ch in (st.replace("(1일째)", "") + ov):
+		digits = digits or (ch >= "0" and ch <= "9")
+	check(not digits, "상태·이겨 낸 병에 숫자(확률·건강) 없음")
 
 
 # ───────────────────────── 1.3·1.4 노출 ─────────────────────────
@@ -306,6 +559,25 @@ func test_injury() -> void:
 				n += 1
 	var rate := float(n) / (v.people.size() * hours)
 	check(absf(rate - Balance.INJURY_HOUR) < Balance.INJURY_HOUR * 0.15, "힘쓰는 일 한 시간 부상 %.4f ≈ 0.3%%" % rate)
+	# 부상의 10%가 덧나 곪은 상처 (힘쓴 시간을 크게 잡아 부상을 많이)
+	var fv := lab(5, 4)
+	var inj := 0
+	var fes := 0
+	for i in 300:
+		for q in fv.people:
+			q.heavy_secs = H * 50.0
+			q.injured_left = 0.0
+			q.health = 1.0
+			q.sick_left = 0.0
+			q.disease = ""
+		Health._hourly(fv, [])
+		for q in fv.people:
+			if q.injured_left > 0.0:
+				inj += 1
+				if q.disease == Balance.FESTER_KIND and q.sick_left > 0.0:
+					fes += 1
+	var fr := float(fes) / maxf(1.0, inj)
+	check(inj > 300 and fr > 0.06 and fr < 0.14 and not fv.outbreaks.has(Balance.FESTER_KIND), "부상 %d번 중 곪은 상처 %.3f ≈ 10%% (유행 없음)" % [inj, fr])
 	var r := v.people[0]
 	r.injured_left = 2.0 * D
 	r.age = 10.0
@@ -407,7 +679,9 @@ func test_deaths_and_text() -> void:
 		deaths[r.death_why] = int(deaths.get(r.death_why, 0)) + 1
 	check(deaths.get("추위", 0) == 1 and deaths.get("병", 0) == 1 and deaths.get("더위", 0) == 1, "death_why: %s" % str(deaths))
 	check(int(v.stats.get("died_cold", 0)) == 1 and int(v.stats.get("died_sick", 0)) == 1 and v.stats["starved"] <= 1, "통계: 추위 %d · 병 %d" % [v.stats.get("died_cold", 0), v.stats.get("died_sick", 0)])
-	texts.append_array([Balance.LINE_FEAR, Balance.LINE_SICK_WARN, "몸이 으슬으슬해…", "아야, 다리를 삐었어…", "마을에 기침 소리가 늘었다. 앓아누운 집이 하나둘이 아니었다."])
+	texts.append_array([Balance.LINE_FEAR, Balance.LINE_SICK_WARN, "몸이 으슬으슬해…", "아야, 다리를 삐었어…", "마을에 기침 소리가 늘었다. 앓아누운 집이 하나둘이 아니었다.",
+		"마르타가 불같은 열병으로 몹시 아파요.", "검은 역병이 돌기 시작했다.", "그 열병을 이겨 낸 사람들은 다시 앓지 않았다.", "한스(24세)가 기침병으로 숨을 거두었다.",
+		"열병을 앓고 있음 (2일째)", "몹시 아픔", "이겨 낸 병: 열병 · 고뿔"])
 	for st: String in ["앓아누운 중", "모닥불 곁에 앓아누운 중", "집에서 몸을 녹이는 중", "집 안에서 더위를 피하는 중", "모닥불 곁에서 몸을 녹이는 중", "집에 숨어 있는 중", "땔감 나르는 중"]:
 		texts.append(st)
 	check(run.words_ok(texts) == "", "새 연대기·말에 금지어(게임·앱·플레이어·휴대폰·키트·상자·구매) 없음 %s" % run.words_ok(texts))
@@ -493,7 +767,10 @@ func sig(v: Village) -> String:
 	var s: String = run.clock_sig(v)
 	s += "|%s|%s|%s|" % [str(v.fear), str(v.health_rng.state), str(v.stats.get("firewood", 0.0))]
 	for p in v.people:
-		s += "%s,%s,%s,%s;" % [str(p.health), str(p.fear), str(p.cold), str(p.sick_left)]
+		s += "%s,%s,%s,%s,%s,%s;" % [str(p.health), str(p.fear), str(p.cold), str(p.sick_left), p.disease, str(p.severe)]
+	for k: String in Balance.DISEASE_ORDER:
+		if v.outbreaks.has(k):
+			s += "%s=%s,%s;" % [k, str(v.outbreaks[k]["c"]), str(v.outbreaks[k]["n"])]
 	return s
 
 
@@ -504,6 +781,7 @@ func test_winter_speed_equal() -> void:
 	for spec: Array in [[0, 1.0 / 30.0], [3, 0.25]]:
 		var v := village_on(1, 20, 3)
 		v.tap_glass(true)
+		Health.start_plague(v)           # 역병 유행 (독함 굴림·같은 병 전염·중증)도 함께 돈다
 		var c := JarClock.new(v)
 		c.set_speed(spec[0])
 		while c.steps_done < steps:
