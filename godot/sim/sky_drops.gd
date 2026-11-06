@@ -46,7 +46,8 @@ const FLEE := 3.2
 const HILL_H := 0.09                   # 광맥 돌 언덕 높이 (높이 단위 — 화면 ×6)
 const VEIN_ROCK := 50.0                # 광맥 바위 하나에 든 양
 const VEIN_KIND := {"철광석": "iron", "석탄": "coal"}      # 넓은 세상 광맥 이름 (WorldGen.VEIN_KINDS)
-const VEIN_SEAM := 0.02                # 하얀 돌: 땅속 암염 (WorldGen 강 위 암염과 같은 양)
+const VEIN_SEAM := 0.02
+const WILD_FISH_R := 12.0              # 작은 물고기 한 줌을 놓을 수 있는 호숫가 (칸)                # 하얀 돌: 땅속 암염 (WorldGen 강 위 암염과 같은 양)
 
 ## 주민의 말 (금지어 없음 — '하늘에서 내려온 것'). [깨달은 뒤, 깨닫기 전]
 const SAY := {
@@ -65,6 +66,10 @@ const SAY := {
 	"하얀 돌": ["하늘에서 하얀 바위가 박혔다!", "하얀 바위가 땅에 박혔어!"],
 	"붉은 돌멩이": ["하룻밤 새 붉은 바위산이 솟았다!", "붉은 줄무늬 바위가 솟았어!"],
 	"검은 돌": ["하늘에서 검은 바위가 박혔다!", "검은 바위가 땅에 박혔어!"],
+	# 들짐승 다시 넣기 (WILDLIFE 4): 깨달은 뒤 "하늘에서 사슴이 내려왔다!" · 깨닫기 전엔 그냥 놀람 (Wildlife.wonder_line과 같은 말)
+	"작은 사슴 한 쌍": ["하늘에서 사슴이 내려왔다!", "어, 사슴이다! 어디서 왔을까…?"],
+	"작은 토끼 한 쌍": ["하늘에서 토끼가 내려왔다!", "어, 토끼다! 어디서 왔을까…?"],
+	"작은 물고기 한 줌": ["하늘에서 물고기가 내려왔다!", "어, 물고기다! 어디서 왔을까…?"],
 }
 ## 연대기 한 줄
 const BOOK := {
@@ -83,6 +88,9 @@ const BOOK := {
 	"하얀 돌": "하늘에서 하얀 바위가 내려와 땅에 깊이 박혔다. 무엇인지 아는 사람은 아무도 없었다.",
 	"붉은 돌멩이": "하룻밤 새 붉은 줄무늬 바위산이 솟았다. 바위에서 녹물 같은 냄새가 났다.",
 	"검은 돌": "하늘에서 검은 바위가 내려와 땅에 박혔다. 만지면 손이 까매졌다.",
+	"작은 사슴 한 쌍": "어디선가 사슴 한 쌍이 나타나 숲가로 뛰어갔다. 사라졌던 사슴이 다시 숲에 산다.",
+	"작은 토끼 한 쌍": "어디선가 토끼 한 쌍이 나타나 들판으로 깡충깡충 뛰어갔다.",
+	"작은 물고기 한 줌": "어디선가 작은 물고기들이 호수로 쏟아져 내려왔다. 물 위로 은빛이 반짝였다.",
 }
 const TOWER_LINES := ["하늘의 탑 아래 땅이 푸르러진다", "탑이 밤에도 빛나요", "하늘의 분이 내려 주신 탑이다", "탑 둘레의 밀이 참 잘 자라"]
 const TOWER_DOUBT := "거인의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
@@ -145,8 +153,11 @@ static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 	var out := {"ok": true, "why": "", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
 	if not v.water.inside(p.x, p.y, size + 0.5):
 		return {"ok": false, "why": "유리벽 가까이엔 떨어뜨릴 수 없어요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
-	if v.water_at(p.x, p.y):
+	var fish := String(d.get("species", "")) == "fish"         # 작은 물고기 한 줌: 물 위나 물가에 (가장 가까운 호수로)
+	if v.water_at(p.x, p.y) and not fish:
 		return {"ok": false, "why": "물 위에는 떨어뜨릴 수 없어요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
+	if fish and not v.water_at(p.x, p.y) and nearest_lake(v, p, WILD_FISH_R) == null:
+		return {"ok": false, "why": "물고기는 호수 가까이에 놓아 주세요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
 	if Vector2(v.fire.x - p.x, v.fire.y - p.y).length() < size + 1.0:
 		return {"ok": false, "why": "모닥불 위에는 떨어뜨릴 수 없어요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
 	if (v.altar_built or Awakening.altar_site(v) != null) and Vector2(v.altar_pos.x - p.x, v.altar_pos.y - p.y).length() < size + 1.6:
@@ -268,7 +279,7 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 		"pill", "bandage":
 			total = 1.0
 	var o := {}
-	if kind != "ampoule" and kind != "vein":
+	if kind != "ampoule" and kind != "vein" and kind != "wild":
 		v._drop_id += 1
 		o = {"id": v._drop_id, "item": item, "x": p.x, "y": p.y, "res": res, "total": total, "left": total, "size": size,
 			"res_n": 0, "t": v.t, "dur": float(d.get("days", 1.0)) * Balance.DAY}
@@ -298,6 +309,9 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 			_plant_tower(v, p)
 		"vein":
 			o = _plant_vein(v, item, p)
+		"wild":
+			if v.wild != null:
+				v.wild.readd(v, String(d["species"]), int(d.get("n", 2)), p, true)
 	_miracle(v, item, p)
 	v.end_giant()
 	return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled}

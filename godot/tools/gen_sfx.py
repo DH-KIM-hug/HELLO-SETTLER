@@ -60,7 +60,12 @@ SFX = {
     "lamp_move":       (2.0, -25, False, "a soft warm airy whoosh with a gentle oil lamp flame flutter, ending in one faint warm chime that rings out softly"),
     "chapel_bell":     (4.0, -28, False, "a small village chapel bell tolling twice far away in the evening, soft, distant, gentle reverb"),
     "funeral":         (5.0, -31, False, "one soft low church bell toll far away, solemn and gentle, long natural ring-out decaying to silence"),
+    # B3 들짐승 — 밤에 깊은 숲에서 (멀리, 무섭지 않게)
+    "wolf_howl":       (2.8, -30, False, "a single lone wolf howling softly very far away across a quiet night valley, gentle and melancholic, not scary, long soft fade into silence"),
 }
+# 멀리서 들리는 소리 — 'close-up' 꼬리말 대신
+FAR = {"wolf_howl"}
+STYLE_FAR = "distant natural outdoor recording, single sound, no music, no voice, no background noise"
 LOOP_XFADE = 0.5      # 반복 파일: 끝 0.5초를 처음 0.5초에 겹쳐(같은 힘 곡선) 이음매 딸깍 없앰
 
 
@@ -117,7 +122,7 @@ def gen(sid, force=False):
     dst = os.path.join(OUT, f"{sid}.mp3")
     if os.path.exists(dst) and not force:
         return
-    body = {"text": f"{prompt}. {STYLE}", "duration_seconds": secs, "prompt_influence": 0.5}
+    body = {"text": f"{prompt}. {STYLE_FAR if sid in FAR else STYLE}", "duration_seconds": secs, "prompt_influence": 0.5}
     if loop:
         body["loop"] = True
     data = api("/v1/sound-generation?output_format=mp3_44100_128", body)

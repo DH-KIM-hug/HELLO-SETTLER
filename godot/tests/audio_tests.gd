@@ -6,7 +6,7 @@ extends RefCounted
 var run: SceneTree
 var quick := false
 const SLOW: Array = []
-const TMP_SETTINGS := "user://test_audio_settings.cfg"
+var TMP_SETTINGS := "user://test_audio_settings_%d.cfg" % OS.get_process_id()      # 프로세스마다 (run.gd _clean_tmp)
 
 
 func _init(r: SceneTree, q: bool) -> void:
@@ -89,6 +89,7 @@ func _manager() -> GameAudio:
 	var a := GameAudio.new()
 	run.root.add_child(a)                # _ready: 버스·플레이어 (헤드리스 — 소리 장치 없음)
 	a.clock_override = 1000.0
+	a.rng.seed = 7                       # _ready가 randomize() — 시험은 늘 같은 흐름으로
 	return a
 
 

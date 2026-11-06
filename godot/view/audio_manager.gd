@@ -33,7 +33,8 @@ const LINE_COOLDOWN := 30.0          # 같은 줄은 30초에 한 번
 const FAST_SPEED := 8.0              # 이 배속부터 목소리 끔·일 소리 드물게
 const OUTSIDE_PPU := 9.0             # 카메라 확대가 이만큼(병 전체)이면 완전히 병 밖 시점, 16(기본)이면 안
 const INSIDE_PPU := 16.0
-const HEAR_R := 18.0                 # 마을 소리가 들리는 거리 (세계 칸)
+const HEAR_R := 18.0
+const HOWL_DB := -9.0                 # 늑대 울음: 멀리서 작게 (무섭지 않게)                 # 마을 소리가 들리는 거리 (세계 칸)
 const BUSES := [["Music", "Master"], ["VillageMusic", "Music"], ["Omen", "VillageMusic"],
 	["SFX", "Master"], ["Room", "SFX"], ["Village", "SFX"], ["Voice", "SFX"]]
 const MUFFLED := ["VillageMusic", "Village", "Voice"]
@@ -557,7 +558,8 @@ func _snapshot(v: Village) -> Dictionary:
 	return {"lid": v.air != null and v.air.lid_open, "phase": v.mold.phase if v.mold != null else "calm",
 		"wild": wild, "flee": fleeing, "groves": int(v.flora.stats["groves"]) if v.flora != null else 0,
 		"letters": v.letters.size(), "married": int(v.stats["marriages"]), "born": int(v.stats["born"]),
-		"fest": v.festival_t, "sick": sick, "hungry": hungry, "funerals": int(v.stats.get("funerals", 0))}
+		"fest": v.festival_t, "sick": sick, "hungry": hungry, "funerals": int(v.stats.get("funerals", 0)),
+		"howl": v.wild.howl_t if v.wild != null else -1.0e9}
 
 
 func _watch_village(dt: float) -> void:
@@ -594,6 +596,8 @@ func _watch_village(dt: float) -> void:
 		say("wedding")
 	if int(s["funerals"]) > int(o["funerals"]) and not fast():
 		fx("funeral", "Village", -4.0)       # 장례: 아주 작고 낮은 종 한 번 (A17)
+	if float(s["howl"]) > float(o["howl"]) and not fast():
+		fx("wolf_howl", "Village", HOWL_DB)   # 밤에 깊은 숲의 늑대 (B3) — 멀리서 작게, 하루 한 번 (빠르게 돌릴 땐 끔)
 	if int(s["born"]) > int(o["born"]):
 		say("baby", _filter(func(r: Resident) -> bool: return r.sex == "f" and r.is_adult()))
 	if float(s["fest"]) != float(o["fest"]):

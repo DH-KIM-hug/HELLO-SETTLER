@@ -3,3 +3,4 @@ voice/*.mp3,Resident voice barks (118 clips),ElevenLabs TTS (eleven_v3; voices b
 music/*.mp3,Background music (theme/day/night/evening/crisis/festival),ElevenLabs Music (prompts in tools/gen_music.py),https://elevenlabs.io (Creator plan - commercial use),2026-11-06,none
 sfx/*.mp3,Sound effects (35 clips),ElevenLabs Sound Effects (prompts in godot/tools/gen_sfx.py),https://elevenlabs.io (Creator plan - commercial use),2026-11-06,none
 sfx/(fly_whoosh|waterfall|core_hum|soil_pour|box_open|lamp_move|chapel_bell|funeral).mp3,A17 sound effects (8 clips; waterfall = 7.5 s crossfaded loop),ElevenLabs Sound Effects (prompts in godot/tools/gen_sfx.py),https://elevenlabs.io (Creator plan - commercial use),2026-11-07,none
+sfx/wolf_howl.mp3,B3 distant wolf howl (2.4 s; night in the deep forest),ElevenLabs Sound Effects (prompt in godot/tools/gen_sfx.py),https://elevenlabs.io (Creator plan - commercial use),2026-11-07,none

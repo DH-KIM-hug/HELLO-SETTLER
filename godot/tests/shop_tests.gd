@@ -8,7 +8,7 @@ extends RefCounted
 var run: SceneTree
 var quick := false
 const SLOW: Array = []
-const TMP_DIR := "user://test_shop_save"
+var TMP_DIR := "user://test_shop_save_%d" % OS.get_process_id()      # 프로세스마다 (run.gd _clean_tmp)
 
 var _old_aware := true
 var _old_notes := 0.0

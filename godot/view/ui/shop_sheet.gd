@@ -301,7 +301,7 @@ func _refresh() -> void:
 			nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		return
-	for it: String in Shop.items_in(tab):
+	for it: String in Shop.items_in(tab, village):
 		_card(it)
 
 

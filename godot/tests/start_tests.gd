@@ -7,7 +7,7 @@ extends RefCounted
 var run: SceneTree
 var quick := false
 const SLOW: Array = []
-const TMP_DIR := "user://test_start_save"
+var TMP_DIR := "user://test_start_save_%d" % OS.get_process_id()      # 프로세스마다 (run.gd _clean_tmp)
 
 
 func _init(r: SceneTree, q: bool) -> void:

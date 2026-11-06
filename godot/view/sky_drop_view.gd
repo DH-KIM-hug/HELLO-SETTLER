@@ -290,6 +290,14 @@ static func make_item(item: String) -> Node3D:
 		"반창고 조각":
 			_mesh(n, _box(Vector3(2.8, 0.16, 1.35)), Color("e6c4a0"), Vector3(0, 0.08, 0))
 			_mesh(n, _box(Vector3(1.1, 0.24, 1.05)), Color("f6efe4"), Vector3(0, 0.14, 0))
+		"작은 사슴 한 쌍", "작은 토끼 한 쌍", "작은 물고기 한 줌":     # 들짐승 다시 넣기 — 손에 든 작은 짐승들 (병 안의 크기 그대로)
+			var mdl: String = {"작은 사슴 한 쌍": "deer", "작은 토끼 한 쌍": "rabbit", "작은 물고기 한 줌": "fish_a"}[item]
+			var k := 3 if mdl == "fish_a" else 2
+			for i in k:
+				var a := Art.instance(n, "animals/" + mdl)
+				a.scale = Vector3.ONE * Style.RESIDENT_SCALE * 1.5
+				a.position = Vector3((i - (k - 1) * 0.5) * 0.9, 0.0, 0.3 * (i % 2))
+				a.rotation.y = 0.6 * i
 		_:
 			_mesh(n, _sphere(1.0), Color("c9a77a"), Vector3(0, 0.6, 0))
 	return n
