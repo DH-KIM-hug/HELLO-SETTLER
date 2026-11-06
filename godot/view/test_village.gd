@@ -59,9 +59,13 @@ var _touch_tap := false
 var _touch_press := Vector2.ZERO
 var _pinch_d := 0.0
 var _pinch_mid := Vector2.ZERO
-# 저장과 돌아왔을 때 (docs/SAVE.md) — 이 장면이 앱의 첫 화면으로 열렸을 때만 저장을 쓴다 (캡처 도구·시험이 띄운 장면은 늘 새 병)
+# 저장과 돌아왔을 때 (docs/SAVE.md) — 시작 흐름(StartFlow.enter_game — 타이틀의 [이어하기]·짧은 창조)으로 들어왔거나
+# 이 장면을 직접 첫 화면으로 띄웠을 때만 저장을 쓴다 (캡처 도구·시험이 띄운 장면은 늘 새 병)
 const JAR_ID := 1
 var use_save := false
+var entry := {"mode": "", "name": ""}  # 어떻게 들어왔나 (StartFlow.take) — continue · new(+ 지구 이름) · ""(직접)
+var confirm_sheet: ConfirmSheet      # 뒤로 가기 → "거인의 방으로 돌아갈까요?" (UI.md 00)
+var leaving := false
 var catching := false                # 비운 시간 따라잡는 중 (로딩 화면) — 시계·화면 갱신을 멈춤
 var return_letter: ReturnLetter      # '자리를 비운 동안' 편지 (SAVE.md 4)
 var catchup_screen: CatchUpScreen
@@ -99,14 +103,64 @@ func _ready() -> void:
 	_after_ready()
 	_start_save()
 	_attach_audio()
+	_setup_back()
+
+
+# ───────────────────────── 뒤로 가기 → 거인의 방 (UI.md 00) ─────────────────────────
+func _setup_back() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 20
+	add_child(layer)
+	confirm_sheet = ConfirmSheet.new()
+	layer.add_child(confirm_sheet)
+	confirm_sheet.answered.connect(func(yes: bool) -> void:
+		if yes:
+			leave_to_title())
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		on_back()
+
+
+## 뒤로 가기 (안드로이드 뒤로 · 컴퓨터 Esc): 열린 시트가 있으면 닫기만, 아니면 "거인의 방으로 돌아갈까요?"
+func on_back() -> void:
+	if leaving or catching or confirm_sheet == null:
+		return
+	if confirm_sheet.visible:
+		confirm_sheet.answer(false)
+		return
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter]:
+		if sheet != null and sheet.visible:
+			sheet.call("close")
+			return
+	confirm_sheet.ask("거인의 방으로 돌아갈까요?", "돌아가기", "병 안에 있기")
+
+
+## 전부 저장하고 병을 내려놓은 뒤 거인의 방(타이틀)으로
+func leave_to_title() -> void:
+	if leaving:
+		return
+	leaving = true
+	paused = true
+	var sm := GameSave.get_instance()
+	if use_save and sm != null:
+		sm.unload()                       # 전부 저장(끝날 때까지 기다림) → 병 내려놓기 (다시 [이어하기]하면 그 사이를 따라잡음)
+	var a := GameAudio.get_instance()
+	if a != null:
+		a.attach(null)
+		a.set_menu(true)
+	StartFlow.to_title(get_tree())
 
 
 # ───────────────────────── 저장 · 돌아왔을 때 (docs/SAVE.md) ─────────────────────────
 ## 앱의 첫 화면으로 열렸고 저장이 있으면 그 병을, 없으면 새 병 (_make_village)
 func _load_or_make_village() -> Village:
 	var sm := GameSave.get_instance()
-	use_save = sm != null and sm.enabled and is_inside_tree() and get_tree().current_scene == self and _saves_here()
-	if use_save and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID) and sm.jars[JAR_ID]["kind"] == "jar":
+	entry = StartFlow.take()
+	var direct := is_inside_tree() and get_tree().current_scene == self
+	use_save = sm != null and sm.enabled and (entry["mode"] != "" or direct) and _saves_here()
+	if use_save and entry["mode"] != "new" and sm.has_save() and sm.load_all() and sm.jars.has(JAR_ID) and sm.jars[JAR_ID]["kind"] == "jar":
 		_loaded_clock = sm.jar_clock(JAR_ID)
 		_away = float(sm.last_load["away"])
 		return sm.jar_village(JAR_ID)
@@ -123,7 +177,8 @@ func _start_save() -> void:
 		return
 	var sm := GameSave.get_instance()
 	if _loaded_clock == null:                     # 새 병: 저장 대상으로 + 첫 병이면 창세의 날 (×12)
-		sm.register_jar(JAR_ID, village, clock, {"name": "첫 병"})
+		var nm := String(entry.get("name", ""))
+		sm.register_jar(JAR_ID, village, clock, {"name": nm if nm != "" else "첫 병"})
 		if sm.should_start_creation():
 			clock.start_creation_day()
 		sm.giant["first_jar_done"] = true
@@ -716,6 +771,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			KEY_M: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))
 			KEY_T: tap_glass(true)            # 개발: 크게 친 톡 (지진)
 			KEY_F3: set_debug_mode(not debug_mode)
+			KEY_ESCAPE: on_back()
 
 
 func _on_touch(t: InputEventScreenTouch) -> void:

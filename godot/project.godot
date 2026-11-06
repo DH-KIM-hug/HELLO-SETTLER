@@ -9,7 +9,16 @@ config/name="Nazakji"
 config/icon="res://art/icon/icon_512.png"
 config/description="나의 작은 지구 — 유리병 속 작은 중세 문명"
 config/version="0.1.0"
-run/main_scene="res://scenes/test_village.tscn"
+; 시작 흐름 (docs/UI.md 00): 회사 로고 → 거인의 방 타이틀 → 짧은 창조 / 이어하기 → 병 안 (view/start/start_flow.gd)
+run/main_scene="res://scenes/boot.tscn"
+; 뒤로 가기(안드로이드)는 화면마다 직접: 마을 = "거인의 방으로 돌아갈까요?" · 타이틀 = 앱 끝내기
+config/quit_on_go_back=false
+; 부팅 스플래시 = 크림 바탕 가운데 앱 아이콘 (엔진 로고 없음)
+boot_splash/bg_color=Color(0.9529412, 0.92156863, 0.8666667, 1)
+boot_splash/show_image=true
+boot_splash/image="res://art/icon/icon_512.png"
+boot_splash/stretch_mode=0
+boot_splash/use_filter=true
 config/features=PackedStringArray("4.7", "Mobile")
 
 [autoload]

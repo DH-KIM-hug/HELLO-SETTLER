@@ -137,16 +137,59 @@ func _serial_of(v: Village, w: JarWorld) -> int:
 	return v.event_serial if v != null else 0
 
 
+## 화면을 떠날 때 (거인의 방으로 돌아감 — UI 00): 전부 저장하고 병을 내려놓는다.
+## 내려놓은 동안은 자동 저장이 없고, 다시 [이어하기]하면 load_all + 그 사이 비운 시간 따라잡기
+func unload() -> void:
+	if enabled and not jars.is_empty():
+		save_all(true)
+	flush()
+	jars.clear()
+	order.clear()
+	current = -1
+
+
+## 타이틀이 보여 줄 마지막 병 요약 (UI 00 [이어하기] 아래 한 줄) — {name, day}. 저장이 없으면 {}.
+## 읽기만 한다 (옮기기·칸 기록·깨진 칸 옮기기 없음). 옛 형식(v0)이나 날짜가 없는 저장은 name "" / day 0
+func peek() -> Dictionary:
+	if not has_save():
+		return {}
+	var r := SaveFile.read_best(_base("giant"))
+	if not r["ok"] or not (r["payload"] is Dictionary):
+		return {"name": "", "day": 0}
+	var gp: Dictionary = r["payload"]
+	var jl: Array = gp.get("jars", [])
+	if jl.is_empty():
+		return {}
+	var cur := int(gp.get("current", -1))
+	var pick: Dictionary = jl[0]
+	for jd: Dictionary in jl:
+		if int(jd.get("id", -1)) == cur:
+			pick = jd
+	var day := int(pick.get("day", 0))
+	if day <= 0:                                   # 날짜를 적기 전의 저장 — 병 파일에서 시각만
+		var jr := SaveFile.read_best(_base("jar_%d" % int(pick.get("id", 1))))
+		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
+			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
+	return {"name": String(pick.get("name", "")), "day": day}
+
+
 # ───────────────────────── 찍어 두기 (화면 쪽 — 짧게) ─────────────────────────
 func giant_payload() -> Dictionary:
 	var jl := []
 	for id: int in order:
 		var j: Dictionary = jars[id]
-		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", ""))})
+		jl.append({"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id)})
 	return {"notes": Market.notes, "sold": Market.sold.duplicate(), "day_key": Market.day_key, "first_paid": Market.first_paid,
 		"lamp_level": Market.lamp_level, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": giant.get("draws", {}).duplicate(), "upgrades": giant.get("upgrades", []).duplicate(),
 		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
+
+
+## 병의 N일째 (타이틀의 "초록별 · 12일째" — 거인 묶음에 함께 적어 둔다)
+func _day_of(id: int) -> int:
+	var j: Dictionary = jars[id]
+	var v: Village = (j["world"] as JarWorld).primary() if j["kind"] == "world" and j["world"] != null else j["village"]
+	return v.day_no() if v != null else 1
 
 
 func jar_payload(id: int) -> Dictionary:
