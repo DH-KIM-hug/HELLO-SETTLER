@@ -14,5 +14,6 @@ for s in buildings village ground water nature residents giants mold items room;
   "$BLENDER" -b --factory-startup --python "$HERE/build_$s.py" -- "$OUT" 2>&1 \
     | grep -E "^  |->|Error|Traceback|rror:" || true
 done
+if [ -z "$1" ] || [ "$1" = "residents" ]; then python3 "$HERE/paint_face_atlas.py" "$OUT/resident_face.png"; fi   # 주민 얼굴 그림 묶음 (Pillow)
 ls -1 "$OUT"/*.glb "$OUT"/room/*.glb | wc -l | xargs echo "glb files:"
 du -ch "$OUT"/*.glb "$OUT"/room/*.glb | tail -1

@@ -68,6 +68,7 @@ func _ready() -> void:
 	for nm: String in PRELOAD:
 		Art.model(nm)
 	Art.parts(ResidentModel.PARTS)
+	ResidentModel.kit()
 	_trees = _node(self)
 	_rocks = _node(self)
 	_manna = _node(self)
@@ -128,9 +129,18 @@ static func age_stage(r: Resident) -> int:
 	return 10 if r.is_adult() else 11
 
 
+## (A20 v3) 주민 LOD: 카메라 확대(칸당 화면 점)가 ResidentModel.LOD_PPU 이상이면 가까이 LOD (정사영 — 거리 대신 확대로)
+func _resident_lod_close() -> bool:
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cam.size <= 0.0:
+		return true
+	return get_viewport().get_visible_rect().size.y / cam.size >= ResidentModel.LOD_PPU
+
+
 func _sync_residents(dt: float) -> void:
 	var seen := {}
 	var chief := v.chief()
+	var lod_close := _resident_lod_close()
 	for r in v.people:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
@@ -166,6 +176,7 @@ func _sync_residents(dt: float) -> void:
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
 		m.set_anim("work" if r.anim == "torch" else r.anim)
+		m.set_lod(lod_close)
 		m.tick(dt)
 		_torch(r, m)
 	for id in _torches.keys():
@@ -279,12 +290,11 @@ func _torch(r: Resident, m: ResidentModel) -> void:
 	glow.scale = Vector3.ONE * (0.95 + 0.08 * sin(_anim_t * 13.0 + r.id))
 	tn.visible = true
 	m.tool.visible = false
+	var ax := -1.6                        # 걸을 때: 횃불을 앞으로 높이
 	if r.anim == "torch":                 # 휘두르기: 횃불을 앞으로 내밀었다 거뒀다 (불꽃은 늘 위로)
-		m.arm_r.rotation.x = -1.25 + 0.4 * sin(_anim_t * 8.0 + r.id)
-	else:                                 # 걸을 때: 횃불을 앞으로 높이
-		m.arm_r.rotation.x = -1.6
-	m.arm_r.rotation.z = 0.2
-	tn.rotation.x = -m.arm_r.rotation.x
+		ax = -1.25 + 0.4 * sin(_anim_t * 8.0 + r.id)
+	m.aim_arm_r(ax, 0.2)                  # (A20 v3) 오른팔 뼈를 직접 겨눔 — tick 뒤
+	tn.rotation.x = -ax
 	var f := int(_anim_t * 10.0 + r.id) % 3
 	var hs := [1.0, 1.3, 0.8]
 	var f1 := tn.get_node("f1") as Node3D
