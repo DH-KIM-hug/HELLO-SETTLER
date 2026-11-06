@@ -14,16 +14,18 @@ uniform float width_px_1080p = 1.6;
 uniform float push_back = 0.06;      // 껍데기를 조금 뒤로 → 자기 면을 덮지 않음 (세계 단위)
 // 7단계: 주민 대머리 — 지운 머리카락의 껍데기도 지운다 (render/resident.gdshader와 같은 규칙, 머리 부품만)
 uniform int bald = 0;
-instance uniform float part_head = 0.0;
+uniform bool resident = false;      // A20 v3: 주민 몸 (뼈대 메시) — 머리 부품 표시·쉴 때 자리는 CUSTOM1, 노멀은 NORMAL
 varying vec3 lp;
+varying float part_head;
 
 vec3 srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
 
 void vertex() {
-	lp = VERTEX;
-	vec3 n = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : NORMAL;
+	lp = resident ? CUSTOM1.xyz : VERTEX;
+	part_head = resident ? CUSTOM1.w : 0.0;
+	vec3 n = (!resident && CUSTOM0.w > 0.5) ? CUSTOM0.xyz : NORMAL;
 	vec4 vp = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	vec3 nv = mat3(MODELVIEW_MATRIX) * n;
 	float upp = 2.0 / (PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y);
