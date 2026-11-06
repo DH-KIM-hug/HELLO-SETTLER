@@ -10,6 +10,7 @@ const DAY := Balance.DAY
 const HOUR := Balance.HOUR
 const R := JarWater.R
 const PATH_N := 128
+const ALTAR_OFFSET := Vector2(-1.6, -1.2)   # (정함) 제단 = 모닥불 곁
 
 var rng := RandomNumberGenerator.new()
 var gene_rng := RandomNumberGenerator.new()   # 7단계: 겉모습 유전자·혈통 유전 전용 (시뮬레이션 난수 순서를 바꾸지 않게)
@@ -49,8 +50,8 @@ var step_dt := Balance.STEP
 # 거인
 var watching := true                  # 거인이 지켜보는가 (앱 켜짐). watch_hours가 있으면 그 시각만
 var watch_hours: Array = []           # 예: [20, 21] — sim_life.py처럼 하루 2시간만 지켜봄
-var auto_build := true                # [주민 자율 건설] (기본 켜짐)
-var auto_reveal := false              # 시대 점수가 차면 지켜보는 때에 계시 (테스트용: 거인이 바로 승인한다고 가정)
+var chief_off := false                # 테스트 전용 — 촌장이 짓지 않게 (게임에는 끄는 버튼이 없다: 마을은 늘 주민이 짓는다, 기획서 6.7)
+var auto_reveal := false             # 시대 점수가 차면 지켜보는 때에 계시 (테스트용: 거인이 바로 승인한다고 가정)
 
 var era := 0
 var era_pts := 0.0
@@ -83,7 +84,18 @@ var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, 
 var violations: Array = []            # 테스트용: 규칙 위반 기록
 var basins_said: Array = []
 var _starve_day := -1
-var _timers := {"life": 0.0, "jobs": 0.0, "chief": 0.0, "lake": 0.0, "decay": 0.0, "speak": 0.0}
+var _timers := {"life": 0.0, "jobs": 0.0, "chief": 0.0, "lake": 0.0, "decay": 0.0, "speak": 0.0, "econ": 0.0}
+# v4.0 — 제단·제물·소원·분가 (기획서 6.7 · 11.1 · 3.1). 계산은 아래 '제단' 절
+var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
+var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
+var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array}
+var favourites: Dictionary = {}       # 거인님이 받으신 물건 → 받은 개수 합 ('거인님은 빵을 좋아하신다')
+var letters: Array = []               # 주민의 편지 {id, kind: "wish"/"split", t, from, name, type, text, state: "open"/"granted"/"done"}
+var wishes: Array = []                # 들어준 소원 중 아직 터를 잡지 않은 건물 종류
+var _offer_day := -1
+var _next_wish_t := Balance.WISH_FIRST
+var _full_since := -1.0               # 영역이 90% 넘게 찬 때부터
+var _letter_id := 0
 var _people_by_id: Dictionary = {}
 var _bld_by_id: Dictionary = {}
 
@@ -98,7 +110,9 @@ static func new_prototype(seed_v: int = 20261105) -> Village:
 func _init_prototype(seed_v: int) -> void:
 	rng.seed = seed_v
 	gene_rng.seed = seed_v * 7919 + 101
+	econ_rng.seed = seed_v * 6151 + 29
 	_init_health(seed_v)
+	altar_pos = fire + ALTAR_OFFSET
 	water = JarWater.new_prototype_world()
 	water.start_clock = start_clock
 	water.t = 0.0
@@ -384,9 +398,39 @@ func water_at(x: float, y: float) -> bool:
 	return water.is_lake(k) or water.is_river(k)
 
 
-## 품을 수 있는 인구 = 대지 넓이 × 0.5 ÷ 1인당 땅 (기획서 3.1)
+## 품을 수 있는 인구 = 영역 넓이 × 0.5 ÷ 1인당 땅 (기획서 3.1 · BALANCE v3-5)
 func land_capacity() -> float:
-	return PI * R * R * Balance.LAND_USABLE / Balance.LAND_PER_PERSON[mini(era, 3)]
+	var r := territory_r()
+	return PI * r * r * Balance.LAND_USABLE / Balance.LAND_PER_PERSON[mini(era, 3)]
+
+
+## 부락 영역 반지름 = 시대별 지름 ÷ 2 (+ 국경 건물). 소형 병은 대지(반지름 R)보다 넓을 수 없다
+func territory_r() -> float:
+	var d: float = Balance.TERRITORY_D[mini(era, 3)]
+	var extra := 0.0
+	for b in buildings:
+		if b.built and Balance.BORDER_D.has(b.type):
+			extra = maxf(extra, float(Balance.BORDER_D[b.type]))
+	var r := (d + extra) * 0.5
+	if not (water is WorldWater):
+		r = minf(r, R)
+	return r
+
+
+## 영역 안인가 (반지름 size만큼 안쪽) — 다른 무리의 영역과는 겹치지 않는다
+func in_territory(x: float, y: float, size := 0.0) -> bool:
+	if Vector2(x - center.x, y - center.y).length() + size > territory_r():
+		return false
+	for o: Village in peers:
+		if o != self and Vector2(x - o.center.x, y - o.center.y).length() < o.territory_r() + size:
+			return false
+	return true
+
+
+## 영역이 얼마나 찼나 (인구 ÷ 품을 수 있는 인구)
+func territory_full() -> float:
+	var c := land_capacity()
+	return people.size() / c if c > 0.0 else 1.0
 
 
 # ───────────────────────── 식량 ─────────────────────────
@@ -573,9 +617,12 @@ func step(dt: float) -> void:
 		assign_homes()
 		_timers["jobs"] = 0.0
 	if _timers["chief"] >= Balance.CHIEF_EVERY:
-		if auto_build or not is_watching():
+		if not chief_off:             # 거인이 있든 없든 촌장이 짓는다 (기획서 6.7)
 			chief_build()
 		_timers["chief"] = 0.0
+	if _timers["econ"] >= 60.0:       # 제물·소원 편지·분가 (1분마다 확인)
+		_economy_tick()
+		_timers["econ"] = 0.0
 	if _timers["lake"] >= Balance.LAKE_EVERY:
 		_timers["lake"] = 0.0
 		lake_watch()
@@ -748,7 +795,7 @@ func _update_building(b: Building, dt: float) -> void:
 	var outs: Dictionary = d["out"]
 	var all_full := true
 	for k in outs:
-		if not (Balance.ENOUGH.has(k) and float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= Balance.ENOUGH[k]):
+		if not (Balance.ENOUGH.has(k) and float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5)
 			all_full = false
 	if all_full:
 		return
@@ -831,6 +878,8 @@ func on_built(b: Building) -> void:
 		log_line("밭을 갈았다. 첫 곡식이 여물려면 반나절은 걸리겠지.")
 	elif b.is_house():
 		log_line("%s 한 채가 다 지어졌다. 이제 한 가족이 지붕 아래에서 잔다." % b.type)
+	elif b.wished:
+		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.type, josa(b.type, "이", "가")])
 	else:
 		log_line("%s%s 다 지어졌다." % [b.type, josa(b.type, "이", "가")])
 
@@ -1219,12 +1268,35 @@ func _owed(k: String) -> int:
 	return s
 
 
+## 들어준 소원 중 지금 지을 수 있는 것 (시대가 열린 것) — 없으면 ""
+func _wish_now() -> String:
+	for w: String in wishes:
+		if int(Balance.B[w]["era"]) <= era:
+			return w
+	return ""
+
+
+## 거인님이 좋아하시는 물건을 만드는 일터 (아직 2채 미만) — 없으면 ""
+func _fav_want() -> String:
+	var goods := favourites.keys().filter(func(k: String) -> bool: return is_favourite(k) and Balance.PRODUCER.has(k))
+	goods.sort_custom(func(a: String, b: String) -> bool: return float(favourites[a]) > float(favourites[b]))
+	for g: String in goods:
+		var ty: String = Balance.PRODUCER[g]
+		if int(Balance.B[ty]["era"]) > era or count_type(ty) >= 2:
+			continue
+		if ty == "소금밭" and (not salt_known or salt_flat_near() == null):
+			continue
+		return ty
+	return ""
+
+
 func chief_build() -> void:
 	var pending := 0
 	for b in buildings:
 		if b.is_site():
 			pending += 1
-	if pending >= 2:
+	var wish := _wish_now()
+	if pending >= (3 if wish != "" else 2):       # 들어준 소원은 짓는 중인 터가 있어도 하나 더
 		return
 	var pop := people.size()
 	var cap := house_capacity()
@@ -1252,7 +1324,10 @@ func chief_build() -> void:
 	var basics := count_type("농장") > 0 and count_type("나무꾼") > 0
 	var food_short := farm_rate() < pop * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY
 	var want := ""
-	if count_type("농장") == 0 and n_houses >= 1:
+	var fav := _fav_want()
+	if wish != "":
+		want = wish                   # 들어준 소원이 우선순위 맨 위 (기획서 6.7)
+	elif count_type("농장") == 0 and n_houses >= 1:
 		want = "농장"
 	elif count_type("나무꾼") == 0 and n_houses >= 1:
 		want = "나무꾼"
@@ -1260,6 +1335,8 @@ func chief_build() -> void:
 		want = "집"
 	elif food_short:
 		want = "농장"
+	elif fav != "":
+		want = fav                    # 거인님이 좋아하시는 물건의 일터 (받은 제물, 11.1)
 	elif count_type("우물") == 0:
 		want = "우물"
 	elif count_type("나무꾼") < 2:
@@ -1307,8 +1384,8 @@ func chief_build() -> void:
 	var d: Dictionary = Balance.B[want]
 	if int(d["era"]) > era:
 		return
-	# 촌장은 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외)
-	if d.get("job", false) and idle < Balance.IDLE_FOR_NEW_JOB and not (want == "농장" and food_short):
+	# 촌장은 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외 · 들어준 소원은 그래도 짓는다)
+	if d.get("job", false) and idle < Balance.IDLE_FOR_NEW_JOB and not (want == "농장" and food_short) and want != wish:
 		return
 	var c := chief()
 	var cn := c.name if c != null else ""
@@ -1323,7 +1400,12 @@ func chief_build() -> void:
 	if spot == null:
 		return
 	var sp: Vector2 = spot
-	add_building(want, sp.x, sp.y, false)
+	var nb := add_building(want, sp.x, sp.y, false)
+	if want == wish:
+		nb.wished = true
+		wishes.erase(wish)
+		log_line("촌장 %s%s 거인님이 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), want])
+		return
 	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), want])
 
 
@@ -1346,6 +1428,10 @@ func _standing_trees() -> int:
 
 func is_free(x: float, y: float, size: float) -> bool:
 	if not water.inside(x, y, size + 1.2):
+		return false
+	if not in_territory(x, y, size):           # 영역 안에만 짓는다 (기획서 3.1)
+		return false
+	if Vector2(altar_pos.x - x, altar_pos.y - y).length() < size + 0.9:
 		return false
 	if water_at(x, y):
 		return false
@@ -1409,7 +1495,8 @@ func find_spot(type: String) -> Variant:
 						return p
 				d += 0.5
 	var rad := 2.0
-	while rad < path_r:
+	var tr_r := territory_r()
+	while rad < tr_r:
 		for k in 24:
 			var a := k / 24.0 * TAU + rad
 			var p := c + Vector2(cos(a), sin(a)) * rad
@@ -1518,6 +1605,41 @@ func mark_path(x: float, y: float, amt: float) -> void:
 		_reveal_walk(x, y)
 
 
+## 걸은 선분 a → b 위의 칸마다 오솔길을 남긴다 (몰아서 계산하는 긴 걸음도 끊기지 않게 — 칸 크기 간격)
+func mark_path_seg(a: Vector2, b: Vector2) -> void:
+	var ln := a.distance_to(b)
+	var cell := 2.0 * path_r / path_n
+	var n := maxi(1, ceili(ln / cell))
+	var amt := ln / n
+	for i in n:
+		var p := a.lerp(b, float(i + 1) / n)
+		var gx := floori((p.x - center.x + path_r) / (2.0 * path_r) * path_n)
+		var gy := floori((p.y - center.y + path_r) / (2.0 * path_r) * path_n)
+		if gx >= 0 and gy >= 0 and gx < path_n and gy < path_n:
+			paths[gy * path_n + gx] = minf(60.0, paths[gy * path_n + gx] + amt)
+	if _fog_on:
+		_reveal_walk(b.x, b.y)
+
+
+## 그 자리의 오솔길 값 (걸은 거리, 0~60). 격자 밖이면 0
+func path_at(x: float, y: float) -> float:
+	var gx := floori((x - center.x + path_r) / (2.0 * path_r) * path_n)
+	var gy := floori((y - center.y + path_r) / (2.0 * path_r) * path_n)
+	if gx >= 0 and gy >= 0 and gx < path_n and gy < path_n:
+		return paths[gy * path_n + gx]
+	return 0.0
+
+
+## 흙길인가 (기획서 6.7 '길은 발길이 만든다' — 많이 밟은 칸, 안 다니면 옅어진다)
+func is_road(x: float, y: float) -> bool:
+	return path_at(x, y) >= Balance.PATH_AT
+
+
+## 걸음 배율 — 흙길 위는 빠르다
+func path_mult(x: float, y: float) -> float:
+	return Balance.PATH_SPEED if path_at(x, y) >= Balance.PATH_AT else 1.0
+
+
 # ───────────────────────── 병 돌리기 ─────────────────────────
 ## 물·지형과 함께 병 안의 모든 것이 (x, y) → (−y, x)로 돈다 (JarWater.rotate_jar)
 func rotate_jar() -> void:
@@ -1551,6 +1673,7 @@ func rotate_jar() -> void:
 			if s["k"] == "walk":
 				rp.call(s)
 	fire = JarWater.rot_pt(fire)
+	altar_pos = JarWater.rot_pt(altar_pos)
 	var np := PackedFloat32Array()
 	np.resize(PATH_N * PATH_N)
 	for j in PATH_N:
@@ -1560,6 +1683,486 @@ func rotate_jar() -> void:
 	_fear_rotate()
 	bless_all(0.06)
 	log_line("땅이 흔들리지도 않았는데 해가 하늘을 건너 옮겨갔다. 그늘이던 쪽이 따뜻해지고, 세상 끝 벽을 타던 물줄기가 다른 곳에서 흘러내리기 시작했다.")
+
+
+# ───────────────────────── 제단·제물·소원·분가 (기획서 3.1 · 6.7 · 11.1, RESIDENT_AI 2.1 · 6.2) ─────────────────────────
+## 소원 편지의 말 (주민 말 — 금지어 없음)
+const WISH_REASON := {
+	"농장": "밭을 일구고 싶어요. 하늘 낟알이 언제까지나 내리진 않을 테니까요.",
+	"우물": "물 길으러 너무 멀리 가요… 우물을 파고 싶어요.",
+	"나무꾼": "나무를 더 베어 올 나무꾼 오두막을 짓고 싶어요.",
+	"제재소": "통나무를 판자로 켜는 제재소를 짓고 싶어요.",
+	"채석장": "바위에서 돌을 캐는 채석장을 짓고 싶어요.",
+	"산림관": "숲이 줄어요. 나무를 심는 산림관을 두고 싶어요.",
+	"소금밭": "하얀 들판에서 소금을 긁는 소금밭을 만들고 싶어요.",
+	"방앗간": "밀을 빻는 방앗간을 짓고 싶어요.",
+	"빵집": "빵 굽는 냄새가 나는 빵집을 짓고 싶어요.",
+}
+
+
+func _economy_tick() -> void:
+	_expire_offerings()
+	if hour_now() >= Balance.OFFER_HOUR and cal_day(t) != _offer_day:
+		_offer_day = cal_day(t)
+		evening_offering()
+	if t >= _next_wish_t:
+		_next_wish_t = t + econ_rng.randf_range(Balance.WISH_EVERY[0], Balance.WISH_EVERY[1])
+		if write_wish().is_empty():
+			_next_wish_t = t + 2.0 * HOUR     # 바랄 것이 없으면 조금 뒤 다시
+	for l: Dictionary in letters:
+		if l["kind"] == "wish" and l["state"] == "open" and t - float(l["t"]) > Balance.WISH_KEEP:
+			l["state"] = "done"           # 들어주지 않아도 언젠가 스스로 짓는다
+	_check_split()
+
+
+func _starving() -> bool:
+	return deficit > 0.0 or t - last_short_t < Balance.STARVED_RECENT
+
+
+func _has_built(type: String) -> bool:
+	for b in buildings:
+		if b.built and b.type == type:
+			return true
+	return false
+
+
+## 거인님이 좋아하신다고 믿는 물건 (받은 제물)
+func is_favourite(item: String) -> bool:
+	return float(favourites.get(item, 0.0)) >= Balance.FAV_MIN
+
+
+## 짓는 속도 배율 — 들어준 소원은 ×1.5 (기획서 6.7)
+func build_mult(b: Building) -> float:
+	return Balance.WISH_SPEED if b.wished else 1.0
+
+
+## 아직 열려 있는 편지
+func open_letters(kind := "") -> Array:
+	return letters.filter(func(l: Dictionary) -> bool: return l["state"] == "open" and (kind == "" or l["kind"] == kind))
+
+
+# ── 소원 편지 ──
+func _wish_pick() -> String:
+	var taken := {}
+	for w: String in wishes:
+		taken[w] = true
+	for l: Dictionary in open_letters("wish"):
+		taken[l["type"]] = true
+	var c: Array[String] = []
+	if count_type("농장") == 0:
+		c.append("농장")
+	if count_type("우물") == 0:
+		c.append("우물")
+	if count_type("나무꾼") < 2:
+		c.append("나무꾼")
+	if count_type("제재소") == 0:
+		c.append("제재소")
+	if count_type("채석장") == 0:
+		c.append("채석장")
+	if era >= 1 and count_type("방앗간") == 0:
+		c.append("방앗간")
+	if era >= 1 and count_type("빵집") == 0:
+		c.append("빵집")
+	if salt_known and count_type("소금밭") == 0 and salt_flat_near() != null:
+		c.append("소금밭")
+	if count_type("산림관") == 0 and _standing_trees() < Balance.FOREST_MIN * 2:
+		c.append("산림관")
+	if count_type("농장") < 3 and farm_rate() < people.size() * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY * 1.3:
+		c.append("농장")
+	c = c.filter(func(ty: String) -> bool: return not taken.has(ty))
+	if c.is_empty():
+		return ""
+	return c[econ_rng.randi() % mini(2, c.size())]
+
+
+## 주민이 소원 편지를 보낸다 (하루 1~2통) — type을 주면 그 건물로 (테스트·튜토리얼)
+func write_wish(type := "") -> Dictionary:
+	var ty := type if type != "" else _wish_pick()
+	if ty == "":
+		return {}
+	var adults := people.filter(func(q: Resident) -> bool: return q.age >= Balance.AGE_ADULT)
+	if adults.is_empty():
+		return {}
+	var who: Resident = adults[econ_rng.randi() % adults.size()]
+	_letter_id += 1
+	var text: String = WISH_REASON.get(ty, "%s%s 짓고 싶어요." % [ty, josa(ty, "을", "를")])
+	var l := {"id": _letter_id, "kind": "wish", "t": t, "from": who.id, "name": who.name, "type": ty, "text": text, "state": "open"}
+	letters.append(l)
+	speak(who, "거인님, 소원이 있어요", 6)
+	return l
+
+
+## [들어준다] — 믿음↑, 그 건물이 우선순위 맨 위, 짓는 속도 ×1.5 (비용 없음)
+func grant_wish(id: int) -> bool:
+	for l: Dictionary in letters:
+		if int(l["id"]) != id or l["kind"] != "wish" or l["state"] != "open":
+			continue
+		l["state"] = "granted"
+		var ty: String = l["type"]
+		var site: Building = null
+		for b in buildings:
+			if b.is_site() and b.site_type() == ty and not b.wished:
+				site = b
+				break
+		if site != null:
+			site.wished = true
+		else:
+			wishes.append(ty)
+		bless_all(Balance.WISH_BELIEF)
+		_update_belief(0.0)
+		var who := person(int(l["from"]))
+		if who != null:
+			speak(who, "거인님이 들어주셨다!", 7)
+		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], ty])
+		return true
+	return false
+
+
+# ── 제물 ──
+## 남는 물건 {물건: 개수} — 마을이 만드는 물건만 (일터가 있는 것). 넉넉한 양의 절반·짓는 데 줄 몫·식량 하루 반치는 남긴다
+func surplus() -> Dictionary:
+	var out := {}
+	var food_have := 0.0
+	for k: String in Balance.FOODS:
+		food_have += float(stock.get(k, 0.0))
+	var food_spare := food_have - _food_people() * DAY / Balance.FOOD_IV * Balance.OFFER_FOOD_KEEP_DAYS
+	var items: Array = Balance.PRODUCER.keys()
+	items.sort_custom(func(a: String, b: String) -> bool: return is_favourite(a) and not is_favourite(b))
+	for item: String in items:
+		if not _has_built(Balance.PRODUCER[item]):
+			continue
+		var have := float(stock.get(item, 0.0))
+		var s := 0.0
+		if item in Balance.FOODS:
+			s = clampf(food_spare, 0.0, have)
+			food_spare -= s
+		else:
+			s = have - float(Balance.ENOUGH.get(item, 0.0)) * Balance.OFFER_KEEP
+			if item == "판자" or item == "돌":
+				s -= _owed(item)
+		if s >= 1.0:
+			out[item] = s
+	return out
+
+
+## 바치는 비율 = 0.3 + 0.7 × 마을 믿음 (좋아하시는 물건은 +0.2)
+func offer_factor(item := "") -> float:
+	var f := Balance.OFFER_BASE + Balance.OFFER_FAITH * faith / 100.0
+	if item != "" and is_favourite(item):
+		f += Balance.OFFER_FAV_BONUS
+	return clampf(f, 0.0, 1.0)
+
+
+## 저녁 기도 — 제단에 제물을 올린다. 올린 것 {물건: 개수}
+func evening_offering() -> Dictionary:
+	_expire_offerings()
+	var by := PackedInt32Array()
+	for p in people:
+		if p.age >= Balance.AGE_ADULT:
+			by.append(p.id)
+	if by.is_empty():
+		return {}
+	var starving := _starving()
+	var got := {}
+	var sp := surplus()
+	for item: String in sp:
+		if item in Balance.FOODS and starving and fear < Balance.OFFER_FEAR_FOOD:
+			continue                      # 굶주리는 마을은 식량을 바치지 않는다
+		var amt := floori(float(sp[item]) * offer_factor(item))
+		if amt < 1:
+			continue
+		stock[item] = float(stock[item]) - amt
+		altar.append({"item": item, "amt": amt, "t": t, "by": by})
+		got[item] = amt
+	if starving and fear >= Balance.OFFER_FEAR_FOOD:     # 두려움이 높은 마을은 굶으면서도 바친다 (연대기의 어두운 이야기)
+		var dark := false
+		for item: String in ["빵", "밀", "건량"]:
+			var amt := floori(float(stock.get(item, 0.0)) * Balance.OFFER_FEAR_FOOD_SHARE)
+			if amt >= 1:
+				stock[item] = float(stock[item]) - amt
+				altar.append({"item": item, "amt": amt, "t": t, "by": by})
+				got[item] = int(got.get(item, 0)) + amt
+				dark = true
+		if dark:
+			log_line("굶주리는 저녁에도 사람들은 마지막 곡식을 제단에 올렸다. 거인님이 노하실까 두려웠다.")
+	if not got.is_empty():
+		if int(stats.get("offered", 0)) == 0:
+			var first: String = got.keys()[0]
+			log_line("저녁 기도 때 사람들이 모닥불 곁 돌 제단에 남는 %s%s 바쳤다." % [first, josa(first, "을", "를")])
+		stats["offered"] = int(stats.get("offered", 0)) + 1
+		var who := person(by[econ_rng.randi() % by.size()])
+		if who != null and not who.sleeping:
+			speak(who, "거인님, 받아 주세요", 6)
+	return got
+
+
+## 이틀이 지난 제물은 창고로 돌아간다 ("거인님이 받지 않으셨다")
+func _expire_offerings() -> void:
+	if altar.is_empty():
+		return
+	var keep: Array = []
+	var back := false
+	for o: Dictionary in altar:
+		if t - float(o["t"]) >= Balance.OFFER_DAYS - HOUR:
+			stock[o["item"]] = float(stock.get(o["item"], 0.0)) + float(o["amt"])
+			back = true
+		else:
+			keep.append(o)
+	altar = keep
+	if back and int(stats.get("offer_back", 0)) == 0:
+		log_line("거인님이 받지 않으신 제물을 사람들이 조용히 창고로 되돌렸다.")
+	if back:
+		stats["offer_back"] = int(stats.get("offer_back", 0)) + 1
+
+
+## 제단의 제물 {물건: 개수}
+func altar_items() -> Dictionary:
+	var out := {}
+	for o: Dictionary in altar:
+		out[o["item"]] = int(out.get(o["item"], 0)) + int(o["amt"])
+	return out
+
+
+## [받기] — 그 물건을 모두 거인의 장터에 판다 → 받은 지폐. 바친 사람 믿음↑, 그 물건은 '좋아하시는 것'
+func take_offering(item: String) -> float:
+	var amt := 0
+	var givers := {}
+	var keep: Array = []
+	for o: Dictionary in altar:
+		if o["item"] == item:
+			amt += int(o["amt"])
+			for id in (o["by"] as PackedInt32Array):
+				givers[id] = true
+		else:
+			keep.append(o)
+	if amt <= 0:
+		return 0.0
+	altar = keep
+	var got := Market.sell(item, amt)
+	var was := is_favourite(item)
+	favourites[item] = float(favourites.get(item, 0.0)) + amt
+	var seen: Resident = null
+	for id: int in givers:
+		var p := person(id)
+		if p != null:
+			p.belief = minf(1.0, p.belief + Balance.OFFER_BELIEF)
+			if seen == null and not p.sleeping:
+				seen = p
+	_update_belief(0.0)
+	if seen != null:
+		speak(seen, "거인님이 받으셨다!", 6)
+	if int(stats.get("taken", 0)) == 0:
+		log_line("제단의 %s%s 하늘로 사라졌다. 사람들은 \"거인님이 받으셨다!\" 하고 외쳤다." % [item, josa(item, "이", "가")])
+	stats["taken"] = int(stats.get("taken", 0)) + 1
+	if not was and is_favourite(item):
+		log_line("사람들은 거인님이 %s%s 좋아하신다고 믿게 되었다." % [item, josa(item, "을", "를")])
+	return got
+
+
+## [모두 받기]
+func take_all() -> float:
+	var s := 0.0
+	for item: String in altar_items().keys():
+		s += take_offering(item)
+	return s
+
+
+## [강제로 거두기] 전에 보여 줄 '마을에 생기는 일' (UI 문구)
+func force_preview(item: String, amt: int) -> String:
+	var have := float(stock.get(item, 0.0))
+	amt = mini(amt, floori(have))
+	var line := ""
+	if item in Balance.FOODS:
+		var day_need := maxf(1.0, _food_people() * DAY / Balance.FOOD_IV)
+		var left := (food_total() - amt) / day_need
+		if left < 1.0:
+			line = "먹을 것이 하루치도 안 남아요"
+		elif left < 2.0:
+			line = "먹을 것이 하루치밖에 안 남아요"
+		elif left < 3.0:
+			line = "먹을 것이 이틀치밖에 안 남아요"
+		else:
+			line = "먹을 것이 %d일치 남아요" % int(left)
+		if _starving():
+			line += " — 굶주리는 중이라 두려움이 크게 늘어요"
+	else:
+		var left := have - amt
+		var owed := _owed(item) if (item == "판자" or item == "돌") else 0
+		if owed > left:
+			line = "%s%s 모자라 짓던 건물이 늦어져요" % [item, josa(item, "이", "가")]
+		elif Balance.ENOUGH.has(item) and left < float(Balance.ENOUGH[item]) * 0.25:
+			line = "%s%s 거의 남지 않아요" % [item, josa(item, "이", "가")]
+		else:
+			line = "%s %d개가 남아요" % [item, int(left)]
+	return line + ". 믿음이 줄고 두려움이 늘어요."
+
+
+## [강제로 거두기] — 창고에서 직접 가져감 → 지폐. 100지폐어치마다 모두 믿음 −0.01 · 두려움 +0.02 (굶주릴 때 식량이면 ×3)
+func force_take(item: String, amt: int) -> float:
+	amt = mini(amt, floori(float(stock.get(item, 0.0))))
+	if amt <= 0 or not Balance.PRICE.has(item):
+		return 0.0
+	var food := item in Balance.FOODS
+	var starving := _starving()
+	stock[item] = float(stock[item]) - amt
+	var worth := Market.sell(item, amt)
+	var k := worth / Balance.FORCE_PER * (Balance.FORCE_FOOD_STARVING if food and starving else 1.0)
+	for p in people:
+		p.belief = clampf(p.belief - Balance.FORCE_BELIEF * k, 0.0, 1.0)
+		raise_fear(p, Balance.FORCE_FEAR * k)
+	recalc_fear()
+	if food:
+		on_food_taken()                 # HEALTH.md 4: 굶주릴 때 식량을 거두면 모두 +0.1
+	_update_belief(0.0)
+	stats["forced"] = int(stats.get("forced", 0)) + 1
+	log_line("창고의 %s%s 하늘로 사라졌다. 사람들은 \"거인님이 노하셨나…\" 하고 수군거렸다." % [item, josa(item, "이", "가")])
+	var awake := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
+	if not awake.is_empty():
+		speak(awake[econ_rng.randi() % awake.size()], "거인님이 노하셨나…", 6)
+	return worth
+
+
+# ── 건물 사 주기 ──
+## 지폐로 산 건물을 거인이 고른 자리(spot — 비우면 촌장이 고를 자리)에 완성된 채 내려놓는다 = 기적 (RESIDENT_AI 2.1)
+func buy_building(type: String, spot: Variant = null) -> Building:
+	if not Balance.SHOP.has(type) or int(Balance.B[type]["era"]) > era:
+		return null
+	var cost := float(Balance.SHOP[type])
+	if not Market.can_pay(cost):
+		return null
+	var p: Vector2
+	if spot == null:
+		var s: Variant = find_spot(type)
+		if s == null:
+			return null
+		p = s
+	else:
+		p = spot
+		var size: float = Balance.B[type]["size"]
+		if not is_free(p.x, p.y, size):
+			return null
+		_clear_trees(p, size)
+	Market.pay(cost)
+	var b := add_building(type, p.x, p.y, true)
+	b.bought = true
+	stats["bought"] = int(stats.get("bought", 0)) + 1
+	reveal_building(b)
+	bless_all(Balance.BOUGHT_BELIEF)
+	_update_belief(0.0)
+	wishes.erase(type)
+	for l: Dictionary in letters:
+		if l["kind"] == "wish" and l["type"] == type and l["state"] != "done":
+			l["state"] = "done"
+	log_line("하늘에서 %s%s 통째로 내려왔다! 사람들은 기적이라며 무릎을 꿇었다." % [type, josa(type, "이", "가")])
+	var near := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
+	near.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
+	for i in mini(2, near.size()):
+		speak(near[i], "기적이다!" if i == 0 else "하늘에서 %s%s 내려왔어!" % [type, josa(type, "이", "가")], 7)
+	return b
+
+
+# ── 분가 (기획서 3.1 · 13.1) ──
+func _check_split() -> void:
+	if territory_full() < Balance.SPLIT_FULL:
+		_full_since = -1.0
+		return
+	if _full_since < 0.0:
+		_full_since = t
+		return
+	if t - _full_since < Balance.SPLIT_AFTER or not open_letters("split").is_empty():
+		return
+	var movers := split_movers()
+	if movers.is_empty():
+		return
+	var who: Resident = movers[0]
+	_letter_id += 1
+	letters.append({"id": _letter_id, "kind": "split", "t": t, "from": who.id, "name": who.name, "type": "",
+		"text": "새 땅으로 떠나고 싶어요. 여기는 이제 집 지을 땅이 없어요.", "state": "open"})
+	speak(who, "새 땅으로 떠나고 싶어요", 7)
+	log_line("집 지을 땅이 바닥나자 젊은 부부들이 안개 너머의 새 땅을 이야기하기 시작했다.")
+
+
+## 떠날 사람들 = 젊은 부부 1~3쌍 + 그 아이들 (촌장 가족·탐험 중인 사람은 남고, 옛 마을에 부부 둘은 남긴다)
+func split_movers() -> Array[Resident]:
+	var c := chief()
+	var wives: Array[Resident] = []
+	var couples := 0
+	for w in people:
+		if w.sex != "f" or w.partner < 0:
+			continue
+		couples += 1
+		var h := person(w.partner)
+		if h == null or w.age < Balance.AGE_ADULT or w.age >= Balance.BIRTH_WIFE_MAX or h.age < Balance.AGE_ADULT:
+			continue
+		if c != null and (w.id == c.id or h.id == c.id):
+			continue
+		if w.id == explorer or h.id == explorer:
+			continue
+		wives.append(w)
+	var n := mini(mini(int(Balance.SPLIT_COUPLES[1]), wives.size()), couples - Balance.OFFLINE_MIN_COUPLES)
+	var out: Array[Resident] = []
+	if n < int(Balance.SPLIT_COUPLES[0]):
+		return out
+	wives.sort_custom(func(a: Resident, b: Resident) -> bool: return a.age < b.age)
+	for i in n:
+		for q in household_of(wives[i]):
+			if not q in out:
+				out.append(q)
+	return out
+
+
+## 떠나는 사람 몫의 창고 물자 (옛 창고에서 덜어 냄)
+func split_stock(n_movers: int) -> Dictionary:
+	var share := float(n_movers) / maxf(1.0, float(people.size())) * Balance.SPLIT_STOCK_SHARE
+	# 첫 집 한 채·이틀 먹을 몫은 챙겨 간다 (옛 창고의 절반까지) — (정함)
+	var food2 := n_movers * DAY / Balance.FOOD_IV * 2.0
+	var least := {"판자": 10.0, "돌": 4.0, "도구": 2.0, "건량": food2, "밀": food2, "빵": food2}
+	var out := {}
+	for k: String in stock:
+		var have := float(stock[k])
+		var take := floorf(maxf(have * share, minf(have * 0.5, float(least.get(k, 0.0)))))
+		stock[k] = have - take
+		out[k] = take
+	return out
+
+
+## 사람들을 새 무리 nv로 옮긴다 (JarWorld.split_out이 부름)
+func move_people_to(nv: Village, movers: Array[Resident]) -> void:
+	for r in movers:
+		ResidentAI.cancel(r)
+		if r.job >= 0:
+			var b := bld(r.job)
+			if b != null:
+				b.worker = -1
+			nv.stock["도구"] = float(nv.stock.get("도구", 0.0)) + 1.0     # 쓰던 도구는 들고 간다
+			r.job = -1
+		r.home = -1
+		if explorer == r.id:
+			explorer = -1
+		people.erase(r)
+		_people_by_id.erase(r.id)
+		r.x = nv.fire.x + econ_rng.randf_range(-1.5, 1.5)
+		r.y = nv.fire.y + econ_rng.randf_range(-1.5, 1.5)
+		r.px = r.x
+		r.py = r.y
+		nv.people.append(r)
+		nv._people_by_id[r.id] = r
+	nv.assign_homes()
+	assign_homes()
+	met[nv.sid] = t
+	nv.met[sid] = t
+	stats["split"] = int(stats.get("split", 0)) + 1
+	for l: Dictionary in letters:
+		if l["kind"] == "split" and l["state"] == "open":
+			l["state"] = "done"
+	_full_since = -1.0
+	var nm: String = movers[0].name
+	log_line("%s의 가족을 비롯한 %d명이 새 땅을 찾아 떠났다. 남은 사람들은 마을 어귀까지 배웅했다." % [nm, movers.size()])
+	nv.log_line("%s의 가족을 비롯한 %d명이 옛 마을을 떠나 이 땅에 처음으로 불을 피웠다." % [nm, movers.size()])
+	recalc_fear()
+	nv.recalc_fear()
+	_update_belief(0.0)
+	nv._update_belief(0.0)
 
 
 # ───────────────────────── 점검 (테스트용) ─────────────────────────
@@ -1607,9 +2210,11 @@ static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, s
 func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> void:
 	rng.seed = seed_v
 	gene_rng.seed = seed_v * 7919 + 101
+	econ_rng.seed = seed_v * 6151 + 29
 	_init_health(seed_v)
 	water = ww
 	kit = kit_def
+	next_id = int(kit_def.get("id_base", 1))      # 분가: 옛 마을 사람 번호와 겹치지 않게
 	sid = sid_v
 	center = spot
 	start_clock = ww.start_clock
@@ -1623,6 +2228,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 	paths.fill(0.0)
 	var fo: Array = kit_def["fire"]
 	fire = spot + Vector2(fo[0], fo[1])
+	altar_pos = fire + ALTAR_OFFSET
 	# 숲: 둘레 숲 무리를 나무 하나하나로 (키트 자리 바로 곁은 치움)
 	for f: Dictionary in ww.forests:
 		var fc := Vector2(f["x"], f["y"])
@@ -1689,8 +2295,13 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 	if people.all(func(p: Resident) -> bool: return p.grade == 0) and ids.size() > 4:
 		ids[4].grade = 1
 	assign_homes()
-	log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
-	log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
+	if kit_def.get("split", false):       # 분가 — 사람은 JarWorld.split_out이 옛 마을에서 옮겨 온다. 하늘 낟알은 없다
+		_arrival_manna = true
+		manna_ended = true
+		first_harvest_t = 0.0
+	else:
+		log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
 	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)
 
 
@@ -1801,6 +2412,8 @@ func climate() -> String:
 ## 창고 물자의 '넉넉함' — 추운 철에는 통나무를 집마다 더 쌓는다 (땔감)
 func enough(k: String) -> float:
 	var e: float = Balance.ENOUGH.get(k, INF)
+	if is_favourite(k):
+		e *= Balance.FAV_ENOUGH       # 거인님이 좋아하시는 물건은 더 만든다 (기획서 11.1)
 	if k == "통나무" and cold_season:
 		e += houses().size() * Balance.FUEL_STOCK_PER_HOUSE
 	return e

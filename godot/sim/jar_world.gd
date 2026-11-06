@@ -115,7 +115,55 @@ func advance(seconds: float) -> void:
 		var chunk := minf(day_left, Balance.HOUR)
 		pv.advance(chunk)
 		day_left -= chunk
+		_auto_split()
 		_update_interest()
+
+
+# ───────────────────────── 분가 (기획서 3.1 · 13.1) ─────────────────────────
+## 무리 from의 젊은 부부들(+아이들)이 (x, y)에 새 무리를 세운다 — 거인이 안개 밖 자리를 고르면 (키트 놓기와 같은 화면).
+## 못 하면 null (떠날 사람이 없거나 자리가 안 됨). 새 무리는 영역 64칸, 창고 하나와 나눠 받은 물자로 시작한다.
+func split_out(from: Village, x: float, y: float) -> Village:
+	var movers := from.split_movers()
+	if movers.is_empty() or not kit_spot_ok(x, y)["ok"]:
+		return null
+	var kit := {"name": "분가", "buildings": [["창고", 0.0, 0.0]], "fire": [2.2, 1.6], "people": [],
+		"stock": from.split_stock(movers.size()), "split": true, "id_base": from.next_id + 100000}
+	var nv := place_kit(x, y, kit)
+	nv.settlement_name = "%d번째 무리 (분가)" % settlements.size()
+	nv._next_wish_t = nv.t + Balance.WISH_FIRST
+	from.move_people_to(nv, movers)
+	_update_interest()
+	return nv
+
+
+## 거인이 없을 때 분가가 스스로 고르는 가까운 좋은 자리 (없으면 null)
+func split_spot(from: Village) -> Variant:
+	for d: float in [110.0, 140.0, 170.0, 210.0, 260.0]:
+		var ok_p: Variant = null
+		for i in 16:
+			var a := i / 16.0 * TAU
+			var p := from.center + Vector2(cos(a), sin(a)) * d
+			var r := kit_spot_ok(p.x, p.y)
+			if r["ok"] and r["warn"] == "":
+				return p
+			if r["ok"] and ok_p == null:
+				ok_p = p
+		if ok_p != null:
+			return ok_p
+	return null
+
+
+## 분가 편지가 하루 넘게 열려 있고 거인이 보고 있지 않으면 스스로 떠난다
+func _auto_split() -> void:
+	for s: Village in settlements.duplicate():
+		if s.is_watching():
+			continue
+		for l: Dictionary in s.open_letters("split"):
+			if s.t - float(l["t"]) >= Balance.SPLIT_AFTER:
+				var p: Variant = split_spot(s)
+				if p != null:
+					split_out(s, (p as Vector2).x, (p as Vector2).y)
+				break
 
 
 func rotate_jar() -> void:

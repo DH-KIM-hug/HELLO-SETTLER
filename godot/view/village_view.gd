@@ -25,6 +25,8 @@ var _manna: Node3D
 var _manna_key := ""
 var _fire: Node3D
 var _flames: Array[MeshInstance3D] = []
+var _altar: Node3D              # 모닥불 곁 작은 돌 제단 (기획서 11.1) + 올려진 제물 더미
+var _altar_pile: MeshInstance3D
 var _props: Node3D
 var _prop_key := ""
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
@@ -732,12 +734,20 @@ func _build_fire() -> void:
 	_flames.append(_box(_fire, Vector3(0.18, 0.3, 0.18), Vector3(0, 0.5, 0.0), Style.FLAME2, 0.8))
 	for a in 6:
 		_box(_fire, Vector3(0.2, 0.14, 0.2), Vector3(cos(a) * 0.55, 0.07, sin(a) * 0.55), Style.STONE_DARK)
+	# 제단: 납작한 돌 두 겹 + 제물 더미 (제물이 있을 때만)
+	_altar = _node(self)
+	_box(_altar, Vector3(0.8, 0.22, 0.55), Vector3(0, 0.11, 0), Style.STONE_DARK, 0.2)
+	_box(_altar, Vector3(0.62, 0.14, 0.42), Vector3(0, 0.29, 0), Style.STONE, 0.2)
+	_altar_pile = _box(_altar, Vector3(0.36, 0.16, 0.26), Vector3(0, 0.44, 0), Style.GRAIN, 0.5)
 
 
 func _animate_fire() -> void:
 	if _fire == null or _flames.is_empty():
 		return
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
+	if _altar != null:
+		_altar.position = Vector3(v.altar_pos.x, gy(v.altar_pos.x, v.altar_pos.y), v.altar_pos.y)
+		_altar_pile.visible = not v.altar.is_empty()
 	var f := int(_anim_t * 8.0) % 3
 	var hs := [1.0, 1.25, 0.85]
 	_flames[0].scale.y = hs[f]

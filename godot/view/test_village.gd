@@ -32,6 +32,7 @@ var lineup: Node3D
 var _terrain_t := 0.0
 var _drag := false
 var detail: ResidentDetail
+var altar_sheet: AltarSheet          # 제단 시트 (UI 02 — 제물 받기·소원 들어주기·건물 사 주기·강제로 거두기)
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
 var _tap_ok := false
@@ -244,6 +245,13 @@ func _setup_ui() -> void:
 	skip_btn.focus_mode = Control.FOCUS_NONE
 	skip_btn.pressed.connect(func() -> void: clock.start_skip_night())
 	tbar.add_child(skip_btn)
+	var altar_btn := Button.new()
+	altar_btn.text = "제단"
+	altar_btn.focus_mode = Control.FOCUS_NONE
+	altar_btn.pressed.connect(func() -> void:
+		detail.close()
+		altar_sheet.open())
+	tbar.add_child(altar_btn)
 	var bar := HBoxContainer.new()
 	_pin_bottom(bar, 0.0, 6.0, 34.0)
 	bar.add_theme_constant_override("separation", 3)
@@ -267,6 +275,10 @@ func _setup_ui() -> void:
 	dlayer.add_child(detail)
 	detail.follow_changed.connect(func(id: int, on: bool) -> void: follow_id = id if on else -1)
 	detail.closed.connect(func() -> void: follow_id = -1)
+	altar_sheet = AltarSheet.new()
+	altar_sheet.setup(village)
+	dlayer.add_child(altar_sheet)
+	altar_sheet.bought.connect(func(_b: Building) -> void: view.sync(0.0, true))
 
 
 ## 화면 아래 가장자리에 붙임 (세로로 긴 화면에서도 아래에 — 넓히기 비율)
@@ -296,9 +308,9 @@ func status_text() -> String:
 			elders += 1
 	var c := v.chief()
 	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "×%d" % int(clock.speed())
-	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
+	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리 · 지폐 %d\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
 		v.fmt_time(v.t), spd, " (멈춤)" if paused else "",
-		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(),
+		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(), roundi(Market.notes),
 		int(v.food_total()), int(v.stock["판자"]), int(v.stock["돌"]), int(v.stock["통나무"]),
 		Balance.ERAS[v.era], int(v.faith), c.name if c != null else "-", Engine.get_frames_per_second(), _sim_ms]
 
@@ -405,6 +417,7 @@ func pick_resident(sp: Vector2) -> Resident:
 func _on_tap(sp: Vector2) -> void:
 	var r := pick_resident(sp)
 	if r != null:
+		altar_sheet.close()
 		detail.open(r)
 	else:
 		village.tap_glass(false)      # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)

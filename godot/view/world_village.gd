@@ -35,6 +35,7 @@ func _make_terrain() -> JarTerrain:
 
 
 func _after_ready() -> void:
+	altar_sheet.set_meta("world", world)        # 분가 편지 [새 땅 고르기] (지금은 가까운 좋은 자리를 바로 — 안개 속 고르기 화면은 나중)
 	cam.ground_center = village.center
 	cam.ground_radius = WorldCfg.REVEAL_KIT + 6.0
 	cam.ppu_min = 0.3

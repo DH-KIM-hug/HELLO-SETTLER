@@ -48,9 +48,10 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 		var used := 0.0
 		if s["k"] == "walk":
 			var to := Vector2(s["x"], s["y"])
-			var d := to - Vector2(r.x, r.y)
+			var from := Vector2(r.x, r.y)
+			var d := to - from
 			var dd := d.length()
-			var sp := r.walk_speed()
+			var sp := r.walk_speed() * v.path_mult(r.x, r.y)     # 흙길 위는 빠르다 (기획서 6.7)
 			var can := sp * left
 			if dd > 1e-4:
 				r.facing = atan2(d.x, d.y)
@@ -59,12 +60,12 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				r.y = to.y
 				used = dd / sp
 				r.steps.pop_front()
-				v.mark_path(r.x, r.y, dd)
+				v.mark_path_seg(from, to)
 			else:
 				r.x += d.x / dd * can
 				r.y += d.y / dd * can
 				used = left
-				v.mark_path(r.x, r.y, can)
+				v.mark_path_seg(from, Vector2(r.x, r.y))
 			r.anim = "carry" if r.carry != "" else "walk"
 		else:
 			var speed: float = r.job_speed(_job_kind(v, r)) if s["fast"] else 1.0
@@ -131,7 +132,7 @@ static func decide(v: Village, r: Resident) -> void:
 				cand["haul"] = Balance.ACT_BASE["haul"] * minf(1.5, 1.0 + 0.1 * n) * Balance.W_DAY_WORK
 			var site := _ready_site(v)
 			if site != null:
-				var g := 1.0 + (v.faith / 100.0 if site.by_giant else 0.0)
+				var g := v.build_mult(site)          # 들어준 소원의 터는 더 서둘러 짓는다
 				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
 	if not night and r.age >= 2.5:
 		var worries := 1.0 + (1.0 if v.deficit > 0.0 else 0.0) + (0.5 if r.home < 0 else 0.0)
@@ -552,12 +553,12 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var put := func() -> void: v.stock[k] = float(v.stock.get(k, 0.0)) + take
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
-	# ② 건설 현장 ← 창고 자재 (거인이 정한 터 먼저)
+	# ② 건설 현장 ← 창고 자재 (들어준 소원의 터 먼저)
 	var sites: Array[Building] = []
 	for b in v.buildings:
 		if b.is_site():
 			sites.append(b)
-	sites.sort_custom(func(a: Building, c: Building) -> bool: return (a.by_giant and not c.by_giant) or (a.by_giant == c.by_giant and a.id < c.id))
+	sites.sort_custom(func(a: Building, c: Building) -> bool: return (a.wished and not c.wished) or (a.wished == c.wished and a.id < c.id))
 	for b in sites:
 		for k: String in ["판자", "돌"]:
 			var lack := b.need(k) - int(b.delivered[k]) - int(b.incoming[k])
@@ -658,7 +659,7 @@ static func _ready_site(v: Village) -> Building:
 	var best: Building = null
 	for b in v.buildings:
 		if b.is_site() and b.materials_ready():
-			if best == null or (b.by_giant and not best.by_giant) or (b.by_giant == best.by_giant and b.id < best.id):
+			if best == null or (b.wished and not best.wished) or (b.wished == best.wished and b.id < best.id):
 				best = b
 	return best
 
@@ -676,7 +677,7 @@ static func build_task(v: Village, r: Resident) -> bool:
 	var work := func() -> void:
 		if not b.is_site():
 			return
-		b.prog += chunk * (1.2 if v.faith > 50.0 and b.by_giant else 1.0)
+		b.prog += chunk * v.build_mult(b)        # 들어준 소원 ×1.5 (기획서 6.7)
 		if b.prog >= float(Balance.B[b.site_type()]["time"]):
 			v.on_built(b)
 			v.speak(r, "%s 완성!" % b.type, 5)

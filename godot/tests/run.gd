@@ -1,5 +1,5 @@
 ## 시뮬레이션 테스트 (헤드리스) — 실패하면 0이 아닌 값으로 끝난다.
-## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health)
+## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 영역·제물·소원만: -- economy · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health)
 extends SceneTree
 
 const DAYS := 9
@@ -26,6 +26,11 @@ func _initialize() -> void:
 		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
 		quit(1 if fails > 0 else 0)
 		return
+	if "economy" in OS.get_cmdline_user_args():        # -- economy : 영역·자율 건설·소원·길·제물·장터·분가만 (v4.0)
+		load("res://tests/economy_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
+		quit(1 if fails > 0 else 0)
+		return
 	if "genetics" in OS.get_cmdline_user_args():       # -- genetics : 7단계 겉모습 유전자·혈통 테스트만
 		load("res://tests/genetics_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -44,6 +49,8 @@ func _initialize() -> void:
 	load("res://tests/genetics_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	# 건강·기후·두려움 (tests/health_tests.gd)
 	load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
+	# v4.0 — 영역·자율 건설·소원·길·제물·장터·분가 (tests/economy_tests.gd)
+	load("res://tests/economy_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
 	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
 		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
@@ -243,7 +250,7 @@ func test_village_opening() -> void:
 func test_house_bottleneck() -> void:
 	print("== 집 크기 병목")
 	var v := Village.new_prototype(5)
-	v.auto_build = false
+	v.chief_off = true          # 테스트 전용: 촌장이 짓지 않게
 	v.water.offline = true
 	v.step_dt = 30.0
 	for p in v.people.duplicate():
