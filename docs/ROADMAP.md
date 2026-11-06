@@ -98,9 +98,9 @@
 
 - [x] 병 돌리기 → 등불 옮기기 옛 표현 (GD 5.4·6.1·6.3·10·19.1·21, RENDERING 2.2, WE 2.5, GODOT_KICKOFF 4)
 - [x] 배속 ×1~×60 (GD 21, BUILDINGS 1, HANDOFF)
-- [ ] 오프라인 = 등불 시간 정밀 (GD 14 머리말, SAVE 6, BUILDINGS 1·8, BALANCE 4)
-- [ ] 주민 판매·이사·종이배 잔재 (BUILDINGS 1·6·8, BALANCE v2 본문, OPENING 4·단계 4, GD 8.2·19.1, HANDOFF)
-- [ ] 두 번째 병 6,000 (BALANCE v3-4)
+- [x] 오프라인 = 등불 시간 정밀 (GD 14 머리말, SAVE 6, BUILDINGS 1·8, BALANCE 4)
+- [~] 주민 판매·이사·종이배 잔재 (BUILDINGS·OPENING·BALANCE 일부 고침, GD 8.2·19.1·HANDOFF 남음) (BUILDINGS 1·6·8, BALANCE v2 본문, OPENING 4·단계 4, GD 8.2·19.1, HANDOFF)
+- [x] 두 번째 병 6,000 (BALANCE v3-4)
 - [ ] 상점 건물·키트 업그레이드 목록 통일 (SHOP 2.1 ↔ BALANCE v3-4 ↔ 코드)
 - [ ] 글꼴 (GODOT_KICKOFF 2, HANDOFF)
 - [ ] 렌더링: 도트 시대 내용(GODOT_KICKOFF 1) 정리, 카메라 각도 48° 기록

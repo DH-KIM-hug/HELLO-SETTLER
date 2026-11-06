@@ -67,4 +67,4 @@
 - `SaveManager` 자동 로드: `save_all()`, `save_giant()`, `load_all()`, `catch_up(elapsed)`.
 - 각 시뮬 객체에 `to_dict()/from_dict()` (Village·Resident·Building·Health·JarAir·Mold·Flora·Market…). 난수는 `RandomNumberGenerator.state`.
 - 테스트: 저장→불러오기 후 N시간 진행 결과 == 저장 없이 N시간 진행 결과 (결정론). 옛 버전 저장 파일을 테스트 자료로 두고 매번 불러오기 확인. 깨진 칸 복구.
-- 요약 계산은 정밀 계산과 **평균이 맞도록** 테스트 (30일 인구 곡선 비교, 허용 ±15%).
+- (v1.1부터 요약 계산 없음 — 등불 시간까지 늘 정밀 계산. 화면 밖 마을의 요약 계산은 성능 작업 ROADMAP B11에서 따로)
