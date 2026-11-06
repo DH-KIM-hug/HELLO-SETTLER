@@ -1,0 +1,31 @@
+{
+  "note": "Short English barks for tiny residents. Speech bubbles stay Korean; voices are flavour, not translation. Keep each line under ~1.2 s.",
+  "voices": {
+    "girl":      "small girl, 7 years old, bright, curious, rural",
+    "boy":       "small boy, 8 years old, cheeky, energetic",
+    "woman":     "young village woman, warm, kind, slightly breathy",
+    "man":       "young farmer man, friendly, a bit gruff",
+    "old_woman": "old village grandmother, gentle, slow",
+    "old_man":   "old village grandfather, wise, raspy"
+  },
+  "lines": [
+    {"id": "lid_open",      "event": "뚜껑 열림",          "voices": ["girl","man","old_woman"], "texts": ["The sky is open!", "Look up!", "Whoa..."]},
+    {"id": "tap",           "event": "유리 톡",            "voices": ["boy","woman","old_man"],  "texts": ["What was that?", "Eek!", "The sky shook!"]},
+    {"id": "tap_hard",      "event": "세게 톡 (두려움)",    "voices": ["girl","woman"],           "texts": ["Hide!", "Run!"]},
+    {"id": "offering_taken","event": "제물 받음",           "voices": ["woman","man","old_woman"],"texts": ["The giant took it!", "Thank you!", "A blessed day!"]},
+    {"id": "wish_granted",  "event": "소원 들어줌",         "voices": ["girl","boy","man"],       "texts": ["Our wish!", "Hooray!"]},
+    {"id": "miracle",       "event": "건물이 하늘에서",      "voices": ["man","old_man","girl"],   "texts": ["A miracle!", "From the sky!"]},
+    {"id": "forced_take",   "event": "강제로 거둠",          "voices": ["woman","old_man"],        "texts": ["Not our bread...", "Why?"]},
+    {"id": "mold_seen",     "event": "곰팡이 무리",          "voices": ["boy","woman","man"],      "texts": ["Fuzzies!", "Get the torch!", "Shoo! Shoo!"]},
+    {"id": "mold_gone",     "event": "곰팡이 쫓아냄",        "voices": ["man","girl"],             "texts": ["Got 'em!", "Ha!"]},
+    {"id": "mushroom",      "event": "버섯 숲",              "voices": ["boy","girl","old_woman"], "texts": ["It's huge!", "Can we eat it?", "Not the spotty one!"]},
+    {"id": "seeds",         "event": "꽃씨 날림 / 불기",     "voices": ["girl","boy","woman"],     "texts": ["It's snowing!", "Wheee!", "So pretty..."]},
+    {"id": "hello",         "event": "주민 누름",            "voices": ["girl","boy","woman","man","old_woman","old_man"], "texts": ["Hm?", "Hello there!", "Yes?"]},
+    {"id": "sick",          "event": "앓음",                 "voices": ["woman","man","old_man"],  "texts": ["*cough cough*", "I don't feel well..."]},
+    {"id": "hungry",        "event": "굶주림",               "voices": ["boy","woman"],            "texts": ["So hungry..."]},
+    {"id": "work",          "event": "일 (가끔)",            "voices": ["man","woman"],            "texts": ["Heave!", "Almost done!"]},
+    {"id": "wedding",       "event": "혼례·축제",            "voices": ["man","woman","old_woman"],"texts": ["Cheers!", "Hooray!"]},
+    {"id": "baby",          "event": "출생",                 "voices": ["woman"],                  "texts": ["Welcome, little one."]},
+    {"id": "prayer",        "event": "저녁 기도 (허밍)",      "voices": ["woman","old_woman","man"],"texts": ["Mmm-mm-mmm..."]}
+  ]
+}
