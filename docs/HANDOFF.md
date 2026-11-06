@@ -30,6 +30,8 @@
 | 데이터·프로토타입 생성 스크립트 | `tools/gen_traits.py`, `gen_buildings.py`, `gen_balance.py`, `gen_art_list.py`, `build_prototype.py` |
 
 ## 진행 중
+- **그림체 시험** (2026-11-06): 평면 채색 일러스트풍 (`design/concept/style-test/flat_*`) vs 지금 레트로 도트 → 사용자가 보고 결정. 바꾸면 콘셉트 아트 35장·`RENDERING.md`·렌더 셰이더가 바뀐다.
+- 동물(퍼리) 주민안은 검토 후 **취소** — 주민은 사람 그대로 (사냥·가축 문제).
 - **밸런스 v2 — 문서 반영 완료** (기획서 v3.5, `BALANCE.md` 0장, `balance_v2.xlsx`). 판매가는 숙련 기준, 팔레트 64색, 열린 질문은 PvP 약탈(보류) 하나만 남음.
   - **개발 서브에이전트에 넘길 것**: 프로토타입·`godot/sim/`에 v2 규칙 적용 — `MAX_POP` 삭제, 혼인 4일·짝마다 0.5, 개인·환경 출산 배율, 숙련 성장 0.6/일·판매가 공식, 시대 점수 배율, 커튼 3단. 렌더링 LUT는 64색 `palette.json`으로.
   - **그림 쪽**: UI 시안(`design/ui-v2/`)은 48색 1차안 값 → 64색으로 바꿀 때 `UI.md`의 색 표 참고.
