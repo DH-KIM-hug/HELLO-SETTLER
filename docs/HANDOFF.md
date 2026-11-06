@@ -1,6 +1,6 @@
 # 인수인계 메모 — 다음 세션이 이어서 볼 것
 
-> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.5 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
+> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.6 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
 
 ## 작업 방식 — 세션 하나 (2026-11-06부터)
 사용자 Mac의 Claude Code 세션 **하나**가 기획을 맡고, 개발과 그림은 그 세션이 띄우는 **서브에이전트**에게 시킨다.
@@ -30,6 +30,7 @@
 | 데이터·프로토타입 생성 스크립트 | `tools/gen_traits.py`, `gen_buildings.py`, `gen_balance.py`, `gen_art_list.py`, `build_prototype.py` |
 
 ## 진행 중
+- **v3.6 시간 빨리 돌리기 + 병 시계** (6.6, 4.1): 창조 후 아침 7시 시작, ×1/×2/×4/×8·밤 건너뛰기, 수치는 병의 날짜 기준, 오프라인 ×1. 개발 반영 중.
 - **그림체 시험** (2026-11-06): 평면 채색 일러스트풍 (`design/concept/style-test/flat_*`) vs 지금 레트로 도트 → 사용자가 보고 결정. 바꾸면 콘셉트 아트 35장·`RENDERING.md`·렌더 셰이더가 바뀐다.
 - 동물(퍼리) 주민안은 검토 후 **취소** — 주민은 사람 그대로 (사냥·가축 문제).
 - **밸런스 v2 — 문서 반영 완료** (기획서 v3.5, `BALANCE.md` 0장, `balance_v2.xlsx`). 판매가는 숙련 기준, 팔레트 64색, 열린 질문은 PvP 약탈(보류) 하나만 남음.
