@@ -27,7 +27,7 @@ func all() -> void:
 	StartFlow.navigate = false
 	var old_plan := StartFlow.plan
 	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick",
-		"test_creation_stages", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
+		"test_creation_stages", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
 	StartFlow.plan = old_plan
 	StartFlow.pending_world = null
 	_clean()
@@ -268,75 +268,122 @@ func test_first_run_and_back() -> void:
 	drop(sm)
 
 
-## 단계마다 조작 하나 — 핵 크기 · 빚기 · 물 · 돌기 · 뚜껑 돌리기 · 씨앗 · 상자 · 물고기 (짠 호수 거절)
+## 단계마다 큰 단추 2~3개 (2026-11-07) — 핵 · 땅 · 물 · (뚜껑은 저절로) · 씨앗 · [풀어 주기] → 키트 자리
 func test_creation_stages() -> void:
 	var sm := manager()
 	var c := creation(CreationPlan.make(11, WorldCfg.SMALL_SIZE))
 	var plan: CreationPlan = c.get("plan")
-	c.call("set_core", 2)
-	c.call("drop_core")
-	check(plan.core == 2 and c.get("step") == "soil" and CreationPlan.load_from(sm.dir).stage == "soil", "핵 크게 → 넣기 → 흙 단계 (단계마다 저장)")
-	c.call("sculpt", 0.3, 0.2, false, 0.5)
-	c.call("sculpt", -0.4, -0.3, true, 0.5)
-	check(CreationPlan.sample(plan.sculpt, 0.3, 0.2) > 0.3 and CreationPlan.sample(plan.sculpt, -0.4, -0.3) < -0.3, "한 손가락 = 쌓기 · 두 손가락 = 파기")
-	c.call("next")
-	check(c.get("step") == "water", "[다음] → 물")
-	c.call("pour_water", 2.0)
-	check(is_equal_approx(plan.water, 1.0), "물은 넘치게 붓지 못함 (게이지 끝에서 멈춤)")
-	c.call("next")
-	check(c.get("step") == "nubs", "→ 뚜껑 안쪽 물방울 돌기")
-	for uv: Array in [[0.1, 0.1], [0.5, 0.2], [-0.5, -0.2], [0.0, 0.6]]:
-		c.call("tap_nub", uv[0], uv[1])
-	check(plan.drips.size() == 3, "물방울 돌기는 세 개까지 (%d)" % plan.drips.size())
-	c.call("tap_nub", 0.1, 0.1)
-	check(plan.drips.size() == 2, "돌기를 다시 누르면 지움")
-	c.call("next")
-	check(c.get("step") == "twist", "[뚜껑 닫기] → 돌려 잠그기")
-	c.call("twist", 0.8)
-	c.call("twist", 0.8)
-	check(c.get("step") == "twist" and int(c.get("_clicks")) == 2, "딸깍 두 번 — 아직")
-	c.call("twist", 0.8)
+	var chips: HBoxContainer = c.get("chips")
+	check(c.get("step") == "core" and chips.visible and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "크게", "핵: [작게 · 보통 · 크게]")
+	c.call("pick", 2)
+	check(plan.core == 2 and c.get("step") == "soil" and CreationPlan.load_from(sm.dir).stage == "soil", "핵 크게 → 바위 → 흙 단계 (단계마다 저장)")
+	check(chips.visible and chips.get_child_count() == 3 and (chips.get_child(0) as Button).text == "너른 들", "땅: [너른 들 · 언덕 · 산과 골짜기]")
+	c.call("pick", 2)
+	var g := plan.sculpt.duplicate()
+	check(c.get("step") == "water" and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "넉넉히", "산과 골짜기 → 물: [조금 · 알맞게 · 넉넉히]")
+	c.call("pick", 0)
 	var jw: JarWorld = c.get("_world")
-	check(jw != null and c.get("step") == "lapse", "딸깍 세 번 → 배양 (세상이 만들어짐)")
+	check(is_equal_approx(plan.water, CreationPlan.WATER_PICKS[0]) and plan.drips.size() == CreationPlan.DRIP_N, "물 조금 → 뚜껑 안쪽 돌기 %d개가 저절로" % plan.drips.size())
+	check(jw != null and c.get("step") == "lapse" and (c.get("next_btn") as Button).visible, "뚜껑이 저절로 잠기고 배양 (세상이 만들어짐) → [다음]")
+	check(jw.water.drips.size() >= 8 and jw.water.drips.size() <= 12, "세상의 물방울 호수 %d곳 (메이슨 자 8~12)" % jw.water.drips.size())
 	c.call("next")
-	check(c.get("step") == "sow", "→ 씨앗")
-	for i in 8:
-		c.call("sow", "tree", -0.5 + i * 0.01, 0.1)
+	check(c.get("step") == "sow" and (chips.get_child(1) as Button).text == "숲을 더", "→ 씨앗: [알아서 · 숲을 더 · 풀밭을 더]")
+	c.call("pick", 1)
+	check(c.get("step") == "grow" and (plan.seeds["tree"] as Array).size() > (plan.seeds["grass"] as Array).size(), "숲을 더 → 나무 씨앗이 많음 → 배양")
 	c.call("next")
-	c.call("next")
-	check(c.get("step") == "release", "배양 → 들짐승 상자 · 물고기 병")
-	var ww := jw.water
-	var salty := Vector2.INF
-	for b: Dictionary in ww.basins:
-		var bp := Vector2(b["x"], b["y"])
-		if ww.depth(ww.idx(bp.x, bp.y)) > 0.01 and WorldGen.lake_salty(ww, bp):
-			salty = bp / ww.rr
-	if salty != Vector2.INF:
-		check(not bool(c.call("release_fish", salty)) and String(c.get("_said")).contains("짜서"), "짠 호수 위에서 기울이면 '이 호수는 짜서 물고기가 살 수 없어요'")
-	else:
-		check(false, "짠 호수가 있음 (암염 보장)")
-	var dry := Vector2(0.97, 0.0)
-	for i in 40:
-		var a := TAU * i / 40.0
-		var q := Vector2(cos(a), sin(a)) * 0.5
-		var wet := false
-		for k in ww.cells_near(q * ww.rr, 12.0):
-			wet = wet or ww.depth(k) > 0.01
-		if not wet:
-			dry = q
-			break
-	check(not bool(c.call("release_fish", dry)) and String(c.get("_said")).contains("호수 위"), "물이 아닌 곳 → '호수 위에서 기울여 주세요'")
-	c.call("release_box", c.call("_default_box_uv"))
-	var fuv: Variant = c.call("_default_fish_uv")
-	check(fuv != null and bool(c.call("release_fish", fuv)), "민물 호수 위 → 물고기를 풂")
-	check(plan.animals.size() == 2 and plan.fish.size() == 2, "상자·물고기 자리가 선택에 남음")
-	c.call("next")
+	check(c.get("step") == "release" and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "풀어 주기", "→ 들짐승·물고기: [풀어 주기] 하나")
+	c.call("pick", 0)
+	check(c.get("step") == "settle" and plan.animals.size() == 2 and plan.fish.size() == 2 and not jw.water.wildlife.is_empty() and not jw.water.fish.is_empty(),
+		"풀어 주기 → 숲에 들짐승 · 민물 호수에 물고기 (자리는 알아서)")
+	var lake := false
+	var fp := Vector2(plan.fish[0], plan.fish[1]) * jw.water.rr
+	for k in jw.water.cells_near(fp, 10.0):
+		lake = lake or jw.water.depth(k) > 0.01
+	check(lake and not WorldGen.lake_salty(jw.water, fp), "물고기는 민물 호수에")
+	check(plan.sculpt == g, "고른 땅이 그대로 남음")
 	c.call("next")
 	check(StartFlow.last_target == StartFlow.GAME_SCENE and CreationPlan.load_from(sm.dir).stage == "spot", "→ 스타터킷 자리 (creation.json = spot)")
+	var myth: Array = StartFlow.pending_world.water.creation.get("myth", [])
+	check(myth.size() >= 6 and String(myth[0]).contains("뜨겁게") and String(myth[1]).contains("골짜기") and String(myth[2]).contains("조금") and String(myth[4]).contains("우거"),
+		"창세 신화가 고른 대로 (핵 크게 · 산과 골짜기 · 물 조금 · 숲을 더)")
 	StartFlow.take()
 	StartFlow.pending_world = null
 	remove(c)
 	drop(sm)
+
+
+## 단추 = 정해진 프리셋 (같은 시드 → 같은 plan) · 땅은 높낮이 차가 너른 들 < 언덕 < 산과 골짜기 · 물은 조금 < 알맞게 < 넉넉히
+func test_creation_presets() -> void:
+	var vars: Array[float] = []
+	for i in 3:
+		var p := CreationPlan.make(41, WorldCfg.SMALL_SIZE)
+		p.land_preset(i)
+		var q := CreationPlan.make(41, WorldCfg.SMALL_SIZE)
+		q.land_preset(i)
+		check(p.sculpt == q.sculpt, "땅 '%s' — 같은 시드면 같은 모양" % CreationPlan.LAND_PICKS[i])
+		var m := 0.0
+		for x in p.sculpt:
+			m += x
+		m /= p.sculpt.size()
+		var v := 0.0
+		for x in p.sculpt:
+			v += (x - m) * (x - m)
+		vars.append(v / p.sculpt.size())
+	check(vars[0] < vars[1] and vars[1] < vars[2], "높낮이 차 너른 들 %.4f < 언덕 %.4f < 산과 골짜기 %.4f" % vars)
+	var o := CreationPlan.make(42, WorldCfg.SMALL_SIZE)
+	o.land_preset(2)
+	var p41 := CreationPlan.make(41, WorldCfg.SMALL_SIZE)
+	p41.land_preset(2)
+	check(o.sculpt != p41.sculpt, "시드가 다르면 산·골짜기 자리도 다름")
+	var hi := 0.0
+	var lo := 0.0
+	for x in o.sculpt:
+		hi = maxf(hi, x)
+		lo = minf(lo, x)
+	check(hi > 0.5 and lo < -0.5, "산과 골짜기: 높은 산 (%.2f) · 깊은 골짜기 (%.2f)" % [hi, lo])
+	var d := CreationPlan.make(43, WorldCfg.SMALL_SIZE)
+	d.auto_drips()
+	var d2 := CreationPlan.make(43, WorldCfg.SMALL_SIZE)
+	d2.auto_drips()
+	var apart := true
+	for i in d.drips.size():
+		var a := Vector2(d.drips[i][0], d.drips[i][1])
+		apart = apart and a.length() < 0.7
+		for j in i:
+			apart = apart and a.distance_to(Vector2(d.drips[j][0], d.drips[j][1])) > 0.2
+	check(d.drips.size() == CreationPlan.DRIP_N and str(d.drips) == str(d2.drips) and apart, "돌기 %d개 저절로 — 같은 시드면 같은 자리 · 서로 떨어져 · 벽에서 떨어져" % d.drips.size())
+	var old := CreationPlan.make(43, WorldCfg.SMALL_SIZE)
+	old.drips = [[0.1, 0.2]]
+	old.auto_drips()
+	check(old.drips.size() == 1, "옛 저장에 찍어 둔 돌기가 있으면 그대로")
+	var sp := CreationPlan.make(44, WorldCfg.SMALL_SIZE)
+	sp.seed_preset(1)
+	var sq := CreationPlan.make(44, WorldCfg.SMALL_SIZE)
+	sq.seed_preset(1)
+	var sg := CreationPlan.make(44, WorldCfg.SMALL_SIZE)
+	sg.seed_preset(2)
+	check(str(sp.seeds) == str(sq.seeds) and (sp.seeds["tree"] as Array).size() > (sp.seeds["grass"] as Array).size() * 3
+		and (sg.seeds["grass"] as Array).size() > (sg.seeds["tree"] as Array).size() * 2, "씨앗: 숲을 더 = 나무가 많이 · 풀밭을 더 = 풀이 많이 (같은 시드면 같게)")
+	# 물: 같은 땅에 조금 · 알맞게 · 넉넉히 → 세상의 물
+	var tot: Array[float] = []
+	for i in 3:
+		var p := CreationPlan.make(45, WorldCfg.SMALL_SIZE)
+		p.land_preset(1)
+		p.auto_drips()
+		p.water = CreationPlan.WATER_PICKS[i]
+		var jw := JarWorld.create(45, WorldCfg.SMALL_SIZE, p.gen_opts())
+		var cells := 0
+		for k in jw.water.n * jw.water.n:
+			cells += 1 if jw.water.depth(k) > 0.01 else 0
+		tot.append(float(cells))
+	check(tot[0] < tot[1] and tot[1] < tot[2], "물에 잠긴 칸 조금 %d < 알맞게 %d < 넉넉히 %d" % [int(tot[0]), int(tot[1]), int(tot[2])])
+	var myth := CreationPlan.myth_of(CreationPlan.make(46, 512).create_dict())
+	var pm := CreationPlan.make(46, 512)
+	pm.land_preset(1)
+	pm.water = CreationPlan.WATER_PICKS[2]
+	pm.seed_preset(2)
+	var m2 := CreationPlan.myth_of(pm.create_dict())
+	check(String(myth[1]).contains("너른") and String(m2[1]).contains("언덕") and String(m2[2]).contains("넉넉히") and String(m2[4]).contains("풀밭"), "창세 신화: 언덕 · 물 넉넉히 · 풀밭을 더 ('%s')" % m2[1])
 
 
 ## 거인의 선택이 세상을 바꾼다 (WorldGen opts["create"] · apply_life)
@@ -414,7 +461,38 @@ func test_creation_resume() -> void:
 	var c: Node = load(StartFlow.CREATION_SCENE).instantiate()
 	c.set("instant", true)
 	run.root.add_child(c)
-	check(c.get("step") == "water" and is_equal_approx((c.get("plan") as CreationPlan).water, 0.4), "물 단계에서 꺼짐 → 물 단계부터 (부은 물 그대로)")
+	check(c.get("step") == "water" and is_equal_approx((c.get("plan") as CreationPlan).water, 0.4) and (c.get("chips") as Control).visible, "물 단계에서 꺼짐 → 물 단추부터 (부은 물 그대로)")
+	remove(c)
+	# 옛 형식 (손으로 빚던 때)의 중간 저장: 빚은 땅 · 찍은 돌기 → 다음 단추 단계부터
+	var od := {"v": 1, "seed": 6, "size": WorldCfg.SMALL_SIZE, "stage": "soil", "core": 2, "water": 0.0, "water_raw": 0.0, "drips": [], "seeds": {"moss": [], "grass": [], "tree": []},
+		"animals": [], "fish": [], "spot": [], "climate": "temperate", "name": ""}
+	var op := CreationPlan.make(6, WorldCfg.SMALL_SIZE)
+	op.brush(0.3, 0.2, 0.25, 0.7)
+	od["sculpt"] = op.create_dict()["sculpt"]
+	var f0 := FileAccess.open(CreationPlan.path_in(sm.dir), FileAccess.WRITE)
+	f0.store_string(JSON.stringify(od))
+	f0.close()
+	StartFlow.plan = null
+	c = load(StartFlow.CREATION_SCENE).instantiate()
+	c.set("instant", true)
+	run.root.add_child(c)
+	var rp: CreationPlan = c.get("plan")
+	check(c.get("step") == "soil" and (c.get("chips") as Control).visible and rp.core == 2 and CreationPlan.sample(rp.sculpt, 0.3, 0.2) > 0.3, "옛 저장 (흙 빚던 중) → 땅 단추부터 (핵·빚은 땅 그대로)")
+	remove(c)
+	od["stage"] = "lid"
+	od["water"] = 0.6
+	od["drips"] = [[0.2, -0.3], [-0.4, 0.1]]
+	f0 = FileAccess.open(CreationPlan.path_in(sm.dir), FileAccess.WRITE)
+	f0.store_string(JSON.stringify(od))
+	f0.close()
+	StartFlow.plan = null
+	c = load(StartFlow.CREATION_SCENE).instantiate()
+	c.set("instant", true)
+	run.root.add_child(c)
+	rp = c.get("plan")
+	check(c.get("step") == "lapse" and c.get("_world") != null and rp.drips.size() == 2, "옛 저장 (돌기 찍던 중) → 찍은 돌기 그대로 뚜껑이 잠기고 배양")
+	c.call("next")
+	check(c.get("step") == "sow" and (c.get("chips") as Control).visible, "→ 씨앗 단추")
 	remove(c)
 	p.stage = "seeds"
 	p.save(sm.dir)
