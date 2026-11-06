@@ -289,6 +289,18 @@ func _reindex() -> void:
 			_index[q.id] = q
 
 
+## 이 주민이 사는 마을 (초상화의 직업 옷 — 일터는 그 마을 건물)
+func _village_of(q: Resident) -> Village:
+	if village == null:
+		return null
+	if q in village.people:
+		return village
+	for pv: Variant in village.peers:
+		if pv is Village and q in (pv as Village).people:
+			return pv
+	return null
+
+
 func find(id: int) -> Resident:
 	return _index.get(id, null)
 
@@ -298,7 +310,9 @@ func _refresh() -> void:
 		return
 	_reindex()
 	# 머리
-	portrait.show_resident(r)
+	var jv := _village_of(r)
+	var jb: Building = jv.bld(r.job) if jv != null and not r.dead else null
+	portrait.show_resident(r, jb.type if jb != null else "", jv != null and jv.chief() == r)
 	name_l.text = r.name
 	info_l.text = "%s · %s" % [ResidentText.age_word(r), ResidentText.sex_word(r)]
 	var job := ResidentText.job_word(r, village)

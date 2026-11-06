@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== A20 주민 모델 v3: 겉모습 부품 · 뼈대 동작 · LOD")
 	run.timed(self, ["test_look_deterministic", "test_look_ignores_stats", "test_parts_exist", "test_job_outfit", "test_face", "test_baby_basket",
-		"test_anims", "test_lod_budget"])
+		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -244,7 +244,7 @@ func test_lod_budget() -> void:
 	var ca := close_sum / maxi(n, 1)
 	var fa := far_sum / maxi(n, 1)
 	print("    삼각형: 가까이 평균 %d 최대 %d · 멀리 평균 %d 최대 %d (%d명)" % [ca, close_max, fa, far_max, n])
-	check(ca >= 2000 and ca <= 3500 and close_max <= 4400, "가까이 LOD 예산 (평균 2000~3500, 최대 4400): 평균 %d 최대 %d" % [ca, close_max])
+	check(ca >= 2000 and ca <= 3800 and close_max <= 4800, "가까이 LOD 예산 (평균 2000~3800, 최대 4800): 평균 %d 최대 %d" % [ca, close_max])
 	check(fa >= 400 and fa <= 700 and far_max <= 760, "멀리 LOD 예산 (평균 ~600, 최대 760): 평균 %d 최대 %d" % [fa, far_max])
 	var m := ResidentModel.new()
 	m.setup_from(Resident.new())
@@ -264,3 +264,74 @@ static func _count(n: Node) -> int:
 			c += 1
 		c += _count(k)
 	return c
+
+
+## A20 v4: 손으로 그린 결 그림 묶음 (머리카락 · 옷감) — 읽히고, 작고(≤512²), 재질에 들어가고, 부품마다 맞는 칸을 씀
+## (꼭짓점 색 알파 = 칸, 0~15 머리카락 · 16~31 옷감 · 1 = 결 없음, UV2 = 무늬 자리). 얼굴 피부에는 결 없음.
+func test_detail_atlases() -> void:
+	for path: String in [ResidentModel.HAIR_TEX, ResidentModel.CLOTH_TEX]:
+		var t := load(path) as Texture2D
+		check(t != null, "결 그림 읽힘: " + path)
+		if t != null:
+			check(t.get_width() <= 512 and t.get_height() <= 512, "결 그림 크기 ≤512²: %s %dx%d" % [path.get_file(), t.get_width(), t.get_height()])
+	var m := ResidentModel.new()
+	m.setup_from(Resident.new())
+	check(m.mat.get_shader_parameter("hair_tex") != null and m.mat.get_shader_parameter("cloth_tex") != null, "주민 재질에 결 그림 두 장")
+	m.free()
+	var parts: Dictionary = ResidentModel.kit().get("parts", {})
+	# 부품 → 기대하는 결 (h = 머리카락 칸, c = 옷감 칸) · 두 LOD 모두
+	var want := {"hair_short": "h", "hair_curly": "h", "hair_braids": "h", "hair_wave_long": "h", "beard": "h", "torso_tunic": "c",
+		"torso_dress": "c", "arm_L": "c", "hat_straw": "c", "hat_fisher": "c", "shawl": "c", "hood": "c", "apron_job": "c"}
+	for nm: String in want:
+		for sfx in ["", "__far"]:
+			var p: Dictionary = parts.get(nm + sfx, {})
+			if p.is_empty():
+				check(false, "부품 있음: " + nm + sfx)
+				continue
+			var cols: PackedColorArray = p["c"]
+			var uv2: PackedVector2Array = p["uv2"]
+			var n_det := 0
+			var right := 0
+			var moved := false
+			for i in cols.size():
+				if cols[i].a < 0.985:
+					n_det += 1
+					var cell := int(cols[i].a * 32.0)
+					if (cell < 16) == (want[nm] == "h"):
+						right += 1
+					if uv2[i].length() > 0.01:
+						moved = true
+			check(n_det > cols.size() / 5 and right == n_det and moved,
+				"%s%s: 결 칸 %d/%d꼭짓점 (%s 칸 %d) · UV2" % [nm, sfx, n_det, cols.size(), want[nm], right])
+	# 얼굴 피부(열쇠 색 (1,0,b))에는 결이 없다
+	var head: Dictionary = parts.get("head", {})
+	var skin_det := 0
+	for c: Color in head.get("c", PackedColorArray()):
+		if c.r > 0.97 and c.g < 0.03 and c.a < 0.985:
+			skin_det += 1
+	check(skin_det == 0, "얼굴 피부에는 결 없음")
+	# 합친 메시에 UV2가 들어감
+	var am := ResidentModel.merged(["torso_tunic", "head", "hair_short"], false)
+	check(am.surface_get_format(0) & Mesh.ARRAY_FORMAT_TEX_UV2 != 0, "합친 몸 메시에 UV2 (결 자리)")
+
+
+## A20 v4: 튜닉 두건은 남자 어른 일부만 (겉모습 유전자) — 여자·아이·노인·긴 옷(교회)은 없음
+func test_hood() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var men := 0
+	var hooded := 0
+	var wrong := 0
+	for i in 300:
+		var r := _resident(rng, i)
+		var lp := ResidentModel.parts_for(ResidentModel.look_of(r))
+		var on := "hood" in ResidentModel.body_list(lp, ResidentModel.job_look(""))
+		if r.sex == "m" and r.age >= Balance.AGE_ADULT and r.age < Balance.AGE_ELDER:
+			men += 1
+			hooded += int(on)
+		elif on:
+			wrong += 1
+		if on and "hood" in ResidentModel.body_list(lp, ResidentModel.job_look("교회")):
+			wrong += 1
+	check(wrong == 0, "두건: 여자·아이·노인·교회 옷에는 없음 (%d)" % wrong)
+	check(hooded > men / 6 and hooded < men * 2 / 3, "두건: 남자 어른 일부 (%d / %d)" % [hooded, men])

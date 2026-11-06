@@ -17,6 +17,10 @@ const STEP_HZ := 1.8              # 걸음 주기 (초당 왕복) — 걷기 동
 const PARTS := "resident_props"   # 소품: art/models/resident_props.glb (Art.parts)
 const BODY := "res://art/models/resident.glb"
 const FACE_TEX := "res://art/models/resident_face.png"
+## A20 v4: 손으로 그린 결 그림 묶음 (머리카락 · 옷감) — art/src/pack_detail_atlas.py (원본 design/characters/textures/src).
+## 부품의 꼭짓점 색 알파 = 칸 번호, UV2 = 칸 안의 무늬 자리 → 셰이더가 물들인 색 × 결
+const HAIR_TEX := "res://art/models/resident_hair.png"
+const CLOTH_TEX := "res://art/models/resident_cloth.png"
 const LOD_PPU := 24.0             # 이 확대(칸당 화면 점) 이상이면 가까이 LOD
 const HEAD_TILT := -0.3           # 머리를 살짝 들어 위에서 보는 카메라(48°)에도 얼굴이 보이게
 const NECK := Vector3(0, 1.17, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리)
@@ -193,7 +197,11 @@ static func kit() -> Dictionary:
 			cu[v * 4 + 1] = q.y
 			cu[v * 4 + 2] = q.z
 			cu[v * 4 + 3] = 1.0 if head_part else 0.0
-		parts[pn] = {"v": pos, "n": a[Mesh.ARRAY_NORMAL], "c": a[Mesh.ARRAY_COLOR], "uv": a[Mesh.ARRAY_TEX_UV],
+		var uv2 = a[Mesh.ARRAY_TEX_UV2]
+		if uv2 == null:
+			uv2 = PackedVector2Array()
+			uv2.resize(nv)
+		parts[pn] = {"v": pos, "n": a[Mesh.ARRAY_NORMAL], "c": a[Mesh.ARRAY_COLOR], "uv": a[Mesh.ARRAY_TEX_UV], "uv2": uv2,
 			"b": bn4, "w": w4, "cu": cu, "i": a[Mesh.ARRAY_INDEX], "tris": (a[Mesh.ARRAY_INDEX] as PackedInt32Array).size() / 3}
 	var skin := Skin.new()
 	for i in bones.size():
@@ -233,6 +241,7 @@ static func merged(names: Array, far: bool) -> ArrayMesh:
 	var n := PackedVector3Array()
 	var c := PackedColorArray()
 	var uv := PackedVector2Array()
+	var uv2 := PackedVector2Array()
 	var b := PackedInt32Array()
 	var w := PackedFloat32Array()
 	var cu := PackedFloat32Array()
@@ -246,6 +255,7 @@ static func merged(names: Array, far: bool) -> ArrayMesh:
 		n.append_array(p["n"])
 		c.append_array(p["c"])
 		uv.append_array(p["uv"])
+		uv2.append_array(p["uv2"])
 		b.append_array(p["b"])
 		w.append_array(p["w"])
 		cu.append_array(p["cu"])
@@ -262,6 +272,7 @@ static func merged(names: Array, far: bool) -> ArrayMesh:
 		arr[Mesh.ARRAY_NORMAL] = n
 		arr[Mesh.ARRAY_COLOR] = c
 		arr[Mesh.ARRAY_TEX_UV] = uv
+		arr[Mesh.ARRAY_TEX_UV2] = uv2
 		arr[Mesh.ARRAY_BONES] = b
 		arr[Mesh.ARRAY_WEIGHTS] = w
 		arr[Mesh.ARRAY_CUSTOM1] = cu
@@ -376,7 +387,10 @@ static func parts_for(lk: Dictionary) -> Dictionary:
 	if hat == "hat_scarf" and hair in ["hair_bun", "hair_short"]:
 		hair = ""                                   # 수건 밑에 다 들어감
 	var elder := age >= Balance.AGE_ELDER
-	return {"baby": age < Balance.AGE_BABY, "torso": cl["torso"], "leg": cl["leg"], "arm": "arm", "hair": hair, "hat": hat,
+	# A20 v4: 남자 어른 일부는 튜닉 두건을 목에 접어 둠 (base_c) — 겉모습 유전자 무늬 칸에서 (없으면 색 번호)
+	var hood_v: int = g[Genetics.PATTERN] if g.size() >= Genetics.GENE_BYTES else hair_i + skin_i * 2 + 1
+	var hood: bool = sex == "m" and age >= Balance.AGE_ADULT and not elder and clothes_i % CLOTHES.size() == 0 and hood_v % 3 == 0
+	return {"hood": hood, "baby": age < Balance.AGE_BABY, "torso": cl["torso"], "leg": cl["leg"], "arm": "arm", "hair": hair, "hat": hat,
 		"cap": cap, "beard": sex == "m" and age >= 8.0 and (hair_i + skin_i) % 3 == 0,
 		"face_shape": 0 if "round_face" in cues else (skin_i + cloth_i) % FACE_SHAPES.size(), "body": body_type(lk),
 		"elder": elder, "shawl": (hair_i + cloth_i + skin_i) % SHAWL_COLORS.size() if elder else -1}
@@ -408,6 +422,8 @@ static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStrin
 		out.append(str(lk_parts["leg"]) + side)
 		out.append(("arm_robe" if robe else "arm") + side)
 	out.append("torso_robe" if robe else str(lk_parts["torso"]))
+	if lk_parts.get("hood", false) and not robe:
+		out.append("hood")
 	out.append("head")
 	var hat: String = job.get("hat", "")
 	if hat == "":
@@ -566,6 +582,8 @@ func build_look(lk: Dictionary) -> void:
 	mat.set_shader_parameter("bald", bald)
 	mat.set_shader_parameter("barefoot", 1.0 if cue.call("barefoot") else 0.0)
 	mat.set_shader_parameter("face_tex", load(FACE_TEX))
+	mat.set_shader_parameter("hair_tex", load(HAIR_TEX))
+	mat.set_shader_parameter("cloth_tex", load(CLOTH_TEX))
 	mat.set_shader_parameter("blink_seed", fposmod(float(hair_i * 7 + skin_i * 13 + cloth_i * 3) * 0.137 + age * 0.31, 1.0))
 	mat.set_shader_parameter("messy", 1.0 if cue.call("messy_hair") else 0.0)
 	if look["elder"]:

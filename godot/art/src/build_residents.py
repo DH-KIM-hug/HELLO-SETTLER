@@ -105,12 +105,13 @@ class Part:
         self.bm = bmesh.new()
         self.cl = self.bm.loops.layers.float_color.new("Color")
         self.uv = self.bm.loops.layers.uv.new("UVMap")
+        self.uv2 = self.bm.loops.layers.uv.new("UVDetail")     # A20 v4: painted detail atlas tile coords (TEXCOORD_1)
         self.weights = weights          # fn(co) -> {bone: w}
         self.head = head                # head parts: face UV + CUSTOM data in Godot
         self.uvfn = face_uv if head else None
         self.shade = None               # fn(co, normal) -> brightness multiplier for key colours
 
-    def grid(self, rows, closed=True, colfn=None, color=CLOTH, cap0=None, cap1=None, flip=False, out=None):
+    def grid(self, rows, closed=True, colfn=None, color=CLOTH, cap0=None, cap1=None, flip=False, out=None, det=None):
         """rows = list of rings (lists of Vector). Quads between consecutive rings. cap0/cap1 = close the first / last
         ring with a fan to its centre. Faces are oriented away from their ring's centre (or along out(centre) -> Vector);
         flip = the other way (inside / back faces)."""
@@ -119,6 +120,7 @@ class Part:
         cen = [sum(r, Vector()) / len(r) for r in rows]
         faces = []
         n = len(rows[0])
+        nat = []                        # det = (cell, tiles around, tiles along): natural ring/row tile coords
         for k, (a, b) in enumerate(zip(vr[:-1], vr[1:])):
             rc = (cen[k] + cen[k + 1]) / 2
             for i in range(n if closed else n - 1):
@@ -130,6 +132,11 @@ class Part:
                 if (f.normal.dot(want) < 0) != flip:
                     f.normal_flip()
                 faces.append(f)
+                if det:
+                    nu = n if closed else n - 1
+                    m = len(rows) - 1
+                    tab = {a[i]: (i, k), a[j]: (i + 1, k), b[j]: (i + 1, k + 1), b[i]: (i, k + 1)}
+                    nat.append((f, {v: (uu / nu * det[1], kk / m * det[2]) for v, (uu, kk) in tab.items()}))
         for cap, k, nxt in ((cap0, 0, 1), (cap1, len(vr) - 1, len(vr) - 2)):
             if cap is None:
                 continue
@@ -145,7 +152,33 @@ class Part:
                 faces.append(f)
         bm.normal_update()
         self.paint(faces, colfn, color)
+        for f, tab in nat:
+            self._set_det(f, det[0], [tab.get(lo.vert, (0.0, 0.0)) for lo in f.loops])
         return faces
+
+    def _set_det(self, f, cell, uvs):
+        a = (cell + 0.5) / 32.0
+        for lo, (u, v) in zip(f.loops, uvs):
+            lo[self.uv2].uv = (u, 1.0 - v)                 # glTF flips V (as the face UV)
+            c = lo[self.cl]
+            lo[self.cl] = (c[0], c[1], c[2], a)
+
+    def detail(self, faces, cell, fn):
+        """Painted detail on these faces: cell = atlas cell (int or fn(face)), fn(co) -> (u, v, period_u); u None = on the
+        axis (pole) -> the face's other u. A face crossing the u wrap gets one period added on its small side."""
+        for f in faces:
+            ce = cell(f) if callable(cell) else cell
+            if ce is None:
+                continue
+            q = [fn(lo.vert.co) for lo in f.loops]
+            P = q[0][2]
+            us = [x[0] for x in q]
+            known = [u for u in us if u is not None]
+            if P and known and max(known) - min(known) > P / 2:
+                us = [None if u is None else (u + P if u < P / 2 else u) for u in us]
+                known = [u for u in us if u is not None]
+            avg = sum(known) / len(known) if known else 0.0
+            self._set_det(f, ce, [(avg if u is None else u, x[1]) for u, x in zip(us, q)])
 
     def sphere(self, c, r, seg, rings, color=SKIN, colfn=None, deform=None):
         bm = self.bm
@@ -177,7 +210,7 @@ class Part:
                 c = lo[self.cl]
                 if self.shade and is_key(c):
                     k = self.shade(lo.vert.co, lo.vert.normal)
-                    lo[self.cl] = (c[0], c[1], max(0.0, min(1.0, c[2] * k)), 1.0)
+                    lo[self.cl] = (c[0], c[1], max(0.0, min(1.0, c[2] * k)), c[3])
                 u, v = self.uvfn(lo.vert.co) if self.uvfn else (-1.0, -1.0)
                 lo[self.uv].uv = (u, 1.0 - v)          # the glTF exporter flips V; Godot then reads v as written
         bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method="FIXED", ngon_method="EAR_CLIP")
@@ -192,6 +225,60 @@ FACE_H = 0.3
 
 def face_uv(co):
     return ((co.x + FACE_W / 2) / FACE_W, (FACE_TOP - co.z) / FACE_H) if co.y < -0.05 else (-1.0, -1.0)
+
+
+# ───────── painted detail atlases (A20 v4): cells must match pack_detail_atlas.py ─────────
+# vertex colour alpha = (cell + 0.5) / 32 (1.0 = no detail), UV2 = tile coords; render/resident.gdshader multiplies tint x detail
+H_STRAIGHT, H_WAVY, H_CURLS, H_BRAID, H_BEARD, H_BUN, _H_TIPS, H_FINE = range(8)   # 6 = lock tips (spare)
+C_LINEN, C_FOLDS, C_APRON, C_CUFF, C_LEATHER, C_POUCH, C_HOOD, C_KNIT, C_STRAW, C_WOOL = range(16, 26)
+
+
+def m_cyl(cx=0.0, cy=0.0, tiles=4.0, vs=0.25, z0=0.0):
+    """Cylinder around a vertical axis: u around (seam at the back), v down from z0 (tile height vs)."""
+    def fn(co):
+        dx, dy = co.x - cx, co.y - cy
+        v = (z0 - co.z) / vs
+        if dx * dx + dy * dy < 1e-7:
+            return (None, v, tiles)
+        return ((math.atan2(dx, -dy) / (2 * math.pi) + 0.5) * tiles, v, tiles)
+    return fn
+
+
+def m_crown(ctr=None, tiles=6.0, vs=0.22, R=None):
+    """Hair: strands radiate from the crown (spherical above the head centre), then fall straight down."""
+    c = ctr or Vector((0, 0.015, HEAD_C))
+    R = R or HEAD_R
+
+    def fn(co):
+        d = co - c
+        rh = math.hypot(d.x, d.y)
+        ph = math.atan2(rh, d.z)
+        v = (ph * R if ph <= math.pi / 2 else math.pi / 2 * R + (c.z - co.z)) / vs
+        if rh < 1e-4:
+            return (None, v, tiles)
+        return ((math.atan2(d.x, -d.y) / (2 * math.pi) + 0.5) * tiles, v, tiles)
+    return fn
+
+
+def m_radial(cx=0.0, cy=0.0, tiles=8.0, vs=0.08):
+    """Flat ring (hat brim): u around, v outward with the radius (straw rows run around the brim)."""
+    def fn(co):
+        dx, dy = co.x - cx, co.y - cy
+        rr = math.hypot(dx, dy)
+        if rr < 1e-4:
+            return (None, 0.0, tiles)
+        return ((math.atan2(dx, -dy) / (2 * math.pi) + 0.5) * tiles, rr / vs, tiles)
+    return fn
+
+
+def m_plane(o, right, down, w, h):
+    """Planar: u along `right` (w = one tile), v along `down` (h = one tile), from the corner o."""
+    o, right, down = Vector(o), Vector(right).normalized(), Vector(down).normalized()
+
+    def fn(co):
+        d = co - o
+        return (d.dot(right) / w, d.dot(down) / h, 0)
+    return fn
 
 
 def lathe_rows(prof, seg, sy=0.82, wob=None, y0=0.0):
@@ -314,7 +401,8 @@ def dress_torso(name, prof, sy, colfn, thigh, extra=None, seg=(14, 7), folds=0.0
     def wob(a, z):
         return 1.0 + folds * sm(WAIST - 0.05, hem, z) * math.sin(a * 7.0) if folds else 1.0
     rows = lathe_rows(pr, Q(*seg), sy=sy, wob=wob)
-    p.grid(rows, colfn=colfn, cap0=True)
+    fs = p.grid(rows, colfn=colfn, cap0=True)
+    p.detail(fs, lambda f: C_FOLDS if f.calc_center_median().z < WAIST - 0.03 else C_LINEN, m_cyl(tiles=3.0, vs=0.55, z0=SHOULDER))
     if extra:
         extra(p)
     if LOD == 0:                      # cream shirt v-neck (a little patch lying on the chest)
@@ -351,7 +439,34 @@ def vneck_patch(p, pr, sy, top=SHOULDER - 0.015, depth=0.14, w=0.075):
             a = math.asin(max(-0.99, min(0.99, x / r)))
             ring.append(Vector((x, -math.cos(a) * r * sy, z)))
         rows.append(ring)
-    p.grid(rows, closed=False, color="LOOK_SHIRT", out=lambda c: Vector((0, -1, 0)))
+    fs = p.grid(rows, closed=False, color="LOOK_SHIRT", out=lambda c: Vector((0, -1, 0)))
+    p.detail(fs, C_LINEN, m_plane((-w, 0, top), (1, 0, 0), (0, 0, -1), 0.3, 0.3))
+
+
+def make_belt(p, r, sy, color="LOOK_BELT"):
+    fs = p.grid(lathe_rows([(r, WAIST - 0.035), (r + 0.007, WAIST), (r, WAIST + 0.035)], Q(18, 8), sy=sy), color=color)
+    p.detail(fs, C_LEATHER, m_cyl(tiles=Q(7.0, 4.0), vs=0.075, z0=WAIST + 0.037))
+
+
+def pouch(p, c, yaw, color="LOOK_BELT"):
+    """Leather belt pouch (base_c / jobs_a): soft rounded bag + a flap, painted stitches (cloth atlas pouch cell)."""
+    if LOD == 1:                                        # too small to see from afar
+        return
+    rot = Matrix.Rotation(yaw, 3, "Z")
+    fwd = rot @ Vector((0, -1, 0))
+    right = rot @ Vector((1, 0, 0))
+
+    def bag(v):
+        x, y, z = v
+        y *= 1.0 - 0.35 * max(0.0, z / 0.07)            # flatter toward the top (hangs from the belt)
+        return rot @ Vector((x * (1.0 + 0.15 * max(0.0, -z / 0.07)), y, z))
+    fs = p.sphere(c, (0.062, 0.038, 0.07), 9, 5, color=shade(color, 1.3), deform=bag)
+    o = c - right * 0.068 + Vector((0, 0, 0.075))
+    p.detail(fs, C_POUCH, m_plane(o, right, (0, 0, -1), 0.136, 0.15))
+    if LOD == 0:                                        # flap over the top half
+        fl = p.sphere(c + fwd * 0.008 + Vector((0, 0, 0.03)), (0.066, 0.042, 0.042), 7, 3, color=shade("LOOK_BELT", 0.85),
+                      deform=lambda v: rot @ Vector((v.x, v.y, max(v.z, -0.012))))
+        p.detail(fl, C_LEATHER, m_plane(o, right, (0, 0, -1), 0.14, 0.14))
 
 
 def build_torsos(parts):
@@ -367,12 +482,10 @@ def build_torsos(parts):
 
     def tunic_extra(p):
         # belt + buckle + pouch
-        p.grid(lathe_rows([(0.283, WAIST - 0.035), (0.29, WAIST), (0.283, WAIST + 0.035)], Q(18, 8), sy=0.8), color="LOOK_BELT")
+        make_belt(p, 0.295, 0.8)   # outside the tunic polygon corners (14 sides)
         if LOD == 0:
-            p.sphere((0, -0.235, WAIST), (0.04, 0.02, 0.032), Q(8, 4), Q(4, 2), color="WINDOW_LIT")
-            p.sphere((0.17, -0.19, WAIST - 0.09), (0.06, 0.04, 0.065), Q(8, 4), Q(5, 3), color="LOOK_BELT")
-        # hood folded on the back of the neck (base_c)
-        p.sphere((0, 0.12, SHOULDER - 0.01), (0.19, 0.1, 0.075), Q(12, 5), Q(6, 3), color=CLOTH_D)
+            p.sphere((0, -0.248, WAIST), (0.04, 0.02, 0.032), Q(8, 4), Q(4, 2), color="WINDOW_LIT")
+        pouch(p, Vector((0.17, -0.2, WAIST - 0.1)), -0.55)
     parts.append(dress_torso("torso_tunic", [(0.32, HIP - 0.2), (0.31, HIP - 0.06), (0.28, WAIST), (0.295, WAIST + 0.18),
                                              (0.29, SHOULDER - 0.12), (0.23, SHOULDER - 0.02), (0.1, NECK - 0.02)],
                              0.8, tunic_col, 0.5, tunic_extra, folds=0.02))
@@ -389,7 +502,7 @@ def build_torsos(parts):
         for j in range(nv + 1):
             t = j / nv
             z = WAIST - 0.02 - t * (WAIST - 0.2)
-            r = skirt_r(z) + 0.012
+            r = skirt_r(z) * 1.035 + 0.01
             ring = []
             for i in range(nu + 1):
                 u = i / nu
@@ -397,10 +510,12 @@ def build_torsos(parts):
                 rr = r * (1.0 + 0.025 * t * math.sin(u * math.pi * 4))
                 ring.append(Vector((math.cos(a) * rr, math.sin(a) * rr * 0.86, z)))
             rows.append(ring)
-        p.grid(rows, closed=False, color="LOOK_APRON")
+        fs = p.grid(rows, closed=False, color="LOOK_APRON", det=(C_APRON, 1.6, 1.0))
         # back side (so it is not see-through from below)
         p.grid(rows, closed=False, color="LOOK_APRON", flip=True)
-        p.grid(lathe_rows([(0.282, WAIST - 0.03), (0.282, WAIST + 0.03)], Q(18, 6), sy=0.86), color="LOOK_APRON")
+        fs = p.grid(lathe_rows([(0.282, WAIST - 0.03), (0.282, WAIST + 0.03)], Q(18, 6), sy=0.86), color="LOOK_APRON")
+        p.detail(fs, C_LINEN, m_cyl(tiles=6.0, vs=0.3, z0=WAIST))
+        pouch(p, Vector((-0.19, -0.2, WAIST - 0.11)), 0.6)
         for sx in ((-1, 1) if LOD == 0 else ()):
             p.sphere((sx * 0.06, 0.25, WAIST), (0.06, 0.03, 0.04), Q(8, 4), Q(4, 2), color="LOOK_APRON")
         p.sphere((0.04, 0.25, WAIST - 0.12), (0.025, 0.02, 0.09), Q(6, 3), Q(4, 2), color="LOOK_APRON")
@@ -420,8 +535,10 @@ def build_torsos(parts):
         return CLOTH_D if c.z < HIP - 0.1 else CLOTH
 
     def robe_extra(p):
-        p.sphere((0, 0.13, SHOULDER - 0.02), (0.2, 0.12, 0.1), Q(12, 5), Q(6, 3), color=CLOTH_D)       # hood
-        p.grid(lathe_rows([(0.29, WAIST - 0.025), (0.295, WAIST), (0.29, WAIST + 0.025)], Q(16, 6), sy=0.82), color="LOOK_STRAW_DARK")
+        fs = p.sphere((0, 0.13, SHOULDER - 0.02), (0.2, 0.12, 0.1), Q(12, 5), Q(6, 3), color=CLOTH_D)       # hood
+        p.detail(fs, C_HOOD, m_cyl(tiles=2.0, vs=0.2, z0=SHOULDER + 0.08))
+        fs = p.grid(lathe_rows([(0.29, WAIST - 0.025), (0.295, WAIST), (0.29, WAIST + 0.025)], Q(16, 6), sy=0.82), color="LOOK_STRAW_DARK")
+        p.detail(fs, C_STRAW, m_cyl(tiles=8.0, vs=0.06, z0=WAIST + 0.03))
         p.sphere((0.1, -0.2, WAIST - 0.15), (0.02, 0.02, 0.12), Q(6, 3), Q(4, 2), color="LOOK_STRAW_DARK")
     parts.append(dress_torso("torso_robe", [(0.4, 0.05), (0.36, 0.25), (0.31, HIP), (0.285, WAIST), (0.29, WAIST + 0.16),
                                             (0.285, SHOULDER - 0.12), (0.225, SHOULDER - 0.02), (0.1, NECK - 0.02)],
@@ -457,30 +574,41 @@ def arm_rows(prof, side, seg):
 
 
 def hand(p, side, color=SKIN):
+    """Soft paddle hand (fingers together, slightly cupped) + a separate thumb at close LOD (jobs_a)."""
     s = 1 if side == "L" else -1
     c = Vector((HAND.x * s, HAND.y, HAND.z))
-    p.sphere(c, (0.068, 0.06, 0.08), Q(10, 5), Q(7, 3), color=color)
-    if LOD == 0:
-        p.sphere(c + Vector((-0.04 * s, -0.04, 0.02)), (0.027, 0.027, 0.038), Q(6, 3), Q(4, 2), color=color)   # thumb
+
+    def palm(v):
+        x, y, z = v
+        if z < 0:                                       # fingers taper a little and curl inward
+            x *= 1.0 - 0.18 * (-z / 0.085)
+            y += 0.012 * (-z / 0.085) ** 2
+        return Vector((x, y, z))
+    p.sphere(c, (0.05, Q(0.064, 0.06), 0.085), Q(10, 5), Q(7, 3), color=color, deform=palm)
+    if LOD == 0:                                        # thumb: a small capsule pointing forward-down, inner side
+        rot = Matrix.Rotation(-0.55, 3, "X") @ Matrix.Rotation(0.35 * s, 3, "Y")
+        p.sphere(c + Vector((-0.032 * s, -0.05, 0.012)), (0.021, 0.021, 0.042), 7, 4, color=color,
+                 deform=lambda v: rot @ v)
 
 
 def build_arms(parts):
     for side in ("L", "R"):
         # cream shirt sleeve, puffy, rolled cuff above the elbow, bare forearm (jobs_a)
         p = Part("arm_" + side, w_arm(side))
-        prof = [(0.0, 0.07), (0.06, 0.092), (0.25, 0.098), (0.48, 0.09), (0.56, 0.085)]
-        cuff = [(0.56, 0.085), (0.6, 0.092), (0.66, 0.088), (0.7, 0.063)]
+        prof = [(0.0, 0.07), (0.06, 0.092), (0.25, 0.098), (0.48, 0.09), (0.55, 0.086)]
+        cuff = [(0.55, 0.086), (0.57, 0.101), (0.61, 0.106), (0.655, 0.102), (0.685, 0.09), (0.7, 0.063)]   # thick rolled cuff
         fore = [(0.7, 0.063), (0.85, 0.055), (1.0, 0.048)]
-        for pr, c in ((catmull(prof, Q(5, 2)), "LOOK_SHIRT"), (cuff if LOD == 0 else [cuff[0], cuff[-1]], shade("LOOK_SHIRT", 0.92)),
-                      (catmull(fore, Q(3, 2)), SKIN)):
-            p.grid(arm_rows(pr, side, Q(8, 4)), color=c, cap0=True if pr is not fore and pr[0][0] == 0.0 else None)
+        for pr, c, det in ((catmull(prof, Q(5, 2)), "LOOK_SHIRT", (C_LINEN, 1.5, 1.6)),
+                           (cuff if LOD == 0 else [cuff[0], cuff[2], cuff[-1]], shade("LOOK_SHIRT", 0.95), (C_CUFF, 1.5, 1.0)),
+                           (catmull(fore, Q(3, 2)), SKIN, None)):
+            p.grid(arm_rows(pr, side, Q(9, 4)), color=c, cap0=True if pr is not fore and pr[0][0] == 0.0 else None, det=det)
         hand(p, side)
         p.shade = lambda co, n: 1.0 - 0.1 * sm(-0.3, -0.9, n.z)
         parts.append(p)
         # robe: wide bell sleeve to the wrist
         p = Part("arm_robe_" + side, w_arm(side))
         prof = [(0.0, 0.08), (0.08, 0.1), (0.5, 0.11), (0.9, 0.15), (1.0, 0.15), (1.0, 0.07)]
-        p.grid(arm_rows(catmull(prof[:-1], Q(7, 3)) + [prof[-1]], side, Q(10, 5)), color=CLOTH_D, cap0=True)
+        p.grid(arm_rows(catmull(prof[:-1], Q(7, 3)) + [prof[-1]], side, Q(10, 5)), color=CLOTH_D, cap0=True, det=(C_FOLDS, 1.5, 1.2))
         hand(p, side)
         parts.append(p)
 
@@ -494,7 +622,7 @@ def build_legs(parts):
             prof = [(r0 * 0.9, 0.1), (r0 * 0.95, KNEE - 0.05), (r0 * 1.02, KNEE + 0.05), (r0 * 1.1, HIP - 0.02), (r0 * 0.6, HIP + 0.08)]
             rows = lathe_rows(catmull(prof, Q(5, 3)), Q(8, 5), sy=1.0)
             rows = [[v + Vector((s * LEG_X, 0, 0)) for v in r] for r in rows]
-            p.grid(rows, color=color, cap1=True)
+            p.grid(rows, color=color, cap1=True, det=(C_LINEN if name == "leg_trousers" else C_KNIT, 1.0, 1.3))
             # boot: rounded, toe forward (-Y), cuff
             c = Vector((s * LEG_X, -0.04, 0.055))
             p.sphere(c, (0.085, 0.13, 0.065), Q(10, 6), Q(6, 3), color="LOOK_BOOT",
@@ -508,8 +636,8 @@ def build_legs(parts):
 
 
 # ───────── hair: a shell from the crown to a hairline that can fall on as a curtain ─────────
-def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(24, 8), rows=(8, 4), color=HAIR, r0=1.06,
-                 tuck=0.09, inner=False, locks=12.0):
+def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(30, 8), rows=(10, 4), color=HAIR, r0=1.06,
+                 tuck=0.09, inner=False, locks=12.0, cell=H_STRAIGHT, tiles=6.0, vs=0.24, wave=0.0):
     """edge(theta) = polar angle (from the top) of the hairline, theta 0 = front, + = toward the character's left.
     drop(theta) = extra length falling straight down from the hairline (long hair). vol(theta, phi) = radius multiplier.
     bumps(Vector) = outward bump (curls)."""
@@ -541,7 +669,7 @@ def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(24, 8), rows=(8,
                 base = ctr + Vector((dirv.x * rr * HEAD_S[0], dirv.y * rr * HEAD_S[1], dirv.z * rr * HEAD_S[2]))
                 k = (d - R * pe) / max(L, 1e-4)
                 out = Vector((dirv.x, dirv.y, 0))
-                flare = 0.06 * math.sin(k * math.pi) - 0.05 * k * k
+                flare = 0.06 * math.sin(k * math.pi) - 0.05 * k * k + wave * math.sin(k * math.pi * 2.5 + th * 3.0) * k
                 pt = base + Vector((0, 0, -(d - R * pe))) + out * flare
             if bumps:
                 nrm = (pt - ctr).normalized()
@@ -592,11 +720,13 @@ def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(24, 8), rows=(8,
             faces.append(f)
     bm.normal_update()
     p.paint(faces, None, color)
+    if cell is not None:
+        p.detail(faces, cell, m_crown(ctr, Q(tiles, max(2.0, tiles / 2)), vs))
 
     def sh(co, n):
         d = co - ctr
         th = math.atan2(-d.x, -d.y)
-        k = 1.0 - 0.09 * (0.5 + 0.5 * math.sin(th * locks + d.z * 6.0))      # painted locks
+        k = 1.0 - 0.05 * (0.5 + 0.5 * math.sin(th * locks + d.z * 6.0))      # painted locks (the atlas carries the strands)
         k *= 1.0 - 0.18 * sm(HEAD_C + 0.05, HEAD_C - 0.45, co.z)             # darker toward the ends / under
         k *= 1.0 + 0.08 * sm(0.4, 0.95, n.z)                                 # sheen on top
         return k
@@ -623,7 +753,7 @@ def fringe(base, side, back, scallop=0.12, n=5, part=0.0):
     return fn
 
 
-def curls(seed, n, amp, sigma, zmin=None):
+def curls(seed, n, amp, sigma, zmin=None, gap=0.0):
     pts = []
     rnd = __import__("random").Random(seed)
     golden = math.pi * (3 - math.sqrt(5))
@@ -638,13 +768,29 @@ def curls(seed, n, amp, sigma, zmin=None):
         for c in pts:
             d2 = (p - c).length_squared
             b = max(b, math.exp(-d2 / (sigma * sigma)))
-        return amp * b
+        return amp * (b - gap)                      # gap > 0: dips between the curls
     return fn
+
+
+def bez(ctrl, n):
+    """Cubic Bezier through 4 control points -> n points."""
+    out = []
+    for i in range(n):
+        t = i / (n - 1)
+        a = [(1 - t) ** 3, 3 * (1 - t) ** 2 * t, 3 * (1 - t) * t * t, t ** 3]
+        out.append(tuple(sum(a[k] * ctrl[k][d] for k in range(4)) for d in range(3)))
+    return out
+
+
+def w_braid(co):
+    """Braids: head at the top, then the chest carries them (so they lie on the chest when the head tilts)."""
+    t = sm(HEAD_C - 0.3, HEAD_C - 0.5, co.z)
+    return W(skull=1 - t + 1e-3, chest=t)
 
 
 def build_hair(parts):
     def H(name, **kw):
-        p = Part(name, w_fixed("skull"), head=False)
+        p = Part(name, kw.pop("weights", w_fixed("skull")), head=False)
         extra = kw.pop("extra", None)
         hair_surface(p, **kw)
         if extra:
@@ -654,67 +800,102 @@ def build_hair(parts):
     side_vol = lambda th, ph: 1.0 + 0.04 * sm(0.6, 1.6, ph)
     H("hair_short", edge=fringe(0.64, 1.72, 2.15, scallop=0.16, n=4, part=0.3), vol=side_vol)
     H("hair_long", edge=fringe(0.7, 1.65, 2.05, scallop=0.12, n=4), inner=True,
-      drop=lambda th: 0.4 * sm(0.25, 0.6, ang_d(th, FRONT) / math.pi), vol=side_vol, rows=(10, 4))
+      drop=lambda th: 0.4 * sm(0.25, 0.6, ang_d(th, FRONT) / math.pi), vol=side_vol, rows=(9, 4))
 
     def braids(p):
+        # two plaits hanging over the shoulders to the chest (variety_c): a lumpy tapered tube, braid weave painted
         for sx in (-1, 1):
-            nb = Q(4, 2)
-            for k in range(nb):
-                t = k / (nb - 1)
-                c = Vector((sx * (0.24 + 0.02 * t), -0.06 - 0.1 * t, HEAD_C - 0.3 - t * 0.34))
-                p.sphere(c, (0.06 - 0.012 * t, 0.054, 0.08), Q(8, 4), Q(4, 2), color=HAIR_D if k % 2 else HAIR)
+            ctrl = [(sx * 0.2, 0.05, HEAD_C - 0.12), (sx * 0.245, -0.1, HEAD_C - 0.36), (sx * 0.235, -0.235, 0.93),
+                    (sx * 0.215, -0.265, 0.76)]
+            path = [Vector(q) for q in bez(ctrl, Q(11, 3))]
+            rows = []
+            for k, c in enumerate(path):
+                t = k / (len(path) - 1)
+                tan = (path[min(k + 1, len(path) - 1)] - path[max(k - 1, 0)]).normalized()
+                back = Vector((0, 1, 0))
+                n1 = tan.cross(back).normalized()
+                n2 = n1.cross(tan).normalized()
+                if n2.y < 0:
+                    n2 = -n2
+                r = 0.056 * (1 - 0.35 * t) * (1 + Q(0.13, 0.0) * abs(math.sin(t * math.pi * 6.5)))
+                ns = Q(8, 3)
+                rows.append([c + (n1 * math.sin(a) + n2 * math.cos(a)) * r * (1.0 if abs(n1.x) > 0.5 else 1.0)
+                             for a in [i / ns * 2 * math.pi for i in range(ns)]])
+            p.grid(rows, color=HAIR, cap1=True, det=(H_BRAID, 1.0, 4.5))
+            end = path[-1]
             if LOD == 0:
-                p.sphere(Vector((sx * 0.265, -0.16, HEAD_C - 0.72)), (0.03, 0.03, 0.03), Q(6, 3), Q(4, 2), color="LOOK_SCARF_B")
-    H("hair_braids", edge=fringe(0.68, 1.75, 2.15, scallop=0.05, n=2), vol=side_vol, extra=braids)
+                p.sphere(end + Vector((0, 0, -0.005)), (0.034, 0.034, 0.026), 6, 3, color="LOOK_SCARF_B")
+            if LOD == 0:
+                tf = p.sphere(end + Vector((0, 0, -0.07)), (0.04, 0.035, 0.06), 7, 4, color=HAIR,
+                              deform=lambda v: Vector((v.x * (1 + max(0.0, -v.z) * 4), v.y, v.z)))
+                p.detail(tf, H_STRAIGHT, m_cyl(cx=end.x, cy=end.y, tiles=2.0, vs=0.15, z0=end.z))
+    H("hair_braids", edge=fringe(0.68, 1.75, 2.15, scallop=0.05, n=2), vol=side_vol, extra=braids, rows=(9, 4), seg=(30, 7),
+      weights=w_braid)
 
     def bun(p):
-        p.sphere(Vector((0, 0.16, HEAD_C + 0.28)), (0.12, 0.11, 0.11), Q(12, 6), Q(7, 3), color=HAIR)
+        c = Vector((0, 0.07, HEAD_C + 0.33))
+        fs = p.sphere(c, (0.13, 0.12, 0.115), Q(14, 6), Q(7, 3), color=HAIR)
+        nrm = Vector((0, 0.45, 0.89)).normalized()
+        right = Vector((1, 0, 0))
+        down = nrm.cross(right).normalized()
+        if down.z > 0:
+            down = -down
+        p.detail(fs, H_BUN, m_plane(c - right * 0.14 - down * 0.14, right, down, 0.28, 0.28))
     H("hair_bun", edge=fringe(0.62, 1.75, 2.15, scallop=0.04, n=2), vol=side_vol, extra=bun, locks=16.0)
 
     def under(fn):                    # curls only below a cap / scarf
-        return lambda q: fn(q) * sm(HEAD_C + 0.08, HEAD_C - 0.05, q.z)
-    cu = curls(7, Q(26, 14), 0.05, 0.075)
-    H("hair_curly", edge=fringe(0.66, 1.9, 2.25, scallop=0.2, n=6), vol=lambda th, ph: 1.05, bumps=cu,
-      seg=(24, 8), rows=(8, 4), locks=0)
-    H("hair_curly_under", edge=fringe(0.95, 1.9, 2.25, scallop=0.2, n=6), vol=lambda th, ph: 0.99, bumps=under(cu),
-      seg=(24, 8), rows=(8, 4), locks=0)
-    cl = curls(11, Q(30, 16), 0.05, 0.08)
+        return lambda q: fn(q) * sm(HEAD_C - 0.02, HEAD_C - 0.14, q.z)
+    # curly: separate curl clusters with gaps between them (base_c / variety_c), not a smooth helmet
+    cu = curls(7, Q(30, 14), Q(0.065, 0.05), Q(0.075, 0.08), gap=Q(0.12, 0.05))
+    H("hair_curly", edge=fringe(0.66, 1.9, 2.25, scallop=0.12, n=7), vol=lambda th, ph: 1.05, bumps=cu,
+      seg=(32, 8), rows=(11, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
+    H("hair_curly_under", edge=fringe(1.05, 1.9, 2.25, scallop=0.03, n=7), vol=lambda th, ph: 0.99, bumps=under(cu),
+      seg=(32, 8), rows=(9, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
+    cl = curls(11, Q(34, 16), Q(0.065, 0.05), Q(0.08, 0.08), gap=Q(0.12, 0.05))
     long_drop = lambda th: 0.36 * sm(0.22, 0.55, ang_d(th, FRONT) / math.pi)
-    H("hair_curly_long", edge=fringe(0.75, 1.62, 2.0, scallop=0.2, n=6), drop=long_drop,
-      vol=lambda th, ph: 1.06 + 0.06 * sm(0.8, 1.6, ph), bumps=cl, seg=(22, 8), rows=(9, 3), inner=True, locks=0)
-    H("hair_curly_long_under", edge=fringe(1.0, 1.62, 2.0, scallop=0.2, n=6), drop=long_drop,
-      vol=lambda th, ph: 1.0 + 0.06 * sm(0.8, 1.6, ph), bumps=under(cl), seg=(22, 8), rows=(9, 3), inner=True, locks=0)
-    wv = lambda p: 0.016 * math.sin(p.z * 30.0 + math.atan2(p.x, p.y) * 3)
-    H("hair_wave", edge=fringe(0.64, 1.75, 2.2, scallop=0.18, n=3, part=0.5), vol=lambda th, ph: 1.04, bumps=wv)
+    H("hair_curly_long", edge=fringe(0.75, 1.62, 2.0, scallop=0.12, n=7), drop=long_drop,
+      vol=lambda th, ph: 1.06 + 0.06 * sm(0.8, 1.6, ph), bumps=cl, seg=(28, 8), rows=(10, 3), inner=True, locks=0,
+      cell=H_CURLS, tiles=8.0, vs=0.13)
+    H("hair_curly_long_under", edge=fringe(1.1, 1.62, 2.0, scallop=0.03, n=7), drop=long_drop,
+      vol=lambda th, ph: 1.0 + 0.06 * sm(0.8, 1.6, ph), bumps=under(cl), seg=(28, 8), rows=(10, 3), inner=True, locks=0,
+      cell=H_CURLS, tiles=8.0, vs=0.13)
+    wv = lambda p: 0.012 * math.sin(p.z * 18.0 + math.atan2(p.x, p.y) * 2)
+    H("hair_wave", edge=fringe(0.64, 1.75, 2.2, scallop=0.18, n=3, part=0.5), vol=lambda th, ph: 1.04, bumps=wv, cell=H_WAVY)
     H("hair_wave_long", edge=fringe(0.7, 1.62, 2.0, scallop=0.14, n=3, part=0.5),
-      drop=lambda th: 0.42 * sm(0.22, 0.55, ang_d(th, FRONT) / math.pi), vol=lambda th, ph: 1.04 + 0.05 * sm(0.8, 1.6, ph),
-      bumps=wv, rows=(10, 4), inner=True)
+      drop=lambda th: 0.46 * sm(0.22, 0.55, ang_d(th, FRONT) / math.pi), vol=lambda th, ph: 1.05 + 0.06 * sm(0.8, 1.6, ph),
+      bumps=wv, rows=(11, 4), inner=True, cell=H_WAVY, wave=0.035)
 
-    # beard: a soft mass around the jaw, mouth left free (jobs_a woodcutter / baker)
+    # beard: a full soft beard around the jaw with a tufted lower edge + moustache, beard hair painted (jobs_a woodcutter)
     p = Part("beard", w_fixed("skull"))
-    ns, nr = Q(12, 5), Q(5, 2)
+    ns, nr = Q(16, 6), Q(7, 2)
     rows = []
     for j in range(nr + 1):
         t = j / nr
         ring = []
         for i in range(ns + 1):
             u = i / ns
-            th = (u - 0.5) * math.pi * 1.2
+            th = (u - 0.5) * math.pi * 1.0
             side = abs(u - 0.5) * 2
-            ph0 = math.radians(118 - 24 * side ** 1.5)              # sideburns climb to the ears
-            ph = ph0 + (math.radians(170) - ph0) * t
-            r = HEAD_R * (1.0 + (0.2 - 0.1 * side) * math.sin(min(1.0, t * 1.3) * math.pi * 0.5) * (1 - 0.6 * t * t))
+            ph0 = math.radians(116 - 26 * side ** 1.4)              # sideburns climb to the ears
+            ph = ph0 + (math.radians(172) - ph0) * t
+            bulge = (0.27 - 0.13 * side) * math.sin(min(1.0, t * 1.25) * math.pi * 0.5) * (1 - 0.45 * t * t)
+            tuft = Q(0.05, 0.0) * abs(math.sin(u * math.pi * 6)) * sm(0.5, 1.0, t) * (1 - side)
+            r = HEAD_R * (1.0 + bulge + tuft)
             dirv = Vector((-math.sin(th) * math.sin(ph), -math.cos(th) * math.sin(ph), math.cos(ph)))
-            ring.append(Vector((0, 0.0, HEAD_C)) + Vector((dirv.x * r * HEAD_S[0], dirv.y * r, dirv.z * r)))
+            q = Vector((0, 0.0, HEAD_C)) + Vector((dirv.x * r * HEAD_S[0], dirv.y * r, dirv.z * r))
+            q.z -= 0.05 * t * t * (1 - side) ** 2                     # a slightly pointed chin
+            ring.append(q)
         rows.append(ring)
-    p.grid(rows, closed=False, color=HAIR, cap0=None)
+    beard_map = m_cyl(cy=0.0, tiles=Q(5.0, 3.0), vs=0.12, z0=HEAD_C)
+    p.detail(p.grid(rows, closed=False, color=HAIR, cap0=None), H_BEARD, beard_map)
     if LOD == 0:
-        p.grid(rows, closed=False, color=HAIR_D, flip=True)
-    # moustache
+        p.detail(p.grid(rows, closed=False, color=HAIR_D, flip=True), H_BEARD, beard_map)
+    # moustache: two soft drooping lobes
     for sx in ((-1, 1) if LOD == 0 else ()):
-        p.sphere(Vector((sx * 0.048, -HEAD_R * 0.985, HEAD_C - 0.035)), (0.05, 0.028, 0.022), Q(8, 4), Q(4, 2), color=HAIR,
-                 deform=lambda v, sx=sx: Vector((v.x, v.y, v.z - 0.3 * abs(v.x) * 0.0 - (v.x * sx) * 0.25)))
-    p.shade = lambda co, n: 1.0 - 0.1 * (0.5 + 0.5 * math.sin(co.x * 60))
+        fs = p.sphere(Vector((sx * 0.05, -HEAD_R * 0.99, HEAD_C - 0.04)), (0.058, 0.03, 0.026), 8, 4, color=HAIR,
+                      deform=lambda v, sx=sx: Vector((v.x, v.y, v.z - (v.x * sx) * 0.35 - 0.6 * (v.x * sx) ** 2 / 0.058)))
+        p.detail(fs, H_BEARD, beard_map)
+    p.shade = lambda co, n: 1.0 - 0.12 * sm(HEAD_C - 0.1, HEAD_C - 0.4, co.z) * 0.5
     parts.append(p)
 
 
@@ -728,42 +909,52 @@ def build_hats(parts):
     p = P("hat_straw")
     seg = Q(22, 8)
     rows = lathe_rows([(0.6, HEAD_C + 0.06), (0.5, HEAD_C + 0.14), (0.3, HEAD_C + 0.19)], seg, sy=1.0, y0=0.02)
-    p.grid(rows, color="LOOK_STRAW")
+    brim = m_radial(cy=0.02, tiles=Q(9.0, 5.0), vs=0.085)
+    p.detail(p.grid(rows, color="LOOK_STRAW"), C_STRAW, brim)
     if LOD == 0:
-        p.grid(lathe_rows([(0.6, HEAD_C + 0.05), (0.5, HEAD_C + 0.125), (0.3, HEAD_C + 0.17)], seg, sy=1.0, y0=0.02),
-               color="LOOK_STRAW_DARK", flip=True)
-    p.grid(lathe_rows(catmull([(0.3, HEAD_C + 0.17), (0.3, HEAD_C + 0.24), (0.27, HEAD_C + 0.36), (0.12, HEAD_C + 0.44)], Q(6, 3)),
-                      Q(16, 7), sy=1.0, y0=0.02), cap1=True,
-           colfn=lambda f: "LOOK_STRAW_DARK" if f.calc_center_median().z < HEAD_C + 0.24 else "LOOK_STRAW")
+        p.detail(p.grid(lathe_rows([(0.6, HEAD_C + 0.05), (0.5, HEAD_C + 0.125), (0.3, HEAD_C + 0.17)], seg, sy=1.0, y0=0.02),
+                        color="LOOK_STRAW_DARK", flip=True), C_STRAW, brim)
+    fs = p.grid(lathe_rows(catmull([(0.3, HEAD_C + 0.17), (0.3, HEAD_C + 0.24), (0.27, HEAD_C + 0.36), (0.12, HEAD_C + 0.44)], Q(6, 3)),
+                           Q(16, 7), sy=1.0, y0=0.02), cap1=True,
+                colfn=lambda f: "LOOK_STRAW_DARK" if f.calc_center_median().z < HEAD_C + 0.24 else "LOOK_STRAW")
+    p.detail(fs, C_STRAW, m_crown(Vector((0, 0.02, HEAD_C + 0.17)), Q(6.0, 3.0), 0.085, R=0.3))
     p.shade = lambda co, n: 1.0
     # headscarf (expressions_a): covers the crown, knot + two tails at the nape
     p = Part("hat_scarf", w_fixed("skull"))
-    hair_surface(p, edge=fringe(0.52, 1.72, 2.0, scallop=0.0), vol=lambda th, ph: 1.15, r0=1.04, color=ACCENT, locks=0, seg=(20, 7),
-                 tuck=0.0)
-    p.sphere(Vector((0, 0.36, HEAD_C - 0.12)), (0.07, 0.06, 0.06), Q(10, 5), Q(5, 3), color=ACCENT_D)
+    hair_surface(p, edge=fringe(0.52, 1.72, 2.0, scallop=0.0), vol=lambda th, ph: 1.15, r0=1.04, color=ACCENT, locks=0, seg=(24, 7),
+                 rows=(8, 4), tuck=0.0, cell=C_LINEN, tiles=4.0, vs=0.3)
+    # knot at the nape + two flared tails (base_c back view)
+    lin = m_plane((-0.2, 0.4, HEAD_C), (1, 0, 0), (0, 0, -1), 0.2, 0.2)
+    p.detail(p.sphere(Vector((0, 0.36, HEAD_C - 0.11)), (0.08, 0.065, 0.065), Q(10, 5), Q(5, 3), color=ACCENT_D), C_FOLDS, lin)
     for sx in (-1, 1):
-        p.sphere(Vector((sx * 0.06, 0.38, HEAD_C - 0.24)), (0.045, 0.025, 0.11), Q(8, 4), Q(4, 2), color=ACCENT,
-                 deform=lambda v, sx=sx: Vector((v.x + sx * 0.25 * (-v.z), v.y, v.z)))
+        fs = p.sphere(Vector((sx * 0.075, 0.37, HEAD_C - 0.25)), (0.06, 0.022, 0.12), Q(8, 4), Q(4, 2), color=ACCENT,
+                      deform=lambda v, sx=sx: Vector((v.x * (1 + 0.8 * max(0.0, -v.z) / 0.12) + sx * 0.35 * (-v.z), v.y, v.z)))
+        p.detail(fs, C_FOLDS, lin)
     p.shade = lambda co, n: 1.0 - 0.12 * sm(0.3, -0.6, n.z) - 0.05 * (0.5 + 0.5 * math.sin(co.x * 40 + co.z * 20))
     parts.append(p)
     # flat cap (woodcutter): soft dome + peak
     p = P("hat_cap")
-    p.sphere(Vector((0, 0.02, HEAD_C + 0.17)), (HEAD_R * 1.18, HEAD_R * 1.2, HEAD_R * 0.62), Q(16, 7), Q(8, 4), color=ACCENT,
-             deform=lambda v: Vector((v.x, v.y, max(v.z, -0.02))))
-    p.sphere(Vector((0, -0.33, HEAD_C + 0.14)), (0.19, 0.11, 0.025), Q(12, 6), Q(5, 3), color=ACCENT_D)
+    fs = p.sphere(Vector((0, 0.02, HEAD_C + 0.17)), (HEAD_R * 1.18, HEAD_R * 1.2, HEAD_R * 0.62), Q(16, 7), Q(8, 4), color=ACCENT,
+                  deform=lambda v: Vector((v.x, v.y, max(v.z, -0.02))))
+    p.detail(fs, C_WOOL, m_crown(Vector((0, 0.02, HEAD_C + 0.1)), Q(5.0, 3.0), 0.15))
+    fs = p.sphere(Vector((0, -0.33, HEAD_C + 0.14)), (0.19, 0.11, 0.025), Q(12, 6), Q(5, 3), color=ACCENT_D)
+    p.detail(fs, C_WOOL, m_plane((-0.2, -0.4, HEAD_C), (1, 0, 0), (0, 1, 0), 0.2, 0.2))
     p.shade = lambda co, n: 1.0 - 0.15 * sm(0.0, -0.8, n.z)
     # baker cap: band + puffy top
     p = P("hat_baker")
-    p.grid(lathe_rows([(0.34, HEAD_C + 0.14), (0.35, HEAD_C + 0.24)], Q(18, 8), sy=1.0, y0=0.01), color=shade("LOOK_BAKER", 0.92))
-    p.sphere(Vector((0, 0.02, HEAD_C + 0.33)), (0.38, 0.37, 0.18), Q(14, 7), Q(7, 4), color="LOOK_BAKER",
-             deform=lambda v: v * (1.0 + 0.06 * math.sin(math.atan2(v.y, v.x) * 5)))
+    p.grid(lathe_rows([(0.34, HEAD_C + 0.14), (0.35, HEAD_C + 0.24)], Q(18, 8), sy=1.0, y0=0.01), color=shade("LOOK_BAKER", 0.92),
+           det=(C_LINEN, 5.0, 0.4))
+    fs = p.sphere(Vector((0, 0.02, HEAD_C + 0.33)), (0.38, 0.37, 0.18), Q(14, 7), Q(7, 4), color="LOOK_BAKER",
+                  deform=lambda v: v * (1.0 + 0.06 * math.sin(math.atan2(v.y, v.x) * 5)))
+    p.detail(fs, C_FOLDS, m_crown(Vector((0, 0.02, HEAD_C + 0.3)), 5.0, 0.3))
     p.shade = lambda co, n: 1.0
     # fisher knit cap with a rolled band
     p = P("hat_fisher")
-    p.sphere(Vector((0, 0.02, HEAD_C + 0.1)), (HEAD_R * 1.14, HEAD_R * 1.14, HEAD_R * 1.05), Q(14, 7), Q(8, 4), color=ACCENT,
-             deform=lambda v: Vector((v.x, v.y, max(v.z, 0.0))))
+    fs = p.sphere(Vector((0, 0.02, HEAD_C + 0.1)), (HEAD_R * 1.14, HEAD_R * 1.14, HEAD_R * 1.05), Q(14, 7), Q(8, 4), color=ACCENT,
+                  deform=lambda v: Vector((v.x, v.y, max(v.z, 0.0))))
+    p.detail(fs, C_KNIT, m_crown(Vector((0, 0.02, HEAD_C + 0.1)), Q(8.0, 4.0), 0.16))
     p.grid(lathe_rows(catmull([(0.375, HEAD_C + 0.06), (0.4, HEAD_C + 0.1), (0.385, HEAD_C + 0.16)], Q(4, 2)), Q(18, 8),
-                      sy=1.0, y0=0.02), color=ACCENT_D)
+                      sy=1.0, y0=0.02), color=ACCENT_D, det=(C_KNIT, 9.0, 0.6))
     p.shade = lambda co, n: 1.0 - 0.06 * (0.5 + 0.5 * math.sin(math.atan2(co.y, co.x) * 14))
 
 
@@ -783,25 +974,49 @@ def build_overlays(parts):
             a = -math.pi / 2 + (u - 0.5) * w
             ring.append(Vector((math.cos(a) * r, math.sin(a) * r * 0.82, z)))
         rows.append(ring)
-    p.grid(rows, closed=False, color="LOOK_APRON")
+    p.grid(rows, closed=False, color="LOOK_APRON", det=(C_APRON, 1.4, 1.0))
     p.grid(rows, closed=False, color="LOOK_APRON", flip=True)
     p.shade = lambda co, n: 1.0
     parts.append(p)
     # chief: red waist sash, knot + tails
     p = Part("sash", w_torso(0.3))
-    p.grid(lathe_rows([(0.265, WAIST - 0.05), (0.27, WAIST), (0.265, WAIST + 0.05)], Q(18, 8), sy=0.82), color="LOOK_SASH")
-    p.sphere(Vector((0.2, -0.14, WAIST)), (0.05, 0.04, 0.045), Q(8, 4), Q(4, 2), color="LOOK_SASH")
-    p.sphere(Vector((0.22, -0.15, WAIST - 0.15)), (0.035, 0.02, 0.12), Q(8, 4), Q(4, 2), color="LOOK_SASH")
+    sm_ = m_cyl(tiles=5.0, vs=0.2, z0=WAIST + 0.05)
+    p.detail(p.grid(lathe_rows([(0.298, WAIST - 0.05), (0.304, WAIST), (0.298, WAIST + 0.05)], Q(18, 8), sy=0.82), color="LOOK_SASH"),
+             C_FOLDS, sm_)
+    p.detail(p.sphere(Vector((0.2, -0.14, WAIST)), (0.05, 0.04, 0.045), Q(8, 4), Q(4, 2), color="LOOK_SASH"), C_FOLDS, sm_)
+    p.detail(p.sphere(Vector((0.22, -0.15, WAIST - 0.15)), (0.035, 0.02, 0.12), Q(8, 4), Q(4, 2), color="LOOK_SASH"), C_FOLDS, sm_)
     parts.append(p)
     # herbalist bag
     p = Part("herb_bag", w_torso(0.2))
     p.grid([[Vector((math.cos(a) * 0.272, math.sin(a) * 0.272 * 0.82, SHOULDER - 0.05 - (math.cos(a) + 1) * 0.28))
              for a in [i / Q(16, 8) * 2 * math.pi for i in range(Q(16, 8))]],
             [Vector((math.cos(a) * 0.272, math.sin(a) * 0.272 * 0.82, SHOULDER - 0.0 - (math.cos(a) + 1) * 0.28))
-             for a in [i / Q(16, 8) * 2 * math.pi for i in range(Q(16, 8))]]], color="LOOK_BELT")
-    p.sphere(Vector((-0.27, -0.06, HIP - 0.05)), (0.08, 0.1, 0.1), Q(10, 5), Q(5, 3), color=shade("LOOK_TROUSER", 1.25))
+             for a in [i / Q(16, 8) * 2 * math.pi for i in range(Q(16, 8))]]], color="LOOK_BELT", det=(C_LEATHER, 8.0, 1.0))
+    p.detail(p.sphere(Vector((-0.27, -0.06, HIP - 0.05)), (0.08, 0.1, 0.1), Q(10, 5), Q(5, 3), color=shade("LOOK_TROUSER", 1.25)),
+             C_LINEN, m_cyl(cx=-0.27, cy=-0.06, tiles=2.0, vs=0.2, z0=HIP + 0.05))
     for k in range(2):
         p.sphere(Vector((-0.3 + k * 0.06, -0.08, HIP + 0.07)), (0.03, 0.02, 0.07), Q(6, 3), Q(3, 2), color="LOOK_HERB")
+    parts.append(p)
+    # tunic hood folded down around the neck and on the upper back (base_c man) - a cowl ring, thick at the back
+    p = Part("hood", w_torso(0.0))
+    nu, nv = Q(20, 8), Q(5, 2)
+    rows = []
+    for j in range(nv + 1):
+        t = j / nv
+        ring = []
+        for i in range(nu):
+            a = -math.pi / 2 + i / nu * 2 * math.pi
+            back = 0.5 + 0.5 * math.sin(a)                   # 0 front .. 1 back
+            z = NECK + 0.0 - t * (0.1 + 0.08 * back + 0.3 * back ** 6) + 0.03 * math.sin(t * math.pi) * back   # pointed tip at the back
+            r = 0.135 + 0.11 * math.sin(min(1.0, t * 1.4) * math.pi / 2) + 0.05 * back * math.sin(t * math.pi)
+            r *= 1.0 + 0.04 * math.sin(a * 5) * t                # soft folds
+            ring.append(Vector((math.cos(a) * r * 1.08, math.sin(a) * r * 0.9 + 0.01 + 0.04 * back * t, z)))
+        rows.append(ring)
+    hood_map = m_cyl(tiles=Q(3.0, 2.0), vs=0.22, z0=NECK + 0.02)
+    p.detail(p.grid(rows, color=CLOTH_D), C_HOOD, hood_map)
+    if LOD == 0:
+        p.detail(p.grid(rows[1:], color=(0, 0, 0.7), flip=True), C_HOOD, hood_map)
+    p.shade = lambda co, n: 1.0 - 0.12 * sm(0.2, -0.6, n.z)
     parts.append(p)
     # elder shawl: soft cape over the shoulders, point at the back (base_c elder)
     p = Part("shawl", w_torso(0.0))
@@ -817,16 +1032,18 @@ def build_overlays(parts):
             r = 0.13 + 0.22 * math.sin(min(1.0, t * 1.6) * math.pi / 2) + 0.03 * math.sin(t * math.pi)
             ring.append(Vector((math.cos(a) * r * 1.05, math.sin(a) * r * 0.9, z)))
         rows.append(ring)
-    p.grid(rows, color=SHAWL)
+    wool = m_cyl(tiles=Q(5.0, 3.0), vs=0.35, z0=NECK)
+    p.detail(p.grid(rows, color=SHAWL), C_WOOL, wool)
     if LOD == 0:
-        p.grid(rows[1:], color=SHAWL_D, flip=True)
-        p.sphere(Vector((0, -0.26, SHOULDER - 0.1)), (0.05, 0.035, 0.04), Q(8, 4), Q(4, 2), color=SHAWL_D)
+        p.detail(p.grid(rows[1:], color=SHAWL_D, flip=True), C_WOOL, wool)
+        p.detail(p.sphere(Vector((0, -0.26, SHOULDER - 0.1)), (0.05, 0.035, 0.04), Q(8, 4), Q(4, 2), color=SHAWL_D), C_WOOL, wool)
     p.shade = lambda co, n: 1.0 - 0.1 * (0.5 + 0.5 * math.sin(math.atan2(co.y, co.x) * 9)) * sm(SHOULDER, SHOULDER - 0.3, co.z)
     parts.append(p)
     # swaddled baby in a basket (base_c)
     p = Part("baby_basket", w_fixed("hips"), head=False)
     rows = lathe_rows(catmull([(0.24, 0.0), (0.3, 0.08), (0.34, 0.17), (0.35, 0.2)], Q(5, 3)), Q(20, 8), sy=0.72)
-    p.grid(rows, cap0=True, colfn=lambda f: "LOOK_STRAW" if (int(f.calc_center_median().z * 40) % 2) else "LOOK_STRAW_DARK")
+    p.detail(p.grid(rows, cap0=True, colfn=lambda f: "LOOK_STRAW" if (int(f.calc_center_median().z * 40) % 2) else "LOOK_STRAW_DARK"),
+             C_STRAW, m_cyl(tiles=Q(6.0, 3.0), vs=0.09, z0=0.2))
     inner = [[Vector((v.x * 0.92, v.y * 0.92, v.z + 0.02)) for v in r] for r in rows]
     p.grid(inner, cap0=True, color=shade("LOOK_STRAW_DARK", 0.8), flip=True)      # inside wall + floor seen from above
     p.grid([rows[-1], inner[-1]], color="LOOK_STRAW", out=lambda c: Vector((0, 0, 1)))
@@ -1165,7 +1382,7 @@ def budget(t):
         return tot
     rows = [
         ("tunic + short hair + cap", ("leg_trousers", "torso_tunic", "arm", "head", "hair_short", "hat_cap")),
-        ("tunic + curly + beard", ("leg_trousers", "torso_tunic", "arm", "head", "hair_curly", "beard")),
+        ("tunic + curly + beard + hood", ("leg_trousers", "torso_tunic", "arm", "head", "hair_curly", "beard", "hood")),
         ("dress + curly long", ("leg_stocking", "torso_dress", "arm", "head", "hair_curly_long")),
         ("dress + braids + scarf", ("leg_stocking", "torso_dress", "arm", "head", "hair_braids", "hat_scarf")),
         ("farmer: straw", ("leg_trousers", "torso_tunic", "arm", "head", "hair_short", "hat_straw")),
