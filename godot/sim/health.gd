@@ -58,6 +58,7 @@ static func temperature_at(v: Village, x: float, y: float) -> float:
 	var tb := base_temp(v, v.t)
 	if v.air != null:
 		tb += v.air.temp_shift(tb)        # [곰팡이·뚜껑] 뚜껑으로 섞여 든 거인의 방 기온 (WORLD_EVENTS 3)
+	tb += GiantHand.temp_add(v, v.t)      # [거인의 손] 손의 온기 · 낮의 커튼 그늘 (B6)
 	return tb + Balance.SPOT_WARM * v.water.warm_at(x, y)
 
 
@@ -127,6 +128,7 @@ static func tick(v: Village, dt: float, tt: float) -> void:
 	var tb := base_temp(v, tt)
 	if v.air != null:
 		tb += v.air.temp_shift(tb)        # [곰팡이·뚜껑] 뚜껑이 열리면 방 기온이 섞인다 (겨울엔 잠깐 추위)
+	tb += GiantHand.temp_add(v, tt)       # [거인의 손] 손의 온기 · 낮의 커튼 그늘 (B6)
 	var hr := floori(tt / Balance.HOUR)
 	var new_hour := hr > v._health_hour
 	if new_hour:

@@ -1135,28 +1135,69 @@ func blow() -> void:
 		GameAudio.say("seeds")
 
 
-## [작은 위기] 핀셋 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데에 가장 가까운 날벌레를 집는다.
-## 날벌레가 가운데에서 멀수록 손끝이 서툴러 곁의 집을 짓누를 수 있다 (가운데에 맞추고 집으면 깔끔)
+## [거인의 손] 핀셋 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데에 가장 가까운 것 (날벌레 → 먼지 뭉치 → 떨어진 물건 → 바위)을 집는다.
+## 가운데에서 멀수록 손끝이 서툴러 곁의 집을 짓누를 수 있다 (가운데에 맞추고 집으면 깔끔)
 func tweeze() -> void:
 	var fv := focus_village()
-	if fv.smalls == null:
-		return
 	var vs := get_viewport().get_visible_rect().size
 	var c := screen_to_ground(vs * 0.5)
-	var best: CrisisThing = null
-	var bd := 9.0
-	for g in fv.smalls.live("gnat"):
-		var d := g.pos().distance_to(c)
-		if g.state != "out" and d < bd:
-			bd = d
-			best = g
-	if best == null:
+	var tg := GiantHand.pick_target(fv, c, 9.0)
+	if tg.is_empty():
+		hand_ctl.say("집을 것이 없어요")
 		return
-	var aim := best.pos() + (c - best.pos()).limit_length(minf(bd * 0.35, Balance.GNAT_TWEEZE_R - 0.2))
+	var at: Vector2 = tg["pos"]
+	var bd := at.distance_to(c)
+	var aim := at + (c - at).limit_length(minf(bd * 0.35, GiantHand.TWEEZE_R - 0.2))
 	var r := fv.tweeze(aim)
-	if bool(r.get("picked", false)):
-		GameAudio.fx("glass_tap_light")
-		GameAudio.buzz()
+	if not bool(r.get("ok", false)) and not bool(r.get("picked", false)):
+		hand_ctl.say(String(r.get("why", "")))
+		return
+	HandFx.tweezers(jar, Vector3(at.x, terrain.ground_y(at.x, at.y), at.y))
+	GameAudio.fx("tweezers")
+	GameAudio.buzz()
+
+
+## [거인의 손] 물 뿌리기 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데 땅에
+func spray() -> void:
+	var fv := focus_village()
+	var vs := get_viewport().get_visible_rect().size
+	var p := screen_to_ground(vs * 0.5)
+	var r := fv.spray_water(p)
+	if not bool(r["ok"]):
+		hand_ctl.say(String(r["why"]))
+		return
+	clock.lid_real = 0.0
+	HandFx.spray(jar, Vector3(p.x, terrain.ground_y(p.x, p.y), p.y), GiantHand.SPRAY_R, bool(r["flood"]))
+	GameAudio.fx("water_spray")
+	if bool(r["flood"]):
+		GameAudio.fx("water_lap", "Village")
+
+
+## [거인의 손] 손으로 감싸기 (병 밖 — WORLD_EVENTS 4.2): 병 전체 +6° 한 시간
+func cup() -> void:
+	var r := focus_village().cup_hands()
+	if not bool(r["ok"]):
+		hand_ctl.say(String(r["why"]))
+		return
+	GameAudio.fx("finger_place")
+	GameAudio.buzz()
+
+
+## [거인의 손] 커튼 다음 단 (열림 → 반쯤 → 닫힘 → 열림 — 기획서 6.4). 넓은 세상은 방의 3D 커튼도 (world_village.gd)
+func curtain_next() -> void:
+	var fv := focus_village()
+	fv.set_curtain((fv.curtain() + 1) % 3)
+	GameAudio.fx("sheet_close" if fv.curtain() > 0 else "sheet_open")
+
+
+## [거인의 손] 유리 닦기 (병 밖): 서린 김·먼지막이 걷힘
+func wipe() -> void:
+	var r := focus_village().wipe_glass()
+	if not bool(r["ok"]):
+		hand_ctl.say(String(r["why"]))
+		return
+	air_overlay.play_wipe()
+	GameAudio.fx("glass_tap_light", "Room", -8.0)
 
 
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)

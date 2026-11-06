@@ -47,6 +47,14 @@ var start_clock := 8.0 * HOUR           # 시작 시각 (프로토타입은 실�
 var humid := 0.5
 var offline := false
 var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
+# 거인의 손 (B6 — sim/giant_hand.gd): 병 하나의 상태라 물이 가진다 (넓은 세상의 무리가 함께 씀). 시간은 남은 초로 센다
+var curtain := 0                        # 커튼 0 열림 · 1 반쯤 · 2 닫힘 (기획서 6.4)
+var curtain_dark := 0.0                 # 낮에 닫힘이 이어진 시간 (초)
+var curtain_frost := false              # 냉해 (낮에 닫힘 12시간↑ — 커튼을 열 때까지)
+var cup_left := 0.0                     # 손으로 감싼 온기가 남은 시간 (초)
+var glass_dust := 0.0                   # 유리에 앉은 먼지막 0~1
+var glass_clear := 0.0                  # 닦아서 걷힌 김 0~1 (다시 서림)
+var bright_left := 0.0                  # 닦은 뒤 또렷한 볕이 남은 시간 (초)
 
 # 계산용 표 (저장하지 않음, 병을 돌리면 다시 만든다)
 var cells := PackedInt32Array()         # 원 안의 칸 (k 오름차순 — 프로토타입과 같은 순서)
@@ -229,6 +237,18 @@ func advance(seconds: float) -> void:
 			humid = maxf(0.2, humid - dt / (DAY * 0.9))
 
 
+## 증발 배율 (B6 거인의 손): 낮의 커튼 ×1·0.6·0.3 (밤엔 볕이 없으니 그대로) · 손으로 감싼 동안 ×0.7. 기본 = 정확히 1
+func evap_k() -> float:
+	var k := 1.0
+	if curtain > 0:
+		var hr := hour_now()
+		if GiantHand.is_light(hr):
+			k = float(GiantHand.CURTAIN_EVAP[clampi(curtain, 0, 2)])
+	if cup_left > 0.0:
+		k *= GiantHand.CUP_EVAP
+	return k
+
+
 # ───────────────────────── 물 한 걸음 (hydroStep) ─────────────────────────
 func hydro_step(sc: float) -> void:
 	var hh := h
@@ -284,12 +304,13 @@ func hydro_step(sc: float) -> void:
 		var d := minf(hv, DISSOLVE * minf(1.0, wet * 20.0) * sc)
 		ha[k] -= d
 		sl[k] += d
-	# 증발과 스며듦 (물만 사라지고 소금은 남는다)
+	# 증발과 스며듦 (물만 사라지고 소금은 남는다) — 커튼·감싼 손이 볕을 가리면 덜 (evap_k)
+	var ev := EVAP * evap_k()
 	for k in cells:
 		var v := ww[k]
 		if v <= 0.0:
 			continue
-		v -= EVAP * (0.35 + wm[k]) * sc
+		v -= ev * (0.35 + wm[k]) * sc
 		if v < SEEP_DEPTH:
 			v -= SEEP * sc
 		ww[k] = v if v > 0.0 else 0.0

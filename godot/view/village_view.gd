@@ -627,7 +627,7 @@ func _sync_trees() -> void:
 func _sync_rocks() -> void:
 	var key := ""
 	for r: Dictionary in v.rocks:
-		key += "%d," % int(r["amt"])
+		key += "%d,%.1f,%.1f;" % [int(r["amt"]), float(r["x"]), float(r["y"])]     # 자리도 (핀셋으로 옮긴 바위 — B6)
 	key += str(v.water.rot)
 	if key == _rock_key:
 		return

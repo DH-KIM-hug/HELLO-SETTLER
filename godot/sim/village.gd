@@ -115,6 +115,7 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 # [곰팡이·뚜껑] 병의 공기(김·연기·탁한 공기·뚜껑)와 곰팡이 무리 — WORLD_EVENTS 2.1 · 3 (sim/jar_air.gd · sim/mold.gd, 난수도 각자)
 var air: JarAir
 var mold: Mold
+var hand: GiantHand                   # [거인의 손] 물 뿌리기·감싸기·커튼·유리 닦기·핀셋 (ROADMAP B6 — sim/giant_hand.gd, 난수 없음)
 var smalls: SmallCrises                # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2 — sim/small_crises.gd, 난수도 따로)
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var wild: Wildlife                    # [들짐승] 물고기·사슴·토끼·늑대… 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
@@ -222,6 +223,7 @@ func _init_health(seed_v: int) -> void:
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
 	smalls = SmallCrises.new(seed_v)     # [작은 위기]
+	hand = GiantHand.new()                # [거인의 손]
 	flora = Flora.new(seed_v)             # [하늘의 것]
 	wild = Wildlife.new(seed_v)           # [들짐승] (넓은 세상의 다른 무리는 JarWorld.place_kit이 첫 무리 것으로 바꿈)
 	if not default_created.is_empty():
@@ -784,6 +786,7 @@ func step(dt: float) -> void:
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
 	Mold.step(self, dt)
 	SmallCrises.step(self, dt)        # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2)
+	GiantHand.step(self, dt)          # [거인의 손] 쿨타임·감싼 온기·유리의 먼지막·커튼 냉해 (B6)
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
 	if owns_water:
 		Wildlife.step(self, dt)       # [들짐승] 무리 수·늑대·토끼 밭 피해·상함·늑대 울음 (WILDLIFE 1~4 — 병 하나에 한 번)
@@ -848,10 +851,11 @@ func step(dt: float) -> void:
 ## 나무: 묘목은 자라 나무가 되고, 그루터기는 다시 자라지 않고 썩어 사라진다. 숲 곁 빈 땅에는 가끔 묘목이 저절로 돋는다
 func _update_trees(dt: float) -> void:
 	var rotted := false
+	var gdt := dt * GiantHand.grow_mult(self)     # [거인의 손] 묘목은 볕을 따라 자람 (커튼·유리 — 그루터기가 썩는 것은 그대로)
 	for tr: Dictionary in trees:
 		if tr["s"] == "tree":
 			continue
-		tr["g"] -= dt
+		tr["g"] -= gdt if tr["s"] == "sapling" else dt
 		if tr["g"] <= 0.0:
 			if tr["s"] == "sapling":
 				tr["s"] = "tree"
@@ -1173,6 +1177,7 @@ func _update_building(b: Building, dt: float) -> void:
 		place *= SkyDrops.fert_mult(self, b.x, b.y)       # [상점] 앰플 탑 둘레 비옥한 땅 ×1.5 (WORLD_EVENTS 4.4)
 		place *= Wildlife.field_mult(self, b)             # [들짐승] 토끼가 넘치면 밭 −10~−30% (울타리 ×0.3 — WILDLIFE 3)
 		place *= SmallCrises.farm_mult(self, b)          # [작은 위기] 먼지 뭉치가 덮은 밭은 자람이 멈춤 (WORLD_EVENTS 2.2)
+		place *= GiantHand.farm_mult(self, b)            # [거인의 손] 커튼·유리의 먼지막·물을 반긴 마른 밭·냉해 (GD 6.4 · WE 4.2)
 	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	if b.type == "빵집":
@@ -2120,6 +2125,7 @@ func _turn_data() -> void:
 	altar_pos = JarWater.rot_pt(altar_pos)
 	mold.rotate()                     # [곰팡이·뚜껑] 털뭉치도 병과 함께 돈다
 	smalls.rotate()                   # [작은 위기] 날벌레·물방울·먼지 뭉치도
+	hand.rotate()                     # [거인의 손] 적신 자리
 	flora.rotate()                    # [하늘의 것] 버섯·민들레·꽃씨도
 	if owns_water and wild != null:
 		wild.rotate()                 # [들짐승] 무리 자리도
@@ -3051,11 +3057,36 @@ func on_food_taken() -> void:
 		raise_fear_all(Balance.FEAR_TAKE_FOOD)
 
 
-## [작은 위기] 거인의 핀셋 (뚜껑을 연 채 — WORLD_EVENTS 4.3): 누른 자리의 날벌레를 집음. 서툴면 곁의 집이 부서짐 → {ok, why, picked, crushed}
-func tweeze(p: Vector2) -> Dictionary:
-	var r := smalls.tweeze(self, p)
+## [작은 위기 · 거인의 손] 거인의 핀셋 (뚜껑을 연 채 — WORLD_EVENTS 4.3): 누른 자리의 날벌레·먼지 뭉치·떨어진 물건·바위를 집음.
+## to를 주면 짧은 거리만 옮겨 놓음. 서툴면 곁의 집이 부서짐 → {ok, why, picked, moved, kind, crushed}
+func tweeze(p: Vector2, to: Variant = null) -> Dictionary:
+	var r := hand.tweeze(self, p, to)
 	giant_acted()
 	return r
+
+
+## [거인의 손] 물 뿌리기 (뚜껑을 연 채 — WORLD_EVENTS 4.3 · 기획서 6.3) → {ok, why, water, fields, fires_out, flood, hit}
+func spray_water(p: Vector2) -> Dictionary:
+	return hand.spray(self, p)
+
+
+## [거인의 손] 손으로 감싸기 (병 밖 — WORLD_EVENTS 4.2): 병 전체 +6° 한 시간 → {ok, why, fear}
+func cup_hands() -> Dictionary:
+	return hand.cup(self)
+
+
+## [거인의 손] 커튼 0 열림 · 1 반쯤 · 2 닫힘 (기획서 6.4) → {ok, step}. 바뀌면 hand.curtain_changed(단계)
+func set_curtain(step_i: int) -> Dictionary:
+	return hand.set_curtain(self, step_i)
+
+
+func curtain() -> int:
+	return water.curtain
+
+
+## [거인의 손] 유리 닦기 (병 밖 — WORLD_EVENTS 4.2) → {ok, why, fog, dust, bright}
+func wipe_glass() -> Dictionary:
+	return hand.wipe(self)
 
 
 ## 물 뿌리기가 집을 잠기게 함 — 반경 안 주민 +0.15
@@ -3068,7 +3099,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "smalls", "flora", "wild", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book"]
 
 
@@ -3080,6 +3111,7 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 	d["air"] = air.to_dict()
 	d["mold"] = mold.to_dict()
 	d["smalls"] = smalls.to_dict()
+	d["hand"] = hand.to_dict()
 	d["flora"] = flora.to_dict()
 	if owns_water and wild != null:
 		d["wild"] = wild.to_dict()    # [들짐승] 병 하나에 한 번 (다른 무리는 첫 무리 것을 함께 — JarWorld.from_dict)
@@ -3122,6 +3154,7 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	v.air = JarAir.from_dict(d["air"])
 	v.mold = Mold.from_dict(d["mold"])
 	v.smalls = SmallCrises.from_dict(d["smalls"]) if d.has("smalls") else SmallCrises.new(int(v.rng.seed % 100000))   # 옛 저장: 작은 위기 없이
+	v.hand = GiantHand.from_dict(d["hand"]) if d.has("hand") else GiantHand.new()     # 옛 저장: 손을 쓴 기록 없이
 	v.flora = Flora.from_dict(d["flora"])
 	v.wild = Wildlife.from_dict(d["wild"]) if d.has("wild") else Wildlife.new(int(v.rng.seed % 100000))   # 옛 저장: 처음 걸음에서 무리를 놓는다
 	for bd: Dictionary in d.get("buildings", []):

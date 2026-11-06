@@ -729,6 +729,8 @@ func _process(dt: float) -> void:
 	if room_zoom != null:
 		room_zoom.update(dt)
 		_shelf_process(dt)
+		if room_zoom.room != null and room_zoom.room.curtain_step != world.water.curtain:     # [거인의 손 B6] 방의 3D 커튼 = 병의 커튼 (GiantRoom.set_curtain)
+			room_zoom.room.set_curtain(world.water.curtain)
 		if _enter_fly and not catching and not leaving:
 			_enter_fly = false
 			fly_to_settlement(village)
