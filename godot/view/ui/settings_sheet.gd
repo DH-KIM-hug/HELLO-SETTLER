@@ -392,4 +392,6 @@ static func credits_text(p := LICENSES) -> String:
 			pixabay = true
 	if out.is_empty():
 		return ""
-	return "소리: " + " · ".join(out) + (" (Pixabay)" if pixabay else "")
+	if not pixabay:           # 모두 직접 만든 소리 (ElevenLabs) — 개발용 메모 대신 짧은 한 줄
+		return "음악·효과음·목소리: ElevenLabs로 만들었어요\n글꼴: 나눔스퀘어라운드·나눔손글씨 펜 (네이버), 주아 (우아한형제들) — SIL 오픈 폰트 라이선스"
+	return "소리: " + " · ".join(out) + " (Pixabay)"
