@@ -12,7 +12,15 @@ const CREATION_SCENE := "res://scenes/creation.tscn"
 const BOOT_SCENE := "res://scenes/boot.tscn"
 const CREAM := Color("f3ebdd")             # 부팅 스플래시·회사 로고 바탕 (project.godot boot_splash/bg_color와 같은 색)
 const NAME_MAX := 10
-const NAMES := ["초록방울", "작은 푸른별", "이끼마을", "햇살병", "작은 붉은별", "물방울섬", "둥근 들판", "새벽별", "솔방울", "민들레별", "조약돌"]
+const NAMES := ["초록방울", "작은 푸른별", "이끼마을", "햇살병", "작은 붉은별", "물방울섬", "둥근 들판", "새벽별", "솔방울", "민들레별", "조약돌",
+	"감자별", "털뭉치 마을", "버섯왕국", "꾸벅꾸벅별", "각설탕섬", "코르크 나라", "콩알 왕국", "우당탕 마을", "꼬르륵 들판", "하품하는 숲",
+	"방울토마토별", "꿀벌 골짜기", "찻잔 행성", "비눗방울 섬", "숨바꼭질 숲", "누룽지별", "쿠키 언덕", "도토리 공화국", "말랑 행성", "몽글몽글별",
+	"졸린 고양이섬", "콧노래 마을", "솜사탕 들판", "젤리 호수", "단추 행성", "양말 한 짝 섬", "반짝 유리성", "김 서린 세상", "두더지 언덕", "달팽이 왕국",
+	"보리빵 마을", "호롱불 섬", "뒹굴뒹굴별", "개구리 연못", "바삭바삭 숲", "구름빵 나라", "꼬마 거인별", "주머니 세상", "손톱만 한 별", "눈곱만 한 섬",
+	"새싹 공화국", "깜빡깜빡별", "포근한 언덕", "느긋한 나라", "수줍은 별", "꿈꾸는 병", "토닥토닥 마을", "소곤소곤 숲", "찰방찰방 호수", "어흥 골짜기"]
+## 붙여 만드는 이름 (꾸밈말 + 이름) — 추천의 절반은 이렇게 새로 지어 겹치지 않게
+const NAME_A := ["꼬마", "몽글", "졸린", "반짝", "동글", "말랑", "보송", "새콤", "느긋한", "수줍은", "꿈꾸는", "포근한", "엉뚱한", "꾸벅", "살랑", "콩닥", "뒹굴", "소곤", "까치발", "방긋", "토실", "푸른", "작은", "초록", "노을", "새벽", "이슬", "솜털", "도토리", "누룽지", "감자", "버섯", "꿀"]
+const NAME_B := ["별", "마을", "섬", "들판", "숲", "방울", "왕국", "세상", "언덕", "호수", "골짜기", "정원", "행성", "나라", "공화국", "유리성", "오두막", "샘"]
 const ART_DIR := "res://art/title/"
 
 ## 들어가는 방법 — "continue"(저장 불러오기) · "new"(짧은 창조 뒤 새 병) · ""(장면을 직접 띄움: 개발·캡처)
@@ -93,7 +101,16 @@ static func clean_name(s: String) -> String:
 
 static func suggest_name(rng: RandomNumberGenerator = null) -> String:
 	if rng == null:
-		return NAMES[randi() % NAMES.size()]
+		rng = RandomNumberGenerator.new()
+		rng.randomize()
+	if rng.randf() < 0.5:
+		return NAMES[rng.randi() % NAMES.size()]
+	for i in 8:     # 꾸밈말 + 이름 (10자 안)
+		var a: String = NAME_A[rng.randi() % NAME_A.size()]
+		var b: String = NAME_B[rng.randi() % NAME_B.size()]
+		var n := (a + " " + b) if a.length() >= 3 or rng.randf() < 0.4 else (a + b)
+		if n.length() <= NAME_MAX:
+			return n
 	return NAMES[rng.randi() % NAMES.size()]
 
 
