@@ -140,3 +140,31 @@
 - 선·빛: 짙은 갈색 얇은 선, 왼쪽 위 빛, 그늘 한 단계. 동물 6종 + 이주민 뽑기(shop_3)는 선이 조금 굵어 스티커 느낌 — 피규어 물건이라 허용.
 - 투명: 90장 모두 가장자리에 마젠타 기 픽셀 없음(자동 검사), 캔버스 테두리에 닿는 픽셀 없음.
 - 겹치는 모양: 소금(그릇)과 소금 한 꼬집, 석탄과 검은 돌, 버섯과 상점 물건은 일부러 비슷한 계열.
+
+## 발견 도감 (disc) — ROADMAP B4
+
+`Codex.ENTRIES`의 `art` 이름 그대로 icons.json 키 (`disc_clay` …). 생성: `tools/gen_ref.sh <sheet> <tag>` (L_2 + 기존 아이콘 3장 `tools/ref_disc_goods.png` 참조).
+
+![disc](../../godot_shots/icons_disc_sheet.png)
+
+| 키 | 파일 | 시트 |
+|---|---|---|
+| `disc_clay` | `disc/clay.png` | disc_1 |
+| `disc_waterwheel` | `disc/waterwheel.png` | disc_1 |
+| `disc_brine` | `disc/brine.png` | disc_1 |
+| `disc_brick` | `disc/brick.png` | disc_1 |
+| `disc_terrace` | `disc/terrace.png` | disc_1 |
+| `disc_hot_spring` | `disc/hot_spring.png` | disc_1 |
+| `disc_reed` | `disc/reed.png` | disc_1 |
+| `disc_sapling` | `disc/sapling.png` | disc_1 |
+| `disc_fish_pen` | `disc/fish_pen.png` | disc_1 |
+| `disc_drip_place` | `disc/drip_place.png` | disc_1 |
+| `disc_risen_bread` | `disc/risen_bread.png` | disc_1 |
+| `disc_world_spring` | `disc/world_spring.png` | disc_1 |
+| `disc_world_end` | `disc/world_end.png` | disc_2 |
+| `disc_giant_shadow` | `disc/giant_shadow.png` | disc_3 |
+| `disc_stars` | `disc/stars.png` | disc_2 |
+| `disc_song` | `disc/song.png` | disc_2 |
+| `disc_funeral` | `disc/funeral.png` | disc_2 |
+| `disc_writing` | `disc/writing.png` | disc_2 |
+| `disc_koji` | `disc/koji.png` | disc_2 |

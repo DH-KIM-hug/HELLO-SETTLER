@@ -689,6 +689,176 @@
     ]
    ],
    "note": "chosen: deer, rabbit, fish_handful (= the two-fish alt); others unused"
+  },
+  {
+   "id": "disc_1",
+   "group": "disc",
+   "cols": 4,
+   "rows": 3,
+   "extra_ref": "design/icons/tools/ref_disc_goods.png",
+   "ref_note": "The second attached image shows three existing icons from this same set (bread, water bucket, herb bundle): match their outline thickness, chunky rounded proportions, saturated warm cel-shaded colours, one shade step plus small white highlight and size in the cell exactly; do not copy those objects. Small scenes must read as one compact chunky object (sitting on a small round grass-and-earth mound), never a framed picture, never a circle badge.",
+   "items": [
+    [
+     "clay",
+     "진흙",
+     "a squat round terracotta clay jar freshly shaped, with a lump of wet grey-brown lakebed clay beside it touching it, finger marks on the clay"
+    ],
+    [
+     "waterwheel",
+     "물레방아",
+     "a small wooden waterwheel with paddles turning in a short teal stream with white water splashes, chunky"
+    ],
+    [
+     "brine",
+     "짠물의 맛",
+     "a round dark clay pot of teal salt water steaming gently, white salt crust crystals around the rim"
+    ],
+    [
+     "brick",
+     "불에 구운 흙",
+     "a neat little stack of three fired red-orange bricks, one slightly glowing warm from the kiln"
+    ],
+    [
+     "terrace",
+     "비탈 계단",
+     "a small hill cut into three stepped green terrace fields with tiny rows of crops, earthen step walls"
+    ],
+    [
+     "hot_spring",
+     "땅속의 열",
+     "a small round stone-ringed pool of milky teal hot water with three soft white steam curls rising"
+    ],
+    [
+     "reed",
+     "갈대",
+     "a tied bundle of tall golden-green reed stalks with brown fluffy cattail tops, bound with twine"
+    ],
+    [
+     "sapling",
+     "씨앗을 심다",
+     "a tiny green sapling with two leaves sprouting from a small mound of dark soil, a few seeds beside it"
+    ],
+    [
+     "fish_pen",
+     "물고기 길들이기",
+     "a small round fence of woven wooden stakes standing in teal water with two plump silver-blue fish swimming inside"
+    ],
+    [
+     "drip_place",
+     "물방울의 자리",
+     "one big clear teal water droplet falling into a small round pool, with a ring ripple and a little crown splash"
+    ],
+    [
+     "risen_bread",
+     "효모",
+     "a round clay bowl with soft cream bread dough risen high and puffy above the rim, a few tiny bubbles on the dough"
+    ],
+    [
+     "world_spring",
+     "세상 끝의 샘",
+     "a small spring bubbling up from mossy grey stones, fresh teal water welling out with white bubbles, a small fern beside"
+    ]
+   ]
+  },
+  {
+   "id": "disc_2",
+   "group": "disc",
+   "cols": 4,
+   "rows": 2,
+   "extra_ref": "design/icons/tools/ref_disc_goods.png",
+   "ref_note": "The second attached image shows three existing icons from this same set (bread, water bucket, herb bundle): match their outline thickness, chunky rounded proportions, saturated warm cel-shaded colours, one shade step plus small white highlight and size in the cell exactly; do not copy those objects. Small scenes must read as one compact chunky object (sitting on a small round grass-and-earth mound), never a framed picture, never a circle badge.",
+   "items": [
+    [
+     "world_end",
+     "세상의 끝",
+     "a small round grass mound with one tiny medieval villager (about 4 heads tall, brown tunic) standing at the edge, reaching out a hand to touch a tall curved transparent pale-cyan glass wall that rises behind the mound with white glass highlight streaks"
+    ],
+    [
+     "giant_shadow",
+     "거인의 그림자",
+     "a small round grass mound with two tiny cottages with red roofs, half of the mound covered by one big soft rounded blue-grey shadow shape with a soft edge, calm and gentle, no hands, no body parts"
+    ],
+    [
+     "stars",
+     "별",
+     "a curved piece of transparent pale-cyan glass with white highlight streaks, and through it a deep navy night sky patch with five small yellow twinkling stars, one bigger four-point star"
+    ],
+    [
+     "song",
+     "노래",
+     "a small round wooden lute with strings, three honey-coloured musical notes floating around it touching it"
+    ],
+    [
+     "funeral",
+     "장례",
+     "a small rounded grey stone marker standing on a little grass mound, a small bunch of white and yellow wildflowers laid at its base, peaceful"
+    ],
+    [
+     "writing",
+     "글",
+     "a curled sheet of pale birch bark used as a page, covered with simple squiggle marks (not letters), a white feather quill resting on it"
+    ],
+    [
+     "koji",
+     "누룩",
+     "a round dark clay fermentation crock with its wooden lid tilted open, showing white fluffy koji rice inside, a few rice grains spilled"
+    ],
+    [
+     "spare",
+     "-",
+     "a single acorn"
+    ]
+   ]
+  },
+  {
+   "id": "disc_3",
+   "group": "disc",
+   "cols": 4,
+   "rows": 2,
+   "extra_ref": "design/icons/tools/ref_disc_goods.png",
+   "ref_note": "The second attached image shows three existing icons from this same set (bread, water bucket, herb bundle): match their outline thickness, chunky rounded proportions, saturated warm cel-shaded colours, one shade step plus small white highlight and size in the cell exactly; do not copy those objects. Small scenes must read as one compact chunky object (sitting on a small round grass-and-earth mound), never a framed picture, never a circle badge.",
+   "items": [
+    [
+     "giant_shadow",
+     "거인의 그림자",
+     "a small round grass mound with two tiny cottages with red roofs; the whole right half of the mound, including one cottage, is darkened by a large soft cool blue-violet shadow tint laid over it (the colours there are clearly darker and bluer), the shadow edge is a big gentle curve; calm, no water, no river, no hands, no figures"
+    ],
+    [
+     "giant_shadow_b",
+     "-",
+     "a small round grass mound with one tiny cottage with a red roof and a little tree; a huge soft dark blue-grey oval shadow lies across the grass and over the cottage roof, making those parts clearly darker; gentle and calm, no water, no hands, no figures"
+    ],
+    [
+     "giant_shadow_c",
+     "-",
+     "two tiny cottages with red roofs sitting on a small grass mound, looking up; above them a big soft rounded blue-grey cloud-like shadow puff hovers and its darker shade falls over the roofs and grass; gentle and cozy, no water, no hands, no faces"
+    ],
+    [
+     "giant_shadow_d",
+     "-",
+     "a tiny cottage with a red roof on a small grass mound, the left half bright sunny, the right half covered in a big soft cool blue shadow with a smooth curved edge across the ground and roof; cozy, no water, no hands"
+    ],
+    [
+     "s1",
+     "-",
+     "a single acorn"
+    ],
+    [
+     "s2",
+     "-",
+     "a small green leaf"
+    ],
+    [
+     "s3",
+     "-",
+     "a small pebble"
+    ],
+    [
+     "s4",
+     "-",
+     "a pine cone"
+    ]
+   ]
   }
  ]
 }

@@ -104,6 +104,25 @@
   "검은 돌 (석탄)": "res://art/icons/shop/black_stone.png",
   "해": "res://art/icons/ui/lamp.png",
   "등불": "res://art/icons/ui/lamp.png",
-  "설정": "res://art/icons/ui/settings.png"
+  "설정": "res://art/icons/ui/settings.png",
+  "disc_clay": "res://art/icons/disc/clay.png",
+  "disc_waterwheel": "res://art/icons/disc/waterwheel.png",
+  "disc_brine": "res://art/icons/disc/brine.png",
+  "disc_brick": "res://art/icons/disc/brick.png",
+  "disc_terrace": "res://art/icons/disc/terrace.png",
+  "disc_hot_spring": "res://art/icons/disc/hot_spring.png",
+  "disc_reed": "res://art/icons/disc/reed.png",
+  "disc_sapling": "res://art/icons/disc/sapling.png",
+  "disc_fish_pen": "res://art/icons/disc/fish_pen.png",
+  "disc_drip_place": "res://art/icons/disc/drip_place.png",
+  "disc_risen_bread": "res://art/icons/disc/risen_bread.png",
+  "disc_world_spring": "res://art/icons/disc/world_spring.png",
+  "disc_world_end": "res://art/icons/disc/world_end.png",
+  "disc_giant_shadow": "res://art/icons/disc/giant_shadow.png",
+  "disc_stars": "res://art/icons/disc/stars.png",
+  "disc_song": "res://art/icons/disc/song.png",
+  "disc_funeral": "res://art/icons/disc/funeral.png",
+  "disc_writing": "res://art/icons/disc/writing.png",
+  "disc_koji": "res://art/icons/disc/koji.png"
  }
 }

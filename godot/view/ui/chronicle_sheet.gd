@@ -531,6 +531,9 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 	hb.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	card.add_child(hb)
 	var icon_name := String(row["icon"])
+	var art_key := String(row.get("art", ""))
+	if art_key != "" and GameIcons.has(art_key):      # 발견 그림 (art/icons/disc) — 없으면 임시 아이콘
+		icon_name = art_key
 	var holder := Control.new()
 	holder.custom_minimum_size = Vector2(34, 34)
 	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
