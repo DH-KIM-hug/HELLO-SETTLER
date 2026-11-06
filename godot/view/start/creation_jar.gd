@@ -648,30 +648,6 @@ func _green_at(x: float, y: float, g: float) -> Vector3:
 	return Vector3(clampf(mo, 0, 1), clampf(gr, 0, 1), clampf(fo, 0, 1))
 
 
-## 화면 점 → 흙 위 (u, v) (원판 밖이면 null)
-func ray_uv(sp: Vector2) -> Variant:
-	var o := cam.project_ray_origin(sp)
-	var n := cam.project_ray_normal(sp)
-	if absf(n.y) < 1e-4:
-		return null
-	var y := to_y(0.3)
-	var hit := Vector3.ZERO
-	for i in 4:
-		var t := (y - o.y) / n.y
-		hit = o + n * t
-		var u := hit.x / RIN
-		var v := hit.z / RIN
-		if u * u + v * v > 1.0:
-			var l := Vector2(u, v).length()
-			u /= l
-			v /= l
-		y = to_y(ground_h(u, v))
-	var uv := Vector2(hit.x / RIN, hit.z / RIN)
-	if uv.length() > 1.02:
-		return null
-	return uv.limit_length(0.98)
-
-
 ## 3D 점 → 화면
 func screen_of(p: Vector3) -> Vector2:
 	return cam.unproject_position(p)
@@ -729,21 +705,6 @@ func set_nubs(list: Array) -> void:
 		mi.material_override = Toon.mat(Color("cfeef2"))
 		mi.position = nub_local(float(dv[0]), float(dv[1]))
 		nubs_root.add_child(mi)
-
-
-## 화면 점 → 뒤집힌 코르크 아랫면 (u, v) — 코르크 원판 밖이면 null
-func ray_cork(sp: Vector2) -> Variant:
-	var face := cork.global_transform * nub_local(0, 0)
-	var nrm := (cork.global_transform.basis * Vector3.DOWN).normalized()
-	var o := cam.project_ray_origin(sp)
-	var n := cam.project_ray_normal(sp)
-	var den := n.dot(nrm)
-	if absf(den) < 1e-4:
-		return null
-	var t := (face - o).dot(nrm) / den
-	var hit := cork.global_transform.affine_inverse() * (o + n * t)
-	var uv := Vector2(hit.x / 3.6, hit.z / 3.6)
-	return uv if uv.length() <= 1.15 else null
 
 
 ## 돌기에서 떨어지는 첫 물방울 (뚜껑이 닫힌 뒤)

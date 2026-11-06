@@ -1,6 +1,9 @@
-## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md 1·2 — 첫 병 줄임판, 약 3~4분).
-## 단계: core 핵 넣기 → soil 흙 붓기·빚기 → water 물 붓기 → lid 물방울 돌기·뚜껑 잠그기(배양) → seeds 씨앗(배양) →
-##       wildlife 들짐승 상자·물고기 병(배양) → spot 스타터킷 자리 (넓은 세상 장면) → name 지구 이름 → 병 안.
+## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md 1·2 — 첫 병 줄임판).
+## 단계: core 핵 → soil 땅 → water 물 → lid 물방울 돌기·뚜껑 잠그기(배양, 저절로) → seeds 씨앗(배양) →
+##       wildlife 들짐승·물고기 풀기(배양) → spot 스타터킷 자리 (넓은 세상 장면) → name 지구 이름 → 병 안.
+## 단계마다 큰 단추 2~3개 (2026-11-07 — 손으로 빚기·게이지·돌기 찍기·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
+##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 돌기 auto_drips · 씨앗 seed_preset.
+##   sculpt · drips · seeds · animals · fish 칸은 그대로 (옛 저장·세상 만들기와 같은 모양).
 ## 빈 병 두드리기(0)는 타이틀 → 병 연출에, 암반 컵(2)은 시드(광맥·암염은 WorldGen이 보장), 태양(5)은 첫 병 온대 고정 (나중 병의 자리만 climate).
 ## 좌표: 병 안 원판을 [-1, 1]로 (u = 세상 x / 반지름, v = 세상 y / 반지름). 빚기 = SG×SG 격자 (−1 파냄 ~ +1 쌓음).
 ## 결정론: 시드 + 이 선택(gen_opts — 값은 1/1000로 반올림) → 늘 같은 세상. 중간 저장(creation.json)에서 다시 만들어도 같다.
@@ -13,7 +16,12 @@ const SG := 32                          # 빚기 격자 한 변
 const REACH := 1.0                      # 병 안 원판 → 세상 (같은 비율)
 const FILE := "creation.json"
 const MAX_PTS := 80                     # 씨앗 종류마다 남기는 점 수
-const WATER_MIN := 0.12                 # 이보다 적게 부으면 [다음]에서 조금 더 부어 준다 ("생명에는 물이 필요해요")
+const CORE_PICKS := ["작게", "보통", "크게"]
+const LAND_PICKS := ["너른 들", "언덕", "산과 골짜기"]
+const WATER_PICKS_T := ["조금", "알맞게", "넉넉히"]
+const WATER_PICKS := [0.22, 0.5, 0.82]   # 물 단추 → 부은 양 (신화: 0.35 아래 '조금' · 0.75 위 '넉넉히')
+const SEED_PICKS := ["알아서", "숲을 더", "풀밭을 더"]
+const DRIP_N := 3                       # 거인의 돌기 (세상이 나머지를 채워 메이슨 자 8~12 — GD 3.3)
 const CORE_WORDS := ["조용한 별이네요.", "따뜻한 별이네요.", "뜨거운 별이네요.\n땅이 자주 흔들릴지도 몰라요."]
 
 var seed_v := 0
@@ -21,11 +29,11 @@ var size := 1024
 var stage := "core"
 var core := 1                           # 0 작게 · 1 보통 · 2 크게
 var sculpt := PackedFloat32Array()      # SG×SG
-var water := 0.0                        # 0~1 (부은 양 — 게이지)
-var drips: Array = []                   # [[u, v]…] 1~3개 (뚜껑 안쪽에 찍은 물방울 돌기)
+var water := 0.0                        # 0~1 (부은 양 — 물 단추 WATER_PICKS)
+var drips: Array = []                   # [[u, v]…] 뚜껑 안쪽 물방울 돌기 (auto_drips — 옛 저장은 거인이 찍은 1~3개)
 var seeds := {"moss": [], "grass": [], "tree": []}
-var animals: Array = []                 # [u, v] 들짐승 상자를 놓은 곳 (비면 알아서)
-var fish: Array = []                    # [u, v] 물고기 병을 기울인 곳
+var animals: Array = []                 # [u, v] 들짐승을 푼 곳 (가까운 숲 — 비면 알아서)
+var fish: Array = []                    # [u, v] 물고기를 푼 호수
 var spot: Array = []                    # [x, y] 스타터킷 자리 (세상 좌표)
 var climate := "temperate"              # 첫 병은 온대 고정 (GAME_DESIGN 5.3) — 두 번째 병부터 태양 단계가 정함
 var jar_name := ""
@@ -124,6 +132,87 @@ func auto_sculpt(n: int) -> void:
 		var a := r.randf() * TAU
 		var d := sqrt(r.randf()) * 0.75
 		brush(cos(a) * d, sin(a) * d, r.randf_range(0.22, 0.4), r.randf_range(0.5, 0.9) * (1.0 if i % 3 != 2 else -1.0))
+
+
+## 땅 단추 (0 너른 들 · 1 언덕 · 2 산과 골짜기) → 빚기 격자. 시드로 자리를 정하고, 높낮이는 프리셋마다 정해진 만큼으로 맞춘다
+## (너른 들 ≤ 0.15 · 언덕 ≈ 0.45 · 산 ≈ 0.9 / 골짜기 ≈ −0.8 — 높낮이 차: 너른 들 < 언덕 < 산과 골짜기)
+func land_preset(i: int) -> void:
+	i = clampi(i, 0, 2)
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 13 + 977 * (i + 1)
+	sculpt.fill(0.0)
+	match i:
+		0:                                          # 너른 들: 넓고 낮은 물결 몇
+			for k in 5:
+				var a := r.randf() * TAU
+				var d := sqrt(r.randf()) * 0.7
+				brush(cos(a) * d, sin(a) * d, r.randf_range(0.4, 0.6), r.randf_range(0.06, 0.12) * (1.0 if k % 2 == 0 else -1.0))
+			_fit(0.15, -0.12)
+		1:                                          # 언덕: 둥근 언덕 여럿 + 얕은 우묵
+			for k in 8:
+				var a := r.randf() * TAU
+				var d := sqrt(r.randf()) * 0.78
+				brush(cos(a) * d, sin(a) * d, r.randf_range(0.2, 0.32), r.randf_range(0.25, 0.45) * (1.0 if k % 4 != 3 else -0.6))
+			_fit(0.45, -0.25)
+		_:                                          # 산과 골짜기: 한쪽 가장자리를 따라 산줄기, 맞은쪽에 깊은 골짜기, 사이에 언덕
+			var a0 := r.randf() * TAU
+			for k in 4:
+				var a := a0 + (k - 1.5) * 0.42 + r.randf_range(-0.12, 0.12)
+				var d := r.randf_range(0.55, 0.72)
+				brush(cos(a) * d, sin(a) * d, r.randf_range(0.2, 0.28), r.randf_range(0.8, 1.0))
+			for k in 2:
+				var a := a0 + PI + (k - 0.5) * 0.7 + r.randf_range(-0.2, 0.2)
+				var d := r.randf_range(0.35, 0.55)
+				brush(cos(a) * d, sin(a) * d, r.randf_range(0.2, 0.26), -r.randf_range(0.8, 1.0))
+			for k in 3:
+				var a := r.randf() * TAU
+				var d := sqrt(r.randf()) * 0.5
+				brush(cos(a) * d, sin(a) * d, r.randf_range(0.16, 0.24), r.randf_range(0.2, 0.35))
+			_fit(0.9, -0.8)
+
+
+## 높은 곳은 hi에, 낮은 곳은 lo에 닿게 (따로 늘이거나 줄임)
+func _fit(hi: float, lo: float) -> void:
+	var mx := 0.0
+	var mn := 0.0
+	for x in sculpt:
+		mx = maxf(mx, x)
+		mn = minf(mn, x)
+	for k in sculpt.size():
+		var x := sculpt[k]
+		sculpt[k] = _q(x * hi / mx if x > 0.0 and mx > 0.0 else (x * lo / mn if x < 0.0 and mn < 0.0 else 0.0))
+
+
+## 뚜껑 안쪽 물방울 돌기를 저절로 (DRIP_N개, 고르게 흩어서) — 이미 있으면 (옛 저장) 그대로
+func auto_drips() -> void:
+	if not drips.is_empty():
+		return
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 5 + 29
+	var a0 := r.randf() * TAU
+	for i in DRIP_N:
+		var a := a0 + TAU * i / DRIP_N + r.randf_range(-0.35, 0.35)
+		var d := r.randf_range(0.32, 0.62)
+		drips.append([_q(cos(a) * d), _q(sin(a) * d)])
+
+
+## 씨앗 단추 (0 알아서 · 1 숲을 더 · 2 풀밭을 더) → 씨앗 점 무리 (무리 = 한 숲·한 들판)
+func seed_preset(i: int) -> void:
+	i = clampi(i, 0, 2)
+	for k: String in ["moss", "grass", "tree"]:
+		seeds[k] = []
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 11 + 5
+	var counts: Dictionary = [{"tree": 3, "grass": 2, "moss": 1}, {"tree": 6, "grass": 1, "moss": 1}, {"tree": 1, "grass": 5, "moss": 1}][i]
+	for kind: String in ["tree", "grass", "moss"]:
+		for n in int(counts[kind]):
+			var a := r.randf() * TAU
+			var d := r.randf_range(0.2, 0.78)
+			var c := Vector2(cos(a), sin(a)) * d
+			add_seed(kind, c.x, c.y)
+			for j in 6:
+				var q := c + Vector2.from_angle(TAU * j / 6.0) * 0.05
+				add_seed(kind, q.x, q.y)
 
 
 ## 미리보기 높이 (세상 높이 단위): 시드의 바탕 + 빚은 높낮이 — 창조 화면의 흙과 세상 만들기가 같은 식
@@ -227,12 +316,22 @@ static func myth_of(cr: Dictionary) -> Array:
 		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 높은 산과 깊은 골짜기를 빚었다.")
 	elif hi > 0.5:
 		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 산을 빚었다.")
+	elif hi > 0.3:
+		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 나지막한 언덕을 빚었다.")
 	else:
 		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 너른 땅을 폈다.")
 	var w := float(cr.get("water", 0.5))
 	lines.append("거인이 물을 조금 부으니 작은 호수 몇이 남았다." if w < 0.35 else ("거인이 물을 넉넉히 부으니 호수가 가득했다." if w > 0.75 else "거인이 물을 부으니 호수가 생겼다."))
 	lines.append("거인이 하늘을 닫자 하늘에서 첫 물방울이 떨어졌고, 긴 세월이 흘렀다.")
-	lines.append("거인이 생명을 뿌리니 숲이 자랐다.")
+	var sd: Dictionary = cr.get("seeds", {})
+	var nt: int = (sd.get("tree", []) as Array).size()
+	var ng: int = (sd.get("grass", []) as Array).size()
+	if ng > nt * 2:
+		lines.append("거인이 생명을 뿌리니 풀밭이 너르게 펼쳐졌다.")
+	elif nt > ng * 3:
+		lines.append("거인이 생명을 뿌리니 숲이 우거졌다.")
+	else:
+		lines.append("거인이 생명을 뿌리니 숲이 자랐다.")
 	lines.append("사람보다 먼저, 거인은 숲에 짐승을 물에 물고기를 풀어 놓으셨다.")
 	lines.append("그리고 어느 새벽, 거인이 우리의 조상 열 명을 이 땅에 내려놓으셨다.")
 	return lines

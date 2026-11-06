@@ -305,7 +305,7 @@ func test_new_jar_scene() -> void:
 	drop(sm)
 
 
-## 빠른 창조 (OPENING 4 — 두 번째 병부터): 한 화면에서 고르고 [만들기] → 세상 → 키트 자리로 · [정성 들여 만들기] = 단계별
+## 빠른 창조 (OPENING 4 — 두 번째 병부터): 한 화면에서 고르고 [만들기] → 세상 → 키트 자리로 (첫 병과 같은 단추 프리셋)
 func test_quick_creation() -> void:
 	var sm := manager()
 	var p := CreationPlan.make(13, WorldCfg.SMALL_SIZE)
@@ -318,7 +318,7 @@ func test_quick_creation() -> void:
 	c.call("set_quick", "core", 2)
 	c.call("set_quick", "water", 2)
 	c.call("set_quick", "seeds", 1)
-	check(p.core == 2 and is_equal_approx(p.water, 0.68) and (p.seeds["tree"] as Array).size() > 0 and p.drips.size() == 2, "고른 것이 바로 plan에 (핵 크게 · 물 넉넉히 · 숲 씨앗)")
+	check(p.core == 2 and is_equal_approx(p.water, CreationPlan.WATER_PICKS[2]) and (p.seeds["tree"] as Array).size() > 0 and p.drips.size() == CreationPlan.DRIP_N, "고른 것이 바로 plan에 (핵 크게 · 물 넉넉히 · 숲 씨앗)")
 	StartFlow.last_target = ""
 	c.call("next")
 	check(StartFlow.last_target == StartFlow.GAME_SCENE and StartFlow.mode == "new" and StartFlow.pending_world != null and p.stage == "spot",
@@ -334,8 +334,7 @@ func test_quick_creation() -> void:
 	var c2: Node = load(StartFlow.CREATION_SCENE).instantiate()
 	c2.set("instant", true)
 	run.root.add_child(c2)
-	c2.call("_on_alt")
-	check(not p2.quick and c2.get("step") == "core", "[정성 들여 만들기] → 첫 창조처럼 핵 넣기부터")
+	check(not (c2.get("alt_btn") as Button).visible and p2.quick and c2.get("step") == "quick", "빠른 창조에 [정성 들여 만들기]는 없음")
 	run.root.remove_child(c2)
 	c2.free()
 	StartFlow.plan = null
