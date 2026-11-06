@@ -4,6 +4,7 @@ extends RefCounted
 
 var run: SceneTree
 var quick := false
+const SLOW: Array = ["test_pressure"]           # 오래 걸리는 통계 시험 — run.gd의 long·전체 모드에서만 (quick은 건너뜀)
 const H := Balance.HOUR
 const D := Balance.DAY
 
@@ -19,18 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 병의 공기·뚜껑·곰팡이 무리 (WORLD_EVENTS 2.1 · 3)")
-	test_air_values()
-	test_lid()
-	test_lid_auto_close()
-	test_gnats()
-	test_pressure()
-	test_swarm_first_time()
-	test_chaser_and_adapt()
-	test_weaknesses()
-	test_illness()
-	test_koji()
-	test_blue_medicine()
-	test_determinism()
+	run.timed(self, ["test_air_values", "test_lid", "test_lid_auto_close", "test_gnats", "test_pressure", "test_swarm_first_time", "test_chaser_and_adapt", "test_weaknesses", "test_illness", "test_koji", "test_blue_medicine", "test_determinism"])
 
 
 static func village(climate := "온대", month := 4, day := 15, seed_v := 5) -> Village:

@@ -20,9 +20,10 @@ const HATS := ["", "hat_straw", "hat_scarf"]
 const CAP_HAT := "hat_cap"        # 모자 없는 남자 일부
 ## 짐 이름 → 부품 (없으면 상자)
 const ITEMS := {"통나무": "item_log", "판자": "item_plank", "돌": "item_stone", "낟알": "item_sack", "밀": "item_sack",
-	"밀가루": "item_sack", "빵": "item_basket", "물": "item_water", "소금": "item_sack"}
+	"밀가루": "item_sack", "빵": "item_basket", "물": "item_water", "소금": "item_sack",
+	"버섯": "item_basket", "빛버섯": "item_basket", "붉은 물감": "item_basket", "말린 버섯": "item_basket"}   # [하늘의 것]
 ## 일터 → 일할 때 드는 연장
-const TOOLS := {"나무꾼": "tool_axe", "산림관": "tool_axe", "채석장": "tool_hammer", "농장": "tool_sickle", "소금밭": "tool_sickle", "": "tool_hammer"}
+const TOOLS := {"나무꾼": "tool_axe", "산림관": "tool_axe", "채석장": "tool_hammer", "농장": "tool_sickle", "소금밭": "tool_sickle", "버섯꾼": "tool_sickle", "": "tool_hammer"}
 
 static var _boxes: Dictionary = {}
 static var _hull: ShaderMaterial
@@ -442,6 +443,14 @@ func apply_pose(a: String, t: float) -> void:
 			arm_l.rotation.z = -0.4
 			arm_r.rotation.z = 0.4
 			head.rotation.x = 0.24 + sin(t * 1.2) * 0.06
+		"fly":                          # [하늘의 것] 꽃씨에 매달려 둥실 — 두 팔을 머리 위로, 다리는 대롱대롱
+			arm_l.rotation.x = -2.95
+			arm_r.rotation.x = -2.95
+			arm_l.rotation.z = 0.15
+			arm_r.rotation.z = -0.15
+			leg_l.rotation.x = sin(t * 2.4) * 0.35
+			leg_r.rotation.x = -sin(t * 2.4 + 0.6) * 0.35
+			pose.rotation.z = sin(t * 1.3) * 0.08
 		"play":
 			var hop := absf(sin(t * 5.0))
 			pose.position.y = hop * 0.26

@@ -4,6 +4,7 @@ extends RefCounted
 
 var run: SceneTree
 var quick := false
+const SLOW: Array = ["test_illness_rates", "test_seasons"]           # 오래 걸리는 통계 시험 — run.gd의 long·전체 모드에서만 (quick은 건너뜀)
 const H := Balance.HOUR
 const D := Balance.DAY
 
@@ -19,20 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 건강·기후·두려움 (HEALTH.md)")
-	test_calendar_and_temperature()
-	test_illness_rates()
-	test_severity()
-	test_outbreaks()
-	test_immunity()
-	test_exposure()
-	test_firewood()
-	test_injury()
-	test_fear()
-	test_deaths_and_text()
-	test_blood_src()
-	test_offline_protection()
-	test_winter_speed_equal()
-	test_seasons()
+	run.timed(self, ["test_calendar_and_temperature", "test_illness_rates", "test_severity", "test_outbreaks", "test_immunity", "test_exposure", "test_firewood", "test_injury", "test_fear", "test_deaths_and_text", "test_blood_src", "test_offline_protection", "test_winter_speed_equal", "test_seasons"])
 
 
 ## 날짜를 정해 새 마을 (Village.default_created를 잠깐 바꿈)

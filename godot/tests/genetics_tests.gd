@@ -4,6 +4,7 @@ extends RefCounted
 
 var run: SceneTree
 var quick := false
+const SLOW: Array = []           # 오래 걸리는 통계 시험 — run.gd의 long·전체 모드에서만 (quick은 건너뜀)
 
 
 func _init(r: SceneTree, q: bool) -> void:
@@ -17,16 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 7단계: 겉모습 유전자 · 혈통")
-	test_eye_mendel()
-	test_skin_mean()
-	test_baldness()
-	test_piebald_and_rare()
-	test_from_look()
-	test_bloodline_data()
-	test_bloodline_inherit()
-	test_cancel_and_slots()
-	test_determinism()
-	test_effects_and_kits()
+	run.timed(self, ["test_eye_mendel", "test_skin_mean", "test_baldness", "test_piebald_and_rare", "test_from_look", "test_bloodline_data", "test_bloodline_inherit", "test_cancel_and_slots", "test_determinism", "test_effects_and_kits"])
 
 
 static func g_of(eye_a: int, eye_b: int, skin := 0.5) -> PackedByteArray:

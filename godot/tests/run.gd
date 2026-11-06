@@ -1,9 +1,17 @@
 ## 시뮬레이션 테스트 (헤드리스) — 실패하면 0이 아닌 값으로 끝난다.
-## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -- quick · 넓은 세상만: -- world · 영역·제물·소원만: -- economy · 유전·혈통만: -- genetics · 건강·기후·두려움만: -- health · 공기·뚜껑·곰팡이만: -- mold)
+## 실행: godot --headless --path godot -s res://tests/run.gd [-- 모드] [-- 묶음]
+##   모드: (없음) 전체 = 빠른 시험 + 오래 걸리는 통계 시험 (모든 시험, 표본 크게) · quick 빠른 시험만 (표본 작게, 2분 남짓) ·
+##         long 오래 걸리는 통계 시험만 (표본 크게 — 30일 인구·50개 세상·발병률 등). quick + long = 전체의 모든 확인.
+##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
 const DAYS := 9
+const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
+var mode := "full"                    # quick · long · full
+var times: Array = []                 # [이름, 초]
 
 
 func check(ok: bool, what: String) -> void:
@@ -12,55 +20,54 @@ func check(ok: bool, what: String) -> void:
 		fails += 1
 
 
+## 시험 함수들을 모드에 맞게 부르고 시간을 잰다 — quick: SLOW 빼고 · long: SLOW만 · full: 모두
+func timed(obj: Object, names: Array) -> void:
+	var slow: Array = obj.get("SLOW") if obj.get("SLOW") != null else []
+	var tag: String = obj.get_script().resource_path.get_file().get_basename()
+	for n: String in names:
+		var is_slow := n in slow
+		if (mode == "quick" and is_slow) or (mode == "long" and not is_slow):
+			continue
+		var t0 := Time.get_ticks_usec()
+		obj.call(n)
+		times.append(["%s.%s" % [tag, n], (Time.get_ticks_usec() - t0) / 1.0e6])
+
+
+const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests/genetics_tests.gd", "health": "res://tests/health_tests.gd",
+	"economy": "res://tests/economy_tests.gd", "mold": "res://tests/mold_tests.gd", "flora": "res://tests/flora_tests.gd"}
+
+
 func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
+	var args := OS.get_cmdline_user_args()
+	if "quick" in args:
+		mode = "quick"
+	elif "long" in args:
+		mode = "long"
+	var q := mode == "quick"
 	# 병 날짜를 4월 15일(봄)로 고정 — 기존 테스트가 기기 날짜에 따라 달라지지 않게 (HEALTH.md 7). 겨울 시험은 health_tests가 따로
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
-	if "health" in OS.get_cmdline_user_args():         # -- health : 건강·기후·두려움 테스트만 (HEALTH.md)
-		load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
-		quit(1 if fails > 0 else 0)
+	var one := ""
+	for k: String in SUITES:
+		if k in args:
+			one = k
+	if one != "":                                      # 묶음 하나만
+		load(SUITES[one]).new(self, q).all()
+		_finish(t0)
 		return
-	if "mold" in OS.get_cmdline_user_args():           # -- mold : 병의 공기·뚜껑·곰팡이 무리만 (WORLD_EVENTS 2.1 · 3)
-		load("res://tests/mold_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
-		quit(1 if fails > 0 else 0)
-		return
-	if "world" in OS.get_cmdline_user_args():          # -- world : 넓은 세상 테스트만 (6단계 개발용)
-		load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
-		quit(1 if fails > 0 else 0)
-		return
-	if "economy" in OS.get_cmdline_user_args():        # -- economy : 영역·자율 건설·소원·길·제물·장터·분가만 (v4.0)
-		load("res://tests/economy_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
-		quit(1 if fails > 0 else 0)
-		return
-	if "genetics" in OS.get_cmdline_user_args():       # -- genetics : 7단계 겉모습 유전자·혈통 테스트만
-		load("res://tests/genetics_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-		print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
-		quit(1 if fails > 0 else 0)
-		return
-	test_nine_days()
-	test_rotation()
-	test_sale_price()
-	test_village_opening()
-	test_house_bottleneck()
-	test_determinism()
-	test_time_controls()
-	# 6단계 — 넓은 세상 (tests/world_tests.gd)
-	load("res://tests/world_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-	# 7단계 — 겉모습 유전자 · 혈통 (tests/genetics_tests.gd)
-	load("res://tests/genetics_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-	# 건강·기후·두려움 (tests/health_tests.gd)
-	load("res://tests/health_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-	# v4.0 — 영역·자율 건설·소원·길·제물·장터·분가 (tests/economy_tests.gd)
-	load("res://tests/economy_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-	# 병의 공기·뚜껑·곰팡이 무리 (tests/mold_tests.gd)
-	load("res://tests/mold_tests.gd").new(self, "quick" in OS.get_cmdline_user_args()).all()
-	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
-		test_village_population()
-	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
+	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_house_bottleneck", "test_determinism", "test_time_controls"])
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora"]:
+		load(SUITES[k]).new(self, q).all()
+	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
+	_finish(t0)
+
+
+func _finish(t0: int) -> void:
+	times.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
+	print("\n오래 걸린 시험 (모드 %s):" % mode)
+	for i in mini(12, times.size()):
+		print("  %6.1f s  %s" % [times[i][1], times[i][0]])
+	print("\n%s — %d failure(s), %.1f s (모드 %s)" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0, mode])
 	quit(1 if fails > 0 else 0)
 
 

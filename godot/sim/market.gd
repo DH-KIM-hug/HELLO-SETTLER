@@ -9,12 +9,14 @@ static var notes := 0.0               # 지폐
 static var sold: Dictionary = {}      # 그날 물건별 거둔 개수
 static var day_key := ""              # sold가 세는 현실 날짜
 static var today_override := ""       # 테스트: 비어 있지 않으면 이 날짜를 '오늘'로
+static var first_paid := false        # 첫 제물 웃돈을 받았다 (BALANCE v4-4 — 거인에게 한 번, Village.take_offering)
 
 
 static func reset(start_notes := 0.0) -> void:
 	notes = start_notes
 	sold = {}
 	day_key = ""
+	first_paid = false
 
 
 static func _today() -> String:

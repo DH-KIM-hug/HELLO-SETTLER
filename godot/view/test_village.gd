@@ -35,6 +35,7 @@ var detail: ResidentDetail
 var altar_sheet: AltarSheet          # 제단 시트 (UI 02 — 제물 받기·소원 들어주기·건물 사 주기·강제로 거두기)
 var air_overlay: JarAirOverlay       # [곰팡이·뚜껑] 서린 김·누런 하늘·열린 뚜껑의 빛 (view/jar_air_overlay.gd)
 var lid_btn: Button                  # [곰팡이·뚜껑] 뚜껑 열기/닫기 (WORLD_EVENTS 3)
+var blow_btn: Button                 # [하늘의 것] 불기 — 뚜껑이 열린 동안만 (WORLD_EVENTS 2.7)
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
 var _tap_ok := false
@@ -263,6 +264,11 @@ func _setup_ui() -> void:
 	lid_btn.focus_mode = Control.FOCUS_NONE
 	lid_btn.pressed.connect(toggle_lid)
 	tbar.add_child(lid_btn)
+	blow_btn = Button.new()             # [하늘의 것] 거인이 입으로 불기 — 솜털 공의 꽃씨가 하늘 가득 (뚜껑이 열린 동안만)
+	blow_btn.text = "불기"
+	blow_btn.focus_mode = Control.FOCUS_NONE
+	blow_btn.pressed.connect(blow)
+	tbar.add_child(blow_btn)
 	var bar := HBoxContainer.new()
 	_pin_bottom(bar, 0.0, 6.0, 34.0)
 	bar.add_theme_constant_override("separation", 3)
@@ -272,7 +278,8 @@ func _setup_ui() -> void:
 			["－", func() -> void: cam.zoom_by(1.0 / 1.5)], ["＋", func() -> void: cam.zoom_by(1.5)],
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
-			["곰팡이", func() -> void: village.mold.force_swarm(village)]]:     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
+			["곰팡이", func() -> void: village.mold.force_swarm(village)],     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
+			["버섯 숲", func() -> void: village.flora.grove(village)]]:      # [하늘의 것] 개발: 하룻밤 버섯 숲 바로
 		var b := Button.new()
 		b.text = spec[0]
 		b.focus_mode = Control.FOCUS_NONE
@@ -313,6 +320,12 @@ func toggle_lid() -> void:
 		clock.lid_real = 0.0
 
 
+## [하늘의 것] 거인이 분다 — 카메라가 보는 쪽(땅 위)으로. 뚜껑이 닫혀 있으면 아무 일 없음
+func blow() -> void:
+	var f := cam.camera.global_transform.basis.z
+	village.blow_seeds(Vector2(-f.x, -f.z))
+
+
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
 func set_pixel_effects(on: bool) -> void:
 	post_mat.set_shader_parameter("use_outline", on)
@@ -347,6 +360,7 @@ func _update_ui() -> void:
 	else:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
+	blow_btn.disabled = not village.air.lid_open
 	if not village.warnings.is_empty() and clock.notice_t <= 0.0:     # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		clock.notice = str(village.warnings.pop_front()["text"])
 		clock.notice_t = 6.0

@@ -108,6 +108,8 @@ static func decide(v: Village, r: Resident) -> void:
 		return
 	if Mold.decide(v, r):              # [곰팡이·뚜껑] 털뭉치를 피해 숨기 · 횃불로 쫓기 · 곰팡이약 만들기 (WORLD_EVENTS 2.1)
 		return
+	if Flora.decide(v, r):             # [하늘의 것] 큰 민들레 꽃잎·솜털·잎 따기 (WORLD_EVENTS 2.7)
+		return
 	var night := v.is_night()
 	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
 	if late > 0.0 and h >= Balance.NIGHT_TO and h < Balance.NIGHT_TO + late:
@@ -389,7 +391,7 @@ static func _pray(v: Village, r: Resident) -> bool:
 
 # ───────────────────────── 일 ─────────────────────────
 static func _full(v: Village, k: String) -> bool:
-	return Balance.ENOUGH.has(k) and float(v.stock.get(k, 0.0)) >= v.enough(k)     # 추운 철엔 통나무를 더 (땔감 — HEALTH.md 1.3)
+	return float(v.stock.get(k, 0.0)) >= v.enough(k)     # 추운 철엔 통나무를 더 (땔감 — HEALTH.md 1.3) · 밀도 넉넉하면 (BALANCE v4-4)
 
 
 ## 직장 일 — dry=true면 일감이 있는지만 본다
@@ -405,6 +407,10 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return false
 	if b.type == "산림관" and v._standing_trees() >= Balance.FORESTER_STOP:
 		return false
+	if b.type == "버섯꾼" and _full(v, "버섯") and _full(v, "말린 버섯"):      # [하늘의 것]
+		return false
+	if b.type == "농장" and v.flora != null and int(v.flora.weeds.get(b.id, 0)) > 0:   # [하늘의 것] 잡초는 넉넉해도 뽑는다
+		return dry or v.flora.weed_task(v, r, b)
 	if d.has("out"):
 		var all_full := true
 		for k in d["out"]:
@@ -444,6 +450,8 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		r.steps.append(act(d["chop"], "work", chop, true, unres))
 		_drop_at_store(v, r, s, "통나무", 1.0)
 		return true
+	if b.type == "버섯꾼":                # [하늘의 것] 큰 버섯을 베어 나름 (WORLD_EVENTS 2.6)
+		return v.flora.pick_task(v, r, b)
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
 		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):

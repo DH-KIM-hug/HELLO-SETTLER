@@ -3,6 +3,7 @@ extends RefCounted
 
 var run: SceneTree          # tests/run.gd (check · words_ok)
 var quick := false
+const SLOW: Array = ["test_world_seeds"]           # 오래 걸리는 통계 시험 — run.gd의 long·전체 모드에서만 (quick은 건너뜀)
 
 
 func _init(r: SceneTree, q: bool) -> void:
@@ -15,14 +16,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	test_world_seeds()
-	test_world_determinism()
-	test_world_water()
-	test_far_lakes()
-	test_kits_and_fog()
-	test_two_kits_contact()
-	test_world_rotation()
-	test_world_budget()
+	run.timed(self, ["test_world_seeds", "test_world_determinism", "test_world_water", "test_far_lakes", "test_kits_and_fog", "test_two_kits_contact", "test_world_rotation", "test_world_budget"])
 
 
 static func h_sig(ww: WorldWater) -> String:

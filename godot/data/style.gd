@@ -86,7 +86,8 @@ const FLAME := Color("f39a45")
 const FLAME2 := Color("ffe08a")
 const GRAIN := Color("fff6dc")
 const ITEM_COLORS := {"통나무": Color("9a7150"), "판자": Color("e0bf8c"), "돌": Color("a3adab"), "밀": Color("efc35a"),
-	"물": Color("6cc6d0"), "밀가루": Color("f2ede2"), "빵": Color("d49a5e"), "소금": Color("fff6dc")}
+	"물": Color("6cc6d0"), "밀가루": Color("f2ede2"), "빵": Color("d49a5e"), "소금": Color("fff6dc"),
+	"버섯": Color("efe9dc"), "말린 버섯": Color("8a5a36"), "빛버섯": Color("bfe8ef")}   # [하늘의 것]
 
 # ───────────── 주민 ─────────────
 const RESIDENT_SCALE := 0.52               # 5단계: 모델 키 약 1.95 → 어른 키 약 1.0칸 = 720×1280 기본 확대에서 약 22px (잰 값, 밀짚모자 +4)

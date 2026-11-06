@@ -90,6 +90,7 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 # [곰팡이·뚜껑] 병의 공기(김·연기·탁한 공기·뚜껑)와 곰팡이 무리 — WORLD_EVENTS 2.1 · 3 (sim/jar_air.gd · sim/mold.gd, 난수도 각자)
 var air: JarAir
 var mold: Mold
+var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array}
 var favourites: Dictionary = {}       # 거인님이 받으신 물건 → 받은 개수 합 ('거인님은 빵을 좋아하신다')
@@ -165,6 +166,7 @@ func _init_health(seed_v: int) -> void:
 	health_rng.seed = seed_v * 104729 + 7
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
+	flora = Flora.new(seed_v)             # [하늘의 것]
 	if not default_created.is_empty():
 		created_date = {"year": int(default_created["year"]), "month": int(default_created["month"]), "day": int(default_created["day"])}
 	else:
@@ -442,7 +444,7 @@ func territory_full() -> float:
 func food_total() -> float:
 	var n := 0.0
 	for k in Balance.FOODS:
-		n += float(stock[k])
+		n += float(stock.get(k, 0.0))
 	for m: Dictionary in manna_batches:
 		n += float(m["amt"])
 	for m: Dictionary in manna:
@@ -455,7 +457,7 @@ func food_total() -> float:
 func food_types() -> int:
 	var n := 0
 	for k in Balance.FOODS:
-		if float(stock[k]) >= 1.0:
+		if float(stock.get(k, 0.0)) >= 1.0:
 			n += 1
 	if not manna_batches.is_empty() or not manna.is_empty():
 		n += 1
@@ -491,9 +493,14 @@ func consume(need: float) -> float:
 	for k: String in Balance.FOODS:
 		if need <= 0.0:
 			break
-		var take := minf(float(stock[k]), need)
-		stock[k] = float(stock[k]) - take
+		var have := float(stock.get(k, 0.0))
+		var take := minf(have, need)
+		if take <= 0.0:
+			continue
+		stock[k] = have - take
 		need -= take
+		if k == "버섯":
+			flora.on_eat(self, have, take)     # [하늘의 것] 섞인 얼룩버섯 조각도 같은 몫 (WORLD_EVENTS 2.6)
 		if need > 0.0 and (k == "빵" or k == "밀"):
 			for b in buildings:
 				if need <= 0.0:
@@ -601,6 +608,7 @@ func step(dt: float) -> void:
 	Health.step(self, dt)
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
 	Mold.step(self, dt)
+	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
 	for b in buildings:
 		_update_building(b, dt)
 	for p in people.duplicate():
@@ -736,6 +744,7 @@ func doubters() -> int:
 func _update_happiness() -> void:
 	var variety := food_types() >= 3
 	var fest := t - festival_t < Balance.FESTIVAL_DAYS * DAY
+	var tea := flora != null and flora.tea_on(self)
 	var cheer := {}               # 집 → 그 집 '명랑' 식구 몫의 합
 	for p in people:
 		var hh := p.f("house_happy", 0.0)
@@ -753,6 +762,8 @@ func _update_happiness() -> void:
 		if t < p.grief_until:
 			h += Balance.HAPPY_GRIEF
 		h += p.f("happiness", 0.0)
+		if tea:
+			h += Balance.TEA_HAPPY                        # [하늘의 것] 민들레 꽃차 (WORLD_EVENTS 2.7)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
 			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)
@@ -802,7 +813,7 @@ func _update_building(b: Building, dt: float) -> void:
 	var outs: Dictionary = d["out"]
 	var all_full := true
 	for k in outs:
-		if not (Balance.ENOUGH.has(k) and float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5)
+		if not (float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5) · 밀도 넉넉하면 멈춤 (BALANCE v4-4)
 			all_full = false
 	if all_full:
 		return
@@ -813,7 +824,7 @@ func _update_building(b: Building, dt: float) -> void:
 	if b.type == "농장":
 		if b.farm_mult < 0.0:
 			b.farm_mult = farm_mult(b.x, b.y)
-		place = b.farm_mult
+		place = b.farm_mult * Flora.weed_mult(self, b)     # [하늘의 것] 밭에 내려앉은 꽃씨 = 잡초 ×0.8 (WORLD_EVENTS 2.7)
 	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
@@ -1346,6 +1357,8 @@ func chief_build() -> void:
 		want = "농장"
 	elif fav != "":
 		want = fav                    # 거인님이 좋아하시는 물건의 일터 (받은 제물, 11.1)
+	elif _want_picker():
+		want = "버섯꾼"               # [하늘의 것] 큰 버섯이 여럿 서 있으면 베어 올 사람 (WORLD_EVENTS 2.6)
 	elif count_type("우물") == 0:
 		want = "우물"
 	elif count_type("나무꾼") < 2:
@@ -1418,6 +1431,11 @@ func chief_build() -> void:
 	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), want])
 
 
+## [하늘의 것] 버섯꾼을 둘 만한가: 하늘의 것에 익숙해졌고 다 자란 먹는 버섯이 둘 넘게 서 있다
+func _want_picker() -> bool:
+	return flora != null and flora.trust and count_type("버섯꾼") == 0 and flora.edible_mature() >= 2
+
+
 ## 자재가 넉넉한가 — 짓고 있는 현장에 줄 몫을 빼고, 비상용 판자 4장은 남긴다 (나무꾼·제재소 제외, 9장)
 func _affordable(type: String) -> bool:
 	var d: Dictionary = Balance.B[type]
@@ -1455,6 +1473,8 @@ func is_free(x: float, y: float, size: float) -> bool:
 	for r: Dictionary in rocks:
 		if Vector2(r["x"] - x, r["y"] - y).length() < size + 0.8:
 			return false
+	if flora != null and flora.blocks(x, y, size):    # [하늘의 것] 큰 버섯의 굵은 대 둘레에는 짓지 않는다
+		return false
 	return true
 
 
@@ -1462,7 +1482,14 @@ func is_free(x: float, y: float, size: float) -> bool:
 func find_spot(type: String) -> Variant:
 	var size: float = Balance.B[type]["size"]
 	var c := center
-	if type == "나무꾼" or type == "산림관":
+	if type == "버섯꾼" and flora != null:     # [하늘의 것] 큰 버섯 곁
+		var best: Dictionary = {}
+		for s: Dictionary in flora.shrooms:
+			if flora.mature(s) and (best.is_empty() or Vector2(s["x"], s["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
+				best = s
+		if not best.is_empty():
+			c = center + (Vector2(best["x"], best["y"]) - center) * 0.7
+	elif type == "나무꾼" or type == "산림관":
 		var best: Dictionary = {}
 		for tr: Dictionary in trees:
 			if tr["s"] == "tree" and (best.is_empty() or Vector2(tr["x"], tr["y"]).distance_to(center) < Vector2(best["x"], best["y"]).distance_to(center)):
@@ -1518,6 +1545,8 @@ func find_spot(type: String) -> Variant:
 
 func _clear_trees(p: Vector2, size: float) -> void:
 	trees = trees.filter(func(tr: Dictionary) -> bool: return Vector2(tr["x"] - p.x, tr["y"] - p.y).length() > size + 0.4)
+	if flora != null:
+		flora.clear_at(p, size)       # [하늘의 것] 짓는 자리의 민들레
 
 
 # ───────────────────────── 호수·소금의 발견 ─────────────────────────
@@ -1684,6 +1713,7 @@ func rotate_jar() -> void:
 	fire = JarWater.rot_pt(fire)
 	altar_pos = JarWater.rot_pt(altar_pos)
 	mold.rotate()                     # [곰팡이·뚜껑] 털뭉치도 병과 함께 돈다
+	flora.rotate()                    # [하늘의 것] 버섯·민들레·꽃씨도
 	var np := PackedFloat32Array()
 	np.resize(PATH_N * PATH_N)
 	for j in PATH_N:
@@ -1707,6 +1737,7 @@ const WISH_REASON := {
 	"소금밭": "하얀 들판에서 소금을 긁는 소금밭을 만들고 싶어요.",
 	"방앗간": "밀을 빻는 방앗간을 짓고 싶어요.",
 	"빵집": "빵 굽는 냄새가 나는 빵집을 짓고 싶어요.",
+	"버섯꾼": "하늘에서 솟은 큰 버섯을 베어 올 버섯꾼을 두고 싶어요.",
 }
 
 
@@ -1777,6 +1808,8 @@ func _wish_pick() -> String:
 		c.append("소금밭")
 	if count_type("산림관") == 0 and _standing_trees() < Balance.FOREST_MIN * 2:
 		c.append("산림관")
+	if _want_picker():
+		c.append("버섯꾼")
 	if count_type("농장") < 3 and farm_rate() < people.size() * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY * 1.3:
 		c.append("농장")
 	c = c.filter(func(ty: String) -> bool: return not taken.has(ty))
@@ -1884,6 +1917,8 @@ func evening_offering() -> Dictionary:
 		stock[item] = float(stock[item]) - amt
 		altar.append({"item": item, "amt": amt, "t": t, "by": by})
 		got[item] = amt
+	if got.is_empty() and int(stats.get("offered", 0)) == 0 and not starving:
+		_first_token(by, got)            # 첫 저녁 기도: 남는 게 없어도 만든 것 몇 개 (OPENING T3 — BALANCE v4-4)
 	if starving and fear >= Balance.OFFER_FEAR_FOOD:     # 두려움이 높은 마을은 굶으면서도 바친다 (연대기의 어두운 이야기)
 		var dark := false
 		for item: String in ["빵", "밀", "건량"]:
@@ -1904,6 +1939,25 @@ func evening_offering() -> Dictionary:
 		if who != null and not who.sleeping:
 			speak(who, "거인님, 받아 주세요", 6)
 	return got
+
+
+## 첫 저녁 기도에 남는 물건이 없으면 마을이 만드는 물건 중 가장 많은 것을 몇 개 (FIRST_OFFER_TOKEN) — '첫 제물'이 늘 생기게
+func _first_token(by: PackedInt32Array, got: Dictionary) -> void:
+	var best := ""
+	var bh := 0.0
+	for item: String in Balance.PRODUCER:
+		if not _has_built(Balance.PRODUCER[item]) or item in Balance.FOODS:
+			continue
+		var h := float(stock.get(item, 0.0))
+		if h > bh:
+			bh = h
+			best = item
+	var amt := mini(Balance.FIRST_OFFER_TOKEN, floori(bh * 0.5))
+	if best == "" or amt < 1:
+		return
+	stock[best] = float(stock[best]) - amt
+	altar.append({"item": best, "amt": amt, "t": t, "by": by})
+	got[best] = amt
 
 
 ## 이틀이 지난 제물은 창고로 돌아간다 ("거인님이 받지 않으셨다")
@@ -1949,6 +2003,10 @@ func take_offering(item: String) -> float:
 		return 0.0
 	altar = keep
 	var got := Market.sell(item, amt)
+	if not Market.first_paid:            # 거인이 처음 받는 제물 — 장터가 웃돈을 얹는다 (BALANCE v4-4 · OPENING T3 → T4 우물 600지폐)
+		Market.first_paid = true
+		Market.notes += Balance.FIRST_OFFER_BONUS
+		got += Balance.FIRST_OFFER_BONUS
 	var was := is_favourite(item)
 	favourites[item] = float(favourites.get(item, 0.0)) + amt
 	var seen: Resident = null
@@ -2422,6 +2480,9 @@ func climate() -> String:
 ## 창고 물자의 '넉넉함' — 추운 철에는 통나무를 집마다 더 쌓는다 (땔감)
 func enough(k: String) -> float:
 	var e: float = Balance.ENOUGH.get(k, INF)
+	if k == "밀":                     # 농장도 넉넉하면 멈춘다 (BALANCE v4-4) — 마을이 먹는 양 × 1.6일 (좋아하시면 +0.15일)
+		var days := Balance.FARM_ENOUGH_DAYS + (Balance.FARM_FAV_DAYS if is_favourite(k) else 0.0)
+		return maxf(Balance.FARM_ENOUGH_MIN, _food_people() * DAY / Balance.FOOD_IV * days)
 	if is_favourite(k):
 		e *= Balance.FAV_ENOUGH       # 거인님이 좋아하시는 물건은 더 만든다 (기획서 11.1)
 	if k == "통나무" and cold_season:
@@ -2458,6 +2519,11 @@ func open_lid() -> bool:
 
 func close_lid() -> bool:
 	return air.close_lid(self)
+
+
+## [하늘의 것] 거인이 뚜껑을 열고 dir 쪽으로 분다 — 솜털 공의 꽃씨가 한꺼번에 (WORLD_EVENTS 2.7). 날린 꽃씨 수, 닫혀 있으면 −1
+func blow_seeds(dir: Vector2) -> int:
+	return flora.blow_seeds(self, dir)
 
 
 ## 거인이 유리를 톡 친다 (그날 4번째부터 모두 +0.05) · 크게 친 톡 = 지진 (모두 +0.2)

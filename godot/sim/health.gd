@@ -88,6 +88,10 @@ static func protection(v: Village, r: Resident, heat_raw: float) -> Array:
 			if tr["s"] == "tree" and Vector2(float(tr["x"]) - r.x, float(tr["y"]) - r.y).length_squared() <= r2:
 				mh = minf(mh, Balance.PROTECT_SHADE[1])
 				break
+	if heat_raw > 0.0 and mh > Balance.SHROOM_SHADE and v.flora != null and v.flora.shade_at(r.x, r.y):
+		mh = Balance.SHROOM_SHADE                     # [하늘의 것] 큰 갓 아래 그늘 ×0.6 (WORLD_EVENTS 2.6)
+	if v.flora != null and v.flora.cotton_on(v, r):
+		mc *= Balance.COTTON_COLD                     # [하늘의 것] 민들레 솜을 넣은 옷 ×0.8 (입는 것이라 다른 것과 겹침 — WORLD_EVENTS 2.7)
 	return [mc, mh]
 
 
@@ -337,7 +341,8 @@ static func _hourly(v: Village, clinic: Array) -> void:
 		p0 *= age_mult(r)
 		var u := v.health_rng.randf()
 		var mold_m := Mold.ill_mult(v, r)     # [곰팡이·뚜껑] 털뭉치 둘레: 배앓이·기침병 ×2 → 거르기 상한도 그만큼 (결과는 곰팡이 없으면 그대로)
-		if sick.is_empty() and u >= p0 * wmax * mold_m * r.f("illness") / 24.0:
+		var fl_m := Flora.ill_mult(v)         # [하늘의 것] 얼룩버섯을 먹은 날: 배앓이 ×5 (WORLD_EVENTS 2.6)
+		if sick.is_empty() and u >= p0 * wmax * mold_m * fl_m * r.f("illness") / 24.0:
 			continue                  # 어떤 '어디서' 배율이어도 안 걸림
 		if ctx.is_empty():
 			var season: String = jar_date(v)["season"]
@@ -355,6 +360,8 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			if not r.is_immune(kind, v.t):
 				var dz: Dictionary = Balance.DISEASES[kind]
 				pd = p0 * float(dz["share"]) * where_mult(dz, ctx) * Mold.kind_mult(kind, mold_m)
+				if kind == "배앓이":
+					pd *= fl_m
 				var cg := 0.0
 				if float(dz["home"]) > 0.0 or float(dz["near"]) > 0.0:
 					if r.home >= 0:
@@ -531,7 +538,7 @@ static func fall_ill(v: Village, r: Resident, in_clinic := false, kind := "고�
 	r.sick_since = v.t
 	r.herb_used = false
 	r.herb_until = -1.0
-	r.severe = v.health_rng.randf() < severe_p(r, kind, float(ob["l"]))
+	r.severe = v.health_rng.randf() < severe_p(r, kind, float(ob["l"])) * Flora.severe_mult(v, r, kind)   # [하늘의 것] 얼룩버섯: 아이 중증 ×2
 	v.stats["sick"] = int(v.stats.get("sick", 0)) + 1
 	var by: Dictionary = v.stats.get("sick_by", {})
 	by[kind] = int(by.get(kind, 0)) + 1

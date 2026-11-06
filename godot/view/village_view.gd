@@ -42,6 +42,7 @@ var n_piers := 0
 var n_bridges := 0
 var _anim_t := 0.0
 var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.gd)
+var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
@@ -70,6 +71,8 @@ func _ready() -> void:
 	_far = _node(self)
 	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
 	add_child(mold_view)
+	flora_view = FloraView.new(v)   # [하늘의 것]
+	add_child(flora_view)
 	_build_fire()
 	sync(0.0, true)
 
@@ -90,6 +93,8 @@ func sync(dt: float, force := false) -> void:
 	_sync_residents(dt)
 	mold_view.alpha = alpha         # [곰팡이·뚜껑]
 	mold_view.sync(dt)
+	flora_view.alpha = alpha        # [하늘의 것]
+	flora_view.sync(dt)
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
@@ -138,6 +143,7 @@ func _sync_residents(dt: float) -> void:
 			z = lerpf(r.py, r.y, alpha)
 		m.position = Vector3(x, gy(x, z), z)
 		m.rotation.y = r.facing
+		_ride(r, m)                     # [하늘의 것] 꽃씨에 매달린 아이 — 떠올라 날아감
 		m.set_item(r.carry)
 		if r.anim == "work":
 			var jb := v.bld(r.job)
@@ -207,6 +213,18 @@ func _torch(r: Resident, m: ResidentModel) -> void:
 	var f2 := tn.get_node("f2") as Node3D
 	f1.scale.y = hs[f]
 	f2.scale.y = hs[(f + 1) % 3]
+
+
+## [하늘의 것] 꽃씨에 매달린 아이: 몸을 띄우고 머리 위에 큰 꽃씨 (sim/flora.gd ride_h)
+func _ride(r: Resident, m: ResidentModel) -> void:
+	var h: float = v.flora.ride_h.get(r.id, 0.0) if v.flora != null else 0.0
+	var sd := flora_view.rider_seed(r.id, h > 0.01)
+	if h <= 0.01:
+		return
+	m.position.y += h
+	if sd != null:
+		sd.position = m.position + Vector3(sin(_anim_t * 2.0) * 0.05, 1.05, 0)
+		sd.rotation.z = sin(_anim_t * 1.6 + r.id) * 0.15
 
 
 static var _glow: ShaderMaterial

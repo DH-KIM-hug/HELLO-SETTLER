@@ -4,6 +4,7 @@ extends RefCounted
 
 var run: SceneTree
 var quick := false
+const SLOW: Array = []           # 오래 걸리는 통계 시험 — run.gd의 long·전체 모드에서만 (quick은 건너뜀)
 
 
 func _init(r: SceneTree, q: bool) -> void:
@@ -17,15 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	Market.today_override = "시험날"
-	test_market_saturation()
-	test_territory()
-	test_chief_autonomous()
-	test_wish()
-	test_offerings()
-	test_forced_taking()
-	test_buy_building()
-	test_footpath()
-	test_split()
+	run.timed(self, ["test_market_saturation", "test_territory", "test_chief_autonomous", "test_wish", "test_offerings", "test_forced_taking", "test_buy_building", "test_footpath", "test_split"])
 	Market.today_override = ""
 	Market.reset()
 
