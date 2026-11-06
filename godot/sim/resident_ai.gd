@@ -74,7 +74,7 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			var rk: Dictionary = d["rk"]
 			rk["amt"] = int(rk["amt"]) - 1
 			rk["res"] = 0
-			r.carry = "돌"
+			r.carry = String(rk.get("ore", "돌"))
 			r.carry_amt = 1.0
 		"pick":                           # 짐을 집어 듦
 			r.carry = d["item"]
@@ -638,7 +638,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		r.steps.append(act(d["plant"], "work", plant, true))
 		return true
 	if b.type == "채석장":
-		var rk := _nearest(v.rocks, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["amt"] > 0 and q["res"] == 0)
+		var rk := _nearest(v.rocks, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["amt"] > 0 and q["res"] == 0 and SkyDrops.rock_minable(v, q))
 		if rk.is_empty() or Vector2(rk["x"] - b.x, rk["y"] - b.y).length() > Balance.GATHER_RANGE:
 			r.doing = "캘 바위가 없어요"
 			r.steps.append(act(120.0, "idle"))
@@ -648,7 +648,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		var unres := op("unres", {"q": rk})
 		r.steps.append(walk(rk["x"] + 0.6, rk["y"] + 0.4))
 		r.steps.append(act(d["dig"], "work", dig, true, unres))
-		_drop_at_store(v, r, s, "돌", 1.0)
+		_drop_at_store(v, r, s, String(rk.get("ore", "돌")), 1.0)      # 하얀 광맥 바위는 소금
 		return true
 	# 생산·가공 건물: 실제 생산은 건물에서 돌아가고(Village._update_building), 일꾼은 곁에서 일한다
 	var spot := near(v, b.x, b.y, 0.9)

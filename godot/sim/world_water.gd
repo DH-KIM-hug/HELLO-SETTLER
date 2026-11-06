@@ -155,6 +155,12 @@ func setup(size: int) -> void:
 	fog_center.fill(0)
 
 
+## 높이를 모두 1/65536 눈금에 (WorldPack — 저장할 때 높이를 정수 차이로 누른다). 화면 ×6으로 0.0001칸 — 보이지 않는다
+func snap_heights() -> void:
+	for k in h.size():
+		h[k] = WorldPack.snap(h[k])
+
+
 ## 높이가 정해진 뒤: 거친 표·이웃·따뜻함
 func build_world_tables() -> void:
 	hs.resize(m * m * 64)
@@ -192,7 +198,7 @@ func build_world_tables() -> void:
 	_rebuild_slices()
 
 
-## 저장: 거친 칸 높이 정렬표(hs·pre)는 높이(h)에서 다시 만든다 (저장 크기 35 → 27 MB, 압축 전)
+## 저장: 거친 칸 높이 정렬표(hs·pre)는 높이(h)에서 다시 만든다 (저장 크기 35 → 27 MB, 압축 전). 큰 격자는 파일에 쓸 때 WorldPack이 누른다
 func _save_skip() -> Array:
 	return ["hs", "pre"]
 

@@ -49,6 +49,10 @@ const MUD := Color("9c8f6e")               # 진흙·습지 + 물웅덩이
 const PUDDLE := Color("78b9c2")
 const ROCK_GROUND := Color("aab4ae")        # 바위 (언덕 위·광맥)
 const ROCK_GROUND_DARK := Color("8d9894")
+## 돌 색 — 어디서나 같다 (기획서 21장 '돌 색' · SHOP 2.4): 회색 = 돌 · 붉은 = 철 · 하양 = 소금 · 검정 = 석탄 · 반짝이 = 금.
+## 창조의 암반 컵·광맥 알갱이, 상점의 광맥 돌, 병 안의 광맥 바위가 모두 이 표를 쓴다 (키 = 창고 물건 이름)
+const ORE := {"돌": Color("a7a9a6"), "철광석": Color("b8543a"), "소금": Color("f2f0ea"), "석탄": Color("2e2c2e"), "금": Color("e8b84a")}
+const ORE_GOLD_GLOW := 0.6                  # 금은 반짝인다 (빛을 조금 냄)
 const STONE_PATH := Color("cbc9bb")        # 돌길 (마을 시대 오솔길)
 const STONE_GAP := Color("a19f90")
 const SNOW := Color("f6f8f8")              # 눈·서리

@@ -1,6 +1,6 @@
 ## 거인의 상점 — docs/SHOP.md (진열 1 · 물건 2 · 손의 흐름 3) · ROADMAP A7. 순수 로직 (화면은 view/ui/shop_sheet.gd).
 ## 진열 탭은 병(Village)마다 열린다: 1일차 건물 + 빵 부스러기 → 2일차 먹을 것·재료 전부 → 첫 병자·첫 위기 조짐이 생긴 날 돌봄 →
-##   첫 수확 다음 날 땅. 생물·이주민·꾸미기는 아직 '곧'. 열린 때는 Village.shop_open (탭 → 병 시각)에 걸어 둔다 (한 번 열리면 그대로).
+##   첫 수확 다음 날 땅 (광맥 돌 4종은 돌마다 그 시대에). 생물(작은 가축 6종)·이주민·꾸미기는 아직 '곧'. 열린 때는 Village.shop_open (탭 → 병 시각)에 걸어 둔다 (한 번 열리면 그대로).
 ## 산 물건은 **거인의 손** (Market.hand — 모든 병이 함께, 최대 5개, 거인 묶음에 저장)에 들린다. 떨어뜨리기는 sim/sky_drops.gd.
 ## 건물은 같은 병에서 또 사면 ×1.5 (Village.shop_bought). 영양제 앰플은 한 병에 동시에 2개까지 (손에 든 것 포함).
 ## 카드 글: '거인에게는 / 병 안에서는' 두 줄 (SHOP 4). 주민 말·연대기에는 상점·구매·키트·상자를 쓰지 않는다 (sky_drops.gd가 맡음).
@@ -14,12 +14,15 @@ const TAB_ICON := {"건물": "마을로 가기", "먹을 것·재료": "각설�
 const FOOD_FULL := "먹을 것·재료+"      # 2일차에 먹을 것·재료가 모두 열림 (반짝임이 한 번 더)
 const AMPOULE := "영양제 앰플"
 const AMPOULE_MAX := 2
+const VEIN_MAX := 2                     # 광맥 돌은 종류마다 한 병에 둘까지 (SHOP 2.4 — 세상이 광물 덩어리가 되지 않게)
+const WAIT_ANIMAL := "짐승이 병 안에 살 수 있어야 해요"
 
-## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 이 표 (제재소·방앗간·빵집·목조주택 = 마을 시대).
-## 어부는 시뮬레이션에 아직 없는 건물이라 '곧'으로 보인다.
+## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 그 건물의 시대 (기획서 8.3 · 21장 '상점 건물 시대'):
+## 개척기 = 우물·창고·농장·나무꾼·채석장·제재소 · 마을 = 어부·방앗간·빵집·목조주택·사냥꾼·목장·방직소·대장간.
+## 어부는 시뮬레이션에 아직 없는 건물이라 '곧'으로 보인다 (물고기 — ROADMAP B3).
 ## 사냥꾼·목장·방직소·대장간도 아직 못 짓는다 (Balance.B_LOCKED — 들짐승·양털·철이 오면) → '곧' + 까닭.
-const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "어부", "제재소", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
-const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "어부": 0, "제재소": 1, "방앗간": 1, "빵집": 1, "목조주택": 1,
+const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소", "어부", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
+const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "제재소": 0, "어부": 1, "방앗간": 1, "빵집": 1, "목조주택": 1,
 	"사냥꾼": 1, "목장": 1, "방직소": 1, "대장간": 1}
 const BUILDING_REPEAT := 1.5
 const BUILDING_LINE := {"우물": "맑은 물을 길어요. 배앓이가 줄어요", "창고": "식량과 자재를 넉넉히 쌓아요", "농장": "밀이 자라는 밭",
@@ -27,8 +30,9 @@ const BUILDING_LINE := {"우물": "맑은 물을 길어요. 배앓이가 줄어�
 	"제재소": "통나무를 켜서 판자로", "방앗간": "밀을 빻아 밀가루로", "빵집": "밀가루와 물로 빵을", "목조주택": "여섯 식구가 사는 큰 집",
 	"사냥꾼": "숲에서 들짐승을 잡아요", "목장": "양을 쳐서 양털을", "방직소": "양털을 짜서 옷을", "대장간": "쇠를 두드려 도구를"}
 
-## 물건 (SHOP 2.2~2.4 · WORLD_EVENTS 4.1 · 4.4). kind: food(식량 days일치 — 마을 크기 비례) · stuff(자원 amt) · pill · bandage · salt · ampoule.
-## res = 주민이 깎아 나르는 창고 물건. size = 병 안에서의 반지름 (칸). lock = 아직 못 사는 까닭 (비면 살 수 있음)
+## 물건 (SHOP 2.2~2.5 · WORLD_EVENTS 4.1 · 4.4). kind: food(식량 days일치 — 마을 크기 비례) · stuff(자원 amt) · pill · bandage · salt · ampoule · vein(광맥 돌 — ore amt).
+## res = 주민이 깎아 나르는 창고 물건. size = 병 안에서의 반지름 (칸). lock = 아직 못 사는 까닭 (비면 살 수 있음) ·
+## era = 살 수 있는 시대 (없으면 개척기) · wait = '곧'인 까닭 (카드의 '병 안에서는' 끝에 '아직은 …')
 const ITEMS := {
 	"빵 부스러기": {"tab": "먹을 것·재료", "price": 100, "giant": "손톱만 한 부스러기", "inside": "갈색 바위 — 식량 반나절치",
 		"kind": "food", "res": "빵", "days": 0.5, "size": 1.3, "day1": true},
@@ -58,10 +62,25 @@ const ITEMS := {
 	"이끼 한 줌": {"tab": "돌봄", "price": 350, "giant": "이끼 한 줌", "inside": "새 숲", "lock": "곧"},
 	"영양제 앰플": {"tab": "땅", "price": 1500, "giant": "손가락만 한 약병", "inside": "하늘에서 꽂힌 유리 탑 — 이레 동안 둘레 땅이 기름져요",
 		"kind": "ampoule", "size": 1.8},
-	"회색 돌멩이": {"tab": "땅", "price": 1200, "giant": "엄지만 한 돌", "inside": "바위 언덕", "lock": "곧"},
-	"작은 양 한 쌍": {"tab": "생물", "price": 800, "giant": "작은 양 한 쌍", "inside": "목장의 양털과 고기", "lock": "곧"},
-	"작은 닭 다섯": {"tab": "생물", "price": 500, "giant": "작은 닭 다섯", "inside": "달걀", "lock": "곧"},
-	"작은 당나귀": {"tab": "생물", "price": 1000, "giant": "작은 당나귀", "inside": "짐 나르기", "lock": "곧"},
+	# 광맥 돌 (SHOP 2.4 · BALANCE v3-4) — 땅에 눌러 박으면 언덕이 솟고 바위 무리(광맥)가 된다. 종류마다 한 병에 둘까지 (VEIN_MAX).
+	# 색은 어디서나 같다 (기획서 21장): 회색 = 돌 · 하양 = 소금 · 붉은 = 철 · 검정 = 석탄 (· 반짝이 = 금). era = 살 수 있는 시대
+	"회색 돌멩이": {"tab": "땅", "price": 1200, "giant": "엄지만 한 돌", "inside": "회색 바위 언덕 — 채석장 자리, 돌 약 600",
+		"kind": "vein", "ore": "돌", "amt": 600, "size": 3.2, "era": 0},
+	"하얀 돌": {"tab": "땅", "price": 2500, "giant": "굵은 소금 덩어리", "inside": "하얀 바위 — 땅속의 소금 약 200. 주민이 소금을 알아야 캐요",
+		"kind": "vein", "ore": "소금", "amt": 200, "size": 2.4, "era": 1},
+	"붉은 돌멩이": {"tab": "땅", "price": 3000, "giant": "녹물 든 돌", "inside": "붉은 줄무늬 바위산 — 철광석 약 300 (광산이 있어야 캐요)",
+		"kind": "vein", "ore": "철광석", "amt": 300, "size": 2.8, "era": 2},
+	"검은 돌": {"tab": "땅", "price": 3000, "giant": "숯 조각", "inside": "검은 바위 — 석탄 약 300 (광산이 있어야 캐요)",
+		"kind": "vein", "ore": "석탄", "amt": 300, "size": 2.8, "era": 2},
+	# 작은 가축 (SHOP 2.5 · BALANCE v3-4) — 이미 가축이 된 작은 종. 그 가축이 쓰이는 시대(era)에 열린다.
+	# 짐승 시뮬레이션(ROADMAP B3)이 아직 없어 모두 '곧' + 까닭 (wait)
+	"작은 강아지 한 쌍": {"tab": "생물", "price": 600, "giant": "작은 강아지 한 쌍", "inside": "사냥을 돕고 늑대·곰팡이에 짖어요. 아이들의 친구",
+		"lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	"작은 돼지 한 쌍": {"tab": "생물", "price": 900, "giant": "작은 돼지 한 쌍", "inside": "양돈장에서 고기", "lock": "곧", "wait": WAIT_ANIMAL, "era": 2},
+	"작은 양 한 쌍": {"tab": "생물", "price": 800, "giant": "작은 양 한 쌍", "inside": "목장의 양털과 고기", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	"작은 소 한 쌍": {"tab": "생물", "price": 1800, "giant": "작은 소 한 쌍", "inside": "우유 · 밭 갈기 · 수레", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	"작은 닭 다섯": {"tab": "생물", "price": 500, "giant": "작은 닭 다섯", "inside": "달걀 — 먹을 것이 골고루", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	"작은 당나귀": {"tab": "생물", "price": 1000, "giant": "작은 당나귀", "inside": "짐을 날라요 — 먼 일터도 가볍게", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
 	"이주민 뽑기": {"tab": "이주민", "price": 300, "giant": "작은 사람 하나", "inside": "마을 어귀에 내려앉는 새 이웃", "lock": "곧"},
 	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
 	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
@@ -160,7 +179,12 @@ static func card(v: Village, item: String) -> Dictionary:
 		lock2 = "곧"
 	if lock2 == "" and String(d["tab"]) == "먹을 것·재료" and not bool(d.get("day1", false)) and not v.shop_open.has(FOOD_FULL):
 		lock2 = "2일차에"
-	return {"name": item, "icon": item, "giant": String(d["giant"]), "inside": String(d["inside"]), "price": price(v, item),
+	if lock2 == "" and int(d.get("era", 0)) > v.era:
+		lock2 = "%s 시대에" % Balance.ERAS[mini(int(d["era"]), Balance.ERAS.size() - 1)]
+	var inside2 := String(d["inside"])
+	if String(d.get("wait", "")) != "":
+		inside2 += " (아직은 %s)" % d["wait"]
+	return {"name": item, "icon": item, "giant": String(d["giant"]), "inside": inside2, "price": price(v, item),
 		"lock": lock2, "building": false}
 
 
@@ -174,6 +198,15 @@ static func price(v: Village, item: String) -> float:
 ## 영양제 앰플: 이 병에 서 있는 (아직 다 스미지 않은) 탑 + 손에 든 앰플
 static func ampoules_used(v: Village) -> int:
 	return SkyDrops.active_towers(v) + hand_count(AMPOULE)
+
+
+static func is_vein(item: String) -> bool:
+	return ITEMS.has(item) and String(ITEMS[item].get("kind", "")) == "vein"
+
+
+## 광맥 돌: 이 병에 박힌 같은 돌 + 손에 든 같은 돌
+static func veins_used(v: Village, item: String) -> int:
+	return SkyDrops.veins_placed(v, item) + hand_count(item)
 
 
 static func hand_count(item: String) -> int:
@@ -193,6 +226,8 @@ static func can_buy(v: Village, item: String) -> Dictionary:
 		return {"ok": false, "why": "손이 가득 찼어요 (%d개)" % HAND_MAX, "need": 0.0}
 	if item == AMPOULE and ampoules_used(v) >= AMPOULE_MAX:
 		return {"ok": false, "why": "탑은 한 병에 둘까지예요", "need": 0.0}
+	if is_vein(item) and veins_used(v, item) >= VEIN_MAX:
+		return {"ok": false, "why": "이 돌은 한 병에 둘까지예요", "need": 0.0}
 	var cost := float(c["price"])
 	if not Market.can_pay(cost):
 		var need := ceilf(cost - Market.notes)

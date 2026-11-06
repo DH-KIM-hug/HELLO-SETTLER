@@ -189,12 +189,12 @@ func test_kits_and_fog() -> void:
 			dry_warn = true
 			break
 	check(dry_warn, "물가가 없는 자리는 경고 (놓을 수는 있음)")
-	var v := jw.place_kit(rec[0].x, rec[0].y, Kits.make(["제재소"]))
+	var v := jw.place_kit(rec[0].x, rec[0].y, Kits.make(["밀밭"]))
 	var huts := 0
 	for b in v.buildings:
 		if b.type == "오두막":
 			huts += 1
-	check(v.people.size() == 10 and huts == 2 and v.count_type("제재소") == 1 and v.store().is_store, "기본 키트 = 10명 · 오두막 2채 · 창고 + 업그레이드(제재소)")
+	check(v.people.size() == 10 and huts == 2 and v.count_type("농장") == 1 and v.store().is_store, "기본 키트 = 10명 · 오두막 2채 · 창고 + 업그레이드(밀밭 — 씨앗)")
 	check(jw.water.revealed(v.center.x, v.center.y, 0) and not jw.water.revealed(v.center.x + 120.0, v.center.y, -1), "키트 둘레만 안개가 걷힘")
 	check(not jw.kit_spot_ok(v.center.x + 30.0, v.center.y)["ok"], "다른 무리 곁에는 또 놓을 수 없음")
 	var near_water := 0

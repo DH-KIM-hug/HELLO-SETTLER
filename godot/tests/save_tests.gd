@@ -3,7 +3,7 @@
 ## 시각이 뒤로 가면 0 · 비운 동안의 규칙(새 위기 없음·위기 사망 하루 1명·부부 2쌍·시대 30%) · 창세의 날 ×12 ·
 ## 거인의 행동은 다음 화면 전에 디스크에 · 자동 저장 한 번의 화면 쪽 비용 · 따라잡기와 편지·귀환 축제 ·
 ## 등불 (SAVE.md 3 v1.1): 12시간 상한·잠든 시간·"긴 밤"·업그레이드 24시간·저장 · 비운 동안의 제물 (3.1): 이틀 상한 없이 쌓임·편지의 [모두 받기] ·
-## 따라잡기 결정론 (나눠 흘려도 한 번에 흘려도 같음).
+## 따라잡기 결정론 (나눠 흘려도 한 번에 흘려도 같음). 넓은 세상 누르기 (A16 — WorldPack): 값 그대로·작게·옛 v1 파일도 읽음.
 ## long: 따라잡기 빠르기 (정밀 24시간 — 이 기기에서 걸린 초).
 extends RefCounted
 
@@ -34,7 +34,7 @@ func all() -> void:
 		"test_files_and_slots", "test_corrupt_recovery", "test_migration_v0", "test_clock_backwards", "test_giant_action_persisted",
 		"test_autosave_cost", "test_offline_no_new_crisis", "test_offline_death_cap", "test_offline_era_altar",
 		"test_creation_day", "test_catchup_and_letter", "test_lamp_upgrade", "test_offline_offerings", "test_catchup_determinism",
-		"test_return_effects", "test_world_files", "test_world_catchup", "test_world_giant_action", "test_catchup_speed", "test_world_catchup_speed"])
+		"test_return_effects", "test_world_files", "test_world_pack", "test_world_v1_file", "test_world_catchup", "test_world_giant_action", "test_catchup_speed", "test_world_catchup_speed"])
 	check(SaveCodec.errors == 0, "저장할 수 없는 값(객체·Callable)을 한 번도 만나지 않았다 (%d)" % SaveCodec.errors)
 	_clean()
 	Village.on_giant_action = old_hook
@@ -189,6 +189,104 @@ func test_world_files() -> void:
 	print("  넓은 세상(512칸) 저장 파일 %d KB · 찍어 두기(화면 쪽) %.1f ms" % [f.get_length() / 1024 if f != null else -1, snap_ms])
 	sm2.free()
 	drop(sm)
+
+
+## 넓은 세상 누르기 (A16): 높이는 눈금에 · 누른 사전 → 풀면 한 비트도 다르지 않음 · 누른 저장을 거쳐도 이어서 흘린 세상이 같다 ·
+## 눈금 밖 높이(옛 세상)도 그대로 (통째로 원래 배열) · 크기
+func test_world_pack() -> void:
+	var jw := _world2(5, 8.0)
+	var h := jw.water.h
+	var off := 0
+	for k in h.size():
+		if roundf(h[k] * WorldPack.Q) / WorldPack.Q != h[k]:
+			off += 1
+	check(off == 0, "새 세상의 땅 높이는 모두 1/65536 눈금에 (키트 자리 평평하게 한 칸도) — 눈금 밖 %d칸" % off)
+	var d := jw.to_dict()
+	var raw: Dictionary = d["water"]
+	var t0 := Time.get_ticks_usec()
+	var packed := WorldPack.pack_water(raw)
+	var t1 := Time.get_ticks_usec()
+	var back := WorldPack.unpack_water(bytes_to_var(var_to_bytes(packed)))
+	var t2 := Time.get_ticks_usec()
+	var raw_z := var_to_bytes(raw).compress(FileAccess.COMPRESSION_ZSTD).size()
+	var pk := var_to_bytes(packed).size()
+	print("  넓은 세상(512칸) 물 사전: 그냥 누름 %d KB → WorldPack %d KB · 누르기 %.0f ms · 풀기 %.0f ms" % [raw_z / 1024, pk / 1024, (t1 - t0) / 1000.0, (t2 - t1) / 1000.0])
+	var same := back.size() == raw.size()
+	for key: Variant in raw:
+		same = same and back.has(key) and var_to_bytes(back[key]) == var_to_bytes(raw[key])
+	check(packed.has("$pack") and not packed.has("h") and same, "누른 물 사전을 풀면 원래 사전과 칸마다 한 비트도 다르지 않다 (값 %d개)" % raw.size())
+	check(pk * 2 < raw_z, "누른 물 사전은 그냥 누른 것의 절반 아래 (%d KB < %d KB / 2)" % [pk / 1024, raw_z / 1024])
+	check(WorldPack.unpack_water(raw) == raw and WorldPack.pack_water(packed) == packed, "옛 사전(누르지 않은)은 그대로 읽고, 두 번 누르지 않는다")
+	# 누른 저장을 거쳐 불러온 세상 = 쉬지 않은 세상 (결정론)
+	var body: Variant = bytes_to_var(var_to_bytes(WorldPack.pack_payload({"world": d})))
+	var jw2 := JarWorld.from_dict(body["world"])
+	check(SaveCodec.digest(jw2.to_dict()) == SaveCodec.digest(d), "누른 저장 → 불러온 세상의 사전 지문이 같다")
+	jw.advance(3.0 * Balance.HOUR)
+	jw2.advance(3.0 * Balance.HOUR)
+	var a := jw.to_dict()
+	var b := jw2.to_dict()
+	if SaveCodec.digest(a) != SaveCodec.digest(b):
+		print("  (다른 곳) " + diff_keys(a, b, "", 6))
+	check(SaveCodec.digest(a) == SaveCodec.digest(b), "결정론: 8시간 → 누른 저장·불러오기 → 3시간 = 쉬지 않고 11시간 (넓은 세상)")
+	# 눈금 밖 높이 (옛 세상 · 손으로 바꾼 칸)
+	var odd := raw.duplicate()
+	var oh: PackedFloat32Array = (raw["h"] as PackedFloat32Array).duplicate()
+	oh[12345] += 0.0000001
+	oh[777] = -0.0
+	odd["h"] = oh
+	var few := WorldPack.unpack_water(WorldPack.pack_water(odd))
+	check(var_to_bytes(few["h"]) == var_to_bytes(oh), "눈금 밖 칸 몇 개 (−0 포함)는 그 칸만 원래 값으로")
+	for k in oh.size():
+		oh[k] += 0.0000001
+	odd["h"] = oh
+	var many := WorldPack.unpack_water(WorldPack.pack_water(odd))
+	check(var_to_bytes(many["h"]) == var_to_bytes(oh), "눈금 밖 높이가 많으면(옛 세상) 높이는 통째로 원래 배열 — 그래도 그대로")
+
+
+## 옛 형식(v1) 넓은 세상 파일: 누르지 않은 물 사전 + 눈금 밖 높이 → 읽으면 옮김(v2) · 높이는 눈금에 · 다시 저장하면 작아진다
+func test_world_v1_file() -> void:
+	var sm := manager()
+	var jw := _world2(9, 3.0)
+	var v := jw.primary()
+	sm.register_jar(1, v, JarClock.new(v), {"name": "옛 별"}, jw)
+	sm.save_all(true)
+	var base := ProjectSettings.globalize_path(TMP_DIR) + "/jar_1.dat"
+	# v1 파일 만들기: 누르지 않은 본문, 높이를 눈금 밖으로 (v2 전의 세상)
+	var p := sm.jar_payload(1)
+	var oh: PackedFloat32Array = (p["world"]["water"]["h"] as PackedFloat32Array).duplicate()
+	for k in oh.size():
+		oh[k] += 0.000003
+	p["world"]["water"]["h"] = oh
+	for s: String in ["a", "b"]:
+		DirAccess.remove_absolute(base + "." + s)
+	SaveFile.write_raw(base + ".a", SaveFile.pack(p, 50, Time.get_unix_time_from_system(), 1))
+	var v1_size := FileAccess.open(base + ".a", FileAccess.READ).get_length()
+	drop(sm)
+	var sm2 := GameSave.new()
+	sm2.dir = TMP_DIR
+	sm2.start()
+	var ok := sm2.load_all()
+	var jw2: JarWorld = sm2.jars[1]["world"] if ok and sm2.jars.has(1) else null
+	check(ok and jw2 != null and sm2.last_load["migrated"] and jw2.settlements.size() == jw.settlements.size(), "옛 v1 넓은 세상 파일을 읽는다 (옮김 · 무리 %d곳)" % jw.settlements.size())
+	if jw2 == null:
+		drop(sm2)
+		return
+	var off := 0
+	var most := 0.0
+	for k in jw2.water.h.size():
+		if roundf(jw2.water.h[k] * WorldPack.Q) / WorldPack.Q != jw2.water.h[k]:
+			off += 1
+		most = maxf(most, absf(jw2.water.h[k] - oh[k]))
+	check(off == 0 and most <= 0.5 / WorldPack.Q + 1e-9, "옮기면 높이가 눈금에 (가장 많이 바뀐 칸 %.7f)" % most)
+	check(jw2.water.hs.size() == jw.water.hs.size() and jw2.primary().people.size() == v.people.size(), "거친 칸 정렬표를 다시 만들고 주민 그대로")
+	sm2.save_all(true)
+	var r := SaveFile.read_best(base)
+	var f2 := FileAccess.open(base + "." + String(r["slot"]), FileAccess.READ)
+	var v2_size := f2.get_length()
+	f2.close()
+	print("  옛 v1 파일 %d KB → 다시 저장한 v2 %d KB (512칸)" % [v1_size / 1024, v2_size / 1024])
+	check(int(r["version"]) == SaveFile.FORMAT and v2_size * 2 < v1_size, "다시 저장하면 v%d · 절반 아래로 (%d KB → %d KB)" % [SaveFile.FORMAT, v1_size / 1024, v2_size / 1024])
+	drop(sm2)
 
 
 ## 세상 전체 따라잡기: 등불 12시간만 · 모든 무리가 함께 · 거인 없음 규칙이 모든 무리에 · 끝나면 다시 봄 · 편지에 다른 무리 소식 ·

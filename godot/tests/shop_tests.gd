@@ -2,6 +2,7 @@
 ## 진열이 열리는 때 · 사면 지폐가 줄고 손에 들림 (저장) · 손은 5개까지 · 떨어뜨리면 바깥 크기 물건 → 주민이 적힌 양 그대로 깎아 나름 ·
 ## 돌봄 4종 효과 · 앰플 탑 (비옥·녹조·2개까지) · 사 준 건물은 완성된 채 + 경이/믿음 · 주민 말·연대기에 금지어 없음 ·
 ## 화면: 상점 시트(탭·카드·모자란 지폐)·아래 띠 5도구·손 칸·선반 (장면 묶음 — 첫 화면에서).
+## 문서와 같은 표 (A21 — 기획서 21장 · BALANCE v3-4): 건물 시대 · 광맥 돌 4종 (언덕·바위·돌 색·둘까지) · 작은 가축 6종 · 키트 업그레이드 값.
 extends RefCounted
 
 var run: SceneTree
@@ -31,7 +32,7 @@ func all() -> void:
 	Village.start_aware = true
 	run.timed(self, ["test_unlocks", "test_buy_and_hand", "test_hand_saved", "test_lid_rule", "test_drop_and_haul", "test_haul_saved_midway",
 		"test_crush", "test_care_items", "test_salt_pinch", "test_ampoule", "test_bought_building", "test_wonder_unaware",
-		"test_words", "test_ui"])
+		"test_words", "test_shop_tables", "test_vein_stones", "test_ui"])
 	Village.start_aware = _old_aware
 	Market.reset(_old_notes)
 	Market.hand = _old_hand
@@ -125,7 +126,7 @@ func test_buy_and_hand() -> void:
 	check(is_equal_approx(Shop.price(v, "우물"), 900.0), "같은 건물을 또 사면 ×1.5 (900)")
 	var nb := Shop.can_buy(v, "우물")
 	check(not bool(nb["ok"]) and String(nb["why"]) == "지폐가 850 모자라요" and is_equal_approx(float(nb["need"]), 850.0), "못 사면 \"%s\"" % nb["why"])
-	var f := Shop.can_buy(v, "제재소")
+	var f := Shop.can_buy(v, "방앗간")
 	check(not bool(f["ok"]) and String(f["why"]).contains("시대"), "마을 시대 건물은 개척기에 못 산다 (%s)" % f["why"])
 	Market.notes = 10000.0
 	for i in 3:
@@ -535,6 +536,177 @@ func test_words() -> void:
 			if tx.contains(wd):
 				bad = "'%s' in: %s" % [wd, tx]
 	check(bad == "", "주민 말·연대기에 상점·구매·키트·상자 없음 (%d줄) %s" % [texts.size(), bad])
+
+
+# ───────────────────────── 문서와 같은 표 (A21) ─────────────────────────
+func test_shop_tables() -> void:
+	var v := lab(51)
+	Shop.update_unlocks(v)
+	# 건물: 그 건물의 시대 (기획서 8.3 · 21장)
+	var pioneer := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소"]
+	var village := ["어부", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
+	var era_ok := true
+	for b: String in Shop.BUILDINGS:
+		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else 1)
+	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size(), "건물 시대: 제재소까지 개척기 · 어부·방앗간·빵집·목조주택… 마을")
+	check(String(Shop.card(v, "제재소")["lock"]) == "" and String(Shop.card(v, "방앗간")["lock"]) == "마을 시대에", "개척기 마을: 제재소는 살 수 있고 방앗간은 \"마을 시대에\"")
+	var waits := true
+	for b: String in ["어부", "사냥꾼", "목장", "방직소", "대장간"]:
+		var c := Shop.card(v, b)
+		waits = waits and String(c["lock"]) == "곧" and String(c["inside"]).contains("아직은")
+	check(waits, "어부·사냥꾼·목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함)")
+	# 광맥 돌 4종 (SHOP 2.4 · BALANCE v3-4)
+	var veins := {"회색 돌멩이": [1200, 0, "돌"], "하얀 돌": [2500, 1, "소금"], "붉은 돌멩이": [3000, 2, "철광석"], "검은 돌": [3000, 2, "석탄"]}
+	var vok := true
+	for it: String in veins:
+		var d: Dictionary = Shop.ITEMS.get(it, {})
+		vok = vok and String(d.get("tab", "")) == "땅" and int(d["price"]) == int(veins[it][0]) and int(d["era"]) == int(veins[it][1]) \
+			and String(d["ore"]) == String(veins[it][2]) and Shop.is_vein(it) and GameIcons.has(it)
+	check(vok and Shop.items_in("땅").size() == 5, "땅 탭: 영양제 앰플 + 광맥 돌 4종 (회색 1,200 · 하양 2,500 · 붉은 3,000 · 검정 3,000 — 시대·아이콘)")
+	# 돌 색 (기획서 21장): 회색 = 돌 · 붉은 = 철 · 하양 = 소금 · 검정 = 석탄 · 반짝이 = 금
+	var o: Dictionary = Style.ORE
+	var grey: Color = o["돌"]
+	var red: Color = o["철광석"]
+	var white: Color = o["소금"]
+	var black: Color = o["석탄"]
+	var gold: Color = o["금"]
+	check(grey.s < 0.1 and grey.v > 0.45 and grey.v < 0.85 and red.r > red.g + 0.25 and white.v > 0.9 and white.s < 0.08 and black.v < 0.25 \
+		and gold.r > gold.b + 0.3 and gold.g > gold.b + 0.2, "돌 색 표: 회색 돌 · 붉은 철 · 하얀 소금 · 검은 석탄 · 금빛 금")
+	# 작은 가축 6종 (SHOP 2.5 · BALANCE v3-4)
+	var animals := {"작은 강아지 한 쌍": 600, "작은 돼지 한 쌍": 900, "작은 양 한 쌍": 800, "작은 소 한 쌍": 1800, "작은 닭 다섯": 500, "작은 당나귀": 1000}
+	var aok := Shop.items_in("생물").size() == 6
+	for it: String in animals:
+		var c := Shop.card(v, it)
+		aok = aok and Shop.ITEMS.has(it) and int(Shop.ITEMS[it]["price"]) == int(animals[it]) and String(c["lock"]) == "곧" \
+			and String(c["inside"]).contains("아직은") and GameIcons.has(it)
+	check(aok, "생물 탭: 작은 가축 6종 (강아지 600 · 돼지 900 · 양 800 · 소 1,800 · 닭 500 · 당나귀 1,000) — 모두 '곧' + 까닭")
+	# 키트 업그레이드 (BALANCE v3-4 · 기획서 21장 — 스타터킷 안의 것만)
+	var kp := {"밀밭": 1000, "목조 주택": 6000, "가족 하나 더": 8000, "암반 컵 하나 더": 4000}
+	var kok := true
+	for u: String in Kits.UPGRADES:
+		kok = kok and kp.has(u) and Kits.upgrade_price(u) == int(kp[u]) and Kits.UPGRADES[u].has("what")
+	check(kok and Kits.UPGRADES.size() == kp.size() and not Kits.UPGRADES.has("제재소") and not Kits.UPGRADES.has("방앗간"),
+		"키트 업그레이드 값: 밀밭 1,000 · 목조 주택 6,000 · 가족 하나 더 8,000 · 암반 컵 4,000 (건물은 상점에서)")
+	check(Kits.upgrade_price("가족 하나 더", 1) == 12000 and Kits.upgrade_price("가족 하나 더", 2) == -1 and Kits.upgrade_price("목조 주택", 1) == -1,
+		"가족 하나 더: 두 번째 12,000 · 최대 2 / 목조 주택은 한 번")
+	var k := Kits.make(["목조 주택", "가족 하나 더", "가족 하나 더", "밀밭"])
+	var houses := 0
+	var huts := 0
+	for b: Array in k["buildings"]:
+		houses += 1 if b[0] == "목조주택" else 0
+		huts += 1 if b[0] == "오두막" else 0
+	check(houses == 4 and huts == 0 and Kits.people(k).size() == 20, "키트: 목조 주택 + 가족 둘 → 목조 주택 4채 · 20명 (%d채 · %d명)" % [houses, Kits.people(k).size()])
+
+
+## 광맥 돌 (SHOP 2.4): 종류마다 한 병에 둘 · 떨어뜨리면 언덕(높이↑, 눈금에) + 바위 무리 · 회색은 채석장이 캠 · 하양은 소금을 안 뒤 · 붉은·검정은 광산이 생겨야
+func test_vein_stones() -> void:
+	Market.reset(30000.0)
+	var v := world_lab(20261107)
+	var ww := v.water as WorldWater
+	v.shop_open["땅"] = v.t
+	check(String(Shop.card(v, "하얀 돌")["lock"]) == "마을 시대에" and String(Shop.card(v, "붉은 돌멩이")["lock"]) == "읍내 시대에"
+		and String(Shop.card(v, "회색 돌멩이")["lock"]) == "", "광맥 돌은 돌마다 그 시대에 (회색 개척기 · 하양 마을 · 붉은·검정 읍내)")
+	var b1 := Shop.buy(v, "회색 돌멩이")
+	var b2 := Shop.buy(v, "회색 돌멩이")
+	var b3 := Shop.can_buy(v, "회색 돌멩이")
+	check(bool(b1["ok"]) and bool(b2["ok"]) and not bool(b3["ok"]) and String(b3["why"]).contains("둘까지"), "회색 돌멩이는 한 병에 둘까지 (손에 든 것 포함 — %s)" % b3["why"])
+	v.open_lid()
+	var p := Vector2.ZERO
+	for rr in range(10, 34):
+		for i in 24:
+			var q := v.center + Vector2(cos(TAU * i / 24.0), sin(TAU * i / 24.0)) * rr
+			var pv := SkyDrops.preview(v, "회색 돌멩이", q)
+			if p == Vector2.ZERO and bool(pv["ok"]) and String(pv["warn"]) == "":
+				p = q
+	var k0 := ww.idx(p.x, p.y)
+	var h0 := ww.h[k0]
+	var rocks0 := v.rocks.size()
+	var r := SkyDrops.drop(v, "회색 돌멩이", p)
+	Shop.hand_remove(int(b1["hand_id"]))
+	var stone := 0
+	for rk: Dictionary in v.rocks:
+		if String(rk.get("ore", "")) == "돌":
+			stone += int(rk["amt"])
+	check(bool(r["ok"]) and ww.h[k0] > h0 + 0.05 and roundf(ww.h[k0] * WorldPack.Q) / WorldPack.Q == ww.h[k0], "떨어뜨리면 그 자리에 언덕이 솟는다 (높이 %.3f → %.3f, 눈금에)" % [h0, ww.h[k0]])
+	check(v.rocks.size() > rocks0 and stone == 600 and v.veins.size() == 1 and SkyDrops.veins_placed(v, "회색 돌멩이") == 1, "회색 바위 무리 — 돌 %d (바위 %d개)" % [stone, v.rocks.size() - rocks0])
+	var said := false
+	for e: Dictionary in v.book:
+		said = said or String(e["text"]).contains("바위산")
+	check(said, "연대기: 하룻밤 새 바위산이 솟았다")
+	# 채석장이 회색 광맥을 캔다
+	var qb := v.add_building("채석장", p.x + 4.5, p.y + 4.5, true)
+	var worker: Resident = null
+	for q: Resident in v.people:
+		if q.age >= 12.0 and worker == null:
+			worker = q
+	ResidentAI.cancel(v, worker)
+	worker.job = qb.id
+	v.step_dt = 30.0
+	var st0 := float(v.stock.get("돌", 0.0))
+	for i in 12:
+		worker.job = qb.id
+		v.advance(Balance.HOUR)
+	var left := 0
+	for rk: Dictionary in v.rocks:
+		if String(rk.get("ore", "")) == "돌":
+			left += int(rk["amt"])
+	check(left < 600, "채석장이 회색 광맥 바위를 캐 돌을 나른다 (남은 돌 %d · 창고 돌 %.0f → %.0f)" % [left, st0, float(v.stock.get("돌", 0.0))])
+	# 하얀 돌 (마을 시대)
+	v.era = 1
+	var bw := Shop.buy(v, "하얀 돌")
+	var hal0 := 0.0
+	for q in ww.cHal:
+		hal0 += q
+	for q in ww.halite:
+		hal0 += q
+	var seams0 := ww.seams.size()
+	var pw := Vector2.ZERO
+	for rr in range(12, 40):
+		for i in 24:
+			var q := v.center + Vector2(cos(TAU * i / 24.0 + 1.0), sin(TAU * i / 24.0 + 1.0)) * rr
+			var pv := SkyDrops.preview(v, "하얀 돌", q)
+			if pw == Vector2.ZERO and bool(pv["ok"]) and String(pv["warn"]) == "":
+				pw = q
+	v.open_lid()                          # (반나절 사이 뚜껑이 다시 닫혔다)
+	var rw := SkyDrops.drop(v, "하얀 돌", pw)
+	Shop.hand_remove(int(bw["hand_id"]))
+	var hal1 := 0.0
+	for q in ww.cHal:
+		hal1 += q
+	for q in ww.halite:
+		hal1 += q
+	var salt_rocks: Array = v.rocks.filter(func(q: Dictionary) -> bool: return String(q.get("ore", "")) == "소금")
+	v.salt_known = false
+	var locked := not SkyDrops.rock_minable(v, salt_rocks[0]) if not salt_rocks.is_empty() else false
+	v.salt_known = true
+	var open := SkyDrops.rock_minable(v, salt_rocks[0]) if not salt_rocks.is_empty() else false
+	check(bool(rw["ok"]) and ww.seams.size() == seams0 + 1 and hal1 > hal0 and salt_rocks.size() >= 3 and locked and open,
+		"하얀 돌: 땅속 암염 (물이 닿으면 녹음) + 하얀 바위 %d개 — 소금을 안 뒤에야 캔다" % salt_rocks.size())
+	# 붉은 돌 (읍내) — 광맥으로 남고 아직 못 캔다
+	v.era = 2
+	var veins0 := ww.veins.size()
+	var br := Shop.buy(v, "붉은 돌멩이")
+	var pr := Vector2.ZERO
+	for rr in range(14, 44):
+		for i in 24:
+			var q := v.center + Vector2(cos(TAU * i / 24.0 + 2.0), sin(TAU * i / 24.0 + 2.0)) * rr
+			var pv := SkyDrops.preview(v, "붉은 돌멩이", q)
+			if pr == Vector2.ZERO and bool(pv["ok"]) and String(pv["warn"]) == "":
+				pr = q
+	v.open_lid()
+	SkyDrops.drop(v, "붉은 돌멩이", pr)
+	Shop.hand_remove(int(br["hand_id"]))
+	var iron: Array = v.rocks.filter(func(q: Dictionary) -> bool: return String(q.get("ore", "")) == "철광석")
+	check(ww.veins.size() == veins0 + 1 and String(ww.veins[-1]["kind"]) == "iron" and not iron.is_empty() and not SkyDrops.rock_minable(v, iron[0]),
+		"붉은 돌멩이: 넓은 세상의 철 광맥 + 붉은 바위 (광산이 생기기 전엔 묻혀 있음)")
+	# 저장: 박힌 돌 기록과 바위의 ore가 남는다
+	var d := v.to_dict()
+	var vr: Array = d["veins"]
+	var ores := 0
+	for rk: Dictionary in d["rocks"]:
+		ores += 1 if rk.has("ore") else 0
+	check(vr.size() == 3 and ores == v.rocks.filter(func(q: Dictionary) -> bool: return q.has("ore")).size(), "박힌 광맥 돌 %d개 · 광맥 바위 %d개가 병과 함께 저장" % [vr.size(), ores])
+	Market.reset()
 
 
 # ───────────────────────── 화면 (UI 01 · 06) ─────────────────────────

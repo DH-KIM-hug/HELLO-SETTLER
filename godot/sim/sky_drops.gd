@@ -10,6 +10,9 @@
 ##  · 영양제 앰플 (WE 4.4): 땅에 꽂힌 탑. 7일 동안 둘레가 날마다 넓게 비옥 (최대 20칸, 농사 ×1.5, 소금기 ×0.5) → 다 스민 뒤 14일에 걸쳐 원래대로.
 ##    처음 꽂힌 날 모두 몰려와 올려다봄 (믿음 크게↑), 저녁 기도를 탑 아래에서도. 둘째 탑이거나 물가면 가장 가까운 호수에 녹조 (10일 —
 ##    물고기 절반, 배앓이↑). 한 병에 동시에 2개까지.
+##  · 광맥 돌 (SHOP 2.4): 땅에 눌러 박힌 돌 → 언덕이 솟고(땅 높이↑ — 물길이 바뀔 수 있음) 그 위에 바위 무리 (Village.rocks, ore = 돌·소금·철광석·석탄).
+##    회색 = 돌 (채석장이 곧바로 캠) · 하양 = 소금 (땅속 암염 — 물이 닿으면 녹고, 주민이 소금을 안 뒤에야 채석장이 캠) ·
+##    붉은 = 철광석 · 검정 = 석탄 (넓은 세상의 광맥 WorldWater.veins에도 — 광산이 생기기 전엔 묻혀 있음). 종류마다 한 병에 둘까지.
 ## 이 파일 밖의 고리: Village.step (step) · is_free (blocks) · _update_building (fert_mult) · rotate_jar · ResidentAI.decide/_do/run_op ("sky_") ·
 ##   ResidentAI._pray (tower_pray) · Health (severe_mult · fester_mult · ill_mult) · SaveCodec.ref_lists ("drops").
 class_name SkyDrops
@@ -40,6 +43,10 @@ const ALGAE_NEAR := 45.0
 const DROP_BELIEF := 0.05
 const SALT_FIELD := 0.004              # 밭에 떨어진 소금 한 꼬집 → 칸마다 소금기 (농사 ×0.5쯤)
 const FLEE := 3.2
+const HILL_H := 0.09                   # 광맥 돌 언덕 높이 (높이 단위 — 화면 ×6)
+const VEIN_ROCK := 50.0                # 광맥 바위 하나에 든 양
+const VEIN_KIND := {"철광석": "iron", "석탄": "coal"}      # 넓은 세상 광맥 이름 (WorldGen.VEIN_KINDS)
+const VEIN_SEAM := 0.02                # 하얀 돌: 땅속 암염 (WorldGen 강 위 암염과 같은 양)
 
 ## 주민의 말 (금지어 없음 — '하늘에서 내려온 것'). [깨달은 뒤, 깨닫기 전]
 const SAY := {
@@ -54,6 +61,10 @@ const SAY := {
 	"마른 약초 한 잎": ["하늘에서 숲만 한 잎이 내려왔다!", "하늘에서 커다란 잎이 떨어졌어!"],
 	"소금 한 꼬집": ["하늘에서 하얀 모래가 쏟아졌다!", "하늘에서 하얀 모래가 쏟아졌어!"],
 	"영양제 앰플": ["하늘의 탑이다!", "하늘에서 유리 탑이 꽂혔어!"],
+	"회색 돌멩이": ["하룻밤 새 바위산이 솟았다!", "땅에서 바위산이 솟았어!"],
+	"하얀 돌": ["하늘에서 하얀 바위가 박혔다!", "하얀 바위가 땅에 박혔어!"],
+	"붉은 돌멩이": ["하룻밤 새 붉은 바위산이 솟았다!", "붉은 줄무늬 바위가 솟았어!"],
+	"검은 돌": ["하늘에서 검은 바위가 박혔다!", "검은 바위가 땅에 박혔어!"],
 }
 ## 연대기 한 줄
 const BOOK := {
@@ -68,6 +79,10 @@ const BOOK := {
 	"마른 약초 한 잎": "하늘에서 숲만 한 마른 잎이 내려왔다. 약초꾼들이 기뻐하며 그것을 잘게 뜯었다.",
 	"소금 한 꼬집": "하늘에서 하얀 모래 언덕이 쏟아졌다. 털뭉치 괴물들이 그것에 닿자 녹아 버렸다.",
 	"영양제 앰플": "하늘에서 거대한 유리 탑이 내려와 땅에 꽂혔다. 사람들은 일손을 놓고 몰려와 탑을 올려다보았다.",
+	"회색 돌멩이": "하룻밤 새 마을 곁에 회색 바위산이 솟았다. 석수들이 그 바위를 두드려 보고 고개를 끄덕였다.",
+	"하얀 돌": "하늘에서 하얀 바위가 내려와 땅에 깊이 박혔다. 무엇인지 아는 사람은 아무도 없었다.",
+	"붉은 돌멩이": "하룻밤 새 붉은 줄무늬 바위산이 솟았다. 바위에서 녹물 같은 냄새가 났다.",
+	"검은 돌": "하늘에서 검은 바위가 내려와 땅에 박혔다. 만지면 손이 까매졌다.",
 }
 const TOWER_LINES := ["하늘의 탑 아래 땅이 푸르러진다", "탑이 밤에도 빛나요", "하늘의 분이 내려 주신 탑이다", "탑 둘레의 밀이 참 잘 자라"]
 const TOWER_DOUBT := "거인의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
@@ -138,6 +153,8 @@ static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 		return {"ok": false, "why": "제단 위에는 떨어뜨릴 수 없어요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
 	if item == Shop.AMPOULE and active_towers(v) >= Shop.AMPOULE_MAX:
 		return {"ok": false, "why": "탑은 한 병에 둘까지예요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
+	if Shop.is_vein(item) and veins_placed(v, item) >= Shop.VEIN_MAX:
+		return {"ok": false, "why": "이 돌은 한 병에 둘까지예요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
 	for o: Dictionary in v.drops:
 		if Vector2(float(o["x"]) - p.x, float(o["y"]) - p.y).length() < float(o["size"]) * _shrink(o) + size:
 			return {"ok": false, "why": "먼저 내려온 것 위에는 떨어뜨릴 수 없어요", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
@@ -251,7 +268,7 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 		"pill", "bandage":
 			total = 1.0
 	var o := {}
-	if kind != "ampoule":
+	if kind != "ampoule" and kind != "vein":
 		v._drop_id += 1
 		o = {"id": v._drop_id, "item": item, "x": p.x, "y": p.y, "res": res, "total": total, "left": total, "size": size,
 			"res_n": 0, "t": v.t, "dur": float(d.get("days", 1.0)) * Balance.DAY}
@@ -279,6 +296,8 @@ static func drop(v: Village, item: String, p: Vector2) -> Dictionary:
 				_salt_ground(v, p, size + 1.0)
 		"ampoule":
 			_plant_tower(v, p)
+		"vein":
+			o = _plant_vein(v, item, p)
 	_miracle(v, item, p)
 	v.end_giant()
 	return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled}
@@ -526,6 +545,74 @@ static func active_towers(v: Village) -> int:
 		if is_active(v, tw):
 			n += 1
 	return n
+
+
+# ───────────────────────── 광맥 돌 (SHOP 2.4) ─────────────────────────
+## 이 병에 박힌 같은 돌의 수
+static func veins_placed(v: Village, item: String) -> int:
+	var n := 0
+	for vn: Dictionary in v.veins:
+		if String(vn["item"]) == item:
+			n += 1
+	return n
+
+
+## 돌을 눌러 박는다 → 언덕 + 바위 무리 (+ 넓은 세상의 광맥·암염). 남는 기록 {item, ore, x, y, amt, t}
+static func _plant_vein(v: Village, item: String, p: Vector2) -> Dictionary:
+	var d := def(item)
+	var ore := String(d["ore"])
+	var amt := float(d["amt"])
+	var size := float(d["size"])
+	raise_hill(v.water, p, size + 2.5, HILL_H)
+	var n := maxi(1, int(ceilf(amt / VEIN_ROCK)))
+	var each := int(roundf(amt / n))
+	for i in n:                                   # 해바라기 씨 배열 — 언덕 위에 고르게
+		var a := float(i) * 2.39996
+		var rr := size * sqrt((float(i) + 0.5) / n)
+		v.rocks.append({"x": p.x + cos(a) * rr, "y": p.y + sin(a) * rr, "amt": each, "res": 0, "ore": ore})
+	var rec := {"item": item, "ore": ore, "x": p.x, "y": p.y, "amt": amt, "t": v.t}
+	v.veins.append(rec)
+	var ww := v.water as WorldWater
+	if ww != null:
+		if VEIN_KIND.has(ore):                    # 넓은 세상의 광맥 (창조의 암반 컵과 같은 기록 — 광산은 읍내에)
+			ww.veins.append({"kind": VEIN_KIND[ore], "x": p.x, "y": p.y, "r": size, "amt": amt / 300.0, "sky": true})
+		elif ore == "소금":                        # 땅속 암염 — 물이 닿으면 녹아 흐른다 (소금 발견 4.5와 같은 길)
+			_bury_salt(ww, p, size)
+	return rec
+
+
+## 언덕: 땅 높이를 둥글게 올린다 (눈금에 — WorldPack). 넓은 세상은 둘레 거친 칸 표를 다시
+static func raise_hill(w: JarWater, p: Vector2, r: float, hh: float) -> void:
+	var ww := w as WorldWater
+	for k in w.cells_near(p, r):
+		var dd := Vector2(w.cx(k) - p.x, w.cy(k) - p.y).length() / r
+		var bump := hh * (1.0 - dd * dd) * (1.0 - dd * dd)
+		w.h[k] = WorldPack.snap(w.h[k] + bump) if ww != null else w.h[k] + bump
+	if ww != null:
+		ww.rebuild_coarse_around(p.x, p.y, r + WorldWater.F)
+
+
+static func _bury_salt(ww: WorldWater, p: Vector2, r: float) -> void:
+	var sm := {"x": p.x, "y": p.y, "r": r, "amt": VEIN_SEAM}
+	ww.seams.append(sm)
+	for k in ww.cells_near(p, r):
+		var a := VEIN_SEAM * (1.0 - Vector2(ww.cx(k) - p.x, ww.cy(k) - p.y).length() / r)
+		if ww.is_fine_k(k):
+			ww.halite[k] += a
+		else:
+			var q := ww.coarse_of(k)
+			ww.cHal[q] += a
+			ww.cNH[q] += 1
+
+
+## 채석장이 캘 수 있는 바위 — 회색(돌)은 언제나, 하양(소금)은 주민이 소금을 안 뒤, 철광석·석탄은 광산이 생겨야 (아직 없음)
+static func rock_minable(v: Village, rk: Dictionary) -> bool:
+	match String(rk.get("ore", "돌")):
+		"돌":
+			return true
+		"소금":
+			return v.salt_known
+	return false
 
 
 ## 비옥한 둘레 반지름 (칸) — 날마다 넓어져 7일에 20칸

@@ -132,6 +132,18 @@ func _set_sun(phase: float) -> void:
 	sun.look_at_from_position(Vector3(cos(a) * 39.0, 40.0, sin(a) * 39.0), Vector3.ZERO)
 
 
+## 금 알갱이: 반짝이 (빛을 조금 내는 금빛 — 돌 색 표의 '반짝이 = 금')
+func _gold_mat() -> Material:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Style.ORE["금"]
+	m.emission_enabled = true
+	m.emission = Style.ORE["금"]
+	m.emission_energy_multiplier = Style.ORE_GOLD_GLOW
+	m.metallic = 0.6
+	m.roughness = 0.25
+	return m
+
+
 func _build_jar() -> void:
 	# 암반 (지층 띠 + 광맥 알갱이·암염) — 아래에서부터 쌓임 (rock_rise)
 	rock_root = Node3D.new()
@@ -152,9 +164,10 @@ func _build_jar() -> void:
 		mi.material_override = flat_mat(b[2])
 		mi.position.y = (float(b[0]) + float(b[1])) * 0.5
 		rock_root.add_child(mi)
-	for i in 26:                                   # 유리에 눌린 광맥 알갱이 (철 회색 · 석탄 검정 · 금 · 암염 흰색)
+	for i in 26:                                   # 유리에 눌린 광맥 알갱이 — 돌 색 (기획서 21장): 철 붉은 · 석탄 검정 · 금 반짝이 · 암염 하양
 		var a := r.randf() * TAU
-		var col: Color = [Color("c9c4bb"), Color("2c2a2c"), Color("e8b84a"), Color("f4f1ea")][i % 4]
+		var ore: String = ["철광석", "석탄", "금", "소금"][i % 4]
+		var col: Color = Style.ORE[ore]
 		var sm := SphereMesh.new()
 		sm.radius = r.randf_range(0.12, 0.24)
 		sm.height = sm.radius * 1.6
@@ -162,7 +175,7 @@ func _build_jar() -> void:
 		sm.rings = 3
 		var mi := MeshInstance3D.new()
 		mi.mesh = sm
-		mi.material_override = Toon.mat(col)
+		mi.material_override = Toon.mat(col) if ore != "금" else _gold_mat()
 		mi.position = Vector3(cos(a) * (RIN - 0.08), r.randf_range(0.15, ROCK_TOP - FLOOR_Y - 0.15), sin(a) * (RIN - 0.08))
 		rock_root.add_child(mi)
 	rock_root.scale.y = 0.001
