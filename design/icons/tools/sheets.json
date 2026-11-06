@@ -1,0 +1,595 @@
+{
+ "style": "A game item icon sheet for a cozy mobile game. Style: cozy flat cel-shaded illustration, clean thin dark-brown outline (#4a2e1f) around every object, flat colours plus exactly one shade step, one small white highlight, light from the upper-left, consistent 3/4 top-down view, warm palette (cream, honey, terracotta, mint, teal, soft brown) like a storybook medieval village game. No gradients, no texture noise, no hatching, no realistic rendering. Each icon is a single chunky object with a simple bold silhouette that stays readable at 48 pixels. Background: completely flat solid pure magenta #FF00FF everywhere, with NO shadows on the background, no ground shadow, no frames, no tiles, no cards, no borders, no grid lines. Absolutely NO text, letters, numbers or labels anywhere. Do not use magenta or pink-purple colours inside any icon.",
+ "sheets": [
+  {
+   "id": "goods_1",
+   "group": "goods",
+   "cols": 4,
+   "rows": 3,
+   "items": [
+    [
+     "hardtack",
+     "건량",
+     "dry travel rations: a small tied cloth bundle with three hard square biscuits"
+    ],
+    [
+     "wheat",
+     "밀",
+     "a tied sheaf of golden wheat stalks"
+    ],
+    [
+     "flour",
+     "밀가루",
+     "a plump cream burlap sack of flour, open top showing white flour, a little flour puff"
+    ],
+    [
+     "bread",
+     "빵",
+     "a round golden-brown loaf of country bread with scored top"
+    ],
+    [
+     "mushroom",
+     "버섯",
+     "one big brown-capped forest mushroom with cream stem"
+    ],
+    [
+     "dried_mushroom",
+     "말린 버섯",
+     "shrivelled dark-brown dried mushroom slices threaded on a string"
+    ],
+    [
+     "glow_mushroom",
+     "빛버섯",
+     "a cluster of three tiny pale mushrooms glowing soft mint-cyan, with small glow sparkles"
+    ],
+    [
+     "dandelion_leaf",
+     "민들레 잎",
+     "a small bunch of jagged green dandelion leaves tied together"
+    ],
+    [
+     "fish",
+     "생선",
+     "one plump silver-blue river fish"
+    ],
+    [
+     "meat",
+     "고기",
+     "a chunk of red meat on a bone (ham hock), cartoon style, no blood"
+    ],
+    [
+     "pig",
+     "돼지",
+     "a whole small pink farm pig standing, side 3/4 view, cute but not chibi"
+    ],
+    [
+     "beer",
+     "맥주",
+     "a wooden tankard of amber beer with white foam spilling over"
+    ]
+   ]
+  },
+  {
+   "id": "goods_2",
+   "group": "goods",
+   "cols": 4,
+   "rows": 3,
+   "items": [
+    [
+     "log",
+     "통나무",
+     "one short cut wooden log with visible tree rings on the end"
+    ],
+    [
+     "plank",
+     "판자",
+     "a neat stack of three sawn wooden planks"
+    ],
+    [
+     "stone",
+     "돌",
+     "a small pile of three grey cut stone blocks"
+    ],
+    [
+     "water",
+     "물",
+     "a wooden bucket full of clear blue water"
+    ],
+    [
+     "salt",
+     "소금",
+     "a small wooden bowl heaped with white salt crystals"
+    ],
+    [
+     "wool",
+     "양털",
+     "a fluffy cream ball of raw sheep wool fleece"
+    ],
+    [
+     "clothes",
+     "옷",
+     "a neatly folded simple medieval linen tunic, earthy green"
+    ],
+    [
+     "iron_ore",
+     "철광석",
+     "a chunky rock with rusty red-orange ore streaks"
+    ],
+    [
+     "coal",
+     "석탄",
+     "a small pile of black coal lumps with dark-blue highlights"
+    ],
+    [
+     "iron",
+     "철",
+     "two stacked dark-grey iron ingots"
+    ],
+    [
+     "tools",
+     "도구",
+     "a hammer and a hand saw crossed, wooden handles"
+    ],
+    [
+     "petals",
+     "꽃잎",
+     "a small heap of soft peach and yellow flower petals"
+    ]
+   ]
+  },
+  {
+   "id": "goods_3",
+   "group": "goods",
+   "cols": 4,
+   "rows": 3,
+   "items": [
+    [
+     "cotton",
+     "솜",
+     "an open cotton boll: fluffy white cotton on a brown pod"
+    ],
+    [
+     "yellow_dye",
+     "노란 물감",
+     "a small clay pot full of bright yellow pigment paste"
+    ],
+    [
+     "red_dye",
+     "붉은 물감",
+     "a small clay pot full of deep brick-red pigment paste"
+    ],
+    [
+     "herb",
+     "약초",
+     "a tied bundle of green medicinal herbs with small leaves"
+    ],
+    [
+     "blue_powder",
+     "푸른 가루",
+     "a small open leather pouch spilling fine sky-blue powder"
+    ],
+    [
+     "mold_cure",
+     "곰팡이약",
+     "a small corked glass vial of pale green medicine with a leaf tag (tag blank)"
+    ],
+    [
+     "coin",
+     "주화",
+     "a small stack of three round copper coins embossed with a little sprout (no letters)"
+    ],
+    [
+     "banknote",
+     "지폐",
+     "a small folded paper banknote, cream with a sage-green border pattern, no writing"
+    ],
+    [
+     "leather",
+     "가죽",
+     "a tanned brown leather hide, flat outstretched shape"
+    ],
+    [
+     "horn",
+     "뿔",
+     "a curved cream-and-brown animal horn"
+    ],
+    [
+     "fur",
+     "털",
+     "a soft folded grey-brown fur pelt"
+    ],
+    [
+     "milk",
+     "우유",
+     "a small clay jug of white milk"
+    ]
+   ]
+  },
+  {
+   "id": "goods_4",
+   "group": "goods",
+   "cols": 4,
+   "rows": 2,
+   "items": [
+    [
+     "cheese",
+     "치즈",
+     "a yellow cheese wheel with one wedge cut out"
+    ],
+    [
+     "honey",
+     "꿀",
+     "a round clay honey pot with golden honey dripping, wooden dipper"
+    ],
+    [
+     "grapes",
+     "포도",
+     "a bunch of purple-blue grapes with a green leaf"
+    ],
+    [
+     "wine",
+     "포도주",
+     "a clay wine jug with a cork, deep red wine"
+    ],
+    [
+     "vegetables",
+     "채소",
+     "a woven basket of vegetables: carrots, cabbage and turnip"
+    ],
+    [
+     "apple",
+     "사과",
+     "two shiny red apples with a green leaf"
+    ],
+    [
+     "egg",
+     "달걀",
+     "three cream eggs in a small straw nest"
+    ],
+    [
+     "spare_bread",
+     "-",
+     "a round golden-brown loaf of country bread with scored top"
+    ]
+   ]
+  },
+  {
+   "id": "shop_1",
+   "group": "shop",
+   "cols": 4,
+   "rows": 3,
+   "items": [
+    [
+     "bread_crumb",
+     "빵 부스러기",
+     "an everyday crumb of bread: a small irregular golden-brown crust piece with soft inside, plus two tiny crumbs"
+    ],
+    [
+     "rice_grain",
+     "쌀 한 톨",
+     "a single plump white grain of rice, large and centred"
+    ],
+    [
+     "sugar_cube",
+     "각설탕",
+     "one white sugar cube with sparkly crystal edges"
+    ],
+    [
+     "wheat_ear",
+     "밀 이삭 한 줄기",
+     "a single stalk with one ear of golden wheat, diagonal"
+    ],
+    [
+     "chopsticks",
+     "나무젓가락",
+     "a pair of disposable wooden chopsticks, still joined at top, diagonal"
+    ],
+    [
+     "gravel",
+     "자갈 한 알",
+     "one small rounded grey gravel stone"
+    ],
+    [
+     "rusty_nail",
+     "녹슨 못",
+     "one rusty iron nail, orange-brown rust, diagonal"
+    ],
+    [
+     "pill_crumb",
+     "알약 부스러기",
+     "a broken half of a white round pill with a few crumbs"
+    ],
+    [
+     "antiseptic_drop",
+     "소독약 한 방울",
+     "a single big amber-brown droplet of antiseptic, glossy teardrop"
+    ],
+    [
+     "bandage",
+     "반창고 조각",
+     "a small piece of beige adhesive bandage with a pad in the middle"
+    ],
+    [
+     "dried_herb_leaf",
+     "마른 약초 한 잎",
+     "one dried olive-green herb leaf, slightly curled"
+    ],
+    [
+     "salt_pinch",
+     "소금 한 꼬집",
+     "a tiny mound pinch of white coarse salt crystals"
+    ]
+   ]
+  },
+  {
+   "id": "shop_2",
+   "group": "shop",
+   "cols": 4,
+   "rows": 3,
+   "items": [
+    [
+     "matchstick",
+     "성냥개비",
+     "one wooden matchstick with a red head, diagonal, unlit"
+    ],
+    [
+     "yarn",
+     "털실 한 가닥",
+     "a single loose strand of soft warm-orange knitting yarn curled in loops"
+    ],
+    [
+     "moss",
+     "이끼 한 줌",
+     "a soft rounded clump of green moss"
+    ],
+    [
+     "nutrient_ampoule",
+     "영양제 앰플",
+     "a small clear plastic plant-food ampoule with green liquid and a twist-off top"
+    ],
+    [
+     "grey_stone",
+     "회색 돌멩이",
+     "a thumb-sized grey stone"
+    ],
+    [
+     "red_stone",
+     "붉은 돌멩이",
+     "a thumb-sized rust-red stone with darker red streaks"
+    ],
+    [
+     "white_stone",
+     "하얀 돌",
+     "a chunky white rock-salt crystal lump, cubic facets"
+    ],
+    [
+     "black_stone",
+     "검은 돌",
+     "a lump of black charcoal with a matte surface"
+    ],
+    [
+     "coaster",
+     "병 받침",
+     "a round woven cork coaster seen from 3/4 top"
+    ],
+    [
+     "pebble",
+     "조약돌",
+     "one smooth polished oval pebble, sand colour with a white band"
+    ],
+    [
+     "glass_tint",
+     "유리 빛깔",
+     "a small fan of three overlapping coloured glass chips: amber, mint and sky-blue, translucent"
+    ],
+    [
+     "cork_pattern",
+     "코르크 무늬",
+     "a cork stopper with a carved leaf pattern on its top"
+    ]
+   ]
+  },
+  {
+   "id": "shop_3",
+   "group": "shop",
+   "cols": 4,
+   "rows": 2,
+   "items": [
+    [
+     "puppy",
+     "작은 강아지",
+     "a tiny figurine-like brown-and-white puppy sitting"
+    ],
+    [
+     "piglet",
+     "작은 돼지",
+     "a tiny figurine-like pink pig standing"
+    ],
+    [
+     "sheep",
+     "작은 양",
+     "a tiny figurine-like fluffy white sheep with dark face"
+    ],
+    [
+     "cow",
+     "작은 소",
+     "a tiny figurine-like brown and white cow standing"
+    ],
+    [
+     "chicken",
+     "작은 닭",
+     "a tiny figurine-like white hen with red comb"
+    ],
+    [
+     "donkey",
+     "작은 당나귀",
+     "a tiny figurine-like grey donkey standing"
+    ],
+    [
+     "settler_draw",
+     "이주민 뽑기",
+     "a gentle open cupped hand (palm up) holding a tiny simple villager figure silhouette in cream with a small sparkle; no dice, no cards, no coins"
+    ],
+    [
+     "spare_moss",
+     "-",
+     "a soft rounded clump of green moss"
+    ]
+   ]
+  },
+  {
+   "id": "ui_1",
+   "group": "ui",
+   "cols": 4,
+   "rows": 2,
+   "bold": true,
+   "items": [
+    [
+     "altar",
+     "제단",
+     "a simple stone altar block with a small flame on top"
+    ],
+    [
+     "shop",
+     "상점",
+     "a small shop: woven basket under a striped cream-and-terracotta awning"
+    ],
+    [
+     "hand",
+     "손",
+     "a large open friendly hand, palm facing the viewer"
+    ],
+    [
+     "chronicle",
+     "연대기",
+     "an old parchment book, open, with a ribbon bookmark (pages blank)"
+    ],
+    [
+     "shelf",
+     "선반",
+     "a wooden shelf holding three small glass jars"
+    ],
+    [
+     "lid",
+     "뚜껑",
+     "a cork stopper lid with a little nub on the bottom"
+    ],
+    [
+     "blow",
+     "불기",
+     "a breath wind swirl carrying three small seeds"
+    ],
+    [
+     "speed",
+     "속도",
+     "an hourglass with two circular arrows around it"
+    ]
+   ]
+  },
+  {
+   "id": "ui_2",
+   "group": "ui",
+   "cols": 4,
+   "rows": 2,
+   "bold": true,
+   "items": [
+    [
+     "lamp",
+     "해/등불",
+     "an oil lamp with sun rays around the flame"
+    ],
+    [
+     "settings",
+     "톱니",
+     "a settings gear cog"
+    ],
+    [
+     "map",
+     "지도",
+     "a round map disc showing a little lake and hills"
+    ],
+    [
+     "go_village",
+     "마을로 가기",
+     "a small house with a curved arrow pointing to it"
+    ],
+    [
+     "letter",
+     "편지",
+     "a sealed envelope letter with a wax seal"
+    ],
+    [
+     "wish",
+     "소원",
+     "a sealed envelope letter with a golden star on it"
+    ],
+    [
+     "watering_can",
+     "물뿌리개",
+     "a watering can pouring a few drops"
+    ],
+    [
+     "curtain",
+     "커튼",
+     "a pair of window curtains tied back to each side"
+    ]
+   ]
+  },
+  {
+   "id": "reroll_1",
+   "group": "goods",
+   "cols": 4,
+   "rows": 2,
+   "items": [
+    [
+     "hardtack",
+     "건량",
+     "a small stack of three square pale-tan hardtack biscuits with poked holes, tied crosswise with twine",
+     "goods"
+    ],
+    [
+     "wine",
+     "포도주",
+     "a small wooden goblet filled with deep purple-red wine, with a tiny bunch of purple grapes leaning against its base",
+     "goods"
+    ],
+    [
+     "grey_stone",
+     "회색 돌멩이",
+     "a flat thumb-sized blue-grey stone with a little patch of brown potting soil and a tiny tuft of moss on top",
+     "shop"
+    ],
+    [
+     "pebble",
+     "조약돌",
+     "a smooth flat river pebble, slate blue-grey with small white speckles, glossy",
+     "shop"
+    ],
+    [
+     "white_stone",
+     "하얀 돌",
+     "a rough irregular chunk of translucent glassy white rock salt crystal with pale grey-blue facets, jagged not cubic",
+     "shop"
+    ],
+    [
+     "altar",
+     "제단",
+     "UI icon, bold simple: a low flat stone altar table (thick stone slab on a solid stone base) with a small candle flame and a little offering bowl on top, no arch, no fireplace",
+     "ui"
+    ],
+    [
+     "go_village",
+     "마을로 가기",
+     "UI icon, bold simple: a small cottage with a big bold honey-coloured curved arrow swooping down into its door",
+     "ui"
+    ],
+    [
+     "map",
+     "지도",
+     "UI icon, bold simple: a round parchment map disc seen from above, drawn as a map: blue lake, small green hill bumps, a dotted path and a tiny house marker, cream border",
+     "ui"
+    ]
+   ]
+  }
+ ]
+}

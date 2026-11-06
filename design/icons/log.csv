@@ -1,0 +1,11 @@
+id,file,model,seed,size,date,chosen,note
+goods_1,design/icons/sheets/goods_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 12 goods, clean magenta bg, consistent outline; hardtack later replaced by reroll_1 (read like flour sack)"
+goods_2,design/icons/sheets/goods_2_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 12 goods"
+goods_3,design/icons/sheets/goods_3_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 12 goods; coin shows sprout emboss, banknote plain (no text)"
+goods_4,design/icons/sheets/goods_4_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 7 goods + spare bread (unused); faint pink glow around shapes keyed out cleanly; wine replaced by reroll_1 (jug looked like milk jug)"
+shop_1,design/icons/sheets/shop_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 12 giant-shop items; crumbs as separate bits merged per cell"
+shop_2,design/icons/sheets/shop_2_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass with re-rolls: grey_stone (same as gravel), pebble (looked like rice grain), white_stone (looked like sugar cube) replaced by reroll_1"
+shop_3,design/icons/sheets/shop_3_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: 6 animal figurines + settler-draw hand; slightly thicker sticker-like outline than goods; spare moss unused"
+ui_1,design/icons/sheets/ui_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass with re-roll: altar read as fireplace/oven -> reroll_1"
+ui_2,design/icons/sheets/ui_2_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass with re-rolls: map read as framed picture, go_village arrow too thin at 48px -> reroll_1"
+reroll_1,design/icons/sheets/reroll_1_a.png,codex-cli 0.163.0 (built-in image generation),-,1536x1024,2026-11-07,yes,"pass: hardtack, wine, grey_stone, pebble, white_stone, altar, go_village, map"
