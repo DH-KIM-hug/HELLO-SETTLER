@@ -46,7 +46,7 @@
 - 픽사베이 콘텐츠 라이선스: 상업적 이용 가능·출처 표기 의무 없음. 단 **음원만 따로 재배포·판매는 금지**, 게임에 넣는 건 가능.
 - **유튜브 콘텐츠 ID에 등록된 곡은 피한다** — 플레이어가 게임 영상을 올릴 때 저작권 신고가 걸릴 수 있다 (곡 페이지·작가 설명에 'Content ID' 언급이 있으면 제외).
 - 받은 파일마다 `godot/audio/LICENSES.csv`에 한 줄: `file,title,author,pixabay_url,download_date,content_id(none/yes)`. 출처 표기 의무는 없지만 크레딧 화면에 작가 이름을 넣는다 (예의 + 분쟁 대비).
-- 형식: 음악 `.ogg` (Godot 반복 재생), 효과음 `.wav` 또는 `.ogg`. 음량을 −14 LUFS 근처로 맞춘다.
+- 형식: 모두 `.mp3` (이 Mac의 ffmpeg에 vorbis 인코더가 없음; Godot 4 mp3 반복 재생 가능). 음량을 −14~−16 LUFS 근처로 맞춘다.
 
 ## 6. 작업 순서
 1. 사용자가 픽사베이에서 2·3장 목록대로 골라 받는다 (계정 로그인 필요 — 사람이 직접). 받은 파일은 `godot/audio/music/`, `godot/audio/sfx/`에 두고 LICENSES.csv를 채운다.
@@ -61,5 +61,5 @@
 - **얼마나 자주**: 같은 상황에서 화면 안의 주민 한두 명만, 같은 줄은 30초에 한 번까지. 빨리 돌리기(×8 이상)에선 끔. 설정의 효과음 음량을 따름 (따로 '목소리' 끄기 추가).
 - 금지: 게임·앱·플레이어·휴대폰 같은 말, 실존 인물 목소리 흉내.
 - **ElevenLabs 이용 조건**: 상업 이용은 **유료 요금제**(Starter 이상)에서 만든 음성만. 보이스 라이브러리의 목소리를 쓰면 그 목소리의 이용 조건도 확인. 만든 목소리 id·요금제·날짜를 `godot/audio/LICENSES.csv`에 기록.
-- 생성: `export ELEVENLABS_API_KEY=...` 후 `python3 tools/gen_voice.py --voices girl=<id> boy=<id> woman=<id> man=<id> old_woman=<id> old_man=<id>` → `godot/audio/voice/*.ogg`.
+- 생성: 키는 `~/.config/elevenlabs/key` (저장소 밖, 팥죽 게임과 공용). `python3 tools/gen_voice.py` (목소리 id는 스크립트에 기본값) → `godot/audio/voice/*.mp3` (118개, 받아쓰기로 검사). 효과음 `godot/tools/gen_sfx.py` (35개), 음악 `tools/gen_music.py` (6곡).
 - 참고: ElevenLabs는 **효과음 생성**(Sound Effects)도 된다 — 픽사베이에서 못 찾은 작은 세계 소리(곰팡이 퐁, 꽃씨 바람, 코르크 뽁)는 거기서 만들어도 된다.
