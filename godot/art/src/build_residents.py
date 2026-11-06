@@ -126,6 +126,56 @@ def build():
     m.sphere(0.29, pos=(0, 0.2, HEAD_C - 0.2), scl=(1.0, 0.45, 1.0), color=HAIR, seg=10, rings=6)
     ps.add("hair_long", m, pivot=(0, 0, NECK))
 
+    # ── curl variants (stage 7: appearance genes — 0 straight / 1 wave / 2 curly) ──
+    def curls(m, n_ring, rings_z, r_shell, ball, back_only_below=None, jitter=0.0):
+        """Small round lumps over the hair shell -> curly silhouette (alternating light/dark hair key)."""
+        k = 0
+        for zi, (z, n) in enumerate(zip(rings_z, n_ring)):
+            for i in range(n):
+                a = (i + 0.5 * (zi % 2)) / n * 2 * math.pi
+                rr = math.sqrt(max(0.0, r_shell ** 2 - (z - HEAD_C) ** 2)) if abs(z - HEAD_C) < r_shell else 0.05
+                x, y = math.sin(a) * rr, math.cos(a) * rr + 0.02
+                if back_only_below is not None and z < back_only_below and y < 0.0:
+                    continue
+                if y < -HEAD_R * 0.55 and z < HEAD_C + 0.12:       # keep the face open
+                    continue
+                m.sphere(ball * (1.0 + 0.12 * ((k * 7) % 3 - 1)), pos=(x, y, z), color=HAIR if k % 3 else HAIR_D, seg=7, rings=5)
+                k += 1
+
+    m = part("hair_curly")
+    cap(m)
+    curls(m, (7, 9, 9), (HEAD_C + 0.3, HEAD_C + 0.18, HEAD_C + 0.02), HEAD_R * 1.12, 0.09, back_only_below=HEAD_C + 0.1)
+    m.sphere(0.1, pos=(0, 0.02, HEAD_C + 0.36), color=HAIR, seg=8, rings=5)
+    ps.add("hair_curly", m, pivot=(0, 0, NECK))
+
+    m = part("hair_curly_long")
+    cap(m, depth=0.1)
+    curls(m, (7, 9, 10, 9, 7), (HEAD_C + 0.3, HEAD_C + 0.18, HEAD_C + 0.02, HEAD_C - 0.16, HEAD_C - 0.32), HEAD_R * 1.14, 0.095,
+          back_only_below=HEAD_C + 0.1)
+    m.sphere(0.1, pos=(0, 0.02, HEAD_C + 0.36), color=HAIR, seg=8, rings=5)
+    ps.add("hair_curly_long", m, pivot=(0, 0, NECK))
+
+    m = part("hair_wave")
+    cap(m)
+    m.sphere(0.13, pos=(-0.1, -0.21, HEAD_C + 0.2), scl=(1.7, 0.8, 0.65), rot=(0, 0.25, 0.35), color=HAIR, seg=8, rings=5)   # swept fringe
+    m.sphere(0.1, pos=(0.14, -0.2, HEAD_C + 0.24), scl=(1.3, 0.8, 0.6), rot=(0, -0.3, -0.2), color=HAIR_D, seg=8, rings=5)
+    for sx in (-1, 1):
+        m.sphere(0.09, pos=(sx * 0.31, 0.08, HEAD_C - 0.12), scl=(0.7, 1.2, 1.0), color=HAIR_D, seg=7, rings=4)            # flick over ears
+    m.sphere(0.12, pos=(0, 0.3, HEAD_C - 0.1), scl=(1.6, 0.6, 0.8), color=HAIR, seg=8, rings=5)                         # nape wave
+    ps.add("hair_wave", m, pivot=(0, 0, NECK))
+
+    m = part("hair_wave_long")
+    cap(m, depth=0.12)
+    m.sphere(0.13, pos=(-0.1, -0.21, HEAD_C + 0.2), scl=(1.7, 0.8, 0.65), rot=(0, 0.25, 0.35), color=HAIR, seg=8, rings=5)
+    for k in range(4):                                                                                                  # wavy fall at the back
+        z = HEAD_C - 0.12 - k * 0.13
+        m.sphere(0.17 - k * 0.012, pos=((0.05 if k % 2 else -0.05), 0.22 + 0.02 * k, z), scl=(1.75, 0.6, 0.85),
+                 color=HAIR if k % 2 == 0 else HAIR_D, seg=9, rings=5)
+    for sx in (-1, 1):
+        for k in range(3):
+            m.sphere(0.08, pos=(sx * (0.3 + 0.03 * (k % 2)), 0.06, HEAD_C - 0.14 - k * 0.12), color=HAIR_D if k % 2 else HAIR, seg=7, rings=4)
+    ps.add("hair_wave_long", m, pivot=(0, 0, NECK))
+
     m = part("beard")
     m.sphere(0.2, pos=(0, -0.17, HEAD_C - 0.17), scl=(1.25, 0.7, 0.9), color=HAIR, seg=9, rings=6)
     m.sphere(0.06, pos=(0, -0.3, HEAD_C - 0.05), scl=(2.0, 0.6, 0.6), color=HAIR_D, seg=6, rings=4)     # moustache

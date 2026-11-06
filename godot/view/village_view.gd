@@ -107,7 +107,7 @@ func _sync_residents(dt: float) -> void:
 	for r in v.people:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
-		var key := age_stage(r)
+		var key := ResidentModel.look_key(r)      # 나이·대머리·흰머리 단계가 바뀌면 다시 만든다 (7단계)
 		if m == null or _res_key.get(r.id, -1) != key:
 			if m != null:
 				m.queue_free()

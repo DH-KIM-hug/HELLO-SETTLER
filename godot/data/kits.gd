@@ -22,14 +22,41 @@ const UPGRADES := {
 }
 
 
-## 기본 키트 + 고른 업그레이드
-static func make(upgrades: Array = []) -> Dictionary:
+## 추가 키트 종류 (기획서 5.5 · BLOODLINES 5장) — 가족 전원이 정해진 좋은 혈통 1~2개 (나쁜 혈통은 키트에 없다).
+## "looks" = 사람마다 거인이 고른 겉모습 (Genetics.from_look 칸 — 빠진 칸·null은 무작위 추천값 "가족끼리 닮게").
+## 순서는 people과 같다: [0] 한스 [1] 마르타 [2] 리나 [3] 토미 [4] 오토 [5] 엘자 [6] 펠릭스 [7] 베른 [8] 그레타 [9] 카를
+const VARIANTS := {
+	"힘센 가족": {"blood": ["strong"], "looks": [{"build": 0.85, "height": 0.7}, {"build": 0.75}, null, null, {"build": 0.8}]},
+	"날랜 가족": {"blood": ["swift"], "looks": [{"height": 0.75, "build": 0.3}, {"height": 0.7, "build": 0.3}]},
+	"장인 가문": {"blood": ["master", "handy"]},
+	"다산 가족": {"blood": ["fertile"]},
+	"경건한 가족": {"blood": ["pious"]},
+	"탐험가 가족": {"blood": ["explorer"]},
+	"강인한 가족": {"blood": ["sturdy", "long_lived"]},
+}
+
+
+## 기본 키트 + 고른 업그레이드 (+ 추가 키트 종류)
+static func make(upgrades: Array = [], variant := "") -> Dictionary:
 	var k := BASE.duplicate(true)
 	for u: String in upgrades:
 		if UPGRADES.has(u):
 			(k["buildings"] as Array).append_array((UPGRADES[u] as Array).duplicate(true))
 	k["upgrades"] = upgrades.duplicate()
+	if VARIANTS.has(variant):
+		k["name"] = variant
+		k.merge((VARIANTS[variant] as Dictionary).duplicate(true), true)
 	return k
+
+
+## 가족 전원의 혈통 (기본 키트 = 없음)
+static func blood(kit: Dictionary) -> PackedStringArray:
+	return PackedStringArray(kit.get("blood", []))
+
+
+## 고른 겉모습 (사람 순서대로, 없으면 빈 배열)
+static func looks(kit: Dictionary) -> Array:
+	return kit.get("looks", [])
 
 
 static func people(kit: Dictionary) -> Array:

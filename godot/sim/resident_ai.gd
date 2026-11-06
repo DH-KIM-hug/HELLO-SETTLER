@@ -67,7 +67,7 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				v.mark_path(r.x, r.y, can)
 			r.anim = "carry" if r.carry != "" else "walk"
 		else:
-			var speed: float = r.work_mult if s["fast"] else 1.0
+			var speed: float = r.job_speed(_job_kind(v, r)) if s["fast"] else 1.0
 			var need: float = s["left"] / speed
 			r.anim = s["anim"]
 			if need <= left:
@@ -85,6 +85,16 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 		r.anim = "idle"
 
 
+## 지금 하는 일의 종류 (혈통 작업 빠르기용): 짓기 / 일터 종류
+static func _job_kind(v: Village, r: Resident) -> String:
+	if r.action == "build":
+		return "짓기"
+	if r.fx.is_empty():
+		return ""
+	var jb := v.bld(r.job)
+	return jb.type if jb != null else ""
+
+
 # ───────────────────────── 점수제 결정 ─────────────────────────
 static func decide(v: Village, r: Resident) -> void:
 	var h := v.hour_now()
@@ -93,6 +103,9 @@ static func decide(v: Village, r: Resident) -> void:
 		_baby(v, r)
 		return
 	var night := v.is_night()
+	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
+	if late > 0.0 and h >= Balance.NIGHT_TO and h < Balance.NIGHT_TO + late:
+		night = true
 	var work_t := v.is_work_time()
 	var cand := {}
 	if night:
@@ -128,8 +141,11 @@ static func decide(v: Village, r: Resident) -> void:
 	if r.is_elder() and not night:
 		cand["rest"] = Balance.ACT_BASE["rest"]
 	# 탐험 (넓은 세상만 — 6단계): 무리마다 가끔 한 명이 안개 가장자리로
-	if v.explore_on and work_t and r.is_adult() and v.can_explore():
-		cand["explore"] = WorldCfg.EXPLORE_BASE
+	if v.explore_on and work_t and r.is_adult() and v.can_explore(r):
+		cand["explore"] = WorldCfg.EXPLORE_BASE * r.f("explore")
+	# 방랑벽 (혈통): 가끔 일을 놓고 멀리 걸어감
+	if work_t and r.is_adult() and r.f("wander", 0.0) > 0.0 and v.gene_rng.randf() < Bloodlines.WANDER_P:
+		cand["wander"] = 100.0
 	# 보정
 	var fs: Dictionary = Balance.FAITH_STATE_MOD.get(v.faith_state(), {})
 	var order: Array = []
@@ -195,6 +211,8 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			return true
 		"explore":
 			return _explore(v, r)
+		"wander":
+			return _wander(v, r)
 		"rest":
 			var p := near(v, v.fire.x, v.fire.y, 2.0)
 			r.doing = "모닥불 곁에서 쉬는 중"
@@ -228,6 +246,22 @@ static func _explore(v: Village, r: Resident) -> bool:
 	return true
 
 
+## 방랑: 마을에서 먼 곳까지 걸어갔다가 돌아온다 (넓은 세상이면 지나는 길의 안개가 조금 걷힌다)
+static func _wander(v: Village, r: Resident) -> bool:
+	for i in 6:
+		var a := v.gene_rng.randf() * TAU
+		var d := v.gene_rng.randf_range(Bloodlines.WANDER_DIST[0], Bloodlines.WANDER_DIST[1])
+		var p := Vector2(r.x, r.y) + Vector2(cos(a), sin(a)) * d
+		if v.water.inside(p.x, p.y, 3.0) and not v.water_at(p.x, p.y):
+			r.doing = "괜히 먼 데까지 걸어가는 중"
+			r.steps.append(walk(p.x, p.y))
+			r.steps.append(act(60.0 + v.gene_rng.randf() * 120.0, "idle"))
+			var hp := near(v, v.fire.x, v.fire.y, 2.5)
+			r.steps.append(walk(hp.x, hp.y))
+			return true
+	return false
+
+
 static func _baby(v: Village, r: Resident) -> void:
 	# 아기는 집 안 (기획서 7.3). 집이 없으면 모닥불 곁
 	var hm := v.bld(r.home)
@@ -243,7 +277,7 @@ static func _baby(v: Village, r: Resident) -> void:
 static func _sleep(v: Village, r: Resident) -> bool:
 	var hm := v.bld(r.home)
 	var p := Vector2(hm.x, hm.y + 0.3) if hm != null else near(v, v.fire.x, v.fire.y, 1.4)
-	var until_morning := fmod(Balance.NIGHT_TO * Balance.HOUR - v.clock() + Balance.DAY, Balance.DAY)
+	var until_morning := fmod((Balance.NIGHT_TO + r.f("wake_late", 0.0)) * Balance.HOUR - v.clock() + Balance.DAY, Balance.DAY)
 	r.doing = "집에서 자는 중" if hm != null else "모닥불 곁에서 자는 중"
 	r.sleeping = true
 	r.steps.append(walk(p.x, p.y))

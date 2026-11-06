@@ -12,12 +12,17 @@ uniform bool use_vertex_color = true;
 uniform vec3 fixed_color : source_color = vec3(0.3, 0.22, 0.18);   // use_vertex_color = false일 때 (주민)
 uniform float width_px_1080p = 1.6;
 uniform float push_back = 0.06;      // 껍데기를 조금 뒤로 → 자기 면을 덮지 않음 (세계 단위)
+// 7단계: 주민 대머리 — 지운 머리카락의 껍데기도 지운다 (render/resident.gdshader와 같은 규칙, 머리 부품만)
+uniform int bald = 0;
+instance uniform float part_head = 0.0;
+varying vec3 lp;
 
 vec3 srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
 
 void vertex() {
+	lp = VERTEX;
 	vec3 n = CUSTOM0.w > 0.5 ? CUSTOM0.xyz : NORMAL;
 	vec4 vp = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	vec3 nv = mat3(MODELVIEW_MATRIX) * n;
@@ -32,6 +37,11 @@ void vertex() {
 }
 
 void fragment() {
+	if (bald > 0 && part_head > 0.5 && COLOR.r < 0.03 && COLOR.g > 0.97) {
+		if ((bald == 1 && length(lp - vec3(0.0, 0.64, -0.08)) < 0.19) || (bald == 2 && lp.y > 0.37 + 0.3 * clamp(-lp.z, 0.0, 0.3))) {
+			discard;
+		}
+	}
 	vec3 c = use_vertex_color ? albedo * srgb_to_linear(COLOR.rgb) : srgb_to_linear(fixed_color);
 	ALBEDO = c * line_mul;
 }

@@ -54,6 +54,12 @@ var look_hat := 0
 var look_hair := 0
 var look_skin := 0
 var look_cloth := 0
+# 7단계 — 겉모습 유전자 (data/genetics.gd, 능력 없음 — 시뮬레이션은 읽지 않는다) · 혈통 (data/bloodlines.gd, 능력)
+var genes := PackedByteArray()        # Genetics.GENE_BYTES 바이트
+var blood := PackedStringArray()      # 혈통 id (최대 2)
+var parent_blood := PackedStringArray()   # 부모 둘이 가진 혈통 (아이의 격세유전용 — 조부모 혈통 = 부모의 parent_blood)
+var fx: Dictionary = {}               # 효과가 있는 혈통의 능력 값 (Bloodlines.effects)
+var stunted := false                  # 어릴 때 굶주려 키 −0.05 (한 번)
 
 
 func is_adult() -> bool:
@@ -83,17 +89,59 @@ func best_skill() -> float:
 	return b
 
 
+## 혈통 효과 (곱하는 능력의 기본 1, 더하는 능력은 기본 0을 넘김)
+func f(stat: String, def := 1.0) -> float:
+	var x: Variant = fx.get(stat, def)
+	return float(x) if not x is Array else def
+
+
+func has_blood(id: String) -> bool:
+	return id in blood
+
+
+func set_blood(b: PackedStringArray) -> void:
+	blood = b
+	fx = Bloodlines.effects(blood)
+
+
 func walk_speed() -> float:
 	var s := Balance.WALK
 	if age >= Balance.AGE_ELDER:
 		s *= Balance.WALK_ELDER
 	elif age < Balance.AGE_ADULT:
 		s *= Balance.WALK_CHILD
+	s *= f("walk")
+	if carry != "":
+		s *= f("carry_work")       # '허약': 짐 나르기 −20%
 	return s
 
 
 func carry_cap() -> int:
-	return Balance.CARRY_BIG if trait_name == Balance.BIG_CARRIER else Balance.CARRY
+	var c := Balance.CARRY_BIG if trait_name == Balance.BIG_CARRIER else Balance.CARRY
+	return maxi(1, roundi(c * f("carry")))
+
+
+## 일터 종류별 작업 빠르기 = 특징 × 혈통 (공방 일·농사·벌목·채석·물 긷기·힘쓰는 일)
+const CRAFT_JOBS := {"제재소": true, "방앗간": true, "빵집": true}
+const FORESTRY_JOBS := {"나무꾼": true, "채석장": true}
+const HEAVY_JOBS := {"나무꾼": true, "채석장": true, "짓기": true}
+
+
+func job_speed(kind: String) -> float:
+	var s := work_mult
+	if fx.is_empty():
+		return s
+	if CRAFT_JOBS.has(kind):
+		s *= f("craft")
+	if kind == "농장":
+		s *= f("farm")
+	if FORESTRY_JOBS.has(kind):
+		s *= f("forestry")
+	if HEAVY_JOBS.has(kind):
+		s *= f("carry_work")
+	if kind == "우물":
+		s *= f("water")
+	return s
 
 
 func is_moving() -> bool:

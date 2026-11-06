@@ -12,6 +12,9 @@ const R := JarWater.R
 const PATH_N := 128
 
 var rng := RandomNumberGenerator.new()
+var gene_rng := RandomNumberGenerator.new()   # 7단계: 겉모습 유전자·혈통 유전 전용 (시뮬레이션 난수 순서를 바꾸지 않게)
+var _singers: Array = []              # 노래꾼 혈통 주민 (life_events마다 다시)
+var _festival_mult := 1.0             # 마을에 노래꾼이 있으면 축제 효과 ×1.2
 var water: JarWater                   # 소형 병(JarWater) 또는 넓은 세상(WorldWater — JarWater를 잇는다)
 # 6단계 — 넓은 세상: 마을은 세상 좌표의 한 자리(center)에 있다. 소형 병은 (0, 0)
 var center := Vector2.ZERO            # 마을 중심 (창고 자리)
@@ -80,6 +83,7 @@ static func new_prototype(seed_v: int = 20261105) -> Village:
 
 func _init_prototype(seed_v: int) -> void:
 	rng.seed = seed_v
+	gene_rng.seed = seed_v * 7919 + 101
 	water = JarWater.new_prototype_world()
 	water.start_clock = start_clock
 	water.t = 0.0
@@ -115,6 +119,8 @@ func _init_prototype(seed_v: int) -> void:
 	for k in [2, 3]:
 		_inherit_look(ids[k], ids[0], ids[1])
 	_inherit_look(ids[6], ids[4], ids[5])
+	for r in ids:                     # 첫 정착민은 혈통 없음 (기본 키트 — BLOODLINES 5장)
+		set_blood(r, PackedStringArray())
 	stats["marriages"] = 0
 	# 10명 중 최소 1명은 '재능' 이상 (OPENING 단계 8)
 	if people.all(func(p: Resident) -> bool: return p.grade == 0):
@@ -175,6 +181,7 @@ func add_person(name: String, sex: String, age: float, trait_n: String, x: float
 	r.look_hair = rng.randi() % Balance.HAIR_COLORS.size()
 	r.look_skin = rng.randi() % Balance.SKIN_COLORS.size()
 	r.look_cloth = rng.randi() % Balance.CLOTH_COLORS.size()
+	r.genes = Genetics.random_genes(gene_rng)
 	if mom != null and dad != null:
 		_inherit_look(r, mom, dad)
 	# 처음 정착민의 숙련: 성인이 된 뒤 일한 날만큼 (sim_life.py와 같은 가정)
@@ -189,6 +196,24 @@ func _inherit_look(r: Resident, a: Resident, b: Resident) -> void:
 	r.look_hair = (a if rng.randf() < 0.5 else b).look_hair
 	r.look_skin = (a if rng.randf() < 0.5 else b).look_skin
 	r.look_head = (a if rng.randf() < 0.5 else b).look_head if rng.randf() < 0.7 else rng.randi() % Balance.LOOK_HEADS
+	# 7단계: 겉모습 유전자 + 혈통 (BLOODLINES 7장·1장) — gene_rng만 씀
+	r.genes = Genetics.inherit(gene_rng, a.genes, b.genes)
+	var pb := a.blood.duplicate()
+	for id in b.blood:
+		if not id in pb:
+			pb.append(id)
+	r.parent_blood = pb
+	var grand := a.parent_blood.duplicate()
+	grand.append_array(b.parent_blood)
+	set_blood(r, Bloodlines.inherit(gene_rng, a.blood, b.blood if b != a else PackedStringArray(), grand))
+
+
+## 혈통을 정한다 — 효과(fx)와, '다산'·'난산'이면 타고난 출산 배율
+func set_blood(r: Resident, b: PackedStringArray) -> void:
+	r.set_blood(b)
+	var fr: Variant = r.fx.get("fert")
+	if fr is Array:
+		r.fert = gene_rng.randf_range(float(fr[0]), float(fr[1]))
 
 
 func _triangular(lo: float, hi: float, mode: float) -> float:
@@ -342,6 +367,14 @@ func food_types() -> int:
 
 
 ## 식량을 먹는다. 남은 못 먹은 양을 돌려준다. 낟알(상하기 전) → 들판 낟알 → 건량 → 빵 → 밀(죽)
+## 식량을 먹는 사람 수 (혈통 '소식' ×0.85 · '대식가' ×1.2 — 혈통이 없으면 인구 그대로)
+func _food_people() -> float:
+	var n := 0.0
+	for p in people:
+		n += p.f("food")
+	return n
+
+
 func consume(need: float) -> float:
 	if float(stock["소금"]) > 0.0:
 		stock["소금"] = maxf(0.0, float(stock["소금"]) - need / 400.0)
@@ -446,7 +479,7 @@ func step(dt: float) -> void:
 	manna = manna.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	# 식량 소비 (집계 — 1명당 15분에 1개)
-	var need := people.size() * dt / Balance.FOOD_IV
+	var need := _food_people() * dt / Balance.FOOD_IV
 	var unmet := consume(need)
 	deficit = unmet / need if need > 0.0 else 0.0
 	if deficit > 0.0:
@@ -460,8 +493,11 @@ func step(dt: float) -> void:
 			p.hunger = maxf(0.0, p.hunger - dt / Balance.FOOD_IV)
 		if p.hunger >= Balance.STARVING_AT:
 			p.health -= dt / Balance.STARVE_HEALTH_TIME
+			if p.is_child() and not p.stunted and p.genes.size() >= Genetics.GENE_BYTES:     # 어릴 때 굶주리면 키 −0.05 (겉모습만)
+				p.stunted = true
+				p.genes[Genetics.HEIGHT] = maxi(0, p.genes[Genetics.HEIGHT] - roundi(Genetics.STUNT * 255.0))
 		else:
-			p.health = minf(1.0, p.health + dt / Balance.HEAL_TIME)
+			p.health = minf(1.0, p.health + dt * p.f("heal") / Balance.HEAL_TIME)
 		p.age += dt / DAY
 		if p.say_t > 0.0:
 			p.say_t -= dt
@@ -525,7 +561,7 @@ func _on_dawn() -> void:
 			var jb := bld(p.job)
 			if jb != null:
 				key = jb.type
-			p.skills[key] = minf(Balance.SKILL_MAX, float(p.skills.get(key, 0.0)) + Balance.SKILL_RATE * p.talent)
+			p.skills[key] = minf(Balance.SKILL_MAX, float(p.skills.get(key, 0.0)) + Balance.SKILL_RATE * p.talent * p.f("skill_growth"))
 		p.work_secs_today = 0.0
 	_update_happiness()
 
@@ -561,9 +597,9 @@ func _update_belief(dt: float) -> void:
 	var sum := 0.0
 	for p in people:
 		if w:
-			p.belief += dt / (DAY * Balance.BELIEF_UP_DAYS)
+			p.belief += dt * p.f("belief_up") / (DAY * Balance.BELIEF_UP_DAYS)
 		else:
-			p.belief -= dt / (DAY * (Balance.BELIEF_DOWN_CHILD_DAYS if p.is_child() else Balance.BELIEF_DOWN_ADULT_DAYS))
+			p.belief -= dt * p.f("belief_down") / (DAY * (Balance.BELIEF_DOWN_CHILD_DAYS if p.is_child() else Balance.BELIEF_DOWN_ADULT_DAYS))
 		p.belief = clampf(p.belief, 0.0, 1.0)
 		sum += p.belief
 	faith = sum / people.size() * 100.0 if not people.is_empty() else 0.0
@@ -597,6 +633,11 @@ func doubters() -> int:
 func _update_happiness() -> void:
 	var variety := food_types() >= 3
 	var fest := t - festival_t < Balance.FESTIVAL_DAYS * DAY
+	var cheer := {}               # 집 → 그 집 '명랑' 식구 몫의 합
+	for p in people:
+		var hh := p.f("house_happy", 0.0)
+		if hh != 0.0 and p.home >= 0:
+			cheer[p.home] = float(cheer.get(p.home, 0.0)) + hh
 	for p in people:
 		var h := Balance.HAPPY_BASE
 		h += Balance.HAPPY_HOME if p.home >= 0 else Balance.HAPPY_NO_HOME
@@ -605,9 +646,12 @@ func _update_happiness() -> void:
 		if p.hunger > 0.5:
 			h += Balance.HAPPY_HUNGRY
 		if fest:
-			h += Balance.HAPPY_FESTIVAL
+			h += Balance.HAPPY_FESTIVAL * _festival_mult * p.f("festival")
 		if t < p.grief_until:
 			h += Balance.HAPPY_GRIEF
+		h += p.f("happiness", 0.0)
+		if p.home >= 0 and not cheer.is_empty():
+			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)
 		p.happiness = clampf(h, 0.0, 1.0)
 
 
@@ -664,7 +708,7 @@ func _update_building(b: Building, dt: float) -> void:
 		if b.farm_mult < 0.0:
 			b.farm_mult = farm_mult(b.x, b.y)
 		place = b.farm_mult
-	b.timer += dt * (w.work_mult if w != null else 1.0) * place
+	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
 	var cyc: float = d["cycle"]
 	while b.timer >= cyc:
 		b.timer -= cyc
@@ -677,6 +721,16 @@ func _update_building(b: Building, dt: float) -> void:
 			b.out[k] = float(b.out.get(k, 0.0)) + float(outs[k])
 		if b.type == "농장" and w != null:
 			harvest_check(w)
+
+
+## '노래꾼'이 근처에서 일하고 있으면 그 일터 +3% (자기 일터 포함, 본인 제외)
+func _singer_aura(b: Building, w: Resident) -> float:
+	if _singers.is_empty():
+		return 1.0
+	for s: Resident in _singers:
+		if s != w and not s.dead and s.action == "work" and Vector2(s.x - b.x, s.y - b.y).length() < Bloodlines.SINGER_RANGE:
+			return 1.0 + s.f("work_aura", 0.0)
+	return 1.0
 
 
 func _inputs_ready(b: Building, ins: Dictionary) -> bool:
@@ -865,6 +919,10 @@ func assign_homes() -> void:
 
 # ───────────────────────── 생로병사 (밸런스 v2) ─────────────────────────
 func life_events(dt: float) -> void:
+	_singers = people.filter(func(q: Resident) -> bool: return q.f("work_aura", 0.0) > 0.0)
+	_festival_mult = 1.0
+	for s: Resident in _singers:
+		_festival_mult = maxf(_festival_mult, s.f("festival"))
 	_marriages(dt)
 	_births(dt)
 	_deaths(dt)
@@ -951,6 +1009,8 @@ func _give_birth(w: Resident, h: Building) -> void:
 	baby.home = h.id
 	stats["born"] += 1
 	log_line("%s%s %s%s 낳았다. 아이는 '%s' 아이였다." % [w.name, josa(w.name, "이", "가"), nm, josa(nm, "을", "를"), baby.trait_name])
+	if Genetics.piebald(baby.genes):
+		log_line("눈송이 아이가 태어났다. 사람들은 %s%s '하늘의 눈송이가 내려앉은 아이'라 부르며 귀하게 여겼다." % [nm, josa(nm, "을", "를")])
 	speak(w, "%s, 반가워!" % nm, 7)
 
 
@@ -961,9 +1021,10 @@ func _deaths(dt: float) -> void:
 			couples += 1
 	for p in people.duplicate():
 		var why := ""
-		if p.age >= Balance.DEATH_FROM:
-			var pd: float = Balance.DEATH_BASE + Balance.DEATH_SLOPE * (p.age - Balance.DEATH_FROM)
-			if rng.randf() < pd * dt / DAY or p.age > Balance.DEATH_MAX_AGE:
+		var la: float = p.age / p.f("lifespan")          # 혈통 '장수' ×1.15 · '단명' ×0.8 → 늙는 빠르기로 (노환 확률·상한 나이)
+		if la >= Balance.DEATH_FROM:
+			var pd: float = Balance.DEATH_BASE + Balance.DEATH_SLOPE * (la - Balance.DEATH_FROM)
+			if rng.randf() < pd * dt / DAY or la > Balance.DEATH_MAX_AGE:
 				why = "노환"
 		if why == "" and p.health <= 0.0:
 			# 거인이 없을 때: 위기 사망은 하루 1명까지, 부부 2쌍 아래로는 일어나지 않음 (멸망 방지)
@@ -1462,6 +1523,7 @@ static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, s
 
 func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> void:
 	rng.seed = seed_v
+	gene_rng.seed = seed_v * 7919 + 101
 	water = ww
 	kit = kit_def
 	sid = sid_v
@@ -1513,17 +1575,28 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 			b.is_store = true
 		_clear_trees(Vector2(b.x, b.y), b.size())
 	var ids: Array[Resident] = []
+	var looks := Kits.looks(kit_def)
 	for f: Array in Kits.people(kit_def):
-		ids.append(add_person(f[0], f[1], f[2], f[3], fire.x + (rng.randf() - 0.5) * 3.0, fire.y + (rng.randf() - 0.5) * 3.0, null, null))
+		var r := add_person(f[0], f[1], f[2], f[3], fire.x + (rng.randf() - 0.5) * 3.0, fire.y + (rng.randf() - 0.5) * 3.0, null, null)
+		if ids.size() < looks.size() and looks[ids.size()] is Dictionary:      # 거인이 고른 겉모습 (숨은 열성 유전자는 무작위)
+			r.genes = Genetics.from_look(gene_rng, looks[ids.size()])
+		ids.append(r)
 	if ids.size() >= 7:
 		marry(ids[0], ids[1])
 		for k in [2, 3]:
 			ids[k].parents = PackedInt32Array([ids[0].id, ids[1].id])
 		marry(ids[4], ids[5])
 		ids[6].parents = PackedInt32Array([ids[4].id, ids[5].id])
-		for k in [2, 3]:
-			_inherit_look(ids[k], ids[0], ids[1])
-		_inherit_look(ids[6], ids[4], ids[5])
+		for k: int in [2, 3, 6]:
+			var g := ids[k].genes
+			_inherit_look(ids[k], ids[0] if k < 6 else ids[4], ids[1] if k < 6 else ids[5])     # 아이는 부모를 닮는다 (추천값)
+			if k < looks.size() and looks[k] is Dictionary:
+				ids[k].genes = g                  # 고른 겉모습이 있으면 그대로
+	# 키트 혈통: 가족 전원이 같은 혈통 (기본 키트는 없음). 키트로 오는 사람에게 나쁜 혈통은 없다
+	var kb := Kits.blood(kit_def)
+	for r in ids:
+		set_blood(r, kb)
+		r.parent_blood = kb.duplicate() if r.parents.size() > 0 else PackedStringArray()
 	stats["marriages"] = 0
 	if people.all(func(p: Resident) -> bool: return p.grade == 0) and ids.size() > 4:
 		ids[4].grade = 1
@@ -1552,6 +1625,8 @@ func _reveal_walk(x: float, y: float) -> void:
 
 
 func _reveal_at(p: Vector2, rad: float, who: Resident, force := false) -> void:
+	if who != null:
+		rad *= who.f("fog")              # 혈통 '탐험가' 안개 반경 +50%
 	var ev: Array = water.reveal(sid, p.x, p.y, rad, force)
 	if ev.is_empty():
 		return
@@ -1602,8 +1677,11 @@ func explore_target() -> Variant:
 	return water.fog_target(sid, center, rng, WorldCfg.EXPLORE_MAX)
 
 
-func can_explore() -> bool:
-	return explore_on and explorer < 0 and t - last_explore_t >= WorldCfg.EXPLORE_EVERY
+func can_explore(r: Resident = null) -> bool:
+	var every := WorldCfg.EXPLORE_EVERY
+	if r != null:
+		every /= r.f("explore")          # 혈통 '탐험가'는 더 자주 나선다
+	return explore_on and explorer < 0 and t - last_explore_t >= every
 
 
 ## 건물이 다 지어지면 둘레 안개도 걷힌다

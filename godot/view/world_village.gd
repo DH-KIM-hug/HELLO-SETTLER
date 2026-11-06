@@ -6,6 +6,7 @@ extends "res://view/test_village.gd"
 
 @export var world_seed := 0          # 0 = 새 무작위 세상 (창조할 때마다 새 시드)
 @export var world_size := WorldCfg.SIZE
+@export var kit_variant := ""        # (7단계) 첫 키트의 종류 — Kits.VARIANTS 이름 (예: "힘센 가족"), 비우면 기본 키트
 
 var world: JarWorld
 var wterrain: WorldTerrain
@@ -21,7 +22,7 @@ func _make_village() -> Village:
 	var sd := world_seed if world_seed != 0 else WorldGen.new_seed()
 	world = JarWorld.create(sd, world_size)
 	var rec := world.recommended_kit_spots()
-	var v := world.place_kit(rec[0].x, rec[0].y)
+	var v := world.place_kit(rec[0].x, rec[0].y, Kits.make([], kit_variant))
 	print("세상 시드 %d · 추천 자리 %d곳 · 첫 키트 %s" % [sd, rec.size(), str(v.center)])
 	return v
 
