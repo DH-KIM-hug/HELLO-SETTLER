@@ -89,7 +89,8 @@ const ITEM_COLORS := {"통나무": Color("9a7150"), "판자": Color("e0bf8c"), "
 	"물": Color("6cc6d0"), "밀가루": Color("f2ede2"), "빵": Color("d49a5e"), "소금": Color("fff6dc")}
 
 # ───────────── 주민 ─────────────
-const RESIDENT_SCALE := 0.5                # 어른 키 약 1.05칸 → 나무 수관 폭(약 3.2칸)의 1/6쯤 되는 몸 폭
+const RESIDENT_SCALE := 0.52               # 5단계: 모델 키 약 1.95 → 어른 키 약 1.0칸 = 720×1280 기본 확대에서 약 22px (잰 값, 밀짚모자 +4)
+const RESIDENT_LINE := Color("4a3a30")     # 주민 둘레선 (짙은 갈색, 기준 4-1.png)
 const ANIM_SPEED := 1.0                    # 부드러운 동작의 빠르기 배율
 
 # ───────────── 유리 (RENDERING.md 2.8) ─────────────
@@ -110,6 +111,21 @@ const NIGHT_FULL := 21.5                   # 이 시각에 완전히 밤
 const DAWN_FROM := 4.5                     # 이 시각부터 밝아져
 const DAY_FULL := 6.0                      # 아침 6시 = 완전히 낮 (밤 건너뛰기 끝과 같음)
 
+
+# ───────────── 5단계: 모델 에셋 (art/) · 모델 외곽선 ─────────────
+## 모델 외곽선 두 가지 (깊이 차이 화면 셰이더와 함께): 뒤집은 껍데기(물체 둘레·겹친 가장자리) + 접힌 곳 선(지붕 끝·벽 모서리)
+## 빛 속이기 (물체만): 밝은 면 판정 빛을 카메라 쪽으로 이만큼 기울임 → 카메라를 향한 앞벽·지붕 앞면이 밝게 (기준 그림처럼).
+## 그림자 방향은 그대로. 0 = 4단계와 같음. (toon_light.gdshaderinc)
+const VIEW_FILL := 1.6
+const OUTLINE_HULL_PX_1080P := 1.7         # 껍데기 두께 (1080×1920 기준, 해상도에 비례)
+const OUTLINE_CREASE_PX_1080P := 1.9       # 접힌 곳 선 두께
+const OUTLINE_CREASE_MUL := Color("6a7476") # 접힌 곳 선 색 = 그 면 색 × 이 색 (둘레선보다 조금 옅게)
+const WINDOW_LIT := Color("f2cf72")        # 창 (기준 그림은 낮에도 따뜻한 노란 창)
+const DOOR := Color("8a5a3a")
+const PLANK := Color("c79a66")             # 선착장·다리 널빤지
+const REED := Color("8fb36a")
+const REED_HEAD := Color("8a5a3a")
+const BREAD := Color("d49a5e")
 
 ## 시각(0~24) → 밤 정도 0~1
 static func night_amount(hour: float) -> float:

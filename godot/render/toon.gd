@@ -24,6 +24,7 @@ static func mat(c: Color) -> ShaderMaterial:
 		var m := ShaderMaterial.new()
 		m.shader = _shader
 		m.set_shader_parameter("albedo", c)
+		m.set_shader_parameter("view_fill", Style.VIEW_FILL)      # 물체만: 카메라 쪽 면을 밝게 (toon_light.gdshaderinc)
 		_mats[key] = _light(m)
 	return _mats[key]
 
