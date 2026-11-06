@@ -13,6 +13,7 @@ const ENTRIES := [
 	{"id": "spotted_mushroom", "name": "얼룩버섯", "hint": "하늘에서 자란 큰 버섯 중엔 먹으면 안 되는 것도…", "icon": "버섯", "live": true},
 	{"id": "clay", "name": "진흙", "hint": "물이 물러난 물가의 젖은 흙…", "icon": "", "live": false},
 	{"id": "waterwheel", "name": "물레방아", "hint": "굵은 강 곁에 방앗간이 있다면", "icon": "", "live": false},
+	{"id": "fish_wisdom", "name": "물고기를 아끼는 지혜", "hint": "솜씨 좋은 어부가 물고기가 줄어든 호수를 보면", "icon": "생선", "live": true},
 	{"id": "fish_pen", "name": "물고기 길들이기", "hint": "물방울 호수의 솜씨 좋은 어부", "icon": "생선", "live": false},
 	{"id": "brine", "name": "짠물의 맛", "hint": "짠 호숫가에 오래 살면…", "icon": "", "live": false},
 	{"id": "drip_place", "name": "물방울의 자리", "hint": "물방울 아래에서 오래 산 노인", "icon": "물", "live": false},

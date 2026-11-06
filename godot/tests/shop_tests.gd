@@ -551,10 +551,15 @@ func test_shop_tables() -> void:
 	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size(), "건물 시대: 제재소까지 개척기 · 어부·방앗간·빵집·목조주택… 마을")
 	check(String(Shop.card(v, "제재소")["lock"]) == "" and String(Shop.card(v, "방앗간")["lock"]) == "마을 시대에", "개척기 마을: 제재소는 살 수 있고 방앗간은 \"마을 시대에\"")
 	var waits := true
-	for b: String in ["어부", "사냥꾼", "목장", "방직소", "대장간"]:
+	for b: String in ["목장", "방직소", "대장간"]:
 		var c := Shop.card(v, b)
 		waits = waits and String(c["lock"]) == "곧" and String(c["inside"]).contains("아직은")
-	check(waits, "어부·사냥꾼·목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함)")
+	check(waits, "목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함)")
+	var fh := true                                   # B3: 어부·사냥꾼은 마을 시대에 (1,500)
+	for b: String in ["어부", "사냥꾼"]:
+		var c := Shop.card(v, b)
+		fh = fh and String(c["lock"]) == "마을 시대에" and not String(c["inside"]).contains("아직은") and int(c["price"]) == 1500
+	check(fh, "어부·사냥꾼: 개척기엔 \"마을 시대에\" · 1,500 (B3 — 들짐승이 산다)")
 	# 광맥 돌 4종 (SHOP 2.4 · BALANCE v3-4)
 	var veins := {"회색 돌멩이": [1200, 0, "돌"], "하얀 돌": [2500, 1, "소금"], "붉은 돌멩이": [3000, 2, "철광석"], "검은 돌": [3000, 2, "석탄"]}
 	var vok := true

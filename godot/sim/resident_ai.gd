@@ -39,6 +39,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("mold_"):
 		v.mold.run_op(v, r, d)
 		return
+	if n.begins_with("wild_"):           # [들짐승] 낚시·사냥·울타리 (sim/wildlife.gd)
+		Wildlife.run_op(v, r, d)
+		return
 	if n.begins_with("sky_"):            # [상점] 하늘에서 내려온 것 깎아 나르기 (sim/sky_drops.gd)
 		SkyDrops.run_op(v, r, d)
 		return
@@ -236,6 +239,8 @@ static func decide(v: Village, r: Resident) -> void:
 	if Mold.decide(v, r):              # [곰팡이·뚜껑] 털뭉치를 피해 숨기 · 횃불로 쫓기 · 곰팡이약 만들기 (WORLD_EVENTS 2.1)
 		return
 	if Flora.decide(v, r):             # [하늘의 것] 큰 민들레 꽃잎·솜털·잎 따기 (WORLD_EVENTS 2.7)
+		return
+	if Wildlife.decide(v, r):          # [들짐승] 쉬는 아이·노인이 물가에서 낚싯대 (WILDLIFE 2)
 		return
 	var night := v.is_night()
 	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
@@ -590,6 +595,10 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return VillageEra.healer_task(v, r, b, dry)
 	if b.type == "농장" and v.flora != null and int(v.flora.weeds.get(b.id, 0)) > 0:   # [하늘의 것] 잡초는 넉넉해도 뽑는다
 		return dry or v.flora.weed_task(v, r, b)
+	if b.type == "농장" and Wildlife.fence_needed(v, r, b):     # [들짐승] 토끼가 밭을 갉으면 울타리 (WILDLIFE 3)
+		return dry or Wildlife.fence_task(v, r, b)
+	if (b.type == "어부" or b.type == "사냥꾼") and not Wildlife.has_work(v, r, b):     # [들짐승] 물고기·사슴이 없거나 넉넉하면 쉼
+		return false
 	if d.has("out"):
 		var all_full := true
 		for k in d["out"]:
@@ -628,6 +637,11 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return v.flora.pick_task(v, r, b)
 	if b.type == "약초꾼":                # (A6) 습한 땅·숲 가에서 약초
 		return VillageEra.herb_task(v, r, b)
+	if b.type == "어부" or b.type == "사냥꾼":       # [들짐승] 물가에서 낚시 · 숲에서 사냥 (WILDLIFE 2 · 3)
+		if Wildlife.work_task(v, r, b):
+			return true
+		r.steps.append(act(120.0, "idle"))
+		return true
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
 		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):
