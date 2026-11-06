@@ -503,11 +503,11 @@ func _sync_rocks() -> void:
 ## 땅 위 소품 무리 (화면 장식): 버섯·이끼 돌·고사리·그루터기·클로버 + 흩어진 풀 포기.
 ## 칸 격자마다 해시로 무리 하나를 놓을지 정한다 → 같은 병이면 늘 같은 자리. 물·강·소금·오솔길·건물·모닥불 근처는 비움.
 func _prop_ok(x: float, z: float, clear_r: float) -> bool:
-	if Vector2(x, z).length() > JarTerrain.R_EDGE - 1.2:
+	if not v.water.inside(x, z, JarTerrain.R - JarTerrain.R_EDGE + 1.2):     # (6단계: 소형 병·넓은 세상 같은 함수)
 		return false
-	var k := JarWater.cell_idx(x, z)
 	var w := v.water
-	if w.is_lake(k) or w.is_river(k) or w.w[k] > 0.002 or w.salt[k] > 0.0015:
+	var k := w.idx(x, z)
+	if w.is_lake(k) or w.is_river(k) or w.depth(k) > 0.002 or w.salt_k(k) > 0.0015:
 		return false
 	if terrain._path_at(k) > 5.0:
 		return false
@@ -532,9 +532,10 @@ func _sync_props() -> void:
 	for k in kinds + ["tuft"]:
 		groups[k] = [] as Array[Transform3D]
 	var cell := 5.0
-	var n := int(JarTerrain.R / cell) + 1
-	for gj in range(-n, n + 1):
-		for gi in range(-n, n + 1):
+	var n := int(v.view_r / cell) + 1               # (6단계) 마을 중심 둘레 — 소형 병은 (0, 0) 둘레 32칸 그대로
+	var g0 := Vector2i(roundi(v.center.x / cell), roundi(v.center.y / cell))
+	for gj in range(g0.y - n, g0.y + n + 1):
+		for gi in range(g0.x - n, g0.x + n + 1):
 			var h0 := _hash(gi, gj, 3.0)
 			var cx := (gi + 0.2 + 0.6 * _hash(gi, gj, 4.0)) * cell
 			var cz := (gj + 0.2 + 0.6 * _hash(gi, gj, 5.0)) * cell
@@ -566,14 +567,14 @@ func _sync_props() -> void:
 	groups["lily"] = [] as Array[Transform3D]
 	groups["lotus"] = [] as Array[Transform3D]
 	var w := v.water
-	for k in w.cells:
+	for k in w.village_cells(v.center, v.view_r * 1.3):     # (6단계) 소형 병은 모든 칸
 		if not w.is_lake(k):
 			continue
-		var x := JarWater.cell_x(k)
-		var z := JarWater.cell_y(k)
+		var x := w.cx(k)
+		var z := w.cy(k)
 		var shore := false
 		for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-			var kk := JarWater.cell_idx(x + d.x, z + d.y)
+			var kk := w.idx(x + d.x, z + d.y)
 			if not w.is_lake(kk):
 				shore = true
 		var hh := _hash(x, z, 70.0)
@@ -581,12 +582,12 @@ func _sync_props() -> void:
 			# 물 밖 쪽으로 조금 밀어 물가에 걸치게
 			var out := Vector2.ZERO
 			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				if not w.is_lake(JarWater.cell_idx(x + d.x, z + d.y)):
+				if not w.is_lake(w.idx(x + d.x, z + d.y)):
 					out += Vector2(d)
 			var p := Vector2(x, z) + out.normalized() * 0.6
 			(groups["shore_rock"] as Array[Transform3D]).append(Transform3D(Basis(Vector3.UP, hh * 40.0).scaled(Vector3.ONE * (0.35 + hh)), Vector3(p.x, gy(p.x, p.y) - 0.05, p.y)))
-		elif not shore and w.w[k] > 0.03 and hh > 0.93:
-			var lvl := (w.h[k] + w.w[k]) * JarTerrain.HS + 0.02
+		elif not shore and w.depth(k) > 0.03 and hh > 0.93:
+			var lvl := (w.ground(k) + w.depth(k)) * JarTerrain.HS + 0.02
 			var key2 := "lotus" if hh > 0.985 else "lily"
 			(groups[key2] as Array[Transform3D]).append(Transform3D(Basis(Vector3.UP, hh * 50.0), Vector3(x, lvl, z)))
 	# 집 둘레 덤불

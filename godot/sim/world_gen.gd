@@ -12,6 +12,8 @@ extends RefCounted
 const NAME_A := ["푸른", "고요한", "둥근", "깊은", "작은", "긴", "하얀", "별빛", "안개", "달빛", "버들", "갈대", "맑은", "은빛", "바람", "이슬", "조약돌", "새벽", "노을", "구름"]
 const NAME_LAKE := ["호수", "못", "늪", "거울 호수"]
 const NAME_RIVER := ["강", "내", "시내"]
+const MAX_CUT := 0.25                   # 강 골짜기를 땅보다 가장 깊이 파는 정도 (높이 단위, 화면 ×6)
+const VALLEY_R := 16.0                 # 골짜기 둘레 (완만한 비탈)
 
 
 static func new_seed() -> int:
@@ -65,10 +67,11 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	var n_sp: int = o["spots"]
 	for i in n_sp:
 		var a := a0 + TAU * i / n_sp + rng.randf_range(-0.3, 0.3)
-		var rad := R * rng.randf_range(0.42, 0.66)
+		var rad := R * rng.randf_range(0.56, 0.74)
 		spots.append(Vector2(cos(a), sin(a)) * rad)
 	var drips: Array[Dictionary] = []
 	var river_paths: Array = []
+	var orig := ww.h.duplicate()        # 강 골짜기는 판 적 없는 땅 높이를 기준으로 (겹쳐 파며 점점 깊어지지 않게)
 	for si in spots.size():
 		var S := spots[si]
 		var out := S.normalized()
@@ -76,13 +79,13 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		var la := atan2(out.y, out.x) + PI * 0.5 * (1.0 if rng.randf() < 0.5 else -1.0) + rng.randf_range(-0.6, 0.6)
 		var D := S + Vector2(cos(la), sin(la)) * 27.0
 		_dip(ww, D, rng.randf_range(6.0, 7.5), rng.randf_range(5.0, 6.5), rng.randf() * PI, 0.34)
-		drips.append({"x": D.x, "y": D.y, "name": _name(rng, used_names, NAME_LAKE), "mult": 2.0, "spot": si})
+		drips.append({"x": D.x, "y": D.y, "name": _name(rng, used_names, NAME_LAKE), "mult": 1.5, "spot": si})
 		# 강: 자리 쪽 세상 끝 벽의 골 → 자리 옆을 지나 → 물방울 호수로
 		var ga := atan2(out.y, out.x) + rng.randf_range(-0.22, 0.22)
 		var G := Vector2(cos(ga), sin(ga)) * (R - 1.5)
 		var side := (D - S).normalized()
 		var P := S + Vector2(-side.y, side.x) * (14.0 if rng.randf() < 0.5 else -14.0) + side * 4.0
-		var pts := _carve_river(ww, rng, [G, P, D + (P - D).normalized() * 5.0])   # 호수 가장자리까지 (호수는 둥글게 남김)
+		var pts := _carve_river(ww, orig, rng, [G, P, D + (P - D).normalized() * 5.0])   # 호수 가장자리까지 (호수는 둥글게 남김)
 		river_paths.append({"pts": pts, "groove": G, "name": _name(rng, used_names, NAME_RIVER)})
 		# 숲 두 무리 + 바위
 		for f in 2:
@@ -153,7 +156,7 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	for si in spots.size():
 		var D := Vector2(drips[si]["x"], drips[si]["y"])
 		var lake_top := H[ww.idx(D.x, D.y)] + 0.3
-		flatten(ww, spots[si], 7.0, lake_top + 0.05)
+		flatten(ww, spots[si], 7.0, lake_top + 0.15)
 	# 7) 먼 숲
 	var n_f: int = o["forests"]
 	tries = 0
@@ -173,8 +176,11 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		ww.drip_mult.append(float(d["mult"]) * WorldWater.DRIP_BIG)
 	ww.grooves = grooves
 	ww.groove_k.clear()
-	for g in grooves:
+	ww.groove_mult.clear()
+	for gi in grooves.size():
+		var g := grooves[gi]
 		ww.groove_k.append(ww.idx(g.x, g.y))
+		ww.groove_mult.append(WorldWater.GROOVE_SPOT if gi < river_paths.size() else 1.0)
 	# 9) 거친 표 → 처음 물 (물방울 분지·부은 분지를 수면까지) · 암염
 	ww.build_world_tables()
 	for d: Dictionary in drips:
@@ -236,7 +242,7 @@ static func _dip(ww: WorldWater, c: Vector2, sxx: float, syy: float, ang: float,
 
 
 ## 강 골짜기: 꺾은선을 따라 바닥이 늘 내려가게 판다 (강물이 끝까지 흐르도록) → 지나는 점들
-static func _carve_river(ww: WorldWater, rng: RandomNumberGenerator, way: Array) -> Array:
+static func _carve_river(ww: WorldWater, orig: PackedFloat32Array, rng: RandomNumberGenerator, way: Array) -> Array:
 	var pts: Array = []
 	var bed := 1.0e9
 	var ph := rng.randf() * TAU
@@ -255,11 +261,12 @@ static func _carve_river(ww: WorldWater, rng: RandomNumberGenerator, way: Array)
 			travelled += 0.5
 			if not ww.inside(p.x, p.y, 0.5):
 				continue
-			var hk := ww.h[ww.idx(p.x, p.y)]
-			bed = minf(hk - 0.025, bed - 0.0004)
-			for k in ww.cells_near(p, 3.2):
-				var d := Vector2(ww.cx(k) - p.x, ww.cy(k) - p.y).length() / 3.2
-				var target := bed + d * d * 0.06
+			var hk := orig[ww.idx(p.x, p.y)]
+			# 바닥은 늘 내려가되 땅보다 MAX_CUT 넘게 깊이 파지 않는다 (언덕을 넘을 땐 그 앞에 작은 못이 생겼다가 넘친다)
+			bed = maxf(minf(hk - 0.03, bed - 0.0004), hk - MAX_CUT)
+			for k in ww.cells_near(p, VALLEY_R):
+				var d := Vector2(ww.cx(k) - p.x, ww.cy(k) - p.y).length()
+				var target := bed + d * 0.03 if d < 3.0 else bed + 0.09 + (d - 3.0) * 0.016     # V자 바닥 (물이 한 줄로 모여 덜 스며듦)
 				if ww.h[k] > target:
 					ww.h[k] = target
 			if s % 2 == 0:

@@ -22,6 +22,8 @@ var zoom_i := 1                     # 가장 가까운 확대 단계 (버튼용)
 var ppu := 16.0                     # 지금 확대 (세계 1칸당 화면 기준 픽셀)
 var ppu_goal := 16.0
 var ground_radius := 31.0           # 땅 원반 반지름 (바라보는 점 제한용)
+var ground_center := Vector2.ZERO   # (6단계) 제한 원의 중심 — 넓은 세상은 본 땅(안개가 걷힌 곳)의 중심·반지름으로 넓어진다
+var ppu_min := PPU_MIN              # (6단계) 가장 멀리 축소 — 넓은 세상은 본 땅이 넓어질수록 더 멀리
 var _yaw_deg := BASE_YAW_DEG
 var _turning: Tween
 var _spinning := false
@@ -86,7 +88,7 @@ func set_zoom(i: int, instant := true) -> void:
 
 ## 부드러운 확대 (휠 한 칸 = ×1.15)
 func zoom_by(factor: float) -> void:
-	ppu_goal = clampf(ppu_goal * factor, PPU_MIN, PPU_MAX)
+	ppu_goal = clampf(ppu_goal * factor, ppu_min, PPU_MAX)
 	var best := 0
 	for i in ZOOM_PPU.size():
 		if absf(log(ZOOM_PPU[i] / ppu_goal)) < absf(log(ZOOM_PPU[best] / ppu_goal)):
@@ -111,9 +113,9 @@ func _clamp_target() -> void:
 	var half_h := view_height_px() / ppu * 0.5 / sin(deg_to_rad(PITCH_DEG))    # 화면 세로 절반이 덮는 땅
 	var half_w := vs.x / ppu * 0.5
 	var lim := maxf(0.0, ground_radius - Vector2(half_w, half_h).length())
-	var p := Vector2(target.x, target.z)
+	var p := Vector2(target.x, target.z) - ground_center
 	if p.length() > lim:
-		p = p.normalized() * lim
+		p = p.normalized() * lim + ground_center
 		target = Vector3(p.x, target.y, p.y)
 
 
@@ -125,4 +127,12 @@ func _apply() -> void:
 	var yaw := deg_to_rad(_yaw_deg)
 	var pitch := deg_to_rad(PITCH_DEG)
 	var back := Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch))
-	camera.global_transform = Transform3D(Basis.looking_at(-back, Vector3.UP), target + back * DISTANCE)
+	var dist := maxf(DISTANCE, camera.size * 0.9)          # 멀리 축소하면 카메라도 물러난다 (정사영 — 크기는 그대로)
+	camera.far = dist + maxf(100.0, camera.size * 1.2)
+	camera.global_transform = Transform3D(Basis.looking_at(-back, Vector3.UP), target + back * dist)
+
+
+## 지금 화면이 덮는 땅의 반지름 (세계 칸) — 넓은 세상 화면이 어느 조각을 그릴지 정할 때
+func view_radius() -> float:
+	var vs := get_viewport().get_visible_rect().size
+	return Vector2(vs.x / ppu * 0.5, view_height_px() / ppu * 0.5 / sin(deg_to_rad(PITCH_DEG))).length()

@@ -142,8 +142,6 @@ func test_far_lakes() -> void:
 	var ww := WorldGen.generate(5)
 	ww.offline = true
 	var drip0: Array = []
-	for d: Dictionary in ww.drips:
-		drip0.append(ww.lake_cells_in(Vector2(d["x"], d["y"]), 12.0))
 	var b: Dictionary = ww.basins[0]
 	var a0: int = b["area0"]
 	var line := "  첫 부은 호수 '%s' %d칸:" % [b["name"], a0]
@@ -153,15 +151,19 @@ func test_far_lakes() -> void:
 		ww.advance(Balance.DAY)
 		var a := ww.basin_area(b)
 		line += " %d" % a
+		if d == 1:          # 물방울 호수는 처음 부은 물에서 물방울과 증발이 맞는 크기로 하루쯤 자리 잡는다 → 그 뒤로 유지
+			for dd: Dictionary in ww.drips:
+				drip0.append(ww.lake_cells_in(Vector2(dd["x"], dd["y"]), 14.0))
 		if gone < 0 and a < 0.12 * a0:
 			gone = d + 1
 	print(line + (" (사라진 날 %d일째)" % gone if gone > 0 else ""))
 	var kept := 0
 	for i in ww.drips.size():
 		var d: Dictionary = ww.drips[i]
-		if ww.lake_cells_in(Vector2(d["x"], d["y"]), 12.0) >= 0.7 * float(drip0[i]) and int(drip0[i]) > 15:
+		if ww.lake_cells_in(Vector2(d["x"], d["y"]), 14.0) >= 0.7 * float(drip0[i]) and int(drip0[i]) > 15:
 			kept += 1
-	check(kept >= ww.drips.size() - 1, "물방울 호수 유지 (%d/%d곳이 70%% 이상)" % [kept, ww.drips.size()])
+	print("  물방울 호수 (2일째 → 끝): %s" % str(drip0))
+	check(kept >= ww.drips.size() - 1, "물방울 호수 유지 (%d/%d곳이 2일째 크기의 70%% 이상, 15칸 넘음)" % [kept, ww.drips.size()])
 	check(ww.basin_area(b) < 0.7 * a0, "물이 안 들어오는 큰 호수가 줄어든다 (%d → %d칸, %d일)" % [a0, ww.basin_area(b), days])
 	if not quick:
 		check(gone >= 5 and gone <= 14, "약 1~2주에 사라짐 (%d일째, 소형 병은 약 9일)" % gone)

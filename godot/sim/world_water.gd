@@ -20,9 +20,13 @@ const SLICES := 8                       # 거친 칸은 8줄 묶음씩 번갈아
 const FOG := 4                          # 안개 칸 = 고운 칸 4×4
 const FOG_BLOCK := 32                   # 안개 화면 묶음 (안개 칸 32×32)
 const GROOVE_BASE := 0.25               # (정함) 넓은 세상의 골: 볕 드는 쪽도 조금은 흐른다 → 비율 (0.25 + 그늘^1.5)
-const GROOVE_BIG := 9.0                 # (정함) 넓은 세상의 골은 강이 먼 길(200칸 넘게)을 흐르도록 소형 병보다 많이
-const DRIP_BIG := 2.2                   # (정함) 넓은 세상의 물방울 돌기 (호수 크기 50~150칸)
+const GROOVE_SPOT := 12.0               # (정함) 좋은 키트 자리로 흘러가는 강의 골 배율 — 150~220칸을 흘러 물방울 호수에 닿게
+const GROOVE_BIG := 12.0                # (정함) 넓은 세상의 골은 강이 먼 길(200칸 넘게)을 흐르도록 소형 병보다 많이
+const DRIP_BIG := 1.2                   # (정함) 넓은 세상의 물방울 돌기 (호수 크기 약 60~250칸)
 const SEP := 0.000001
+const FINE_SEEP := 0.3                  # (정함) 넓은 세상 고운 칸의 스며듦 배율 — 강이 마을 둘레(40~60칸)를 지나 호수에 닿게
+const COARSE_SEEP := 0.12               # (정함) 거친 칸의 스며듦 배율 — 거친 칸은 강물을 낮은 칸에 고인 얕은 웅덩이로 보므로
+                                        # 그대로 스며들게 하면 강이 거친 칸 두세 개 만에 사라진다 (고운 칸의 강은 좁고 깊어 덜 스며듦)
 const OFFLINE_EVERY_BIG := 600.0        # (정함) 넓은 세상을 몰아서 계산할 때 고운 칸 간격 (소형 병 300초의 두 배 — 하루 1.5초 안에 들게)
 
 # 크기
@@ -69,6 +73,7 @@ var _wet_rr := 0
 var drip_k := PackedInt32Array()
 var drip_mult := PackedFloat32Array()
 var groove_k := PackedInt32Array()
+var groove_mult := PackedFloat32Array()   # 골마다 배율 (키트 자리로 가는 강의 골은 더 많이)
 
 # 빛 (병 좌표에서의 창가 방향 — 병을 돌리면 반대로 돈다)
 var light := LIGHT
@@ -489,7 +494,7 @@ func fine_step(sc: float) -> void:
 	for i in groove_k.size():
 		var k := groove_k[i]
 		if is_fine_k(k):
-			var a := _groove_rate(k) * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc
 			ww[k] += a
 			added += a
 	for i in nf:
@@ -555,7 +560,7 @@ func fine_step(sc: float) -> void:
 		var v0 := v
 		v -= EVAP * (0.35 + fw[i]) * sc
 		if v < SEEP_DEPTH:
-			v -= SEEP * sc
+			v -= SEEP * FINE_SEEP * sc
 		if v < 0.0:
 			v = 0.0
 		ww[k] = v
@@ -599,7 +604,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 		var k := groove_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := _groove_rate(k) * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc
 			V[c] += a
 			added += a
 			_relevel(c)
@@ -669,7 +674,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 			S[c] += d
 		var v := V[c]
 		if v > SEP:
-			var loss := EVAP * (0.35 + cw[c]) * sc * K[c] + SEEP * sc * _shallow(c, SEEP_DEPTH)
+			var loss := EVAP * (0.35 + cw[c]) * sc * K[c] + SEEP * COARSE_SEEP * sc * _shallow(c, SEEP_DEPTH)
 			var nv := maxf(0.0, v - loss)
 			removed += v - nv
 			V[c] = nv

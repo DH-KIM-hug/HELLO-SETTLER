@@ -32,14 +32,12 @@ var _drag := false
 
 
 func _ready() -> void:
-	village = Village.new_prototype(SEED)
+	village = _make_village()
 	clock = JarClock.new(village)
 	sun = JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
-	terrain = JarTerrain.new(village.water)
-	terrain.paths = village.paths
-	terrain.path_n = Village.PATH_N
+	terrain = _make_terrain()
 	jar.add_child(terrain)
 	view = VillageView.new(village, terrain)
 	jar.add_child(view)
@@ -52,6 +50,23 @@ func _ready() -> void:
 	look_at_ground(Vector2(1.0, 1.0))
 	post_mat = OutlinePost.attach(cam.camera)
 	_setup_ui()
+	_after_ready()
+
+
+# ── (6단계) 넓은 세상 장면(view/world_village.gd)이 바꿔 끼우는 곳 — 소형 병은 아래 그대로 ──
+func _make_village() -> Village:
+	return Village.new_prototype(SEED)
+
+
+func _make_terrain() -> JarTerrain:
+	var t := JarTerrain.new(village.water)
+	t.paths = village.paths
+	t.path_n = Village.PATH_N
+	return t
+
+
+func _after_ready() -> void:
+	pass
 
 
 func look_at_ground(p: Vector2) -> void:
