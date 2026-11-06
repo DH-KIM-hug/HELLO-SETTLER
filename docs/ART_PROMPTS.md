@@ -143,7 +143,7 @@ desert mud-brick house, isometric, neutral background, 3:2
 | # | 장면 | 프롬프트 |
 |---|---|---|
 | 6-1 | **선반과 여러 병** — 병 사이의 거인의 다리 | `a wooden shelf with three glass terrariums of different shapes (mason jar, fish bowl, cloche dome), a tiny wooden bridge connecting two jars from lid to lid, one jar in ruins with a few flowers placed, warm room light, 16:9` |
-| 6-2 | **거인의 종이배** — 나루터에서 떠나는 주민 | `a white paper boat at a tiny wooden pier on a lake inside a terrarium, a medieval villager with a bundle boarding it, family waving goodbye, the boat drifting toward the glowing glass wall at the edge of the world, bittersweet, 16:9` |
+| 6-2 | **제단의 제물** (v4.0 — 종이배 대신) — 저녁 기도 때 제물을 바치는 마을 | `a small stone altar beside a campfire in a tiny medieval village inside a terrarium at dusk, villagers kneeling and placing loaves of bread, a bundle of planks and a basket of fish on the altar, a gigantic soft fingertip descending from the sky to lift one loaf, faces looking up in awe, warm firelight, 16:9` |
 | 6-3 | **거인의 상점 물건의 크기감** | `a sugar cube and a pair of wooden chopsticks dropped into a tiny medieval village, the sugar cube looks like a huge white boulder and the chopsticks like giant logs, villagers gathering around in wonder, any stream starts only from water trickling down the inside of the glass wall at the edge of the world, no waterfall from rocks or hills, no stream flowing out of a lake, 16:9` |
 | 6-4 | **유적 (멸망한 병)** | `an abandoned terrarium world in ruins, collapsed cottages overgrown with moss, a small graveyard with stone markers and fresh flowers, soft melancholic light through dusty glass, no living people at all, completely abandoned and silent, only fresh flowers left on the graves, 16:9` |
 
