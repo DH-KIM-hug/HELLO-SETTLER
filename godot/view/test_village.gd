@@ -571,6 +571,9 @@ func _setup_ui() -> void:
 			["외곽선", func() -> void: set_pixel_effects(not post_mat.get_shader_parameter("use_outline"))],
 			["모델", func() -> void: hide_lineup() if lineup != null else show_lineup(Vector2(cam.target.x, cam.target.z))],
 			["곰팡이", func() -> void: focus_village().mold.force_swarm(focus_village())],     # [곰팡이·뚜껑] 개발: 털뭉치 무리 바로
+			["날벌레", func() -> void: focus_village().smalls.force_gnats(focus_village())],    # [작은 위기] 개발 버튼
+			["물방울", func() -> void: focus_village().smalls.force_drop(focus_village())],
+			["먼지", func() -> void: focus_village().smalls.force_dust(focus_village())],
 			["버섯 숲", func() -> void: focus_village().flora.grove(focus_village())]]:      # [하늘의 것] 개발: 하룻밤 버섯 숲 바로
 		var b := _bar_button(dev_bar, spec[0], spec[1])
 		b.custom_minimum_size = Vector2(40, 32)
@@ -1125,6 +1128,30 @@ func blow() -> void:
 		GameAudio.say("seeds")
 
 
+## [작은 위기] 핀셋 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데에 가장 가까운 날벌레를 집는다.
+## 날벌레가 가운데에서 멀수록 손끝이 서툴러 곁의 집을 짓누를 수 있다 (가운데에 맞추고 집으면 깔끔)
+func tweeze() -> void:
+	var fv := focus_village()
+	if fv.smalls == null:
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var c := screen_to_ground(vs * 0.5)
+	var best: CrisisThing = null
+	var bd := 9.0
+	for g in fv.smalls.live("gnat"):
+		var d := g.pos().distance_to(c)
+		if g.state != "out" and d < bd:
+			bd = d
+			best = g
+	if best == null:
+		return
+	var aim := best.pos() + (c - best.pos()).limit_length(minf(bd * 0.35, Balance.GNAT_TWEEZE_R - 0.2))
+	var r := fv.tweeze(aim)
+	if bool(r.get("picked", false)):
+		GameAudio.fx("glass_tap_light")
+		GameAudio.buzz()
+
+
 ## 외곽선 켜고 끄기 (1단계 '도트' 버튼 자리 — 이름은 캡처 도구 호환)
 func set_pixel_effects(on: bool) -> void:
 	post_mat.set_shader_parameter("use_outline", on)
@@ -1409,7 +1436,7 @@ func _on_tap(sp: Vector2) -> void:
 		detail.open(r)
 		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
 	else:
-		tap_glass(false)              # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움)
+		tap_glass(false, screen_to_ground(sp))     # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움) · 매달린 물방울은 누른 쪽으로 떨어짐 (WORLD_EVENTS 2.2)
 
 
 ## 누른 곳이 제단(돌 단 가운데)이면 그 무리 — 제단이 서 있거나 짓는 중일 때만. 아니면 null
@@ -1436,8 +1463,12 @@ func open_altar_of(q: Village) -> void:
 
 
 ## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!") — 넓은 세상은 카메라가 보는 무리가 듣는다
-func tap_glass(hard: bool) -> void:
-	focus_village().tap_glass(hard)
+func tap_glass(hard: bool, at: Variant = null) -> void:
+	var fv := focus_village()
+	var hanging := fv.smalls != null and fv.smalls.drop_phase == "hang"
+	fv.tap_glass(hard, at)
+	if hanging and fv.smalls.drop_phase != "hang":
+		GameAudio.fx("glass_tap_hard")          # 물덩이가 떨어짐
 	if not hard:
 		GuideCaption.done(focus_village(), "tap")
 	GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")

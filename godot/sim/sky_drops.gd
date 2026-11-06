@@ -326,6 +326,7 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 			v.end_giant()
 			return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled, "people": o["people"]}
 	_miracle(v, item, p)
+	Health.food_carry(v, item)                   # [B7] 먹는 물건 (각설탕·마른 약초)에 바깥의 열병이 묻어 옴 (2% — WORLD_EVENTS 5)
 	v.end_giant()
 	return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled}
 

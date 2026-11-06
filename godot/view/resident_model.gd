@@ -748,6 +748,22 @@ func set_job(job: String, chief := false) -> void:
 
 
 ## 표정: "" 보통 · happy · sad · sick · sleep · surprised · talking (얼굴 그림 칸, 앓으면 피부를 조금 핼쑥하게)
+## [B7] 잠복 중인 병 — 창백한 얼굴빛 (피부색을 창백 쪽으로). 바뀔 때만
+var _pale := false
+var _skin_base := Color.WHITE
+
+
+func set_pale(on: bool) -> void:
+	if on == _pale or mat == null:
+		return
+	_pale = on
+	if on:
+		_skin_base = mat.get_shader_parameter("skin")
+		mat.set_shader_parameter("skin", _skin_base.lerp(Color(Genetics.PALE), 0.6).lerp(Color("d3dccb"), 0.45))     # 핏기 없는 잿빛 연두
+	else:
+		mat.set_shader_parameter("skin", _skin_base)
+
+
 func set_face(f: String) -> void:
 	if f == face or mat == null or _baby:
 		return

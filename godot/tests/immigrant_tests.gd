@@ -1,7 +1,7 @@
 ## 이주민 뽑기 (ROADMAP B2 — 기획서 11.2 · BALANCE v3 · SHOP 2.6 · BLOODLINES 5) — tests/run.gd가 부름 (`-- immigrant` = 이것만). 상점 시트를 띄우므로 장면 묶음.
 ## 값 300 ×1.5 · 하루 5번 · 날이 바뀌면 처음 값 (모든 병 합쳐서) · 2일차에 탭이 열림 · 공개 확률표와 실제 굴림이 맞음 (혼자 60% · 가족 크기 · 등급 · 혈통) ·
 ## 내려놓으면 주민이 생김 (영역 밖·집 위는 안 됨) · 가족 = 부부 + 아이 (가계도) · 같은 seed = 같은 사람 · 저장 (병 · 거인 묶음) ·
-## 비운 동안엔 아무도 오지 않음 · 맞이 (반김 ↑ · 경계 ↓) · 주민 말·연대기에 숫자·금지어 없음, 깨닫기 전엔 거인 이야기 없음 · 상점 카드 + 확률 창.
+## 비운 동안엔 아무도 오지 않음 · 맞이 (반김 ↑ · 경계 ↓) · 주민 말·연대기에 숫자·금지어 없음, 깨닫기 전엔 거인 이야기 없음 · 밖에서 온 병 (B7: 잠복 → 앓음) · 상점 카드 + 확률 창.
 extends RefCounted
 
 var run: SceneTree
@@ -33,7 +33,7 @@ func all() -> void:
 	_old_today = Market.today_override
 	Village.start_aware = true
 	run.timed(self, ["test_price_and_limit", "test_odds", "test_land", "test_family", "test_same_seed", "test_save", "test_offline",
-		"test_reaction", "test_words", "test_ui"])
+		"test_reaction", "test_words", "test_disease", "test_ui"])
 	Village.start_aware = _old_aware
 	Market.reset(_old_notes)
 	Market.hand = _old_hand
@@ -426,6 +426,42 @@ func test_words() -> void:
 		"깨닫기 전 실제 연대기·말: \"%s\" %s" % [lines[0] if not lines.is_empty() else "", bad_word(said, true)])
 	check(v.wonder > w0 and made.all(func(q: Resident) -> bool: return q.belief == 0.0), "목격 → 경이 · 아직 아무도 거인을 믿지 않는다")
 	check(Immigrants.book_line(true, "welcome", PackedStringArray(["브루노", "아다"]), true).contains("브루노와 아다"), "이름 잇기: '브루노와 아다'")
+
+
+# ───────────────────────── 밖에서 온 병 (B7 — WORLD_EVENTS 5 · HEALTH 2.6) ─────────────────────────
+func test_disease() -> void:
+	var v := world_lab(20261117)
+	var n := 0
+	var by := {}
+	for k in 60:
+		var made: Array[Resident] = []
+		for i in 40:
+			var r := Resident.new()
+			r.id = 100000 + k * 40 + i
+			made.append(r)
+		Immigrants.carry_disease(v, made)
+		for r in made:
+			n += 1
+			if r.latent != "":
+				by[r.latent] = int(by.get(r.latent, 0)) + 1
+	var pf := float(by.get("열병", 0)) / n
+	var pp := float(by.get(Balance.PLAGUE, 0)) / n
+	var want_f := Balance.MIGRANT_FEVER_P * Balance.MIGRANT_FEVER_LANDS
+	print("  이주민 %d명: 열병 %.4f (기대 %.4f) · 역병 %.4f (기대 0.01)" % [n, pf, want_f, pp])
+	check(pf > want_f * 0.4 and pf < want_f * 1.8 and pp > 0.004 and pp < 0.02, "이주민이 지니고 오는 병: 열병(열병이 사는 기후에서 온 사람의 5%%) · 역병 1%% — 드물다")
+	# 실제로 내려놓은 사람이 병을 지니면: 하루 잠복 (창백한 얼굴빛 — 아프지도 옮기지도 않음) → 앓기 시작
+	var w := world_lab(20261118)
+	var made2 := Immigrants.land(w, spot(w), seed_of_size(2))
+	var carrier: Resident = made2[0]
+	carrier.latent = ""
+	Health.make_latent(w, carrier, Balance.PLAGUE)
+	check(carrier.latent == Balance.PLAGUE and carrier.sick_left <= 0.0 and carrier.immune.is_empty(), "내려온 사람: 잠복 중 · 이 마을이 겪은 병의 면역은 없다")
+	w.advance(0.5 * Balance.DAY)
+	check(carrier.sick_left <= 0.0 and not w.outbreaks.has(Balance.PLAGUE), "잠복 동안은 앓지도 옮기지도 않는다")
+	w.advance(0.6 * Balance.DAY)
+	check(carrier.disease == Balance.PLAGUE and w.outbreaks.has(Balance.PLAGUE), "하루 뒤 역병이 시작된다 ('%s')" % str(w.outbreaks.get(Balance.PLAGUE, {}).get("name", "")))
+	var bw := bad_word(w.book.slice(w.book.size() - 6).map(func(e: Dictionary) -> String: return String(e["text"])))
+	check(not bw.contains("상점") and not bw.contains("뽑기"), "연대기에 금지어 없음 %s" % bw)
 
 
 # ───────────────────────── 화면 ─────────────────────────

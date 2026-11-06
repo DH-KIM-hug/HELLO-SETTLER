@@ -302,6 +302,8 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 		waiting.append("노인들이 하늘을 올려다보며 거인님의 계시를 기다려요.")
 	if vv.mold != null and vv.mold.phase == "omen":
 		waiting.append("유리에 김이 서리기 시작했어요. 빵에 푸른 털이 났어요.")
+	if vv.smalls != null:                 # [작은 위기] 조짐에서 기다리는 것 (물방울·날벌레·먼지)
+		waiting.append_array(vv.smalls.waiting_lines())
 	var c := vv.chief()
 	return {"chief": c.name if c != null else "", "chief_id": c.id if c != null else -1, "away": away_s,
 		"pop0": int(b["pop"]), "pop1": vv.people.size(), "events": events.slice(0, 5), "born": born, "lost": lost,
