@@ -36,10 +36,10 @@ static var last_target := ""
 
 
 ## 병 안으로 — m = "continue" · "new" (new면 name = 지구 이름)
-static func enter_game(tree: SceneTree, m: String, name := "") -> void:
+static func enter_game(tree: SceneTree, m: String, name := "", cover := true) -> void:
 	mode = m
 	jar_name = clean_name(name) if m == "new" else ""
-	_go(tree, scene_for(m, GameSave.get_instance()), true)
+	_go(tree, scene_for(m, GameSave.get_instance()), cover)
 
 
 ## 들어갈 장면: 새 병 = 넓은 세상 · 이어하기 = 저장된 병의 종류대로 (넓은 세상 "world" / 옛 소형 병 "jar")
@@ -57,8 +57,9 @@ static func take() -> Dictionary:
 	return d
 
 
-static func to_title(tree: SceneTree, cover_color := Color(1.0, 0.98, 0.93)) -> void:
-	_go(tree, TITLE_SCENE, true, cover_color)
+## cover = false: 넓은 세상이 거인의 방(⑤)까지 날아 나간 뒤 — 타이틀이 같은 방 같은 자리라 덮지 않음 (B1)
+static func to_title(tree: SceneTree, cover_color := Color(1.0, 0.98, 0.93), cover := true) -> void:
+	_go(tree, TITLE_SCENE, cover, cover_color)
 
 
 static func to_creation(tree: SceneTree) -> void:

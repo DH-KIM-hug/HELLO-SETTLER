@@ -71,6 +71,7 @@ static var _inst: GameAudio
 # 상태 (화면이 매 화면 알려 줌)
 var village: Village
 var menu := false                    # 메뉴·선반 화면 → theme
+var room_view := false               # (B1) 병 밖 ④⑤ — 거인의 방 음악(theme)이 앞, 마을 소리는 그대로 (먹먹하게 — outside)
 var speed := 1.0                     # 지금 배속 (밤 건너뛰기 중이면 아주 큼)
 var outside := 0.0                   # 병 밖 시점 정도 0~1 (카메라 확대로)
 var listener := Vector2.ZERO         # 듣는 자리 (카메라가 보는 땅 위의 점)
@@ -305,11 +306,11 @@ func _update_music() -> void:
 		if evening == "playing" and (hour >= 20.0 or fast()):
 			evening = "done"          # 빨리 돌려 지나갔으면 끝
 	var fest := now() < _festival_until
-	var want := pick_track(hour, phase, fest, menu or village == null, evening)
+	var want := pick_track(hour, phase, fest, menu or room_view or village == null, evening)
 	if want != track:
 		_switch(want)
 	# 조짐: 낮 곡 위에 위기 곡 낮은 음만 살짝
-	var omen := phase == "omen" and not menu and village != null
+	var omen := phase == "omen" and not menu and not room_view and village != null
 	if omen != _omen_on:
 		_omen_on = omen
 		var tw := create_tween()

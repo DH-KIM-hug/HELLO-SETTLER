@@ -108,8 +108,16 @@ func _build_room() -> void:
 	var y := Basis.IDENTITY
 	Art.instance(self, ROOM + "shelf")
 	Art.instance(self, ROOM + "window_frame", Transform3D(y, Vector3(-7, 9, -9.5)))
+	var sky := MeshInstance3D.new()                 # 창밖 하늘 (B1부터 따로 — 현실 시각 색)
+	sky.mesh = Art.model(ROOM + "window_sky")["mesh"]
+	sky.transform = Transform3D(y, Vector3(-7, 9, -9.18))
+	var sky_mat := ShaderMaterial.new()
+	GiantRoom.paint_sky(sky_mat, tod)
+	sky.material_override = sky_mat
+	add_child(sky)
 	Art.instance(self, ROOM + "curtain", Transform3D(y, Vector3(-22, 9, -12.5)))
 	Art.instance(self, ROOM + "oil_lamp", Transform3D(y, Vector3(11.5, 0, -2.5)))
+	Art.instance(self, ROOM + "oil_lamp_flame", Transform3D(y, Vector3(11.5, 0, -2.5)))
 	Art.instance(self, ROOM + "flowerpot", Transform3D(Basis(Vector3.UP, 0.3), Vector3(-12.5, 0, -1.5)))
 	Art.instance(self, ROOM + "watering_can", Transform3D(Basis(Vector3.UP, 0.4), Vector3(-17.0, 0, -6.5)))
 	Art.instance(self, ROOM + "sugar_bowl", Transform3D(y, Vector3(-15.5, 0, 9.5)))

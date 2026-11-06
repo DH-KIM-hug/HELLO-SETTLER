@@ -9,8 +9,9 @@
 ##   - 분가 편지 [새 땅 고르기] → 세상을 멀리 보여 주고 거인이 땅을 누른다 (아니면 [알아서 고르기] = 가까운 좋은 자리)
 ##   - 오른쪽 위 둥근 지도 (UI 09 — view/ui/world_minimap.gd): 본 땅·무리·지금 보는 곳. 누르면 그곳으로 날아감 (무리 점이면 그 마을 광장)
 ##   - [마을로 가기] (지도 아래): 무리가 하나면 그 마을로, 여럿이면 작은 목록 → 구글 어스식 날아가기 (JarCamera.fly_to — GIANT_ROOM 4)
-##   - 구글 어스식 확대: 마을 → 넓은 땅 → 세상 전체(유리벽)까지 한 번에 오므림. 그 너머(병·거인의 방)는 cam.zoom_beyond_world 신호로 넘길 자리
-##     (zoom_beyond_world → 이 장면의 같은 이름 신호. 지금은 받는 곳 없음 — 거인의 방 단계가 붙일 곳)
+##   - 구글 어스식 확대 (B1 — GIANT_ROOM 4): 마을 → 넓은 땅 → 세상 전체(유리벽) → 유리병 → 거인의 방까지 한 번에 오므림 (view/room/room_zoom.gd).
+##     같은 3D 장면에 거인의 방이 세상에 맞는 크기로 서 있고 카메라만 움직인다. [병 밖으로] = 방까지 지름길. 방에서 [마을로 가기]·병 두 번 톡 = 날아 들어감.
+##     타이틀 [이어하기]는 방에서 시작해 마을로 날아 들어오고 (StartFlow "continue"), 뒤로 가기 → 방으로 날아 나간 뒤 타이틀.
 ##   - 저장: 세상 전체 (JarWorld — 땅·물·안개·무리마다 주민·곰팡이·하늘의 것) · 따라잡기도 세상 전체 (CatchUp world)
 ##   - 느린 기기(코어 4개 이하 또는 메모리 3 GB 미만)는 작은 세상 WorldCfg.SMALL_SIZE (default_size)
 ## 땅은 view/world_terrain.gd (조각·LOD·안개), 시뮬레이션은 sim/jar_world.gd. 병 돌리기는 데이터 대신 병 노드가 돈다.
@@ -23,11 +24,21 @@ extends "res://view/test_village.gd"
 @export var pick_spot := true        # 새 병이면 키트 자리를 거인이 고른다 (시험·캡처는 끔 — force_pick이면 직접 띄워도)
 @export var force_pick := false        # (7단계) 첫 키트의 종류 — Kits.VARIANTS 이름 (예: "힘센 가족"), 비우면 기본 키트
 
-signal zoom_beyond_world(amount: float)   # 세상 전체보다 더 오므림 (log2 몫) — 병·거인의 방 단계(GIANT_ROOM 4)가 이어받을 곳
+signal zoom_beyond_world(amount: float)   # 거인의 방보다 더 오므림 (log2 몫) — 나중 선반 화면(UI 05)이 이어받을 곳
+@export var room_view := true        # (B1) 병 밖 = 거인의 방 (시험·캡처는 끌 수 있음)
+
+var room_zoom: RoomZoom
+var out_btn: Button                  # [병 밖으로] (UI 09 — 방까지 지름길)
+var _tap_t := -1.0                   # 병 밖에서 병 두 번 톡 = 들어가기
+var _proc_ms := 0.0                  # 이 장면 _process 시간 (시뮬레이션 + 화면 갱신, 평균 — 성능 측정용)
+var _enter_fly := false              # 타이틀 [이어하기] → 방에서 마을로 날아 들어오는 중 (따라잡기가 끝나면)
 
 const LOW_CORES := 4
 const ARRIVE_PPU := 16.0             # 날아가서 내려앉는 확대 (기본 확대)
 const LOW_MEM := 3.0 * 1024.0 * 1024.0 * 1024.0
+const TITLE_HANDOFF := 0.62          # 타이틀이 병 쪽으로 다가가다 넘겨주는 beyond (④ 병 전체 — 유리 바깥)
+const LEAVE_TIME := 0.9              # 뒤로 가기 → 방으로 날아 나가는 시간
+const DOUBLE_TAP := 0.35
 
 var world: JarWorld
 var wterrain: WorldTerrain
@@ -388,7 +399,7 @@ func _arrival_process() -> void:
 
 
 func _set_hud(on: bool) -> void:
-	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn, speed_btn, lamp_ctl.badge if lamp_ctl != null else null]:
+	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn, out_btn, speed_btn, lamp_ctl.badge if lamp_ctl != null else null]:
 		if n != null:
 			n.visible = on
 
@@ -450,10 +461,19 @@ func _after_ready() -> void:
 	cam.ground_radius = WorldCfg.REVEAL_KIT + 6.0
 	cam.ppu_min = 0.3                 # 세상 전체 + 유리벽이 보이는 데까지 (병·거인의 방 단계가 붙으면 더 낮춤)
 	cam.zoom_beyond_world.connect(func(a: float) -> void: zoom_beyond_world.emit(a))
+	if room_view:
+		room_zoom = RoomZoom.new()
+		room_zoom.name = "RoomZoom"
+		add_child(room_zoom)
+		room_zoom.setup(self, world.water.rr, wterrain.ground_y, world.water.light)
 	# 날아가기 '쉭~' (fly_whoosh)은 JarCamera.fly_to가 직접 낸다 (가까운 날아가기는 조용히 · 빠른 확대에도)
 	cam.set_zoom(1)
 	look_at_ground(village.center + Vector2(1.0, 1.0))
 	_update_limits()
+	if room_zoom != null and entry["mode"] == "continue":     # 타이틀(방 ⑤)에서 들어옴 → 같은 자리에서 시작해 마을로 날아 들어감
+		cam.set_ext_zoom(cam.ext_min() + (1.0 - TITLE_HANDOFF) * JarCamera.BEYOND_SPAN)
+		_enter_fly = true
+		room_zoom.update(0.0)
 	wterrain.set_focus(Vector2(cam.target.x, cam.target.z), cam.view_radius())
 	wterrain.update_now()
 	_setup_world_ui()
@@ -520,6 +540,7 @@ func _process(dt: float) -> void:
 		return
 	if arrival != null:
 		_arrival_process()
+	var t0 := Time.get_ticks_usec()
 	super(dt)
 	if catching:
 		return
@@ -533,8 +554,16 @@ func _process(dt: float) -> void:
 	far_outline_check()
 	_rim_check()
 	_lid_follow()
+	if room_zoom != null:
+		room_zoom.update(dt)
+		if _enter_fly and not catching and not leaving:
+			_enter_fly = false
+			fly_to_settlement(village)
+		if out_btn != null:
+			out_btn.visible = goto_btn.visible and cam.stage() < 4
 	if minimap != null:
 		minimap.update_view(ground_at_camera(), cam.view_radius(), _map_angle(), focus_village())
+	_proc_ms = lerpf(_proc_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.1)
 
 
 ## 멀리 축소하면 세상 끝 유리벽(JarGlass의 얇은 띠)이 화면에서 사라진다 → 확대에 맞춰 굵어지는 빛나는 테두리 (화면 약 3·8 px)
@@ -668,6 +697,8 @@ func _apply_light(l: Vector2) -> void:
 	var d := Style.sun_direction_for(l)
 	sun.look_at_from_position(-d * 50.0, Vector3.ZERO, Vector3.UP)
 	wterrain.set_light_shown(l)
+	if room_zoom != null:
+		room_zoom.set_light_dir(l)                # 방의 등불도 그쪽으로
 
 
 func lamp_water() -> JarWater:
@@ -818,6 +849,11 @@ func _setup_world_ui() -> void:
 	goto_btn.clip_text = false
 	goto_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 	goto_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 32)
+	if room_view:
+		out_btn = _bar_button(root, "병 밖으로", go_outside)
+		out_btn.clip_text = false
+		out_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
+		out_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 32)
 	goto_list = PanelContainer.new()
 	goto_list.theme_type_variation = "TopBar"
 	goto_list.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -843,6 +879,9 @@ func _layout_world_ui() -> void:
 	var vw := get_viewport().get_visible_rect().size.x
 	goto_btn.position = Vector2(vw - d - 8.0, top_h + 8.0 + d + 6.0)
 	goto_btn.size = Vector2(d, 32)
+	if out_btn != null:
+		out_btn.position = goto_btn.position + Vector2(0, 38.0)
+		out_btn.size = Vector2(d, 32)
 	goto_list.position = Vector2(vw - 200.0 - 8.0, goto_btn.position.y + 38.0)
 	goto_list.size = Vector2(200.0, 0)
 	split_bar.anchor_left = 0.0
@@ -897,6 +936,32 @@ func open_goto() -> void:
 		b.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
 		b.custom_minimum_size = Vector2(0, 36)
 	goto_list.visible = true
+
+
+## [병 밖으로] (UI 09): 거인의 방까지 부드럽게 (손가락으로 오므리는 것과 같은 길 — 지름길)
+func go_outside() -> void:
+	if room_zoom == null:
+		return
+	_stop_follow()
+	goto_list.visible = false
+	cam.zoom_to_ext(cam.ext_min())
+
+
+## 병 밖(④⑤)에서 누름: 병을 두 번 톡 = 들어가기 (마을로 날아감) · 한 번 = 유리 톡
+func _room_tap(sp: Vector2) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	var c := room_zoom.room.cm(Vector3(0, 7.0, 0))
+	var e := room_zoom.room.cm(Vector3(GiantRoom.JAR_OUT, 7.0, 0))
+	var cp := cam.camera.unproject_position(c)
+	var on_jar := absf(sp.x - cp.x) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.05 and absf(sp.y - cp.y) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.4
+	if not on_jar:
+		return
+	if _tap_t > 0.0 and now - _tap_t < DOUBLE_TAP:
+		_tap_t = -1.0
+		fly_to_settlement(focus_village())
+		return
+	_tap_t = now
+	tap_glass(false)
 
 
 ## 분가 편지 [새 땅 고르기] → 세상을 멀리 보여 주고 거인이 땅을 누른다
@@ -964,7 +1029,41 @@ func _on_tap(sp: Vector2) -> void:
 	if split_from != null:
 		_do_split(screen_to_ground(sp))
 		return
+	if room_zoom != null and cam.stage() >= 4:
+		_room_tap(sp)
+		return
 	super(sp)
+
+
+## (B1) 뒤로 가기 → 거인의 방으로 날아 나간 뒤 타이틀 (타이틀은 같은 방 ⑤ — 끊김 없이)
+var _leave_fly := false
+
+
+func leave_to_title() -> void:
+	if leaving or _leave_fly:
+		return
+	if room_zoom == null or not is_inside_tree() or not StartFlow.navigate:
+		super()
+		return
+	_leave_fly = true
+	_stop_follow()
+	cam.zoom_to_ext(cam.ext_min())
+	var tw := create_tween()
+	tw.tween_interval(LEAVE_TIME)
+	tw.tween_callback(_leave_now)
+
+
+func _leave_now() -> void:
+	cam.set_ext_zoom(cam.ext_min())
+	title_cover = false
+	super.leave_to_title()
+
+
+func _update_audio() -> void:
+	super()
+	var a := GameAudio.get_instance()
+	if a != null and room_zoom != null:
+		a.outside = room_zoom.outside_amount()
 
 
 func on_back() -> void:

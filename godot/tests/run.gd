@@ -5,7 +5,7 @@
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
 ##         era 깨달음·계시·연대기 (A4b · A5 · A10) · shop 상점·손·떨어뜨리기·아래 띠 (A7 · A9) ·
 ##         village 마을 시대 건물·등불 옮기기 (A6 · A11) ·
-##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 들짐승·낚시·사냥 (B3). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 들짐승·낚시·사냥 (B3). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -43,7 +43,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd", "save": "res://tests/save_tests.gd",
 	"start": "res://tests/start_tests.gd", "era": "res://tests/era_tests.gd", "terrain": "res://tests/terrain_tests.gd", "shop": "res://tests/shop_tests.gd",
 	"village": "res://tests/village_era_tests.gd", "looks": "res://tests/resident_look_tests.gd",
-	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "discovery": "res://tests/discovery_tests.gd"}
+	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "discovery": "res://tests/discovery_tests.gd", "room": "res://tests/room_zoom_tests.gd"}
 
 
 func _initialize() -> void:

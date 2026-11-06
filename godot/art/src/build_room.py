@@ -35,6 +35,8 @@ GLASS = "dff1f0"
 FLAME = "ffcf6a"
 CURTAIN = "f0a98a"
 CAN = "7fb2a8"
+WFRAME = "e2b27a"                 # painted-wood window frame (B1: reads against the plaster wall)
+PLASTER = "f4e7d2"
 
 JAR_R = 6.0
 JAR_H = 13.0
@@ -88,9 +90,7 @@ def build_shelf():
     for x in (-22, 22):
         m.box((1.6, D * 0.8, 6.0), pos=(x, 0, -T - 6.0), color=OAK_DARK)
         m.prism([(-D * 0.35, 0.0), (D * 0.4, 0.0), (D * 0.4, -5.5)], 1.4, pos=(x, 0, -T), color=OAK_DARK)
-    # back wall strip and window ledge behind the shelf
-    m.box((L, 1.0, 40.0), pos=(0, D / 2 + 0.5, -10.0), color="e9dcc4",
-          colfn=lambda f: "e9dcc4" if f.normal.y < -0.5 else shade("e9dcc4", 0.9))
+    # (B1) the back wall is its own model now (room_wall) - no strip here
     m.export(OUT)
 
 
@@ -100,17 +100,32 @@ def build_window():
     W, H, F = 26.0, 30.0, 1.6
     y = 8.0
     for x in (-W / 2, W / 2):
-        m.box((F, 2.0, H), pos=(x, y, 0), color=CREAM)
+        m.box((F, 2.0, H), pos=(x, y, 0), color=WFRAME)
     for z in (0, H - F):
-        m.box((W + F, 2.0, F), pos=(0, y, z), color=CREAM)
-    m.box((F * 0.6, 1.4, H), pos=(0, y + 0.2, 0), color=CREAM)
-    m.box((W, 1.4, F * 0.6), pos=(0, y + 0.2, H * 0.55), color=CREAM)
-    m.box((W + 4, 4.0, 1.2), pos=(0, y - 1.2, -1.2), color=shade(CREAM, 0.95))     # sill
-    # the view outside: one sky panel behind the panes (the title can tint it by time of day) + a far tree line
-    m.box((W, 0.3, H), pos=(0, y + 0.6, 0), color="bfe6f0", group="body_nl", colfn=lambda f: "bfe6f0")
+        m.box((W + F, 2.0, F), pos=(0, y, z), color=WFRAME)
+    m.box((F * 0.6, 1.4, H), pos=(0, y + 0.2, 0), color=WFRAME)
+    m.box((W, 1.4, F * 0.6), pos=(0, y + 0.2, H * 0.55), color=WFRAME)
+    m.box((W + 4, 4.0, 1.2), pos=(0, y - 1.2, -1.2), color=shade(WFRAME, 0.92))     # sill
+    # the view outside: a far tree line (the sky panel behind the panes is its own model window_sky - Godot paints it
+    # by the real time of day: morning / sunset / night, view/room/giant_room.gd)
     for k in range(6):
         m.sphere(3.2, pos=(-W / 2 + 2 + k * 4.6, y + 0.4, 2.0 + 1.2 * (k % 2)), scl=(1, 0.2, 0.8),
                  color=("a8d49a", "93c78a")[k % 2], seg=10, rings=4, group="body_nl")
+    m.export(OUT)
+    sky = Model("window_sky", 604)
+    sky.box((W, 0.3, H), pos=(0, y + 0.6, 0), color="bfe6f0", group="body_nh", colfn=lambda f: "bfe6f0")
+    sky.export(OUT)
+
+
+def build_wall():
+    """Back wall of the giant's room (B1): a big plaster panel with a wooden wainscot rail and skirting, behind the shelf.
+    The window sits in front of it (no hole needed - the window_sky panel covers the opening)."""
+    m = Model("room_wall", 605)
+    Y = 11.6
+    m.box((220.0, 1.0, 200.0), pos=(0, Y + 0.5, -5.0), color=PLASTER, group="body_nl",
+          colfn=lambda f: PLASTER if f.normal.y < -0.5 else shade(PLASTER, 0.9))
+    m.box((220.0, 1.0, 60.0), pos=(0, Y + 0.5, -65.0), color="c4936a", group="body_nl")    # wainscot below the shelf
+    m.box((220.0, 1.8, 1.4), pos=(0, Y - 0.4, -6.4), color=OAK_LIGHT)            # rail between plaster and wainscot
     m.export(OUT)
 
 
@@ -252,9 +267,11 @@ def build_lamp():
         p1 = Vector((-3.0 - 1.6 * math.sin(a1), 0, 3.2 + 1.6 * math.cos(a1) - 1.6 + 1.6))
         v = p1 - p0
         m.cyl(0.32, 0.32, v.length, pos=p0, rot=tuple(v.to_track_quat("Z", "Y").to_euler()), color=BRASS, seg=6, smooth=True)
-    m.sphere(0.55, pos=(0, 0, 8.4), scl=(1, 1, 1.9), color=FLAME, seg=8, rings=5, group="body_nl")
-    m.sphere(0.28, pos=(0, -0.1, 8.2), scl=(1, 1, 1.6), color="fff4c2", seg=6, rings=4, group="body_nl")
     m.export(OUT)
+    fl = Model("oil_lamp_flame", 623)          # separate: the jar's day = lamp lit (GD 4.1) - Godot hides it at jar-night
+    fl.sphere(0.55, pos=(0, 0, 8.4), scl=(1, 1, 1.9), color=FLAME, seg=8, rings=5, group="body_nh")
+    fl.sphere(0.28, pos=(0, -0.1, 8.2), scl=(1, 1, 1.6), color="fff4c2", seg=6, rings=4, group="body_nh")
+    fl.export(OUT)
     g = Model("oil_lamp_glass", 622)
     lathe(g, [(1.55, 7.6), (2.3, 8.6), (2.4, 9.8), (1.5, 11.6), (1.25, 13.6), (1.35, 13.9)], seg, GLASS, group="body_nl",
           colfn=lambda f: "ffffff" if abs(((math.atan2(f.calc_center_median().y, f.calc_center_median().x) + 2.2)
@@ -360,8 +377,14 @@ def build_sugar_bowl():
 
 if __name__ == "__main__":
     print("room ->", OUT)
+    only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
+    if only:                                  # blender ... -- <out_dir> window wall lamp  (just those)
+        for nm in only:
+            globals()["build_" + nm]()
+        sys.exit(0)
     build_shelf()
     build_window()
+    build_wall()
     build_curtain()
     build_jar()
     build_cork()

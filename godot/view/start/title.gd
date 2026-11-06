@@ -2,17 +2,22 @@
 ## 병이 은은히 빛나고 오르골 테마(AudioManager 메뉴 곡). 위에 제목 "나의 작은 지구" + 부제 "유리병 속 작은 세상".
 ## 아래 큰 버튼 하나: 저장이 없으면 [시작하기] → 짧은 창조 / 있으면 [이어하기] + "초록별 · 12일째" → 병 안 (따라잡기·편지).
 ## 오른쪽 위 톱니(설정·문의 — UI 10 시트), 왼쪽 아래 작은 버전. 가만히 두면 8초마다 병 안 주민이 손을 흔든다 (이어하기 — 병 안에 마을이 있을 때).
-## 버튼을 누르면 들어가는 연출 (#4, 1.2초): 병 쪽으로 다가가며 반사광이 화면을 쓸고 지나감 → 빛으로 덮이고 다음 장면.
+## (B1) 방은 3D 거인의 방 (view/room/giant_room.gd — 넓은 세상 장면의 병 밖 ⑤와 같은 방·같은 카메라 길, JarCamera.room_pose). 타이틀 = ⑤ 단계 그 자체.
+## 버튼을 누르면 들어가는 연출: [이어하기] = 병 쪽으로 다가가(⑤ → ④, 약 0.5초) 넓은 세상 장면에 넘겨주고 그 장면이 같은 자리에서
+## 유리를 지나 마을까지 날아 내려간다 (GIANT_ROOM 4 — 빛 쓸기 대신) · [시작하기] = 병 쪽으로 다가간 뒤 짧은 창조 (창조는 자기 3D 병 장면).
 ## 뒤로 가기(안드로이드) = 앱 끝내기.
 extends Control
 
 const WAVE_EVERY := 8.0
 const WAVE_TIME := 2.6
-const ZOOM_TIME := 1.2
-const ZOOM_SCALE := 7.0
+const ZOOM_TIME := 0.55
+const HANDOFF := 0.62                 # 넓은 세상 장면이 이어받는 beyond (WorldVillage.TITLE_HANDOFF와 같음)
+const RR_CM := GiantRoom.JAR_IN       # 타이틀 방은 1단위 = 1cm (s = 1) — 넓은 세상과 같은 비율의 카메라 길
 
-var room: RoomArt
-var zoom_root: Control
+var room: GiantRoom
+var cam: JarCamera
+var post: ShaderMaterial
+var world3d: Node3D
 var ui: Control
 var title_box: VBoxContainer
 var title_l: Label
@@ -22,7 +27,6 @@ var save_line: Label
 var version_l: Label
 var gear: Button
 var settings_sheet: SettingsSheet
-var sweep: LightSweep
 var info := {}                        # StartFlow.button_info
 var entering := false
 var _idle := 0.0
@@ -33,22 +37,8 @@ func _ready() -> void:
 	StartFlow.prepare(self)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	info = StartFlow.button_info(GameSave.get_instance())
-	zoom_root = Control.new()
-	zoom_root.set_anchors_preset(Control.PRESET_FULL_RECT)
-	zoom_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(zoom_root)
-	room = RoomArt.new()
-	room.tod = StartFlow.now_time_of_day()
-	room.houses = bool(info["has_save"])
-	if room.houses:                            # 이어하기: 병 안에 작은 마을 / 처음: 빈 병의 은은한 빛
-		room.soil = 1.0
-		room.water = 1.0
-		room.green = 1.0
-	room.load_art(room.houses)
-	zoom_root.add_child(room)
+	_build_room()
 	_build_ui()
-	sweep = LightSweep.new()
-	add_child(sweep)
 	var layer := CanvasLayer.new()
 	layer.layer = 5
 	add_child(layer)
@@ -60,8 +50,63 @@ func _ready() -> void:
 	if a != null:
 		a.attach(null)
 		a.set_menu(true)                       # 오르골 테마 (거인의 방)
+		a.room_view = false
 	get_viewport().size_changed.connect(layout)
 	layout()
+
+
+## 3D 거인의 방 (⑤) — 넓은 세상 장면의 병 밖과 같은 방·같은 카메라 (s = 1)
+func _build_room() -> void:
+	world3d = Node3D.new()
+	world3d.name = "Room3D"
+	add_child(world3d)
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Style.BACKGROUND
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color.BLACK
+	env.ambient_light_energy = 0.0
+	env.reflected_light_source = Environment.REFLECTION_SOURCE_DISABLED
+	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
+	var we := WorldEnvironment.new()
+	we.environment = env
+	world3d.add_child(we)
+	room = GiantRoom.new()
+	world3d.add_child(room)
+	room.setup(1.0, StartFlow.now_time_of_day(), true)
+	room.houses = bool(info["has_save"])
+	room.add_mini_village(room.houses)          # 이어하기: 병 안에 작은 마을 / 처음: 풀과 나무만
+	room.set_lamp(true, JarWater.LIGHT)
+	room.light.directional_shadow_max_distance = 120.0
+	cam = JarCamera.new()
+	world3d.add_child(cam)
+	cam.ppu_min = 360.0 / (2.0 * RR_CM * 1.15)
+	cam.set_room(1.0, 0.0)
+	cam.target = Vector3(0, GiantRoom.SOIL_TOP, 0)
+	cam.set_ext_zoom(cam.ext_min())
+	cam.camera.current = true
+	post = OutlinePost.attach(cam.camera)
+	post.set_shader_parameter("use_glass", false)
+	post.set_shader_parameter("use_outline", false)
+	post.set_shader_parameter("room_mask", true)
+	post.set_shader_parameter("room_outline", true)
+	post.set_shader_parameter("room_mul", room.room_mul())
+	post.set_shader_parameter("room_gap", Style.OUTLINE_GAP)
+	var v := room.jar_volume()
+	post.set_shader_parameter("jar_center", v["center"])
+	post.set_shader_parameter("jar_radius", v["radius"])
+	post.set_shader_parameter("jar_bottom", v["bottom"])
+	post.set_shader_parameter("jar_top", v["top"])
+
+
+## 화면에서 병 몸통 (톡·손 흔들기 자리)
+func jar_body() -> Rect2:
+	var c := cam.camera.unproject_position(room.cm(Vector3(0, 6.5, 0)))
+	var e := cam.camera.unproject_position(room.cm(Vector3(GiantRoom.JAR_OUT, 6.5, 0)))
+	var top := cam.camera.unproject_position(room.cm(Vector3(0, GiantRoom.JAR_BODY_TOP, 0)))
+	var bot := cam.camera.unproject_position(room.cm(Vector3(0, 0, 0)))
+	var hw := absf(e.x - c.x)
+	return Rect2(c.x - hw, top.y, hw * 2.0, bot.y - top.y)
 
 
 func _build_ui() -> void:
@@ -190,8 +235,6 @@ func layout() -> void:
 	button.position = Vector2((vs.x - bs.x) * 0.5, save_line.position.y - 8 - bs.y)
 	version_l.size = version_l.get_combined_minimum_size()
 	version_l.position = Vector2(10, bottom - version_l.size.y - 8)
-	if not entering:
-		zoom_root.pivot_offset = room.jar_center()
 
 
 func _process(dt: float) -> void:
@@ -205,9 +248,12 @@ func _process(dt: float) -> void:
 		layout()
 
 
+## 가만히 두면: 병 유리에 반짝임 한 번 (이어하기 — 병 안 마을이 손 흔드는 대신)
 func wave() -> void:
-	if room.houses:
-		room.waving = WAVE_TIME
+	if room.houses and is_inside_tree():
+		var tw := create_tween()
+		tw.tween_method(func(v: float) -> void: post.set_shader_parameter("sweep", v), 0.25, 0.75, 1.2).set_trans(Tween.TRANS_SINE)
+		tw.tween_callback(func() -> void: post.set_shader_parameter("sweep", -1.0))
 
 
 ## 병을 톡 — 유리 소리 + (마을이 있으면) 손 흔들기
@@ -216,7 +262,7 @@ func _gui_input(e: InputEvent) -> void:
 		return
 	if e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		var p := (e as InputEventMouseButton).position
-		if room.jar_body().grow(10.0).has_point(p):
+		if jar_body().grow(10.0).has_point(p):
 			GameAudio.fx("glass_tap_light")
 			GameAudio.buzz()
 			_idle = 0.0
@@ -236,24 +282,23 @@ func _unhandled_key_input(e: InputEvent) -> void:
 		enter()
 
 
-## [시작하기]/[이어하기] → 들어가는 연출 (1.2초) → 다음 장면
+## [시작하기]/[이어하기] → 병 쪽으로 다가감 (⑤ → ④, 0.55초 — 넓은 세상 장면이 같은 자리에서 이어 날아 들어감) → 다음 장면
 func enter() -> void:
 	if entering:
 		return
 	entering = true
 	settings_sheet.close()
-	zoom_root.pivot_offset = room.jar_center() + Vector2(0, room.jar_size().y * 0.08)
+	GameAudio.fx("fly_whoosh", "Room", -6.0)
+	var from := cam.ext_zoom()
+	var to := cam.ext_min() + (1.0 - HANDOFF) * JarCamera.BEYOND_SPAN
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(ui, "modulate:a", 0.0, 0.25)
-	tw.tween_property(zoom_root, "scale", Vector2.ONE * ZOOM_SCALE, ZOOM_TIME).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
-	tw.tween_property(sweep, "sweep", 1.0, 0.7).set_delay(0.35).set_trans(Tween.TRANS_SINE)
-	tw.tween_callback(func() -> void: GameAudio.fx("glass_tap_light", "Room", -10.0)).set_delay(0.7)   # 유리를 지나는 순간
-	tw.tween_property(sweep, "fade", 1.0, 0.35).set_delay(ZOOM_TIME - 0.35)
+	tw.tween_method(func(v: float) -> void: cam.set_ext_zoom(v), from, to, ZOOM_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.chain().tween_callback(go_next)
 
 
 func go_next() -> void:
 	if bool(info["has_save"]):
-		StartFlow.enter_game(get_tree(), "continue")
+		StartFlow.enter_game(get_tree(), "continue", "", false)     # 덮개 없이 — 넓은 세상 장면이 같은 방 자리에서 이어 날아 들어감
 	else:
 		StartFlow.to_creation(get_tree())
