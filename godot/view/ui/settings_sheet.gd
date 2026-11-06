@@ -33,6 +33,11 @@ var close_btn: Button
 var credit_l: Label
 var info_l: Label
 var toast: Label
+var reset_btn: Button
+var confirm: ConfirmSheet
+var _reset_ask := 0                      # 몇 번째 물음 (1, 2)
+const RESET_Q1 := "모든 병과 지폐가 사라져요. 정말 처음부터 시작할까요?"
+const RESET_Q2 := "되돌릴 수 없어요. 정말 지울까요?"
 var _toast_t := 0.0
 
 
@@ -122,6 +127,15 @@ func _build_settings(body: VBoxContainer) -> void:
 	credit_l = _label(body, credits_text(), "Small")
 	credit_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credit_l.visible = credit_l.text != ""
+	# 처음부터 다시 시작 (맨 아래) — 두 번 묻고, 저장 폴더를 모두 지우고 지폐·장터를 처음으로 → 타이틀 [시작하기]. 설정(소리 등)은 그대로
+	_section(body, "처음부터")
+	reset_btn = _button(body, "처음부터 다시 시작")
+	reset_btn.add_theme_color_override("font_color", Color("a8452f"))
+	reset_btn.pressed.connect(func() -> void:
+		GameAudio.ui_click()
+		ask_reset())
+	confirm = ConfirmSheet.new()
+	confirm.answered.connect(_on_reset_answer)
 
 
 func _build_inquiry(body: VBoxContainer) -> void:
@@ -240,6 +254,40 @@ func _layout() -> void:
 
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
+## [처음부터 다시 시작] → 두 번 묻기
+func ask_reset() -> void:
+	if confirm.get_parent() == null:
+		add_child(confirm)
+	_reset_ask = 1
+	confirm.ask(RESET_Q1, "처음부터", "그만두기")
+
+
+func _on_reset_answer(yes: bool) -> void:
+	if not yes:
+		_reset_ask = 0
+		return
+	if _reset_ask == 1:
+		_reset_ask = 2
+		confirm.ask.call_deferred(RESET_Q2, "모두 지우기", "그만두기")
+		return
+	_reset_ask = 0
+	reset_everything()
+
+
+## 저장을 모두 지우고 (자동 저장 멈춤 → 저장 폴더 비움 → 지폐·장터 처음으로) 타이틀로
+func reset_everything() -> void:
+	var sm := GameSave.get_instance()
+	if sm != null:
+		sm.reset_all()
+	else:
+		Market.reset(0.0)
+	StartFlow.plan = null
+	StartFlow.pending_world = null
+	close()
+	if is_inside_tree():
+		StartFlow.to_title(get_tree())
+
+
 func open() -> void:
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)

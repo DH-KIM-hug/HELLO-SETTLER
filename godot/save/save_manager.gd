@@ -153,6 +153,33 @@ func unload() -> void:
 	current = -1
 
 
+## 처음부터 다시 시작 (설정 시트): 줄 선 쓰기를 끝내고, 병을 내려놓고(자동 저장 멈춤), 저장 폴더의 파일을 모두 지우고
+## (병·거인 묶음·연대기·만들던 창조·깨진 칸 보관), 지폐·장터·등불을 처음으로. 설정(user://settings.cfg)은 저장 폴더 밖이라 그대로
+func reset_all() -> void:
+	flush()
+	jars.clear()
+	order.clear()
+	current = -1
+	giant = {}
+	_slots.clear()
+	_auto_t = 0.0
+	_wipe_dir(ProjectSettings.globalize_path(dir))
+	Market.reset(0.0)
+	Market.first_paid = false
+	Market.lamp_level = 0
+
+
+static func _wipe_dir(path: String) -> void:
+	var da := DirAccess.open(path)
+	if da == null:
+		return
+	for f in da.get_files():
+		da.remove(f)
+	for d in da.get_directories():
+		_wipe_dir(path.path_join(d))
+		da.remove(d)
+
+
 ## 타이틀이 보여 줄 마지막 병 요약 (UI 00 [이어하기] 아래 한 줄) — {name, day}. 저장이 없으면 {}.
 ## 읽기만 한다 (옮기기·칸 기록·깨진 칸 옮기기 없음). 옛 형식(v0)이나 날짜가 없는 저장은 name "" / day 0
 func peek() -> Dictionary:

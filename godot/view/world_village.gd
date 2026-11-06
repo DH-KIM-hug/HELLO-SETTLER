@@ -87,7 +87,14 @@ func _begin_pick() -> void:
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	var sd := world_seed if world_seed != 0 else WorldGen.new_seed()
 	var size := world_size if world_size > 0 else default_size()
-	world = JarWorld.create(sd, size)
+	if StartFlow.pending_world != null:            # 창조 오프닝이 만든 세상 (거인의 선택이 담긴)
+		world = StartFlow.pending_world
+		StartFlow.pending_world = null
+		_plan = StartFlow.plan
+		sd = world.seed_v
+		size = world.water.n
+	else:
+		world = JarWorld.create(sd, size)
 	var root := Node3D.new()
 	add_child(root)
 	JarTerrain.make_world(root)
@@ -171,6 +178,11 @@ func _begin_pick() -> void:
 		if yes and pp != null:
 			_place_first_kit(pp as Vector2))
 	print("세상 시드 %d · 지름 %d칸 · 키트 자리 고르기 (추천 %d곳)" % [sd, size, marks.size()])
+	if _plan != null:
+		cap.add_theme_font_override("font", UiTheme.font(true))
+		GameAudio.fx("paper", "Room", -8.0)
+		if _plan.stage == "name" and _plan.spot.size() == 2:    # 이름 짓다가 꺼졌음 → 고른 자리 그대로
+			_place_first_kit(Vector2(float(_plan.spot[0]), float(_plan.spot[1])))
 
 
 func _pick_process(dt: float) -> void:
@@ -222,14 +234,115 @@ func choose_spot(p: Vector2) -> void:
 		_pick["pending"] = p
 		(_pick["confirm"] as ConfirmSheet).ask("%s. 정말 여기에 둘까요?" % world.spot_reason(p.x, p.y), "여기에 둔다", "다시 고르기")
 		return
-	_place_first_kit(p)
+	_drop_kit(p)
+
+
+## 거인의 손이 상자를 그 자리에 내려놓는다 (창조에서 왔을 때만 — 시험·개발 고르기는 바로)
+func _drop_kit(p: Vector2) -> void:
+	if _plan == null or not kit_anim or _pick.has("dropping"):
+		_place_first_kit(p)
+		return
+	_pick["dropping"] = true
+	var pc: JarCamera = _pick["cam"]
+	var pt: WorldTerrain = _pick["terrain"]
+	var u := 40.0 / maxf(pc.ppu, 0.01)                 # 화면에서 약 40px 상자
+	var gy := pt.ground_y(p.x, p.y)
+	var root := Node3D.new()
+	(_pick["root"] as Node3D).add_child(root)
+	root.position = Vector3(p.x, gy + u * 9.0, p.y)
+	var box := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(u, u * 0.62, u * 0.75)
+	box.mesh = bm
+	box.material_override = Toon.mat(Color("e8c99a"))
+	box.position.y = u * 0.31
+	root.add_child(box)
+	var lid := MeshInstance3D.new()
+	var lm := BoxMesh.new()
+	lm.size = Vector3(u * 1.06, u * 0.14, u * 0.8)
+	lid.mesh = lm
+	lid.material_override = Toon.mat(Color("d6694f"))
+	lid.position.y = u * 0.69
+	root.add_child(lid)
+	var hand := _giant_hand(u)
+	hand.position = Vector3(0, u * 0.95, 0)
+	root.add_child(hand)
+	for m: Array in _pick["marks"]:
+		(m[1] as Label).visible = false
+	(_pick["caption"] as Label).text = "이 세상에 살 사람들을 데려왔어요."
+	var tw := create_tween()
+	tw.tween_property(root, "position:y", gy + 0.5, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_callback(func() -> void:
+		GameAudio.fx("drop_thud")
+		GameAudio.buzz())
+	tw.tween_property(hand, "position:y", u * 8.0, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(hand, "position:x", u * 3.0, 0.6)
+	tw.tween_property(lid, "rotation:x", -1.8, 0.3).set_trans(Tween.TRANS_BACK)
+	tw.parallel().tween_property(lid, "position:z", -u * 0.5, 0.3)
+	tw.tween_callback(func() -> void: GameAudio.fx("box_open", "Room", -4.0))     # (소리 자리)
+	tw.tween_interval(0.35)
+	tw.tween_callback(func() -> void: _place_first_kit(p))
+
+
+## 거인의 손 (낮은 폴리곤: 손바닥 + 손가락 넷 + 엄지) — 상자 위에서 잡고 있다가 놓고 올라감
+static func _giant_hand(u: float) -> Node3D:
+	var h := Node3D.new()
+	var skin := Toon.mat(Color("f2c4a0"))
+	var palm := MeshInstance3D.new()
+	var pm := BoxMesh.new()
+	pm.size = Vector3(u * 1.1, u * 0.35, u * 1.0)
+	palm.mesh = pm
+	palm.material_override = skin
+	palm.position = Vector3(0, u * 0.35, -u * 0.2)
+	h.add_child(palm)
+	for i in 4:
+		var f := MeshInstance3D.new()
+		var cm := CapsuleMesh.new()
+		cm.radius = u * 0.12
+		cm.height = u * 0.75
+		f.mesh = cm
+		f.material_override = skin
+		f.rotation.x = PI * 0.5 + 0.5
+		f.position = Vector3(-u * 0.39 + i * u * 0.26, u * 0.12, u * 0.45)
+		h.add_child(f)
+	var th := MeshInstance3D.new()
+	var tm := CapsuleMesh.new()
+	tm.radius = u * 0.13
+	tm.height = u * 0.6
+	th.mesh = tm
+	th.material_override = skin
+	th.rotation = Vector3(0.4, 0, 1.1)
+	th.position = Vector3(-u * 0.62, u * 0.2, -u * 0.05)
+	h.add_child(th)
+	var arm := MeshInstance3D.new()
+	var am := CylinderMesh.new()
+	am.top_radius = u * 0.42
+	am.bottom_radius = u * 0.48
+	am.height = u * 6.0
+	arm.mesh = am
+	arm.material_override = Toon.mat(Color("8fb3c9"))      # 거인의 소매
+	arm.rotation.x = -0.9
+	arm.position = Vector3(0, u * 2.6, -u * 2.6)
+	h.add_child(arm)
+	return h
 
 
 ## 키트를 놓는다 → 안개가 나머지를 덮고 → 병 안 장면을 만들고 → 멀리서 그 빈터로 날아 내려감
 func _place_first_kit(p: Vector2) -> void:
 	var far_ppu: float = (_pick["cam"] as JarCamera).ppu
 	print("첫 키트 자리 %s (%s)" % [str(p), world.spot_reason(p.x, p.y)])
-	world.place_kit(p.x, p.y, Kits.make([], kit_variant))
+	var v := world.place_kit(p.x, p.y, Kits.make([], kit_variant))
+	if _plan != null:                              # 이름 짓기 전 (앱이 꺼지면 이 자리에서 다시) · 주민들은 상자에서 걸어 나온다
+		_plan.spot = [p.x, p.y]
+		_plan.stage = "name"
+		_plan.save(StartFlow.save_dir())
+		var r := RandomNumberGenerator.new()
+		r.seed = world.seed_v + 3
+		for q in v.people:
+			q.x = p.x + r.randf_range(-1.2, 1.2)
+			q.y = p.y + r.randf_range(-1.2, 1.2)
+			q.px = q.x
+			q.py = q.y
 	(_pick["root"] as Node).queue_free()
 	(_pick["layer"] as Node).queue_free()
 	_pick = {}
@@ -240,6 +353,66 @@ func _place_first_kit(p: Vector2) -> void:
 	cam.target = Vector3(0, 0, 0)
 	cam._apply()
 	fly_to_settlement(village)
+	if _plan != null:
+		_begin_arrival()
+
+
+# ───────────────────────── 첫 주민 소개 · 지구 이름 (OPENING 8 끝 · 9) ─────────────────────────
+var _plan: CreationPlan = null
+var kit_anim := true                 # 창조에서 왔을 때 상자 내려놓는 연출 (시험은 끔)
+var arrival: FirstArrival
+var _arrival_wait := false
+
+
+func _begin_arrival() -> void:
+	_set_hud(false)
+	var layer := CanvasLayer.new()
+	layer.layer = 15
+	add_child(layer)
+	arrival = FirstArrival.new()
+	arrival.visible = false
+	layer.add_child(arrival)
+	arrival.named.connect(_on_named)
+	arrival.done.connect(func() -> void:
+		_set_hud(true)
+		arrival = null)
+	_arrival_wait = true
+
+
+## 날아 내려앉으면 소개 시작
+func _arrival_process() -> void:
+	if _arrival_wait and not cam.flying:
+		_arrival_wait = false
+		arrival.visible = true
+		arrival.start(village, _plan, world.water)
+
+
+func _set_hud(on: bool) -> void:
+	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn]:
+		if n != null:
+			n.visible = on
+
+
+## 이름을 정함 → 이제야 저장 대상으로 (창세의 날 ×12) · 만들던 창조 파일은 지움
+func _on_named(nm: String) -> void:
+	entry["name"] = nm
+	_named = true
+	_defer_save = false
+	_start_save()
+	CreationPlan.clear(StartFlow.save_dir())
+	StartFlow.plan = null
+	print("지구 이름 '%s'" % nm)
+
+
+var _defer_save := false
+var _named := false
+
+
+func _start_save() -> void:
+	if _plan != null and not _named:
+		_defer_save = true                   # 이름을 지을 때까지 (꺼지면 creation.json에서 그 자리로 다시)
+		return
+	super._start_save()
 
 
 func _from_save(sm: GameSave) -> Village:
@@ -337,6 +510,8 @@ func _process(dt: float) -> void:
 		return
 	if village == null:
 		return
+	if arrival != null:
+		_arrival_process()
 	super(dt)
 	if catching:
 		return

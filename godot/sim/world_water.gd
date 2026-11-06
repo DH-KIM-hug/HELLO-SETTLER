@@ -89,6 +89,16 @@ var forests: Array[Dictionary] = []     # {x, y, r, dens}
 var rock_spots: Array[Vector2] = []
 var seams: Array[Dictionary] = []       # 암염 {x, y, r, amt}
 var kits: Array[Dictionary] = []        # 놓인 키트 {x, y, sid}
+# 창조 오프닝의 선택이 남긴 것 (OPENING 2 — WorldGen.generate의 opts["create"] · WorldGen.apply_life). 아직 쓰는 시뮬레이션이 없는 것도 데이터로 둔다
+var core := 1                           # 핵 크기 0 작게 · 1 보통 · 2 크게
+var mineral_rich := 1.0                 # 광물 풍부도 (핵 크기)
+var volcano: Dictionary = {}            # 핵이 '크게'면 화산 자리 {x, y} (재해 시뮬레이션은 나중)
+var veins: Array[Dictionary] = []       # 광맥 {kind: iron/coal/gold, x, y, r, amt}
+var meadows: Array[Dictionary] = []     # 풀씨를 뿌린 들판 {x, y, r}
+var moss: Array[Dictionary] = []        # 이끼를 뿌린 곳 {x, y, r}
+var wildlife: Array[Dictionary] = []    # 들짐승 무리 {kind: deer/rabbit/wolf/boar/sheep/aurochs, x, y, n} (WILDLIFE.md 1)
+var fish: Array[Dictionary] = []        # 물고기 {name, x, y, n} — 민물 호수만
+var creation: Dictionary = {}           # 창조 요약 (핵·물·돌기·씨앗·창세 신화 줄들 — 지구 카드·연대기용)
 
 # 안개·발견
 var fog := PackedByteArray()            # 안개 칸마다 본 무리 (비트 = sid)

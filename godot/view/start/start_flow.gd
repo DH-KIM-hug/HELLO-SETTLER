@@ -27,6 +27,9 @@ const ART_DIR := "res://art/title/"
 ## 들어가는 방법 — "continue"(저장 불러오기) · "new"(짧은 창조 뒤 새 병) · ""(장면을 직접 띄움: 개발·캡처)
 static var mode := ""
 static var jar_name := ""
+## 창조 오프닝 (OPENING 1·2): 만드는 중인 선택 · 창조가 만든 세상(넓은 세상 장면이 키트 자리 고르기에서 받아 감)
+static var plan: CreationPlan
+static var pending_world: JarWorld
 ## 시험: false면 장면을 실제로 바꾸지 않고 마지막 목적지만 적어 둔다
 static var navigate := true
 static var last_target := ""
@@ -107,6 +110,18 @@ static func clean_name(s: String) -> String:
 	return t if t != "" else NAMES[0]
 
 
+## 지구 이름 거르기 (OPENING 5 '이름에 부적절한 단어') — 아주 짧은 목록, 띄어쓰기·대소문자 무시
+const NAME_BLOCK := ["씨발", "시발", "ㅅㅂ", "병신", "ㅂㅅ", "개새", "좆", "니미", "섹스", "fuck", "shit", "sex", "bitch"]
+
+
+static func name_ok(s: String) -> bool:
+	var t := s.replace(" ", "").to_lower()
+	for w: String in NAME_BLOCK:
+		if t.contains(w):
+			return false
+	return true
+
+
 static func suggest_name(rng: RandomNumberGenerator = null) -> String:
 	if rng == null:
 		rng = RandomNumberGenerator.new()
@@ -140,10 +155,36 @@ static func now_time_of_day() -> String:
 	return time_of_day(int(Time.get_datetime_dict_from_system()["hour"]))
 
 
+## 저장 폴더 (창조 중간 저장 creation.json도 여기)
+static func save_dir() -> String:
+	var sm := GameSave.get_instance()
+	return sm.dir if sm != null else GameSave.DIR
+
+
+## 만들던 창조 (앱이 꺼졌다 켜짐 — OPENING 5). 저장된 병이 이미 있으면 창조 파일은 지난 것 → 지움
+static func resume_plan(sm: GameSave = null) -> CreationPlan:
+	if sm == null:
+		sm = GameSave.get_instance()
+	var dir := sm.dir if sm != null else GameSave.DIR
+	if sm != null and sm.has_save() and not sm.peek().is_empty():     # 병이 이미 저장됨 = 창조는 끝났음 (지난 파일)
+		CreationPlan.clear(dir)
+		return null
+	return CreationPlan.load_from(dir)
+
+
+## 새 창조 (첫 병: 새 무작위 시드 · 기기에 맞는 세상 크기)
+static func new_plan(size := 0) -> CreationPlan:
+	if size <= 0:
+		size = load("res://view/world_village.gd").default_size()
+	return CreationPlan.make(WorldGen.new_seed(), size)
+
+
 ## 타이틀 버튼 — 저장이 있으면 [이어하기] + "초록별 · 12일째", 없으면 [시작하기]
 static func button_info(sm: GameSave) -> Dictionary:
 	var p := sm.peek() if sm != null else {}
 	if p.is_empty():
+		if sm != null and CreationPlan.exists_in(sm.dir):
+			return {"label": "이어 만들기", "sub": "만들던 병이 있어요", "has_save": false, "creating": true}
 		return {"label": "시작하기", "sub": "", "has_save": false}
 	var nm := String(p.get("name", ""))
 	if nm == "":

@@ -2,7 +2,7 @@
 ## 390×844, 가짜 안전 영역(위 28 · 아래 16). 저장은 user://shot_start_save (진짜 저장을 건드리지 않음).
 ## 결과 (godot_shots/): start_logo · start_title_morning (처음 — [시작하기]) · start_title_sunset · start_title_night ([이어하기] + 손 흔드는 주민) ·
 ##   start_title_9x20 (540×1200 = 1080×2400 비율) · start_zoom (들어가는 연출 중간 — 반사광) ·
-##   start_create_soil · start_create_water · start_create_lid · start_create_lapse · start_create_done · start_name
+##   (창조 화면은 tools/shot_creation.gd · shot_creation_world.gd → create_*.png)
 extends SceneTree
 
 const SAVE_DIR := "user://shot_start_save"
@@ -123,56 +123,7 @@ func _process(dt: float) -> bool:
 				st = 0.0
 			if frame > 10 and _at(0.72):          # 0.72초 — 반사광이 지나가는 중
 				_save("start_zoom")
-				_clean()
-				StartFlow.force_tod = "night"
-				_open(StartFlow.CREATION_SCENE)
-				step = 7
-		7:
-			if frame == 20:
-				scene.set("holding", true)
-				st = 0.0
-			if frame > 20 and _at(1.5):            # 흙이 반쯤 — 쏟아지는 중
-				_save("start_create_soil")
-				scene.set("holding", false)
-				scene.call("jump", "water")
-				step = 8
-				frame = 0
-				st = 0.0
-		8:
-			if frame == 20:
-				scene.set("holding", true)
-				st = 0.0
-			if frame > 20 and _at(1.6):
-				_save("start_create_water")
-				scene.set("holding", false)
-				scene.call("jump", "lid")
-				frame = 0
-				st = 0.0
-				step = 9
-		9:
-			if _at(1.0):
-				scene.get("room").set("lid_hint", false)
-				scene.get("room").set("lid", 0.45)
-			if _at(2.2):
-				_save("start_create_lid")
-				scene.get("room").set("lid", 0.0)
-				scene.call("go", "timelapse")
-				frame = 0
-				st = 0.0
-				step = 10
-		10:
-			if _at(3.3):
-				_save("start_create_lapse")
-			if _at(8.5):
-				_save("start_create_done")
-				scene.call("go", "name")
-				frame = 0
-				st = 0.0
-				step = 11
-		11:
-			if _at(0.6):
-				_save("start_name")
-				step = 12
+				step = 12                          # 창조 오프닝은 tools/shot_creation.gd · shot_creation_world.gd (create_*.png)
 		12:
 			print("shots: ", shots.size())
 			sm.stop()
