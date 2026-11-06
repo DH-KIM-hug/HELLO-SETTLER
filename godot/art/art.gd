@@ -13,6 +13,19 @@ const DIR := "res://art/models/"
 const CREASE_DEG := 24.0          # 이보다 덜 꺾인 모서리엔 선 없음
 const WELD := 1000.0              # 같은 자리 판정 (1/1000칸)
 
+## 땅 겉모습 덮개 (A13 준비, art/src/build_ground.py) — 땅 종류마다 변형 2~3개. 원점 = 조각 가운데 땅 위, 지름 약 1.2~1.4칸.
+## 평평한 부분은 외곽선 없음. 아직 배치 안 함 — dev가 땅 종류별로 흩뿌릴 때 이 이름을 쓴다.
+const GROUND_COVER := {
+	"이끼": ["gc_moss_a", "gc_moss_b", "gc_moss_c"],
+	"모래·자갈 물가": ["gc_shore_a", "gc_shore_b", "gc_shore_c"],
+	"진흙": ["gc_mud_a", "gc_mud_b"],
+	"낙엽": ["gc_leaves_a", "gc_leaves_b", "gc_leaves_c"],
+	"오솔길 디딤돌": ["gc_pathstones_a", "gc_pathstones_b", "gc_pathstones_c"],
+}
+## 유리벽 폭포 (A12 준비, art/src/build_water.py) — art/models/water/README.md 참고. 게임에는 아직 안 씀.
+const WATERFALL := {"strip": "water/waterfall_strip", "foam": "water/splash_foam", "rim": "water/splash_rim",
+	"mist": "res://art/models/water/mist_puffs.png"}
+
 static var _models: Dictionary = {}
 static var _parts: Dictionary = {}
 static var _body_mat: ShaderMaterial

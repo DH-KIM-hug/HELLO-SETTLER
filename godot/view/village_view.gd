@@ -54,8 +54,8 @@ func _init(village: Village, t: JarTerrain) -> void:
 
 
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
-const PRELOAD := ["cottage_a", "cottage_b", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
-	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge",
+const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
+	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
 	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
 	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar"]
 
@@ -306,11 +306,19 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 	return mi
 
 
-## 건물 모양 → art/models의 모델 (art/src/build_buildings.py). 종류마다 하나, 오두막은 두 가지를 번갈아.
+## 건물 모양 → art/models의 모델 (art/src/build_buildings.py · build_village.py). 종류마다 하나, 오두막은 네 가지를 번갈아.
 ## 일터는 모델 + 마당 소품 (나무꾼 = 오두막 + 장작 헛간 + 도끼 박힌 그루터기, 산림관 = 집 + 묘목 상자).
-const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b"], "목조주택": ["house_timber"], "석조주택": ["house_stone"],
+const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber"], "석조주택": ["house_stone"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
-	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"]}
+	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
+	"버섯꾼": ["mushroom_hut"],
+	# 마을 시대 (A6, art/src/build_village.py) — 시뮬레이션 종류 이름이 정해지면 여기 이름을 맞춘다. 모델 바닥 크기(칸):
+	# 어부 1.6×1.2 · 사냥꾼 1.6×1.2 · 약초꾼 1.7×1.2 · 치료소 2.5×1.5(+오른쪽 툇마루 1칸) · 방직소 2.3×1.5(+왼쪽 처마 0.8)
+	# 대장간 1.5×1.5(+오른쪽 대장간 헛간 1.4) · 교회 2.0×3.0 · 광장 지름 3.8 · 묘지 2.6×2.2 · 목장 4.0×3.4 · 망루 1.4×1.4(높이 4.3)
+	# 나루터 = pier처럼 원점이 물가, +x(모델 기준)로 2.6칸 물 위 (옆에 뗏목)
+	"어부": ["fisher"], "사냥꾼": ["hunter"], "약초꾼": ["herbalist"], "치료소": ["healer"], "방직소": ["weaver"],
+	"대장간": ["smithy"], "교회": ["chapel"], "광장": ["plaza"], "묘지": ["graveyard"], "목장": ["pasture"],
+	"망루": ["watchtower"], "나루터": ["ferry"]}
 ## 마당 소품: [모델, 건물 기준 자리(x, z — 건물 앞 = +z), 방위(라디안)]
 const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]],
 	"산림관": [["planter", Vector3(-0.2, 0, 1.35), 0.0]]}

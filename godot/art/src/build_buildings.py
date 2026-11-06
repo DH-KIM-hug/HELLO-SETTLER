@@ -226,42 +226,6 @@ def window(m, x, z, y, w=0.3, h=0.28, face=-1, side=False):
     m.box((w + 0.12, 0.1, 0.05), pos=(x, y + face * 0.04, z - 0.07), color="STONE_DARK")       # sill
 
 
-def chimney(m, x, y, top, w=0.3, col="STONE"):
-    """Chunky stone stack: offset courses (each a slightly different grey), a dark soot cap and flue."""
-    z = 0.3
-    k = 0
-    course = 0.26
-    while z < top + 0.3 - 0.01:
-        h = min(course, top + 0.3 - z)
-        dx = 0.015 if k % 2 else -0.015
-        m.box((w + (0.03 if k % 2 else 0.0), w + (0.0 if k % 2 else 0.03), h), pos=(x + dx, y, z),
-              color=shade(col, (1.0, 0.93, 1.05, 0.97)[k % 4]))
-        z += h
-        k += 1
-    zt = 0.3 + top
-    m.box((w + 0.1, w + 0.1, 0.09), pos=(x, y, zt), color="STONE_DARK",
-          colfn=lambda f: SOOT if f.normal.z > 0.7 else "STONE_DARK")
-    m.box((w - 0.06, w - 0.06, 0.07), pos=(x, y, zt + 0.09), color=SOOT,
-          colfn=lambda f: "WINDOW" if f.normal.z > 0.7 else SOOT)
-    m.box((w - 0.16, w - 0.16, 0.012), pos=(x, y, zt + 0.155), color=mix(SOOT, "WINDOW", 0.5))
-
-
-def dormer(m, x, surf, col, under, s0=-0.62, s1=-0.18):
-    """Eyebrow dormer on the front slope: small plaster face with a lit window under a round thatch hood."""
-    y0, z0 = surf(s0)
-    y1, z1 = surf(s1)
-    w = 0.5
-    zc = (z0 + z1) / 2 - 0.04
-    m.box((w, 0.3, z1 - z0), pos=(x, y0 + 0.2, z0 - 0.05), color="PLASTER")
-    m.box((0.3, 0.05, 0.24), pos=(x, y0 + 0.05, zc - 0.12), color="WINDOW_LIT")
-    m.box((0.035, 0.06, 0.24), pos=(x, y0 + 0.045, zc - 0.12), color="WOOD_DARK")
-    m.box((0.36, 0.06, 0.04), pos=(x, y0 + 0.045, zc - 0.15), color="WOOD_DARK")
-    hood = m.sphere(0.5, pos=(x, y0 + 0.22, z1 - 0.04), scl=(0.74, 0.62, 0.36), color=shade(col, 1.05), seg=10, rings=5)
-    for f in hood:
-        if f.normal.z < -0.2:
-            m._finish(m._bm("body"), [f], under, False)
-
-
 def flower_box(m, x, y, w=0.36, z=0.45, face=-1, seed=0, cols=None):
     """Window box with round flower heads and a few leaves (front wall plane y)."""
     cols = cols or ("LOTUS", "FLAME2", "PLASTER")
@@ -351,106 +315,372 @@ def plank_roof(m, W, D, z, rise, col="WOOD", over=0.15):
     m.box((W + 2 * over + 0.05, 0.1, 0.08), pos=(0, 0, z + rise - 0.04), color="WOOD_DARK")
 
 
-# ───────────────────────── cottages ─────────────────────────
-def cottage(name, W, D, H, rise, door_x, win_xs, chim_x, seed, extras=None, walls="stone", roof_col="THATCH",
-            roof_under="THATCH_DARK", p=1.55, side_win=True, shutter=None, boxes=True, moss=0, straw=True, steps=2,
-            gable_col="PLASTER", lamp=False, dormer_x=None):
+# ───────────────────────── A19: round thatch, wall colours, timber frames ─────────────────────────
+# wall plasters (title painting / flat2_map: cream, warm ochre, pale rose; stone grey = stone_walls)
+CREAM = "f6ead0"
+OCHRE = "edcb8f"
+ROSE = "f2d2c4"
+LIME = "f8f4ea"                                   # lime-washed white (healer, chapel)
+# roof straw / tile
+GOLD = "f3c97f"                                   # fresh golden thatch
+GOLD_UNDER = "c99a5c"
+MOSSY = mix("f0c886", "8fc46c", 0.3)              # older thatch with moss growing in
+MOSSY_UNDER = mix("c99a5c", "6f9a5a", 0.35)
+OLD = mix("f0c886", "9a7150", 0.22)               # weathered grey-brown straw
+OLD_UNDER = mix("c99a5c", "5b4537", 0.3)
+TILE = "d9775a"                                   # red clay tile (later eras)
+TILE_UNDER = "a85a40"
+
+
+def _se(theta, a, b, n):
+    """Point on a superellipse (rounded rectangle for n ~ 3-4) with half-extents a, b."""
+    c, s = math.cos(theta), math.sin(theta)
+    return (a * math.copysign(abs(c) ** (2 / n), c), b * math.copysign(abs(s) ** (2 / n), s))
+
+
+def bun_roof(m, W, D, H, rise, ox=0.27, oy=0.25, hip=0.82, col=GOLD, under=GOLD_UNDER, n=3.4, NU=7, NT=28,
+             phi0=0.4, roll=0.09, wobble=0.035, ridge=False, scallop=True, moss=0, seed=0, bands=(0.48,)):
+    """Round, puffy thatch (A19): a hipped 'bun' lofted through rounded-rectangle rings (superellipse, exponent n).
+    The slope profile is a quarter ellipse started at phi0 -> soft bulge, steep rolled eaves, deep overhang
+    (ox / oy beyond the W x D walls whose top is H). hip = how far the ends pull in (1 = ridge half-length A - B).
+    Under the eave a fat rolled lip (roll) curls back to the wall. Everything is smooth-shaded (one clean toon
+    terminator) and the vertex colours are 'painted': darker toward the eave, lighter toward the ridge, straw streaks
+    running eave -> ridge, a darker course band (bands = u positions), a scalloped ridge cap (scallop) + ridge roll.
+    Returns roof(x, y) -> surface height (for chimneys) and surf(u) -> (y, z) on the front slope at x = 0."""
+    import random as _r
+    rnd = _r.Random(seed * 17 + 3)
+    A, B = W / 2 + ox, D / 2 + oy
+    lo = math.sin(phi0)
+
+    def abz(u):
+        phi = phi0 + (math.pi / 2 - phi0) * u
+        c = math.cos(phi) / math.cos(phi0)
+        b = B * c
+        return A - B * hip * (1 - c), max(b, 0.035), H + rise * (math.sin(phi) - lo) / (1 - lo)
+
+    noise_off = [rnd.uniform(-1, 1) for _ in range(NT)]
+    smooth_noise = [(noise_off[i - 1] + 2 * noise_off[i] + noise_off[(i + 1) % NT]) / 4 for i in range(NT)]
+    thetas = [-math.pi / 2 + math.tau * i / NT for i in range(NT)]   # start at the front middle (-Y)
+
+    def ring(a, b, z, wob=0.0, push=0.0):
+        pts = []
+        for i, t in enumerate(thetas):
+            x, y = _se(t, a + push, b + push, n)
+            pts.append(Vector((x, y, z + wob * smooth_noise[i])))
+        return pts
+
+    # rows: underside (wall) -> under-roll -> roll front -> eave -> slope rings -> ridge
+    rings, kinds = [], []
+    rings.append(ring(W / 2 - 0.03, D / 2 - 0.03, H - 0.03)); kinds.append("u")
+    rings.append(ring(A - roll * 1.6, B - roll * 1.6, H - roll * 0.9, wobble)); kinds.append("u")
+    rings.append(ring(A, B, H - roll * 1.15, wobble, -roll * 0.25)); kinds.append("r")
+    rings.append(ring(A, B, H - roll * 0.35, wobble, roll * 0.32)); kinds.append("r")
+    us = [k / NU for k in range(NU + 1)]
+    for u in us:
+        a, b, z = abz(u)
+        rings.append(ring(a, b, z, wobble * (1 - u)))
+        kinds.append("s%f" % u)
+    bm = m._bm("body")
+    vr = [[bm.verts.new(p) for p in r] for r in rings]
+    streak = [1.0 + 0.05 * smooth_noise[i] + (0.02 if i % 3 == 0 else -0.005) for i in range(NT)]
+    faces = []
+    for j in range(len(vr) - 1):
+        a_, b_ = vr[j], vr[j + 1]
+        kind = kinds[j + 1]
+        for i in range(NT):
+            k = (i + 1) % NT
+            f = bm.faces.new((a_[i], a_[k], b_[k], b_[i]))
+            faces.append(f)
+            if kind == "u" or j == 0:
+                c = under
+            elif kind == "r":
+                c = shade(col, (0.8 if j == 1 else 0.9) * streak[i])
+            else:
+                u = float(kind[1:])
+                c = shade(col, (0.9 + 0.16 * u) * streak[i])
+                for bu in bands:
+                    if abs(u - bu) < 0.5 / NU + 1e-6 and u >= bu:
+                        c = shade(col, 0.84 * streak[i])
+                if scallop and u > 0.7:
+                    cap = mix(col, "fff3d6", 0.2)
+                    top = u > 0.86 or (i % 2 == 0)
+                    c = shade(cap, 1.0 + 0.04 * smooth_noise[i]) if top else c
+            m._finish(bm, [f], c, True)
+    cap = bm.faces.new(list(vr[-1]))
+    faces.append(cap)
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    m._finish(bm, [cap], mix(col, "fff3d6", 0.2), True)
+    a_t, b_t, z_t = abz(1.0)
+    if ridge:      # fat ridge roll with two binding bands
+        m.sphere(1.0, pos=(0, 0, z_t - 0.02), scl=(a_t + 0.12, 0.16, 0.13), color=shade(mix(col, "9a7150", 0.25), 0.95),
+                 seg=12, rings=5)
+    for k in range(moss):
+        t = rnd.uniform(0, math.tau)
+        u = rnd.uniform(0.15, 0.6)
+        a, b, z = abz(u)
+        x, y = _se(t, a, b, n)
+        m.sphere(rnd.uniform(0.07, 0.1), pos=(x, y, z + 0.02), scl=(1.6, 1.3, 0.5),
+                 color=mix(mix("MOSS", "LEAF_MID", 0.25), col, 0.3), seg=7, rings=4, lumps=0.15, group="body_nl")
+
+    def roof(x, y):
+        lo_u, hi_u = 0.0, 1.0
+        for _ in range(18):
+            mid = (lo_u + hi_u) / 2
+            a, b, z = abz(mid)
+            if (abs(x) / a) ** n + (abs(y) / b) ** n <= 1.0:
+                lo_u = mid
+            else:
+                hi_u = mid
+        return abz(lo_u)[2]
+
+    def surf(u):
+        a, b, z = abz(u)
+        return -b, z
+    return roof, surf
+
+
+def tile_roof(m, W, D, H, rise, col=TILE, under=TILE_UNDER, seed=0, **kw):
+    """Red clay tile gable for later eras: the course roof (thatch_roof) made straighter and thinner, with tile
+    strips and a ridge of round tiles."""
+    surf = thatch_roof(m, W, D, H, rise, col=col, under=under, p=1.12, thick=0.12, step=0.05, layers=(0.3, 0.6, 0.85),
+                       strip=0.16, end=0.12, end_drop=0.04, end_pinch=0.96, droop=0.02, seed=seed, **kw)
+    L = W + 2 * 0.24
+    zt = H + rise + 3 * 0.05
+    m.cyl(0.075, 0.075, L - 0.1, pos=(-(L - 0.1) / 2, 0, zt - 0.05), rot=(0, math.pi / 2, 0), color=shade(col, 0.85),
+          seg=7, smooth=True, cap=shade(col, 0.7), bottom_cap=shade(col, 0.7))
+    return surf
+
+
+def rotated(m, fn, angle, offset=(0, 0, 0)):
+    """Run fn() (adds geometry to m), then turn everything it added by angle around Z and move it by offset
+    (e.g. a gable roof whose ridge should run front-to-back, or a porch roof beside the house)."""
+    before = {g: len(bm.verts) for g, bm in m.groups.items()}
+    fn()
+    from mathutils import Matrix
+    rot = Matrix.Translation(offset) @ Matrix.Rotation(angle, 4, "Z")
+    for g, bm in m.groups.items():
+        bm.verts.ensure_lookup_table()
+        vs = bm.verts[before.get(g, 0):]
+        if vs:
+            bmesh.ops.transform(bm, matrix=rot, verts=vs)
+        bm.normal_update()
+
+
+def framed_walls(m, W, D, H, col=CREAM, beam="WOOD_DARK", base="STONE", base_h=0.32, braces=True, posts=None,
+                 back=False):
+    """Plaster walls with a half-timber frame on the front and both sides over a low stone footing."""
+    m.box((W, D, H), color=col)
+    m.box((W + 0.07, D + 0.07, base_h), color=base)
+    m.box((W + 0.11, D + 0.11, 0.1), color="STONE_DARK")
+    t = 0.03
+    xs = posts if posts is not None else [-W / 2, W / 2]
+    # front
+    for x in xs:
+        m.box((0.075, t, H - base_h), pos=(x, -D / 2 - 0.012, base_h), color=beam)
+    for z in (base_h, H - 0.07):
+        m.box((W + 0.04, t, 0.075), pos=(0, -D / 2 - 0.012, z), color=beam)
+    # sides
+    for sx in (-1, 1):
+        for y in (-D / 2, 0.0, D / 2):
+            m.box((t, 0.075, H - base_h), pos=(sx * (W / 2 + 0.012), y * 0.985, base_h), color=beam)
+        for z in (base_h, H - 0.07):
+            m.box((t, D + 0.04, 0.075), pos=(sx * (W / 2 + 0.012), 0, z), color=beam)
+        if braces:
+            for sy in (-1, 1):
+                ln = math.hypot(D / 2, H - base_h - 0.1)
+                a = math.atan2(H - base_h - 0.1, D / 2)
+                m.box((t, ln, 0.06), pos=(sx * (W / 2 + 0.014), sy * D / 4, base_h + (H - base_h) / 2 - 0.08),
+                      rot=(sy * a, 0, 0), color=beam)
+    if back:
+        for x in xs:
+            m.box((0.075, t, H - base_h), pos=(x, D / 2 + 0.012, base_h), color=beam)
+
+
+def chimney(m, x, y, top, w=0.36, col="STONE"):
+    """Chunky round-shouldered stone chimney: fat base courses, a slightly narrower stack, flared cap, clay pot."""
+    z = 0.0
+    k = 0
+    course = 0.24
+    while z < top - 0.01:
+        h = min(course, top - z)
+        ww = w + (0.06 if z < 0.6 else 0.0)
+        dx = 0.016 if k % 2 else -0.016
+        m.box((ww + (0.03 if k % 2 else 0.0), ww + (0.0 if k % 2 else 0.03), h), pos=(x + dx, y, z),
+              color=shade(col, (1.0, 0.92, 1.06, 0.96)[k % 4]))
+        z += h
+        k += 1
+    m.box((w + 0.12, w + 0.12, 0.1), pos=(x, y, top), color="STONE_DARK",
+          colfn=lambda f: shade("STONE", 1.05) if f.normal.z > 0.7 else "STONE_DARK")
+    m.cyl(0.1, 0.085, 0.15, pos=(x, y, top + 0.1), color=shade("ROOF_RED", 0.92), seg=7, smooth=True, cap=SOOT)
+
+
+def dormer(m, x, surf, col, under, roof_fn):
+    """Eyebrow dormer for bun_roof: lit window in a small plaster face under a round thatch hood."""
+    y0, z0 = surf(0.12)
+    y1, z1 = surf(0.42)
+    w = 0.52
+    m.box((w - 0.08, 0.35, z1 - z0 + 0.05), pos=(x, y0 + 0.24, z0 - 0.06), color=CREAM)
+    m.box((0.3, 0.05, 0.22), pos=(x, y0 + 0.07, z0 + 0.0), color="WINDOW_LIT")
+    m.box((0.035, 0.06, 0.22), pos=(x, y0 + 0.065, z0 + 0.0), color="WOOD_DARK")
+    m.box((0.36, 0.06, 0.04), pos=(x, y0 + 0.065, z0 - 0.03), color="WOOD_DARK")
+    hood = m.sphere(0.5, pos=(x, y0 + 0.24, z1 - 0.02), scl=(0.66, 0.6, 0.34), color=shade(col, 0.98), seg=12, rings=6)
+    bm = m._bm("body")
+    for f in hood:
+        if f.normal.z < -0.25:
+            m._finish(bm, [f], under, True)
+
+
+def herb_bundle(m, x, y, z, col="7fb565"):
+    m.box((0.02, 0.02, 0.08), pos=(x, y, z - 0.08), color="WOOD_DARK")
+    m.cyl(0.02, 0.07, 0.16, pos=(x, y, z - 0.24), color=col, seg=5)
+
+
+def round_bush(m, x, y, r=0.2, col="BUSH", flowers=None, seed=0):
+    m.sphere(r, pos=(x, y, r * 0.75), scl=(1.15, 1.0, 0.85), color=col, seg=8, rings=5, lumps=0.18, group="body_nl")
+    if flowers:
+        for k in range(3):
+            a = seed + k * 2.1
+            m.sphere(0.035, pos=(x + math.cos(a) * r * 0.8, y + math.sin(a) * r * 0.8 - r * 0.2, r * 1.15),
+                     color=flowers, seg=5, rings=3, group="body_nl")
+
+
+def house(name, W, D, H, rise, door_x, win_xs, chim, seed, extras=None, walls=("framed", CREAM), roof="bun",
+          roof_col=GOLD, roof_under=GOLD_UNDER, hip=0.82, side_win=True, shutter=None, boxes=True, moss=0, steps=2,
+          lamp=False, dormer_x=None, ox=0.27, oy=0.25, phi0=0.4, posts=None, door_col="DOOR", upper=None):
+    """A19 cottage builder: walls (('framed', plaster) | ('stone', col) | ('plank', col)) + roof ('bun' thatch |
+    'tile' red tile gable) + arched door, lit windows, chunky chimney, flower boxes, shutters."""
     m = Model(name, seed)
-    if walls == "stone":
-        stone_walls(m, W, D, H, seed=seed)
-    elif walls == "plank":
-        plank_walls(m, W, D, H)
-    else:
-        walls(m, W, D, H)
-    gable_wall(m, W, D, H, rise, p=p, col=gable_col)
-    surf = thatch_roof(m, W, D, H, rise, col=roof_col, under=roof_under, p=p, moss=moss, straw=straw, seed=seed)
-    if dormer_x is not None:
-        dormer(m, dormer_x, surf, roof_col, roof_under)
-    dh = min(0.95, H - 0.36)
-    door(m, door_x, -D / 2, w=0.44, h=dh)
+    kind, wc = walls
+    if kind == "framed":
+        framed_walls(m, W, D, H, col=wc, posts=posts)
+    elif kind == "stone":
+        stone_walls(m, W, D, H, col=wc, seed=seed)
+    elif kind == "plank":
+        plank_walls(m, W, D, H, col=wc)
+    if roof == "bun":
+        roof_fn, surf = bun_roof(m, W, D, H, rise, col=roof_col, under=roof_under, hip=hip, moss=moss, seed=seed,
+                                 ox=ox, oy=oy, phi0=phi0)
+        if dormer_x is not None:
+            dormer(m, dormer_x, surf, roof_col, roof_under, roof_fn)
+    elif roof == "tile":
+        gable_wall(m, W, D, H, rise, p=1.12, col=wc if kind != "stone" else "STONE", timber=kind == "framed",
+                   thick=0.12, droop=0.02)
+        tile_roof(m, W, D, H, rise, col=roof_col, under=roof_under, seed=seed)
+        roof_fn = lambda x, y: H + rise * (1 - abs(y) / (D / 2 + 0.2))        # noqa: E731
+    else:      # "tile_front": gable end facing the camera (title painting), ridge front-to-back
+        gcol = wc if kind != "stone" else "STONE"
+
+        def _r():
+            gable_wall(m, D, W, H, rise, p=1.12, col=gcol, timber=kind == "framed", thick=0.12, droop=0.02)
+            tile_roof(m, D, W, H, rise, col=roof_col, under=roof_under, seed=seed)
+        rotated(m, _r, -math.pi / 2)
+        roof_fn = lambda x, y: H + rise * (1 - abs(x) / (W / 2 + 0.2))        # noqa: E731
+        # plaster gable face in front of the roof's end cap, with a timber king post and a round lit window
+        yf = -(D / 2 + 0.24) - 0.02
+        tri = [(-W / 2 + 0.06, H - 0.02), (W / 2 - 0.06, H - 0.02), (0.0, H + rise - 0.12)]
+        m.prism([(-x, z) for x, z in tri], 0.03, pos=(0, yf, 0), rot=(0, 0, math.pi / 2),
+                color=CREAM if kind == "stone" else wc)
+        m.box((W - 0.1, 0.04, 0.07), pos=(0, yf - 0.02, H - 0.05), color="WOOD_DARK")
+        m.box((0.07, 0.04, rise - 0.5), pos=(0, yf - 0.02, H + 0.02), color="WOOD_DARK")
+        zw = H + rise * 0.4
+        m.cyl(0.17, 0.17, 0.04, pos=(0, yf - 0.01, zw), rot=(math.pi / 2, 0, 0), color="WOOD_DARK", seg=12)
+        m.cyl(0.13, 0.13, 0.05, pos=(0, yf - 0.02, zw), rot=(math.pi / 2, 0, 0), color="WINDOW_LIT", seg=12)
+        m.box((0.03, 0.06, 0.26), pos=(0, yf - 0.03, zw - 0.13), color="WOOD_DARK")
+        m.box((0.26, 0.06, 0.03), pos=(0, yf - 0.03, zw - 0.015), color="WOOD_DARK")
+    dh = min(0.9, H - 0.38)
+    door(m, door_x, -D / 2, w=0.42, h=dh, col=door_col)
     if steps:
         stepping_stones(m, door_x, -D / 2 - 0.1, steps)
     if lamp:
         lantern(m, door_x + 0.36, -D / 2, dh - 0.05)
-    wz = min(H * 0.5, 0.62)
+    wz = min(H * 0.48, 0.6)
     for i, x in enumerate(win_xs):
         window(m, x, wz, -D / 2)
         if shutter is not None:
             shutters(m, x, wz, -D / 2, 0.3, 0.28, shutter)
         if boxes:
             flower_box(m, x, -D / 2, w=0.4, z=wz - 0.17, seed=seed + i)
+    if upper:
+        for x in upper:
+            window(m, x, H - 0.55, -D / 2, w=0.28, h=0.26)
+            if shutter is not None:
+                shutters(m, x, H - 0.55, -D / 2, 0.28, 0.26, shutter)
     if side_win:
         window(m, W / 2 + 0.01, wz, 0.0, w=0.26, h=0.24, face=1, side=True)
-    if chim_x is not None:
-        chimney(m, chim_x, D * 0.18, H + rise - 0.05)
+    if chim is not None:
+        cx, cy = chim
+        chimney(m, cx, cy, roof_fn(cx, cy) + 0.32)
     if extras:
         extras(m)
     return m
 
 
+# ───────────────────────── cottages ─────────────────────────
 def build_cottages():
     def a_extra(m):
-        barrel(m, 1.12, -0.3)
-        sack(m, 1.1, 0.05, 0.8)
-        picket_fence(m, -1.35, -0.95, -1.35, 0.3)
-        picket_fence(m, -1.35, -0.95, -0.75, -0.95)
-    cottage("cottage_a", 1.9, 1.25, 1.4, 1.2, -0.3, [0.45], 0.55, 11, extras=a_extra, shutter=SHUTTER[0]).export(OUT)
+        barrel(m, 1.18, -0.32)
+        sack(m, 1.16, 0.05, 0.8)
+        picket_fence(m, -1.4, -1.0, -1.4, 0.3)
+        picket_fence(m, -1.4, -1.0, -0.8, -1.0)
+        round_bush(m, -1.05, -0.85, 0.2, flowers="LOTUS", seed=1)
+    # cream plaster + timber frame, fresh golden bun thatch
+    house("cottage_a", 1.9, 1.25, 1.25, 1.2, -0.3, [0.45], (0.62, 0.12), 11, extras=a_extra, shutter=SHUTTER[0],
+          walls=("framed", CREAM)).export(OUT)
 
     def b_extra(m):
         sack(m, -1.25, -0.45, 0.9)
-        barrel(m, -1.28, -0.1, 0.85)
-        m.cyl(0.12, 0.09, 0.2, pos=(0.75, -0.95, 0), color="ROOF_RED", seg=8, cap="FIELD_SOIL")       # flower pot
-        m.sphere(0.13, pos=(0.75, -0.95, 0.27), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
+        barrel(m, -1.3, -0.1, 0.85)
+        m.cyl(0.12, 0.09, 0.2, pos=(0.8, -0.98, 0), color="ROOF_RED", seg=8, cap="FIELD_SOIL")       # flower pot
+        m.sphere(0.13, pos=(0.8, -0.98, 0.27), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
         for k in range(3):
-            m.sphere(0.04, pos=(0.7 + k * 0.05, -1.02, 0.36 + 0.02 * k), color="FLAME2", seg=5, rings=3, group="body_nl")
-    cottage("cottage_b", 2.1, 1.3, 1.35, 1.25, 0.3, [-0.45, 0.82], -0.6, 12, extras=b_extra,
-            roof_col=mix("THATCH", "ROOF_RED", 0.18), roof_under=mix("THATCH_DARK", "ROOF_RED", 0.25),
-            shutter=SHUTTER[1], lamp=True, dormer_x=0.15).export(OUT)
-    # pioneer hut: plank walls, low weathered roof with moss, no chimney
-    cottage("hut", 1.5, 1.1, 1.15, 1.0, 0.15, [-0.4], None, 13, walls="plank", side_win=False,
-            roof_col=mix("THATCH", "TRUNK", 0.16), roof_under=mix("THATCH_DARK", "TRUNK", 0.3), moss=3, boxes=False,
-            steps=1, gable_col="WOOD").export(OUT)
+            m.sphere(0.04, pos=(0.75 + k * 0.05, -1.05, 0.36 + 0.02 * k), color="FLAME2", seg=5, rings=3, group="body_nl")
+    # pale rose plaster, mossy thatch with an eyebrow dormer
+    house("cottage_b", 2.1, 1.3, 1.25, 1.25, 0.3, [-0.45, 0.82], (0.7, 0.12), 12, extras=b_extra,
+          roof_col=MOSSY, roof_under=MOSSY_UNDER, shutter=SHUTTER[1], lamp=True,
+          walls=("framed", ROSE), moss=2).export(OUT)
+    # warm ochre plaster, golden thatch, green shutters, woodpile corner
+    def c_extra(m):
+        for k in range(3):
+            log(m, 1.25, 0.05 + k * 0.0, 0.1 + k * 0.18, 0.7, 0.09, 1.57)
+        round_bush(m, -1.2, -0.8, 0.22, flowers="ffffff", seed=3)
+        m.cyl(0.12, 0.09, 0.2, pos=(0.85, -0.98, 0), color="ROOF_RED", seg=8, cap="FIELD_SOIL")
+        m.sphere(0.13, pos=(0.85, -0.98, 0.27), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
+    house("cottage_c", 1.95, 1.25, 1.25, 1.2, 0.35, [-0.4], (-0.62, 0.12), 14, extras=c_extra, shutter=SHUTTER[2],
+          walls=("framed", OCHRE), roof_col=GOLD, roof_under=GOLD_UNDER, lamp=True).export(OUT)
+
+    # grey fieldstone cottage under an old mossy bun
+    def d_extra(m):
+        barrel(m, -1.2, -0.35, 0.85)
+        picket_fence(m, 0.7, -1.05, 1.4, -1.05)
+        picket_fence(m, 1.4, -1.05, 1.4, -0.1)
+        round_bush(m, 1.1, -0.65, 0.2, flowers="LOTUS", seed=6)
+    house("cottage_d", 1.85, 1.25, 1.2, 1.15, -0.25, [0.45], (0.6, 0.12), 15, extras=d_extra, shutter=SHUTTER[3],
+          walls=("stone", "STONE"), roof_col=MOSSY, roof_under=MOSSY_UNDER, moss=3).export(OUT)
+
+    # pioneer hut: plank walls, low weathered bun with moss, no chimney
+    house("hut", 1.5, 1.1, 1.0, 0.95, 0.15, [-0.4], None, 13, walls=("plank", "WOOD"), side_win=False,
+          roof_col=OLD, roof_under=OLD_UNDER, moss=3, boxes=False, steps=1, ox=0.22, oy=0.2).export(OUT)
 
 
 def build_houses():
-    # 목조주택: two storeys, half-timbered plaster over a stone ground course
-    def timber_walls(m, W, D, H):
-        m.box((W, D, H), color="PLASTER")
-        m.box((W + 0.06, D + 0.06, 0.45), color="STONE")
-        m.box((W + 0.1, D + 0.1, 0.12), color="STONE_DARK")
-        for x in (-W / 2, -W / 6, W / 6, W / 2):
-            m.box((0.07, 0.03, H - 0.45), pos=(x, -D / 2 - 0.012, 0.45), color="WOOD_DARK")
-        for z in (0.45, H * 0.6, H - 0.06):
-            m.box((W + 0.02, 0.03, 0.07), pos=(0, -D / 2 - 0.012, z), color="WOOD_DARK")
-        for x0 in (-W / 3, W / 3):
-            ln = math.hypot(W / 3, H * 0.6 - 0.45)
-            a = math.atan2(H * 0.6 - 0.45, W / 3)
-            m.box((ln, 0.03, 0.06), pos=(x0 - math.copysign(W / 6, x0) * 0 , -D / 2 - 0.014, 0.45 + (H * 0.6 - 0.45) / 2 - 0.03),
-                  rot=(0, -a if x0 < 0 else a, 0), color="WOOD_DARK")
-        for y in (-D / 2, D / 2):
-            for sx in (-1, 1):
-                m.box((0.03, 0.07, H - 0.45), pos=(sx * (W / 2 + 0.012), y * 0.98, 0.45), color="WOOD_DARK")
-
     def t_extra(m):
-        for x in (-0.75, 0.0, 0.75):
-            window(m, x, 1.38, -0.75, w=0.28, h=0.26)
         for k, x in enumerate((-0.75, 0.75)):
-            flower_box(m, x, -0.75, w=0.38, z=1.2, seed=k)
-        barrel(m, 1.4, -0.8)
-        barrel(m, 1.2, -1.0, 0.85)
+            flower_box(m, x, -0.75, w=0.38, z=1.15, seed=k)
+        barrel(m, 1.42, -0.82)
+        barrel(m, 1.22, -1.02, 0.85)
+        round_bush(m, -1.45, -0.7, 0.24, flowers="FLAME2", seed=2)
+    # 목조주택: two storeys, warm ochre plaster in a full timber frame, big golden thatch with a dormer
+    house("house_timber", 2.4, 1.5, 1.95, 1.35, -0.35, [0.55], (0.85, 0.15), 21, walls=("framed", OCHRE),
+          extras=t_extra, shutter=SHUTTER[2], lamp=True, upper=(-0.75, 0.0, 0.75),
+          posts=[-1.2, -0.4, 0.4, 1.2]).export(OUT)
 
-    cottage("house_timber", 2.4, 1.5, 2.0, 1.3, -0.35, [0.55], 0.75, 21, walls=timber_walls, extras=t_extra,
-            shutter=SHUTTER[2], lamp=True, dormer_x=-0.35).export(OUT)
-
-    # 석조주택: big stone house, grey slate roof (straighter, thinner)
+    # 석조주택: big stone house with a red clay tile roof (later era)
     def s_extra(m):
-        window(m, -0.75, 1.25, -0.775, w=0.3, h=0.3)
-        window(m, 0.75, 1.25, -0.775, w=0.3, h=0.3)
         crate(m, 1.45, -0.85, 0.9)
-    m = cottage("house_stone", 2.4, 1.55, 1.8, 1.1, 0.0, [-0.75, 0.75], -0.75, 22, roof_col="ROOF_GREY",
-                roof_under=shade("ROOF_GREY", 0.8), p=1.15, extras=s_extra,
-                shutter=SHUTTER[3], lamp=True)
-    chimney(m, 0.8, 0.3, 1.8 + 1.1 - 0.05)
+        round_bush(m, -1.5, -0.6, 0.22, flowers="LOTUS", seed=4)
+    m = house("house_stone", 2.4, 1.55, 1.75, 1.3, 0.0, [-0.75, 0.75], (-0.7, 0.35), 22, walls=("stone", "STONE"),
+              roof="tile_front", roof_col=TILE, roof_under=TILE_UNDER, extras=s_extra, shutter=SHUTTER[3], lamp=True,
+              upper=(-0.75, 0.75))
     m.export(OUT)
 
 
@@ -458,7 +688,7 @@ def build_houses():
 def build_store():
     """창고: open-fronted thatched shed on posts with barrels, sacks and crates."""
     m = Model("storehouse", 31)
-    W, D, H = 2.5, 1.7, 1.15
+    W, D, H = 2.5, 1.7, 1.3
     m.box((W + 0.1, D + 0.1, 0.1), color="STONE_DARK")
     m.box((W, 0.1, H), pos=(0, D / 2 - 0.05, 0.1), color="WOOD")                     # back wall
     for i in range(int(W / 0.22)):
@@ -470,8 +700,7 @@ def build_store():
         post(m, x, -D / 2 + 0.05, H + 0.1, 0.12)
         m.box((0.18, 0.18, 0.12), pos=(x, -D / 2 + 0.05, 0), color="STONE")
     m.box((W + 0.1, 0.1, 0.1), pos=(0, -D / 2 + 0.05, H), color="WOOD_DARK")
-    gable_wall(m, W, D, H + 0.1, 0.9, col="WOOD", timber=False)
-    thatch_roof(m, W, D, H + 0.1, 0.9)
+    bun_roof(m, W, D, H + 0.1, 0.85, hip=0.7, seed=31, oy=0.2)
     barrel(m, -0.85, 0.35)
     barrel(m, -0.5, 0.45)
     barrel(m, -0.68, 0.38, z=0.4)
@@ -487,22 +716,24 @@ def build_store():
 def build_well():
     m = Model("well", 41)
     m.cyl(0.46, 0.44, 0.5, color="STONE", seg=12, smooth=False)
-    for k in range(12):
-        a = k * math.tau / 12 + (0.13 if k % 2 else 0)
+    for k in range(7):
+        a = -math.pi / 2 + (k - 3) * 0.42 + (0.1 if k % 2 else 0)
         z = 0.1 + (k % 3) * 0.12
         m.box((0.16, 0.03, 0.09), pos=(math.cos(a) * 0.455, math.sin(a) * 0.455, z), rot=(0, 0, a + math.pi / 2),
               color=shade("STONE", 0.9 if k % 2 else 1.05))
     m.cyl(0.5, 0.5, 0.09, pos=(0, 0, 0.5), color="STONE_DARK", seg=12, cap="STONE")
-    m.cyl(0.33, 0.33, 0.02, pos=(0, 0, 0.58), color="WATER", seg=12)
+    m.cyl(0.33, 0.33, 0.02, pos=(0, 0, 0.58), color="WATER", seg=8)
     for sx in (-1, 1):
         post(m, sx * 0.42, 0, 1.25, 0.1)
     m.cyl(0.04, 0.04, 0.95, pos=(-0.47, 0, 0.98), rot=(0, math.pi / 2, 0), color="WOOD", seg=6)   # windlass
     m.box((0.04, 0.2, 0.04), pos=(0.52, -0.1, 0.96), color="WOOD")
     m.box((0.015, 0.015, 0.35), pos=(0, 0, 0.62), color="WOOD_DARK")                                 # rope
     m.cyl(0.09, 0.08, 0.14, pos=(0, 0, 0.6), color="WOOD", seg=8, cap="WATER")                         # bucket
-    plank_roof(m, 1.0, 0.75, 1.22, 0.42)
+    m.box((1.0, 0.1, 0.08), pos=(0, 0, 1.2), color="WOOD_DARK")
+    bun_roof(m, 0.84, 0.5, 1.24, 0.42, ox=0.12, oy=0.18, hip=0.75, NT=14, NU=4, roll=0.05, wobble=0.02, seed=41,
+             bands=())
     for sx in (-1, 1):
-        m.sphere(0.12, pos=(sx * 0.62, -0.32, 0.1), color="BUSH", seg=7, rings=4, lumps=0.2)
+        m.sphere(0.12, pos=(sx * 0.62, -0.32, 0.1), color="BUSH", seg=6, rings=3, lumps=0.2)
     m.export(OUT)
 
 
@@ -563,7 +794,7 @@ def build_sawmill():
         m.box((W + 0.1, 0.1, 0.1), pos=(0, y, H - 0.08), color="WOOD_DARK")
         for sx in (-1, 1):   # knee braces
             m.box((0.06, 0.06, 0.4), pos=(sx * (W / 2 - 0.15), y, H - 0.35), rot=(0, sx * 0.7, 0), color="WOOD_DARK")
-    thatch_roof(m, W, D, H, 0.85, droop=0.1)
+    bun_roof(m, W, D, H, 0.85, col=OLD, under=OLD_UNDER, hip=0.7, seed=61, moss=2)
     # saw bench with a log and a big blade
     m.box((1.3, 0.35, 0.35), pos=(0, 0, 0.0), color="WOOD")
     log(m, 0.1, 0.0, 0.47, 1.4, 0.13)
@@ -624,11 +855,9 @@ def build_windmill():
         z = 0.3 + (k % 5) * 0.34
         rr = 0.78 - (0.22 * z / 2.1) + 0.005
         m.box((0.18, 0.03, 0.1), pos=(math.cos(a) * rr, math.sin(a) * rr, z), rot=(0, 0, a + math.pi / 2), color=shade("STONE", 0.9))
-    # thatched cap
-    m.cyl(0.74, 0.02, 1.0, pos=(0, 0, 2.05), color="THATCH", seg=20, smooth=True,
-          colfn=lambda f: shade("THATCH", (1.0, 0.94, 1.05, 0.97, 1.02)[int((math.atan2(f.calc_center_median().y, f.calc_center_median().x) + 4) * 3.2) % 5]))
-    m.sphere(0.1, pos=(0, 0, 3.05), color="WOOD_DARK", seg=6, rings=3)
-    m.cyl(0.74, 0.7, 0.12, pos=(0, 0, 2.0), color="THATCH_DARK", seg=12)
+    # round thatched cap (A19): a bun with equal sides = a puffy dome
+    bun_roof(m, 1.12, 1.12, 2.08, 0.95, ox=0.1, oy=0.1, hip=1.0, n=2.0, NT=24, seed=81, bands=(0.45,))
+    m.sphere(0.09, pos=(0, 0, 3.02), color="WOOD_DARK", seg=6, rings=3)
     door(m, 0.0, -0.76, w=0.34, h=0.55)
     window(m, 0.0, 1.35, -0.64, w=0.22, h=0.22)
     # sails on a hub facing front (-y)
@@ -672,13 +901,15 @@ def build_bakery():
         for k in range(3):
             m.sphere(0.12, pos=(-0.75 + k * 0.25, -1.15, 0.53), scl=(1.2, 0.9, 0.7), color="BREAD", seg=8, rings=5)
         barrel(m, 1.05, -0.75, 0.8)
-    cottage("bakery", 2.0, 1.3, 1.4, 1.1, 0.35, [-0.35], -0.55, 91, extras=extras).export(OUT)
+    house("bakery", 2.0, 1.3, 1.3, 1.15, 0.35, [-0.35], (-0.6, 0.15), 91, extras=extras, walls=("framed", CREAM),
+          shutter=SHUTTER[1]).export(OUT)
 
 
 def build_forester():
     def extras(m):
         m.sphere(0.3, pos=(-1.15, 0.5, 0.25), color="BUSH", seg=8, rings=5, lumps=0.2)
-    cottage("forester", 1.6, 1.15, 1.2, 1.05, -0.2, [0.4], 0.45, 101, extras=extras).export(OUT)
+    house("forester", 1.6, 1.15, 1.1, 1.05, -0.2, [0.4], (0.4, 0.2), 101, extras=extras, walls=("stone", "STONE"),
+          roof_col=MOSSY, roof_under=MOSSY_UNDER, moss=2, shutter=SHUTTER[2]).export(OUT)
 
 
 def build_saltpan():

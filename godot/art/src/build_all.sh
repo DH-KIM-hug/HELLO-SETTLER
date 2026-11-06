@@ -9,7 +9,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/../models"
 BLENDER="${BLENDER:-blender}"
 mkdir -p "$OUT"
-for s in buildings nature residents giants mold items room; do
+for s in buildings village ground water nature residents giants mold items room; do
   if [ -n "$1" ] && [ "$1" != "$s" ]; then continue; fi
   "$BLENDER" -b --factory-startup --python "$HERE/build_$s.py" -- "$OUT" 2>&1 \
     | grep -E "^  |->|Error|Traceback|rror:" || true
