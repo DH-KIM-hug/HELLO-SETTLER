@@ -1,5 +1,6 @@
 ## 거인의 손 — 아래 띠 [손] 칸 (UI 01 · A9) + 손에 든 물건 떨어뜨리기 (SHOP 3 · WORLD_EVENTS 3 · 4 · A7).
-## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 (뚜껑이 열린 동안) · 핀셋 (열린 동안 + 날벌레) · 등불 옮기기 /
+## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 · 물 뿌리기 · 핀셋 (뚜껑이 열린 동안) /
+##   감싸기 · 커튼 (열림·반쯤·닫힘 — 누를 때마다 다음 단) · 유리 닦기 · 등불 옮기기 (병 밖 — ROADMAP B6, sim/giant_hand.gd) /
 ##   손에 든 것 (Market.hand — 5칸). 물건을 누르면 → 뚜껑이 열리고 (한 번 열고 여러 개 — 병의 법칙) 떨어뜨릴 자리 고르기:
 ##   땅 위 그림자 + 그 위에 거인의 손이 물건을 들고 기다림. 손가락으로 끌면 그림자가 따라옴, [떨어뜨리기]로 놓음.
 ##   물건 칸에서 바로 땅으로 끌어 놓으면 곧바로 떨어진다 (경고가 있으면 멈추고 묻는다).
@@ -17,7 +18,12 @@ var sc: Node                           # 장면 (TestVillage 계열)
 var tray: PanelContainer
 var lid_btn: Button
 var blow_btn: Button
-var tweeze_btn: Button                 # [작은 위기] 핀셋 — 뚜껑이 열리고 날벌레가 있을 때만 (WORLD_EVENTS 4.3)
+var tweeze_btn: Button                 # [거인의 손] 핀셋 — 뚜껑이 열린 동안 (날벌레·먼지 뭉치·떨어진 것 — WORLD_EVENTS 4.3)
+var spray_btn: Button                  # [거인의 손 B6] 물 뿌리기 — 뚜껑이 열린 동안
+var cup_btn: Button                    # 감싸기 (병 밖 — 온기가 남은 동안은 못 함)
+var curtain_btn: Button                # 커튼 3단
+var wipe_btn: Button                   # 유리 닦기
+var _say_t := 0.0                      # 손짓이 안 될 때 잠깐 보이는 말 (hint)
 var lamp_btn: Button
 var hand_title: Label
 var hint: Label
@@ -61,8 +67,15 @@ func build(root: Control) -> void:
 	col.add_child(row)
 	lid_btn = _btn(row, "뚜껑 열기", "뚜껑", Callable(sc, "toggle_lid"))
 	blow_btn = _btn(row, "불기", "불기", Callable(sc, "blow"))
+	spray_btn = _btn(row, "물 뿌리기", "물 뿌리기", Callable(sc, "spray"))
 	tweeze_btn = _btn(row, "핀셋", "핀셋", Callable(sc, "tweeze"))
-	lamp_btn = _btn(row, "등불 옮기기", "등불", Callable(sc, "move_lamp"))
+	var row2 := HBoxContainer.new()                   # 병 밖의 손짓 (뚜껑을 열지 않음 — WORLD_EVENTS 4.2)
+	row2.add_theme_constant_override("separation", UiTheme.GAP)
+	col.add_child(row2)
+	cup_btn = _btn(row2, "감싸기", "감싸기", Callable(sc, "cup"))
+	curtain_btn = _btn(row2, "커튼", "", Callable(sc, "curtain_next"))      # 글자가 단을 말함 (좁은 칸 — 아이콘 없이)
+	wipe_btn = _btn(row2, "유리 닦기", "유리 닦기", Callable(sc, "wipe"))
+	lamp_btn = _btn(row2, "등불 옮기기", "등불", Callable(sc, "move_lamp"))
 	col.add_child(HSeparator.new())
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 4)
@@ -199,7 +212,16 @@ func refresh() -> void:
 		lid_btn.text = "뚜껑 열기"
 		lid_btn.modulate = Color.WHITE
 	blow_btn.visible = open_lid
-	tweeze_btn.visible = open_lid and v.smalls != null and not v.smalls.live("gnat").is_empty()
+	spray_btn.visible = open_lid
+	spray_btn.disabled = v.hand.spray_cd > 0.0
+	tweeze_btn.visible = open_lid
+	var w := v.water
+	cup_btn.disabled = w.cup_left > 0.0
+	cup_btn.text = "감싸는 중" if w.cup_left > 0.0 else "감싸기"
+	curtain_btn.text = "커튼 %s" % GiantHand.CURTAIN_NAMES[clampi(w.curtain, 0, 2)]
+	wipe_btn.disabled = v.hand.wipe_cd > 0.0
+	if _say_t > 0.0:
+		return
 	var sig := str(Market.hand)
 	if sig == _hand_sig:
 		return
@@ -229,6 +251,15 @@ func refresh() -> void:
 			s.disabled = true
 			s.tooltip_text = ""
 			s.modulate = Color(1, 1, 1, 0.45)
+
+
+## 손짓이 안 될 때 (뚜껑이 닫힘 · 쿨타임 · 집을 것이 없음) 칸 머리에 잠깐
+func say(text: String) -> void:
+	if text == "" or hint == null:
+		return
+	hint.text = text
+	_say_t = 2.5
+	_hand_sig = ""
 
 
 func _on_slot_down(i: int) -> void:
@@ -430,6 +461,8 @@ func confirm_drop() -> void:
 # ───────────────────────── 매 화면 ─────────────────────────
 func process(dt: float) -> void:
 	_t += dt
+	if _say_t > 0.0:
+		_say_t = maxf(0.0, _say_t - dt)
 	if tray.visible:
 		refresh()
 	if aiming():

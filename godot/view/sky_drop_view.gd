@@ -54,8 +54,8 @@ func sync(dt: float) -> void:
 		var node: Node3D = e["node"]
 		var s := SkyDrops.shrink(d)
 		node.scale = Vector3(s, s, s) if not _falling(node) else node.scale
-		node.position.x = float(d["x"])
-		node.position.z = float(d["y"])
+		if absf(node.position.x - float(d["x"])) > 0.01 or absf(node.position.z - float(d["y"])) > 0.01:     # 핀셋으로 옮김 (B6)
+			node.position = Vector3(float(d["x"]), gy(float(d["x"]), float(d["y"])), float(d["y"]))
 	for id: int in _nodes.keys():
 		if not seen.has(id):
 			var gone: Node3D = _nodes[id]["node"]

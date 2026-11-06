@@ -580,13 +580,14 @@ func fine_step(sc: float) -> void:
 		sl[k] += d
 	# 증발·스며듦
 	var fw := fwarm
+	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
 	for i in nf:
 		var k := cells_l[i]
 		var v := ww[k]
 		if v <= 0.0:
 			continue
 		var v0 := v
-		v -= EVAP * (0.35 + fw[i]) * sc
+		v -= ev * (0.35 + fw[i]) * sc
 		if v < SEEP_DEPTH:
 			v -= SEEP * FINE_SEEP * sc
 		if v < 0.0:
@@ -606,6 +607,7 @@ func _groove_rate(k: int) -> float:
 
 
 func coarse_slice(sc: float, slice: int) -> void:
+	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
 	var V := cV
 	var L := cL
 	var K := cK
@@ -702,7 +704,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 			S[c] += d
 		var v := V[c]
 		if v > SEP:
-			var loss := EVAP * (0.35 + cw[c]) * sc * K[c] + SEEP * COARSE_SEEP * sc * _shallow(c, SEEP_DEPTH)
+			var loss := ev * (0.35 + cw[c]) * sc * K[c] + SEEP * COARSE_SEEP * sc * _shallow(c, SEEP_DEPTH)
 			var nv := maxf(0.0, v - loss)
 			removed += v - nv
 			V[c] = nv
