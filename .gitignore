@@ -3,3 +3,4 @@ godot/export/
 .DS_Store
 .claude/worktrees/
 tools/__pycache__/
+build/
