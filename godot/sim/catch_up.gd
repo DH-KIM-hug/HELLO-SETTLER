@@ -189,8 +189,16 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 		var tx: String = e["text"]
 		if tx.contains("마침내 사라졌다"):
 			events.append(tx.split(".")[0].replace("마침내 사라졌다", "마침내 사라졌어요") + ".")
-	if events.size() < 3:
-		events.append("다들 거인님을 기다리며 하루하루 잘 지냈어요.")
+	# 큰 일이 3줄이 안 되면 평범한 날의 줄로 채움 (SAVE.md 4장: 3~5줄)
+	var fillers: Array = ["다들 거인님을 기다리며 하루하루 잘 지냈어요."]
+	if vv.people.any(func(q: Resident) -> bool: return q.is_child()):
+		fillers.append("아이들이 들판에서 뛰어놀았어요.")
+	fillers.append("밤마다 모닥불 앞에 모여 노래했어요.")
+	fillers.append("다들 맡은 일을 부지런히 했어요.")
+	var fi := 0
+	while events.size() < 3 and fi < fillers.size():
+		events.append(fillers[fi])
+		fi += 1
 	# 기다리는 것
 	var waiting: Array = []
 	var alt := vv.altar_items()
