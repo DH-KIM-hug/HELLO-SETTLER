@@ -128,6 +128,16 @@ var _people_by_id: Dictionary = {}
 var _bld_by_id: Dictionary = {}
 var _opening_chief := 0               # 첫 한 시간에 촌장이 터를 잡은 횟수 (OPENING_CHIEF_AT)
 var _spread_left := Balance.HOUR      # 숲이 저절로 퍼지는지 다음에 굴리기까지
+# 거인의 상점·하늘에서 내려온 것 (SHOP.md · WORLD_EVENTS 1.1 · 4.1 · 4.4 — sim/shop.gd · sim/sky_drops.gd)
+var drops: Array = []                 # 바깥 크기의 물건 {id, item, x, y, res, total, left, size, res_n(깎는 사람), t, dur(효과만 — 사그라드는 시간)}
+var towers: Array = []                # 영양제 앰플 탑 {id, x, y, t}
+var algae: Array = []                 # 녹조 {x, y, t, until}
+var care: Dictionary = {}             # 돌봄 효과가 끝나는 병 시각 {pill, bandage}
+var shop_open: Dictionary = {}        # 상점 탭 → 열린 병 시각 (Shop.update_unlocks)
+var shop_seen: Array = []             # 거인이 들여다본 탭 (상점 버튼 옆 반짝임)
+var shop_bought: Dictionary = {}      # 이 병에 사 준 건물 수 (또 사면 ×1.5)
+var _drop_id := 0
+var _sky_acc := 0.0
 
 
 # ───────────────────────── 처음 세계 ─────────────────────────
@@ -754,6 +764,7 @@ func step(dt: float) -> void:
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
 	Mold.step(self, dt)
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
+	SkyDrops.step(self, dt)           # [상점] 하늘에서 내려온 것·돌봄·앰플 탑·녹조·진열 (SHOP · WORLD_EVENTS 4)
 	for b in buildings:
 		_update_building(b, dt)
 	for p in people.duplicate():
@@ -1127,6 +1138,7 @@ func _update_building(b: Building, dt: float) -> void:
 		if b.farm_mult < 0.0:
 			b.farm_mult = farm_mult(b.x, b.y)
 		place = b.farm_mult * Flora.weed_mult(self, b)     # [하늘의 것] 밭에 내려앉은 꽃씨 = 잡초 ×0.8 (WORLD_EVENTS 2.7)
+		place *= SkyDrops.fert_mult(self, b.x, b.y)       # [상점] 앰플 탑 둘레 비옥한 땅 ×1.5 (WORLD_EVENTS 4.4)
 	if b.type == "빵집" and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	b.timer += dt * (w.job_speed(b.type) if w != null else 1.0) * place * _singer_aura(b, w)
@@ -1785,6 +1797,8 @@ func is_free(x: float, y: float, size: float) -> bool:
 			return false
 	if flora != null and flora.blocks(x, y, size):    # [하늘의 것] 큰 버섯의 굵은 대 둘레에는 짓지 않는다
 		return false
+	if SkyDrops.blocks(self, x, y, size):              # [상점] 하늘에서 내려온 물건·앰플 탑 자리
+		return false
 	return true
 
 
@@ -2008,7 +2022,7 @@ func rotate_jar() -> void:
 		var x: float = o["x"]
 		o["x"] = -float(o["y"])
 		o["y"] = x
-	for list: Array in [trees, rocks, manna]:
+	for list: Array in [trees, rocks, manna, drops, towers, algae]:     # [상점] 하늘에서 내려온 것도 병과 함께 돈다
 		for o: Dictionary in list:
 			rp.call(o)
 	for b in buildings:
@@ -2426,10 +2440,11 @@ func force_take(item: String, amt: int) -> float:
 
 # ── 건물 사 주기 ──
 ## 지폐로 산 건물을 거인이 고른 자리(spot — 비우면 촌장이 고를 자리)에 완성된 채 내려놓는다 = 기적 (RESIDENT_AI 2.1)
-func buy_building(type: String, spot: Variant = null) -> Building:
+## 건물 사 주기 — paid = 이미 지폐를 냈다 (상점에서 사서 거인의 손에 든 것 — SkyDrops.place_building)
+func buy_building(type: String, spot: Variant = null, paid := false) -> Building:
 	if not Balance.SHOP.has(type) or int(Balance.B[type]["era"]) > era:
 		return null
-	var cost := float(Balance.SHOP[type])
+	var cost := 0.0 if paid else float(Balance.SHOP[type])
 	if not Market.can_pay(cost):
 		return null
 	var p: Vector2

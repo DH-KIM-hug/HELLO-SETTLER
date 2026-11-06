@@ -107,7 +107,7 @@ static func set_rng(r: RandomNumberGenerator, d: Variant) -> void:
 # ───────────────────────── 걸음 속 할 일 묶음의 붙잡은 것 ─────────────────────────
 ## 붙잡을 수 있는 목록 (이름 → 배열). 버섯·민들레는 Flora에
 static func ref_lists(v: Village) -> Dictionary:
-	var l := {"trees": v.trees, "rocks": v.rocks, "manna": v.manna}
+	var l := {"trees": v.trees, "rocks": v.rocks, "manna": v.manna, "drops": v.drops}
 	if v.flora != null:
 		l["shrooms"] = v.flora.shrooms
 		l["dands"] = v.flora.dands

@@ -4,7 +4,8 @@
 ## 그림: 공용 툰 셰이더(render/toon.gd) + 그림자 맵 한 단계 + 깊이 외곽선·밤 색·화면 유리 곡선(render/outline_post.gd). 색은 data/style.gd.
 ## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
 ## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
-## 조작: 위 띠 = 시각·인구·지폐 + 톱니(설정·문의, 길게 누르면 개발 모드) / 아래 띠 = 제단 · 뚜껑 · 불기(뚜껑 열린 동안) · 속도, 그 위 밤 건너뛰기.
+## 조작 (UI 01 · A9): 위 띠 = 지구 이름 · 시대 · 인구 · 지폐 + 톱니(설정·문의, 길게 누르면 개발 모드), 그 아래 왼쪽 시각·배속 칩 /
+##   아래 띠 = 거인의 도구 5개: 제단 · 상점 · 손 · 연대기 · 선반. [손] = 뚜껑·불기·등불 + 손에 든 물건 떨어뜨리기 (view/giant_hand_ctl.gd).
 ## 개발 모드(휴대폰 기본 꺼짐 · F3): 상태 글 + +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델 · 곰팡이 · 버섯 숲. 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 ## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
 ## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
@@ -77,6 +78,21 @@ var _letter_layer: CanvasLayer
 # A5 계시 · A10 연대기 · A4b 깨달음 (view/ui/revelation_show.gd · chronicle_sheet.gd · guide_caption.gd · view/sky_beam.gd)
 var altar_btn: Button
 var chron_btn: Button
+var shop_btn: Button                 # [상점] (UI 06 — view/ui/shop_sheet.gd) — 새 탭이 열리면 옆에 작은 반짝임
+var hand_btn: Button                 # [손] — 뚜껑·불기·등불 + 손에 든 것 (view/giant_hand_ctl.gd)
+var shelf_btn: Button                # [선반] (UI 05 — 지금은 '곧 열려요' + 등불 올리기)
+var tool_btns: Array[Button] = []
+var shop_sheet: ShopSheet
+var shelf_sheet: ShelfSheet
+var hand_ctl: GiantHandCtl
+var lamp_btn: Button
+var notes_label: Label
+var speed_list: HBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6)
+var _speed_down_t := -1.0
+var _speed_long := false
+var _sparkle: Control
+var _hand_glow_t := 0.0
+var _tray_h := 0.0
 var chronicle: ChronicleSheet
 var rev_show: RevelationShow
 var guide_cap: GuideCaption
@@ -138,7 +154,16 @@ func on_back() -> void:
 	if confirm_sheet.visible:
 		confirm_sheet.answer(false)
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle]:
+	if hand_ctl != null and hand_ctl.aiming():
+		hand_ctl.cancel_drop()
+		return
+	if hand_ctl != null and hand_ctl.is_open():
+		hand_ctl.close()
+		return
+	if speed_list != null and speed_list.visible:
+		speed_list.visible = false
+		return
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -356,6 +381,9 @@ func _process(dt: float) -> void:
 	update_night()
 	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]
 	_gear_hold(dt)
+	_speed_hold(dt)
+	if hand_ctl != null:
+		hand_ctl.process(dt)
 	_update_ui()
 	_update_audio()
 
@@ -458,13 +486,22 @@ func _setup_ui() -> void:
 	top_bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(top_bar)
 	var trow := HBoxContainer.new()
+	trow.add_theme_constant_override("separation", 4)
 	top_bar.add_child(trow)
-	info_label = Label.new()
+	info_label = Label.new()               # 지구 이름 · 시대 · 인구
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	info_label.clip_text = true
 	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	trow.add_child(info_label)
+	var bn := GameIcons.rect("지폐", 24)
+	bn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	trow.add_child(bn)
+	notes_label = Label.new()              # 지폐
+	notes_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	notes_label.add_theme_font_override("font", UiTheme.font(true))
+	notes_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	trow.add_child(notes_label)
 	gear_btn = _gear_button()
 	trow.add_child(gear_btn)
 	# 개발: 상태 글 (위 띠 아래)
@@ -520,20 +557,53 @@ func _setup_ui() -> void:
 	bottom_bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(bottom_bar)
 	var brow := HBoxContainer.new()
-	brow.add_theme_constant_override("separation", UiTheme.GAP)
+	brow.add_theme_constant_override("separation", 2)
 	bottom_bar.add_child(brow)
-	altar_btn = _bar_button(brow, "제단", open_altar)
-	altar_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	GameIcons.button_icon(altar_btn, "제단", 26)
-	chron_btn = _bar_button(brow, "연대기", func() -> void: open_chronicle(-1))    # (도구 5개 띠가 생기기 전 임시 자리 — UI 01)
-	chron_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	GameIcons.button_icon(chron_btn, "연대기", 26)
-	lid_btn = _bar_button(brow, "뚜껑 열기", toggle_lid)   # [곰팡이·뚜껑] 뚜껑: 열면 김·연기가 빠지고 방 공기가 들어옴, 안 닫으면 1분 뒤 저절로
-	lid_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	blow_btn = _bar_button(brow, "불기", blow)            # [하늘의 것] 거인이 입으로 불기 — 뚜껑이 열린 동안만 보임
-	blow_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	speed_btn = _bar_button(brow, "속도 ×1", func() -> void: clock.cycle_speed())
-	speed_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	altar_btn = _tool_button(brow, "제단", "제단", open_altar)
+	shop_btn = _tool_button(brow, "상점", "상점", open_shop)
+	hand_btn = _tool_button(brow, "손", "손", toggle_hand)
+	chron_btn = _tool_button(brow, "연대기", "연대기", func() -> void: open_chronicle(-1))
+	shelf_btn = _tool_button(brow, "선반", "선반", open_shelf)
+	_sparkle = Control.new()              # 상점에 새 물건 — 버튼 옆 작은 반짝임 (빨간 점 금지)
+	_sparkle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sparkle.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sparkle.draw.connect(_draw_sparkle)
+	shop_btn.add_child(_sparkle)
+	# 시각·배속 칩 (위 띠 아래 왼쪽) — 누르면 다음 배속, 길게 누르면 배속 목록 (기획서 6.6)
+	speed_btn = Button.new()
+	speed_btn.focus_mode = Control.FOCUS_NONE
+	speed_btn.custom_minimum_size = Vector2(UiTheme.TOUCH, UiTheme.TOUCH)
+	speed_btn.add_theme_font_size_override("font_size", 11)
+	GameIcons.button_icon(speed_btn, "속도", 22)
+	speed_btn.expand_icon = false           # 아이콘 폭이 최소 크기에 들어가게 (칩은 글자 폭만큼)
+	speed_btn.button_down.connect(func() -> void:
+		_speed_down_t = 0.0
+		_speed_long = false)
+	speed_btn.pressed.connect(func() -> void:
+		_speed_down_t = -1.0
+		if _speed_long:
+			return
+		GameAudio.ui_click()
+		speed_list.visible = false
+		clock.cycle_speed())
+	root.add_child(speed_btn)
+	speed_list = HBoxContainer.new()
+	speed_list.add_theme_constant_override("separation", 3)
+	speed_list.visible = false
+	root.add_child(speed_list)
+	for i in Balance.SPEEDS.size():
+		var sb := _bar_button(speed_list, "×%d" % int(Balance.SPEEDS[i]), func() -> void:
+			clock.set_speed(i)
+			speed_list.visible = false)
+		sb.custom_minimum_size = Vector2(40, UiTheme.TOUCH)
+		sb.add_theme_font_size_override("font_size", 11)
+	# 거인의 손 칸 (뚜껑 · 불기 · 등불 + 손에 든 것) · 떨어뜨릴 자리 띠
+	hand_ctl = GiantHandCtl.new(self)
+	add_child(hand_ctl)
+	hand_ctl.build(root)
+	lid_btn = hand_ctl.lid_btn
+	blow_btn = hand_ctl.blow_btn
+	lamp_btn = hand_ctl.lamp_btn
 	# 주민 상세 (UI 03) · 제단 (UI 02) · 설정 (UI 10) — 위 화면보다 앞 층
 	var dlayer := CanvasLayer.new()
 	dlayer.layer = 5
@@ -546,7 +616,12 @@ func _setup_ui() -> void:
 	altar_sheet = AltarSheet.new()
 	altar_sheet.setup(village)
 	dlayer.add_child(altar_sheet)
-	altar_sheet.bought.connect(func(_b: Building) -> void: view.sync(0.0, true))
+	shop_sheet = ShopSheet.new()
+	shop_sheet.setup(village)
+	dlayer.add_child(shop_sheet)
+	shop_sheet.bought.connect(func(_it: String) -> void: _hand_glow_t = 4.0)
+	shelf_sheet = ShelfSheet.new()
+	dlayer.add_child(shelf_sheet)
 	settings_sheet = SettingsSheet.new()
 	settings_sheet.setup(village)
 	dlayer.add_child(settings_sheet)
@@ -574,13 +649,154 @@ func _setup_ui() -> void:
 	layout_bars()
 
 
-## 제단 시트 — 넓은 세상은 카메라가 보고 있는 무리의 제단 (focus_village)
+## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
+func close_sheets(keep: Control = null) -> void:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet]:
+		if sh != null and sh != keep and sh.visible:
+			sh.call("close")
+	if hand_ctl != null:
+		hand_ctl.close()
+		if hand_ctl.aiming():
+			hand_ctl.cancel_drop()
+
+
+## 제단 시트 — 넓은 세상은 카메라가 보고 있는 무리의 제단 (focus_village). 다시 누르면 닫힘
 func open_altar() -> void:
-	detail.close()
-	settings_sheet.close()
-	chronicle.close()
+	if altar_sheet.visible:
+		altar_sheet.close()
+		return
+	close_sheets(altar_sheet)
 	altar_sheet.setup(focus_village())
 	altar_sheet.open()
+
+
+## [상점] (UI 06) — 보고 있는 무리의 진열. 다시 누르면 닫힘
+func open_shop() -> void:
+	if shop_sheet.visible:
+		shop_sheet.close()
+		return
+	close_sheets(shop_sheet)
+	shop_sheet.setup(focus_village())
+	shop_sheet.open()
+
+
+## [선반] (UI 05 — 지금은 '곧 열려요' + 거인의 등불)
+func open_shelf() -> void:
+	if shelf_sheet.visible:
+		shelf_sheet.close()
+		return
+	close_sheets(shelf_sheet)
+	shelf_sheet.open()
+
+
+## [손] — 뚜껑·불기·등불 + 손에 든 것
+func toggle_hand() -> void:
+	if hand_ctl.is_open():
+		hand_ctl.close()
+		return
+	close_sheets()
+	hand_ctl.open()
+	layout_bars()
+
+
+func hand_open() -> bool:
+	return hand_ctl.is_open()
+
+
+func aiming() -> bool:
+	return hand_ctl.aiming()
+
+
+## 손에 든 물건(id)을 떨어뜨릴 자리 고르기 (뚜껑이 닫혀 있으면 연다)
+func start_drop(id: int) -> void:
+	close_sheets()
+	hand_ctl.start_drop(id)
+
+
+func cancel_drop() -> void:
+	hand_ctl.cancel_drop()
+
+
+## 땅 위 점의 무리 (소형 병은 하나)
+func village_at(_p: Vector2) -> Village:
+	return village
+
+
+## 화면 위 한 점 → 땅 위 점 (병 데이터 좌표) — 정사영 광선을 땅 높이에 맞춰 두 번 고친다 (넓은 세상은 병이 돈 만큼 되돌림)
+func screen_to_ground(sp: Vector2) -> Vector2:
+	var o := cam.camera.project_ray_origin(sp)
+	var n := cam.camera.project_ray_normal(sp)
+	var y := cam.target.y
+	var hit := Vector3.ZERO
+	for i in 3:
+		var t := (y - o.y) / n.y if absf(n.y) > 1e-5 else 0.0
+		hit = o + n * t
+		y = terrain.ground_y(hit.x, hit.z)
+	return Vector2(hit.x, hit.z)
+
+
+## [등불 옮기기] (기획서 6.3 · 4.6 — A11 전까지는 병 돌리기 그대로: 볕·그늘이 바뀜)
+func move_lamp() -> void:
+	dev_rotate()
+
+
+## 떨어진 물건 — 화면을 곧바로 맞춤 (SkyDropView가 하늘에서 떨어뜨림)
+func after_drop(v: Village) -> void:
+	for vv: Array in village_views():
+		if vv[0] == v:
+			(vv[1] as VillageView).sync(0.0, true)
+
+
+## 사 준 건물이 하늘에서 내려온다 (기획서 6.7 — 완성된 채)
+func drop_building_fx(v: Village, b: Building) -> void:
+	for vv: Array in village_views():
+		if vv[0] != v:
+			continue
+		var vw: VillageView = vv[1]
+		vw.sync(0.0, true)
+		var n: Node3D = vw._blds.get(b.id)
+		if n != null and vw.drop_view != null:
+			vw.drop_view.fall(n, n.position.y)
+
+
+## 아래 띠의 도구 (아이콘 위 · 이름 아래, 누르는 곳 44px 이상)
+func _tool_button(parent: Node, text: String, icon: String, on_press: Callable) -> Button:
+	var b := _bar_button(parent, text, on_press)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	b.custom_minimum_size = Vector2(UiTheme.TOUCH, 54)
+	b.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	b.vertical_icon_alignment = VERTICAL_ALIGNMENT_TOP
+	b.add_theme_font_size_override("font_size", 10)
+	b.add_theme_constant_override("h_separation", 0)
+	GameIcons.button_icon(b, icon, 30)
+	tool_btns.append(b)
+	return b
+
+
+func tool_names() -> PackedStringArray:
+	var out := PackedStringArray()
+	for b in tool_btns:
+		out.append(b.text)
+	return out
+
+
+func tool_buttons() -> Array:
+	return tool_btns
+
+
+## 상점 버튼 옆 반짝임: 작은 네 갈래 별 셋이 번갈아 (새 탭이 열렸을 때만)
+func _draw_sparkle() -> void:
+	if not Shop.has_new(focus_village()):
+		return
+	var sz := _sparkle.size
+	var pts := [Vector2(sz.x - 13, 10), Vector2(sz.x - 5, 22), Vector2(sz.x - 22, 5)]
+	for i in pts.size():
+		var k := 0.5 + 0.5 * sin(_btn_glow_t * 3.1 + i * 2.1)
+		var r := 3.0 + 4.5 * k
+		var c := Color(UiTheme.GLOW.lightened(0.25), 0.35 + 0.65 * k)
+		var p: Vector2 = pts[i]
+		_sparkle.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r * 0.28, -r * 0.28), p + Vector2(r, 0), p + Vector2(r * 0.28, r * 0.28),
+			p + Vector2(0, r), p + Vector2(-r * 0.28, r * 0.28), p + Vector2(-r, 0), p + Vector2(-r * 0.28, -r * 0.28)]), c)
 
 
 ## 연대기 (UI 07) — 넓은 세상은 카메라가 보는 무리 (최근·발견은 모든 무리). tab = −1이면 지난번 탭
@@ -588,9 +804,7 @@ func open_chronicle(tab := -1) -> void:
 	if chronicle.visible and tab < 0:
 		chronicle.close()
 		return
-	detail.close()
-	altar_sheet.close()
-	settings_sheet.close()
+	close_sheets(chronicle)
 	if return_letter != null and return_letter.visible:
 		return_letter.close()
 	chronicle.setup(focus_village(), jar_world())
@@ -725,10 +939,20 @@ func _gear_button() -> Button:
 		if settings_sheet.visible:
 			settings_sheet.close()
 			return
-		detail.close()
-		altar_sheet.close()
+		close_sheets(settings_sheet)
 		settings_sheet.open())
 	return b
+
+
+## 배속 칩 길게 누르기 → 배속 목록
+func _speed_hold(dt: float) -> void:
+	if _speed_down_t < 0.0 or speed_btn == null or not speed_btn.is_pressed() or _speed_long:
+		return
+	_speed_down_t += dt
+	if _speed_down_t >= 0.5:
+		_speed_long = true
+		speed_list.visible = true
+		GameSettings.buzz(30)
 
 
 ## 길게 누르기 확인 (_process에서)
@@ -754,7 +978,7 @@ func layout_bars() -> void:
 	_insets = ins
 	var pad := 6.0
 	top_h = ins.x + UiTheme.TOUCH + pad * 2.0 + 1.0
-	bottom_h = ins.y + UiTheme.TOUCH + pad * 2.0 + 1.0
+	bottom_h = ins.y + 54.0 + pad * 2.0 + 1.0
 	_bar_style(top_bar, "TopBar", ins.x, 0.0)
 	top_bar.anchor_left = 0.0
 	top_bar.anchor_right = 1.0
@@ -773,14 +997,19 @@ func layout_bars() -> void:
 	bottom_bar.offset_right = 0
 	bottom_bar.offset_top = -bottom_h
 	bottom_bar.offset_bottom = 0
-	ui_label.position = Vector2(8, top_h + 4.0)
+	speed_btn.position = Vector2(6, top_h + 6.0)
+	speed_btn.size = Vector2(0, UiTheme.TOUCH)
+	speed_list.position = Vector2(6, top_h + 6.0 + UiTheme.TOUCH + 4.0)
+	ui_label.position = Vector2(8, top_h + UiTheme.TOUCH + 12.0)
+	if hand_ctl != null:
+		hand_ctl.layout(bottom_h)
 	stack.anchor_left = 0.0
 	stack.anchor_right = 1.0
 	stack.anchor_top = 1.0
 	stack.anchor_bottom = 1.0
 	stack.offset_left = 8
 	stack.offset_right = -8
-	stack.offset_bottom = -bottom_h - 6.0
+	stack.offset_bottom = -bottom_h - 6.0 - (hand_ctl.height() + 4.0 if hand_ctl != null and hand_ctl.height() > 0.0 else 0.0)
 	stack.offset_top = stack.offset_bottom
 
 
@@ -837,9 +1066,20 @@ func status_text() -> String:
 		Balance.ERAS[v.era], int(v.faith), c.name if c != null else "-", Engine.get_frames_per_second(), _sim_ms]
 
 
-## 위 띠 한 줄 (거인이 보는 것만 — 시각 · 인구 · 지폐)
+## 위 띠 (UI 01): 지구 이름 · 시대 · 인구 (지폐는 오른쪽 따로, 시각은 아래 배속 칩)
 func top_text() -> String:
-	return "%s · 인구 %d · %s 지폐" % [village.fmt_time(village.t), village.people.size(), AltarSheet._num(Market.notes)]
+	return "%s · %s · %d명" % [earth_name(), Balance.ERAS[village.era], village.people.size()]
+
+
+## 지구 이름 (창조 때 지은 이름 — 저장의 병 이름). 없으면 "나의 작은 지구"
+func earth_name() -> String:
+	var sm := GameSave.get_instance()
+	if use_save and sm != null and sm.jars.has(JAR_ID):
+		var nm := String(sm.jars[JAR_ID]["meta"].get("name", ""))
+		if nm != "":
+			return nm
+	var en := String(entry.get("name", ""))
+	return en if en != "" else "나의 작은 지구"
 
 
 ## 다음 알림 한 줄 (없으면 "") — 넓은 세상은 모든 무리에서 (다른 무리면 이름을 앞에)
@@ -851,6 +1091,7 @@ func next_warning() -> String:
 
 func _update_ui() -> void:
 	info_label.text = top_text()
+	notes_label.text = AltarSheet._num(Market.notes)
 	if debug_mode:
 		ui_label.text = status_text()
 	_layout_t += get_process_delta_time()
@@ -858,23 +1099,24 @@ func _update_ui() -> void:
 		_layout_t = 0.0
 		if SafeArea.insets(get_viewport()) != _insets:
 			layout_bars()
-	speed_btn.text = "새벽으로…" if clock.skipping else "속도 ×%d" % int(clock.speed())
+	var fv := focus_village()
+	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  ×%d" % [fv.fmt_time(fv.t), int(clock.speed())]
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
-	if village.air.lid_open:             # [곰팡이·뚜껑] 저절로 닫힐 때까지 남은 현실 초
-		lid_btn.text = "뚜껑 닫기 %d" % ceili(Balance.LID_AUTO_CLOSE_REAL - clock.lid_real)
-		lid_btn.modulate = Color(1, 0.9, 0.6)
-	else:
-		lid_btn.text = "뚜껑 열기"
-		lid_btn.modulate = Color.WHITE
-	blow_btn.visible = village.air.lid_open    # [하늘의 것] 불기는 뚜껑이 열린 동안만
+	hand_ctl.refresh()                   # [손] 뚜껑 (저절로 닫힐 때까지 남은 현실 초) · 불기 (뚜껑이 열린 동안만) · 손에 든 것
+	hand_btn.text = "손 %d" % Market.hand.size() if not Market.hand.is_empty() else "손"
 	_btn_glow_t += get_process_delta_time()
-	var fv := focus_village()
+	_hand_glow_t = maxf(0.0, _hand_glow_t - get_process_delta_time())
 	_glow_button(altar_btn, fv.revelation_pending())     # [계시]를 기다림 (A5)
 	guide_cap.setup(fv)
-	var hl := GuideCaption.highlight(fv)                 # 첫 병 안내 (A4b)
+	var hl := GuideCaption.highlight(fv)                 # 첫 병 안내 (A4b) — 뚜껑·불기는 [손] 칸 안
 	_glow_button(lid_btn, hl == "lid")
 	_glow_button(blow_btn, hl == "blow")
+	_glow_button(hand_btn, (hl != "" and not hand_ctl.is_open()) or _hand_glow_t > 0.0)
+	_sparkle.queue_redraw()
+	if hand_ctl.height() != _tray_h:     # 손 칸이 열리고 닫히면 알림 줄을 그 위로
+		_tray_h = hand_ctl.height()
+		layout_bars()
 	_check_awakening()
 	if clock.notice_t <= 0.0:         # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		var w := next_warning()
@@ -950,6 +1192,10 @@ func _unhandled_input(e: InputEvent) -> void:
 		if _touches.is_empty():       # 휴대폰 두 손가락은 아래 _on_touch_drag가 직접 (엔진 몸짓과 겹치지 않게)
 			cam.zoom_by((e as InputEventMagnifyGesture).factor)
 	elif e is InputEventMouseMotion and _drag:
+		if hand_ctl != null and hand_ctl.aiming():   # 떨어뜨릴 자리 고르기: 끌면 그림자가 따라옴
+			_tap_ok = false
+			hand_ctl.aim_at((e as InputEventMouseMotion).position, false)
+			return
 		if _tap_ok and (e as InputEventMouseMotion).position.distance_to(_press_pos) > TAP_SLOP:
 			_tap_ok = false
 		if not _tap_ok:
@@ -975,6 +1221,8 @@ func _on_touch(t: InputEventScreenTouch) -> void:
 		if _touches.size() == 1:
 			_touch_tap = true
 			_touch_press = t.position
+			if hand_ctl != null and hand_ctl.aiming():
+				hand_ctl.aim_at(t.position, true)
 		else:
 			_touch_tap = false        # 두 손가락 = 확대, 톡 아님
 			_pinch_reset()
@@ -996,6 +1244,10 @@ func _on_touch_drag(d: InputEventScreenDrag) -> void:
 		return                        # 버튼 위에서 시작한 손가락 (UI가 가져감)
 	_touches[d.index] = d.position
 	if _touches.size() == 1:
+		if hand_ctl != null and hand_ctl.aiming():   # 떨어뜨릴 자리 고르기: 한 손가락은 그림자를 끈다 (두 손가락은 그대로 이동·확대)
+			_touch_tap = false
+			hand_ctl.aim_at(d.position, true)
+			return
 		if _touch_tap and d.position.distance_to(_touch_press) > TAP_SLOP:
 			_touch_tap = false
 		if not _touch_tap:
@@ -1053,6 +1305,9 @@ var _follow_vv: Array = []           # 상세를 연(따라가는) 주민의 [Vi
 
 
 func _on_tap(sp: Vector2) -> void:
+	if hand_ctl != null and hand_ctl.aiming():      # 떨어뜨릴 자리 고르기: 누른 곳으로 그림자
+		hand_ctl.aim_at(sp, false)
+		return
 	var av := pick_altar(sp)                # 제단을 누르면 제단 시트 (그 무리의)
 	if av != null:
 		open_altar_of(av)
@@ -1086,9 +1341,7 @@ func pick_altar(sp: Vector2) -> Village:
 
 
 func open_altar_of(q: Village) -> void:
-	detail.close()
-	settings_sheet.close()
-	chronicle.close()
+	close_sheets(altar_sheet)
 	altar_sheet.setup(q)
 	altar_sheet.open()
 

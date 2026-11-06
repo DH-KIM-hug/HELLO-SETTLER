@@ -43,6 +43,7 @@ var n_bridges := 0
 var _anim_t := 0.0
 var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.gd)
 var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
+var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
@@ -73,6 +74,8 @@ func _ready() -> void:
 	add_child(mold_view)
 	flora_view = FloraView.new(v)   # [하늘의 것]
 	add_child(flora_view)
+	drop_view = SkyDropView.new(v, terrain)   # [상점]
+	add_child(drop_view)
 	_build_fire()
 	sync(0.0, true)
 
@@ -95,6 +98,8 @@ func sync(dt: float, force := false) -> void:
 	mold_view.sync(dt)
 	flora_view.alpha = alpha        # [하늘의 것]
 	flora_view.sync(dt)
+	if drop_view != null:
+		drop_view.sync(dt)          # [상점]
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
