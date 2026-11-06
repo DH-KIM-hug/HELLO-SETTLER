@@ -1,5 +1,5 @@
 ## 시뮬레이션 테스트 (헤드리스) — 실패하면 0이 아닌 값으로 끝난다.
-## 실행: godot --headless --path godot -s res://tests/run.gd
+## 실행: godot --headless --path godot -s res://tests/run.gd   (빠르게: ... -s res://tests/run.gd -- quick)
 extends SceneTree
 
 const DAYS := 9
@@ -16,6 +16,12 @@ func _initialize() -> void:
 	var t0 := Time.get_ticks_msec()
 	test_nine_days()
 	test_rotation()
+	test_sale_price()
+	test_village_opening()
+	test_house_bottleneck()
+	test_determinism()
+	if not "quick" in OS.get_cmdline_user_args():     # -- quick : 30일 인구 시험(약 100초) 건너뜀
+		test_village_population()
 	print("\n%s — %d failure(s), %.1f s" % ["PASS" if fails == 0 else "FAIL", fails, (Time.get_ticks_msec() - t0) / 1000.0])
 	quit(1 if fails > 0 else 0)
 
@@ -121,3 +127,171 @@ func test_rotation() -> void:
 	for i in 4:
 		s2.rotate_jar()
 	check(s2.h == hb and s2.w == wb and s2.rot == 0, "네 번 돌리면 제자리")
+
+
+# ───────────────────────── 3단계 — 주민 ─────────────────────────
+const POP_SEEDS := [1, 2, 3]
+# tools/sim_life.py (판매 없음, 병 하나, 하루 2시간 지켜봄, 60번 평균)의 10%~90% 범위
+const POP_RANGE := {10: [16, 25], 20: [18, 49], 30: [32, 52]}
+
+
+func words_ok(texts: Array) -> String:
+	for tx: String in texts:
+		for wd: String in Balance.FORBIDDEN_WORDS:
+			if tx.contains(wd):
+				return "'%s' in: %s" % [wd, tx]
+	return ""
+
+
+## 기획서 11장 판매가 = 100 × 등급 × (0.5 + 0.1 × 숙련) × 나이(1.0/0.8/0.6) × 0.95^(n−1)
+func test_sale_price() -> void:
+	print("== 판매가 공식")
+	var r := Resident.new()
+	r.age = 10.0
+	check(is_equal_approx(Village.sale_price(r), 50.0), "갓 성인, 숙련 0 → 50지폐 (%.1f)" % Village.sale_price(r))
+	r.skills["농장"] = 10.0
+	check(is_equal_approx(Village.sale_price(r), 150.0), "숙련 10 → 150 (%.1f)" % Village.sale_price(r))
+	r.age = 22.0
+	check(is_equal_approx(Village.sale_price(r), 120.0), "노인(22일) ×0.8 → 120 (%.1f)" % Village.sale_price(r))
+	r.age = 26.0
+	check(is_equal_approx(Village.sale_price(r), 90.0), "25일 이상 ×0.6 → 90 (%.1f)" % Village.sale_price(r))
+	r.age = 10.0
+	r.grade = 1
+	check(is_equal_approx(Village.sale_price(r, 2), 300.0 * 0.95), "재능 ×2, 그날 두 번째 ×0.95 → 285 (%.1f)" % Village.sale_price(r, 2))
+	r.age = 3.0
+	check(Village.sale_price(r) == 0.0, "아이는 팔 수 없다")
+
+
+## OPENING 3장 '첫 3일 목표' · BALANCE 5장 하늘 낟알 · 기획서 8.4
+func test_village_opening() -> void:
+	print("== 첫 3일 (OPENING 3장) — 거인이 계속 지켜봄, 시대 점수가 차면 계시")
+	var v := Village.new_prototype(1)
+	v.auto_reveal = true
+	var first_hut := -1.0
+	var first_farm := -1.0
+	var era_t := -1.0
+	var bad := PackedStringArray()
+	var t0 := Time.get_ticks_usec()
+	for hr in 72:
+		v.advance(Balance.HOUR)
+		for b in v.buildings:
+			if b.built and b.type == "오두막" and first_hut < 0.0:
+				first_hut = v.t
+			if b.built and b.type == "농장" and first_farm < 0.0:
+				first_farm = v.t
+		if v.era >= 1 and era_t < 0.0:
+			era_t = v.t
+		bad.append_array(v.check_invariants())
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	var first_birth := -1.0
+	for e: Dictionary in v.birth_log:
+		first_birth = e["t"]
+		break
+	var h := func(x: float) -> String: return "-" if x < 0.0 else v.fmt_time(x)
+	print("  첫 오두막 %s · 첫 농장 %s · 첫 수확 %s · 낟알 %d번 · 첫 출생 %s · 마을 시대 %s" % [h.call(first_hut), h.call(first_farm), h.call(v.first_harvest_t), v.manna_falls, h.call(first_birth), h.call(era_t)])
+	print("  3일 뒤 인구 %d (출생 %d · 사망 %d · 굶주림 %d) · 건물 %d · 하루 계산 %.0f ms (10초 걸음, 물 60초 간격)" % [v.people.size(), v.stats["born"], v.stats["died"], v.stats["starved"], v.buildings.size(), ms / 3.0])
+	check(v.manna_falls >= 1 and v.book.any(func(e: Dictionary) -> bool: return e["t"] < 60.0 and String(e["text"]).contains("낟알")), "도착하자마자 하늘 낟알 (T0)")
+	check(first_hut >= 0.0 and first_hut < 6.0 * Balance.HOUR, "첫 오두막이 첫날 밤 안에 (도착 후 %.1f시간)" % (first_hut / 3600.0))
+	check(v.first_harvest_t >= 0.0 and v.cal_day(v.first_harvest_t) <= 2, "첫 수확 1~2일차 (%s)" % h.call(v.first_harvest_t))
+	check(v.manna_ended and v.manna_falls <= 2, "첫 수확 다음 새벽에 낟알이 그침 (%d번 내림, BALANCE 5장: 18시 도착이면 1번)" % v.manna_falls)
+	check(v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("첫 수확 축제")), "첫 수확 축제가 연대기에")
+	check(first_birth >= 0.0 and first_birth <= Balance.DAY, "첫 출생 1일차 (첫 24시간 안, %s)" % h.call(first_birth))
+	check(era_t >= 0.0 and era_t <= 2.0 * Balance.DAY, "'마을' 시대 점수가 2일차 안에 참 (%s)" % h.call(era_t))
+	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "3일 동안 식량이 모자란 적 없음")
+	check(v.people.size() >= 11 and v.people.size() <= 16, "3일 뒤 인구 11~16 (%d)" % v.people.size())
+	check(bad.is_empty(), "물자·주민 값이 음수/NaN이 아니고 집 정원 초과 없음 %s" % ("" if bad.is_empty() else str(bad.slice(0, 3))))
+	var texts: Array = []
+	for e: Dictionary in v.book:
+		texts.append(e["text"])
+	texts.append_array(Balance.LINES_PRAY + Balance.LINES_DOUBT + Balance.LINES_WATCHED + [Balance.LINE_ELDER_SCOLD])
+	for p in v.people:
+		texts.append(p.say)
+		texts.append(p.doing)
+	var wbad := words_ok(texts)
+	check(wbad == "", "연대기·주민 말에 금지어(게임·앱·플레이어·휴대폰) 없음 %s" % wbad)
+
+
+## 집 크기 병목 (의도한 규칙): 집이 꽉 차면 '가족 + 1명'이 들어갈 집으로 옮겨야 낳는다
+func test_house_bottleneck() -> void:
+	print("== 집 크기 병목")
+	var v := Village.new_prototype(5)
+	v.auto_build = false
+	v.water.offline = true
+	v.step_dt = 30.0
+	for p in v.people.duplicate():
+		if not (p.name in ["한스", "마르타", "리나", "토미"]):
+			v.kill(p, "노환")
+	var hut := v.add_building("오두막", 4.0, -3.0, true)
+	v.assign_homes()
+	check(v.occupants(hut) == 4, "네 식구가 오두막(4명)을 꽉 채움 (%d/4)" % v.occupants(hut))
+	v.advance(1.3 * Balance.DAY)
+	check(v.stats["born"] == 0, "다른 집이 없으면 아이를 낳지 않는다 (1.3일, 출생 %d)" % v.stats["born"])
+	var house := v.add_building("목조주택", -4.0, -3.0, true)
+	v.advance(4.0 * Balance.DAY)
+	var marta: Resident = null
+	for p in v.people:
+		if p.name == "마르타":
+			marta = p
+	check(marta != null and marta.home == house.id and v.stats["moves"] >= 1, "넓은 집(6명)이 생기면 가족이 옮긴다")
+	check(v.stats["born"] >= 1, "옮긴 뒤 아이를 낳는다 (4일, 출생 %d)" % v.stats["born"])
+	var all_room := v.birth_log.all(func(e: Dictionary) -> bool: return e["occ_before"] < e["cap"])
+	check(all_room and v.violations.is_empty(), "모든 출생 때 집에 빈자리가 있었다 (%d번)" % v.birth_log.size())
+
+
+func test_determinism() -> void:
+	print("== 같은 시드 → 같은 결과")
+	var sig := func(seed_v: int) -> String:
+		var v := Village.new_prototype(seed_v)
+		v.water.offline = true
+		v.advance(1.5 * Balance.DAY)
+		var s := "%d|%d|%d|" % [v.people.size(), v.book.size(), v.buildings.size()]
+		for p in v.people:
+			s += "%.3f,%.3f;" % [p.x, p.y]
+		return s
+	var a: String = sig.call(7)
+	var b: String = sig.call(7)
+	var c: String = sig.call(8)
+	check(a == b, "시드 7 두 번 → 같은 위치·연대기 (%d자)" % a.length())
+	check(a != c, "시드 8은 다르다")
+
+
+## 보통 마을 30일 — 인구가 sim_life.py(밸런스 v2)가 예측한 범위에
+func test_village_population() -> void:
+	print("== 보통 마을 30일 (하루 2시간 지켜봄 · 30초 걸음 · 물 300초 간격) — sim_life.py 범위와 비교")
+	var sums := {10: 0.0, 20: 0.0, 30: 0.0}
+	var all_ok := true
+	var room_ok := true
+	var starved := 0
+	var cap_ok := true
+	var ms_tot := 0.0
+	for seed_v in POP_SEEDS:
+		var v := Village.new_prototype(seed_v)
+		v.watch_hours = [20, 21]
+		v.auto_reveal = true
+		v.step_dt = 30.0
+		v.water.offline = true
+		var line := "  시드 %d:" % seed_v
+		var t0 := Time.get_ticks_usec()
+		for d in range(1, 31):
+			v.advance(Balance.DAY)
+			if not v.check_invariants().is_empty():
+				all_ok = false
+			if sums.has(d):
+				sums[d] += v.people.size()
+				line += " %d일 %d명" % [d, v.people.size()]
+		var ms := (Time.get_ticks_usec() - t0) / 1000.0
+		ms_tot += ms
+		room_ok = room_ok and v.violations.is_empty() and v.birth_log.all(func(e: Dictionary) -> bool: return e["occ_before"] < e["cap"])
+		starved += v.stats["starved"]
+		cap_ok = cap_ok and v.house_capacity() <= v.land_capacity() * Balance.HOUSE_SLACK + 0.01
+		print("%s · 출생 %d 사망 %d · 집 %d채 정원 %d (땅 한계 %.0f×1.1) · 시대 %s · 하루 %.0f ms" % [line, v.stats["born"], v.stats["died"], v.houses().size(), v.house_capacity(), v.land_capacity(), Balance.ERAS[v.era], ms / 30.0])
+	for d: int in POP_RANGE:
+		var avg: float = sums[d] / POP_SEEDS.size()
+		var rg: Array = POP_RANGE[d]
+		check(avg >= rg[0] and avg <= rg[1], "%d일째 평균 인구 %.1f — sim_life 범위 %d~%d" % [d, avg, rg[0], rg[1]])
+	check(all_ok, "30일 내내 물자·주민 값이 음수/NaN 아님, 집 정원 초과 없음")
+	check(room_ok, "모든 출생 때 집에 빈자리 (집 크기 병목)")
+	check(cap_ok, "집 정원 합계 ≤ 품을 수 있는 인구 × 1.1 (땅이 한계)")
+	check(starved == 0, "굶어 죽은 사람 없음 (%d)" % starved)
+	print("  계산 시간: 마을 30일 평균 %.0f ms/일 (물 포함)" % (ms_tot / POP_SEEDS.size() / 30.0))
+

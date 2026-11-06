@@ -1,0 +1,525 @@
+## 주민이 무엇을 할지 — 점수제 결정과 행동 (RESIDENT_AI.md 4·5장, 고친 규칙 9장)
+## 점수 = 기본 × 긴급도 × 시간대 가중치 × (1 + 특징 보정) × 신앙 상태 보정, 방금 한 행동 ×0.8.
+## 가장 높은 행동부터 해 보고, 할 수 없으면(일감 없음 등) 다음 행동.
+## 행동 = 걸음(steps) 목록: {k:"walk", x, y} → 목표까지 걷기 / {k:"do", left, anim, done, cancel} → 정해진 시간 수행.
+## 원본: prototype/app.html decide·workTask·haulTask·buildTask·haulMannaTask
+class_name ResidentAI
+extends RefCounted
+
+const WORKISH := {"work": true, "haul": true, "build": true}
+
+
+static func walk(x: float, y: float) -> Dictionary:
+	return {"k": "walk", "x": x, "y": y}
+
+
+static func act(left: float, anim: String, done: Variant = null, fast := false, cancel: Variant = null) -> Dictionary:
+	return {"k": "do", "left": left, "anim": anim, "done": done, "fast": fast, "cancel": cancel}
+
+
+static func near(v: Village, x: float, y: float, r := 1.2) -> Vector2:
+	var a := v.rng.randf() * TAU
+	return Vector2(x + cos(a) * r, y + sin(a) * r)
+
+
+## 하던 일을 그만둔다 — 들고 있던 짐·예약은 되돌린다 (죽음 등)
+static func cancel(r: Resident) -> void:
+	for s: Dictionary in r.steps:
+		if s.get("cancel") != null:
+			(s["cancel"] as Callable).call()
+	r.steps.clear()
+	r.carry = ""
+	r.carry_amt = 0.0
+
+
+# ───────────────────────── 한 걸음 ─────────────────────────
+static func update(v: Village, r: Resident, dt: float) -> void:
+	var left := dt
+	var decisions := 0
+	while left > 1e-6:
+		if r.steps.is_empty():
+			if decisions >= 3:
+				break
+			decide(v, r)
+			decisions += 1
+			if r.steps.is_empty():
+				break
+		var s: Dictionary = r.steps[0]
+		var used := 0.0
+		if s["k"] == "walk":
+			var to := Vector2(s["x"], s["y"])
+			var d := to - Vector2(r.x, r.y)
+			var dd := d.length()
+			var sp := r.walk_speed()
+			var can := sp * left
+			if dd > 1e-4:
+				r.facing = atan2(d.x, d.y)
+			if dd <= can:
+				r.x = to.x
+				r.y = to.y
+				used = dd / sp
+				r.steps.pop_front()
+				v.mark_path(r.x, r.y, dd)
+			else:
+				r.x += d.x / dd * can
+				r.y += d.y / dd * can
+				used = left
+				v.mark_path(r.x, r.y, can)
+			r.anim = "carry" if r.carry != "" else "walk"
+		else:
+			var speed: float = r.work_mult if s["fast"] else 1.0
+			var need: float = s["left"] / speed
+			r.anim = s["anim"]
+			if need <= left:
+				used = need
+				r.steps.pop_front()
+				if s["done"] != null:
+					(s["done"] as Callable).call()
+			else:
+				s["left"] = float(s["left"]) - left * speed
+				used = left
+		left -= used
+		if WORKISH.has(r.action):
+			r.work_secs_today += used
+	if r.steps.is_empty() and r.anim == "walk":
+		r.anim = "idle"
+
+
+# ───────────────────────── 점수제 결정 ─────────────────────────
+static func decide(v: Village, r: Resident) -> void:
+	var h := v.hour_now()
+	r.sleeping = false
+	if r.is_baby():
+		_baby(v, r)
+		return
+	var night := v.is_night()
+	var work_t := v.is_work_time()
+	var cand := {}
+	if night:
+		cand["sleep"] = Balance.ACT_BASE["sleep"] * Balance.W_NIGHT_SLEEP
+	if r.hunger >= Balance.HUNGRY_AT:
+		cand["eat"] = Balance.ACT_BASE["eat"] * (1.0 + r.hunger)
+	elif not night:
+		var mk := _meal_key(v, h)
+		if mk >= 0 and r.meal_done != mk:
+			cand["eat"] = Balance.ACT_BASE["eat"] * Balance.W_MEAL
+	if not v.manna.is_empty() and h < 11.0 and not night and r.age >= 2.5:
+		cand["manna"] = Balance.ACT_BASE["manna"] * (Balance.W_DAWN_MANNA if h < 8.0 else 1.0)
+	if r.is_adult():
+		if r.job >= 0 and work_task(v, r, true):
+			cand["work"] = Balance.ACT_BASE["work"] * (Balance.W_DAY_WORK if work_t else Balance.W_NIGHT_WORK)
+		if work_t:
+			var n := haul_requests(v)
+			if n > 0:
+				cand["haul"] = Balance.ACT_BASE["haul"] * minf(1.5, 1.0 + 0.1 * n) * Balance.W_DAY_WORK
+			var site := _ready_site(v)
+			if site != null:
+				var g := 1.0 + (v.faith / 100.0 if site.by_giant else 0.0)
+				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
+	if not night and r.age >= 2.5:
+		var worries := 1.0 + (1.0 if v.deficit > 0.0 else 0.0) + (0.5 if r.home < 0 else 0.0)
+		# 저녁(일이 끝난 뒤) ×2, 저녁 일하는 시간엔 ×1, 낮엔 ×0.5. 믿음이 깊을수록 자주
+		var pw := Balance.W_EVENING_PRAY if h >= Balance.WORK_TO else (1.0 if h >= Balance.EVENING_FROM else 0.5)
+		cand["pray"] = Balance.ACT_BASE["pray"] * worries * pw * r.belief
+	if not night and r.age >= Balance.AGE_ADULT:
+		cand["social"] = Balance.ACT_BASE["social"] * (Balance.W_EVENING_SOCIAL if h >= Balance.WORK_TO else 1.0)
+	if r.is_child() and work_t:
+		cand["play"] = Balance.ACT_BASE["play"]
+	if r.is_elder() and not night:
+		cand["rest"] = Balance.ACT_BASE["rest"]
+	# 보정
+	var fs: Dictionary = Balance.FAITH_STATE_MOD.get(v.faith_state(), {})
+	var order: Array = []
+	for k: String in cand:
+		var s: float = cand[k] * (1.0 + float(r.trait_mod.get(k, 0.0))) * float(fs.get(k, 1.0))
+		if k == r.last_action:
+			s *= Balance.REPEAT_MULT
+		s += v.rng.randf() * 0.2
+		order.append([s, k])
+	order.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	for o: Array in order:
+		var k: String = o[1]
+		if _do(v, r, k, h):
+			r.action = k
+			r.last_action = k
+			return
+	r.action = "idle"
+	r.doing = "쉬는 중"
+	var p := near(v, v.fire.x, v.fire.y, 2.5)
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(300.0, "idle"))
+
+
+static func _meal_key(v: Village, h: float) -> int:
+	for i in Balance.MEALS.size():
+		var m: Array = Balance.MEALS[i]
+		if h >= m[0] and h < m[1]:
+			return int((v.start_clock + v.t) / Balance.DAY) * 3 + i
+	return -1
+
+
+static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
+	match k:
+		"sleep":
+			return _sleep(v, r)
+		"eat":
+			return _eat(v, r, h)
+		"manna":
+			return haul_manna_task(v, r)
+		"work":
+			return work_task(v, r, false)
+		"haul":
+			return haul_task(v, r)
+		"build":
+			return build_task(v, r)
+		"pray":
+			return _pray(v, r)
+		"social":
+			var p := near(v, v.fire.x, v.fire.y, 2.5)
+			r.doing = "어울리는 중"
+			r.steps.append(walk(p.x, p.y))
+			r.steps.append(act(300.0 + v.rng.randf() * 400.0, "sit"))
+			return true
+		"play":
+			var c := Vector2(v.fire.x, v.fire.y)
+			var hm := v.bld(r.home)
+			if hm != null:
+				c = Vector2(hm.x, hm.y)
+			var p := near(v, c.x, c.y, 2.5 + v.rng.randf() * 2.0)
+			r.doing = "노는 중"
+			r.steps.append(walk(p.x, p.y))
+			r.steps.append(act(120.0 + v.rng.randf() * 240.0, "play"))
+			return true
+		"rest":
+			var p := near(v, v.fire.x, v.fire.y, 2.0)
+			r.doing = "모닥불 곁에서 쉬는 중"
+			r.steps.append(walk(p.x, p.y))
+			r.steps.append(act(600.0 + v.rng.randf() * 600.0, "sit"))
+			return true
+	return false
+
+
+static func _baby(v: Village, r: Resident) -> void:
+	# 아기는 집 안 (기획서 7.3). 집이 없으면 모닥불 곁
+	var hm := v.bld(r.home)
+	var p := Vector2(hm.x, hm.y) if hm != null else near(v, v.fire.x, v.fire.y, 1.0)
+	r.x = p.x
+	r.y = p.y
+	r.action = "baby"
+	r.doing = "집 안의 아기" if hm != null else "모닥불 곁의 아기"
+	r.sleeping = v.is_night()
+	r.steps.append(act(600.0, "sleep" if hm != null else "sit"))
+
+
+static func _sleep(v: Village, r: Resident) -> bool:
+	var hm := v.bld(r.home)
+	var p := Vector2(hm.x, hm.y + 0.3) if hm != null else near(v, v.fire.x, v.fire.y, 1.4)
+	var until_morning := fmod(Balance.NIGHT_TO * Balance.HOUR - v.clock() + Balance.DAY, Balance.DAY)
+	r.doing = "집에서 자는 중" if hm != null else "모닥불 곁에서 자는 중"
+	r.sleeping = true
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(clampf(until_morning, 60.0, 2.0 * Balance.HOUR), "sleep"))
+	return true
+
+
+static func _eat(v: Village, r: Resident, h: float) -> bool:
+	if r.hunger >= Balance.HUNGRY_AT:
+		var s := v.store()
+		var p := near(v, s.x, s.y, 2.0)
+		r.doing = "먹을 것을 찾는 중"
+		v.speak(r, "배고파요…", 5)
+		r.steps.append(walk(p.x, p.y))
+		r.steps.append(act(120.0, "idle"))
+		return true
+	# 식사 시간 — 모닥불에 모여 앉아 죽을 먹음 (식량은 마을 전체에서 집계로 줄어든다)
+	var mk := _meal_key(v, h)
+	var p := near(v, v.fire.x, v.fire.y, 1.8)
+	r.doing = "밥 먹는 중"
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(Balance.MEAL_TIME * 0.5, "eat", func() -> void: r.meal_done = mk))
+	return true
+
+
+static func _pray(v: Village, r: Resident) -> bool:
+	r.doing = "기도하는 중"
+	var p := near(v, v.fire.x, v.fire.y, 2.2)
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(600.0, "pray", func() -> void: r.belief = minf(1.0, r.belief + Balance.BELIEF_PRAYER)))
+	if v.rng.randf() < 0.35:
+		v.speak(r, Balance.LINES_PRAY[v.rng.randi() % Balance.LINES_PRAY.size()], 6)
+	return true
+
+
+# ───────────────────────── 일 ─────────────────────────
+static func _full(v: Village, k: String) -> bool:
+	return Balance.ENOUGH.has(k) and float(v.stock.get(k, 0.0)) >= Balance.ENOUGH[k]
+
+
+## 직장 일 — dry=true면 일감이 있는지만 본다
+static func work_task(v: Village, r: Resident, dry: bool) -> bool:
+	var b := v.bld(r.job)
+	if b == null or not b.built:
+		r.job = -1
+		return false
+	var d := b.def()
+	if b.type == "나무꾼" and _full(v, "통나무"):
+		return false
+	if b.type == "채석장" and _full(v, "돌"):
+		return false
+	if b.type == "산림관" and v._standing_trees() >= Balance.FORESTER_STOP:
+		return false
+	if d.has("out"):
+		var all_full := true
+		for k in d["out"]:
+			if not _full(v, k):
+				all_full = false
+		if all_full:
+			return false
+	if dry:
+		return true
+	var s := v.store()
+	# 건물 앞에 4개 넘게 쌓인 산출물은 일꾼이 직접 창고로 (9장)
+	if b.out_total() >= 4.0:
+		for k: String in b.out:
+			if float(b.out[k]) >= 1.0:
+				var take := minf(4.0, floorf(b.out[k]))
+				b.out[k] = float(b.out[k]) - take
+				r.doing = "%s 나르는 중" % k
+				var put := func() -> void: v.stock[k] = float(v.stock.get(k, 0.0)) + take
+				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
+				return true
+	r.doing = "%s에서 일하는 중" % b.type
+	if b.type == "나무꾼":
+		var tr := _nearest(v.trees, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["s"] == "tree" and q["res"] == 0)
+		if tr.is_empty() or Vector2(tr["x"] - b.x, tr["y"] - b.y).length() > Balance.GATHER_RANGE:
+			r.doing = "벨 나무가 없어요"
+			r.steps.append(act(120.0, "idle"))
+			return true
+		tr["res"] = 1
+		var chop := func() -> void:
+			tr["s"] = "stump"
+			tr["g"] = Balance.TREE_REGROW / (0.6 + v.wetness(tr["x"], tr["y"]))
+			tr["res"] = 0
+			r.carry = "통나무"
+			r.carry_amt = 1.0
+		var unres := func() -> void: tr["res"] = 0
+		r.steps.append(walk(tr["x"] + 0.4, tr["y"] + 0.2))
+		r.steps.append(act(d["chop"], "work", chop, true, unres))
+		_drop_at_store(v, r, s, "통나무", 1.0)
+		return true
+	if b.type == "산림관":
+		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
+		if sp.length() > Village.R - 2.0 or v.water_at(sp.x, sp.y):
+			r.steps.append(act(45.0, "idle"))
+			return true
+		r.steps.append(walk(sp.x, sp.y))
+		var plant := func() -> void: v.trees.append({"x": sp.x, "y": sp.y, "s": "sapling", "g": 3.0 * Balance.HOUR, "res": 0})
+		r.steps.append(act(d["plant"], "work", plant, true))
+		return true
+	if b.type == "채석장":
+		var rk := _nearest(v.rocks, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["amt"] > 0 and q["res"] == 0)
+		if rk.is_empty() or Vector2(rk["x"] - b.x, rk["y"] - b.y).length() > Balance.GATHER_RANGE:
+			r.doing = "캘 바위가 없어요"
+			r.steps.append(act(120.0, "idle"))
+			return true
+		rk["res"] = 1
+		var dig := func() -> void:
+			rk["amt"] = int(rk["amt"]) - 1
+			rk["res"] = 0
+			r.carry = "돌"
+			r.carry_amt = 1.0
+		var unres := func() -> void: rk["res"] = 0
+		r.steps.append(walk(rk["x"] + 0.6, rk["y"] + 0.4))
+		r.steps.append(act(d["dig"], "work", dig, true, unres))
+		_drop_at_store(v, r, s, "돌", 1.0)
+		return true
+	# 생산·가공 건물: 실제 생산은 건물에서 돌아가고(Village._update_building), 일꾼은 곁에서 일한다
+	var spot := near(v, b.x, b.y, 0.9)
+	if b.type == "농장" and v.t < b.ready_at:
+		r.doing = "밭을 돌보는 중 (아직 자라는 중)"
+	r.steps.append(walk(spot.x, spot.y))
+	r.steps.append(act(90.0, "work"))
+	return true
+
+
+static func _nearest(list: Array, c: Vector2, ok: Callable) -> Dictionary:
+	var best: Dictionary = {}
+	var bd := INF
+	for q: Dictionary in list:
+		if not ok.call(q):
+			continue
+		var d := Vector2(q["x"], q["y"]).distance_squared_to(c)
+		if d < bd:
+			bd = d
+			best = q
+	return best
+
+
+## 짐 나르기 걸음: from에서 집어 to에 내려놓음. drop = 내려놓을 때, undo = 도중에 그만두면 (짐을 되돌림)
+static func _carry_steps(v: Village, r: Resident, from: Vector2, to: Vector2, item: String, amt: float, drop: Callable, undo: Callable) -> void:
+	var pick := func() -> void:
+		r.carry = item
+		r.carry_amt = amt
+	var put := func() -> void:
+		drop.call()
+		r.carry = ""
+		r.carry_amt = 0.0
+	r.steps.append(walk(from.x, from.y))
+	r.steps.append(act(3.0, "idle", pick))
+	r.steps.append(walk(to.x, to.y))
+	r.steps.append(act(3.0, "idle", put, false, undo))
+
+
+## 채집한 것(손에 든 것)을 창고에 내려놓는 걸음
+static func _drop_at_store(v: Village, r: Resident, s: Building, item: String, amt: float) -> void:
+	var put := func() -> void:
+		v.stock[item] = float(v.stock.get(item, 0.0)) + amt
+		r.carry = ""
+		r.carry_amt = 0.0
+	var undo := func() -> void: v.stock[item] = float(v.stock.get(item, 0.0)) + amt
+	r.steps.append(walk(s.x + 0.8, s.y + 0.6))
+	r.steps.append(act(4.0, "idle", put, false, undo))
+
+
+# ───────────────────────── 운반 (5.3) ─────────────────────────
+static func haul_requests(v: Village) -> int:
+	var n := 0
+	for b in v.buildings:
+		if b.built and not b.is_store:
+			for k in b.out:
+				if float(b.out[k]) >= 1.0:
+					n += 1
+		if b.is_site():
+			for k: String in ["판자", "돌"]:
+				if b.need(k) - int(b.delivered[k]) - int(b.incoming[k]) > 0 and float(v.stock[k]) >= 1.0:
+					n += 1
+		if b.built and b.def().has("in"):
+			for k in b.def()["in"]:
+				if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < 3.0 and float(v.stock.get(k, 0.0)) >= 1.0:
+					n += 1
+	return n
+
+
+static func haul_task(v: Village, r: Resident) -> bool:
+	var s := v.store()
+	var cap := r.carry_cap()
+	# ① 건물 앞 산출물 → 창고
+	for b in v.buildings:
+		if not b.built or b.is_store:
+			continue
+		for k: String in b.out:
+			var n := float(b.out[k])
+			if n >= 1.0:
+				var take := minf(cap, floorf(n))
+				b.out[k] = n - take
+				r.doing = "%s 나르는 중" % k
+				var put := func() -> void: v.stock[k] = float(v.stock.get(k, 0.0)) + take
+				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
+				return true
+	# ② 건설 현장 ← 창고 자재 (거인이 정한 터 먼저)
+	var sites: Array[Building] = []
+	for b in v.buildings:
+		if b.is_site():
+			sites.append(b)
+	sites.sort_custom(func(a: Building, c: Building) -> bool: return (a.by_giant and not c.by_giant) or (a.by_giant == c.by_giant and a.id < c.id))
+	for b in sites:
+		for k: String in ["판자", "돌"]:
+			var lack := b.need(k) - int(b.delivered[k]) - int(b.incoming[k])
+			if lack > 0 and float(v.stock[k]) >= 1.0:
+				var take := mini(mini(cap, lack), int(floorf(v.stock[k])))
+				v.stock[k] = float(v.stock[k]) - take
+				b.incoming[k] = int(b.incoming[k]) + take
+				r.doing = "%s 터로 %s 나르는 중" % [b.site_type(), k]
+				var put := func() -> void:
+					b.incoming[k] = int(b.incoming[k]) - take
+					b.delivered[k] = int(b.delivered[k]) + take
+				var undo := func() -> void:
+					b.incoming[k] = int(b.incoming[k]) - take
+					v.stock[k] = float(v.stock[k]) + take
+				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
+				return true
+	# ③ 가공 건물 ← 창고 재료
+	for b in v.buildings:
+		if not b.built or not b.def().has("in"):
+			continue
+		for k: String in b.def()["in"]:
+			var have := float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0))
+			if have < 3.0 and float(v.stock.get(k, 0.0)) >= 1.0:
+				var take := minf(minf(cap, 3.0 - have), floorf(v.stock[k]))
+				v.stock[k] = float(v.stock[k]) - take
+				b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
+				r.doing = "%s에 %s 나르는 중" % [b.type, k]
+				var put := func() -> void:
+					b.in_inc[k] = float(b.in_inc[k]) - take
+					b.in_buf[k] = float(b.in_buf.get(k, 0.0)) + take
+				var undo := func() -> void:
+					b.in_inc[k] = float(b.in_inc[k]) - take
+					v.stock[k] = float(v.stock[k]) + take
+				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
+				return true
+	return false
+
+
+static func haul_manna_task(v: Village, r: Resident) -> bool:
+	var s := v.store()
+	var m := _nearest(v.manna, Vector2(r.x, r.y), func(q: Dictionary) -> bool: return q["amt"] > 0.0 and q["res"] < 3)
+	if m.is_empty():
+		return false
+	m["res"] = int(m["res"]) + 1
+	r.doing = "하늘 낟알을 줍는 중"
+	var cap := 8.0 if r.is_child() else 20.0
+	var born: float = m["born"]
+	var pick := func() -> void:
+		var take := minf(cap, m["amt"])
+		m["amt"] = float(m["amt"]) - take
+		m["res"] = int(m["res"]) - 1
+		r.carry = "낟알"
+		r.carry_amt = take
+	var unres := func() -> void: m["res"] = int(m["res"]) - 1
+	var put := func() -> void:
+		if r.carry_amt > 0.0:
+			v.manna_batches.append({"amt": r.carry_amt, "born": born})
+		r.carry = ""
+		r.carry_amt = 0.0
+	var undo := func() -> void:
+		if r.carry_amt > 0.0:
+			v.manna_batches.append({"amt": r.carry_amt, "born": born})
+	r.steps.append(walk(m["x"], m["y"]))
+	r.steps.append(act(40.0, "work", pick, false, unres))
+	r.steps.append(walk(s.x + 0.6, s.y + 0.7))
+	r.steps.append(act(4.0, "idle", put, false, undo))
+	if v.rng.randf() < 0.15:
+		v.speak(r, "거인님의 낟알이다!", 5)
+	return true
+
+
+# ───────────────────────── 짓기 (5.4) ─────────────────────────
+static func _ready_site(v: Village) -> Building:
+	var best: Building = null
+	for b in v.buildings:
+		if b.is_site() and b.materials_ready():
+			if best == null or (b.by_giant and not best.by_giant) or (b.by_giant == best.by_giant and b.id < best.id):
+				best = b
+	return best
+
+
+static func build_task(v: Village, r: Resident) -> bool:
+	var b := _ready_site(v)
+	if b == null:
+		return false
+	var total: float = Balance.B[b.site_type()]["time"]
+	var chunk := minf(30.0, total - b.prog)
+	if chunk <= 0.0:
+		chunk = 1.0
+	r.doing = "%s 짓는 중" % b.site_type()
+	var sp := near(v, b.x, b.y, 0.8 + b.size() * 0.5)
+	var work := func() -> void:
+		if not b.is_site():
+			return
+		b.prog += chunk * (1.2 if v.faith > 50.0 and b.by_giant else 1.0)
+		if b.prog >= float(Balance.B[b.site_type()]["time"]):
+			v.on_built(b)
+			v.speak(r, "%s 완성!" % b.type, 5)
+	r.steps.append(walk(sp.x, sp.y))
+	r.steps.append(act(chunk, "work", work, true))
+	return true
