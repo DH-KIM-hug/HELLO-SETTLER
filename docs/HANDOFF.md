@@ -1,6 +1,6 @@
 # 인수인계 메모 — 다음 세션이 이어서 볼 것
 
-> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.5 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
+> 브랜치: `ccr-5955ceb0-i7kj1q` · 기준 문서: [GAME_DESIGN.md](GAME_DESIGN.md) v3.6 · 변경 기록: [CHANGELOG.md](CHANGELOG.md)
 
 ## 작업 방식 — 세션 하나 (2026-11-06부터)
 사용자 Mac의 Claude Code 세션 **하나**가 기획을 맡고, 개발과 그림은 그 세션이 띄우는 **서브에이전트**에게 시킨다.
@@ -16,7 +16,7 @@
 ## 지금까지 만든 것
 | 무엇 | 어디 |
 |---|---|
-| 게임 기획서 v3.5 (확정 내용만, 22장) | `docs/GAME_DESIGN.md` |
+| 게임 기획서 v3.6 (확정 내용만, 22장) | `docs/GAME_DESIGN.md` |
 | 렌더링 명세 — 3D를 도트처럼 | `docs/RENDERING.md` |
 | 창조 오프닝·튜토리얼 | `docs/OPENING.md` |
 | 주민 행동 명세 (믿음·오프라인 자율 번성 포함) | `docs/RESIDENT_AI.md` |
@@ -30,6 +30,9 @@
 | 데이터·프로토타입 생성 스크립트 | `tools/gen_traits.py`, `gen_buildings.py`, `gen_balance.py`, `gen_art_list.py`, `build_prototype.py` |
 
 ## 진행 중
+- **v3.6 주민 = 직립보행 동물(퍼리)** (2026-11-06 사용자 결정): 여러 종족, 종족끼리 혼인 없음, 종족마다 부락 따로, 털색·무늬 유전 + 돌연변이. 아직 고칠 문서: `RESIDENT_AI.md`(혼인·부락), `ART_PROMPTS.md`·`prompts.json`(주민 묘사), `traits_v1.xlsx` 특징 문구 중 사람 전용 표현 점검, `OPENING.md` 8단계(종족 고르기).
+- **그림체 시험**: 평면 채색 일러스트풍 (`design/concept/style-test/flat_*`) vs 지금 레트로 도트 → 사용자가 보고 결정. 바꾸면 콘셉트 아트 35장·`RENDERING.md`·렌더 셰이더가 바뀐다.
+- **개발 3단계 (주민)** 진행 중 (개발 서브에이전트).
 - **밸런스 v2 — 문서 반영 완료** (기획서 v3.5, `BALANCE.md` 0장, `balance_v2.xlsx`). 판매가는 숙련 기준, 팔레트 64색, 열린 질문은 PvP 약탈(보류) 하나만 남음.
   - **개발 서브에이전트에 넘길 것**: 프로토타입·`godot/sim/`에 v2 규칙 적용 — `MAX_POP` 삭제, 혼인 4일·짝마다 0.5, 개인·환경 출산 배율, 숙련 성장 0.6/일·판매가 공식, 시대 점수 배율, 커튼 3단. 렌더링 LUT는 64색 `palette.json`으로.
   - **그림 쪽**: UI 시안(`design/ui-v2/`)은 48색 1차안 값 → 64색으로 바꿀 때 `UI.md`의 색 표 참고.
