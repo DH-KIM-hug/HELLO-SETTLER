@@ -388,7 +388,7 @@ func _arrival_process() -> void:
 
 
 func _set_hud(on: bool) -> void:
-	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn]:
+	for n: Control in [top_bar, bottom_bar, stack, minimap, goto_btn, speed_btn]:
 		if n != null:
 			n.visible = on
 
@@ -501,6 +501,8 @@ func _update_focus(dt: float) -> void:
 		air_overlay.setup(f)
 		if altar_sheet.visible:
 			altar_sheet.setup(f)
+		if shop_sheet.visible:
+			shop_sheet.setup(f)
 
 
 # ───────────────────────── 매 화면 ─────────────────────────
@@ -659,8 +661,20 @@ func top_text() -> String:
 	var f := focus_village()
 	var name := ""
 	if world.settlements.size() > 1:
-		name = f.settlement_name + " · "
-	return "%s · %s인구 %d · %s 지폐" % [f.fmt_time(f.t), name, f.people.size(), AltarSheet._num(Market.notes)]
+		name = " · " + f.settlement_name
+	return "%s%s · %s · %d명" % [earth_name(), name, Balance.ERAS[f.era], f.people.size()]
+
+
+## 떨어뜨린 자리의 무리 = 그 자리에서 가장 가까운 무리
+func village_at(p: Vector2) -> Village:
+	var best: Village = focus_village()
+	var bd := INF
+	for q in world.settlements:
+		var d := q.center.distance_squared_to(p)
+		if d < bd:
+			bd = d
+			best = q
+	return best
 
 
 func status_text() -> String:

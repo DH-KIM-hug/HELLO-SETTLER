@@ -326,7 +326,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 				v.stats["injured"] = int(v.stats.get("injured", 0)) + 1
 				v.speak(r, "아야, 다리를 삐었어…", 5)
 				# 10%는 덧나 곪은 상처 (HEALTH.md 3) — 이미 앓는 중이면 그대로
-				if v.health_rng.randf() < Balance.FESTER and r.sick_left <= 0.0:
+				if v.health_rng.randf() < Balance.FESTER * SkyDrops.fester_mult(v) and r.sick_left <= 0.0:     # [상점] 반창고 조각 5일: 곪지 않음
 					fall_ill(v, r, in_clinic, Balance.FESTER_KIND)
 		if r.sick_left > 0.0:
 			continue
@@ -341,7 +341,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 		p0 *= age_mult(r)
 		var u := v.health_rng.randf()
 		var mold_m := Mold.ill_mult(v, r)     # [곰팡이·뚜껑] 털뭉치 둘레: 배앓이·기침병 ×2 → 거르기 상한도 그만큼 (결과는 곰팡이 없으면 그대로)
-		var fl_m := Flora.ill_mult(v)         # [하늘의 것] 얼룩버섯을 먹은 날: 배앓이 ×5 (WORLD_EVENTS 2.6)
+		var fl_m := Flora.ill_mult(v) * SkyDrops.ill_mult(v)    # [하늘의 것] 얼룩버섯을 먹은 날: 배앓이 ×5 (WORLD_EVENTS 2.6) · [상점] 녹조 배앓이↑
 		if sick.is_empty() and u >= p0 * wmax * mold_m * fl_m * r.f("illness") / 24.0:
 			continue                  # 어떤 '어디서' 배율이어도 안 걸림
 		if ctx.is_empty():
@@ -538,7 +538,7 @@ static func fall_ill(v: Village, r: Resident, in_clinic := false, kind := "고�
 	r.sick_since = v.t
 	r.herb_used = false
 	r.herb_until = -1.0
-	r.severe = v.health_rng.randf() < severe_p(r, kind, float(ob["l"])) * Flora.severe_mult(v, r, kind)   # [하늘의 것] 얼룩버섯: 아이 중증 ×2
+	r.severe = v.health_rng.randf() < severe_p(r, kind, float(ob["l"])) * Flora.severe_mult(v, r, kind) * SkyDrops.severe_mult(v)   # [하늘의 것] 얼룩버섯: 아이 중증 ×2 · [상점] 알약 부스러기 3일 ×0.3
 	v.stats["sick"] = int(v.stats.get("sick", 0)) + 1
 	var by: Dictionary = v.stats.get("sick_by", {})
 	by[kind] = int(by.get(kind, 0)) + 1

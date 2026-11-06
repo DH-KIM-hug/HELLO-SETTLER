@@ -12,6 +12,8 @@ static var day_key := ""              # sold가 세는 현실 날짜
 static var today_override := ""       # 테스트: 비어 있지 않으면 이 날짜를 '오늘'로
 static var first_paid := false        # 첫 제물 웃돈을 받았다 (BALANCE v4-4 — 거인에게 한 번, Village.take_offering)
 static var lamp_level := 0            # 등불 단계 0~3 (LAMP_HOURS)
+static var hand: Array = []           # 거인의 손에 든 물건 (SHOP 3 — 상점에서 산 것, 최대 5개, 모든 병이 함께) {id, item, paid}
+static var hand_serial := 0           # 손에 든 물건 번호
 
 const LAMP_HOURS := [12, 16, 20, 24]                       # 단계별 등불 시간 (비운 동안 병이 흐르는 최대 시간)
 const LAMP_COST := [2000.0, 6000.0, 15000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1
@@ -24,6 +26,8 @@ static func reset(start_notes := 0.0) -> void:
 	day_key = ""
 	first_paid = false
 	lamp_level = 0
+	hand = []
+	hand_serial = 0
 
 
 # ───────────────────────── 거인의 등불 ─────────────────────────

@@ -39,6 +39,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("mold_"):
 		v.mold.run_op(v, r, d)
 		return
+	if n.begins_with("sky_"):            # [상점] 하늘에서 내려온 것 깎아 나르기 (sim/sky_drops.gd)
+		SkyDrops.run_op(v, r, d)
+		return
 	match n:
 		"stock_add":                      # 창고에 더함 (나른 물건 내려놓기 · 그만두면 되돌리기)
 			v.stock[d["k"]] = float(v.stock.get(d["k"], 0.0)) + float(d["amt"])
@@ -255,6 +258,9 @@ static func decide(v: Village, r: Resident) -> void:
 			if site != null:
 				var g := v.build_mult(site)          # 들어준 소원의 터는 더 서둘러 짓는다
 				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
+	# [상점] 하늘에서 내려온 바깥 크기의 물건: 몰려와 깎아 창고로 (WORLD_EVENTS 1.1) — 낮에, 어른 (아이는 먹을 것만 조금씩)
+	if work_t and not hurt and r.age >= 2.5 and not v.drops.is_empty() and SkyDrops.carve_open(v):
+		cand["carve"] = Balance.ACT_BASE["haul"] * 1.4 * Balance.W_DAY_WORK * (1.0 if r.is_adult() else 0.5)
 	if not night and r.age >= 2.5 and not opening and v.altar_built:     # 제단이 생기기 전엔 기도가 없다 (A4b — 기획서 6.5). 첫 한 시간엔 따로 기도하지 않는다 — 첫 집이 서면 다 같이 감사 기도 (Village.thanksgiving)
 		var worries := 1.0 + (1.0 if v.deficit > 0.0 else 0.0) + (0.5 if r.home < 0 else 0.0)
 		# 저녁(일이 끝난 뒤) ×2, 저녁 일하는 시간엔 ×1, 낮엔 ×0.5. 믿음이 깊을수록 자주
@@ -331,6 +337,8 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			return work_task(v, r, false)
 		"haul":
 			return haul_task(v, r)
+		"carve":
+			return SkyDrops.carve_task(v, r)
 		"build":
 			return build_task(v, r)
 		"pray":
@@ -507,6 +515,16 @@ static func _eat(v: Village, r: Resident, h: float) -> bool:
 static func _pray(v: Village, r: Resident) -> bool:
 	r.doing = "기도하는 중"
 	var a := v.rng.randf() * TAU                  # 제단 둘레 고리에서 제단을 바라보며 (near와 같은 난수 하나)
+	var tw: Variant = SkyDrops.tower_pray(v, r)   # [상점] 하늘의 탑이 있으면 몇은 탑 아래에서 (성소 — WORLD_EVENTS 4.4)
+	if tw != null:
+		var tp: Vector2 = tw
+		var q := tp + Vector2(cos(a), sin(a)) * SkyDrops.TOWER_RING
+		r.doing = "하늘의 탑 아래에서 기도하는 중"
+		r.steps.append(walk(q.x, q.y))
+		var f := q + (tp - q).normalized() * 0.03
+		r.steps.append(walk(f.x, f.y))
+		r.steps.append(act(600.0, "pray", op("pray")))
+		return true
 	var p := v.altar_pos + Vector2(cos(a), sin(a)) * Awakening.RING_R
 	r.steps.append(walk(p.x, p.y))
 	r.steps.append(Awakening.face_altar_step(v, p))
