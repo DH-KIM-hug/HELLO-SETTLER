@@ -280,6 +280,7 @@ class PartSet:
     def export(self, out_dir=OUT_DIR):
         bpy.ops.wm.read_factory_settings(use_empty=True)
         total = 0
+        self.tris = {}           # part name -> triangles (for budget tables)
         for pname, model, pivot in self.parts:
             for g, bm in model.groups.items():
                 _triangulate(bm)
@@ -288,13 +289,16 @@ class PartSet:
                 me = bpy.data.meshes.new(pname)
                 bm.to_mesh(me)
                 bm.free()
-                total += sum(len(p.vertices) - 2 for p in me.polygons)
+                n = sum(len(p.vertices) - 2 for p in me.polygons)
+                total += n
+                self.tris[pname] = self.tris.get(pname, 0) + n
                 ob = bpy.data.objects.new(pname if g == "body" else pname + "_" + g, me)
                 ob.location = pivot
                 bpy.context.scene.collection.objects.link(ob)
             model.groups = {}
         _export_glb(os.path.join(out_dir, self.name + ".glb"))
         print("  %-18s %5d tris (%d parts)" % (self.name, total, len(self.parts)))
+        return self.tris
 
 
 def out_dir_from_argv():

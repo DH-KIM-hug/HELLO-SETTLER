@@ -130,6 +130,7 @@ static func age_stage(r: Resident) -> int:
 
 func _sync_residents(dt: float) -> void:
 	var seen := {}
+	var chief := v.chief()
 	for r in v.people:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
@@ -157,6 +158,9 @@ func _sync_residents(dt: float) -> void:
 		m.rotation.y = r.facing
 		_raft(r, m)                     # (A6) 나루터 뗏목 위
 		_ride(r, m)                     # [하늘의 것] 꽃씨에 매달린 아이 — 떠올라 날아감
+		var jb0 := v.bld(r.job)                 # (A20) 직업 옷·연장 · 촌장 띠 · 표정 — 바뀔 때만 부품을 갈아 끼움
+		m.set_job(jb0.type if jb0 != null else "", r == chief)
+		m.set_face(ResidentModel.face_of(r))
 		m.set_item(r.carry)
 		if r.anim == "work":
 			var jb := v.bld(r.job)

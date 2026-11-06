@@ -6,6 +6,7 @@
 //   점 눈(고정색 LOOK_EYE) → 눈 색 (왼쪽·오른쪽 따로 = 짝짝이 눈) · 볼(고정색) → cheek (혈통 '강인한' 붉은 뺨 / '병약' 창백)
 //   주근깨 = 얼굴 피부의 작은 점 무늬 · 대머리 = 머리카락을 정수리부터 지움(아래 두피가 보임) · 흰 앞머리 한 줌 ·
 //   점박이 = 피부·머리에 하얀 얼룩 무늬 (무늬 시드) · 맨발 (혈통 '물가 사람') = 신발 색 → 피부.
+// A20: 표정 앓음 = sick (피부를 연둣빛 잿빛으로 조금). 감은 눈·눈썹·입은 고정색(LOOK_FIXED lash · mouth)이라 그대로.
 // 머리 부품(얼굴·머리카락·모자·수염)은 instance uniform part_head = 1 (부품 좌표: 목 관절 원점, +Y 위, +Z 앞).
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled, cull_back;
@@ -25,6 +26,7 @@ uniform int bald = 0;                  // 0 온전 · 1 정수리 · 2 대머리
 uniform float forelock = 0.0;          // 흰 앞머리
 uniform float barefoot = 0.0;
 uniform float piebald = 0.0;
+uniform float sick = 0.0;              // A20 표정 '앓음': 피부를 조금 핼쑥하게 (ResidentModel.set_face)
 uniform vec4 pb_pattern = vec4(0.0, 0.0, 0.0, 3.0);   // xyz 무늬 자리, w 무늬 크기(빈도)
 uniform float pb_cut = 0.62;           // 이 값보다 큰 곳이 하얀 무늬
 uniform vec3 pb_skin : source_color = vec3(0.97, 0.94, 0.91);
@@ -89,6 +91,7 @@ void fragment() {
 			s = mix(s, freckle_col, dot_on * freckles);
 		}
 		s = mix(s, pb_skin, pb);
+		s = mix(s, vec3(0.62, 0.68, 0.5), sick * 0.3);
 		c = s * srgb_to_linear(vec3(k.b));
 	} else if (k.r < 0.03 && k.g > 0.97) {
 		if (head && bald > 0) {
@@ -112,7 +115,7 @@ void fragment() {
 		c = lp.x < 0.0 ? eye_l : eye_r;
 	} else if (near_col(k, vec3(0.94, 0.62, 0.55))) {           // 볼
 		c = cheek;
-	} else if (barefoot > 0.5 && near_col(k, vec3(0.204, 0.141, 0.098))) {   // 신발 → 맨발
+	} else if (barefoot > 0.5 && near_col(k, vec3(0.290, 0.204, 0.149))) {   // 신발 (LOOK_FIXED.boot) → 맨발
 		c = skin * 0.92;
 	}
 	ALBEDO = c;

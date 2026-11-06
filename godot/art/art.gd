@@ -52,7 +52,7 @@ static func model(name: String) -> Dictionary:
 	return res
 
 
-## 부품 모음 (주민): 노드마다 따로 — {부품 이름: {"mesh", "lines", "origin": 관절 자리}}. "이름_body_nl" 노드는 "이름"에 합침.
+## 부품 모음 (주민): 노드마다 따로 — {부품 이름: {"mesh", "lines", "origin": 관절 자리}}. "이름_body_nl" · "이름_body_nh" 노드는 "이름"에 합침.
 static func parts(name: String) -> Dictionary:
 	if _parts.has(name):
 		return _parts[name]
@@ -64,7 +64,8 @@ static func parts(name: String) -> Dictionary:
 			var pn := nm.trim_suffix("_body_nl").trim_suffix("_body_nh")
 			if not by_part.has(pn):
 				by_part[pn] = {"acc": _Acc.new(), "origin": _rel_xf(mi, root).origin}
-			(by_part[pn]["acc"] as _Acc).add(mi.mesh, Transform3D(_rel_xf(mi, root).basis, Vector3.ZERO), not nm.ends_with("_nl"))
+			var nh := nm.ends_with("_nh")          # 안쪽 면 (주민 머리카락 안쪽 — A20): 선도 껍데기도 없음
+			(by_part[pn]["acc"] as _Acc).add(mi.mesh, Transform3D(_rel_xf(mi, root).basis, Vector3.ZERO), not (nm.ends_with("_nl") or nh), not nh)
 		root.free()
 	var out := {}
 	for pn: String in by_part:

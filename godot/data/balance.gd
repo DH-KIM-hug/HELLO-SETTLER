@@ -375,8 +375,10 @@ const HAIR_COLORS := ["533727", "342419", "c18b51", "b54023", "deab43", "a49b9a"
 const SKIN_COLORS := ["edb06e", "eac79c", "c99f73", "a66f3c"]
 const CLOTH_COLORS := ["46759e", "6e452f", "3e5c2c", "725b4f", "a0703e", "355b6e", "8b5733", "60782e"]
 # 옷·소품의 고정 색 (화면이 읽음 — 그림체를 바꿀 때 여기만 고친다)
-const LOOK_FIXED := {"trouser": "6e452f", "boot": "342419", "stocking": "544e4f", "belt": "533727", "apron": "e2ded8",
-	"eye": "252122", "straw": "deab43", "straw_dark": "a6974b", "scarf_a": "e2ded8", "scarf_b": "b54023", "elder_hair": "b6b0b1"}
+## A20 (주민 v2, design/characters): 셔츠(소매·깃 — 모두 크림색) · 감은 눈·눈썹 선 · 입 · 촌장 띠 · 약초 잎 · 지팡이
+const LOOK_FIXED := {"trouser": "6e452f", "boot": "4a3426", "stocking": "d3c6a8", "belt": "533727", "apron": "ece4d2",
+	"eye": "252122", "straw": "deab43", "straw_dark": "a6974b", "scarf_a": "e2ded8", "scarf_b": "b54023", "elder_hair": "b6b0b1",
+	"shirt": "eadfc6", "lash": "4a3a30", "mouth": "9b5446", "sash": "b8453a", "herb": "6f9a3e", "cane": "7a5636", "baker": "f4f0e6"}
 
 # ───────────────────────── v4.0 — 영역·자율 건설·소원·길·제물 (기획서 3.1 · 6.7 · 11.1, RESIDENT_AI 2.1 · 6.2, BALANCE v3) ─────────────────────────
 # 부락 영역 (기획서 3.1 · BALANCE v3-5): 시대별 지름 → 품는 인구 = 영역 넓이 × 0.5 ÷ 1인당 땅 (약 40 / 90 / 225 / 560)
