@@ -3,7 +3,7 @@
 ##   모드: (없음) 전체 = 빠른 시험 + 오래 걸리는 통계 시험 (모든 시험, 표본 크게) · quick 빠른 시험만 (표본 작게, 2분 남짓) ·
 ##         long 오래 걸리는 통계 시험만 (표본 크게 — 30일 인구·50개 세상·발병률 등). quick + long = 전체의 모든 확인.
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
-##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
@@ -39,7 +39,7 @@ func timed(obj: Object, names: Array) -> void:
 const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests/genetics_tests.gd", "health": "res://tests/health_tests.gd",
 	"economy": "res://tests/economy_tests.gd", "mold": "res://tests/mold_tests.gd", "flora": "res://tests/flora_tests.gd",
 	"ui": "res://tests/ui_tests.gd", "audio": "res://tests/audio_tests.gd", "save": "res://tests/save_tests.gd",
-	"start": "res://tests/start_tests.gd"}
+	"start": "res://tests/start_tests.gd", "terrain": "res://tests/terrain_tests.gd"}
 
 
 func _initialize() -> void:
@@ -65,7 +65,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()

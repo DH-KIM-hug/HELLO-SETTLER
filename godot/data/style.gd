@@ -35,6 +35,29 @@ const MARSH := Color("8fc4a0")
 const BANK := Color("93b27a")              # 호숫가 짙은 띠 (흙 + 이끼)
 const SOIL := Color("8a6a4a")              # 땅 옆면
 const SOIL_DARK := Color("5e4836")
+# 겉흙 12종 (기획서 4.4b — view/ground_look.gd · render/terrain.gdshader). 풀밭 = 위 GRASS들, 흙길 = PATH, 소금 = SALT
+const DRY_GRASS := Color("d2cf8c")         # 짧은 풀·마른 풀 (볕 드는 마른 쪽, 여름)
+const MOSS_GROUND := Color("63a58c")       # 이끼 (짙은 청록) + 보송한 점
+const MOSS_DOT := Color("8cc8a0")
+const FOREST_FLOOR := Color("a2a26c")      # 숲 바닥 (낙엽·흙 — 수관 그늘 아래라 밝게)
+const FOREST_DOT := Color("8c7c56")
+const SOIL_GROUND := Color("b8925f")       # 맨흙 (밭·집터·공사장) + 밭이랑
+const SOIL_FURROW := Color("9a7650")
+const SHORE_SAND := Color("e6d9a9")        # 모래·자갈 물가
+const PEBBLE := Color("aab1aa")
+const MUD := Color("9c8f6e")               # 진흙·습지 + 물웅덩이
+const PUDDLE := Color("78b9c2")
+const ROCK_GROUND := Color("aab4ae")        # 바위 (언덕 위·광맥)
+const ROCK_GROUND_DARK := Color("8d9894")
+const STONE_PATH := Color("cbc9bb")        # 돌길 (마을 시대 오솔길)
+const STONE_GAP := Color("a19f90")
+const SNOW := Color("f6f8f8")              # 눈·서리
+const SNOW_SHADE := Color("dbe7ee")
+const DESERT_SAND := Color("e9c287")       # 사막 병 모래땅
+const DANDELION := Color("f4d64c")         # 봄 들꽃 (민들레 노랑 + 흰 꽃)
+const DAISY := Color("fbf8ea")
+const LEAF_RED := Color("d9763f")          # 가을 낙엽
+const LEAF_GOLD := Color("e8b04a")
 
 # ───────────── 물 ─────────────
 const WATER := Color("6cc6d0")             # 옅은 하늘색 (기준 68c3cc)

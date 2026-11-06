@@ -40,8 +40,15 @@ static func terrain_mat() -> ShaderMaterial:
 	var m := ShaderMaterial.new()
 	m.shader = load("res://render/terrain.gdshader")
 	for p: Array in [["path_col", Style.PATH], ["path_edge", Style.PATH_EDGE], ["salt_col", Style.SALT], ["salt_edge", Style.SALT_EDGE],
-			["river_col", Style.RIVER], ["river_edge", Style.RIVER_EDGE], ["bank_col", Style.BANK], ["ridge_col", Style.GRASS_RIDGE], ["foam_col", Style.WATER_FOAM]]:
+			["river_col", Style.RIVER], ["river_edge", Style.RIVER_EDGE], ["bank_col", Style.BANK], ["ridge_col", Style.GRASS_RIDGE], ["foam_col", Style.WATER_FOAM],
+			["dry_col", Style.DRY_GRASS], ["moss_col", Style.MOSS_GROUND], ["moss_dot", Style.MOSS_DOT], ["forest_col", Style.FOREST_FLOOR],
+			["forest_dot", Style.FOREST_DOT], ["soil_col", Style.SOIL_GROUND], ["soil_dark", Style.SOIL_FURROW], ["shore_col", Style.SHORE_SAND],
+			["pebble_col", Style.PEBBLE], ["mud_col", Style.MUD], ["puddle_col", Style.PUDDLE], ["rock_col", Style.ROCK_GROUND],
+			["rock_dark", Style.ROCK_GROUND_DARK], ["stone_col", Style.STONE_PATH], ["stone_gap", Style.STONE_GAP], ["snow_col", Style.SNOW],
+			["snow_shade", Style.SNOW_SHADE], ["sand_col", Style.DESERT_SAND], ["flower_col", Style.DANDELION], ["flower_col2", Style.DAISY],
+			["leaf_col", Style.LEAF_RED], ["leaf_col2", Style.LEAF_GOLD]]:
 		m.set_shader_parameter(p[0], p[1])
+	GroundLook.apply_season(m, GroundLook.season_params(4, 15, Balance.CLIMATE_DEFAULT, 12.0))
 	return _light(m)
 
 
