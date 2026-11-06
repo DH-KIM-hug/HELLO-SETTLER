@@ -17,6 +17,9 @@ const STALK := Color("ddd3b8")
 const EYE := Color("1b1718")
 const FOOT := Color("c9a57a")
 
+## Blender 모델 (art/src/build_mold.py): 종류마다 몸 + 곤두선 털 껍데기. 있으면 그것을 씀 (없으면 아래 절차 메시)
+const ART := {"검은": "mold_black", "푸른": "mold_blue", "흰": "mold_white", "누룩": "mold_yeast"}
+
 static var _meshes: Dictionary = {}     # 종류 → ArrayMesh (몸·털·눈·대롱·발)
 static var _spikes: ArrayMesh            # 곤두선 털 (종류 색은 재질로)
 static var _puff_mesh: SphereMesh
@@ -159,12 +162,18 @@ func _make(b: MoldBlob) -> Dictionary:
 	var pose := Node3D.new()
 	root.add_child(pose)
 	var body := MeshInstance3D.new()
-	body.mesh = body_mesh(b.kind)
-	body.material_override = Toon.vc_mat()
+	var an: String = ART.get(b.kind, "")
+	var art := Art.exists(an)
+	body.mesh = Art.model(an)["mesh"] if art else body_mesh(b.kind)
+	if not art:
+		body.material_override = Toon.vc_mat()
 	pose.add_child(body)
 	var sp := MeshInstance3D.new()
-	sp.mesh = spike_mesh()
-	sp.material_override = Toon.mat(COLORS[b.kind])
+	if art and Art.exists(an + "_bristle"):
+		sp.mesh = Art.model(an + "_bristle")["mesh"]
+	else:
+		sp.mesh = spike_mesh()
+		sp.material_override = Toon.mat(COLORS[b.kind])
 	sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	sp.visible = false
 	pose.add_child(sp)

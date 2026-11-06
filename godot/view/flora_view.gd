@@ -33,6 +33,10 @@ const FLUFF := Color("f7f5ee")
 const FLUFF_CORE := Color("cbb58a")
 const DROP := Color("cdeef2")
 
+## Blender 모델 (art/src/build_giants.py → art/models/*.glb)이 있으면 그것을 씀 (없으면 아래 절차 메시)
+const ART_SHROOM := {"흰갓버섯": "giant_white", "갈색갓버섯": "giant_brown", "얼룩버섯": "giant_red", "부채버섯": "giant_fan", "빛버섯": "giant_glow"}
+const ART_DAND := {"flower": "dand_flower", "closed": "dand_closed", "puff": "dand_puff", "bare": "dand_bare"}
+
 static var _meshes: Dictionary = {}
 static var _glow_mat: ShaderMaterial
 static var _night_cap: ShaderMaterial
@@ -128,6 +132,9 @@ static func _stalk(st: SurfaceTool, base: Vector3, h: float, r0: float, r1: floa
 # ───────────────────────── 버섯 메시 (종류마다 한 번, 키 = Balance.SHROOM h) ─────────────────────────
 static func shroom_mesh(kind: String) -> ArrayMesh:
 	if _meshes.has(kind):
+		return _meshes[kind]
+	if Art.exists(ART_SHROOM.get(kind, "")):
+		_meshes[kind] = Art.model(ART_SHROOM[kind])["mesh"]
 		return _meshes[kind]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -281,6 +288,10 @@ static func rosette_mesh(big: bool) -> ArrayMesh:
 	var key := "rosette_%s" % big
 	if _meshes.has(key):
 		return _meshes[key]
+	var an := "dand_leaves" if big else "dand_leaves_small"
+	if Art.exists(an):
+		_meshes[key] = Art.model(an)["mesh"]
+		return _meshes[key]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var n := 7 if big else 4
@@ -317,6 +328,9 @@ static func stem_top() -> Vector3:
 static func dand_mesh(st_name: String) -> ArrayMesh:
 	var key := "dand_" + st_name
 	if _meshes.has(key):
+		return _meshes[key]
+	if Art.exists(ART_DAND.get(st_name, "")):
+		_meshes[key] = Art.model(ART_DAND[st_name])["mesh"]
 		return _meshes[key]
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -390,6 +404,13 @@ static func seed_mesh() -> ArrayMesh:
 	var m := st.commit()
 	_meshes["seed"] = m
 	return m
+
+
+## 메시에 맞는 재질: Blender 모델(툰 + 껍데기 외곽선 재질이 붙어 있음)이면 그대로, 절차 메시면 꼭짓점 색 툰
+static func vc_for(mesh: Mesh) -> Material:
+	if mesh != null and mesh.get_surface_count() > 0 and mesh.surface_get_material(0) != null:
+		return null
+	return Toon.vc_mat()
 
 
 # ───────────────────────── 매 화면 ─────────────────────────
@@ -494,7 +515,13 @@ func _make_shroom(s: Dictionary) -> Dictionary:
 		add_child(gl)
 		nd["glow"] = gl
 	else:
-		body.material_override = Toon.vc_mat()
+		body.material_override = vc_for(body.mesh)
+		var an: String = ART_SHROOM.get(s["kind"], "")
+		if body.material_override == null and Art.exists(an) and Art.model(an)["lines"] != null:
+			var ln := MeshInstance3D.new()                  # 접힌 곳 선 (갓 가장자리·턱받이·갈라진 금 둘레)
+			ln.mesh = Art.model(an)["lines"]
+			ln.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			root.add_child(ln)
 	return nd
 
 
@@ -521,6 +548,7 @@ func _sync_dands(f: Flora, dt: float, yaw: float) -> void:
 		if nd["big"] != big:
 			nd["big"] = big
 			leaves.mesh = rosette_mesh(big)
+			leaves.material_override = vc_for(leaves.mesh)
 		var shape := ""
 		match st:
 			"flower", "closed", "puff":
@@ -534,6 +562,7 @@ func _sync_dands(f: Flora, dt: float, yaw: float) -> void:
 			head.visible = shape != ""
 			if shape != "":
 				head.mesh = dand_mesh(shape)
+				head.material_override = vc_for(head.mesh)
 			if shape == "flower" or shape == "puff":
 				nd["grow"] = 0.5
 		# 피어남·부풂: 단계가 바뀌면 머리가 부드럽게 자람 · 솜털 공은 꽃씨가 줄면 작아짐 · 첫 꽃대는 쑥 올라옴
@@ -566,7 +595,7 @@ func _make_dand(d: Dictionary) -> Dictionary:
 	add_child(root)
 	var leaves := MeshInstance3D.new()
 	leaves.mesh = rosette_mesh(d["st"] != "sprout")
-	leaves.material_override = Toon.vc_mat()
+	leaves.material_override = vc_for(leaves.mesh)
 	leaves.rotation.y = fposmod(float(d["id"]) * 1.37, TAU)
 	root.add_child(leaves)
 	var hr := Node3D.new()
@@ -627,7 +656,7 @@ func _sync_weeds(f: Flora) -> void:
 			var z := b.y + sin(a) * r * b.size() * 0.8
 			var lv := MeshInstance3D.new()
 			lv.mesh = rosette_mesh(true)
-			lv.material_override = Toon.vc_mat()
+			lv.material_override = vc_for(lv.mesh)
 			lv.position = Vector3(x, _gy(x, z) + 0.02, z)
 			lv.scale = Vector3.ONE * 0.5
 			lv.rotation.y = a
@@ -640,7 +669,7 @@ func _sync_weeds(f: Flora) -> void:
 			for pair: Array in [[stem_mesh(), Vector3.ZERO], [dand_mesh("flower"), stem_top()]]:
 				var mi := MeshInstance3D.new()
 				mi.mesh = pair[0]
-				mi.material_override = Toon.vc_mat()
+				mi.material_override = vc_for(mi.mesh)
 				mi.position = pair[1]
 				hn.add_child(mi)
 

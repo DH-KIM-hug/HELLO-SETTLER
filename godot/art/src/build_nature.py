@@ -28,13 +28,14 @@ def canopy_col(top_z, low_z):
 
 
 def trunk(m, h, r_bot, r_top, roots=4, lean=(0.0, 0.0), seed=0):
-    m.cyl(r_bot, r_top, h, color="TRUNK", seg=7, smooth=True, cap="TRUNK_DARK", rot=(lean[0], lean[1], 0))
+    m.cyl(r_bot * 1.15, r_bot, 0.25, color="TRUNK", seg=8, smooth=True)          # flared foot
+    m.cyl(r_bot, r_top, h, pos=(0, 0, 0.2), color="TRUNK", seg=8, smooth=True, cap="TRUNK_DARK", rot=(lean[0], lean[1], 0))
     rng = m.rng
-    for i in range(roots):                       # root flare: low wedges radiating out
+    for i in range(roots):                       # root flare: arching wedges radiating out, sinking into the grass
         a = i * math.tau / roots + rng.uniform(-0.3, 0.3)
-        ln = rng.uniform(0.38, 0.55)
-        m.cyl(r_bot * 0.55, 0.02, ln, pos=(math.cos(a) * r_bot * 0.5, math.sin(a) * r_bot * 0.5, 0.05),
-              rot=(0, math.pi / 2 - 0.35, a), color="TRUNK", seg=5, smooth=True)
+        ln = rng.uniform(0.36, 0.5)
+        m.cyl(r_bot * 0.62, 0.04, ln, pos=(math.cos(a) * r_bot * 0.6, math.sin(a) * r_bot * 0.6, 0.12),
+              rot=(0, math.pi / 2 - 0.7, a), color=shade("TRUNK", 0.94 if i % 2 else 1.0), seg=5, smooth=True)
     return h
 
 
@@ -45,31 +46,41 @@ def branch(m, base, direction, ln, r):
     m.cyl(r, r * 0.6, ln, pos=base, rot=(0, pitch, yaw), color="TRUNK", seg=5, smooth=True)
 
 
-def broadleaf(name, seed, blobs, height=1.9, spread=1.15, top=3.2, lift=0.75):
-    """Lumpy canopy = clusters of noisy ico-blobs. blobs = [(x, y, z, r)] in canopy space (0..1 heights)."""
+def blob_col(z, low_z, top_z, k=0):
+    """Per-blob colour (cel look: one flat colour per leaf clump, the toon terminator does the rest).
+    High clumps light mint, middle teal, low/rim clumps dark teal; k nudges the shade so neighbours differ."""
+    h = (z - low_z) / max(0.01, top_z - low_z)
+    base = "LEAF_TOP" if h > 0.62 else ("LEAF_MID" if h > 0.25 else "LEAF_LOW")
+    return shade(base, (1.0, 0.96, 1.04)[k % 3])
+
+
+def broadleaf(name, seed, blobs, height=1.9, spread=1.15, top=3.2, lift=0.75, roots=5, rim=11, trunk_r=0.3):
+    """Cloud canopy = clusters of smooth round clumps, each one flat colour (light on top, teal, dark teal rim),
+    so the canopy reads like the concept art's stacked leaf clouds. blobs = [(x, y, z, r)] in canopy space."""
     m = Model(name, seed)
     rng = m.rng
     # the camera looks down 60 deg: the canopy must sit high (lift) so trunk + roots show below its front rim
     height += lift
     top += lift
     blobs = [(x, y, z + lift, r) for (x, y, z, r) in blobs]
-    trunk(m, height + 0.4, 0.3, 0.18)
+    trunk(m, height + 0.4, trunk_r, trunk_r * 0.6, roots=roots)
     for a in (0.4, 2.5, 4.4):
         branch(m, (0, 0, height * 0.8), (math.cos(a), math.sin(a), 1.1), 0.8, 0.09)
-    low_z = height - 0.15
-    top_z = top + 0.6
-    col = canopy_col(top_z, low_z)
-    for (x, y, z, r) in blobs:
-        m.ico(r, pos=(x * spread, y * spread, z), scl=(1.0, 1.0, 0.86), color="LEAF_MID", subdiv=2, smooth=True,
-              colfn=col, lumps=0.13, lump_scale=2.2, group="body_nl")
-    # small rim lumps -> scalloped edge seen from above
-    n = 11
-    for i in range(n):
-        a = i * math.tau / n + rng.uniform(-0.15, 0.15)
-        d = spread * rng.uniform(1.22, 1.38)
-        r = rng.uniform(0.32, 0.42)
-        m.ico(r, pos=(math.cos(a) * d, math.sin(a) * d, height + 0.55 + rng.uniform(-0.05, 0.25)), scl=(1, 1, 0.85),
-              color="LEAF_MID", subdiv=2, smooth=True, colfn=col, lumps=0.15, group="body_nl")
+    zs = [z for (_, _, z, _) in blobs]
+    low_z = min(zs) - 0.5
+    top_z = max(zs) + 0.2
+    for i, (x, y, z, r) in enumerate(blobs):
+        m.ico(r, pos=(x * spread, y * spread, z), scl=(1.0, 1.0, 0.82), color=blob_col(z, low_z, top_z, i), subdiv=2,
+              smooth=True, lumps=0.08, lump_scale=1.4, group="body_nl")
+    # small rim clumps -> scalloped edge seen from above (dark teal underside of the cloud)
+    for i in range(rim):
+        a = i * math.tau / rim + rng.uniform(-0.15, 0.15)
+        d = spread * rng.uniform(1.18, 1.34)
+        r = rng.uniform(0.34, 0.44)
+        z = height + 0.5 + rng.uniform(-0.05, 0.25)
+        m.ico(r, pos=(math.cos(a) * d, math.sin(a) * d, z), scl=(1, 1, 0.82),
+              color=shade("LEAF_MID" if i % 3 == 0 else "LEAF_LOW", 1.0 + 0.04 * (i % 2)), subdiv=2, smooth=True,
+              lumps=0.08, group="body_nl")
     m.export(OUT)
 
 
@@ -89,6 +100,11 @@ def build_trees():
         (0, 0, 2.4, 0.95), (0.8, 0.0, 2.25, 0.75), (-0.8, 0.1, 2.25, 0.75), (0.3, 0.75, 2.2, 0.72),
         (-0.3, -0.75, 2.2, 0.72), (0.55, -0.6, 2.35, 0.6), (-0.55, 0.6, 2.35, 0.6),
         (0.2, 0.1, 2.95, 0.7), (-0.35, -0.25, 2.85, 0.55)], height=1.6, spread=1.2, top=2.9)
+    # D: old oak - thick trunk with big roots, one big dome of clumps (the concept's round cloud trees)
+    broadleaf("tree_d", 4, [
+        (0, 0, 2.9, 1.15), (0.85, 0.2, 2.55, 0.8), (-0.85, 0.25, 2.55, 0.8), (0.3, -0.85, 2.5, 0.78),
+        (-0.4, -0.75, 2.6, 0.75), (0.2, 0.85, 2.6, 0.78), (-0.15, -0.2, 3.6, 0.78), (0.55, 0.3, 3.4, 0.62),
+        (-0.6, 0.2, 3.35, 0.6)], height=1.8, spread=1.15, top=3.3, roots=6, rim=12, trunk_r=0.38)
 
 
 def build_conifer():
@@ -129,27 +145,60 @@ def build_conifer():
     m.export(OUT)
 
 
-def build_bush():
-    m = Model("bush", 5)
-    col = canopy_col(0.85, 0.0)
-    for (x, y, z, r) in ((0, 0, 0.32, 0.42), (0.42, 0.15, 0.25, 0.33), (-0.36, 0.2, 0.24, 0.32), (0.1, -0.35, 0.22, 0.3),
-                         (0.05, 0.1, 0.6, 0.28)):
-        m.ico(r, pos=(x, y, z), scl=(1, 1, 0.85), color="BUSH", subdiv=2, smooth=True, colfn=col, lumps=0.15, group="body_nl")
+def _bush(name, seed, blobs, flowers=0, fcols=("LOTUS", "PLASTER", "FLAME2")):
+    m = Model(name, seed)
+    zs = [z for (_, _, z, _) in blobs]
+    lo, hi = min(zs) - 0.25, max(zs) + 0.05
+    for i, (x, y, z, r) in enumerate(blobs):
+        h = (z - lo) / (hi - lo)
+        c = "BUSH_TOP" if h > 0.75 else ("BUSH" if h > 0.35 else mix("BUSH", "LEAF_LOW", 0.5))
+        m.ico(r, pos=(x, y, z), scl=(1, 1, 0.85), color=shade(c, (1.0, 0.96, 1.04)[i % 3]), subdiv=2, smooth=True,
+              lumps=0.1, group="body_nl")
+    rng = m.rng
+    for i in range(flowers):
+        x, y, z, r = blobs[i % len(blobs)]
+        a = rng.uniform(0, math.tau)
+        el = rng.uniform(0.35, 1.1)
+        p = Vector((x, y, z)) + Vector((math.cos(a) * math.cos(el), math.sin(a) * math.cos(el), math.sin(el) * 0.85)) * r
+        if p.z < 0.15:
+            continue
+        m.sphere(0.075, pos=p, scl=(1, 1, 0.7), color=fcols[i % len(fcols)], seg=5, rings=3, group="body_nl")
     m.export(OUT)
+
+
+def build_bush():
+    _bush("bush", 5, [(0, 0, 0.32, 0.42), (0.42, 0.15, 0.25, 0.33), (-0.36, 0.2, 0.24, 0.32), (0.1, -0.35, 0.22, 0.3),
+                      (0.05, 0.1, 0.6, 0.28)])
+    _bush("bush_b", 25, [(0, 0, 0.26, 0.34), (0.3, -0.1, 0.2, 0.26), (-0.28, 0.05, 0.22, 0.27), (0.02, 0.05, 0.5, 0.22)])
 
 
 def build_bush_flower():
-    m = Model("bush_flower", 6)
-    col = canopy_col(0.75, 0.0)
-    for (x, y, z, r) in ((0, 0, 0.28, 0.36), (0.38, 0.1, 0.22, 0.3), (-0.3, 0.18, 0.22, 0.28)):
-        m.ico(r, pos=(x, y, z), scl=(1, 1, 0.85), color="BUSH", subdiv=1, smooth=True, colfn=col, lumps=0.15, group="body_nl")
-    rng = m.rng
-    for i in range(7):
-        a = rng.uniform(0, math.tau)
-        d = rng.uniform(0.1, 0.4)
-        m.sphere(0.06, pos=(math.cos(a) * d, math.sin(a) * d, 0.5 + rng.uniform(-0.1, 0.05)),
-                 color="LOTUS" if i % 3 else "PLASTER", seg=6, rings=3, group="body_nl")
-    m.export(OUT)
+    _bush("bush_flower", 6, [(0, 0, 0.28, 0.36), (0.38, 0.1, 0.22, 0.3), (-0.3, 0.18, 0.22, 0.28), (0.05, 0.05, 0.5, 0.22)],
+          flowers=10)
+    _bush("bush_berry", 26, [(0, 0, 0.3, 0.36), (0.32, 0.2, 0.22, 0.28), (-0.3, -0.1, 0.22, 0.28)], flowers=9,
+          fcols=("a8322c", "c94a3a", "a8322c"))
+
+
+def build_flowers():
+    """Wildflower patch: leafy tufts with round blossoms (pink / white / yellow / lilac)."""
+    for name, seed, cols in (("flowers", 31, ("LOTUS", "PLASTER", "FLAME2")), ("flowers_b", 32, ("b8a6e0", "PLASTER", "8fc6e8"))):
+        m = Model(name, seed)
+        rng = m.rng
+        for i in range(8):
+            a = rng.uniform(0, math.tau)
+            d = rng.uniform(0.05, 0.38)
+            base = Vector((math.cos(a) * d, math.sin(a) * d, 0))
+            h = rng.uniform(0.3, 0.5)
+            tip = base + Vector((rng.uniform(-0.05, 0.05), rng.uniform(-0.05, 0.05), h))
+            m.blade(base, tip, 0.035, color=shade("TUFT", 0.9))
+            m.sphere(0.095, pos=tip, scl=(1, 1, 0.6), color=cols[i % len(cols)], seg=6, rings=3, group="body_nl")
+            m.sphere(0.04, pos=tip + Vector((0, 0, 0.05)), color="FLAME2" if cols[i % len(cols)] != "FLAME2" else "e09a16",
+                     seg=4, rings=2, group="body_nl")
+        for k in range(4):
+            a = k * 1.7
+            m.blade((math.cos(a) * 0.05, math.sin(a) * 0.05, 0), (math.cos(a) * 0.32, math.sin(a) * 0.32, 0.2), 0.1,
+                    color="TUFT" if k % 2 else shade("TUFT", 1.1))
+        m.export(OUT)
 
 
 def build_stump():
@@ -198,6 +247,21 @@ def build_rocks():
     m.ico(0.42, pos=(0.75, 0.3, 0.18), scl=(1.0, 1.0, 0.8), color="ROCK", subdiv=2, colfn=mossy, lumps=0.2, seed=2, smooth=True)
     m.ico(0.3, pos=(-0.62, 0.42, 0.1), scl=(1.0, 1.0, 0.75), color="ROCK", subdiv=2, colfn=mossy, lumps=0.2, seed=3, smooth=True)
     m.ico(0.18, pos=(0.35, -0.55, 0.05), color="ROCK_DARK", subdiv=2, lumps=0.2, seed=4, smooth=True)
+    m.export(OUT)
+
+
+def build_rocks_b():
+    """Two tall rounded boulders leaning together + pebbles (the concept's grey boulder pairs)."""
+    m = Model("rocks_b", 19)
+
+    def mossy(f):
+        return "MOSS" if f.normal.z > 0.8 else ("ROCK" if f.normal.z > -0.2 else "ROCK_DARK")
+    m.ico(0.55, pos=(-0.2, 0.1, 0.42), scl=(0.95, 0.85, 1.25), rot=(0.12, -0.2, 0.3), color="ROCK", subdiv=2, colfn=mossy,
+          lumps=0.12, seed=7, smooth=True)
+    m.ico(0.42, pos=(0.45, -0.12, 0.28), scl=(1.0, 0.9, 1.05), rot=(0, 0.25, 0.8), color="ROCK", subdiv=2, colfn=mossy,
+          lumps=0.14, seed=8, smooth=True)
+    for (x, y, r) in ((0.85, 0.3, 0.13), (-0.7, -0.35, 0.11), (0.2, -0.6, 0.09)):
+        m.ico(r, pos=(x, y, 0.03), scl=(1.2, 1, 0.7), color=shade("ROCK", 1.05), subdiv=1, smooth=True)
     m.export(OUT)
 
 
@@ -334,11 +398,13 @@ if __name__ == "__main__":
     build_conifer()
     build_bush()
     build_bush_flower()
+    build_flowers()
     build_stump()
     build_sapling()
     build_mushrooms()
     build_rocks()
     build_rock_small()
+    build_rocks_b()
     build_fern()
     build_clover()
     build_tuft()

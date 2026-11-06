@@ -56,8 +56,8 @@ func _init(village: Village, t: JarTerrain) -> void:
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
 const PRELOAD := ["cottage_a", "cottage_b", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge",
-	"tree_a", "tree_b", "tree_c", "conifer", "stump", "sapling", "bush", "bush_flower", "rocks", "rock_small", "mushrooms",
-	"fern", "clover", "tuft", "lily", "lotus", "log", "reeds"]
+	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
+	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar"]
 
 
 func _ready() -> void:
@@ -360,7 +360,7 @@ func _build_piles(n: Node3D, b: Building) -> void:
 ## 시뮬레이션의 나무·그루터기·묘목·바위 + 화면 장식: 숲 가장자리(장식 나무 무리), 소품 무리, 물가 갈대·돌, 연잎, 선착장, 다리.
 ## 장식은 시뮬레이션에 없다 (베어지지 않음). 자리는 '병 처음 방향' 좌표에서 잡음(FastNoiseLite, 시드 고정)·해시로 정하고
 ## 지금 병 방향으로 돌린다 → 같은 병이면 늘 같은 자리, 병을 돌리면 땅과 함께 돈다. 물·강·소금·오솔길·건물·모닥불 근처는 비움.
-const TREE_KINDS := ["tree_a", "tree_b", "tree_c"]
+const TREE_KINDS := ["tree_a", "tree_b", "tree_c", "tree_d"]
 const FOREST_STEP := 2.2          # 장식 숲 격자 (칸) — 수관 지름 약 3.4칸이라 겹쳐서 숲 덩어리가 된다
 const PROP_STEP := 2.6            # 소품 무리 격자
 const VILLAGE_CLEAR := 5.0        # 마을(모닥불·건물)에서 이만큼은 장식 나무 없음, 그 바깥 FOREST_RAMP칸에 걸쳐 숲이 짙어짐
@@ -502,7 +502,7 @@ func _sync_trees() -> void:
 		var yaw := _hash(z, x, 1.0) * TAU
 		match String(tr["s"]):
 			"tree":
-				_put(groups, TREE_KINDS[int(h * 97.0) % 3], x, z, (0.85 + 0.3 * h) * TREE_SCALE, yaw)
+				_put(groups, TREE_KINDS[int(h * 97.0) % TREE_KINDS.size()], x, z, (0.85 + 0.3 * h) * TREE_SCALE, yaw)
 			"stump":
 				_put(groups, "stump", x, z, 1.0, yaw)
 			_:
@@ -562,7 +562,7 @@ func _sync_props() -> void:
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
-	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds"])
+	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b"])
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 
@@ -596,14 +596,14 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 			if near:
 				continue
 			var h := _hash(gi, gj, 4.0)
-			var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % 3]
+			var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % TREE_KINDS.size()]
 			_put(groups, kind, p.x, p.y, (0.82 + 0.38 * _hash(gi, gj, 5.0)) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 			n_decor_trees += 1
 
 
 ## 소품 무리: 숲 가장자리엔 덤불·고사리·버섯·이끼 돌·쓰러진 통나무, 빈 풀밭엔 드문드문 클로버·풀 포기·꽃 덤불
-const FRINGE := ["bush", "bush", "fern", "fern", "mushrooms", "rocks", "stump", "log", "bush_flower", "fern"]
-const OPEN := ["clover", "clover", "tuft", "tuft", "tuft", "rock_small", "bush_flower", "mushrooms", "clover", "fern"]
+const FRINGE := ["bush", "bush_b", "fern", "fern", "mushrooms", "rocks", "stump", "log", "bush_flower", "fern", "rocks_b", "bush_berry"]
+const OPEN := ["clover", "clover", "tuft", "tuft", "flowers", "rock_small", "bush_flower", "mushrooms", "flowers_b", "fern", "bush_b", "tuft"]
 
 
 func _decor_clusters(groups: Dictionary) -> void:
@@ -622,7 +622,7 @@ func _decor_clusters(groups: Dictionary) -> void:
 				continue
 			var table: Array = FRINGE if fringe or f >= 0.9 else OPEN
 			var kind: String = table[int(_hash(gi, gj, 6.0) * table.size()) % table.size()]
-			var cnt := 1 if kind in ["stump", "log", "rocks"] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
+			var cnt := 1 if kind in ["stump", "log", "rocks", "rocks_b"] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
 			for i in cnt:
 				var a := _hash(gi, gj, 10.0 + i) * TAU
 				var d := (0.35 + 0.8 * _hash(gi, gj, 20.0 + i)) if i > 0 else 0.0
@@ -685,7 +685,7 @@ func _decor_yards(groups: Dictionary) -> void:
 			var r := b.size() * BUILDING_SCALE * 1.45
 			var x := b.x + sin(a) * r
 			var z := b.y + cos(a) * r
-			_put(groups, "bush_flower" if hb > 0.8 else "bush", x, z, 0.65 + 0.4 * hb, hb * 9.0)
+			_put(groups, "bush_flower" if hb > 0.8 else ("bush_b" if hb < 0.5 else "bush"), x, z, 0.65 + 0.4 * hb, hb * 9.0)
 
 
 ## 선착장 (마을 가까운 호숫가, 물 쪽으로) · 다리 (오솔길이 강을 건너는 곳)
@@ -799,7 +799,7 @@ func _sync_far() -> void:
 					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015:
 						continue
 					var h := _hash(gi, gj, 4.0)
-					var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % 3]
+					var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % TREE_KINDS.size()]
 					_put(groups, kind, p.x, p.y, (0.82 + 0.38 * _hash(gi, gj, 5.0)) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 					n_far_trees += 1
 	_flush(_far, groups)
@@ -839,9 +839,12 @@ func _build_fire() -> void:
 		_box(_fire, Vector3(0.2, 0.14, 0.2), Vector3(cos(a) * 0.55, 0.07, sin(a) * 0.55), Style.STONE_DARK)
 	# 제단: 납작한 돌 두 겹 + 제물 더미 (제물이 있을 때만)
 	_altar = _node(self)
-	_box(_altar, Vector3(0.8, 0.22, 0.55), Vector3(0, 0.11, 0), Style.STONE_DARK, 0.2)
-	_box(_altar, Vector3(0.62, 0.14, 0.42), Vector3(0, 0.29, 0), Style.STONE, 0.2)
-	_altar_pile = _box(_altar, Vector3(0.36, 0.16, 0.26), Vector3(0, 0.44, 0), Style.GRAIN, 0.5)
+	if Art.exists("altar"):              # Blender 모델 (art/src/build_items.py): 돌판 두 겹 + 해 무늬 + 초 두 자루 + 이끼
+		Art.instance(_altar, "altar", Transform3D(Basis(Vector3.UP, 0.2), Vector3.ZERO))
+	else:
+		_box(_altar, Vector3(0.8, 0.22, 0.55), Vector3(0, 0.11, 0), Style.STONE_DARK, 0.2)
+		_box(_altar, Vector3(0.62, 0.14, 0.42), Vector3(0, 0.29, 0), Style.STONE, 0.2)
+	_altar_pile = _box(_altar, Vector3(0.36, 0.16, 0.26), Vector3(0, 0.46, 0), Style.GRAIN, 0.5)
 
 
 func _animate_fire() -> void:

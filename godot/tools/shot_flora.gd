@@ -80,7 +80,7 @@ func _people_near(v: Village, p: Vector2, n: int) -> void:
 	for r in v.people:
 		if k >= n or r.is_baby():
 			continue
-		ResidentAI.cancel(r)
+		ResidentAI.cancel(v, r)
 		r.x = p.x + cos(k * 2.1) * (1.6 + k * 0.5)
 		r.y = p.y + sin(k * 2.1) * (1.6 + k * 0.5)
 		r.px = r.x

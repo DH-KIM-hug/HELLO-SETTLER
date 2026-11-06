@@ -136,7 +136,7 @@ func _process(_d: float) -> bool:
 				else:
 					b.state = "gone"
 			if chaser != null:
-				ResidentAI.cancel(chaser)
+				ResidentAI.cancel(v, chaser)
 				chaser.x = spot.x - 2.4
 				chaser.y = spot.y - 1.6
 			for i in 600:

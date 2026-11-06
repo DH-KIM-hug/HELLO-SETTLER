@@ -12,14 +12,23 @@ import bmesh  # noqa: E402
 
 OUT = out_dir_from_argv()
 SACK = mix("THATCH", "PLASTER", 0.55)
+SOOT = "6a625c"
+STEP = mix("PATH", "STONE", 0.3)
+SHUTTER = ("6f9a9a", "a8574a", "7d9a62", "5f7c96")
 
 
 # ───────────────────────── shared parts ─────────────────────────
-def thatch_roof(m, W, D, H, rise, ox=0.24, oy=0.17, thick=0.2, col="THATCH", under="THATCH_DARK", K=12, p=1.55,
-                droop=0.05, end=0.2, end_drop=0.14, end_pinch=0.86, layers=(0.42, 0.74), step=0.07):
+def thatch_roof(m, W, D, H, rise, ox=0.24, oy=0.17, thick=0.2, col="THATCH", under="THATCH_DARK", K=10, p=1.55,
+                droop=0.05, end=0.2, end_drop=0.14, end_pinch=0.86, layers=(0.42, 0.74), step=0.07, strip=0.21,
+                ridge=False, moss=0, straw=True, seed=0):
     """Thick, rounded gable roof (ridge along X). Eaves overhang ox / oy beyond walls W x D whose top is H.
     Layered thatch: the slope steps out at |s| = layers (each course overhangs the one below with a dark lip).
-    The two end sections are pinched and dropped -> rounded 'loaf' ends like hand-drawn thatch."""
+    The two end sections are pinched and dropped -> rounded 'loaf' ends like hand-drawn thatch.
+    straw=True: the slope is cut into strips along the ridge (~strip wide) and each strip gets a slightly different
+    shade -> texture-free straw streaks (vertex colour only). ridge=True: a rounded ridge roll on top.
+    moss = number of soft moss cushions on the slopes (old roofs)."""
+    import random as _r
+    rnd = _r.Random(seed * 31 + int(W * 100))
     hy = D / 2 + oy
 
     def zb(s):
@@ -30,58 +39,102 @@ def thatch_roof(m, W, D, H, rise, ox=0.24, oy=0.17, thick=0.2, col="THATCH", und
 
     # outer profile front eave -> ridge -> back eave, with lip segments at course boundaries
     ss = sorted(set([-1 + 2 * i / K for i in range(K + 1)] + [x * b for b in layers for x in (-1, 1)]))
-    outer, kinds = [], []          # kinds[i] = type of segment i -> i+1: 's' slope, 'l' lip
+    outer = []
     for s in ss:
         is_b = any(abs(abs(s) - b) < 1e-6 for b in layers)
         if is_b:
-            lo, hi = off(s * 1.0001), off(s * 0.9999)        # outer side (lower course) / inner side (upper course)
+            lo, hi = off(s * 1.0001), off(s * 0.9999)
             first, second = (lo, hi) if s < 0 else (hi, lo)
             outer.append((s, first))
             outer.append((s, second))
         else:
             outer.append((s, off(s)))
-    pts = []
-    for i, (s, o) in enumerate(outer):
-        pts.append((s * (hy + o * 0.6), zb(s) + o))
-    for i in range(len(outer) - 1):
-        kinds.append("l" if abs(outer[i][0] - outer[i + 1][0]) < 1e-9 else "s")
+    pts = [(s * (hy + o * 0.6), zb(s) + o) for (s, o) in outer]
+    kinds = ["l" if abs(outer[i][0] - outer[i + 1][0]) < 1e-9 else "s" for i in range(len(outer) - 1)]
+    course = [off((outer[i][0] + outer[i + 1][0]) / 2) for i in range(len(outer) - 1)]
 
-    def section(scale, dz):
-        out = [(y * scale, z + dz) for y, z in pts]
-        inner = []
+    def inner_pts(scale, dz):
+        out = []
         for i in range(K + 1):
             s = -1 + 2 * i / K
-            inner.append((s * (hy - thick * 0.55) * scale, zb(s) - thick + dz))
-        return out, inner
+            out.append(((s * (hy - thick * 0.55)) * scale, zb(s) - thick + dz))
+        return out
 
     L = W + 2 * ox
-    xs = [-L / 2, -L / 2 + end, L / 2 - end, L / 2]
+    n_mid = max(1, int(round((L - 2 * end) / strip)))
+    xs = [-L / 2] + [-L / 2 + end + (L - 2 * end) * k / n_mid for k in range(n_mid + 1)] + [L / 2]
+    if not straw:
+        xs = [-L / 2, -L / 2 + end, L / 2 - end, L / 2]
+
+    def sec(j):
+        e = j in (0, len(xs) - 1)
+        return (end_pinch, -end_drop) if e else (1.0, 0.0)
+
+    bm = m._bm("body")
+    # outer shell: slope profile + the inner eave corners (front and back) -> the eave thickness faces
     rings = []
     for j, x in enumerate(xs):
-        e = j in (0, 3)
-        out, inner = section(*((end_pinch, -end_drop) if e else (1.0, 0.0)))
-        rings.append([Vector((x, y, z)) for y, z in out] + [Vector((x, y, z)) for y, z in reversed(inner)])
+        sc, dz = sec(j)
+        inn = inner_pts(sc, dz)
+        ring = [Vector((x, y * sc, z + dz)) for y, z in pts] + [Vector((x, inn[-1][0], inn[-1][1])),
+                                                                 Vector((x, inn[0][0], inn[0][1]))]
+        rings.append(ring)
     n = len(rings[0])
     n_out = len(pts) - 1
-    bm = m._bm("body")
     vr = [[bm.verts.new(q) for q in r] for r in rings]
-    slope, lips, other = [], [], []
-    for a, b in zip(vr[:-1], vr[1:]):
+    faces = []
+    tone = {}
+    slope_f = set()
+    shades = (1.0, 0.95, 1.05, 0.97, 1.02, 0.92)
+    for j, (a, b) in enumerate(zip(vr[:-1], vr[1:])):
+        streak = shades[rnd.randrange(len(shades))] if straw else 1.0
         for i in range(n):
-            j = (i + 1) % n
-            f = bm.faces.new((a[i], b[i], b[j], a[j]))
-            if i < n_out:
-                (lips if kinds[i] == "l" else slope).append(f)
+            k = (i + 1) % n
+            f = bm.faces.new((a[i], b[i], b[k], a[k]))
+            faces.append(f)
+            if i < n_out and kinds[i] == "s":
+                lift = 1.0 + 0.06 * course[i] / max(step, 1e-6) - 0.03       # upper courses a touch lighter
+                tone[f] = shade(col, streak * lift * (0.94 if j in (0, len(xs) - 2) else 1.0))
+                slope_f.add(f)
             else:
-                other.append(f)
+                tone[f] = under
     caps = [bm.faces.new(list(reversed(vr[0]))), bm.faces.new(vr[-1])]
-    bmesh.ops.recalc_face_normals(bm, faces=slope + lips + other + caps)
+    # underside (few stations: it is only seen at the eaves)
+    us = []
+    for x, j in ((xs[0], 0), (xs[1], 1), (xs[-2], len(xs) - 2), (xs[-1], len(xs) - 1)):
+        sc, dz = sec(j)
+        us.append([Vector((x, y, z)) for y, z in inner_pts(sc, dz)])
+    uv = [[bm.verts.new(q) for q in r] for r in us]
+    under_f = []
+    for a, b in zip(uv[:-1], uv[1:]):
+        for i in range(K):
+            under_f.append(bm.faces.new((a[i], a[i + 1], b[i + 1], b[i])))
+    bmesh.ops.recalc_face_normals(bm, faces=faces + caps)
+    for f in under_f:
+        f.normal_update()
+        if f.normal.z > 0:
+            f.normal_flip()
     bm.normal_update()
-    m._finish(bm, slope, col, True)
-    m._finish(bm, lips, under, False)
-    m._finish(bm, other, under, False)
+    for f in faces:
+        m._finish(bm, [f], tone[f], f in slope_f)
     m._finish(bm, caps, shade(col, 0.86), False)
-    return hy
+    m._finish(bm, under_f, under, False)
+    if ridge:
+        zt = zb(0) + off(0)
+        m.cyl(0.12, 0.12, L - 2 * end + 0.1, pos=(-(L - 2 * end + 0.1) / 2, 0, zt - 0.06), rot=(0, math.pi / 2, 0),
+              color=shade(col, 0.82), seg=7, smooth=True, cap=shade(col, 0.7), bottom_cap=shade(col, 0.7))
+        for k in range(4):       # binding bands round the roll
+            x = -(L - 2 * end) / 2 + (k + 0.5) * (L - 2 * end) / 4
+            m.cyl(0.128, 0.128, 0.05, pos=(x - 0.025, 0, zt - 0.06), rot=(0, math.pi / 2, 0), color=shade(col, 0.62),
+                  seg=7, smooth=True)
+    for k in range(moss):
+        x = rnd.uniform(-L / 2 + 0.35, L / 2 - 0.35)
+        s = rnd.uniform(-0.75, -0.2) * (1 if k % 2 == 0 else -1)
+        y = s * hy
+        z = zb(s) + off(s) + 0.01
+        m.sphere(rnd.uniform(0.12, 0.17), pos=(x, y, z), scl=(1.6, 1.0, 0.3), color=mix("MOSS", "LEAF_MID", 0.35), seg=8, rings=4,
+                 lumps=0.15, group="body_nl")
+    return lambda s_: (s_ * (hy + off(s_) * 0.6), zb(s_) + off(s_))
 
 
 def gable_wall(m, W, D, H, rise, droop=0.05, thick=0.2, oy=0.17, p=1.55, col="PLASTER", timber=True):
@@ -145,7 +198,7 @@ def door(m, x, y, w=0.36, h=0.6, col="WOOD", arch=True, face=-1):
     """Arched plank door on the wall plane y (face -1 = front): flat slab + frame + step."""
     def outline(ww, hh):
         pts = [(-ww / 2, 0.0), (ww / 2, 0.0)]
-        k = 7 if arch else 1
+        k = 5 if arch else 1
         for i in range(k + 1):
             a = i / k * math.pi
             pts.append((ww / 2 * math.cos(a), hh - (ww / 2 if arch else 0) + (ww / 2 * math.sin(a) if arch else 0)))
@@ -155,7 +208,7 @@ def door(m, x, y, w=0.36, h=0.6, col="WOOD", arch=True, face=-1):
     for k in (-1, 1):
         m.box((0.035, 0.02, h * 0.62), pos=(x + k * w * 0.2, y + face * 0.05, 0.08), color=shade(col, 0.8))
     m.box((0.05, 0.03, 0.05), pos=(x + w * 0.3, y + face * 0.05, h * 0.42), color="WOOD_DARK")   # handle
-    m.box((w + 0.18, 0.18, 0.06), pos=(x, y + face * 0.09, 0.0), color="STONE_DARK")             # step
+    m.box((w + 0.18, 0.2, 0.07), pos=(x, y + face * 0.1, 0.0), color=shade(STEP, 0.92))           # step
 
 
 def window(m, x, z, y, w=0.3, h=0.28, face=-1, side=False):
@@ -174,17 +227,93 @@ def window(m, x, z, y, w=0.3, h=0.28, face=-1, side=False):
 
 
 def chimney(m, x, y, top, w=0.3, col="STONE"):
-    m.box((w, w, top), pos=(x, y, 0.3), color=col)
-    m.box((w + 0.08, w + 0.08, 0.1), pos=(x, y, 0.3 + top), color="STONE_DARK")
-    m.box((w - 0.1, w - 0.1, 0.02), pos=(x, y, 0.3 + top + 0.095), color="WINDOW")
-    for k in range(2):
-        m.box((w + 0.02, 0.02, 0.09), pos=(x, y - w / 2 - 0.005, 0.3 + top - 0.25 - k * 0.3), color=shade(col, 0.9))
+    """Chunky stone stack: offset courses (each a slightly different grey), a dark soot cap and flue."""
+    z = 0.3
+    k = 0
+    course = 0.26
+    while z < top + 0.3 - 0.01:
+        h = min(course, top + 0.3 - z)
+        dx = 0.015 if k % 2 else -0.015
+        m.box((w + (0.03 if k % 2 else 0.0), w + (0.0 if k % 2 else 0.03), h), pos=(x + dx, y, z),
+              color=shade(col, (1.0, 0.93, 1.05, 0.97)[k % 4]))
+        z += h
+        k += 1
+    zt = 0.3 + top
+    m.box((w + 0.1, w + 0.1, 0.09), pos=(x, y, zt), color="STONE_DARK",
+          colfn=lambda f: SOOT if f.normal.z > 0.7 else "STONE_DARK")
+    m.box((w - 0.06, w - 0.06, 0.07), pos=(x, y, zt + 0.09), color=SOOT,
+          colfn=lambda f: "WINDOW" if f.normal.z > 0.7 else SOOT)
+    m.box((w - 0.16, w - 0.16, 0.012), pos=(x, y, zt + 0.155), color=mix(SOOT, "WINDOW", 0.5))
+
+
+def dormer(m, x, surf, col, under, s0=-0.62, s1=-0.18):
+    """Eyebrow dormer on the front slope: small plaster face with a lit window under a round thatch hood."""
+    y0, z0 = surf(s0)
+    y1, z1 = surf(s1)
+    w = 0.5
+    zc = (z0 + z1) / 2 - 0.04
+    m.box((w, 0.3, z1 - z0), pos=(x, y0 + 0.2, z0 - 0.05), color="PLASTER")
+    m.box((0.3, 0.05, 0.24), pos=(x, y0 + 0.05, zc - 0.12), color="WINDOW_LIT")
+    m.box((0.035, 0.06, 0.24), pos=(x, y0 + 0.045, zc - 0.12), color="WOOD_DARK")
+    m.box((0.36, 0.06, 0.04), pos=(x, y0 + 0.045, zc - 0.15), color="WOOD_DARK")
+    hood = m.sphere(0.5, pos=(x, y0 + 0.22, z1 - 0.04), scl=(0.74, 0.62, 0.36), color=shade(col, 1.05), seg=10, rings=5)
+    for f in hood:
+        if f.normal.z < -0.2:
+            m._finish(m._bm("body"), [f], under, False)
+
+
+def flower_box(m, x, y, w=0.36, z=0.45, face=-1, seed=0, cols=None):
+    """Window box with round flower heads and a few leaves (front wall plane y)."""
+    cols = cols or ("LOTUS", "FLAME2", "PLASTER")
+    m.box((w, 0.13, 0.1), pos=(x, y + face * 0.07, z), color="WOOD",
+          colfn=lambda f: "FIELD_SOIL" if f.normal.z > 0.7 else "WOOD")
+    m.box((w - 0.04, 0.1, 0.06), pos=(x, y + face * 0.07, z + 0.09), color=shade("BUSH", 0.95))       # leaves
+    n = max(3, int(w / 0.11))
+    for i in range(n):
+        px = x - w / 2 + (i + 0.5) * w / n
+        m.sphere(0.055, pos=(px, y + face * (0.08 + 0.03 * (i % 2)), z + 0.17), scl=(1, 1, 0.8),
+                 color=cols[(i + seed) % len(cols)], seg=5, rings=3, group="body_nl")
+
+
+def shutters(m, x, z, y, w, h, col, face=-1):
+    for sx in (-1, 1):
+        m.box((w * 0.42, 0.03, h + 0.04), pos=(x + sx * (w / 2 + w * 0.24), y + face * 0.02, z - 0.02), color=col)
+        m.box((w * 0.3, 0.035, 0.03), pos=(x + sx * (w / 2 + w * 0.24), y + face * 0.025, z + h * 0.5), color=shade(col, 0.8))
+
+
+def stepping_stones(m, x, y, n=2, face=-1):
+    for k in range(n):
+        m.cyl(0.17 - 0.02 * k, 0.15 - 0.02 * k, 0.05, pos=(x + (0.06 if k % 2 else -0.04), y + face * (0.32 + k * 0.3), 0.0),
+              color=STEP, seg=6, cap=shade(STEP, 1.08), scl=(1.25, 1.0, 1.0))
+
+
+def picket_fence(m, x0, y0, x1, y1, h=0.42, col="WOOD"):
+    """Short picket fence from (x0, y0) to (x1, y1): pickets with pointed tops + two rails."""
+    d = Vector((x1 - x0, y1 - y0, 0))
+    ln = d.length
+    ang = math.atan2(d.y, d.x)
+    n = max(2, int(ln / 0.16))
+    pc = shade(col, 1.25)
+    for i in range(n + 1):
+        t = i / n
+        px, py = x0 + d.x * t, y0 + d.y * t
+        m.box((0.06, 0.04, h), pos=(px, py, 0), rot=(0, 0, ang), color=pc)
+    for z in (h * 0.3, h * 0.72):
+        m.box((ln, 0.03, 0.05), pos=((x0 + x1) / 2, (y0 + y1) / 2 + 0.03 * math.cos(ang), z), rot=(0, 0, ang),
+              color=shade(col, 1.05))
+
+
+def lantern(m, x, y, z, face=-1):
+    m.box((0.03, 0.12, 0.03), pos=(x, y + face * 0.06, z + 0.1), color="WOOD_DARK")
+    m.box((0.09, 0.09, 0.12), pos=(x, y + face * 0.12, z - 0.02), color="WINDOW_LIT",
+          colfn=lambda f: "WOOD_DARK" if abs(f.normal.z) > 0.7 else "WINDOW_LIT")
+    m.cyl(0.075, 0.0, 0.06, pos=(x, y + face * 0.12, z + 0.1), color="WOOD_DARK", seg=4, rot=(0, 0, math.pi / 4))
 
 
 def barrel(m, x, y, s=1.0, z=0.0):
-    m.cyl(0.17 * s, 0.17 * s, 0.4 * s, pos=(x, y, z), color="WOOD", seg=9, smooth=True, cap="STUMP_TOP")
+    m.cyl(0.17 * s, 0.17 * s, 0.4 * s, pos=(x, y, z), color="WOOD", seg=8, smooth=True, cap="STUMP_TOP")
     for hz in (0.07, 0.31):
-        m.cyl(0.18 * s, 0.18 * s, 0.035 * s, pos=(x, y, z + hz * s), color="WOOD_DARK", seg=9, smooth=True)
+        m.cyl(0.18 * s, 0.18 * s, 0.035 * s, pos=(x, y, z + hz * s), color="WOOD_DARK", seg=8, smooth=True)
 
 
 def sack(m, x, y, s=1.0, z=0.0, rz=0.0):
@@ -224,7 +353,8 @@ def plank_roof(m, W, D, z, rise, col="WOOD", over=0.15):
 
 # ───────────────────────── cottages ─────────────────────────
 def cottage(name, W, D, H, rise, door_x, win_xs, chim_x, seed, extras=None, walls="stone", roof_col="THATCH",
-            roof_under="THATCH_DARK", p=1.55, side_win=True):
+            roof_under="THATCH_DARK", p=1.55, side_win=True, shutter=None, boxes=True, moss=0, straw=True, steps=2,
+            gable_col="PLASTER", lamp=False, dormer_x=None):
     m = Model(name, seed)
     if walls == "stone":
         stone_walls(m, W, D, H, seed=seed)
@@ -232,13 +362,25 @@ def cottage(name, W, D, H, rise, door_x, win_xs, chim_x, seed, extras=None, wall
         plank_walls(m, W, D, H)
     else:
         walls(m, W, D, H)
-    gable_wall(m, W, D, H, rise, p=p, col="PLASTER")
-    thatch_roof(m, W, D, H, rise, col=roof_col, under=roof_under, p=p)
-    door(m, door_x, -D / 2, w=0.4, h=min(0.82, H - 0.4))
-    for x in win_xs:
-        window(m, x, min(H * 0.5, 0.68), -D / 2)
+    gable_wall(m, W, D, H, rise, p=p, col=gable_col)
+    surf = thatch_roof(m, W, D, H, rise, col=roof_col, under=roof_under, p=p, moss=moss, straw=straw, seed=seed)
+    if dormer_x is not None:
+        dormer(m, dormer_x, surf, roof_col, roof_under)
+    dh = min(0.95, H - 0.36)
+    door(m, door_x, -D / 2, w=0.44, h=dh)
+    if steps:
+        stepping_stones(m, door_x, -D / 2 - 0.1, steps)
+    if lamp:
+        lantern(m, door_x + 0.36, -D / 2, dh - 0.05)
+    wz = min(H * 0.5, 0.62)
+    for i, x in enumerate(win_xs):
+        window(m, x, wz, -D / 2)
+        if shutter is not None:
+            shutters(m, x, wz, -D / 2, 0.3, 0.28, shutter)
+        if boxes:
+            flower_box(m, x, -D / 2, w=0.4, z=wz - 0.17, seed=seed + i)
     if side_win:
-        window(m, W / 2 + 0.01, H * 0.5, 0.0, w=0.26, h=0.24, face=1, side=True)
+        window(m, W / 2 + 0.01, wz, 0.0, w=0.26, h=0.24, face=1, side=True)
     if chim_x is not None:
         chimney(m, chim_x, D * 0.18, H + rise - 0.05)
     if extras:
@@ -247,14 +389,27 @@ def cottage(name, W, D, H, rise, door_x, win_xs, chim_x, seed, extras=None, wall
 
 
 def build_cottages():
-    cottage("cottage_a", 1.9, 1.25, 1.4, 1.2, -0.3, [0.45], 0.55, 11,
-            extras=lambda m: (barrel(m, 1.12, -0.3), sack(m, 1.1, 0.05, 0.8))).export(OUT)
+    def a_extra(m):
+        barrel(m, 1.12, -0.3)
+        sack(m, 1.1, 0.05, 0.8)
+        picket_fence(m, -1.35, -0.95, -1.35, 0.3)
+        picket_fence(m, -1.35, -0.95, -0.75, -0.95)
+    cottage("cottage_a", 1.9, 1.25, 1.4, 1.2, -0.3, [0.45], 0.55, 11, extras=a_extra, shutter=SHUTTER[0]).export(OUT)
+
     def b_extra(m):
         sack(m, -1.25, -0.45, 0.9)
         barrel(m, -1.28, -0.1, 0.85)
-    cottage("cottage_b", 2.1, 1.3, 1.35, 1.25, 0.3, [-0.45, 0.82], -0.6, 12, extras=b_extra).export(OUT)
-    # pioneer hut: plank walls, low roof, no chimney
-    cottage("hut", 1.5, 1.1, 1.15, 1.0, 0.15, [-0.4], None, 13, walls="plank", side_win=False).export(OUT)
+        m.cyl(0.12, 0.09, 0.2, pos=(0.75, -0.95, 0), color="ROOF_RED", seg=8, cap="FIELD_SOIL")       # flower pot
+        m.sphere(0.13, pos=(0.75, -0.95, 0.27), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
+        for k in range(3):
+            m.sphere(0.04, pos=(0.7 + k * 0.05, -1.02, 0.36 + 0.02 * k), color="FLAME2", seg=5, rings=3, group="body_nl")
+    cottage("cottage_b", 2.1, 1.3, 1.35, 1.25, 0.3, [-0.45, 0.82], -0.6, 12, extras=b_extra,
+            roof_col=mix("THATCH", "ROOF_RED", 0.18), roof_under=mix("THATCH_DARK", "ROOF_RED", 0.25),
+            shutter=SHUTTER[1], lamp=True, dormer_x=0.15).export(OUT)
+    # pioneer hut: plank walls, low weathered roof with moss, no chimney
+    cottage("hut", 1.5, 1.1, 1.15, 1.0, 0.15, [-0.4], None, 13, walls="plank", side_win=False,
+            roof_col=mix("THATCH", "TRUNK", 0.16), roof_under=mix("THATCH_DARK", "TRUNK", 0.3), moss=3, boxes=False,
+            steps=1, gable_col="WOOD").export(OUT)
 
 
 def build_houses():
@@ -279,13 +434,13 @@ def build_houses():
     def t_extra(m):
         for x in (-0.75, 0.0, 0.75):
             window(m, x, 1.38, -0.75, w=0.28, h=0.26)
-        m.box((0.4, 0.12, 0.08), pos=(0.75, -0.83, 1.25), color="WOOD")       # flower box
-        for k in range(3):
-            m.sphere(0.06, pos=(0.63 + k * 0.12, -0.83, 1.35), color=("LOTUS", "WINDOW_LIT", "LOTUS")[k], seg=6, rings=4)
+        for k, x in enumerate((-0.75, 0.75)):
+            flower_box(m, x, -0.75, w=0.38, z=1.2, seed=k)
         barrel(m, 1.4, -0.8)
         barrel(m, 1.2, -1.0, 0.85)
 
-    cottage("house_timber", 2.4, 1.5, 2.0, 1.3, -0.35, [0.55], 0.75, 21, walls=timber_walls, extras=t_extra).export(OUT)
+    cottage("house_timber", 2.4, 1.5, 2.0, 1.3, -0.35, [0.55], 0.75, 21, walls=timber_walls, extras=t_extra,
+            shutter=SHUTTER[2], lamp=True, dormer_x=-0.35).export(OUT)
 
     # 석조주택: big stone house, grey slate roof (straighter, thinner)
     def s_extra(m):
@@ -293,7 +448,8 @@ def build_houses():
         window(m, 0.75, 1.25, -0.775, w=0.3, h=0.3)
         crate(m, 1.45, -0.85, 0.9)
     m = cottage("house_stone", 2.4, 1.55, 1.8, 1.1, 0.0, [-0.75, 0.75], -0.75, 22, roof_col="ROOF_GREY",
-                roof_under=shade("ROOF_GREY", 0.8), p=1.15, extras=s_extra)
+                roof_under=shade("ROOF_GREY", 0.8), p=1.15, extras=s_extra,
+                shutter=SHUTTER[3], lamp=True)
     chimney(m, 0.8, 0.3, 1.8 + 1.1 - 0.05)
     m.export(OUT)
 
@@ -469,7 +625,9 @@ def build_windmill():
         rr = 0.78 - (0.22 * z / 2.1) + 0.005
         m.box((0.18, 0.03, 0.1), pos=(math.cos(a) * rr, math.sin(a) * rr, z), rot=(0, 0, a + math.pi / 2), color=shade("STONE", 0.9))
     # thatched cap
-    m.cyl(0.72, 0.02, 0.95, pos=(0, 0, 2.05), color="THATCH", seg=12, smooth=True)
+    m.cyl(0.74, 0.02, 1.0, pos=(0, 0, 2.05), color="THATCH", seg=20, smooth=True,
+          colfn=lambda f: shade("THATCH", (1.0, 0.94, 1.05, 0.97, 1.02)[int((math.atan2(f.calc_center_median().y, f.calc_center_median().x) + 4) * 3.2) % 5]))
+    m.sphere(0.1, pos=(0, 0, 3.05), color="WOOD_DARK", seg=6, rings=3)
     m.cyl(0.74, 0.7, 0.12, pos=(0, 0, 2.0), color="THATCH_DARK", seg=12)
     door(m, 0.0, -0.76, w=0.34, h=0.55)
     window(m, 0.0, 1.35, -0.64, w=0.22, h=0.22)
@@ -555,15 +713,38 @@ def build_field(name, ripe):
     rows = 6
     for i in range(rows):
         y = -S / 2 + 0.35 + i * (S - 0.7) / (rows - 1)
-        m.box((S - 0.45, 0.22, 0.05), pos=(0, y, 0.06), color=shade("FIELD_SOIL", 0.88))
-        n = 15
-        for k in range(n):
-            x = -S / 2 + 0.35 + k * (S - 0.7) / (n - 1) + r.uniform(-0.04, 0.04)
-            h = r.uniform(0.38, 0.5) if ripe else r.uniform(0.22, 0.3)
-            c = shade(crop, r.choice((0.92, 1.0, 1.08)))
-            m.cyl(0.11, 0.035, h, pos=(x, y + r.uniform(-0.04, 0.04), 0.08), color=c, seg=5, group="body_nl")
-            if ripe:
-                m.sphere(0.06, pos=(x, y, 0.08 + h), scl=(1, 1, 1.6), color=shade("CROP_RIPE", 1.1), seg=5, rings=3, group="body_nl")
+        m.box((S - 0.45, 0.34, 0.05), pos=(0, y, 0.06), color=shade("FIELD_SOIL", 0.86))
+        # one crop row = a zig-zag ridge lofted along X: tall ears / short gaps alternate -> reads as many stalks
+        n = 28
+        x0, x1 = -S / 2 + 0.32, S / 2 - 0.32
+        rings = []
+        for k in range(n + 1):
+            x = x0 + (x1 - x0) * k / n
+            tall = k % 2 == 0
+            h = (r.uniform(0.44, 0.56) if tall else r.uniform(0.3, 0.36)) if ripe else \
+                (r.uniform(0.26, 0.32) if tall else r.uniform(0.18, 0.22))
+            if k in (0, n):
+                h *= 0.6
+            w = 0.16 if ripe else 0.15
+            dy = r.uniform(-0.025, 0.025)
+            wt = w * (0.45 if tall else 0.7)
+            rings.append([Vector((x, y + dy - w, 0.1)), Vector((x, y + dy - wt, 0.1 + h * 0.86)),
+                          Vector((x, y + dy, 0.1 + h)), Vector((x, y + dy + wt, 0.1 + h * 0.86)),
+                          Vector((x, y + dy + w, 0.1))])
+        base_c = "CROP_RIPE" if ripe else "CROP"
+        stem_c = mix("CROP_RIPE", "CROP", 0.45) if ripe else shade("CROP", 0.86)
+
+        def rc(f, base_c=base_c, stem_c=stem_c):
+            c = f.calc_center_median()
+            if c.z > 0.1 + (0.36 if ripe else 0.2):
+                return shade(base_c, 1.1 if ripe else 1.06)
+            return base_c if c.z > 0.1 + (0.2 if ripe else 0.1) else stem_c
+        fs = m.strip(rings, color=base_c, caps=True, group="body_nl")
+        bm = m._bm("body_nl")
+        bmesh.ops.recalc_face_normals(bm, faces=fs)
+        bm.normal_update()
+        for f in fs:
+            m._finish(bm, [f], rc(f), False)
     # fence with a gap (gate) at the front
     F = S / 2 + 0.12
     pts = []
