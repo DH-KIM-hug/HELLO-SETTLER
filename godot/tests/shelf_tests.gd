@@ -27,7 +27,8 @@ func all() -> void:
 	var old_lamp := Market.lamp_level
 	StartFlow.navigate = false
 	run.timed(self, ["test_prices", "test_buy_jar", "test_lamp_upgrade", "test_kit_upgrades", "test_kit_applies", "test_switch_round_trip",
-		"test_other_jar_catches_up", "test_old_save_one_jar", "test_new_jar_scene", "test_quick_creation", "test_sheet_and_room"])
+		"test_other_jar_catches_up", "test_old_save_one_jar", "test_new_jar_scene", "test_quick_creation", "test_sheet_and_room",
+		"test_title_empty_jar", "test_preview_saved", "test_title_from_preview", "test_old_save_preview"])
 	_clean()
 	StartFlow.navigate = old_nav
 	StartFlow.take()
@@ -397,4 +398,153 @@ func test_sheet_and_room() -> void:
 	check(room.shelf_jars.size() == 3 and room._shelf_ext.size() == 2, "방: 옆 병 셋 + 선반 판을 양쪽으로 이어 붙임")
 	run.root.remove_child(room)
 	room.free()
+	drop(sm)
+
+
+# ───────────────────────── 병 미리보기 (타이틀·선반의 병 안 — sim/jar_preview.gd · view/room/preview_mesh.gd) ─────────────────────────
+func _title() -> Node:
+	var t: Node = load(StartFlow.TITLE_SCENE).instantiate()
+	run.root.add_child(t)
+	return t
+
+
+func _drop_title(t: Node) -> void:
+	run.root.remove_child(t)
+	t.free()
+
+
+## 저장도 만들던 병도 없으면 타이틀의 병은 빈 유리병 (흙·마을·나무 없이 — 코르크만)
+func test_title_empty_jar() -> void:
+	var sm := manager()
+	var t := _title()
+	var room: GiantRoom = t.get("room")
+	check(room.soil == null and room.mini_village == null and room.cork != null and room.root.find_child("JarPreview", true, false) == null,
+		"처음 타이틀: 빈 유리병 (흙·마을 없음, 코르크만)")
+	_drop_title(t)
+	drop(sm)
+
+
+## 저장하면 병 요약에 미리보기 (작고 · 같은 세상이면 같고 · 세상과 맞음)
+func test_preview_saved() -> void:
+	var sm := manager()
+	var jw := add_world(sm, 1, 3, "첫 별", 0.6)
+	add_world(sm, 2, 5, "둘째 별", 0.6)
+	sm.giant["first_jar_done"] = true
+	sm.save_all(true)
+	var g := SaveFile.read_best(ProjectSettings.globalize_path(TMP_DIR) + "/giant.dat")
+	var pv: Variant = (g["payload"]["jars"][0] as Dictionary).get("preview") if g["ok"] else null
+	check(pv is Dictionary and not JarPreview.decode(pv).is_empty(), "저장하면 거인 묶음의 병 요약에 미리보기가 들어간다")
+	if not (pv is Dictionary):
+		drop(sm)
+		return
+	var bytes := JarPreview.byte_size(pv)
+	check(bytes < 16384, "미리보기는 작다 (%d 바이트 < 16 KB)" % bytes)
+	var d1 := JarPreview.decode(JarPreview.make(jw))
+	var d2 := JarPreview.decode(JarPreview.make(jw))
+	var d0 := JarPreview.decode(pv)
+	check(d1["h"] == d2["h"] and d1["c"] == d2["c"] and d0["h"] == d1["h"], "같은 세상이면 같은 미리보기 (결정적)")
+	var other := JarPreview.decode((g["payload"]["jars"][1] as Dictionary).get("preview"))
+	check(not other.is_empty() and other["h"] != d0["h"], "다른 세상은 다른 미리보기")
+	# 세상과 맞는가: 가장 높은 미리보기 칸 자리의 땅은 세상에서도 높은 쪽 · 호수 칸은 세상에서도 물
+	var ww := jw.water
+	var n: int = d0["n"]
+	var cw := float(ww.n) / n
+	var hs := PackedFloat32Array()
+	for k in range(0, ww.n * ww.n, 7):
+		if ww.is_inside_k(k):
+			hs.append(ww.h[k])
+	hs.sort()
+	var best := -1
+	for pi in n * n:
+		var c: int = d0["c"][pi]
+		if c != JarPreview.C_OUT and not PreviewMesh.is_water(c) and (best < 0 or d0["h"][pi] > d0["h"][best]):
+			best = pi
+	var top_h := _cell_h(ww, best % n, best / n, cw)
+	var rank := hs.bsearch(top_h) / float(hs.size())
+	check(rank > 0.85, "가장 높은 미리보기 칸 = 세상의 높은 곳 (그 자리 땅 높이가 세상에서 상위 %.0f%%)" % ((1.0 - rank) * 100.0))
+	var lakes := 0
+	var wet := 0
+	for pi in n * n:
+		var c: int = d0["c"][pi]
+		if c == JarPreview.C_LAKE or c == JarPreview.C_DEEP:
+			lakes += 1
+			if _cell_water(ww, pi % n, pi / n, cw):
+				wet += 1
+	check(lakes > 0 and wet >= lakes * 0.8, "호수 칸은 세상에서도 물 (%d / %d)" % [wet, lakes])
+	check((d0["vil"] as Array).size() == 1 and (Vector2(d0["vil"][0][0], d0["vil"][0][1]) * ww.rr).distance_to(jw.primary().center) < 1.0,
+		"무리 자리·시대가 미리보기에 (%s)" % str(d0["vil"]))
+	drop(sm)
+
+
+func _cell_h(ww: WorldWater, px: int, py: int, cw: float) -> float:
+	var s := 0.0
+	var m := 0
+	for sy in JarPreview.SUB:
+		for sx in JarPreview.SUB:
+			var k := clampi(int((py + (sy + 0.5) / JarPreview.SUB) * cw), 0, ww.n - 1) * ww.n + clampi(int((px + (sx + 0.5) / JarPreview.SUB) * cw), 0, ww.n - 1)
+			if ww.is_inside_k(k):
+				s += ww.h[k]
+				m += 1
+	return s / maxi(m, 1)
+
+
+func _cell_water(ww: WorldWater, px: int, py: int, cw: float) -> bool:
+	for sy in JarPreview.SUB:
+		for sx in JarPreview.SUB:
+			var k := clampi(int((py + (sy + 0.5) / JarPreview.SUB) * cw), 0, ww.n - 1) * ww.n + clampi(int((px + (sx + 0.5) / JarPreview.SUB) * cw), 0, ww.n - 1)
+			if ww.is_lake(k):
+				return true
+	return false
+
+
+## 타이틀은 세상을 불러오지 않고 미리보기로 병 안을 그린다 · 옆 병도 자기 미리보기 · 사 둔 빈 병은 비어 있음
+func test_title_from_preview() -> void:
+	var sm := manager()
+	add_world(sm, 1, 3, "첫 별", 0.6)
+	add_world(sm, 2, 5, "둘째 별", 0.6)
+	sm.giant["first_jar_done"] = true
+	sm.giant["pending_jar"] = {"climate": "온대", "paid": 6000.0, "unix": 0.0}
+	sm.save_all(true)
+	sm.unload()
+	var t0 := Time.get_ticks_usec()
+	var pv := PreviewMesh.build(sm.peek()["preview"])
+	var ms := (Time.get_ticks_usec() - t0) / 1000.0
+	pv.free()
+	var t := _title()
+	var room: GiantRoom = t.get("room")
+	check(sm.jars.is_empty() and room.mini_village != null and room.mini_village.name == "JarPreview" and room.soil != null,
+		"이어하기 타이틀: 세상을 불러오지 않고 (불러온 병 %d) 미리보기로 병 안을 그림 (만들기 %.1f ms)" % [sm.jars.size(), ms])
+	check(ms < 30.0, "미리보기 만들기가 빠르다 (%.1f ms — 목표 데스크톱 15 ms)" % ms)
+	var used := 0
+	var empties := 0
+	for e: Dictionary in room.shelf_jars:
+		if bool(e["preview"]):
+			used += 1
+		if bool(e["empty"]) and (e["node"] as Node).get_child_count() == 2:      # 코르크 + 유리뿐
+			empties += 1
+	check(room.shelf_jars.size() == 2 and used == 1 and empties == 1, "옆 병은 자기 미리보기 (%d) · 사 둔 빈 병은 빈 유리병 (%d)" % [used, empties])
+	_drop_title(t)
+	drop(sm)
+
+
+## 미리보기가 없는 옛 저장: 타이틀은 시대에 맞춘 꾸민 마을 → 그 병을 처음 불러올 때 한 번 만들어 저장
+func test_old_save_preview() -> void:
+	var sm := manager()
+	add_world(sm, 1, 3, "첫 별", 0.3)
+	sm.giant["first_jar_done"] = true
+	sm.save_all(true)
+	sm.jars[1].erase("preview")
+	sm.save_giant(true)                          # 미리보기 없는 요약 (옛 저장처럼)
+	sm.enabled = false                           # (unload가 다시 저장하지 않게)
+	sm.unload()
+	sm.enabled = true
+	check(not (sm.peek().get("preview", {}) as Dictionary).has("b"), "옛 저장처럼: 요약에 미리보기 없음")
+	var t := _title()
+	var room: GiantRoom = t.get("room")
+	check(room.mini_village != null and room.mini_village.name != "JarPreview" and room.mini_village.get_child_count() > 6,
+		"미리보기 없는 옛 저장: 타이틀은 시대에 맞춘 꾸민 마을")
+	_drop_title(t)
+	check(sm.load_all() and sm.jar_summary(1).has("preview"), "그 병을 불러오면 미리보기를 만든다")
+	sm.flush()
+	check((sm.peek().get("preview", {}) as Dictionary).has("b"), "만든 미리보기는 곧바로 저장 (다음 타이틀부터 미리보기)")
 	drop(sm)

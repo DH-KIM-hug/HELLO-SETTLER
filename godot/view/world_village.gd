@@ -557,7 +557,8 @@ func refresh_shelf() -> void:
 		lo = minf(lo, float(s["x"]))
 		hi = maxf(hi, float(s["x"]))
 		if float(s["x"]) != 0.0:
-			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0))})
+			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0)),
+				"preview": (s["info"] as Dictionary).get("preview", {})})
 	if room_zoom != null:
 		room_zoom.room.set_shelf_jars(others)
 	cam.shelf_range = Vector2(lo, hi) if others.size() > 0 else Vector2.ZERO

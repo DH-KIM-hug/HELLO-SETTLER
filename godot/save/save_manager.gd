@@ -18,6 +18,9 @@ const EVENT_GAP := 1.0                 # 큰 일 저장 사이 최소 간격 (�
 const WORLD_EVENT_GAP := 20.0
 const WORLD_AUTOSAVE_EVERY := 60.0
 const DIR := "user://save"
+## 병 미리보기 (sim/jar_preview.gd — 타이틀·선반의 병 안): 병 요약에 함께 적는다. 만드는 데 데스크톱 20~50 ms라 저장마다가 아니라
+## 이 간격(현실 초)에 한 번까지 + 전부 저장(앱이 뒤로 갈 때)·선반에 내려놓을 때·미리보기 없는 옛 병을 처음 불러올 때는 곧바로
+const PREVIEW_EVERY := 300.0
 
 static var _inst: GameSave
 
@@ -145,9 +148,26 @@ func loaded_ids() -> Array:
 func jar_summary(id: int) -> Dictionary:
 	if jars.has(id):
 		var j: Dictionary = jars[id]
-		return {"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id), "era": _era_of(id), "pop": _pop_of(id),
+		var s := {"id": id, "kind": j["kind"], "name": String(j["meta"].get("name", "")), "day": _day_of(id), "era": _era_of(id), "pop": _pop_of(id),
 			"climate": _climate_of(id), "sim_unix": Time.get_unix_time_from_system(), "live": true}
+		if j.get("preview") is Dictionary and not (j["preview"] as Dictionary).is_empty():
+			s["preview"] = j["preview"]
+		return s
 	return shelf_info.get(id, {})
+
+
+## 병 미리보기를 새로 (넓은 세상만 — force가 아니면 PREVIEW_EVERY에 한 번까지). 만들었으면 true
+func update_preview(id: int, force := false) -> bool:
+	if not jars.has(id):
+		return false
+	var j: Dictionary = jars[id]
+	if j["kind"] != "world" or j["world"] == null:
+		return false
+	if not force and j.get("preview") is Dictionary and _now_t - float(j.get("preview_t", -1.0e9)) < PREVIEW_EVERY:
+		return false
+	j["preview"] = JarPreview.make(j["world"])
+	j["preview_t"] = _now_t
+	return true
 
 
 ## 선반의 병 요약 전부 (선반 순서)
@@ -177,6 +197,7 @@ func switch_jar(id: int) -> bool:
 
 ## 불러온 병을 선반에 내려놓음 (요약만 남기고 메모리에서 뺌)
 func _shelve(id: int) -> void:
+	update_preview(id, true)                  # 선반에 놓이는 병은 그 순간의 모습으로
 	var s := jar_summary(id)
 	s["live"] = false
 	s["sim_unix"] = Time.get_unix_time_from_system()
@@ -315,6 +336,7 @@ func peek() -> Dictionary:
 		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
 	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0)), "id": int(pick.get("id", 1)),
+		"preview": pick.get("preview", {}),
 		"shelf": jl.duplicate(true), "pending": gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty()}
 
 
@@ -421,6 +443,7 @@ func save_jar(id: int, sync := false) -> void:
 	if not jars.has(id):
 		return
 	var t0 := Time.get_ticks_usec()
+	update_preview(id, false)
 	var p := jar_payload(id)
 	var j: Dictionary = jars[id]
 	var bn := _book_n(id)
@@ -443,6 +466,8 @@ func save_jar(id: int, sync := false) -> void:
 
 ## 전부 (거인 + 모든 병 + 연대기) — 앱이 뒤로 갈 때
 func save_all(sync := true) -> void:
+	for id: int in loaded_ids():             # 거인 묶음(병 요약)보다 먼저 — 미리보기가 요약에 들어가게
+		update_preview(id, sync)
 	save_giant(false)
 	for id: int in loaded_ids():
 		save_jar(id, false)
@@ -708,7 +733,13 @@ func _load_jar(id: int) -> bool:
 	for q: Village in (w.settlements if w != null else [v]):
 		q.watching = true                # 불러온 병은 거인이 보는 중 (비운 시간은 catch_up이 '거인 없음'으로 따로 흘린다)
 	var c := JarClock.from_dict(v, p.get("clock", {}))
+	var old_preview: Variant = (shelf_info.get(id, {}) as Dictionary).get("preview")
 	register_jar(id, v, c, p.get("meta", {}), w)
+	if old_preview is Dictionary and not (old_preview as Dictionary).is_empty():
+		jars[id]["preview"] = old_preview                  # 저장된 미리보기 (PREVIEW_EVERY 뒤에 새로)
+		jars[id]["preview_t"] = _now_t
+	elif w != null and update_preview(id, true) and enabled:
+		save_giant(false)                                  # 미리보기가 없던 옛 병: 처음 불러올 때 한 번 만들어 적어 둔다
 	jars[id]["book_n"] = _book_n(id)
 	if jr["fell_back"] or (not cr.is_empty() and cr["fell_back"]):
 		v.log_line("기억이 흐릿한 날이 있었다. 그 무렵의 일은 누구도 또렷이 떠올리지 못했다.")

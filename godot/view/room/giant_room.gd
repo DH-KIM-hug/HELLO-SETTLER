@@ -453,7 +453,7 @@ func jar_volume() -> Dictionary:
 
 ## 타이틀: 병 안의 작은 마을 (preview_room과 같은 배치 — 넓은 세상 장면에서는 진짜 땅이 들어감).
 ## 이어하기면 저장된 병의 시대(era)에 맞춘 마을 — 개척기 오두막·우물 → 마을 목조 집·밭 → 읍내 돌집·예배당·광장 → 영지 망루.
-## (진짜 세상을 타이틀에서 불러 낮은 LOD로 그리는 건 1024칸 세상에서 불러오기만 100 ms 넘게 걸려서 — 휴대폰 150 ms 예산 밖 — 꾸민 마을로)
+## (진짜 세상을 타이틀에서 불러오면 1024칸 세상은 풀기만 100 ms 넘게 걸려서 — 저장된 미리보기로 그린다 (add_jar_contents). 이 꾸민 마을은 미리보기가 없는 옛 저장용)
 const MINI_ERA := [
 	[["hut", Vector3(-3.5, 0, 2.0), 0.3], ["well", Vector3(4.0, 0, 5.0), -0.4], ["woodpile", Vector3(-7.5, 0, -1.0), 0.6], ["field_green", Vector3(5.0, 0, -1.5), 0.2]],
 	[["house_timber", Vector3(-3.5, 0, 2.0), 0.3], ["cottage_a", Vector3(-7.0, 0, -2.5), 1.1], ["well", Vector3(4.0, 0, 5.0), -0.4], ["field_ripe", Vector3(5.0, 0, -1.5), 0.2]],
@@ -468,9 +468,27 @@ func add_mini_village(houses: bool, era := 0) -> void:
 	mini_village = _make_mini(root, houses, mini_era)
 
 
+## 이어하기: 저장된 세상의 미리보기 (sim/jar_preview.gd → view/room/preview_mesh.gd — 그 세상의 언덕·호수·강·숲·소금·마을 자리).
+## 미리보기가 없거나 못 읽으면 (옛 저장) 시대에 맞춘 꾸민 마을. 미리보기로 그렸으면 true
+func add_jar_contents(preview: Variant, era := 0) -> bool:
+	mini_era = clampi(era, 0, MINI_ERA.size() - 1)
+	mini_village = _make_contents(root, preview, mini_era)
+	return mini_village.name == "JarPreview"
+
+
+func _make_contents(parent: Node3D, preview: Variant, era: int) -> Node3D:
+	var pv := PreviewMesh.build(preview)
+	if pv == null:
+		return _make_mini(parent, true, era)
+	pv.position = Vector3(0, SOIL_TOP, 0)
+	parent.add_child(pv)
+	_set_layers(pv)
+	return pv
+
+
 # ───────────────────────── 선반의 다른 병 (C1 — GIANT_ROOM 1 '병이 여러 개면 선반에 나란히', UI 05) ─────────────────────────
-## 지금 병(원점) 옆에 나란히 놓인 병들 — 저장된 시대에 맞춘 작은 마을이 든 꾸민 병 (타이틀의 병과 같은 꼴; 진짜 세상은 들어갈 때 불러옴).
-## items: [{x: cm (선반 위 자리), era, empty (사 두고 아직 만들지 않은 빈 병), id}]. 선반 판은 병이 놓이는 데까지 이어 붙인다
+## 지금 병(원점) 옆에 나란히 놓인 병들 — 그 병의 미리보기 (없으면 저장된 시대에 맞춘 작은 마을; 진짜 세상은 들어갈 때 불러옴).
+## items: [{x: cm (선반 위 자리), era, preview (병 요약의 미리보기), empty (사 두고 아직 만들지 않은 빈 병), id}]. 선반 판은 병이 놓이는 데까지 이어 붙인다
 const SHELF_GAP := 26.0                    # 병과 병 사이 (cm) — 소품(화분·물뿌리개)을 지나 옆 병
 const SHELF_L := 60.0                      # 선반 판 하나의 길이 (build_room.py)
 var shelf_jars: Array = []                 # [{node, x, id, glass}]
@@ -495,9 +513,10 @@ func set_shelf_jars(items: Array) -> void:
 		n.position = Vector3(x, 0.0, 0.0)
 		root.add_child(n)
 		var empty := bool(it.get("empty", false))
-		if not empty:
+		var contents: Node3D = null
+		if not empty:                                   # 사 두고 아직 만들지 않은 병은 빈 유리병 (흙도 없이)
 			Art.instance(n, ROOM + "jar_soil")
-			_make_mini(n, true, int(it.get("era", 0)))
+			contents = _make_contents(n, it.get("preview", {}), int(it.get("era", 0)))
 		Art.instance(n, ROOM + "jar_cork")
 		var gm := _glass_material(JAR_BODY_TOP)
 		gm.set_shader_parameter("tint_mul", room_mul())
@@ -505,7 +524,8 @@ func set_shelf_jars(items: Array) -> void:
 		g.material_override = gm
 		# (바닥 그림자 blob은 넣지 않음 — 옆 병 자리에서는 네모난 어두운 판으로 보였다. 원인은 아직 모름: 지금 병의 blob과 같은 재질·메시인데도)
 		_set_layers(n)
-		shelf_jars.append({"node": n, "x": x, "id": int(it.get("id", 0)), "glass": gm, "empty": empty})
+		shelf_jars.append({"node": n, "x": x, "id": int(it.get("id", 0)), "glass": gm, "empty": empty,
+			"preview": contents != null and contents.name == "JarPreview"})
 	# 선반 판: 원래 판(−30~30) 밖으로 병이 있으면 그쪽으로 판을 더 놓는다
 	var k := 1
 	while hi + JAR_OUT > SHELF_L * (k - 0.5) or lo - JAR_OUT < -SHELF_L * (k - 0.5):
