@@ -61,7 +61,8 @@ const WALK_CHILD := 0.9
 const FOOD_IV := 900.0                  # 1명이 15분마다 식량 1
 const HUNGRY_AT := 0.8                  # 굶은 식량 0.8 이상이면 먹을 것을 찾아 나섬
 const STARVING_AT := 3.0                # 3이면 굶주림 → 건강 감소
-const STARVE_HEALTH_TIME := 1.0 * DAY   # 굶주림에서 건강 1 → 0 (v5: 8시간 → 하루 = 현실 5분 — 거인이 손쓸 틈)
+const HUNGER_EASE := 1.0                # (v5-0) 모자란 날: 배고픔 += (모자란 몫 − 먹은 몫 × 이 값) — 1이면 절반 넘게 모자랄 때만 굶주림이 쌓인다
+const STARVE_HEALTH_TIME := 1.0 * DAY  # 굶주림에서 건강 1 → 0 (v5: 8시간 → 하루 = 현실 5분 — 거인이 손쓸 틈)
 const HEAL_TIME := 12.0 * HOUR
 const CARRY := 3                        # 한 번에 나르는 짐 (특징 '짐을 많이 들 수 있음' 4) — (2026-11-07 걸음 다시: 걸음 ×2/3 → 2 → 3, 오가는 횟수 ×2/3)
 ## 낟알·가루·빵·물은 수레·자루 하나로 나른다 (v5 — 걸음이 느려져 한 번에 많이). 물건 → 한 번에 나르는 양
@@ -80,7 +81,7 @@ const MARRY_MIN := 4.0
 const MARRY_MAX := 20.0
 const MARRY_RATE := 0.3                 # 미혼 남녀 짝마다 병 하루 확률 (v5: 0.5 → 0.3)
 const BIRTH_RATE := 0.1                 # 부부당 병 하루 기본 출산 확률 (v5: 0.6 → 0.1 — 가임 기간이 병 56일로 길어짐)
-const BIRTH_FOOD_DAYS := 1.5            # (v5) 창고 먹을 것이 이만큼 날치 아래면 아이를 미룬다 (성장이 스스로 멈추게) — v5-0: 2 → 1.5 (아기 무렵 빠듯해지게)
+const BIRTH_FOOD_DAYS := 1.25           # (v5) 창고 먹을 것이 이만큼 날치 아래면 아이를 미룬다 (성장이 스스로 멈추게) — v5-0: 2 → 1.5 → 1.25 (2026-11-07 balance-check: 아기·인구가 늘 때 빠듯해지게)
 const CARE_DAYS := 0.8                  # (v5 · GD 7.3) 아기가 걸음마(약 2세 = 일생 0.8날 = 병 3.2일)를 할 때까지 부모 둘 다 집에서 돌봄
 const CARE_ELDER_DAYS := 0.15           # 같은 집에 노인이 있으면 한 사람은 이만큼 뒤 일터로
 const STROLL_P := 0.25                  # (v5) 돌보는 부모가 낮에 결정할 때 유모차 산책을 나갈 확률
@@ -205,10 +206,17 @@ const ENOUGH := {"통나무": 20.0, "판자": 30.0, "돌": 20.0, "물": 200.0, "
 ## 제물로 남기는 식량(OFFER_FOOD_KEEP_DAYS 1.5일)보다 조금 더 → 날마다 바치는 밀이 인구에 맞게 묶인다
 const FARM_ENOUGH_DAYS := 2.0          # v5: 1.6 → 3일 → (v5-0 2026-11-07 '빠듯함') 2일 — 밀은 상하므로 넉넉히 쌓되 끝없이는 아니게, 비축이 대개 1~4일치
 const FARM_ENOUGH_MIN := 120.0          # (정함) 작은 마을도 이만큼은 쌓는다
-const FARM_FAV_DAYS := 0.15             # (정함) 거인님이 밀을 좋아하신다고 믿으면 이만큼 날을 더 (다른 물건의 ×1.5 대신 — 식량이라 바치는 몫이 너무 커지지 않게)
+## v5-0 (2026-11-07): 철에 따른 밭 자람 = 1 + (그날 철 기온 − SEASON_GROW_T) × K, MIN~MAX (Health.season_grow — 첫 빵 뒤부터)
+## 온대: 4·10월 중순 12°C → 1.0 · 12월 중순 약 2.5°C → 약 0.6 · 1월 중순 1°C → 0.55 바닥 · 7월 23°C → 1.1 꼭대기
+const SEASON_GROW_T := 12.0
+const SEASON_GROW_K := 0.04
+const SEASON_GROW_MIN := 0.55
+const SEASON_GROW_MAX := 1.1
+const FARM_FAV_DAYS := 0.15            # (정함) 거인님이 밀을 좋아하신다고 믿으면 이만큼 날을 더 (다른 물건의 ×1.5 대신 — 식량이라 바치는 몫이 너무 커지지 않게)
 const PLANK_RESERVE := 4                # 촌장이 남기는 비상용 판자 (나무꾼·제재소 제외)
 const IDLE_FOR_NEW_JOB := 2             # 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외)
 const FARM_SAFETY := 1.3                # 농장 생산 < 소비 × 1.3 이면 식량 부족
+const FARM_FEEDS := 6.0                 # 먹을 것이 모자랄 때 촌장의 어림: 밭 하나 = 죽으로 6명 (빵을 구우면 × BREAD/PORRIDGE = 12명 — v5-0, 밭이 넘치게 지어지지 않게)
 const FOREST_MIN := 40                  # 나무가 이만큼 아래면 산림관
 const FORESTER_STOP := 70               # 산림관은 나무가 이만큼 넘으면 쉰다
 const TREE_LOGS := 4                    # (v5) 나무 한 그루 = 통나무 4개 (예전엔 1개 — 숲이 그루터기 밭이 되고 통나무는 0)
