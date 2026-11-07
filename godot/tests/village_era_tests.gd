@@ -188,9 +188,17 @@ func test_herbalist() -> void:
 	var b := built(v, "약초꾼", sp)
 	var hb := staff(v, b)
 	var t0 := v.t
+	var picks := 0
+	var bad_pick := ""
+	var last_t := -1.0
 	while v.t - t0 < 30.0 * Balance.HOUR and float(v.stock.get(Balance.HERB, 0.0)) < 3.0:     # v5: 걸음이 느려 (예전 10시간)
 		v.advance(300.0)
-	check(b.has_spot and VillageEra.herb_ok(v, Vector2(b.spot_x, b.spot_y)), "약초 자리: 습한 땅 또는 숲 가 (%.1f, %.1f)" % [b.spot_x, b.spot_y])
+		if b.has_spot and b.spot_t != last_t:      # 자리를 새로 고른 순간에 맞는 자리였는지 (E3-7: 이슬이 새벽에만 떨어져 땅이 하루 사이 젖었다 마름 — 6시간마다 다시 고름)
+			last_t = b.spot_t
+			picks += 1
+			if not VillageEra.herb_ok(v, Vector2(b.spot_x, b.spot_y)):
+				bad_pick = "(%.1f, %.1f)" % [b.spot_x, b.spot_y]
+	check(picks > 0 and bad_pick == "", "약초 자리: 고를 때마다 습한 땅 또는 숲 가 (%d번 고름 %s)" % [picks, bad_pick])
 	check(float(v.stock.get(Balance.HERB, 0.0)) >= 3.0, "약초꾼이 약초를 캐 창고에 (%.0f개, %.1f시간)" % [float(v.stock.get(Balance.HERB, 0.0)), (v.t - t0) / Balance.HOUR])
 	# 곰팡이약: 약초꾼이 있으면 약초꾼만 만든다
 	v.mold.med_known = true
