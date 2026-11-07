@@ -550,11 +550,44 @@ def build_graveyard():
     m.export(OUT)
 
 
-def build_ferry():
+def reed_raft(m, x, y, z, L=1.3, W=0.7, rz=0.0):
+    """Pioneer-era raft (GD 3.0 물가 표): dry reed stems bundled side by side, lashed across with grass cord at three
+    places, a cross-stalk underneath at both ends. Deck top ~z+0.13. Long along X."""
+    def _r():
+        n = 7
+        r = W / n / 2 * 1.05
+        for k in range(n):
+            yy = -W / 2 + (k + 0.5) * W / n
+            dx = 0.04 * ((k * 5) % 3 - 1)
+            stem(m, (-L / 2 + dx, yy, 0.06), (L / 2 + dx * 0.5, yy, 0.06), r,
+                 (REED, "d8c896", "c4b47a", REED, "b39a72", "d8c896", REED)[k], "8f7a48", 2, 5)
+        for xx in (-L * 0.36, 0.0, L * 0.36):
+            m.box((0.05, W + 0.04, r * 2 + 0.02), pos=(xx, 0, 0.06 - r - 0.01), color=CORD)
+        for xx in (-L * 0.44, L * 0.44):
+            stem(m, (xx, -W / 2 - 0.05, 0.0), (xx, W / 2 + 0.05, 0.0), 0.03, REED_GREEN, REED_GREEN_NODE, 0, 5)
+    placed(m, _r, (x, y, z), rz)
+
+
+def build_raft():
+    """Standalone reed raft for the ferry crossing (village_view: pioneer era) - origin = deck centre at the waterline."""
+    m = Model("raft_reed", 233)
+    reed_raft(m, 0, 0, -0.06, 1.3, 0.72)
+    m.export(OUT)
+
+
+def build_leaf_boat():
+    """Standalone curled-leaf boat for the ferry crossing (village_view: after the pioneer era), no mast (the ferryman
+    stands in it). Origin = centre at the waterline."""
+    m = Model("boat_leaf", 234)
+    leaf_boat(m, 0, 0, -0.14, 1.45, 0.62, 0.0)
+    m.export(OUT)
+
+
+def build_ferry(raft=False):
     """나루터: reed-pole piles (thick green stems with joints) along +X from the shore, a deck of slim reeds lashed
     across with flat pebbles laid on the landward half, a mooring reed with grass-cord coils at the end, a curled
     leaf boat with a petal sail moored to a lily pad, a glowing seed lantern on a reed pole."""
-    m = Model("ferry", 231)
+    m = Model("ferry_raft" if raft else "ferry", 231)
     L, Wd = 2.6, 0.9
     z = 0.25
     n = 8
@@ -577,8 +610,11 @@ def build_ferry():
     stem(m, (0.2, -Wd / 2 - 0.1, 0), (0.2, -Wd / 2 - 0.1, 1.25), 0.03, REED, REED_NODE, 3, 5)
     twig(m, (0.2, -Wd / 2 - 0.1, 1.22), (0.45, -Wd / 2 - 0.1, 1.3), 0.02)
     seed_lantern(m, 0.43, -Wd / 2 - 0.1, 1.29, 0.12)
-    # leaf boat moored to a lily pad beside the pier
-    leaf_boat(m, 1.55, 1.12, -0.12, 1.3, 0.48, 0.05, sail="f2a2b8")
+    # moored to a lily pad beside the pier: a curled-leaf boat (later eras) / a dry reed raft (pioneer era: ferry_raft)
+    if raft:
+        reed_raft(m, 1.55, 1.12, -0.08, 1.3, 0.62)
+    else:
+        leaf_boat(m, 1.55, 1.12, -0.12, 1.3, 0.48, 0.05, sail="f2a2b8")
     lily_pad(m, 2.45, 1.45, -0.04, 0.32, 0.6)
     cord(m, (2.15, 1.15, 0.18), (2.45, 1.45, 0.0), sag=0.05, r=0.01, n=2)
     cord(m, (0.95, 1.12, 0.18), (0.35, Wd / 2 + 0.05, 0.3), sag=0.08, r=0.01, n=3)
@@ -745,7 +781,8 @@ if __name__ == "__main__":
     only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv and len(sys.argv) > sys.argv.index("--") + 2 else []
     for name, fn in (("fisher", build_fisher), ("hunter", build_hunter), ("herbalist", build_herbalist),
                      ("mushroom_hut", build_mushroom_hut), ("healer", build_healer), ("weaver", build_weaver),
-                     ("smithy", build_smithy), ("graveyard", build_graveyard), ("ferry", build_ferry),
+                     ("smithy", build_smithy), ("graveyard", build_graveyard), ("ferry", build_ferry), ("ferry_raft", lambda: build_ferry(True)),
+                     ("raft_reed", build_raft), ("boat_leaf", build_leaf_boat),
                      ("chapel", build_chapel), ("plaza", build_plaza), ("pasture", build_pasture),
                      ("watchtower", build_watchtower)):
         if not only or name in only:

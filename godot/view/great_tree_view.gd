@@ -44,7 +44,7 @@ func sync(dt: float, force := false) -> void:
 	var se := season()
 	var key := "%s|%d|%d" % [se, ww.great_trees.size(), ww.giant_fruits.size()]
 	for f: Dictionary in ww.giant_fruits:
-		key += ",%.0f" % float(f["x"])
+		key += ",%.0f%s" % [float(f["x"]), "c" if f.get("cut", false) else ""]
 	if key == _key and not force:
 		return
 	_key = key
@@ -90,7 +90,8 @@ func sync(dt: float, force := false) -> void:
 	for f: Dictionary in ww.giant_fruits:
 		var x: float = f["x"]
 		var z: float = f["y"]
-		Art.instance(self, "flora/giant_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
+		# (E3-3) 자르기 시작하면 잘린 열매
+		Art.instance(self, "flora/giant_fruit_cut" if f.get("cut", false) else "flora/giant_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
 			Vector3(x, terrain.ground_y(x, z) - 0.15, z)))
 		n_fruits += 1
 

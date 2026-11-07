@@ -2,8 +2,8 @@
 ## 세계수·소나무·과일나무·은행나무·단풍나무 — 분재 모양 랜드마크. 베지 않는다 (Village.trees에 넣지 않음 → 나무꾼·건물·길이 건드리지 않음).
 ## 세상을 만들 때(WorldGen.generate 끝) 시드로 정한 자리에 하나씩: 서로 멀리, 좋은 키트 자리(물가 마을 터)에서 멀리, 물가에서 떨어져.
 ## 키트 자리 고르기도 큰 나무 곁은 막는다 (어느 부락도 처음부터 곁에 있지 않음 — 탐험·이주의 목표).
-## 과일나무는 여름~가을에 가끔 거대한 열매를 떨어뜨린다 (WorldWater.giant_fruits) — 지금은 데이터 + 화면만.
-## TODO(E3-4): 주민이 열매를 주워 나르기 (여럿이 메고 오는 볼거리, 하나로 여러 날 먹는 큰 먹을거리 — BALANCE에 값 정하기)
+## 과일나무는 여름~가을에 가끔 거대한 열매를 떨어뜨린다 (WorldWater.giant_fruits).
+## (E3-3) 부락 영역 + FRUIT_REACH 안에 떨어지면 한가한 어른 몇이 함께 가서 자르고(잘린 열매 모양) 조각을 하나씩 지고 와 창고에 '과일'로 (fetch).
 class_name GreatTrees
 extends RefCounted
 
@@ -19,7 +19,13 @@ const FRUIT_MONTHS := [6, 7, 8, 9, 10]
 const FRUIT_PER_HOUR := 1.0 / 36.0     # 철이면 한 시간에 이만큼 (병의 하루 24시간 → 약 이틀 반에 하나)
 const FRUIT_MAX := 3                   # 땅에 이만큼까지
 const FRUIT_ROT_DAYS := 8.0            # 이 날 동안 아무도 안 주우면 썩어 사라짐
-const FRUIT_FOOD := 60.0               # (안) 열매 하나 = 먹을거리 — 줍기가 생기면 BALANCE로
+const FRUIT_FOOD := Balance.FRUIT_FOOD # 열매 하나 = 먹을거리 (data/balance.gd)
+const FETCH_FROM := 7.0                # 낮에만 주우러 감 (시)
+const FETCH_UNTIL := 16.0
+const FRUIT_STAND := 2.4               # 열매 둘레 이만큼에 둘러섬 (열매 지름 약 3.5 × 화면 크기)
+## 연대기 (처음 한 번 — 거인 이야기 없음)
+const FIRST_LINE := "%s 사람들을 데리고 멀리 큰 나무 아래까지 갔다. 제 몸집보다 큰 열매를 함께 잘라 조각조각 지고 돌아오니, 며칠은 배불리 먹게 되었다."
+const SAY_GO := "저기 커다란 열매가 떨어졌어! 다 같이 가자!"
 
 
 ## 세상 만들기 끝에 (물이 자리 잡은 뒤) 다섯 그루를 세운다. 결정론: 같은 시드 → 같은 자리. 옛 저장은 불러올 때 ensure()
@@ -171,7 +177,124 @@ static func drop_fruit(ww: WorldWater, rng: RandomNumberGenerator, now: float) -
 		var p := c + Vector2(cos(a), sin(a)) * d
 		if not ww.inside(p.x, p.y, 2.0) or ww.depth(ww.idx(p.x, p.y)) > 0.004:
 			continue
-		var f := {"x": p.x, "y": p.y, "t": now, "yaw": rng.randf() * TAU, "food": FRUIT_FOOD}
+		var f := {"x": p.x, "y": p.y, "t": now, "yaw": rng.randf() * TAU, "food": FRUIT_FOOD, "left": FRUIT_FOOD}
+		f["id"] = fruit_id(f)
 		ww.giant_fruits.append(f)
 		return f
 	return {}
+
+
+# ───────────────────────── (E3-3) 거대한 열매 줍기 ─────────────────────────
+static func fruit_id(f: Dictionary) -> int:
+	return int(float(f["t"]) / 60.0) * 7919 + int(absf(float(f["x"])) * 10.0) + int(absf(float(f["y"])) * 1000.0) * 3
+
+
+static func fruit_left(f: Dictionary) -> float:
+	return float(f.get("left", f.get("food", FRUIT_FOOD)))
+
+
+static func fruit_by_id(ww: WorldWater, id: int) -> Dictionary:
+	for f: Dictionary in ww.giant_fruits:
+		if int(f.get("id", fruit_id(f))) == id:
+			return f
+	return {}
+
+
+## 이 부락이 닿는 열매 (영역 반지름 + FRUIT_REACH 안, 아무도 맡지 않은 것 가운데 가장 가까운) — 없으면 빈 사전
+static func reachable_fruit(v: Village) -> Dictionary:
+	if not v.water is WorldWater:
+		return {}
+	var reach := v.territory_r() + Balance.FRUIT_REACH
+	var best: Dictionary = {}
+	var bd := INF
+	for f: Dictionary in (v.water as WorldWater).giant_fruits:
+		if v.t < float(f.get("claim_until", -1.0)) or fruit_left(f) <= 0.5:
+			continue
+		var d := Vector2(f["x"], f["y"]).distance_to(v.center)
+		if d <= reach and d < bd:
+			bd = d
+			best = f
+	return best
+
+
+## 한 시간에 한 번 (모든 부락): 닿는 열매가 있고 낮이면 한가한 어른 2~4명이 함께 간다 → 간 사람 수
+static func fetch(v: Village) -> int:
+	if not v.water is WorldWater or (v.water as WorldWater).giant_fruits.is_empty():
+		return 0
+	var h := v.hour_now()
+	if h < FETCH_FROM or h > FETCH_UNTIL:
+		return 0
+	var f := reachable_fruit(v)
+	if f.is_empty():
+		return 0
+	var fp := Vector2(f["x"], f["y"])
+	var team := _team(v, fp)
+	if team.size() < Balance.FRUIT_TEAM_MIN:
+		return 0
+	if not f.has("id"):
+		f["id"] = fruit_id(f)
+	f["claim_until"] = v.t + Balance.FRUIT_CLAIM
+	var s := v.store()
+	var home := Vector2(s.x, s.y) if s != null else v.center
+	for i in team.size():
+		var r: Resident = team[i]
+		ResidentAI.cancel(v, r)
+		r.action = "haul"
+		r.last_action = "haul"
+		r.doing = "커다란 열매를 가지러 가는 중"
+		var a := TAU * i / float(team.size()) + 0.3
+		var q := fp + Vector2(cos(a), sin(a)) * FRUIT_STAND
+		r.steps.append(ResidentAI.walk(q.x, q.y))
+		r.steps.append(ResidentAI.act(Balance.FRUIT_CUT_TIME, "work", ResidentAI.op("fruit_take", {"fid": int(f["id"])})))
+		var o := Vector2(cos(a), sin(a)) * 0.7
+		r.steps.append(ResidentAI.walk(home.x + 0.8 + o.x, home.y + 0.6 + o.y))
+		r.steps.append(ResidentAI.act(3.0, "idle", ResidentAI.op("fruit_put")))
+	v.speak(team[0], SAY_GO, 7)
+	v.stats["fruit_trips"] = int(v.stats.get("fruit_trips", 0)) + 1
+	return team.size()
+
+
+## 함께 갈 어른: 깨어 있고 아프지·다치지·배고프지 않으며 급한 일(위기·곰팡이·병 돌봄)을 하지 않는 사람, 열매에 가까운 순
+static func _team(v: Village, p: Vector2) -> Array:
+	var cs: Array = []
+	for r in v.people:
+		if r.dead or r.sleeping or not r.is_adult() or r.sick_left > 0.0 or r.injured_left > 0.0 or r.hunger >= 1.0:
+			continue
+		if not r.action in ["", "idle", "rest", "social", "work", "haul", "build", "play", "wander"] or r.carry != "":
+			continue
+		cs.append(r)
+	cs.sort_custom(func(a: Resident, b: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(b.x, b.y).distance_squared_to(p))
+	return cs.slice(0, Balance.FRUIT_TEAM)
+
+
+static func run_op(v: Village, r: Resident, d: Dictionary) -> void:
+	match String(d["op"]):
+		"fruit_take":                  # 열매를 잘라 한 조각을 등에 (열매는 잘린 모양으로 · 다 나르면 사라짐)
+			if not v.water is WorldWater:
+				return
+			var ww := v.water as WorldWater
+			var f := fruit_by_id(ww, int(d["fid"]))
+			if f.is_empty():
+				r.doing = "빈손으로 돌아오는 중"
+				return
+			var piece := minf(fruit_left(f), Balance.FRUIT_FOOD / float(Balance.FRUIT_TEAM))
+			f["cut"] = true
+			f["left"] = fruit_left(f) - piece
+			if float(f["left"]) <= 0.5:
+				ww.giant_fruits.erase(f)
+			r.carry = "과일"
+			r.carry_amt = piece
+			r.doing = "열매 조각을 지고 돌아오는 중"
+		"fruit_put":
+			if r.carry == "과일" and r.carry_amt > 0.0:
+				v.stock["과일"] = float(v.stock.get("과일", 0.0)) + r.carry_amt
+				v.stats["fruit_food"] = float(v.stats.get("fruit_food", 0.0)) + r.carry_amt
+				if not v.stats.has("fruit_first"):
+					v.stats["fruit_first"] = v.t
+					v.log_line(FIRST_LINE % ("%s%s" % [r.name, Village.josa(r.name, "이", "가")]))
+					v.speak(r, "이거 하나면 며칠은 먹겠다!", 6)
+			if r.carry == "과일":
+				r.carry = ""
+				r.carry_amt = 0.0
+		_:
+			push_error("GreatTrees.run_op: 모르는 할 일 %s" % d["op"])

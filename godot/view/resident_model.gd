@@ -51,26 +51,33 @@ const CARRY := {
 	"빵": ["bread_basket", "front"], "죽": ["porridge_pot", "front"], "건량": ["grain_sack", "back"], "낟알": ["grain_sack", "back"],
 	"통나무": ["twig_bundle", "shoulder"], "판자": ["twig_bundle", "shoulder"],   # (E3 소인의 세상) 통나무·판자 = 나뭇가지 다발·쪼갠 갈대 다발 (GD 3.0)
 	"돌": ["stone_block", "front"], "철광석": ["stone_block", "front"], "석탄": ["stone_block", "front"], "철": ["stone_block", "front"],
-	"소금": ["salt_sack", "back"], "물": ["water_bucket", "hand"], "생선": ["fish_string", "hand"],
+	"소금": ["salt_sack", "back"], "물": ["water_bucket", "hand"],
+	"생선": ["medaka", "front"],           # (E3-6 GD 3.0 · 2026-11-07 사용자) 잡는 물고기 = 송사리 (주민만 함) — 혼자면 두 팔로 안고, 같은 길을 가는 둘이면 큰 놈을 장대에 메고 (village_view 짝짓기)
+	"생선:앞": ["fish_pole", "pole"], "생선:뒤": ["pole_half", "pole"],
+	"과일": ["fruit_piece", "head"],        # (E3-3) 거대한 열매를 잘라 조각을 머리에 이고 (위에서 보는 카메라에 잘 보이게)
 	"약초": ["herb_bundle", "hand"], "민들레 잎": ["herb_bundle", "hand"], "꽃잎": ["herb_bundle", "hand"],
 	"버섯": ["mushroom_basket", "front"], "빛버섯": ["mushroom_basket", "front"], "말린 버섯": ["mushroom_basket", "front"],
 	"유모차": ["pram", "push"],          # v5 (GD 7.3) 아기 산책: 땅 위를 굴러가는 나무 유모차를 두 손으로 민다 (art/src/build_pioneer.py)
 }
 const CARRY_GENERIC := ["bundle", "back"]
 const CARRY_PROPS := ["wheat_sheaf", "flour_sack", "grain_sack", "salt_sack", "dough_bowl", "bread_basket", "loaf",
-	"porridge_pot", "log", "plank_stack", "twig_bundle", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle", "pram"]
+	"porridge_pot", "log", "plank_stack", "twig_bundle", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle", "pram",
+	"medaka", "fish_pole", "pole_half", "fruit_piece"]
 ## 아이: 작은 것으로 바꿔 (빵 바구니 → 빵 한 덩이) 두 손으로 안는다 · 머리에 이는 건 바구니만 (어른 여자 반쯤)
-const CARRY_CHILD := {"bread_basket": "loaf"}
+const CARRY_CHILD := {"bread_basket": "loaf", "fish_pole": "medaka", "pole_half": "medaka"}
 const CARRY_HEAD_OK := ["bread_basket", "mushroom_basket"]
 const CARRY_SCALE := 1.12          # 기본 확대에서도 읽히게 조금 크게
 const CARRY_CHILD_SCALE := 0.95
 ## 작은 소품은 더 크게 (손에 늘어뜨린 것은 기본 확대에서 안 읽힘)
-const CARRY_PROP_SCALE := {"fish_string": 1.55, "wheat_sheaf": 1.2, "flour_sack": 1.2, "salt_sack": 1.15, "grain_sack": 1.15, "bundle": 1.15, "herb_bundle": 1.5, "water_bucket": 1.15, "loaf": 1.15}
+const CARRY_PROP_SCALE := {"fish_string": 1.55, "medaka": 1.25, "fruit_piece": 1.5, "wheat_sheaf": 1.2, "flour_sack": 1.2, "salt_sack": 1.15, "grain_sack": 1.15, "bundle": 1.15, "herb_bundle": 1.5, "water_bucket": 1.15, "loaf": 1.15}
 const CARRY_FAR_SCALE := 1.35
 const CARRY_BOB := 0.035          # 걸음에 맞춰 짐이 통통
 ## 자리 → 붙는 곳 (모델 좌표, 쉴 자세 — 앞 = +Z, 오른쪽 = -X)
 const CARRY_SOCKET := {"front": Vector3(0, 0.86, 0.42), "shoulder": Vector3(-0.22, 1.18, -0.1), "back": Vector3(0, 0.96, -0.17),
-	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02), "push": Vector3(0, 0, 1.16)}
+	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02), "push": Vector3(0, 0, 1.16),
+	"pole": Vector3(-0.22, 1.27, -0.04)}
+## pole (둘이 메기): 오른 어깨 위 장대 — 앞 사람(fish_pole)은 뒤로, 뒤 사람(pole_half)은 앞으로 뻗어 POLE_GAP 사이 가운데에서 만남
+const POLE_GAP := 2.6            # 둘 사이 (모델 단위 — build_carry.py POLE_HALF × 2). 세상 칸 = × Style.RESIDENT_SCALE
 ## push (유모차): 모델 원점(땅)에 붙음 — 소품 원점 = 바구니 아래 땅, 손잡이가 주민 쪽(-Z). 바퀴 부품 (굴러감)
 const PRAM_SCALE := 1.3          # 유모차 크기 (손잡이가 손 높이에 오게)
 const PRAM_WHEELS := {"pram_wheel_fl": 0.13, "pram_wheel_fr": 0.13, "pram_wheel_bl": 0.17, "pram_wheel_br": 0.17}   # 부품 → 반지름
@@ -81,6 +88,7 @@ const CARRY_ARMS := {
 	"head": {"R": [Vector3(-2.75, 0.5, 0.0), -0.45], "L": [Vector3(-2.75, -0.5, 0.0), -0.45]},
 	"hand": {"R": [Vector3(0.0, 0.3, 0.0), -0.08]},
 	"push": {"R": [Vector3(-0.7, 0.1, 0.0), -0.75], "L": [Vector3(-0.7, -0.1, 0.0), -0.75]},
+	"pole": {"R": [Vector3(-1.25, 0.75, 0.0), -2.1]},
 }
 const A_OUT := 0.12                # 쉴 때 팔이 몸에서 벌어진 정도 (build_residents.py A_OUT)
 ## 직업(일터 종류) → 옷·연장 (A20, design/characters/jobs_a·jobs_b). hat = 모자(본디 모자 대신), over = 겉옷, robe = 긴 옷,
@@ -940,6 +948,9 @@ func set_item(kind: String) -> void:
 	if _carry_style == "push":
 		_set_push(parts)
 		return
+	if _carry_style == "pole":
+		_set_ground_prop(parts)
+		return
 	_reparent_item(head if _carry_style == "head" else (arm_r if _carry_style == "hand" else chest))
 	_carry_close = _carry_mi(parts["mesh"])
 	_carry_far = _carry_mi(parts["far"] if parts["far"] != null else parts["mesh"])
@@ -983,6 +994,22 @@ func _set_push(parts: Dictionary) -> void:
 	_carry_close.visible = lod_close
 	_carry_far.visible = not lod_close
 	item.transform = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * PRAM_SCALE), CARRY_SOCKET["push"])
+	_item_base = item.position
+
+
+## (E3-6) 둘이 메는 장대: 모델 원점에 붙임 (어깨 위 장대 — 어깨 점을 장대 끝에 맞춤)
+func _set_ground_prop(parts: Dictionary) -> void:
+	_reparent_item(self)
+	_carry_close = _carry_mi(parts["mesh"])
+	_carry_far = _carry_mi(parts["far"] if parts["far"] != null else parts["mesh"])
+	_carry_close.visible = lod_close
+	_carry_far.visible = not lod_close
+	var ab := (parts["mesh"] as Mesh).get_aabb()
+	var at: Vector3 = CARRY_SOCKET[_carry_style]
+	# 앞 사람 = 뒤로 (X → -Z) · 뒤 사람 = 앞으로 (X → +Z). 크기는 그대로 (둘 사이가 맞게)
+	var b := Basis(Vector3.UP, PI / 2.0 if _carry_prop == "fish_pole" else -PI / 2.0)
+	var anchor := Vector3(ab.position.x + 0.15, ab.end.y - 0.045, ab.get_center().z)
+	item.transform = Transform3D(b, at - b * anchor)
 	_item_base = item.position
 
 
@@ -1217,7 +1244,7 @@ func _carry_pose(walking: bool) -> void:
 	if _player != null and _player.current_animation != "":
 		var ln := _player.current_animation_length
 		ph = _player.current_animation_position / ln if ln > 0.0 else 0.0
-	var bob := absf(cos(ph * TAU)) * CARRY_BOB if walking and _carry_style != "push" else 0.0
+	var bob := absf(cos(ph * TAU)) * CARRY_BOB if walking and not _carry_style in ["push", "pole"] else 0.0
 	item.position = _item_base + Vector3(0, bob, 0)
 	if not _wheels.is_empty():
 		_roll_wheels()
