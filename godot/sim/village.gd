@@ -133,6 +133,15 @@ var _full_since := -1.0               # 영역이 90% 넘게 찬 때부터
 var _letter_id := 0
 var _people_by_id: Dictionary = {}
 var _bld_by_id: Dictionary = {}
+var _fp_val := 0.0                    # (저장 안 함) 이 걸음 처음에 센 _food_people() — enough("밀")이 같은 걸음 안에서 다시 쓴다
+var _fp_n := -1
+var _fp_t := -1.0
+var _pnz := PackedInt32Array()        # (저장 안 함) 밟힌 적 있는 오솔길 칸 — _path_rebuild_nz
+var _pnz_in := PackedByteArray()
+var _pnz_ok := false
+var _tr_fix := -1.0                   # (저장 안 함) find_spot 동안 고정한 영역 반지름 (<0 = 늘 새로 셈)
+var _homes_sig := PackedInt64Array()  # (저장 안 함) 집 배정이 아무것도 바꾸지 않았던 상태 — 같으면 다시 볼 것이 없다 (assign_homes)
+var _homes_types := PackedStringArray()
 var _opening_chief := 0               # 첫 한 시간에 촌장이 터를 잡은 횟수 (OPENING_CHIEF_AT)
 var _spread_left := Balance.HOUR      # 숲이 저절로 퍼지는지 다음에 굴리기까지
 # 거인의 상점·하늘에서 내려온 것 (SHOP.md · WORLD_EVENTS 1.1 · 4.1 · 4.4 — sim/shop.gd · sim/sky_drops.gd)
@@ -177,6 +186,7 @@ func _init_prototype(seed_v: int) -> void:
 	stock = Balance.START_STOCK.duplicate()
 	paths.resize(PATH_N * PATH_N)
 	paths.fill(0.0)
+	_pnz_ok = false
 	# 숲 다섯 군데 · 바위 · (호수는 물 시뮬레이션)
 	for g: Vector2 in [Vector2(-12, 14), Vector2(-20, 4), Vector2(18, -6), Vector2(22, 12), Vector2(4, 22)]:
 		for i in 24:
@@ -579,6 +589,8 @@ func land_capacity() -> float:
 
 ## 부락 영역 반지름 = 시대별 지름 ÷ 2 (+ 국경 건물). 소형 병은 대지(반지름 R)보다 넓을 수 없다
 func territory_r() -> float:
+	if _tr_fix >= 0.0:
+		return _tr_fix
 	var d: float = Balance.TERRITORY_D[mini(era, 3)]
 	var extra := 0.0
 	for b in buildings:
@@ -675,7 +687,8 @@ func consume(need: float) -> float:
 				if t2 > 0.0:
 					b.out[k] = float(b.out[k]) - t2
 					need -= t2
-	manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
+	if not manna_batches.is_empty():
+		manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	return maxf(0.0, need)
 
 
@@ -734,12 +747,15 @@ func advance(seconds: float) -> void:
 
 
 func step(dt: float) -> void:
+	SimProf.begin()
 	for p in people:              # 화면이 걸음 사이를 보간하도록 직전 위치
 		p.px = p.x
 		p.py = p.y
 	t += dt
+	SimProf.mark("misc")
 	if owns_water:
 		water.advance(dt)
+	SimProf.mark("water")
 	if not _arrival_manna and t >= Balance.MANNA_DELAY:
 		_arrival_manna = true
 		manna_fall("arrival")
@@ -751,16 +767,22 @@ func step(dt: float) -> void:
 		_last_dawn = dawn_idx
 		_on_dawn()
 	# 낟알 상함 (하루)
-	for m: Dictionary in manna:
-		if t - m["born"] >= Balance.MANNA_SPOIL:
-			m["amt"] = 0.0
-	for m: Dictionary in manna_batches:
-		if t - m["born"] >= Balance.MANNA_SPOIL:
-			m["amt"] = 0.0
-	manna = manna.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
-	manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
+	if not manna.is_empty():
+		for m: Dictionary in manna:
+			if t - m["born"] >= Balance.MANNA_SPOIL:
+				m["amt"] = 0.0
+		manna = manna.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
+	if not manna_batches.is_empty():
+		for m: Dictionary in manna_batches:
+			if t - m["born"] >= Balance.MANNA_SPOIL:
+				m["amt"] = 0.0
+		manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	# 식량 소비 (집계 — 1명당 15분에 1개)
-	var need := _food_people() * dt / Balance.FOOD_IV
+	var fp := _food_people()
+	_fp_val = fp                          # 이 걸음 동안 enough("밀")이 다시 세지 않게 (사람 수가 그대로일 때만)
+	_fp_n = people.size()
+	_fp_t = t
+	var need := fp * dt / Balance.FOOD_IV
 	var unmet := consume(need)
 	deficit = unmet / need if need > 0.0 else 0.0
 	if deficit > 0.0:
@@ -778,28 +800,41 @@ func step(dt: float) -> void:
 			if p.is_child() and not p.stunted and p.genes.size() >= Genetics.GENE_BYTES:     # 어릴 때 굶주리면 키 −0.05 (겉모습만)
 				p.stunted = true
 				p.genes[Genetics.HEIGHT] = maxi(0, p.genes[Genetics.HEIGHT] - roundi(Genetics.STUNT * 255.0))
-		elif Health.can_heal(p):         # 앓는 중·추위·더위 속에서는 저절로 낫지 않는다 (HEALTH.md 1.4 · 2)
+		elif p.health != 1.0 and Health.can_heal(p):         # 앓는 중·추위·더위 속에서는 저절로 낫지 않는다 (HEALTH.md 1.4 · 2). 다 나았으면 볼 것 없음 (같은 값)
 			p.health = minf(1.0, p.health + dt * p.f("heal") / Balance.HEAL_TIME)
 		p.age += dt / DAY
 		if p.say_t > 0.0:
 			p.say_t -= dt
+	SimProf.mark("food_people")
 	Health.step(self, dt)
+	SimProf.mark("health")
 	VillageEra.decay(self, dt)        # 걸어 건넌 물 (나루터 조건 — A6)
+	SimProf.mark("era_decay")
 	air.step(self, dt)                # [곰팡이·뚜껑] 김·연기·공기 + 뚜껑, 곰팡이 무리 (WORLD_EVENTS 2.1 · 3)
+	SimProf.mark("air")
 	Mold.step(self, dt)
+	SimProf.mark("mold")
 	SmallCrises.step(self, dt)        # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2)
+	SimProf.mark("smallcrises")
 	GiantHand.step(self, dt)          # [거인의 손] 쿨타임·감싼 온기·유리의 먼지막·커튼 냉해 (B6)
+	SimProf.mark("hand")
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
+	SimProf.mark("flora")
 	if owns_water:
 		Wildlife.step(self, dt)       # [들짐승] 무리 수·늑대·토끼 밭 피해·상함·늑대 울음 (WILDLIFE 1~4 — 병 하나에 한 번)
+	SimProf.mark("wildlife")
 	SkyDrops.step(self, dt)           # [상점] 하늘에서 내려온 것·돌봄·앰플 탑·녹조·진열 (SHOP · WORLD_EVENTS 4)
+	SimProf.mark("skydrops")
 	for b in buildings:
 		_update_building(b, dt)
+	SimProf.mark("buildings")
 	for p in people.duplicate():
 		_walker = p
 		ResidentAI.update(self, p, dt)
 	_walker = null
+	SimProf.mark("resident_ai")
 	_update_trees(dt)
+	SimProf.mark("trees")
 	# 주기 처리
 	for k in _timers:
 		_timers[k] += dt
@@ -807,9 +842,13 @@ func step(dt: float) -> void:
 		life_events(_timers["life"])
 		_timers["life"] = 0.0
 		trees = trees.filter(func(tr: Dictionary) -> bool: return water.depth(water.idx(tr["x"], tr["y"])) < 0.03)   # 물에 잠긴 나무는 죽는다
+		SimProf.mark("life")
 	if _timers["jobs"] >= Balance.JOBS_EVERY:
+		SimProf.mark("misc")
 		assign_jobs()
+		SimProf.mark("jobs")
 		assign_homes()
+		SimProf.mark("homes")
 		_timers["jobs"] = 0.0
 	if _opening_chief < Balance.OPENING_CHIEF_AT.size() and t >= float(Balance.OPENING_CHIEF_AT[_opening_chief]):
 		_opening_chief += 1
@@ -824,28 +863,45 @@ func step(dt: float) -> void:
 					speak(chief(), Balance.LINE_FIRST_SITE, 8)
 	if _timers["chief"] >= Balance.CHIEF_EVERY:
 		if not chief_off:             # 거인이 있든 없든 촌장이 짓는다 (기획서 6.7)
+			SimProf.mark("misc")
 			chief_build()
+			SimProf.mark("chief")
 		_timers["chief"] = 0.0
 	if _timers["econ"] >= 60.0:       # 제물·소원 편지·분가 (1분마다 확인)
+		SimProf.mark("misc")
 		_economy_tick()
+		SimProf.mark("econ")
 		_timers["econ"] = 0.0
 	if _timers["lake"] >= Balance.LAKE_EVERY:
 		_timers["lake"] = 0.0
+		SimProf.mark("misc")
 		lake_watch()
+		SimProf.mark("lake")
 		salt_discovery()
+		SimProf.mark("salt")
 		Discovery.hourly(self)        # 발견 W2 · F3 · F5 · S3 · P1 (DISCOVERIES — sim/discovery.gd)
+	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
-		for i in paths.size():
-			if paths[i] > 0.0:
-				paths[i] *= f
+		var pp := paths
+		if not _pnz_ok:
+			_path_rebuild_nz()
+		for i in _pnz:                # 한 번이라도 밟힌 칸만 (나머지는 0 — 같은 결과)
+			if pp[i] > 0.0:
+				pp[i] *= f
 		_timers["decay"] = 0.0
+	SimProf.mark("path_decay")
 	if _timers["speak"] >= Balance.SPEAK_EVERY:
 		idle_chatter()
 		_timers["speak"] = 0.0
+	SimProf.mark("chatter")
 	Awakening.step(self, dt)
+	SimProf.mark("awakening")
 	_update_era(dt)
+	SimProf.mark("era")
 	_update_belief(dt)
+	SimProf.mark("belief")
+	_fp_t = -1.0
 	for o: Village in others:        # 같은 세상의 다른 무리 (물은 이 마을이 이미 흘렸다)
 		o.step(dt)
 
@@ -1165,9 +1221,11 @@ func birth_env() -> float:
 func _update_building(b: Building, dt: float) -> void:
 	if not b.built:
 		return
-	var d := b.def()
 	if b.type == "농장" and b.ready_at < 0.0:
 		b.ready_at = t + Balance.GROW_FIRST
+	if b.worker < 0:
+		return                        # 일꾼이 없으면 아래에서도 그냥 돌아간다 (빠른 길)
+	var d := b.def()
 	# 생산·가공: 일꾼이 배정돼 있으면 밤에도 돌아간다 (RESIDENT_AI 9장). 채집형만 일꾼이 직접 걸어가서 일함
 	if not d.get("job", false) or not d.has("out") or d.get("gather", false) or b.worker < 0:
 		return
@@ -1184,6 +1242,7 @@ func _update_building(b: Building, dt: float) -> void:
 	for k in outs:
 		if not (float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5) · 밀도 넉넉하면 멈춤 (BALANCE v4-4)
 			all_full = false
+			break
 	if all_full:
 		return
 	var ins: Dictionary = d.get("in", {})
@@ -1289,7 +1348,30 @@ func on_built(b: Building) -> void:
 
 
 # ───────────────────────── 일자리·집 ─────────────────────────
+## 일자리 배정 (20초마다). 바꿀 것이 없으면 (일하는 아이 없음 · 빈 일터에 들어갈 사람이나 도구 없음 · 떠난 일꾼 없음) 바로 돌아간다 — 같은 결과
 func assign_jobs() -> void:
+	var free_adult := false
+	for p in people:
+		if p.job >= 0:
+			if not p.is_adult():
+				_assign_jobs()
+				return
+		elif not free_adult and p.is_adult():
+			free_adult = true
+	var can_fill := free_adult and float(stock["도구"]) >= 1.0
+	for b in buildings:
+		if not b.built:
+			continue
+		if b.worker >= 0:
+			if person(b.worker) == null and b.def().get("job", false):
+				_assign_jobs()
+				return
+		elif can_fill and b.def().get("job", false):
+			_assign_jobs()
+			return
+
+
+func _assign_jobs() -> void:
 	for p in people:
 		if p.job >= 0 and not p.is_adult():
 			var b := bld(p.job)
@@ -1380,7 +1462,51 @@ func _lives_with_parent(p: Resident) -> bool:
 	return false
 
 
+## 집 배정이 읽는 것 전부 (사람 순서·id·집·짝·어른인지 + 건물 순서·id·지어졌나·종류) — 부모는 사람마다 정해져 있다
+func _homes_state() -> PackedInt64Array:
+	var sig := PackedInt64Array()
+	sig.resize(people.size() * 4 + buildings.size() * 2 + 2)
+	var i := 0
+	sig[i] = people.size()
+	i += 1
+	for p in people:
+		sig[i] = p.id
+		sig[i + 1] = p.home
+		sig[i + 2] = p.partner
+		sig[i + 3] = 1 if p.age >= Balance.AGE_ADULT else 0
+		i += 4
+	sig[i] = buildings.size()
+	i += 1
+	for b in buildings:
+		sig[i] = b.id
+		sig[i + 1] = 1 if b.built else 0
+		i += 2
+	return sig
+
+
+func _homes_type_list() -> PackedStringArray:
+	var out := PackedStringArray()
+	out.resize(buildings.size())
+	for i in buildings.size():
+		out[i] = buildings[i].type
+	return out
+
+
+## 집 배정 (20초마다). 지난번에 아무것도 바꾸지 않았던 상태 그대로면 이번에도 바꿀 것이 없다 → 건너뜀 (같은 결과, 계산만 덜)
 func assign_homes() -> void:
+	var sig := _homes_state()
+	var types := _homes_type_list()
+	if sig == _homes_sig and types == _homes_types:
+		return
+	_assign_homes()
+	if _homes_state() == sig:
+		_homes_sig = sig
+		_homes_types = types
+	else:
+		_homes_sig = PackedInt64Array()
+
+
+func _assign_homes() -> void:
 	var hs := houses()
 	var occ := occupancy()
 	for p in people:
@@ -1478,27 +1604,38 @@ func _shuffle(a: Array) -> void:
 func _births(dt: float) -> void:
 	var env := birth_env()
 	var guarantee: bool = Balance.FIRST_BIRTH_GUARANTEE and stats["born"] == 0 and t >= DAY - Balance.LIFE_EVERY and t < 2.0 * DAY
+	var occ := {}                         # 집마다 사는 사람 수 (occupants()와 같은 값 — 한 번 세고 옮길 때마다 고침)
+	var hs: Array[Building] = []
+	var counted := false
 	for w in people.duplicate():
 		if not (w.sex == "f" and w.partner >= 0 and w.age >= Balance.BIRTH_WIFE_MIN and w.age < Balance.BIRTH_WIFE_MAX):
 			continue
+		if not counted:
+			counted = true
+			occ = occupancy()
+			hs = houses()
 		var h := bld(w.home) if w.home >= 0 else null
-		if h == null or occupants(h) >= h.cap():
+		if h == null or int(occ.get(h.id, 0)) >= h.cap():
 			var hh := household_of(w)
 			var to: Building = null
-			for b in houses():
-				if (h == null or b.id != h.id) and b.cap() - occupants(b) >= hh.size() + 1:
+			for b in hs:
+				if (h == null or b.id != h.id) and b.cap() - int(occ.get(b.id, 0)) >= hh.size() + 1:
 					to = b
 					break
 			if to == null:
 				continue
 			for q in hh:
+				if q.home >= 0:
+					occ[q.home] = int(occ.get(q.home, 0)) - 1
 				q.home = to.id
+				occ[to.id] = int(occ.get(to.id, 0)) + 1
 			h = to
 			stats["moves"] += 1
 			log_line("%s의 가족이 더 넓은 집으로 옮겼다." % w.name)
 		if guarantee or rng.randf() < Balance.BIRTH_RATE * w.fert * env * dt / DAY:
 			guarantee = false
 			_give_birth(w, h)
+			occ[h.id] = int(occ.get(h.id, 0)) + 1     # 아기도 그 집에 산다
 
 
 func _give_birth(w: Resident, h: Building) -> void:
@@ -1875,7 +2012,23 @@ func is_free(x: float, y: float, size: float) -> bool:
 
 
 ## 마을 중심에서 가까운 빈 땅부터 나선형으로. 나무꾼은 숲 옆, 채석장은 바위 옆, 농장은 따뜻하고 촉촉한 곳
+## 자리 찾기 동안은 건물이 바뀌지 않는다 → 영역 반지름(건물을 모두 도는 계산)을 이 마을·이웃 무리마다 한 번만 (is_free가 수백 번 묻는다 — 같은 값)
 func find_spot(type: String) -> Variant:
+	var fixed: Array[Village] = [self]
+	for o: Village in peers:
+		if o != self and o._tr_fix < 0.0:
+			fixed.append(o)
+	if _tr_fix >= 0.0:
+		fixed.erase(self)
+	for q: Village in fixed:
+		q._tr_fix = q.territory_r()
+	var out: Variant = _find_spot(type)
+	for q: Village in fixed:
+		q._tr_fix = -1.0
+	return out
+
+
+func _find_spot(type: String) -> Variant:
 	var size: float = Balance.B[type]["size"]
 	var c := center
 	if type == "나루터":                       # 물가 (건너편이 보이는 곳 — A6)
@@ -1989,10 +2142,15 @@ func salt_discovery() -> void:
 		return
 	var flat := 0
 	var fc := Vector2.ZERO
-	for k in water.village_cells(center, view_r * 1.5):
-		if water.depth(k) < 0.004 and water.salt_k(k) > 0.003:
-			flat += 1
-			fc += Vector2(water.cx(k), water.cy(k))
+	if water is WorldWater:               # 넓은 세상: 같은 값을 빠르게 (소금 없는 거친 칸은 건너뜀)
+		var sc: Array = (water as WorldWater).salt_flat_scan(center, view_r * 1.5, 0.004, 0.003)
+		flat = sc[0]
+		fc = sc[1]
+	else:
+		for k in water.village_cells(center, view_r * 1.5):
+			if water.depth(k) < 0.004 and water.salt_k(k) > 0.003:
+				flat += 1
+				fc += Vector2(water.cx(k), water.cy(k))
 	if flat < 45:
 		return
 	fc /= flat
@@ -2039,11 +2197,31 @@ static func sale_price(r: Resident, nth := 1, lineage := false, sick := false) -
 
 
 # ───────────────────────── 오솔길 ─────────────────────────
+## 한 번이라도 밟힌 칸 목록 (오솔길 옅어짐이 16,384칸을 다 돌지 않게). 저장하지 않고 처음 쓸 때 paths에서 다시 만든다
+func _path_rebuild_nz() -> void:
+	_pnz = PackedInt32Array()
+	_pnz_in = PackedByteArray()
+	_pnz_in.resize(paths.size())
+	for i in paths.size():
+		if paths[i] != 0.0:
+			_pnz.append(i)
+			_pnz_in[i] = 1
+	_pnz_ok = true
+
+
+func _path_touch(i: int) -> void:
+	if _pnz_ok and _pnz_in[i] == 0:
+		_pnz_in[i] = 1
+		_pnz.append(i)
+
+
 func mark_path(x: float, y: float, amt: float) -> void:
 	var gx := floori((x - center.x + path_r) / (2.0 * path_r) * path_n)
 	var gy := floori((y - center.y + path_r) / (2.0 * path_r) * path_n)
 	if gx >= 0 and gy >= 0 and gx < path_n and gy < path_n:
-		paths[gy * path_n + gx] = minf(60.0, paths[gy * path_n + gx] + amt)
+		var pi := gy * path_n + gx
+		paths[pi] = minf(60.0, paths[pi] + amt)
+		_path_touch(pi)
 	if _fog_on:
 		_reveal_walk(x, y)
 
@@ -2059,7 +2237,9 @@ func mark_path_seg(a: Vector2, b: Vector2) -> void:
 		var gx := floori((p.x - center.x + path_r) / (2.0 * path_r) * path_n)
 		var gy := floori((p.y - center.y + path_r) / (2.0 * path_r) * path_n)
 		if gx >= 0 and gy >= 0 and gx < path_n and gy < path_n:
-			paths[gy * path_n + gx] = minf(60.0, paths[gy * path_n + gx] + amt)
+			var pi := gy * path_n + gx
+			paths[pi] = minf(60.0, paths[pi] + amt)
+			_path_touch(pi)
 	if _fog_on:
 		_reveal_walk(b.x, b.y)
 
@@ -2155,6 +2335,7 @@ func _turn_data() -> void:
 		for i in PATH_N:
 			np[i * PATH_N + (PATH_N - 1 - j)] = paths[j * PATH_N + i]
 	paths = np
+	_pnz_ok = false
 
 
 ## 옮긴 뒤 (무리마다): 두려움 규칙 · 믿음 · 밭 배율 다시 · 연대기 · 목격 · "해가 옮겨갔다!"
@@ -2793,6 +2974,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 	stock = Kits.stock(kit_def)
 	paths.resize(path_n * path_n)
 	paths.fill(0.0)
+	_pnz_ok = false
 	var fo: Array = kit_def["fire"]
 	fire = spot + Vector2(fo[0], fo[1])
 	altar_pos = fire + ALTAR_OFFSET
@@ -2899,6 +3081,10 @@ func _reveal_walk(x: float, y: float) -> void:
 
 
 func _reveal_at(p: Vector2, rad: float, who: Resident, force := false) -> void:
+	if _fog_on and not force:             # 이미 걷힌 안개 칸 한가운데면 WorldWater.reveal도 아무것도 안 한다 — 미리 보고 돌아감 (같은 결과)
+		var fw := water as WorldWater
+		if fw.fog_center[fw.fog_idx(p.x, p.y)] & (1 << sid):
+			return
 	if who != null:
 		rad *= who.f("fog")              # 혈통 '탐험가' 안개 반경 +50%
 	var ev: Array = water.reveal(sid, p.x, p.y, rad, force)
@@ -2989,7 +3175,8 @@ func enough(k: String) -> float:
 	var e: float = Balance.ENOUGH.get(k, INF)
 	if k == "밀":                     # 농장도 넉넉하면 멈춘다 (BALANCE v4-4) — 마을이 먹는 양 × 1.6일 (좋아하시면 +0.15일)
 		var days := Balance.FARM_ENOUGH_DAYS + (Balance.FARM_FAV_DAYS if is_favourite(k) else 0.0)
-		return maxf(Balance.FARM_ENOUGH_MIN, _food_people() * DAY / Balance.FOOD_IV * days)
+		var fp := _fp_val if (_fp_t == t and _fp_n == people.size()) else _food_people()
+		return maxf(Balance.FARM_ENOUGH_MIN, fp * DAY / Balance.FOOD_IV * days)
 	e *= Discovery.store_mult(self, k)  # 발견 W2 진흙 — 저장 항아리 (식량 ×1.5)
 	if is_favourite(k):
 		e *= Balance.FAV_ENOUGH       # 거인님이 좋아하시는 물건은 더 만든다 (기획서 11.1)
@@ -3120,7 +3307,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

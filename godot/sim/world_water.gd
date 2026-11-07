@@ -67,6 +67,9 @@ var f_nbs := PackedInt32Array()
 var f_nbl := PackedInt32Array()         # ≥0 고운 이웃 · <0 = −(거친 칸)−1 (거친 이웃)
 var fine_chunks := PackedInt32Array()   # 고운 칸이 하나라도 있는 조각 (습기 계산 단위)
 var interest: Array[Dictionary] = []    # 고운 계산이 필요한 곳 {x, y, r} (마을)
+var _cterm := PackedFloat64Array()      # (저장 안 함) 거친 습기 계산의 칸마다 젖은 정도
+var _cq := PackedByteArray()            # (저장 안 함) 거친 묶음 계산의 '순서 목록에 있음' 표시 (m×m, 끝나면 0으로)
+var _interest_done: Array = []          # (저장 안 함) 마지막으로 고운/거친을 맞춘 목록 — 같으면 다시 셀 것이 없다
 var _wet_rr := 0
 
 # 물이 들어오는 곳 (JarWater.drips·grooves에 더해)
@@ -149,6 +152,7 @@ func setup(size: int) -> void:
 	cwet.fill(0.0)
 	bmode.resize(m * m)
 	bmode.fill(0)
+	_interest_done = []
 	fog.resize(fn * fn)
 	fog.fill(0)
 	fog_center.resize(fn * fn)
@@ -200,7 +204,7 @@ func build_world_tables() -> void:
 
 ## 저장: 거친 칸 높이 정렬표(hs·pre)는 높이(h)에서 다시 만든다 (저장 크기 35 → 27 MB, 압축 전). 큰 격자는 파일에 쓸 때 WorldPack이 누른다
 func _save_skip() -> Array:
-	return ["hs", "pre"]
+	return ["hs", "pre", "_interest_done", "_cq", "_cterm"]
 
 
 func _after_load() -> void:
@@ -417,6 +421,72 @@ func village_cells(c: Vector2, r: float) -> PackedInt32Array:
 	return cells_near(c, r)
 
 
+## 원 (c, r) 안에서 depth(k) < dmax 이고 salt_k(k) > smin 인 칸의 수와 중심 합 — cells_near를 돌며 depth·salt_k를 부른 것과 같은 값·같은 순서
+## (마을의 소금 발견이 한 시간마다 1만 칸 넘게 보던 것을 빠르게: 소금 없는 거친 칸 줄은 통째로 건너뜀) → [수, 중심 합 Vector2]
+func salt_flat_scan(c: Vector2, r: float, dmax: float, smin: float) -> Array:
+	var cnt := 0
+	var fc := Vector2.ZERO
+	var j0 := maxi(0, floori(c.y - r + rr))
+	var j1 := mini(n - 1, floori(c.y + r + rr))
+	var hh := h
+	var ww := w
+	var sl := salt
+	var mode := bmode
+	var S := cS
+	var K := cK
+	var L := cL
+	var A := cA
+	var HS := hs
+	for j in range(j0, j1 + 1):
+		var y := -rr + j + 0.5
+		var i0 := maxi(row_i0[j], floori(c.x - r + rr))
+		var i1 := mini(row_i1[j] - 1, floori(c.x + r + rr))
+		var crow := (j / F) * m
+		var i := i0
+		while i <= i1:
+			var cc := crow + i / F
+			var blk_end := mini(i1, (i / F) * F + F - 1)
+			if mode[cc] == 0:
+				var s := S[cc]
+				if s <= 0.0:
+					i = blk_end + 1
+					continue
+				var kc := K[cc]
+				var lim := 0.0
+				var low_h := 0.0
+				if kc == 0:
+					low_h = HS[cc * 64 + maxi(1, A[cc] / 4) - 1]
+					lim = s / maxi(1, A[cc] / 4)
+				else:
+					lim = s / kc
+				if not lim > smin:
+					i = blk_end + 1           # 이 거친 칸은 어디나 소금이 smin 이하
+					continue
+				var lv := L[cc]
+				while i <= blk_end:
+					var k := j * n + i
+					var hk := hh[k]
+					var d := 0.0
+					var sk := 0.0
+					if kc > 0:
+						d = maxf(0.0, lv - hk)
+						sk = lim if hk < lv else 0.0
+					else:
+						sk = lim if hk <= low_h else 0.0
+					if d < dmax and sk > smin and Vector2(-rr + i + 0.5 - c.x, y - c.y).length() < r:
+						cnt += 1
+						fc += Vector2(-rr + (k % n) + 0.5, -rr + (k / n) + 0.5)
+					i += 1
+			else:
+				while i <= blk_end:
+					var k := j * n + i
+					if ww[k] < dmax and sl[k] > smin and Vector2(-rr + i + 0.5 - c.x, y - c.y).length() < r:
+						cnt += 1
+						fc += Vector2(-rr + (k % n) + 0.5, -rr + (k / n) + 0.5)
+					i += 1
+	return [cnt, fc]
+
+
 func has_fog() -> bool:
 	return true
 
@@ -492,14 +562,146 @@ func advance(seconds: float) -> void:
 
 ## 한 번: 고운 조각 한 걸음 + 거친 칸 한 묶음 (거친 칸마다 SLICES번에 한 번 = sc × SLICES)
 func world_tick(sc: float) -> void:
+	var u0 := SimProf.now()
 	if not fcells.is_empty():
 		fine_step(sc)
+	SimProf.add("W_fine", u0)
+	u0 = SimProf.now()
 	coarse_slice(sc * SLICES, _slice_i)
+	SimProf.add("W_coarse", u0)
 	_slice_i = (_slice_i + 1) % SLICES
 	tick += 1
 
 
+## 고운 칸 한 걸음 (물방울·골 → 흐름 4번 → 암염 → 증발·스며듦 → 습기 한 조각).
+## 고운 칸은 1만 5천 칸이 넘어도 젖은 칸은 수백 칸 — 한 번 훑어 젖은 칸·암염 칸만 추린 뒤 그것만 돈다.
+## 흐름 중 마른 칸이 물을 받으면 순서 목록에 끼워 넣는다 (뒤쪽이면 이번 번에, 앞쪽이면 다음 번에) → 모든 칸을 차례로 돌던 것(fine_step_ref)과 같은 값·같은 순서
 func fine_step(sc: float) -> void:
+	var hh := h
+	var ww := w
+	var fl := flux
+	var sl := salt
+	var nbs := f_nbs
+	var nbl := f_nbl
+	var V := cV
+	var L := cL
+	var S := cS
+	var FL := cFL
+	var cells_l := fcells
+	var nf := cells_l.size()
+	# 들어오는 물
+	for i in drip_k.size():
+		var k := drip_k[i]
+		if is_fine_k(k):
+			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			ww[k] += a
+			added += a
+	for i in groove_k.size():
+		var k := groove_k[i]
+		if is_fine_k(k):
+			var a := _groove_rate(k) * groove_mult[i] * sc
+			ww[k] += a
+			added += a
+	# 한 번 훑기: 흐른 양 줄이기 (0이면 그대로) · 물이 있는 칸 · 암염 칸
+	var ha := halite
+	var cand := PackedInt32Array()
+	var hal_l := PackedInt32Array()
+	var inq := PackedByteArray()
+	inq.resize(nf)
+	for i in nf:
+		var k := cells_l[i]
+		var f := fl[k]
+		if f != 0.0:
+			fl[k] = f * FLUX_DECAY
+		if ww[k] > 0.0:
+			cand.append(i)
+			inq[i] = 1
+		if ha[k] > 0.0:
+			hal_l.append(i)
+	for pass_i in FLOW_PASSES:
+		var pos := 0
+		while pos < cand.size():
+			var i := cand[pos]
+			pos += 1
+			var k := cells_l[i]
+			var wk := ww[k]
+			if wk <= 1e-7:
+				continue
+			var s0 := hh[k] + wk
+			var best := -1
+			var bs := s0
+			for q in range(nbs[i], nbs[i + 1]):
+				var nn := nbl[q]
+				var sn := 0.0
+				if nn >= 0:
+					sn = hh[nn] + ww[nn]
+				else:
+					sn = L[-nn - 1]
+				if sn < bs:
+					bs = sn
+					best = nn
+			if best == -1:
+				continue
+			var mv := minf(wk, (s0 - bs) * 0.5)
+			var sm := 0.0
+			if sl[k] > 0.0 and wk > 0.0005:
+				sm = sl[k] * (mv / wk)
+				sl[k] -= sm
+			ww[k] -= mv
+			fl[k] += mv
+			if best >= 0:
+				ww[best] += mv
+				sl[best] += sm
+				var j := cells_l.bsearch(best)
+				if inq[j] == 0:
+					inq[j] = 1
+					var at := cand.bsearch(j)
+					cand.insert(at, j)
+					if at < pos:
+						pos += 1          # 지나온 자리에 끼움 → 다음 번에 돈다
+			else:
+				var c := -best - 1
+				V[c] += mv
+				S[c] += sm
+				FL[c] += mv
+				_relevel(c)
+	# 암염
+	for i in hal_l:
+		var k := cells_l[i]
+		var hv := ha[k]
+		if hv <= 0.0:
+			continue
+		var wet := ww[k] + fl[k] * 40.0
+		if wet < 0.0008:
+			continue
+		var d := minf(hv, DISSOLVE * minf(1.0, wet * 20.0) * sc)
+		ha[k] -= d
+		sl[k] += d
+	# 증발·스며듦 (물이 있던 칸·받은 칸만 — cand)
+	var fw := fwarm
+	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	for i in cand:
+		var k := cells_l[i]
+		var v := ww[k]
+		if v <= 0.0:
+			continue
+		var v0 := v
+		v -= ev * (0.35 + fw[i]) * sc
+		if v < SEEP_DEPTH:
+			v -= SEEP * FINE_SEEP * sc
+		if v < 0.0:
+			v = 0.0
+		ww[k] = v
+		removed += v0 - v
+	scale = sc
+	# 습기: 네 번에 한 번, 고운 칸이 있는 조각 하나씩 번갈아 (습기는 천천히 바뀐다)
+	if not fine_chunks.is_empty() and tick % 4 == 0:
+		_wet_rr = (_wet_rr + 1) % fine_chunks.size()
+		update_wet_chunk(fine_chunks[_wet_rr])
+
+
+## (시험 기준) 옛 고운 계산 — 모든 고운 칸을 일곱 번 돈다. fine_step과 같은 값을 내야 한다 (tests/world_tests.gd)
+func fine_step_ref(sc: float) -> void:
 	var hh := h
 	var ww := w
 	var fl := flux
@@ -598,7 +800,7 @@ func fine_step(sc: float) -> void:
 	# 습기: 네 번에 한 번, 고운 칸이 있는 조각 하나씩 번갈아 (습기는 천천히 바뀐다)
 	if not fine_chunks.is_empty() and tick % 4 == 0:
 		_wet_rr = (_wet_rr + 1) % fine_chunks.size()
-		update_wet_chunk(fine_chunks[_wet_rr])
+		update_wet_chunk_ref(fine_chunks[_wet_rr])
 
 
 func _groove_rate(k: int) -> float:
@@ -607,6 +809,184 @@ func _groove_rate(k: int) -> float:
 
 
 func coarse_slice(sc: float, slice: int) -> void:
+	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	var V := cV
+	var L := cL
+	var K := cK
+	var S := cS
+	var FL := cFL
+	var nbs := c_nbs
+	var nbl := c_nbl
+	var nbf := c_nbf
+	var hh := h
+	var ww := w
+	var mode := bmode
+	var edge := c_edge
+	var list := cslices[slice]
+	# 들어오는 물 (이 묶음의 거친 칸에 있는 돌기·골)
+	for i in drip_k.size():
+		var k := drip_k[i]
+		var c := coarse_of(k)
+		if (c / m) % SLICES == slice and not is_fine_k(k):
+			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			V[c] += a
+			added += a
+			_relevel(c)
+	for i in groove_k.size():
+		var k := groove_k[i]
+		var c := coarse_of(k)
+		if (c / m) % SLICES == slice and not is_fine_k(k):
+			var a := _groove_rate(k) * groove_mult[i] * sc
+			V[c] += a
+			added += a
+			_relevel(c)
+	# 한 번 훑기: 흐른 양 줄이기 · 물이 있는 칸 · 암염 칸 (흐름 4번과 증발은 이 칸들만 — 모든 칸을 돌던 것과 같은 값·같은 순서)
+	var cand := PackedInt32Array()
+	var hal_l := PackedInt32Array()
+	if _cq.size() != m * m:
+		_cq.resize(m * m)
+		_cq.fill(0)
+	var inq := _cq
+	var HAL := cHal
+	for c in list:
+		var f := FL[c]
+		if f != 0.0:
+			FL[c] = f * FLUX_DECAY
+		if V[c] > SEP:
+			cand.append(c)
+			inq[c] = 1
+		if HAL[c] > 0.0:
+			hal_l.append(c)
+	for pass_i in FLOW_PASSES:
+		var pos := 0
+		while pos < cand.size():
+			var c := cand[pos]
+			pos += 1
+			var v := V[c]
+			if v <= SEP:
+				continue
+			var s0 := L[c]
+			var best := -1
+			var bf := -1
+			var bs := s0 - 1e-7
+			if edge[c] == 0:
+				for q in range(nbs[c], nbs[c + 1]):
+					var nn := nbl[q]
+					if L[nn] < bs:
+						bs = L[nn]
+						best = nn
+			else:
+				for q in range(nbs[c], nbs[c + 1]):
+					var nn := nbl[q]
+					var fk := nbf[q]
+					if fk >= 0:
+						var sf := hh[fk] + ww[fk]
+						if sf < bs:
+							bs = sf
+							best = -1
+							bf = fk
+					elif mode[nn] == 0 and L[nn] < bs:
+						bs = L[nn]
+						best = nn
+						bf = -1
+			if best < 0 and bf < 0:
+				continue
+			var kc := maxi(K[c], 1)
+			var dv := 0.0
+			if best >= 0:
+				dv = minf(v, (s0 - bs) * 0.5 / (1.0 / kc + 1.0 / maxi(K[best], 1)))
+			else:
+				dv = minf(v, (s0 - bs) * 0.5 / (1.0 / kc + 1.0))
+			if dv <= 0.0:
+				continue
+			var sm := 0.0
+			if S[c] > 0.0 and v / kc > 0.0005:
+				sm = S[c] * (dv / v)
+				S[c] -= sm
+			V[c] = v - dv
+			FL[c] += dv
+			_relevel(c)
+			if best >= 0:
+				V[best] += dv
+				S[best] += sm
+				_relevel(best)
+				if inq[best] == 0 and (best / m) % SLICES == slice:
+					var j := list.bsearch(best)
+					if j < list.size() and list[j] == best:     # 이 묶음의 칸이 물을 받음 → 순서 목록에 끼움
+						inq[best] = 1
+						var at := cand.bsearch(best)
+						cand.insert(at, best)
+						if at < pos:
+							pos += 1
+			else:
+				ww[bf] += dv
+				salt[bf] += sm
+	for c in cand:
+		inq[c] = 0
+	# 암염 · 증발 · 스며듦 (칸마다 따로라 암염 칸과 물 있는 칸을 나눠 돌아도 같다 — 버린 양 합은 같은 순서)
+	var cw := cwarm
+	for c in hal_l:
+		var hv := cHal[c]
+		if hv > 0.0 and (K[c] > 0 or FL[c] > 0.0):
+			var frac := minf(1.0, float(K[c]) / cA[c] * 2.0 + FL[c] * 40.0 / cA[c])
+			var d := minf(hv, DISSOLVE * sc * cNH[c] * frac)
+			cHal[c] = hv - d
+			S[c] += d
+	for c in cand:
+		var v := V[c]
+		if v > SEP:
+			var loss := ev * (0.35 + cw[c]) * sc * K[c] + SEEP * COARSE_SEEP * sc * _shallow(c, SEEP_DEPTH)
+			var nv := maxf(0.0, v - loss)
+			removed += v - nv
+			V[c] = nv
+			_relevel(c)
+	if (tick / SLICES) % 4 != 0:          # 습기는 천천히 바뀐다 — 네 바퀴에 한 번
+		cscale = sc
+		return
+	# 칸마다의 젖은 정도를 이 묶음 줄 ±1줄에서 한 번씩만 셈 (옛 계산은 이웃마다 9번) — 더하는 순서는 그대로
+	if _cterm.size() != m * m:
+		_cterm.resize(m * m)
+	var term := _cterm
+	var A := cA
+	for cj0 in range(slice, m, SLICES):
+		for jj in range(maxi(0, cj0 - 1), mini(m, cj0 + 2)):
+			for ii in m:
+				var q := jj * m + ii
+				var a := A[q]
+				term[q] = -1.0 if a == 0 else minf(1.0, float(K[q]) / a * 3.0 + FL[q] * 600.0 / a)
+	var we := cwet
+	for c in list:
+		var ci := c % m
+		var cj := c / m
+		var s := 0.0
+		var cnt := 0
+		if ci > 0 and cj > 0 and ci < m - 1 and cj < m - 1:     # 안쪽 칸: 아홉 이웃을 같은 순서로 풀어 씀
+			for q in [c - m - 1, c - m, c - m + 1, c - 1, c, c + 1, c + m - 1, c + m, c + m + 1]:
+				var tv := term[q]
+				if tv >= 0.0:
+					s += tv
+					cnt += 1
+			we[c] = minf(1.0, s / maxi(cnt, 1) * 2.2)
+			continue
+		for dj in range(-1, 2):
+			var jj := cj + dj
+			if jj < 0 or jj >= m:
+				continue
+			for di in range(-1, 2):
+				var ii := ci + di
+				if ii < 0 or ii >= m:
+					continue
+				var tv := term[jj * m + ii]
+				if tv < 0.0:
+					continue
+				s += tv
+				cnt += 1
+		cwet[c] = minf(1.0, s / maxi(cnt, 1) * 2.2)
+	cscale = sc
+
+
+## (시험 기준) 옛 거친 묶음 계산 — coarse_slice와 같은 값
+func coarse_slice_ref(sc: float, slice: int) -> void:
 	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
 	var V := cV
 	var L := cL
@@ -739,6 +1119,64 @@ func update_wet_chunk(ch: int) -> void:
 	var sz := CH + 12
 	var src := PackedFloat32Array()
 	src.resize(sz * sz)
+	var ww := w
+	var fl := flux
+	var hh := h
+	var mode := bmode
+	var K := cK
+	var L := cL
+	for jj in sz:
+		var j := y0 + jj
+		if j < 0 or j >= n:
+			continue
+		var crow := (j / F) * m
+		var row := jj * sz - x0
+		for i in range(maxi(x0, row_i0[j]), mini(x0 + sz, row_i1[j])):     # is_fine_k · depth를 풀어 씀 (같은 값)
+			var k := j * n + i
+			var c := crow + i / F
+			if mode[c] == 1:
+				src[row + i] = minf(1.0, ww[k] * 12.0 + fl[k] * 9000.0)
+			elif K[c] > 0:
+				src[row + i] = minf(1.0, maxf(0.0, L[c] - hh[k]) * 12.0)
+			else:
+				src[row + i] = 0.0
+	var tmp := PackedFloat32Array()
+	tmp.resize(sz * sz)
+	# 가로 (미끄럼 합)
+	for jj in sz:
+		var row := jj * sz
+		var s := 0.0
+		for ii in range(0, 3):
+			s += src[row + ii]
+		for ii in sz:
+			if ii + 3 < sz:
+				s += src[row + ii + 3]
+			if ii - 4 >= 0:
+				s -= src[row + ii - 4]
+			tmp[row + ii] = s / (mini(ii + 3, sz - 1) - maxi(ii - 3, 0) + 1)
+	# 세로 → 안쪽 64×64만 씀
+	for ii in range(6, 6 + CH):
+		var s := 0.0
+		for jj in range(0, 3):
+			s += tmp[jj * sz + ii]
+		for jj in sz:
+			if jj + 3 < sz:
+				s += tmp[(jj + 3) * sz + ii]
+			if jj - 4 >= 0:
+				s -= tmp[(jj - 4) * sz + ii]
+			if jj >= 6 and jj < 6 + CH:
+				var j := y0 + jj
+				var i := x0 + ii
+				wet_c[j * n + i] = minf(1.0, s / (mini(jj + 3, sz - 1) - maxi(jj - 3, 0) + 1) * 2.2)
+
+
+## (시험 기준) 옛 습기 조각 — update_wet_chunk와 같은 값
+func update_wet_chunk_ref(ch: int) -> void:
+	var x0 := (ch % nc) * CH - 6
+	var y0 := (ch / nc) * CH - 6
+	var sz := CH + 12
+	var src := PackedFloat32Array()
+	src.resize(sz * sz)
 	for jj in sz:
 		var j := y0 + jj
 		if j < 0 or j >= n:
@@ -786,6 +1224,8 @@ func update_wet_chunk(ch: int) -> void:
 ## 마을 둘레 (x, y, r)를 고운 계산으로 (거친 칸 8×8 단위의 원). 바뀐 칸만 옮긴다.
 func set_interest(list: Array[Dictionary]) -> void:
 	interest = list
+	if not _interest_done.is_empty() and _interest_done == Array(list):
+		return                              # 범위가 그대로면 바뀔 칸이 없다 (5분마다 부름 — 128×128을 다시 셀 필요 없음)
 	var want := {}
 	for it: Dictionary in interest:
 		var c := Vector2(float(it["x"]), float(it["y"]))
@@ -811,6 +1251,7 @@ func set_interest(list: Array[Dictionary]) -> void:
 	if changed:
 		_rebuild_fine()
 		_rebuild_slices()
+	_interest_done = Array(list).duplicate(true)
 
 
 func _coarse_fine_cells(c: int) -> PackedInt32Array:

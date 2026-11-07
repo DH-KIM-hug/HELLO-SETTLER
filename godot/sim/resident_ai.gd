@@ -712,20 +712,26 @@ static func _drop_at_store(v: Village, r: Resident, s: Building, item: String, a
 # ───────────────────────── 운반 (5.3) ─────────────────────────
 static func haul_requests(v: Village) -> int:
 	var n := 0
+	var cold := v.cold_season and float(v.stock.get("통나무", 0.0)) >= 1.0
+	var plank_ok := float(v.stock["판자"]) >= 1.0
+	var stone_ok := float(v.stock["돌"]) >= 1.0
 	for b in v.buildings:
-		if b.built and not b.is_store:
-			for k in b.out:
-				if float(b.out[k]) >= 1.0:
-					n += 1
+		if b.built:
+			if not b.is_store:
+				for k in b.out:
+					if float(b.out[k]) >= 1.0:
+						n += 1
+			var d := b.def()
+			if d.has("in"):
+				for k in d["in"]:
+					if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < 3.0 and float(v.stock.get(k, 0.0)) >= 1.0:
+						n += 1
 		if b.is_site():
-			for k: String in ["판자", "돌"]:
-				if b.need(k) - int(b.delivered[k]) - int(b.incoming[k]) > 0 and float(v.stock[k]) >= 1.0:
-					n += 1
-		if b.built and b.def().has("in"):
-			for k in b.def()["in"]:
-				if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < 3.0 and float(v.stock.get(k, 0.0)) >= 1.0:
-					n += 1
-		if v.cold_season and Health.fuel_lack(v, b) >= 1.0 and float(v.stock.get("통나무", 0.0)) >= 1.0:
+			if plank_ok and b.need("판자") - int(b.delivered["판자"]) - int(b.incoming["판자"]) > 0:
+				n += 1
+			if stone_ok and b.need("돌") - int(b.delivered["돌"]) - int(b.incoming["돌"]) > 0:
+				n += 1
+		if cold and Health.fuel_lack(v, b) >= 1.0:
 			n += 1
 	return n
 
