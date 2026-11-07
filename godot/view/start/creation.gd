@@ -1346,7 +1346,8 @@ func leave() -> void:
 		return
 	leaving = true
 	WorldGen.apply_life(_world.water, plan.create_dict())
-	plan.stage = "spot"
+	if plan.stage_index() < CreationPlan.STAGES.find("spot"):     # 건물을 놓거나 이름 짓다가 꺼졌으면 그 단계 그대로 (v3.9)
+		plan.stage = "spot"
 	plan.save(StartFlow.save_dir())
 	StartFlow.plan = plan
 	StartFlow.pending_world = _world

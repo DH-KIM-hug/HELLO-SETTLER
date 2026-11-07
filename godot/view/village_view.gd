@@ -63,6 +63,10 @@ var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주
 var _fast_t := 0.0
 var _fast_dt := 0.0
 const FAST_EVERY := 0.1
+## (OPENING 8 v3.9 스타터킷 풀기) 장면이 잠깐 감추거나 직접 움직이는 것 — 상자에서 기어 나오는 주민 · 아직 놓지 않은 키트 건물·모닥불
+var hidden_blds := {}           # 건물 id → true (그리지 않음)
+var hide_fire := false
+var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -209,6 +213,19 @@ func _sync_residents(dt: float) -> void:
 			z = lerpf(r.py, r.y, alpha)
 		m.position = Vector3(x, gy(x, z), z)
 		m.rotation.y = r.facing
+		if staged.has(r.id):            # (스타터킷 풀기) 장면이 직접 — 상자 가장자리를 넘어 폴짝
+			var st: Dictionary = staged[r.id]
+			m.visible = bool(st.get("vis", true))
+			m.position = st.get("pos", m.position)
+			m.rotation.y = float(st.get("rot", r.facing))
+			m.set_lod(true)
+			m.set_face(String(st.get("face", "")))
+			m.set_anim(String(st.get("anim", "idle")))
+			m.tick(dt)
+			var tl: Vector2 = st.get("tilt", Vector2.ZERO)
+			if tl != Vector2.ZERO:
+				m.tilt_head(tl.x, tl.y)
+			continue
 		_raft(r, m)                     # (A6) 나루터 뗏목 위
 		_ride(r, m)                     # [하늘의 것] 꽃씨에 매달린 아이 — 떠올라 날아감
 		var jb0 := v.bld(r.job)                 # (A20) 직업 옷·연장 · 촌장 띠 · 표정 — 바뀔 때만 부품을 갈아 끼움
@@ -416,6 +433,8 @@ func _sync_buildings() -> void:
 	var seen := {}
 	for b in v.buildings:
 		if b.site_type() == Awakening.ALTAR:      # 제단은 AltarView가 그린다 (짓는 모습까지)
+			continue
+		if hidden_blds.has(b.id):
 			continue
 		seen[b.id] = true
 		var key := _bld_state(b)
@@ -1200,5 +1219,6 @@ func _build_fire() -> void:
 func _animate_fire() -> void:
 	if _fire == null:
 		return
+	_fire.visible = not hide_fire
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
 	_fire.tick(get_process_delta_time() if is_inside_tree() else 0.0, v)   # [모닥불] 상태·일렁임·LOD (view/campfire.gd)
