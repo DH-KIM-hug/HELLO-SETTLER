@@ -274,7 +274,7 @@ func test_effects_and_kits() -> void:
 	var s := Resident.new()
 	s.age = 10.0
 	s.set_blood(PackedStringArray(["strong", "swift"]))
-	check(s.carry_cap() == int(Balance.CARRY * 1.5) and is_equal_approx(s.walk_speed(), Balance.WALK * 1.2), "힘센: 짐 %d개 · 날랜: 걸음 ×1.2" % s.carry_cap())
+	check(s.carry_cap() == roundi(Balance.CARRY * 1.5) and is_equal_approx(s.walk_speed(), Balance.WALK * 1.2), "힘센: 짐 %d개 · 날랜: 걸음 ×1.2" % s.carry_cap())
 	var h := Resident.new()
 	h.set_blood(PackedStringArray(["handy", "woodcutter"]))
 	check(is_equal_approx(h.job_speed("제재소"), 1.15) and is_equal_approx(h.job_speed("나무꾼"), 1.15) and is_equal_approx(h.job_speed("농장"), 1.0), "손재주: 공방 ×1.15 · 나무꾼: 벌목 ×1.15 · 농장 그대로")

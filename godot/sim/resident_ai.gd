@@ -680,7 +680,11 @@ static func _pray(v: Village, r: Resident) -> bool:
 
 # ───────────────────────── 일 ─────────────────────────
 static func _full(v: Village, k: String) -> bool:
-	return float(v.stock.get(k, 0.0)) >= v.enough(k)     # 추운 철엔 통나무를 더 (땔감 — HEALTH.md 1.3) · 밀도 넉넉하면 (BALANCE v4-4)
+	var have := float(v.stock.get(k, 0.0))
+	if Balance.BULK.has(k):             # (걸음 다시 2026-11-07) 수레 물건은 건물 앞에 쌓여 나르기를 기다리는 몫도 센다 — 밭 앞 밀이 넉넉함을 넘어 쌓이지 않게
+		for b in v.buildings:
+			have += float(b.out.get(k, 0.0))
+	return have >= v.enough(k)     # 추운 철엔 통나무를 더 (땔감 — HEALTH.md 1.3) · 밀도 넉넉하면 (BALANCE v4-4)
 
 
 ## 직장 일 — dry=true면 일감이 있는지만 본다

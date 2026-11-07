@@ -224,7 +224,7 @@ func _sync_residents(dt: float) -> void:
 		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
-		m.position = Vector3(x, gy(x, z), z)
+		m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
 		m.rotation.y = r.facing
 		if (r.anim == "walk" or r.anim == "carry") and not crossings.is_empty():     # (E3-6) 징검돌에서 폴짝 · 다리 위
 			m.position.y = maxf(m.position.y, crossing_y(x, z))
