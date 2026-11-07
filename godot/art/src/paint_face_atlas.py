@@ -20,7 +20,7 @@ CW, CH = 256, 128
 FW, FTOP, FH = 0.5, 0.1, 0.3
 NAMES = ["normal", "happy", "sad", "sick", "sleep", "surprised", "talking", "blink"]
 
-EX, EZ = 0.092, -0.02          # eyes
+EX, EZ = 0.095, -0.012         # eyes (v5: a little larger and higher so they read under the 48-degree camera / the fringe)
 MZ = -0.125                    # mouth
 
 
@@ -70,10 +70,10 @@ class Cell:
 
 def blush(c, k=1.0):
     for s in (-1, 1):
-        c.ellipse("A", s * 0.15, -0.075, 0.075, 0.04, int(150 * k))
+        c.ellipse("A", s * 0.155, -0.072, 0.09, 0.048, int(180 * k))
 
 
-def eyes(c, w=0.04, h=0.058, hl=True, half=False):
+def eyes(c, w=0.05, h=0.07, hl=True, half=False):
     for s in (-1, 1):
         x = s * EX
         c.ellipse("G", x, EZ, w, h)

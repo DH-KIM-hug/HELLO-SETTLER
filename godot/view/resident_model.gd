@@ -23,7 +23,7 @@ const HAIR_TEX := "res://art/models/resident_hair.png"
 const CLOTH_TEX := "res://art/models/resident_cloth.png"
 const LOD_PPU := 24.0             # 이 확대(칸당 화면 점) 이상이면 가까이 LOD
 const HEAD_TILT := -0.3           # 머리를 살짝 들어 위에서 보는 카메라(48°)에도 얼굴이 보이게
-const NECK := Vector3(0, 1.17, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리)
+const NECK := Vector3(0, 1.23, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리) — art/src/build_residents.py NECK
 const BLEND := 0.18               # 동작 바꿀 때 섞는 시간 (초)
 
 ## 부품 고르기 표 (데이터) — look_clothes → 몸통·다리, look_head × 성별 → 머리 모양, look_hat → 모자
