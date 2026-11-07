@@ -132,6 +132,32 @@ func _process(_dt: float) -> bool:
 			_wait = 40
 		6:
 			_save("f2_far_head")
+			# 가까이 (ppu 32): 줄기 밑동 + 그림자 띠·잎 그림자 + 꽃판 그림자 가장자리
+			var sf: Dictionary = _near_sf()
+			var sc := GiantPlants.shadow_center(sf, v.t)
+			_zoom(32.0)
+			_look(Vector2(sf["x"], sf["y"]).lerp(sc, 0.55))
+			_settle()
+			_wait = 40
+		7:
+			_save("f2_close_sunflower")
+			# 등불을 옮긴 뒤 (꽃판이 다 돈 순간): 그림자가 마을 쪽으로 쓸려 옴 — ppu 16
+			var l: Vector2 = ww.light
+			ww.light = l.rotated(deg_to_rad(110.0))
+			var sf: Dictionary = _near_sf()
+			var cur := GiantPlants.head_dir(sf, v.t)
+			sf["fx"] = cur.x
+			sf["fy"] = cur.y
+			sf["lx"] = ww.light.x
+			sf["ly"] = ww.light.y
+			sf["t0"] = v.t - Balance.SF_TURN * 0.6       # 돌던 중 (60%)
+			var sc := GiantPlants.shadow_center(sf, v.t)
+			_zoom(16.0)
+			_look(Vector2(sf["x"], sf["y"]).lerp(sc, 0.5).lerp(v.center, 0.3))
+			_settle()
+			_wait = 30
+		8:
+			_save("f2_village_sunflower_lamp")
 			return true
 	step += 1
 	return false

@@ -24,14 +24,19 @@ from flora_kit import V, leaf  # noqa: E402
 from build_bonsai import stube  # noqa: E402
 
 OUT = os.path.join(out_dir_from_argv(), "flora")
-H = 80.0                      # stalk height (residents)
-HEAD_R = 14.0                 # seed disc + petals radius
+H = 85.0                      # stalk height (model units; x SunflowerView.SCALE 0.6 = ~51 residents, GD 3.0 40-60x)
+HEAD_R = 24.0                 # seed disc + petals radius (x0.6 = ~14.4 -> head ~29 residents across, a village square)
+STALK_R0 = 4.6                # stalk radius at the foot (x0.6 = 2.8 -> ~5.5 residents wide: thicker than anything in the village)
+STALK_R1 = 2.9                # ... under the head
+TILT = 74.0                   # head face elevation (deg): looks up toward the lamp; the 48 deg camera always sees the face
+LEAF_SPEC = ((0.20, 0.4, 24.0, 9.0), (0.33, 2.6, 22.0, 8.4), (0.46, 4.6, 20.0, 7.6), (0.60, 1.4, 17.0, 6.6), (0.73, 3.6, 14.0, 5.4))
+# (height fraction, azimuth rad (Blender XY), length, half width) -- mirrored in SunflowerView.LEAVES for the leaf shadows
 STALK = ("6f9a48", "5a8240", "86b058")
 LEAF = ("6aa04c", "4f8a40", "8cc062")
 GOLD = "f2c23a"
 YELLOW = "f7d65a"
-DISC_DARK = "5a3a24"
-DISC_BROWN = "7a5230"
+DISC_DARK = "6e4426"
+DISC_BROWN = "94622e"
 DRY = "a8783e"
 
 
@@ -47,8 +52,8 @@ def build_stalk(far):
     m = Model("sf_stalk" + ("_far" if far else ""), 11)
     n = 6 if far else 16
     pts = stalk_pts(n)
-    radii = [2.1 - 0.9 * (i / n) for i in range(n + 1)]
-    radii[0] = 2.6
+    radii = [STALK_R0 - (STALK_R0 - STALK_R1) * (i / n) ** 0.7 for i in range(n + 1)]
+    radii[0] = STALK_R0 * 1.25                    # root flare
 
     def col(i, k, N):
         if far:
@@ -56,7 +61,7 @@ def build_stalk(far):
         if i % 4 == 3:
             return STALK[2]                       # leaf collar band
         return STALK[1] if k % 3 == 0 else STALK[0]   # fibre streaks
-    stube(m, pts, radii, seg=6 if far else 10, group="body_nl" if far else "body", colfn=col)
+    stube(m, pts, radii, seg=6 if far else 12, group="body_nl" if far else "body", colfn=col)
     return m
 
 
@@ -78,12 +83,12 @@ def heart(m, base, az, ln, w, droop, group):
 def build_leaves(far):
     m = Model("sf_leaves" + ("_far" if far else ""), 12)
     pts = stalk_pts(16)
-    spec = [(0.22, 0.4, 16.0, 6.0), (0.36, 2.6, 15.0, 5.5), (0.5, 4.6, 13.0, 5.0), (0.64, 1.4, 11.0, 4.4), (0.76, 3.6, 9.0, 3.6)]
-    if far:
-        spec = spec[:3]
+    spec = LEAF_SPEC[:3] if far else LEAF_SPEC
     for (z, az, ln, w) in spec:
-        p = pts[int(z * 16)]
-        heart(m, p, az, ln, w, 0.55, "body_nl" if far else "body_nl")
+        p = pts[int(round(z * 16))]
+        d = V(math.cos(az), math.sin(az), 0)
+        r = STALK_R0 - (STALK_R0 - STALK_R1) * z ** 0.7
+        heart(m, p + d * (r * 0.8), az, ln, w, 0.55, "body_nl")
     return m
 
 
@@ -132,10 +137,10 @@ def petals(m, c, f, s, u, n, r0, r1, w, color, curl, group, phase=0.0):
 def build_head(far, dry):
     m = Model("sf_head" + ("_dry" if dry else "") + ("_far" if far else ""), 13)
     c = V(0, 0, 0)
-    tilt = math.radians(62.0)
+    tilt = math.radians(TILT)
     f = V(0, -math.cos(tilt), math.sin(tilt))          # faces -Y, tilted up toward the lamp
     up = V(0, 0, 1)
-    disc_r = HEAD_R * 0.52
+    disc_r = HEAD_R * 0.42
 
     def seeds(fc):
         p = fc.calc_center_median() - c
@@ -146,20 +151,19 @@ def build_head(far, dry):
     group = "body_nl"
     s, u = disc_face(m, c, f, up, disc_r, 2 if far else 5, 10 if far else 20, seeds, group)
     if dry:
-        petals(m, c - f * 0.2, f, s, u, 12 if far else 22, disc_r * 0.9, HEAD_R * 0.92, 1.3, DRY, 0.9, group)
+        petals(m, c - f * 0.2, f, s, u, 14 if far else 22, disc_r * 0.9, HEAD_R * 0.92, 2.0, DRY, 0.9, group)
     else:
-        petals(m, c - f * 0.1, f, s, u, 12 if far else 24, disc_r * 0.9, HEAD_R, 1.5, GOLD, 0.1, group)
-        if not far:
-            petals(m, c - f * 0.3, f, s, u, 20, disc_r * 0.85, HEAD_R * 0.86, 1.3, YELLOW, 0.15, group, phase=0.5)
+        petals(m, c - f * 0.1, f, s, u, 16 if far else 26, disc_r * 0.9, HEAD_R, 2.4, GOLD, 0.1, group)
+        petals(m, c - f * 0.3, f, s, u, 12 if far else 22, disc_r * 0.85, HEAD_R * 0.86, 2.2, YELLOW, 0.15, group, phase=0.5)
     # the neck: a short bent stalk piece from the head back down to the column (pivot = head centre)
-    neck = [c - f * 1.2, c - f * 3.0 - up * 1.0, c - f * 3.6 - up * 3.2]
-    stube(m, neck, [1.3, 1.25, 1.2], seg=6 if far else 8, group=group, color=STALK[0])
+    neck = [c - f * 1.2, c - f * 3.0 - up * 1.4, c - f * 3.6 - up * 4.0]
+    stube(m, neck, [STALK_R1 * 0.95, STALK_R1 * 0.95, STALK_R1], seg=6 if far else 10, group=group, color=STALK[0])
     return m
 
 
 def build_sunflower():
     ps = PartSet("giant_sunflower")
-    head_c = (stalk_pts(16)[-1] + V(0, 3.6 * math.cos(math.radians(62)), 3.2 - 3.6 * math.sin(math.radians(62))))
+    head_c = (stalk_pts(16)[-1] + V(0, 3.6 * math.cos(math.radians(TILT)), 4.0 - 3.6 * math.sin(math.radians(TILT))))
     ps.add("stalk", build_stalk(False))
     ps.add("stalk__far", build_stalk(True))
     ps.add("leaves", build_leaves(False))
