@@ -710,6 +710,9 @@ func _add(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:
 
 ## 창가 한쪽의 빛 + 환경 (RENDERING.md v2 2.3). 빛은 툰 셰이더의 light()가 한 단계로 끊는다 — 주변광은 쓰지 않음.
 ## 해 방향은 Style.sun_direction(). 그림자 맵은 켜고, 결과는 셰이더에서 같은 그늘 색 한 단계로.
+const SHADOW_DIST_WORLD := 150.0   # 넓은 세상: 카메라가 큰 나무만큼 더 물러나 있어 (JarCamera.INSIDE_MARGIN) 그림자 거리도 그만큼
+
+
 static func make_world(parent: Node) -> DirectionalLight3D:
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR

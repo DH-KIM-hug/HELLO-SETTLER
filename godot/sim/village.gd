@@ -941,6 +941,8 @@ func step(dt: float) -> void:
 		salt_discovery()
 		SimProf.mark("salt")
 		Discovery.hourly(self)        # 발견 W2 · F3 · F5 · S3 · P1 (DISCOVERIES — sim/discovery.gd)
+		if owns_water:
+			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
@@ -1016,6 +1018,8 @@ func _tree_spread() -> void:
 	for q: Dictionary in trees:
 		if Vector2(float(q["x"]) - x, float(q["y"]) - y).length() < 1.0:
 			return
+	if GreatTrees.blocks(water, x, y, 0.0):
+		return
 	trees.append({"x": x, "y": y, "s": "sapling", "g": Balance.SAPLING_GROW, "res": 0})
 
 
@@ -2192,6 +2196,8 @@ func is_free(x: float, y: float, size: float) -> bool:
 		return false
 	if SkyDrops.blocks(self, x, y, size):              # [상점] 하늘에서 내려온 물건·앰플 탑 자리
 		return false
+	if GreatTrees.blocks(water, x, y, size):           # 큰 나무 다섯의 줄기 둘레 (GD 3.0 — 베지 않음)
+		return false
 	return true
 
 
@@ -3250,6 +3256,8 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 			if p.distance_to(spot) < WorldCfg.KIT_CLEAR_R or p.distance_to(spot) > WorldCfg.KIT_TREES_R:
 				continue
 			if not ww.inside(x, y, 1.5) or ww.depth(ww.idx(x, y)) >= 0.005:
+				continue
+			if GreatTrees.blocks(ww, x, y, 0.0):
 				continue
 			trees.append({"x": x, "y": y, "s": "tree", "g": 0.0, "res": 0})
 	for rp in ww.rock_spots:

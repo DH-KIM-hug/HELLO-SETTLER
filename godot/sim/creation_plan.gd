@@ -21,7 +21,7 @@ const CORE_PICKS := ["작게", "보통", "크게"]
 const LAND_PICKS := ["너른 들", "언덕", "산과 골짜기"]
 const WATER_PICKS_T := ["조금", "알맞게", "넉넉히"]
 const WATER_PICKS := [0.22, 0.5, 0.82]   # 물 단추 → 부은 양 (신화: 0.35 아래 '조금' · 0.75 위 '넉넉히')
-const SEED_PICKS := ["알아서", "숲을 더", "풀밭을 더"]
+const SEED_PICKS := ["알아서", "꽃을 더", "풀밭을 더"]   # (E3-3 소인의 세상) 이끼·풀·꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
 const DRIP_N := 3                       # 거인의 돌기 (세상이 나머지를 채워 메이슨 자 8~12 — GD 3.3)
 const DRIP_MAX_R := 0.8                 # 뚜껑 안쪽에 돌기를 찍을 수 있는 곳 (가장자리 테 안)
 const DRIP_GAP := 0.24                  # 돌기 사이 (너무 붙으면 안 찍힘)
@@ -249,7 +249,7 @@ func fill_drips() -> void:
 			drips.append([_q(p.x), _q(p.y)])
 
 
-## 씨앗 단추 (0 알아서 · 1 숲을 더 · 2 풀밭을 더) → 씨앗 점 무리 (무리 = 한 숲·한 들판)
+## 씨앗 단추 (0 알아서 · 1 꽃을 더 · 2 풀밭을 더) → 씨앗 점 무리 (무리 = 한 숲·한 들판)
 func seed_preset(i: int) -> void:
 	i = clampi(i, 0, 2)
 	for k: String in ["moss", "grass", "tree"]:
@@ -382,9 +382,9 @@ static func myth_of(cr: Dictionary) -> Array:
 	if ng > nt * 2:
 		lines.append("거인이 생명을 뿌리니 풀밭이 너르게 펼쳐졌다.")
 	elif nt > ng * 3:
-		lines.append("거인이 생명을 뿌리니 숲이 우거졌다.")
+		lines.append("거인이 생명을 뿌리니 거대한 꽃숲이 우거졌다.")
 	else:
-		lines.append("거인이 생명을 뿌리니 숲이 자랐다.")
+		lines.append("거인이 생명을 뿌리니 이끼와 풀 사이로 꽃숲이 자랐다.")
 	lines.append("사람보다 먼저, 거인은 숲에 짐승을 물에 물고기를 풀어 놓으셨다.")
 	lines.append("그리고 어느 새벽, 거인이 우리의 조상 열 명을 이 땅에 내려놓으셨다.")
 	return lines

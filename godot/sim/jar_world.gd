@@ -183,6 +183,8 @@ func kit_spot_ok(x: float, y: float) -> Dictionary:
 			return {"ok": false, "warn": "", "why": "다른 무리와 너무 가까워요"}
 	if relief(p, WorldCfg.KIT_FLAT_R) > CLIFF_RELIEF:
 		return {"ok": false, "warn": "", "why": "벼랑이라 놓을 수 없어요"}
+	if GreatTrees.too_close_for_kit(ww, p):
+		return {"ok": false, "warn": "", "why": "큰 나무 곁이라 놓을 수 없어요"}
 	var water_near := false
 	for k in ww.cells_near(p, WorldCfg.KIT_WATER_R):
 		if ww.is_lake(k) or ww.is_river(k):
@@ -384,6 +386,7 @@ static func from_dict(d: Dictionary) -> JarWorld:
 	jw.water = JarWater.from_dict(d["water"]) as WorldWater
 	for sd: Dictionary in d["settlements"]:
 		jw.settlements.append(Village.from_dict(sd, jw.water))
+	GreatTrees.ensure(jw)               # 옛 저장: 큰 나무 다섯을 무리에서 먼 자리에
 	var others: Array = d.get("others", [])
 	for i in jw.settlements.size():
 		var s := jw.settlements[i]

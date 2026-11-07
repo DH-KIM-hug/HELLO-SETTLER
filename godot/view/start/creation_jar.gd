@@ -1120,7 +1120,7 @@ func show_specks(seeds: Dictionary) -> void:
 	mm.instance_count = n
 	var r := RandomNumberGenerator.new()
 	r.seed = 9
-	var cols := {"moss": Color("7cc06a"), "grass": Color("e2cf86"), "tree": Color("8a5a2e")}
+	var cols := {"moss": Color("7cc06a"), "grass": Color("e2cf86"), "tree": Color("e48aa8")}
 	for i in all.size():
 		var p: Array = all[i][1]
 		for j in 3:
@@ -1131,7 +1131,8 @@ func show_specks(seeds: Dictionary) -> void:
 	speck_mm.visible = n > 0
 
 
-## 숲의 나무들 (배양에서 자람 — green이 at을 넘으면)
+## 꽃숲 (배양에서 자람 — green이 at을 넘으면). (E3-3 소인의 세상) 나무 대신 거대한 꽃·풀대·고사리·이끼 — 철 꽃이 섞여 핀다.
+## 씨앗 이름(plan.seeds["tree"] · ww.forests)은 저장 호환으로 그대로
 func plant_trees() -> void:
 	for c in tree_root.get_children():
 		c.queue_free()
@@ -1141,10 +1142,10 @@ func plant_trees() -> void:
 	_build_gcache()
 	var r := RandomNumberGenerator.new()
 	r.seed = plan.seed_v + 77
-	var names := ["tree_a", "tree_b", "tree_c", "conifer", "tree_d"]
+	var names: Array = FloraLook.FLOWERS["봄"].slice(0, 3) + FloraLook.FLOWERS["여름"].slice(0, 3) + FloraLook.FLOWERS["가을"].slice(0, 3) + ["flora/grass_a", "flora/fern_a", "flora/moss_a"]
 	for f: Dictionary in ww.forests:
 		var c := Vector2(f["x"], f["y"])
-		var n := clampi(int(float(f["r"]) / 3.5), 1, 5)
+		var n := clampi(int(float(f["r"]) / 3.0), 1, 6)
 		for i in n:
 			var a := r.randf() * TAU
 			var d := sqrt(r.randf()) * float(f["r"]) * 0.8
@@ -1154,8 +1155,9 @@ func plant_trees() -> void:
 			var k := ww.idx(p.x * R, p.y * R)
 			if ww.depth(k) > 0.004:
 				continue
-			var nd := Art.instance(tree_root, names[r.randi() % names.size()], Transform3D(Basis(Vector3.UP, r.randf() * TAU), uv_point(p.x, p.y)))
-			var s := r.randf_range(0.15, 0.2) * (1.15 if bool(f.get("sown", false)) else 1.0)
+			var nm: String = names[r.randi() % names.size()]
+			var nd := Art.instance(tree_root, nm, Transform3D(Basis(Vector3.UP, r.randf() * TAU), uv_point(p.x, p.y)))
+			var s := r.randf_range(0.15, 0.2) * (1.15 if bool(f.get("sown", false)) else 1.0) * FloraLook.base_scale(nm) * 0.75   # 옛 나무(높이 5)만 하게
 			nd.scale = Vector3.ONE * 0.001
 			_trees.append({"node": nd, "at": 0.5 + r.randf() * 0.35, "s": s})
 

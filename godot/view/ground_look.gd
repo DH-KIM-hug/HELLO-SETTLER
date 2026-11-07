@@ -177,6 +177,9 @@ static func season_now(v: Village) -> Dictionary:
 	return season_params(month, day, climate, hour)
 
 
+const BLOOM := {"봄": [Color("f4d44c"), 1.0], "여름": [Color("ee7a8c"), 1.0], "가을": [Color("ec9cc8"), 0.9], "겨울": [Color("e8e2d0"), 0.25]}
+
+
 ## 계절 값 → 땅 재질 uniform
 static func apply_season(m: ShaderMaterial, sp: Dictionary) -> void:
 	if m == null:
@@ -192,6 +195,10 @@ static func apply_season(m: ShaderMaterial, sp: Dictionary) -> void:
 	m.set_shader_parameter("frost_amt", float(sp["frost"]))
 	m.set_shader_parameter("snow_amt", float(sp["snow"]))
 	m.set_shader_parameter("desert", 1.0 if bool(sp["desert"]) else 0.0)
+	# (E3-3) 세상 전체 지도의 꽃숲 점 — 철 꽃 색 (FloraLook.FLOWERS와 같은 철)
+	var bloom: Array = BLOOM.get(String(sp.get("season", "봄")), BLOOM["봄"])
+	m.set_shader_parameter("bloom_col", bloom[0])
+	m.set_shader_parameter("bloom_amt", float(bloom[1]) * (0.0 if bool(sp["desert"]) else 1.0))
 
 
 # ───────────────────────── 오솔길 텍스처 ─────────────────────────

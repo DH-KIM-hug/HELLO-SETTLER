@@ -275,6 +275,7 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	ww.removed = 0.0
 	for b: Dictionary in ww.basins:
 		b["area0"] = ww.basin_area(b)
+	GreatTrees.place(ww)                # 큰 나무 다섯 (GD 3.0) — 물이 자리 잡은 뒤, 서로·키트 자리·물가에서 멀리
 	return ww
 
 
@@ -483,6 +484,8 @@ static func apply_life(ww: WorldWater, cr: Dictionary) -> void:
 	for pt: Array in _clusters(seeds.get("tree", []), 0.09):
 		var p := Vector2(float(pt[0]), float(pt[1])) * R * CreationPlan.REACH
 		if not ww.inside(p.x, p.y, 8.0) or ww.depth(ww.idx(p.x, p.y)) > 0.01 or _near_any(p, ww.spots, 22.0):
+			continue
+		if not GreatTrees.near(ww, p, 6.0).is_empty():      # 큰 나무 줄기 둘레는 비움
 			continue
 		mine.append({"x": p.x, "y": p.y, "r": clampf(6.0 + float(pt[2]) * 1.6, 6.0, 16.0), "dens": 0.85, "spot": -1, "sown": true})
 	if not mine.is_empty():

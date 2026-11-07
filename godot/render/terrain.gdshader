@@ -90,6 +90,9 @@ uniform float map_hs = 6.0;
 uniform vec3 canopy_col : source_color = vec3(0.24, 0.64, 0.51);
 uniform vec3 canopy_lit : source_color = vec3(0.4, 0.79, 0.54);
 uniform vec3 canopy_dark : source_color = vec3(0.16, 0.52, 0.47);
+// (E3-3 소인의 세상) 세상 전체 지도의 꽃숲: 수관 덩어리 위에 철 꽃 점 (GroundLook.apply_season — 봄 노랑·여름 분홍·가을 코스모스, 겨울 없음)
+uniform vec3 bloom_col : source_color = vec3(0.95, 0.82, 0.3);
+uniform float bloom_amt = 0.0;
 uniform vec3 lake_col : source_color = vec3(0.42, 0.78, 0.82);
 uniform vec3 lake_edge : source_color = vec3(0.31, 0.62, 0.68);
 #ifdef WHOLE_UNDER
@@ -392,6 +395,10 @@ void fragment() {
 		vec3 cc = canopy_col;
 		cc = mix(cc, canopy_lit, smoothstep(0.08, 0.2, f - fl) * 0.9);
 		cc = mix(cc, canopy_dark, smoothstep(0.08, 0.2, f - fd) * 0.8);
+		vec2 bq = lpos.xz / 5.0;
+		float bh = fract(sin(dot(floor(bq), vec2(12.9898, 78.233))) * 43758.5453);
+		float bd = length(fract(bq) - 0.5);
+		cc = mix(cc, bloom_col, step(bd, 0.3) * step(1.0 - bloom_amt * 0.4, bh) * smoothstep(0.45, 0.6, f));
 		c = mix(c, cc, fo);
 		// 물: 거친 칸 수면 높이와 픽셀 높이
 		vec2 wv = texture(map_w, uvm).rg;
