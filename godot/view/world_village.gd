@@ -1046,6 +1046,11 @@ func layout_bars() -> void:
 	_layout_world_ui()
 
 
+## [창고] 창고 띠는 둥근 지도 왼쪽까지
+func store_right() -> float:
+	return WorldMinimap.SIZE + 16.0
+
+
 func _layout_world_ui() -> void:
 	if minimap == null:
 		return
