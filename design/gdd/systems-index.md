@@ -26,13 +26,13 @@
 |---|-------------|----------|----------|--------|------------|------------|
 | 1 | 병 시간·속도·비운 시간 따라잡기 + 중요한 일이 생기면 저절로 느려지고 까닭을 말함 ✅ | Core | MVP | Designed | design/gdd/jar-time.md | — |
 | 2 | 세상 생성·창조 오프닝 ✅ | Core | MVP | Not Started | — (docs/OPENING.md) | — |
-| 3 | 닫힌 병의 물·소금·이슬 ✅ | Core | MVP | Not Started | — | 1, 2, 4 |
-| 4 | 빛·등불·계절·날씨 ✅ | Core | MVP | Not Started | — | 1 |
+| 3 | 닫힌 병의 물·소금·이슬 ✅ | Core | MVP | Designed | design/gdd/water.md | 1, 2, 4 |
+| 4 | 빛·등불·계절·날씨 ✅ | Core | MVP | Designed | design/gdd/light-seasons.md | 1 |
 | 5 | 저장·불러오기 (입출력·코덱·판 옮김) ✅ | Persistence | MVP | Not Started | — (docs/SAVE.md) | 1 (모든 계통의 끝단) |
-| 6 | 소인의 꽃숲·큰 나무 다섯·땅 덮개 ✅ | Core | MVP | Not Started | — | 2, 4 |
+| 6 | 소인의 꽃숲·큰 나무 다섯·땅 덮개 ✅ | Core | MVP | Designed | design/gdd/flower-forest.md | 2, 4 |
 | 7 | 사건 기록 흐름 (inferred) ⬜ | Core | MVP | Not Started | — | 1 |
-| 8 | 유전·겉모습 ✅ | Gameplay | MVP | Not Started | — | 1 |
-| 9 | 건강·나이·죽음 ✅ | Gameplay | MVP | Not Started | — (docs/HEALTH.md) | 1, 8, 10 |
+| 8 | 유전·겉모습 ✅ | Gameplay | MVP | Designed | design/gdd/genetics.md | 1 |
+| 9 | 건강·나이·죽음 ✅ | Gameplay | MVP | Designed | design/gdd/health.md | 1, 8, 10 |
 | 10 | 필요와 기분 (배고픔·행복·두려움) (inferred) 🔄 | Gameplay | MVP | Designed | design/gdd/needs-and-mood.md | 1, 8, 15 |
 | 11 | 하루 일정·일자리 배정 ✅ | Gameplay | MVP | Designed | design/gdd/daily-schedule.md | 8, 10, 13, 15 |
 | 12 | 움직임·길 찾기·나르기·길과 도로 + **손에 든 물건·더미·멈춤 표시** (막힌 곳이 화면에 보임 — 기둥 2, 그림은 28) ✅ | Gameplay | MVP | Designed | design/gdd/movement-carry.md | 2, 11 |
