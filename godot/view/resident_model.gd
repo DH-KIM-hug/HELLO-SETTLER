@@ -8,7 +8,9 @@
 ## 겉모습(체형·머리·피부·옷 색)은 주민 데이터(look_* · 겉모습 유전자 · 혈통 표시)에서만 정한다 — 능력치(재주·특징·숙련·건강)와 상관없다.
 ## 직업 옷(set_job)은 일터 종류에서, 표정(set_face)은 지금 상태(잠·앓음·기분·말)에서.
 ## 색: 부품의 열쇠 색을 render/resident.gdshader가 이 주민의 옷·피부·머리·수건·숄 색으로 바꿈. 주민 한 명 = 재질 하나.
-## 외곽선: 뒤집은 껍데기(짙은 갈색) + 화면 깊이 외곽선. 크기: 모델 키 약 1.9 × Style.RESIDENT_SCALE.
+## 외곽선: 뒤집은 껍데기(짙은 갈색) + 화면 깊이 외곽선.
+## A23 (아트 바이블 5.2·8.13): 약 4등신, 모델 단위 = 게임 단위 (1 = 1칸 = 어른 키 · 아이 약 0.7 · 노인 0.95 + 지팡이).
+##   낮엔 머리쓰개 문화 (넓은 챙 풀 모자 · 높은 고깔 · 늘어진 머릿수건 — daylight), 저녁엔 벗어 머리색이 드러남.
 ## v5 동작: 시뮬레이션 동작(r.anim) + 행동(r.action)으로 기본 클립을 고르고 (_clip), 사람마다 버릇(_style)·시작 자리·빠르기를 달리,
 ##   가끔 사이 동작(둘러보기·기지개·머리 긁기·짝다리·이야기·절)을 끼운다 (VARIETY). 손 흔들기는 인사(greet)·신호 때만.
 ## LOD: 마을 확대가 LOD_PPU(칸당 화면 점) 이상이면 가까이 LOD (village_view가 set_lod) — 초상화·따라가기는 늘 가까이.
@@ -17,7 +19,7 @@ extends Node3D
 
 ## 걸음 동작이 1배속일 때 디딘 발이 몸 뒤로 미는 빠르기 (칸/초, 모델 배율 1 기준 — tools/measure_stride.gd로 잰 값).
 ## 동작 빠르기 = 땅 위 실제 빠르기 ÷ (이 값 × 모델 배율) → 발이 미끄러지지 않는다 (GD 6.6 '걸음 다시' 2026-11-07)
-const STRIDE := {"walk": 1.82, "carry": 1.60, "run": 3.10, "walk_elder": 0.91}
+const STRIDE := {"walk": 1.35, "carry": 1.18, "run": 2.28, "walk_elder": 0.67}   # A23 4등신 (칸/초, 모델 배율 1)
 const GROUND_NORMAL := 1.0        # 땅 빠르기를 모를 때(초상화·사진) 어른 걸음 = 보통 배속 1초에 1칸 (Balance.WALK × 288)
 const GROUND_EASE := 6.0          # 잰 땅 빠르기를 부드럽게 따라가는 정도 (1/초)
 const PARTS := "resident_props"   # 소품: art/models/resident_props.glb (Art.parts)
@@ -29,7 +31,12 @@ const HAIR_TEX := "res://art/models/resident_hair.png"
 const CLOTH_TEX := "res://art/models/resident_cloth.png"
 const LOD_PPU := 24.0             # 이 확대(칸당 화면 점) 이상이면 가까이 LOD
 const HEAD_TILT := -0.3           # 머리를 살짝 들어 위에서 보는 카메라(48°)에도 얼굴이 보이게
-const NECK := Vector3(0, 1.23, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리) — art/src/build_residents.py NECK
+const NECK := Vector3(0, 0.735, 0) # 머리 부품 좌표 원점 (셰이더 대머리·주근깨 자리) — art/src/build_residents.py fz(NECK)
+## CUSTOM1 = 옛 설계 단위 자리 (셰이더의 대머리·주근깨·점박이 숫자가 그대로 맞게): 머리 = (자리 - NECK) ÷ HEAD_K, 몸 = 자리 ÷ BODY_K
+const HEAD_K := 0.42              # build_residents.py HS
+const BODY_K := 0.52              # build_residents.py WB
+const ARM_X := 0.148              # 어깨 관절 x (build_residents.py ARM_X × WB) — 체형 어깨 넓힘
+const LEG_X := 0.055              # 다리 x (LEG_X × WB)
 const BLEND := 0.18               # 동작 바꿀 때 섞는 시간 (초)
 
 ## 부품 고르기 표 (데이터) — look_clothes → 몸통·다리, look_head × 성별 → 머리 모양, look_hat → 모자
@@ -55,6 +62,13 @@ const ERA_SCARF := [1, 2, 3]       # 목수건
 const ERA_ACORN := [1, 2, 3]       # 도토리 깍정이 모자 (모자 없는 사람)
 const ERA_FLOWER := [2, 4, 4]      # 머리에 꽃 (여자·아이, 모자 없거나 수건)
 static var village_era := 0        # 지금 그리는 마을의 시대 (VillageView가 정함 — look_of가 읽음)
+## A23 (아트 바이블 5.3 R6) 낮의 머리쓰개 문화: 낮에 등불 아래서 일할 땐 많은 주민이 머리를 덮는 쓰개를 쓰고 저녁엔 벗는다.
+## 모양은 머리 윤곽을 크게 바꾸는 것만 — 넓은 챙 풀 모자 · 높은 고깔 · 늘어진 머릿수건 (크림·마른 재료색, 고정 색).
+## 누가 무엇을 쓰는지는 차림 취향 씨앗(유전 아님) × 시대 — 능력과 무관. 직업 모자가 있으면 그것을 씀.
+const DAY_HATS := ["hat_straw", "hat_cone", "hat_kerchief"]
+const ERA_DAY_HAT := [9, 9, 8]     # 시대마다 낮 쓰개를 쓰는 몫 (0~10)
+const DAY_HOURS := Vector2(6.0, 17.0)   # 이 시각 사이 = 낮 (저녁 모닥불부터 벗음)
+static var daylight := true        # 지금 낮인가 (VillageView가 정함 — 모델마다 바뀔 때만 몸을 다시 합침)
 const HATS := ["", "hat_straw", "hat_scarf"]
 const CAP_HAT := "hat_cap"        # 모자 없는 남자 일부
 ## 체형 3종 (겉모습 유전자 '체격'에서 — 능력과 무관): 0 호리호리 · 1 다부진 · 2 둥근 → 몸통 배율 (가슴·치마 뼈)
@@ -66,7 +80,7 @@ const ITEMS := {"통나무": "item_log", "판자": "item_plank", "돌": "item_st
 	"밀가루": "item_sack", "빵": "item_basket", "물": "item_water", "소금": "item_sack",
 	"버섯": "item_basket", "빛버섯": "item_basket", "붉은 물감": "item_basket", "말린 버섯": "item_basket"}   # [하늘의 것] (옛 소품 — carry glb가 없을 때만)
 ## (A22 · E0 · OPENING 3.1c) 나르는 짐 — 밀 단 → 밀가루 자루 → 반죽 그릇 → 빵 바구니가 길 따라 옮겨 가는 모습이 핵심.
-## 소품 = art/models/carry/<이름>.glb (art/src/build_carry.py, 부품 "<이름>" · 멀리 LOD 덩어리 "<이름>_far").
+## 소품 = art/models/carry/<이름>.glb (art/src/build_carry.py, 부품 "<이름>" · 멀리 LOD 덩어리 "<이름>__far").
 ## 짐 이름 → [소품, 드는 자리]. 자리: front 두 손으로 안음 · shoulder 오른 어깨에 멤 · back 등에 짊어짐(오른손이 목을 잡음) ·
 ## head 머리에 임 · hand 오른손에 늘어뜨림. 표에 없는 짐 = 보따리 (CARRY_GENERIC)
 const CARRY := {
@@ -94,16 +108,17 @@ const CARRY_CHILD_SCALE := 0.95
 ## 작은 소품은 더 크게 (손에 늘어뜨린 것은 기본 확대에서 안 읽힘)
 const CARRY_PROP_SCALE := {"fish_string": 1.55, "medaka": 1.25, "fruit_piece": 1.5, "wheat_sheaf": 1.2, "flour_sack": 1.2, "salt_sack": 1.15, "grain_sack": 1.15, "bundle": 1.15, "herb_bundle": 1.5, "water_bucket": 1.15, "loaf": 1.15}
 const CARRY_FAR_SCALE := 1.35
-const CARRY_BOB := 0.035          # 걸음에 맞춰 짐이 통통
-## 자리 → 붙는 곳 (모델 좌표, 쉴 자세 — 앞 = +Z, 오른쪽 = -X)
-const CARRY_SOCKET := {"front": Vector3(0, 0.86, 0.42), "shoulder": Vector3(-0.22, 1.18, -0.1), "back": Vector3(0, 0.96, -0.17),
-	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02), "push": Vector3(0, 0, 1.16),
-	"pole": Vector3(-0.22, 1.27, -0.04)}
+const CARRY_BOB := 0.018          # 걸음에 맞춰 짐이 통통 (칸)
+## 자리 → 붙는 곳 (모델 좌표 = 칸, 쉴 자세 — 앞 = +Z, 오른쪽 = -X). A23 4등신 관절 (build_residents.py가 찍는 A23 joints)
+const CARRY_SOCKET := {"front": Vector3(0, 0.57, 0.218), "shoulder": Vector3(-0.114, 0.714, -0.052), "back": Vector3(0, 0.614, -0.088),
+	"head": Vector3(0, 1.01, 0.0), "hand": Vector3(-0.187, 0.39, 0.01), "push": Vector3(0, 0, 0.6),
+	"pole": Vector3(-0.114, 0.76, -0.02)}
+const BODY_FRONT := 0.125         # 가슴 앞면 (front 짐이 몸에 묻히지 않게)
 ## pole (둘이 메기): 오른 어깨 위 장대 — 앞 사람(fish_pole)은 뒤로, 뒤 사람(pole_half)은 앞으로 뻗어 POLE_GAP 사이 가운데에서 만남
-const POLE_GAP := 2.6            # 둘 사이 (모델 단위 — build_carry.py POLE_HALF × 2). 세상 칸 = × Style.RESIDENT_SCALE
+const POLE_GAP := 1.352          # 둘 사이 (칸 — build_carry.py POLE_HALF × 2)
 ## push (유모차): 모델 원점(땅)에 붙음 — 소품 원점 = 바구니 아래 땅, 손잡이가 주민 쪽(-Z). 바퀴 부품 (굴러감)
 const PRAM_SCALE := 1.3          # 유모차 크기 (손잡이가 손 높이에 오게)
-const PRAM_WHEELS := {"pram_wheel_fl": 0.13, "pram_wheel_fr": 0.13, "pram_wheel_bl": 0.17, "pram_wheel_br": 0.17}   # 부품 → 반지름
+const PRAM_WHEELS := {"pram_wheel_fl": 0.0676, "pram_wheel_fr": 0.0676, "pram_wheel_bl": 0.0884, "pram_wheel_br": 0.0884}   # 부품 → 반지름 (build_pioneer.py × PRAM_UNIT)
 ## 자리 → 팔 자세 (build_residents.py arms()와 같은 말: [윗팔 (x 앞으로 듦(-), y 옆으로 벌림, z), 팔뚝 굽힘(-)]). 빠진 팔은 살랑
 const CARRY_ARMS := {
 	"shoulder": {"R": [Vector3(-1.25, 0.75, 0.0), -2.1]},
@@ -231,6 +246,7 @@ var _skip := false
 var _skip_dt := 0.0
 var _accent := Color.WHITE      # 본디 수건·모자 색 (직업 모자가 바꿨다가 되돌림)
 var _cloth_i := 0
+var _day_shown := true          # 지금 합친 몸이 낮 쓰개를 반영한 것인가
 
 
 ## 상자 메시 (건설 현장·더미 등 village_view가 씀)
@@ -305,7 +321,7 @@ static func kit() -> Dictionary:
 		var cu := PackedFloat32Array()
 		cu.resize(nv * 4)
 		for v in nv:
-			var q := pos[v] - NECK if head_part else pos[v]
+			var q := (pos[v] - NECK) / HEAD_K if head_part else pos[v] / BODY_K
 			cu[v * 4] = q.x
 			cu[v * 4 + 1] = q.y
 			cu[v * 4 + 2] = q.z
@@ -538,6 +554,9 @@ static func parts_for(lk: Dictionary) -> Dictionary:
 		acc.append("buttons_seed")
 	if hat == "" and not cap and roll.call(3, ERA_ACORN):
 		hat = "hat_acorn"
+	var day_hat := ""
+	if (hat == "" or hat == "hat_acorn") and not cap and roll.call(6, ERA_DAY_HAT):
+		day_hat = DAY_HATS[posmod(hash([sv, 11]), DAY_HATS.size())]
 	var flower_ok: bool = (sex == "f" or child) and (hat == "" or hat == "hat_scarf") and roll.call(5, ERA_FLOWER)
 	if flower_ok:
 		acc.append(FLOWERS[posmod(hash([sv, 9]), FLOWERS.size())])
@@ -550,7 +569,7 @@ static func parts_for(lk: Dictionary) -> Dictionary:
 		fsh = (skin_i + cloth_i) % FACE_SHAPES.size()
 	return {"hood": hood, "baby": age < Balance.AGE_BABY, "torso": torso, "leg": cl["leg"], "arm": "arm", "hair": hair, "hat": hat,
 		"cap": cap, "beard": sex == "m" and age >= 8.0 and (hair_i + skin_i) % 3 == 0,
-		"face_shape": fsh, "body": body_type(lk), "acc": acc, "era": era, "sv": sv,
+		"face_shape": fsh, "body": body_type(lk), "acc": acc, "era": era, "sv": sv, "day_hat": day_hat,
 		"elder": elder, "shawl": (hair_i + cloth_i + skin_i) % SHAWL_COLORS.size() if elder else -1}
 
 
@@ -569,7 +588,7 @@ static func outfit_colors(lk: Dictionary, p: Dictionary) -> Dictionary:
 		over = Color(LEAF_COLORS[(sv >> 3) % LEAF_COLORS.size()])
 	elif "acc_scarf" in acc:
 		over = Color(SCARF_COLORS[(sv + cloth_i) % SCARF_COLORS.size()])
-	return {"cloth": cloth, "over": over}
+	return {"cloth": dye(cloth), "over": dye(over)}
 
 
 ## 직업 옷 (일터 종류 · 촌장) → {hat, over[], robe, tool}
@@ -584,14 +603,15 @@ static func job_look(job: String, chief := false) -> Dictionary:
 
 
 ## 머리 위를 덮는 모자(납작모자·털모자·빵 모자·수건)를 쓰면 곱슬머리는 정수리 곱슬을 뺀 부품(_under)으로, 올림머리는 짧은 머리로
-const CROWN_HATS := ["hat_cap", "hat_fisher", "hat_baker", "hat_scarf", "hat_acorn"]
+const CROWN_HATS := ["hat_cap", "hat_fisher", "hat_baker", "hat_scarf", "hat_acorn", "hat_cone", "hat_kerchief"]
+const KERCHIEFS := ["hat_scarf", "hat_kerchief"]
 ## 수건을 쓰면 다 들어가는 머리 · 정수리 모자 밑에선 짧은 머리로 바꾸는 머리 (올림머리)
 const SCARF_HIDES := ["hair_bun", "hair_short", "hair_crop", "hair_twinbuns"]
 const CROWN_SHORT := ["hair_bun", "hair_twinbuns"]
 
 
 ## 지금 그릴 몸 부품 (겉모습 + 직업 옷) — 데이터만
-static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStringArray()) -> Array[String]:
+static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStringArray(), day := false) -> Array[String]:
 	var out: Array[String] = []
 	if lk_parts.get("baby", false):
 		out.append("baby_basket")
@@ -607,8 +627,10 @@ static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStrin
 	var hat: String = job.get("hat", "")
 	if hat == "":
 		hat = lk_parts.get("hat", "")
+		if day and lk_parts.get("day_hat", "") != "" and (hat == "" or hat == "hat_acorn"):
+			hat = lk_parts["day_hat"]
 	var hair: String = lk_parts.get("hair", "")
-	if hat == "hat_scarf" and hair in SCARF_HIDES:
+	if hat in KERCHIEFS and hair in SCARF_HIDES:
 		hair = ""
 	if hat in CROWN_HATS:
 		if hair.begins_with("hair_curly"):
@@ -627,7 +649,7 @@ static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStrin
 	for a: String in lk_parts.get("acc", []):
 		if robe and a in ["cape_leaf", "buttons_seed"]:
 			continue
-		if a.begins_with("acc_flower") and hat != "" and hat != "hat_scarf":
+		if a.begins_with("acc_flower") and hat != "" and not hat in KERCHIEFS:
 			continue
 		if a == "buttons_seed" and "apron_job" in job.get("over", []):
 			continue
@@ -732,22 +754,14 @@ func build_look(lk: Dictionary) -> void:
 	var has_g := g.size() >= Genetics.MIN_BYTES
 	var cue := func(n: String) -> bool: return n in _cues
 	# 색 (유전자가 있으면 유전자에서, 없으면 예전 색표)
-	var skin := Color(Balance.SKIN_COLORS[skin_i % Balance.SKIN_COLORS.size()])
-	var hair := Color(Balance.HAIR_COLORS[hair_i % Balance.HAIR_COLORS.size()])
-	var eye_a := _lc("eye")
+	var tones := tones_of(lk)
+	var skin: Color = tones["skin"]
+	var hair: Color = tones["hair"]
+	var eye_a := Style.EYE_DOT                # A23: 모든 주민의 점 눈은 같은 짙은 값 (아트 바이블 5.7)
 	var eye_b := eye_a
 	var bald := 0
 	if has_g:
-		var st := Genetics.skin_step(g)
-		if cue.call("tanned"):
-			st = mini(st + 2, Genetics.SKIN_TONES.size() - 1)
-		skin = Color(Genetics.SKIN_TONES[st])
-		hair = Genetics.hair_color(g, age, cue.call("silver_early"))
-		eye_a = _eye_col(Color(Genetics.EYE_COLORS[Genetics.eye(g)]))     # 빛깔은 살리되 멀리서도 짙게
-		eye_b = _eye_col(Color(Genetics.EYE_COLORS[Genetics.eye2(g)]))
 		bald = Genetics.bald_stage(g, sex, age)
-	elif age >= Balance.AGE_ELDER:
-		hair = _lc("elder_hair")
 	var cheek := Color(Genetics.CHEEK)
 	if cue.call("pale"):
 		skin = skin.lerp(Color(Genetics.PALE), 0.35)
@@ -759,6 +773,7 @@ func build_look(lk: Dictionary) -> void:
 	var accent := _lc("scarf_a") if (cloth_i + hair_i) % 2 == 0 else _lc("scarf_b")
 	if look["cap"]:
 		accent = Color(Balance.CLOTH_COLORS[(cloth_i + 3) % Balance.CLOTH_COLORS.size()]).darkened(0.15)
+	accent = dye(accent)
 	_accent = accent
 	_cloth_i = cloth_i
 	if _shader == null:
@@ -806,7 +821,7 @@ func build_look(lk: Dictionary) -> void:
 	elif cue.call("narrow_shoulders"):
 		shoulder = 0.88
 	var bs: Vector3 = BODY_SCALE[look["body"]]
-	_lean = 0.17 if cue.call("hunched") else (-0.05 if cue.call("upright") else (0.09 if look["elder"] else 0.0))
+	_lean = 0.2 if cue.call("hunched") else (-0.05 if cue.call("upright") else (0.2 if look["elder"] else 0.0))
 	_gait = 0.7 if cue.call("slow_gait") else (0.85 if look["elder"] else 1.0)
 	_baby = look["baby"]
 	_child = age < Balance.AGE_ADULT and not _baby
@@ -867,26 +882,28 @@ func build_look(lk: Dictionary) -> void:
 		_cane = _pivot(arm_l, origin("cane"))
 		_mesh(_cane, "cane")
 	# 혈통 소품 (모델 좌표: +Z 앞, y 위 — 가슴 뼈를 따라 움직임)
-	var front := 0.27
+	var front := 0.14
 	if cue.call("amulet"):
-		_prop(chest, box_of(Vector3(0.08, 0.1, 0.03)), Style.WOOD, Vector3(0, 0.88, front + 0.01))
-		_prop(chest, box_of(Vector3(0.015, 0.16, 0.015)), Style.WOOD_DARK, Vector3(0, 0.99, front - 0.03), Vector3(0.3, 0, 0))
+		_prop(chest, box_of(Vector3(0.042, 0.052, 0.016)), Style.WOOD, Vector3(0, 0.6, front + 0.005))
+		_prop(chest, box_of(Vector3(0.008, 0.083, 0.008)), Style.WOOD_DARK, Vector3(0, 0.65, front - 0.016), Vector3(0.3, 0, 0))
 	if cue.call("neck_scarf"):
-		_prop(chest, _cyl(0.15, 0.08), _lc("scarf_b"), Vector3(0, 1.14, 0.0))
+		_prop(chest, _cyl(0.085, 0.042), _lc("scarf_b"), Vector3(0, 0.7, 0.0))
 	if cue.call("cloak"):
-		_prop(chest, box_of(Vector3(0.62, 0.8, 0.05)), Color("7a6650"), Vector3(0, 0.72, -0.28), Vector3(0.12, 0, 0))
+		_prop(chest, box_of(Vector3(0.34, 0.46, 0.026)), Color("7a6650"), Vector3(0, 0.46, -0.155), Vector3(0.12, 0, 0))
 	if cue.call("pipe"):
-		_prop(chest, _cyl(0.025, 0.32), Style.WOOD_DARK, Vector3(0.3 * shoulder, 0.55, 0.15), Vector3(0.4, 0, 0.3))
+		_prop(chest, _cyl(0.013, 0.166), Style.WOOD_DARK, Vector3(0.168 * shoulder, 0.39, 0.084), Vector3(0.4, 0, 0.3))
 	if cue.call("staff") and not look["elder"]:
-		var sp := _prop(arm_l, _cyl(0.035, 1.75), Style.WOOD, origin("cane") + Vector3(0, 0.25, 0.04))
-		_prop(sp, box_of(Vector3(0.1, 0.1, 0.1)), Style.WOOD_DARK, Vector3(0, 0.88, 0))
+		var sp := _prop(arm_l, _cyl(0.018, 0.91), Style.WOOD, origin("cane") + Vector3(0, 0.13, 0.02))
+		_prop(sp, box_of(Vector3(0.052, 0.052, 0.052)), Style.WOOD_DARK, Vector3(0, 0.458, 0))
 	if cue.call("bandage"):
-		_prop(arm_r, box_of(Vector3(0.13, 0.08, 0.13)), Color("f2efe6"), origin("tool_axe") + Vector3(0, 0.2, 0))
+		_prop(arm_r, box_of(Vector3(0.068, 0.042, 0.068)), Color("f2efe6"), origin("tool_axe") + Vector3(0, 0.104, 0))
 	# 뼈 자세 덧입히기 (동작 뒤 매번): 체형 · 어깨 · 팔다리 굵기 · 머리 크기
 	var hs := 1.0
-	if _child:
+	if _child:                              # 아이: 키 약 0.7 · 약 3등신 (머리는 어른의 약 85~90%) — 아트 바이블 5.2
 		_base_scale = 0.62 + 0.08 * clampf((age - 1.0) / 3.0, 0.0, 1.0)
-		hs = 1.2
+		hs = 1.27
+	elif look["elder"]:                     # 노인: 0.95 + 지팡이 + 숙임
+		_base_scale = 0.95
 	else:
 		_base_scale = 1.0
 	var fs: Vector3 = FACE_SHAPES[look["face_shape"]]
@@ -895,11 +912,75 @@ func build_look(lk: Dictionary) -> void:
 	_post = {
 		"chest": Vector3(bs.x * shoulder, 1.0, bs.z), "skirt": Vector3(bs.x, 1.0, bs.z),
 		"skull": Vector3(hs * fs.x / bw, hs * fs.y / hh, hs * fs.z / bw),
-		"arm_dx": 0.285 * (maxf(bs.x * shoulder, 1.0) - 1.0) * 0.9, "leg_dx": 0.105 * (maxf(bs.x, 1.0) - 1.0),
+		"arm_dx": ARM_X * (maxf(bs.x * shoulder, 1.0) - 1.0) * 0.9, "leg_dx": LEG_X * (maxf(bs.x, 1.0) - 1.0),
 		"thick_arms": cue.call("thick_arms"), "slim_legs": cue.call("slim_legs")}
 	set_face("")
 	_refresh_body()
 	scale = Vector3.ONE * _base_scale * Style.RESIDENT_SCALE
+
+
+## A23 피부·머리 색 — 아트 바이블 5.7의 8단계 (S1~S8 · H1~H8). 유전자에서 (없으면 옛 색 번호를 가까운 단계로).
+## 3D와 초상화(PortraitComposer.colors · FaceIcon)가 같이 씀. 흰머리 = 반백 → 따뜻한 회백 H8 (은백 없음)
+const OLD_SKIN_STEP := [2, 1, 3, 5]                    # Balance.SKIN_COLORS 4가지 → S 단계
+const OLD_HAIR_STEP := [1, 0, 6, 4, 6, -1, 2, 0]       # Balance.HAIR_COLORS 8가지 → H 단계 (-1 = 반백)
+
+
+static func skin_step(g: PackedByteArray, tanned := false) -> int:
+	var n := Style.SKIN_RAMP.size()
+	var st := clampi(int(Genetics.skin(g) * n), 0, n - 1)
+	return mini(st + 1, n - 1) if tanned else st
+
+
+static func hair_base(g: PackedByteArray) -> Color:
+	var d := Genetics.darkness(g)
+	var red := Genetics.red(g)
+	var i := 0
+	match d:
+		0:
+			i = 5 if red else 0
+		1:
+			i = 3 if red else (1 if maxi(g[Genetics.DARK], g[Genetics.DARK + 1]) <= 1 else 2)
+		_:
+			i = 4 if red else 6
+	return Color(Style.HAIR_RAMP[i])
+
+
+## 나이 든 머리: 반백을 거쳐 따뜻한 회백 (grey 0~0.85)
+static func greyed(c: Color, gr: float) -> Color:
+	if gr <= 0.0:
+		return c
+	var t := clampf(gr / 0.85, 0.0, 1.0)
+	if t < 0.5:
+		return c.lerp(Style.HAIR_GREY_MID, t * 2.0)
+	return Style.HAIR_GREY_MID.lerp(Color(Style.HAIR_RAMP[7]), (t - 0.5) * 2.0)
+
+
+static func tones_of(lk: Dictionary) -> Dictionary:
+	var g: PackedByteArray = lk.get("genes", PackedByteArray())
+	var cues: PackedStringArray = Bloodlines.looks(lk.get("blood", PackedStringArray()))
+	var age: float = lk.get("age", 10.0)
+	var skin: Color
+	var hair: Color
+	if g.size() >= Genetics.MIN_BYTES:
+		skin = Color(Style.SKIN_RAMP[skin_step(g, "tanned" in cues)])
+		hair = greyed(hair_base(g), Genetics.grey(age, "silver_early" in cues))
+	else:
+		skin = Color(Style.SKIN_RAMP[OLD_SKIN_STEP[int(lk.get("skin_i", 0)) % OLD_SKIN_STEP.size()]])
+		var hi: int = OLD_HAIR_STEP[int(lk.get("hair_i", 0)) % OLD_HAIR_STEP.size()]
+		hair = Style.HAIR_GREY_MID if hi < 0 else Color(Style.HAIR_RAMP[hi])
+		if age >= Balance.AGE_ELDER:
+			hair = Color(Style.HAIR_RAMP[7])
+	return {"skin": skin, "hair": hair}
+
+
+## 옷 물감 (꽃물 공식의 상한): 채도 ≤ DYE_SAT_MAX, 명도 DYE_VAL 안 — 크림 어깨띠가 늘 먼저 읽히고 짙은 색은 신발·허리띠에만
+static func dye(c: Color) -> Color:
+	return Color.from_hsv(c.h, minf(c.s * 0.85, Style.DYE_SAT_MAX), clampf(c.v * 1.08, Style.DYE_VAL.x, Style.DYE_VAL.y))
+
+
+## 낮인가 (머리쓰개 문화) — 병 안의 시각(시)
+static func is_hat_time(hour: float) -> bool:
+	return hour >= DAY_HOURS.x and hour < DAY_HOURS.y
 
 
 ## 짙은 눈 색: 유전자 색의 빛깔은 남기고 밝기는 낮게 (멀리서도 또렷한 점 눈)
@@ -910,7 +991,8 @@ static func _eye_col(c: Color) -> Color:
 
 ## 지금 부품 목록으로 메시를 다시 합침 (같은 조합은 공유)
 func _refresh_body() -> void:
-	shown_parts = body_list(look, _job, _cues)
+	_day_shown = daylight
+	shown_parts = body_list(look, _job, _cues, daylight)
 	if _close_mi != null:
 		_close_mi.mesh = merged(shown_parts, false)
 		_far_mi.mesh = merged(shown_parts, true)
@@ -941,9 +1023,9 @@ func set_job(job: String, chief := false) -> void:
 	var hat: String = jl["hat"]
 	var ac := _accent
 	if hat == "hat_cap":
-		ac = Color(Balance.CLOTH_COLORS[(_cloth_i + 1) % Balance.CLOTH_COLORS.size()]).darkened(0.2)
+		ac = dye(Color(Balance.CLOTH_COLORS[(_cloth_i + 1) % Balance.CLOTH_COLORS.size()]).darkened(0.2))
 	elif hat == "hat_fisher":
-		ac = Color("5f7d92")
+		ac = dye(Color("5f7d92"))
 	if mat != null:
 		mat.set_shader_parameter("accent", ac)
 	_job_tool = jl["tool"]
@@ -999,7 +1081,7 @@ static func carry_parts(prop: String) -> Dictionary:
 	var ps := Art.parts("carry/" + prop)
 	if not ps.has(prop):
 		return {}
-	return {"mesh": ps[prop].get("mesh"), "far": ps.get(prop + "_far", {}).get("mesh")}
+	return {"mesh": ps[prop].get("mesh"), "far": ps.get(prop + "__far", {}).get("mesh")}
 
 
 ## 자리 → 소품 돌림 (긴 것은 어깨 위에서 앞뒤로 눕힘, 자루는 오른 어깨 쪽으로 기울여 등에)
@@ -1064,11 +1146,11 @@ func set_item(kind: String) -> void:
 	var pos := at
 	match _carry_style:
 		"front":
-			pos = Vector3(at.x, at.y - h.y * 0.15, maxf(at.z, 0.24 + h.z))
+			pos = Vector3(at.x, at.y - h.y * 0.15, maxf(at.z, BODY_FRONT + h.z))
 		"shoulder":
 			pos = at + Vector3(-h.x * 0.3, h.y * 0.75, -h.z * 0.3)
 		"back":
-			pos = at + Vector3(-0.05, h.y * 0.45, -h.z * 0.85)
+			pos = at + Vector3(-0.028, h.y * 0.45, -h.z * 0.85)
 		"head":
 			pos = at + Vector3(0, h.y * 0.8, 0)
 		"hand":
@@ -1107,7 +1189,7 @@ func _set_ground_prop(parts: Dictionary) -> void:
 	var at: Vector3 = CARRY_SOCKET[_carry_style]
 	# 앞 사람 = 뒤로 (X → -Z) · 뒤 사람 = 앞으로 (X → +Z). 크기는 그대로 (둘 사이가 맞게)
 	var b := Basis(Vector3.UP, PI / 2.0 if _carry_prop == "fish_pole" else -PI / 2.0)
-	var anchor := Vector3(ab.position.x + 0.15, ab.end.y - 0.045, ab.get_center().z)
+	var anchor := Vector3(ab.position.x + 0.078, ab.end.y - 0.023, ab.get_center().z)
 	item.transform = Transform3D(b, at - b * anchor)
 	_item_base = item.position
 
@@ -1255,6 +1337,8 @@ func tick(dt: float) -> void:
 	if _baby:
 		apply_pose(anim, _t)
 		return
+	if _day_shown != daylight:              # 낮 ↔ 저녁: 머리쓰개를 쓰고 벗음 (바뀔 때만 다시 합침)
+		_refresh_body()
 	var c := _pick(dt * Style.ANIM_SPEED)
 	if _player == null or not _player.has_animation(c):
 		return

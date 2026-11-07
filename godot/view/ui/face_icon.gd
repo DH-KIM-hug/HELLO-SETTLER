@@ -35,13 +35,10 @@ func set_resident(r: Resident) -> void:
 		paper.visible = not ls.is_empty()
 	if r != null and r.genes.size() >= Genetics.MIN_BYTES:
 		var g := r.genes
-		var cues := Bloodlines.looks(r.blood)
-		var st := Genetics.skin_step(g)
-		if "tanned" in cues:
-			st = mini(st + 2, Genetics.SKIN_TONES.size() - 1)
-		skin = Color(Genetics.SKIN_TONES[st])
-		hair = Genetics.hair_color(g, r.age, "silver_early" in cues)
-		eye = Color(Genetics.EYE_COLORS[Genetics.eye(g)])
+		var tones := ResidentModel.tones_of(ResidentModel.look_of(r))     # (A23) 피부·머리 8단계 · 점 눈 하나
+		skin = tones["skin"]
+		hair = tones["hair"]
+		eye = Style.EYE_DOT
 		bald = Genetics.bald_stage(g, r.sex, r.age)
 		curl = Genetics.curl(g)
 		piebald = Genetics.piebald(g)

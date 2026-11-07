@@ -677,10 +677,13 @@ def build_twigs():
         done(m)
 
 
+CARRY_UNIT = 0.52          # old resident-model units -> cells (build_carry.py UNIT)
+
+
 def build_twig_bundle():
     """Carried twig bundle (carry/twig_bundle.glb, Art.parts like build_carry.py): a handful of thin twigs and dry
-    stalks tied with two twists of green grass. Resident-model units (resident ~1.95 before RESIDENT_SCALE),
-    long axis = X so it rides on the shoulder like the old log."""
+    stalks tied with two twists of green grass. Drawn in the old resident-model units (adult ~1.95) and scaled by
+    CARRY_UNIT into cells (A23: 1 = adult height, same on-screen size), long axis = X so it rides on the shoulder."""
     m = Model("twig_bundle", 211)
     rng = m.rng
     L = 1.05
@@ -699,11 +702,15 @@ def build_twig_bundle():
     for x in (-0.24, 0.24):                                   # grass ties
         m.cyl(0.115, 0.115, 0.06, pos=(x - 0.03, 0, 0), rot=(0, math.pi / 2, 0), color=GRASS_TIE, seg=7, group="body")
     m.blade((0.24, 0, 0.1), (0.33, -0.04, 0.2), 0.04, color=GRASS_TIE)
-    blob = Model("twig_bundle_far")
+    blob = Model("twig_bundle__far")
     blob.sphere(1.0, pos=(0, 0, 0), scl=(0.52, 0.11, 0.11), color=TWIG, seg=6, rings=4)
+    for mdl in (m, blob):
+        for bm in mdl.groups.values():
+            for v in bm.verts:
+                v.co *= CARRY_UNIT
     ps = PartSet("twig_bundle")
     ps.add("twig_bundle", m, pivot=(0, 0, 0))
-    ps.add("twig_bundle_far", blob, pivot=(0, 0, 0))
+    ps.add("twig_bundle__far", blob, pivot=(0, 0, 0))
     tris = ps.export(os.path.join(ROOT, "carry"))
     BUILT.append(("carry/twig_bundle", tris.get("twig_bundle", 0)))
 
@@ -787,6 +794,9 @@ def build_materials():
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     print("flora ->", OUT)
+    if "--twig-bundle-only" in sys.argv:
+        build_twig_bundle()
+        sys.exit(0)
     build_dandelion()
     build_daisy()
     build_tulip()

@@ -117,8 +117,21 @@ const ITEM_COLORS := {"통나무": Color("9a7150"), "판자": Color("e0bf8c"), "
 	"버섯": Color("efe9dc"), "말린 버섯": Color("8a5a36"), "빛버섯": Color("bfe8ef")}   # [하늘의 것]
 
 # ───────────── 주민 ─────────────
-const RESIDENT_SCALE := 0.52               # 5단계: 모델 키 약 1.95 → 어른 키 약 1.0칸 = 1080 폭 기본 확대(ppu 16)에서 약 32px — 아트 바이블 5.8 (잰 값, 밀짚모자 +4)
-const RESIDENT_LINE := Color("4a3a30")     # 주민 둘레선 (짙은 갈색, 기준 4-1.png)
+## A23 (아트 바이블 5.2·8.13): 주민 모델은 게임 단위로 만든다 — 1 = 1칸 = 어른 키 (약 4등신). 기본 확대(ppu 16)에서 1080 폭 약 32px
+const RESIDENT_SCALE := 1.0
+## 옛 '주민 모델 단위' (어른 약 1.9) → 칸. 아직 그 단위로 만든 동물(animals/*)·몇몇 연출만 씀 — 다시 만들 때 1칸 단위로 옮기고 지움
+const LEGACY_MODEL_UNIT := 0.52
+const RESIDENT_LINE := Color("3a2a22")     # 주민 둘레선 — 화면에서 가장 짙은 외곽선 (아트 바이블 5.3 R7)
+## 주민 색 (아트 바이블 4.1 · 5.3 · 5.7) — 크림 어깨띠 P4 · 팔다리 중간 명도 P3 쪽 · 피부 8단계 · 머리색 8단계 · 점 눈
+const CREAM := Color("f3e6cc")             # P4 주민 크림 (어깨 깃 · 빵 모자 · 머릿수건) — 화면에서 가장 밝은 따뜻한 값
+const DRIED := Color("c8ae82")             # P3 마른 재료 (고깔 풀 모자)
+const SKIN_RAMP := ["e8c8a8", "ddb590", "cfa27a", "b98762", "a0704e", "87593c", "6e452e", "573524"]   # S1~S8 (번호로만, 능력과 무관)
+const HAIR_RAMP := ["3a3230", "4e3a2e", "6e5038", "8a5434", "ad6440", "7e3f2c", "d2b278", "d9d1c3"]   # H1~H8 (H8 흰머리 = 따뜻한 회백)
+const HAIR_GREY_MID := Color("a69c90")     # 반백
+const EYE_DOT := Color("1e1612")           # 모든 주민의 점 눈 (게임에서 가장 짙은 값)
+## 옷 물감 상한 (꽃물 공식 — 채도 ≤ 0.42 · 명도 ≤ 0.85, 짙은 색은 신발·허리띠에만 → 명도 하한)
+const DYE_SAT_MAX := 0.42
+const DYE_VAL := Vector2(0.5, 0.85)
 const ANIM_SPEED := 1.0                    # 부드러운 동작의 빠르기 배율
 
 # ───────────── 유리 (RENDERING.md 2.8) ─────────────

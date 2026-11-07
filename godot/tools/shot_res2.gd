@@ -96,6 +96,7 @@ func _hair() -> void:
 		var m := _place(0 if i % 2 == 0 else 2, r, Vector3((i - (HAIRS.size() - 1) * 0.5) * gap, 0, 0), 0.5)
 		m.look["hair"] = HAIRS[i]
 		m.look["hat"] = "hat_acorn" if i == HAIRS.size() - 1 else ""
+		m.look["day_hat"] = ""              # (A23) 낮 머리쓰개 없이 머리 모양만
 		m.look["acc"] = ["acc_flower"] if i == 4 else (["acc_flower_y"] if i == 11 else [])
 		m.set_job("", false)
 		m._refresh_body()
@@ -174,7 +175,8 @@ func _process(_d: float) -> bool:
 	var img := vp.get_texture().get_image()
 	if front_cam == null:
 		img = img.get_region(_people_rect())
-	var name: String = "res2_" + {"mid": "close", "far": "default"}.get(mode, mode) + suffix
+	var name: String = OS.get_environment("SHOT_PREFIX") if OS.get_environment("SHOT_PREFIX") != "" else "res2_"
+	name += {"mid": "close", "far": "default"}.get(mode, mode) + suffix
 	img.save_png(out_dir.path_join(name + ".png"))
 	print("saved ", name, " ", img.get_size())
 	return true

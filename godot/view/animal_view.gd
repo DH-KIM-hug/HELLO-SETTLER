@@ -1,5 +1,5 @@
 ## 들짐승 화면 — sim/wildlife.gd (Wildlife)의 무리에서 카메라 곁 무리만 대표 몇 마리 (WILDLIFE 5 · 6 · 기획서 18: 먼 무리는 숫자로만).
-## 동물 = 부품마다 관절 노드 (Art.parts("animals/<종>") — 몸 Art.body_mat + 접힌 곳 선), 크기 = 모델 × Style.RESIDENT_SCALE (주민과 같은 단위).
+## 동물 = 부품마다 관절 노드 (Art.parts("animals/<종>") — 몸 Art.body_mat + 접힌 곳 선), 크기 = 모델 × Style.LEGACY_MODEL_UNIT (주민과 같은 단위).
 ## 걷기: 다리 앞뒤 · 머리 끄덕 · 꼬리 흔들기 (뼈대 없음 — 부품만 돌림), 토끼는 깡충, 풀 뜯을 땐 머리를 숙임.
 ## 사슴·토끼·들양·들소·멧돼지는 주민이 가까이 오면 달아난다 (숲 안쪽으로). 늑대는 울 때 머리를 든다 (Wildlife.howl_t).
 ## 물고기: 호수 위로 가끔 튀어 오르는 은빛 + 물결 동그라미. 사냥꾼이 사슴을 메고 돌아온다 (피 없이 — Wildlife.carry).
@@ -286,7 +286,7 @@ static func body_mat() -> ShaderMaterial:
 
 ## 대표의 크기: 주민 단위 × (멀리 볼 때 작은 종만 조금 더 — BOOST)
 func _scale(kind: String) -> float:
-	return Style.RESIDENT_SCALE * (1.0 + float(BOOST.get(kind, 0.0)) * boost_k)
+	return Style.LEGACY_MODEL_UNIT * (1.0 + float(BOOST.get(kind, 0.0)) * boost_k)
 
 
 ## 새벽에 하루 한 번: 마을에서 가까운 사슴 대표 하나가 호숫가로 물을 마시러 나온다 ('여기 봐' 순간)
@@ -531,7 +531,7 @@ func _make_carried() -> Node3D:
 	var root := Node3D.new()
 	add_child(root)
 	var body := Node3D.new()                # 어깨 위에 가로로 누운 사슴 (다리는 접고 — 피 없이)
-	body.scale = Vector3.ONE * Style.RESIDENT_SCALE * 0.8
+	body.scale = Vector3.ONE * Style.LEGACY_MODEL_UNIT * 0.8
 	body.rotation = Vector3(0, PI * 0.5, 0)       # 어깨를 가로질러 등 뒤로 (다리는 접어 배 밑으로)
 	body.position = Vector3(0, -0.08, -0.16)
 	root.add_child(body)

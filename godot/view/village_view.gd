@@ -205,6 +205,7 @@ func _resident_lod_close() -> bool:
 
 func _sync_residents(dt: float) -> void:
 	ResidentModel.village_era = v.era     # (A20 2차) 시대마다 옷이 달라짐 — look_of · look_key가 읽음
+	ResidentModel.daylight = ResidentModel.is_hat_time(v.hour_now())   # (A23) 낮엔 머리쓰개, 저녁엔 벗음
 	var seen := {}
 	var chief := v.chief()
 	var lod_close := _resident_lod_close()

@@ -162,7 +162,7 @@ func _play(sc: Dictionary) -> void:
 					_poses[g.id]["face"] = "talking"
 			if sc.has("petals"):
 				var pt: Node3D = sc["petals"]
-				pt.position = _ground(center) + Vector3(0, 1.6 * Style.RESIDENT_SCALE * 2.0, 0)
+				pt.position = _ground(center) + Vector3(0, 1.6 * Style.LEGACY_MODEL_UNIT * 2.0, 0)
 				(pt.get_child(0) as CPUParticles3D).emitting = li >= 1
 		"quarrel":
 			var angry := li < ls.size() - 1
@@ -249,7 +249,7 @@ func _flower_node() -> Node3D:
 	var mat := Toon.mat(Color("f39ab4"))     # 공용 툰 재질 (화면 외곽선·빛이 다른 물체와 같게)
 	var mid := Toon.mat(Color("f6d24a"))
 	var stem := Toon.mat(Color("5c9a3c"))
-	var s := Style.RESIDENT_SCALE
+	var s := Style.LEGACY_MODEL_UNIT
 	for i in 5:
 		var pm := MeshInstance3D.new()
 		var sm := SphereMesh.new()

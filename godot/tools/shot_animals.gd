@@ -2,7 +2,7 @@
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_animals.gd -- <모드> [접미사]
 ##   lineup : 모든 종 한 줄씩 (위: 들짐승 · 아래: 가축) + 줄 끝에 어른 주민 → godot_shots/animals_v2_lineup<접미사>.png
 ##   close  : 몇 종 가까이 (걷는 자세 = 부품 따로 움직이는지 확인)       → godot_shots/animals_v2_close<접미사>.png
-## 동물 = 부품마다 MeshInstance3D (Art.parts, 재질 Art.body_mat + 선), 크기 = 모델 × Style.RESIDENT_SCALE (주민과 같은 단위).
+## 동물 = 부품마다 MeshInstance3D (Art.parts, 재질 Art.body_mat + 선), 크기 = 모델 × Style.LEGACY_MODEL_UNIT (주민과 같은 단위).
 extends SceneTree
 
 const SIZE := Vector2i(1600, 1000)
@@ -71,7 +71,7 @@ func _animal(key: String, p: Vector3, turn := -1.1) -> Dictionary:
 	world.add_child(a)
 	a.position = p
 	a.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG) + turn
-	a.scale = Vector3.ONE * Style.RESIDENT_SCALE
+	a.scale = Vector3.ONE * Style.LEGACY_MODEL_UNIT
 	var joints := {}
 	var parts := Art.parts("animals/" + key)
 	for pn: String in parts:

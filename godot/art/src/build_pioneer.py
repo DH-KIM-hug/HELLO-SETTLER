@@ -10,8 +10,8 @@
   blueprint_scroll   설계도: a rolled paper scroll tied with a red ribbon (lying on the ground, long axis along X).
   blueprint_open     the same sheet unrolled flat (curled ends) with a little house plan drawn on it.
   carry/pram         유모차: wooden baby carriage (basket body, cloth hood, push handle) — carry prop for resident
-                     units (adult ~1.95 tall). Parts: "pram" body (origin = ground under the basket centre) ·
-                     "pram_far" blob · "pram_wheel_fl/fr/bl/br" (pivot = axle centre, axle along X) so they can spin.
+                     units scaled by PRAM_UNIT into cells (A23). Parts: "pram" body (origin = ground under the basket centre) ·
+                     "pram__far" blob · "pram_wheel_fl/fr/bl/br" (pivot = axle centre, axle along X) so they can spin.
 Units: 1 = one cell; adult resident ~1.0 tall in the village (models above), front = -Y (Godot +Z).
 Run: blender -b --factory-startup --python build_pioneer.py -- [out_dir]
 """
@@ -328,6 +328,7 @@ PRAM_BLANKET = "f1d9c9"    # soft petal-down blanket
 STEM_RIND = "7fa65a"       # green rind of a cut stem
 STEM_PITH = "eef0c8"       # pale pith of the cut face
 STEM_RING = "a9c27a"
+PRAM_UNIT = 0.52           # A23: drawn in old resident-model units (adult ~1.9) -> cells; view PRAM_WHEELS = radius x this
 WHEEL_R_BACK = 0.17
 WHEEL_R_FRONT = 0.13
 AXLE_BACK_Y = 0.2
@@ -401,12 +402,12 @@ def build_pram():
     """Origin = ground under the basket centre. Hood + baby at the front (-Y Blender = +Z Godot), push handle at the
     back (+Y Blender = -Z Godot): the resident walks behind the handle and the pram rolls ahead of them."""
     body, zb = pram_body()
-    far = Model("pram_far")
+    far = Model("pram__far")
     far.sphere(1.0, pos=(0, 0, zb + 0.12), scl=(0.24, 0.36, 0.22), color=PRAM_BASKET, seg=6, rings=4)
     far.sphere(1.0, pos=(0, -0.15, zb + 0.28), scl=(0.22, 0.16, 0.14), color=PRAM_HOOD, seg=6, rings=3)
     ps = PartSet("pram")
     ps.add("pram", body, pivot=(0, 0, 0))
-    ps.add("pram_far", far, pivot=(0, 0, 0))
+    ps.add("pram__far", far, pivot=(0, 0, 0))
     for nm, sx, ay, r in (("pram_wheel_fl", 1, AXLE_FRONT_Y, WHEEL_R_FRONT), ("pram_wheel_fr", -1, AXLE_FRONT_Y, WHEEL_R_FRONT),
                           ("pram_wheel_bl", 1, AXLE_BACK_Y, WHEEL_R_BACK), ("pram_wheel_br", -1, AXLE_BACK_Y, WHEEL_R_BACK)):
         w = Model(nm)
@@ -415,16 +416,22 @@ def build_pram():
             for v in bm.verts:
                 v.co += Vector((sx * TRACK, ay, r))
         ps.add(nm, w, pivot=(sx * TRACK, ay, r))
+    for i, (pn, mdl, pv) in enumerate(ps.parts):           # A23: old resident-model units -> cells (1 = adult height)
+        for bm in mdl.groups.values():
+            for v in bm.verts:
+                v.co *= PRAM_UNIT
+        ps.parts[i] = (pn, mdl, pv * PRAM_UNIT)
     tris = ps.export(os.path.join(OUT, "carry"))
     print("  pram parts", tris)
 
 
 if __name__ == "__main__":
     print("pioneer ->", OUT)
-    build_quern_house()
-    build_quern_stone()
-    build_oven()
-    build_oven_glow()
-    build_blueprint_scroll()
-    build_blueprint_open()
+    if "--pram-only" not in sys.argv:
+        build_quern_house()
+        build_quern_stone()
+        build_oven()
+        build_oven_glow()
+        build_blueprint_scroll()
+        build_blueprint_open()
     build_pram()
