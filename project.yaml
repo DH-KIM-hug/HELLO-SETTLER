@@ -40,7 +40,7 @@ engine:
   name: "Godot"
   version: "4.7.2"
   language: "GDScript"
-  rendering: "Forward+"
+  rendering: "Mobile"   # godot/project.godot rendering_method="mobile" (2026-11-07 TA 지적으로 맞춤)
   physics: "Jolt"
   path: "/opt/homebrew/bin/godot"
 
