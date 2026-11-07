@@ -19,8 +19,6 @@ const CORK_BOTTOM := 13.4
 const LAMP_R := 9.6                       # 등불은 병 가운데에서 이만큼 (cm)
 const WINDOW_AT := Vector3(-7.0, 9.0, -2.5)
 const CURTAIN_AT := Vector3(13.6, 9.0, -8.4)    # 창 오른쪽 (거울 뒤집어 왼쪽으로 닫힘)
-const CURTAIN_SCALE := [1.0, 2.1, 3.85]    # 열림 · 반쯤 · 닫힘 (커튼 폭 배율 — 창 폭 26cm를 덮어 감)
-const CURTAIN_LIGHT := [1.0, 0.6, 0.25]    # 볕 (GIANT_ROOM 2 커튼 3단)
 const TOD := {
 	"morning": {"room": Color(1.0, 0.99, 0.96), "sky_top": Color("5fb0e6"), "sky_bottom": Color("cdeaf2"), "orb": Color("fff6d8"),
 		"orb_pos": Vector2(-6.5, 23.0), "orb_r": 2.4, "stars": 0.0, "clouds": 1.0, "cloud": Color("ffffff"), "beam": Color(1.0, 0.95, 0.78), "beam_a": 0.16,
@@ -62,7 +60,6 @@ var blob_mat: ShaderMaterial
 var root: Node3D                           # cm 공간 (scale_s배)
 var light: DirectionalLight3D              # 창빛 (층 2만)
 var curtain: Node3D
-var curtain_step := 0
 var lamp: Node3D
 var lamp_flame: Node3D
 var lamp_glow: MeshInstance3D
@@ -163,7 +160,9 @@ func setup(s: float, time_of_day: String, with_soil := true) -> void:
 	set_tod(time_of_day)
 	set_season(now_season())
 	set_lamp(true, lamp_dir)
-	set_curtain(0)
+	if curtain != null:
+		curtain.scale = Vector3(-1.0, 1.0, 1.0)   # 방의 커튼은 늘 열린 장식 (커튼 손짓은 없앴다 — giant-touch 6c-1)
+	_update_beam()
 
 
 func _plain(name: String, xf: Transform3D, parent: Node3D = null) -> MeshInstance3D:
@@ -351,23 +350,9 @@ static func paint_sky(m: ShaderMaterial, t: String) -> void:
 	m.set_shader_parameter("cloud_col", p["cloud"])
 
 
-## 방 화소에 곱하는 색 (화면 셰이더 room_mul) — 밤 = 남색, 노을 = 복숭아빛. 커튼이 닫히면 낮에도 조금 어둑하게
+## 방 화소에 곱하는 색 (화면 셰이더 room_mul) — 밤 = 남색, 노을 = 복숭아빛
 func room_mul() -> Color:
-	var c: Color = TOD[tod]["room"]
-	if tod != "night":
-		c = c.lerp(c * Color(0.82, 0.8, 0.82), 1.0 - CURTAIN_LIGHT[curtain_step])
-	return c
-
-
-## 커튼 3단 (0 열림 · 1 반쯤 · 2 닫힘)
-func set_curtain(step: int) -> void:
-	curtain_step = clampi(step, 0, 2)
-	if curtain != null:
-		curtain.scale = Vector3(-CURTAIN_SCALE[curtain_step], 1.0, 1.0)
-	_update_beam()
-	if glass_mat != null:
-		for m: ShaderMaterial in _glass_mats():
-			m.set_shader_parameter("tint_mul", room_mul())
+	return TOD[tod]["room"]
 
 
 func _glass_mats() -> Array:
@@ -382,7 +367,7 @@ func _update_beam() -> void:
 		return
 	var p: Dictionary = TOD[tod]
 	beam_mat.set_shader_parameter("glow_col", p["beam"])
-	beam_mat.set_shader_parameter("strength", float(p["beam_a"]) * CURTAIN_LIGHT[curtain_step])
+	beam_mat.set_shader_parameter("strength", float(p["beam_a"]))
 
 
 ## 등불: 켜짐(병 안 낮) · 자리 = 병 안 해가 오는 쪽 (병 데이터 좌표의 창가 방향 l — 등불 옮기기 A11과 같은 값)

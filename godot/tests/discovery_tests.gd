@@ -287,7 +287,7 @@ func test_sun_path() -> void:
 	for q: Village in [a, c]:
 		for r in q.people:
 			r.fear = 0.0
-		q._rots = [q.cal_day(q.t), Balance.FEAR_FREE_PER_DAY]
+		q._rots = [q.cal_day(q.t), Balance.LAMP_FREE_PER_DAY]
 		q._fear_rotate()
 		rises.append(q.people[0].fear)
 	check(rises[1] > 0.0 and rises[1] < rises[0] * 0.75, "효과: 해시계 — 두려움 %.3f → %.3f" % [rises[0], rises[1]])

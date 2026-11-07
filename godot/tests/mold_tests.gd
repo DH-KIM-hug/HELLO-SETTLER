@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 병의 공기·뚜껑·곰팡이 무리 (WORLD_EVENTS 2.1 · 3)")
-	run.timed(self, ["test_air_values", "test_lid", "test_lid_auto_close", "test_gnats", "test_pressure", "test_swarm_first_time", "test_chaser_and_adapt", "test_weaknesses", "test_illness", "test_koji", "test_blue_medicine", "test_determinism"])
+	run.timed(self, ["test_air_values", "test_lid", "test_lid_no_real_time", "test_gnats", "test_pressure", "test_swarm_first_time", "test_chaser_and_adapt", "test_weaknesses", "test_illness", "test_koji", "test_blue_medicine", "test_determinism"])
 
 
 static func village(climate := "온대", month := 4, day := 15, seed_v := 5) -> Village:
@@ -108,17 +108,23 @@ func test_lid() -> void:
 	check(not s.air.lid_open and absf(s.air.lid_total - Balance.LID_SAFETY_CLOSE) <= Balance.STEP + 1e-6, "병 시계 8분 뒤 저절로 닫힘 (열린 시간 %.0f초)" % s.air.lid_total)
 
 
-func test_lid_auto_close() -> void:
+## (jar-time E7 · giant-touch) 현실 시간 자동 닫힘은 없앴다 — 병 시계 안전장치만 (배속과 상관없이 같은 병 시각에 닫힘). 닫기는 화면의 입력
+func test_lid_no_real_time() -> void:
+	var totals: Array = []
 	for sp in [0, 3]:
 		var v := village()
 		var c := JarClock.new(v)
 		c.set_speed(sp)
 		v.open_lid()
 		var real := 0.0
-		while v.air.lid_open and real < 120.0:
+		while v.air.lid_open and real < 600.0:
 			c.tick(0.25)
 			real += 0.25
-		check(not v.air.lid_open and real <= 60.5 and (real >= 59.5 or v.air.lid_total >= Balance.LID_SAFETY_CLOSE - Balance.STEP - 1e-6), "%s: 현실 1분 또는 병 시계 안전장치 중 먼저 저절로 닫힘 (%.1f초, 병 시계 %.0f초 열림)" % [c.speed_text(), real, v.air.lid_total])
+		totals.append(v.air.lid_total)
+		check(not v.air.lid_open and absf(v.air.lid_total - Balance.LID_SAFETY_CLOSE) <= Balance.STEP * 2.0 + 1e-6,
+			"%s: 병 시계 8분 안전장치로만 닫힘 (현실 %.1f초, 병 시계 %.0f초 열림)" % [c.speed_text(), real, v.air.lid_total])
+	check(not "lid_real" in JarClock.new(village()).get_property_list().map(func(p: Dictionary) -> String: return String(p["name"])) and not (Balance as Script).get_script_constant_map().has("LID_AUTO_CLOSE_REAL"),
+		"JarClock에 현실 시간 뚜껑 값(lid_real)이 없음")
 
 
 func test_gnats() -> void:

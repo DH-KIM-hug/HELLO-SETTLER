@@ -105,11 +105,12 @@ func test_witness_wonder() -> void:
 	check(v.wonder == w2, "세게 친 톡은 경이 없이 두려움만 (두려움 %.1f → %.1f)" % [f0, v.fear])
 	var w3 := v.wonder
 	v.open_lid()
-	check(v.wonder > w3, "뚜껑 열기 → 경이 +%.1f" % (v.wonder - w3))
 	var w4 := v.wonder
-	var n := v.blow_seeds(Vector2(1, 0))
-	check(n > 0 and v.wonder - w4 >= 15.0, "꽃씨 불기 → 꽃씨 %d · 경이 +%.1f (첫 마을 곁 솜털 공은 꼭 있다)" % [n, v.wonder - w4])
+	var n := v.lid_breeze(Vector2(1, 0))
+	check(v.wonder == w3 and n > 0, "뚜껑·뚜껑 바람(꽃씨 %d)은 손짓이 아니다 — 경이 없음 (giant-touch 사용자 결정 ⑤)" % n)
 	v.close_lid()
+	Awakening.witness(v, "drop")
+	check(v.wonder - w4 >= 15.0, "내려 주기 목격 → 경이 +%.1f" % (v.wonder - w4))
 	var kid_said := false
 	var adult_said := false
 	for r in v.people:
@@ -176,7 +177,8 @@ func test_awakening_and_altar() -> void:
 	check(v._offer_key == v.cal_day(v.t) * 2 + 1 and v.book.size() > 0, "그 저녁부터 평소 저녁 기도 (기도 번호 %d — v5: 남는 물건이 있을 때만 제물, 넉넉함이 인구에 맞게 늘어 첫날 저녁엔 없을 수 있음)" % v._offer_key)
 
 
-## OPENING 3.1 v3.3: 2:00 톡 → 3:00 물 뿌리기 (뚜껑은 손짓마다 저절로) → 깨달음 → 제단 — ×12로 현실 10분 안 (자막은 톡 하나뿐)
+## OPENING 3.1 v3.3 · 3.1b: 2:00 톡 → 2:30 낟알 한 줌 내려 주기 → 3:00 물 뿌리기 (뚜껑은 손짓마다 저절로 — 뚜껑 자체는 경이가 아님,
+## giant-touch 사용자 결정 ⑤) → 깨달음 → 제단 — ×12로 현실 10분 안 (자막은 톡 하나뿐)
 func test_guided_path() -> void:
 	var v := proto()
 	v.guide = {"on": true}
@@ -193,6 +195,11 @@ func test_guided_path() -> void:
 			GuideCaption.done(v, "tap")
 			marks["after_tap"] = GuideCaption.step(v)
 			marks["hl"] = GuideCaption.highlight(v)
+		if real >= 150.0 and not marks.has("grain"):
+			marks["grain"] = true
+			v.open_lid()
+			SkyDrops.drop(v, Notebook.GRAIN, v.fire + Vector2(2, -2))
+			v.close_lid()
 		if real >= 180.0 and not marks.has("water"):
 			marks["water"] = true
 			v.open_lid()
@@ -258,9 +265,13 @@ func test_world_first() -> void:
 	v.tap_glass(false)
 	jw.advance(10.0 * 60.0)
 	v.open_lid()
-	var n := v.blow_seeds(Vector2(1, 0))
+	var n := v.lid_breeze(Vector2(1, 0))
 	v.close_lid()
 	check(n > 0, "첫 무리 곁 솜털 공 → 꽃씨 %d" % n)
+	v.open_lid()                                   # (giant-touch) 뚜껑·바람은 경이가 없다 — 낟알 내려 주기·물 뿌리기를 목격
+	SkyDrops.drop(v, Notebook.GRAIN, v.fire + Vector2(2, -2))
+	v.spray_water(v.fire + Vector2(3, 3))
+	v.close_lid()
 	var t0 := v.t
 	while not v.altar_built and v.t - t0 < 3.0 * Balance.HOUR:
 		jw.advance(60.0)

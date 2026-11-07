@@ -176,15 +176,14 @@ func _process(_d: float) -> bool:
 		3:
 			scene.paused = true
 			_save("flora_dandelions", focus, true)
-			# 거인이 분다 — 솜털 공을 더 만들고 뚜껑을 열어
+			# 뚜껑이 열린 바람 — 솜털 공을 더 만들고 뚜껑을 열어
 			for d: Dictionary in v.flora.dands:
 				if d["st"] != "sprout":
 					d["st"] = "puff"
 					d["seeds"] = Balance.DAND_SEEDS
 			v.open_lid()
-			scene.clock.lid_real = 0.0
 			var f3: Vector3 = scene.cam.camera.global_transform.basis.z
-			v.blow_seeds(Vector2(-f3.x, -f3.z).rotated(0.6))
+			v.lid_breeze(Vector2(-f3.x, -f3.z).rotated(0.6))
 			# 꽃씨에 매달린 아이
 			var kid: Resident = null
 			for r in v.people:

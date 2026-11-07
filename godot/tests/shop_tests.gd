@@ -785,7 +785,7 @@ func test_ui() -> void:
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
 	hc.refresh()
-	check(bool(scene.call("hand_open")) and hc.spray_btn.is_visible_in_tree() and not hc.blow_btn.is_visible_in_tree() and not hc.lid_btn.is_visible_in_tree(),
+	check(bool(scene.call("hand_open")) and hc.spray_btn.is_visible_in_tree() and hc.get("blow_btn") == null and hc.get("lid_btn") == null,
 		"손 → 물 뿌리기·핀셋·유리 닦기·등불·손에 든 것 칸 (뚜껑·불기 단추 없음 — 6c-1)")
 	Market.hand = [{"id": 99, "item": "각설탕", "paid": 500.0}]
 	scene.call("start_drop", 99)

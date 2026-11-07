@@ -1,48 +1,30 @@
-## 거인의 손 — 물 뿌리기 · 손으로 감싸기 · 커튼 3단 · 유리 닦기 · 핀셋 (ROADMAP B6).
-## 기준: WORLD_EVENTS 4.2 (병 밖 — 뚜껑을 열지 않음, 무료, 쿨타임) · 4.3 (뚜껑을 열고) · 2.5 (병의 날씨) · 기획서 6.3 (양날의 검) · 6.4 (커튼) ·
+## 거인의 손 — 물 뿌리기 · 유리 닦기 · 핀셋 (ROADMAP B6 · design/gdd/giant-touch.md). 유리 톡·등불 옮기기의 그날 횟수는 아직 Village
+##   (_taps·_rots — GDD Ownership은 여기로 옮기기를 바람, 저장 이름이 바뀌어 다음 단계).
+## 기준: giant-touch R1~R7 · WORLD_EVENTS 4.2 (병 밖 — 뚜껑을 열지 않음, 무료, 쿨타임) · 4.3 (뚜껑을 열고) · 기획서 6.3 (양날의 검) ·
 ##   GIANT_ROOM 2 (병 밖의 손짓). 화면과 분리된 순수 로직, 난수 없음 (×1·×8 같음 — 다른 흐름을 흔들지 않음).
-## 병 하나의 상태 (커튼·손의 온기·유리의 먼지막·닦은 김)는 물(JarWater — 넓은 세상의 무리가 함께 씀)이 가지고 남은 초로 센다
+## 감싸기·커튼·불기·뚜껑 손짓은 없앴다 (사용자 결정 2026-11-07~08 — 옛 저장의 cups·curtain·frost 값은 읽고 버림).
+## 병 하나의 상태 (유리의 먼지막·닦은 김)는 물(JarWater — 넓은 세상의 무리가 함께 씀)이 가지고 남은 초로 센다
 ##   (병 시계와 상관없이 같은 값 — 따라잡기에도 그대로). 무리 하나의 상태 (쿨타임·적신 자리·젖은 밭·하루 횟수·처음 쓴 것)는 Village.hand.
 ##
-## 물 뿌리기 (뚜껑을 연 채, 쿨타임 SPRAY_COOLDOWN): 누른 자리 둘레에 거인의 물 (병 밖에서 들어온 물 — 물의 합이 는다) →
+## 물 뿌리기 (뚜껑을 연 채, 쿨타임 SPRAY_COOLDOWN): 끌어 겨눈 자리 둘레에 거인의 물 (병 밖에서 들어온 물 — 물의 합이 는다) →
 ##   모깃불·연기를 끔 · 마른 밭은 하루 동안 잘 자람 (×1.3) · 낮은 자리엔 물이 고여 작은 연못 · 녹은 소금은 물과 함께 씻겨 내려감.
 ##   한 시간 안에 같은 자리에 세 번째 → 넘침 (밭 쓸림 · 집 잠김 · 두려움 — 아무도 죽지 않음). 같은 기적이 잦으면 감동↓ (하루 횟수).
-## 손으로 감싸기 (병 밖, 무료): 병 전체 +6° 한 시간 (병 시계) — 손이 유리를 덮어 그동안 증발 ×0.7. 온기가 남은 동안은 다시 못 함.
-##   하루 3번 넘으면 두려움↑ ("하늘이 우리를 쥐고 있어"). 추울 때 감싸면 깨달은 마을은 믿음↑.
-## 커튼 3단 (열림·반쯤·닫힘, 병 밖, 제한 없음): 낮에만 — 증발 ×1·0.6·0.3 (볕 드는 쪽 강이 멀리 흐름) · 작물·나무 자람 ×1·0.85·0.6 ·
-##   온기 0·−2.5°·−5° (기후 지도 한·두 단계 서늘). 낮에 '닫힘'이 12시간 넘게 이어지면 냉해 (밭이 자라지 않음 — 커튼을 열 때까지).
-##   믿음·두려움에 영향 없음 (조용한 손 — "하늘이 흐려졌다"). 바꾸면 curtain_changed(단계) — 방의 3D 커튼은 GiantRoom.set_curtain.
 ## 유리 닦기 (병 밖, 쿨타임 WIPE_COOLDOWN): 서린 김·곰팡이로 뿌연 유리가 맑아짐 (보기만 — 병 안 습기는 그대로, 김은 몇 시간에 걸쳐 다시 서림) +
 ##   유리에 앉은 먼지막을 걷음 (먼지막이 두꺼우면 낮의 자람 최대 −15%) → 반나절 동안 또렷한 볕 (×1.08).
-## 핀셋 (뚜껑을 연 채): 날벌레 (SmallCrises.tweeze) · 먼지 뭉치 · 떨어진 물건 (통나무·돌…) · 바위 하나를 집어냄 — to를 주면
+## 핀셋 (뚜껑을 연 채, 끌어 겨눈 자리): 날벌레 (SmallCrises.tweeze) · 먼지 뭉치 · 떨어진 물건 (통나무·돌…) · 바위 하나를 집어냄 — to를 주면
 ##   짧은 거리(MOVE_MAX)만 옮겨 놓음. 물건에서 멀리 집으면 서툴러 곁의 집이 짓눌림 (날벌레와 같은 규칙).
-## 모두: 깨닫기 전엔 경이 (Awakening.witness — '거인' 이야기 없음), 깨달은 뒤엔 믿음 · 처음 쓴 날 연대기 한 줄.
-## 이 파일 밖의 고리: Village.step (step) · _update_building (farm_mult) · _update_trees (grow_mult) · Health (temp_add) ·
-##   JarWater/WorldWater 증발 (evap_k) · Village.spray_water/cup_hands/set_curtain/wipe_glass/tweeze · view/jar_air_overlay.gd (fog_shown).
+## 모두: 깨닫기 전엔 경이만 (Awakening.witness — '거인' 이야기 없음, 믿음 없음 — R5), 깨달은 뒤엔 믿음 · 처음 쓴 날 연대기 한 줄 ·
+##   받아들여지면 사건 giant_acted, 거절되면 giant_refused (docs/architecture/event-kinds.md).
+## 이 파일 밖의 고리: Village.step (step) · _update_building (farm_mult) · _update_trees (grow_mult) ·
+##   Village.spray_water/wipe_glass/tweeze · view/jar_air_overlay.gd (fog_shown) · view/giant_hand_ctl.gd (끌어 겨누기 — tool_preview).
 class_name GiantHand
 extends RefCounted
-
-signal curtain_changed(step: int)
 
 const DAY := 86400.0
 const HOUR := 3600.0
 const LIGHT_FROM := 7.0                # 병 안의 볕 (JarWater.advance의 낮 물 순환과 같은 시각)
 const LIGHT_TO := 18.0
 
-# 커튼 3단 (기획서 6.4 — 0 열림 · 1 반쯤 · 2 닫힘)
-const CURTAIN_NAMES := ["열림", "반쯤", "닫힘"]
-const CURTAIN_LIGHT := [1.0, 0.6, 0.25]
-const CURTAIN_EVAP := [1.0, 0.6, 0.3]
-const CURTAIN_GROW := [1.0, 0.85, 0.6]
-const CURTAIN_COOL := [0.0, -2.5, -5.0]
-const FROST_AFTER := 12.0 * HOUR       # 낮에 닫힘이 이만큼 이어지면 냉해
-# 손으로 감싸기 (WORLD_EVENTS 4.2)
-const CUP_WARM := 6.0
-const CUP_TIME := 1.0 * HOUR
-const CUP_EVAP := 0.7
-const CUP_FREE_PER_DAY := 3
-const CUP_FEAR := 0.05
-const CUP_BELIEF := 0.02
 # 물 뿌리기 (WORLD_EVENTS 4.3 · 기획서 6.3)
 const SPRAY_R := 3.0
 const SPRAY_WATER := 0.012             # 가운데 칸의 물 깊이 (호수 깊이 0.015보다 조금 얕게 — 땅을 적심)
@@ -76,10 +58,6 @@ const PICK_BELIEF := 0.02
 const FIRST := {
 	"water": ["{w:이/가} 하늘에서 물을 뿌려 주셨다. 마른 땅이 촉촉해지고 사람들은 젖은 얼굴로 하늘을 올려다보았다.",
 		"하늘에서 물이 쏟아져 내렸다. 사람들은 젖은 얼굴로 하늘을 올려다보며 어디서 온 물인지 물었다."],
-	"cup": ["{w}의 커다란 손이 세상을 감싸자 차가운 땅에 온기가 돌았다.",
-		"하늘이 어둑해지더니 어디선가 따뜻한 기운이 세상을 감쌌다."],
-	"curtain": ["어느 날 하늘 한쪽이 어둑해졌다. 사람들은 하늘이 흐려졌다고 말했다.",
-		"어느 날 하늘 한쪽이 어둑해졌다. 사람들은 하늘이 흐려졌다고 말했다."],
 	"wipe": ["{w:이/가} 하늘을 닦으시자 뿌옇던 하늘이 맑아지고 햇살이 또렷해졌다.",
 		"뿌옇던 하늘이 한순간에 맑아지고 햇살이 또렷해졌다."],
 	"pick": ["{w}의 커다란 집게가 내려와 땅에 떨어진 것을 집어 가셨다.",
@@ -94,10 +72,11 @@ var wipe_cd := 0.0
 var soaks: Array = []                  # 최근 적신 자리 [x, y, 남은 초]
 var watered: Array = []                # 물을 반긴 밭 [건물 id, 남은 초]
 var sprays := [-1, 0]                  # [그날, 횟수]
-var cups := [-1, 0]
+var acts := {}                         # 손짓 이름 → [그날, 그날 받아들여진 횟수] (사건 giant_acted의 n_today — 물·닦기·핀셋)
 var firsts: Array = []                 # 처음 쓴 손짓 (연대기 한 번)
-var stats := {"sprays": 0, "water": 0.0, "fires_out": 0, "fields": 0, "floods": 0, "cups": 0, "cup_fear": 0, "curtain": 0,
-	"wipes": 0, "picked": 0, "moved": 0, "crushed": 0, "frost": 0}
+var stats := {"sprays": 0, "water": 0.0, "fires_out": 0, "fields": 0, "floods": 0,
+	"wipes": 0, "picked": 0, "moved": 0, "crushed": 0}
+const STATS_KEYS := ["sprays", "water", "fires_out", "fields", "floods", "wipes", "picked", "moved", "crushed"]
 
 
 # ───────────────────────── 걸음 ─────────────────────────
@@ -125,8 +104,6 @@ static func step(v: Village, dt: float) -> void:
 	if not v.owns_water:
 		return
 	var w := v.water
-	if w.cup_left > 0.0:
-		w.cup_left = maxf(0.0, w.cup_left - dt)
 	if w.bright_left > 0.0:
 		w.bright_left = maxf(0.0, w.bright_left - dt)
 	if w.glass_clear > 0.0:
@@ -135,36 +112,21 @@ static func step(v: Village, dt: float) -> void:
 			w.glass_clear = 0.0
 	if w.glass_dust < 1.0:
 		w.glass_dust = minf(1.0, w.glass_dust + dt / (DUST_DAYS * DAY) + (dt * DUST_LID if v.air != null and v.air.lid_open else 0.0))
-	if w.curtain == 2:
-		if is_light(v.hour_now()):
-			w.curtain_dark += dt
-		if w.curtain_dark >= FROST_AFTER and not w.curtain_frost:
-			w.curtain_frost = true
-			h.stats["frost"] += 1
-			v.log_line("해가 오래 가려져 밭의 싹이 냉해를 입었다. 밭은 더 자라지 않았다.")
-			_warn(v, "frost", "하늘이 오래 어두워 밭이 얼어 가요", "하늘이 오래 어두워 밭이 얼어 가요")
-			v.crisis("frost", "밭이 냉해를 입었다")
 
 
 static func is_light(hr: float) -> bool:
 	return hr >= LIGHT_FROM and hr < LIGHT_TO
 
 
-static func _hour_at(v: Village, tt: float) -> float:
-	return fmod(v.start_clock + tt, DAY) / HOUR
-
-
 # ───────────────────────── 다른 계산이 읽는 값 ─────────────────────────
-## 작물·나무가 자라는 배율 (밤엔 커튼·유리와 상관없음 — 볕이 없으니). 기본(열림·맑은 유리) = 정확히 1
+## 작물·나무가 자라는 배율 (밤엔 유리와 상관없음 — 볕이 없으니). 기본(맑은 유리) = 정확히 1
 static func grow_mult(v: Village) -> float:
 	var w := v.water
 	if w == null:
 		return 1.0
-	if w.curtain_frost:
-		return 0.0
 	if not is_light(v.hour_now()):
 		return 1.0
-	var m: float = CURTAIN_GROW[clampi(w.curtain, 0, 2)]
+	var m := 1.0
 	if w.glass_dust > DUST_FROM:
 		m *= 1.0 - DUST_GROW * (w.glass_dust - DUST_FROM) / (1.0 - DUST_FROM)
 	if w.bright_left > 0.0:
@@ -184,19 +146,6 @@ static func farm_mult(v: Village, b: Building) -> float:
 	return m
 
 
-## 병 기온에 더할 값 (Health.tick · temperature_at) — 손의 온기 + 낮의 커튼 그늘. 기본 = 0
-static func temp_add(v: Village, tt: float) -> float:
-	var w := v.water
-	if w == null:
-		return 0.0
-	var a := 0.0
-	if w.cup_left > 0.0:
-		a += CUP_WARM
-	if w.curtain > 0 and is_light(_hour_at(v, tt)):
-		a += float(CURTAIN_COOL[clampi(w.curtain, 0, 2)])
-	return a
-
-
 ## 화면의 서린 김 (닦으면 걷히고 천천히 다시 서림) 0~1
 static func fog_shown(v: Village) -> float:
 	var f := 0.0
@@ -212,22 +161,20 @@ static func dust_shown(v: Village) -> float:
 	return clampf((v.water.glass_dust - 0.1) / 0.9, 0.0, 1.0) if v.water != null else 0.0
 
 
-## 방의 3D 커튼이 부르는 값 — 단계의 볕 (GiantRoom.CURTAIN_LIGHT와 같은 값)
-static func curtain_light(step_i: int) -> float:
-	return float(CURTAIN_LIGHT[clampi(step_i, 0, 2)])
-
-
 # ───────────────────────── 물 뿌리기 ─────────────────────────
 func spray(v: Village, p: Vector2) -> Dictionary:
 	var no := {"ok": false, "why": "", "water": 0.0, "fields": 0, "fires_out": 0, "flood": false, "hit": 0}
 	if v.air == null or not v.air.lid_open:
 		no["why"] = "뚜껑을 먼저 열어 주세요"
+		v.touch_refused(&"spray", &"lid")
 		return no
 	if spray_cd > 0.0:
 		no["why"] = "물뿌리개에 물을 채우는 중이에요"
+		v.touch_refused(&"spray", &"cooldown")
 		return no
 	if not v.water.inside(p.x, p.y, 1.5):
 		no["why"] = "유리벽 가까이는 뿌릴 수 없어요"
+		v.touch_refused(&"spray", &"edge")
 		return no
 	spray_cd = SPRAY_COOLDOWN
 	var n := 1
@@ -303,6 +250,9 @@ func spray(v: Village, p: Vector2) -> Dictionary:
 	elif near != null:
 		v.speak(near, "물이 넘친다! 높은 데로!", 7)
 	_first(v, "water")
+	v.touch_event(&"spray", int(sprays[1]), true)
+	if flood:
+		v.emit(&"spray_flooded", {"at": p, "v": {"x": p.x, "y": p.y, "houses": hit.filter(func(b: Building) -> bool: return b.is_house()).size()}})
 	v.giant_acted()
 	return {"ok": true, "why": "", "water": added, "fields": fields, "fires_out": out, "flood": flood, "hit": hit.size()}
 
@@ -337,77 +287,16 @@ static func _add_water(v: Village, at: Vector2, rad: float, depth: float) -> flo
 	return total
 
 
-# ───────────────────────── 손으로 감싸기 ─────────────────────────
-func cup(v: Village) -> Dictionary:
-	var w := v.water
-	if w.cup_left > 0.0:
-		return {"ok": false, "why": "손의 온기가 아직 남아 있어요", "fear": false}
-	var before := Health.temperature_at(v, v.center.x, v.center.y)
-	w.cup_left = CUP_TIME
-	var d := v.cal_day(v.t)
-	if int(cups[0]) != d:
-		cups = [d, 0]
-	cups[1] = int(cups[1]) + 1
-	stats["cups"] += 1
-	var near := _near_awake(v, v.center)
-	var fear := int(cups[1]) > CUP_FREE_PER_DAY
-	if fear:
-		v.raise_fear_all(CUP_FEAR)
-		stats["cup_fear"] += 1
-		if near != null:
-			v.speak(near, "하늘이 우리를 쥐고 있어", 7)
-	else:
-		var cold := before < Balance.COLD_FROM + 3.0
-		if v.aware:
-			if cold:
-				v.bless_all(CUP_BELIEF)
-			if near != null:
-				v.speak(near, "{w}의 손이 따뜻해요" if cold else "하늘이 포근해졌어", 7)
-		else:
-			Awakening.witness(v, "cup")
-			if near != null:
-				v.speak(near, "하늘이 따뜻해졌어!", 7)
-	_first(v, "cup")
-	v.giant_acted()
-	return {"ok": true, "why": "", "fear": fear}
-
-
-# ───────────────────────── 커튼 ─────────────────────────
-func set_curtain(v: Village, step_i: int) -> Dictionary:
-	step_i = clampi(step_i, 0, 2)
-	var w := v.water
-	if w.curtain == step_i:
-		return {"ok": false, "why": "", "step": step_i}
-	var was := w.curtain
-	w.curtain = step_i
-	if step_i != 2:
-		w.curtain_dark = 0.0
-		if w.curtain_frost:
-			w.curtain_frost = false
-			v.log_line("가려졌던 해가 다시 비치자 얼었던 밭에 싹이 다시 돋았다.")
-			for b in v.buildings:
-				if b.type == "농장":
-					b.farm_mult = -1.0
-	stats["curtain"] += 1
-	if is_light(v.hour_now()):
-		var near := _near_awake(v, v.center)
-		if near != null:
-			v.speak(near, "하늘이 흐려졌다" if step_i > was else "하늘이 다시 밝아졌다", 6)
-	if step_i > 0:
-		_first(v, "curtain")
-	curtain_changed.emit(step_i)
-	v.giant_acted()
-	return {"ok": true, "why": "", "step": step_i}
-
-
 # ───────────────────────── 유리 닦기 ─────────────────────────
 func wipe(v: Village) -> Dictionary:
 	if wipe_cd > 0.0:
+		v.touch_refused(&"wipe", &"cooldown")
 		return {"ok": false, "why": "방금 닦았어요", "fog": 0.0, "dust": 0.0, "bright": false}
 	var w := v.water
 	var fog := fog_shown(v)
 	var dust := w.glass_dust
 	if fog < 0.05 and dust < 0.05:
+		v.touch_refused(&"wipe", &"no_target")
 		return {"ok": false, "why": "유리가 이미 맑아요", "fog": fog, "dust": dust, "bright": false}
 	wipe_cd = WIPE_COOLDOWN
 	w.glass_clear = 1.0
@@ -427,6 +316,7 @@ func wipe(v: Village) -> Dictionary:
 			if near != null:
 				v.speak(near, "하늘이 맑아졌어!", 6)
 		_first(v, "wipe")
+	v.touch_event(&"wipe", count_today(v, "wipe"), true)
 	v.giant_acted()
 	return {"ok": true, "why": "", "fog": fog, "dust": dust, "bright": bright}
 
@@ -471,15 +361,20 @@ static func pick_target(v: Village, p: Vector2, reach := TWEEZE_R) -> Dictionary
 ## 핀셋 — p에서 집음. to를 주면 집은 것(먼지 뭉치·물건·바위)을 그 쪽으로 MOVE_MAX까지 옮겨 놓음 → {ok, why, picked, moved, kind, crushed}
 func tweeze(v: Village, p: Vector2, to: Variant = null) -> Dictionary:
 	if v.air == null or not v.air.lid_open:
+		v.touch_refused(&"tweeze", &"lid")
 		return {"ok": false, "why": "뚜껑을 먼저 열어 주세요", "picked": false, "moved": false, "kind": "", "crushed": ""}
 	var tg := pick_target(v, p)
 	if tg.is_empty():
+		v.touch_refused(&"tweeze", &"no_target")       # (giant-touch E6) 놓는 순간 다시 찾고, 없으면 거절 (쿨타임 없음)
 		return {"ok": false, "why": "집을 것이 없어요", "picked": false, "moved": false, "kind": "", "crushed": ""}
 	var kind := String(tg["kind"])
 	if kind == "gnat":
 		var r := v.smalls.tweeze(v, p)
 		r["kind"] = "gnat"
 		r["moved"] = false
+		if bool(r.get("ok", false)):
+			v.touch_event(&"tweeze", count_today(v, "tweeze"), true)
+			v.emit(&"tweeze_done", {"at": p, "v": {"what": &"gnat", "moved": false, "crushed": 0 if String(r.get("crushed", "")) == "" else 1}})
 		return r
 	var dest: Variant = null
 	if to != null:
@@ -488,6 +383,7 @@ func tweeze(v: Village, p: Vector2, to: Variant = null) -> Dictionary:
 		dest = from + (tv - from).limit_length(MOVE_MAX)
 		var size := _size_of(tg)
 		if not _free_spot(v, dest, size):
+			v.touch_refused(&"tweeze", &"no_spot")
 			return {"ok": false, "why": "거기에는 내려놓을 수 없어요", "picked": false, "moved": false, "kind": kind, "crushed": ""}
 	var crushed := _clumsy(v, p, float(tg["d"]))
 	var name := ""
@@ -542,6 +438,8 @@ func tweeze(v: Village, p: Vector2, to: Variant = null) -> Dictionary:
 		if near != null:
 			v.speak(near, "하늘에서 커다란 손가락이…!", 7)
 	_first(v, "pick" if dest == null else "move")
+	v.touch_event(&"tweeze", count_today(v, "tweeze"), true)
+	v.emit(&"tweeze_done", {"at": p, "v": {"what": StringName(kind), "moved": dest != null, "crushed": 0 if crushed == "" else 1}})
 	v.giant_acted()
 	return {"ok": true, "why": "", "picked": dest == null, "moved": dest != null, "kind": kind, "crushed": crushed}
 
@@ -615,10 +513,41 @@ static func _near_awake(v: Village, p: Vector2) -> Resident:
 	return best
 
 
-static func _warn(v: Village, kind: String, aware_text: String, unaware_text: String) -> void:
-	v.warnings.append({"t": v.t, "kind": kind, "text": SmallCrises.say_for(v, aware_text, unaware_text)})
-	if v.warnings.size() > 20:
-		v.warnings.pop_front()
+## 그날 이 손짓이 받아들여진 횟수를 하나 올리고 돌려줌 (사건 giant_acted의 n_today)
+func count_today(v: Village, kind: String) -> int:
+	var d := v.cal_day(v.t)
+	var c: Array = acts.get(kind, [-1, 0])
+	if int(c[0]) != d:
+		c = [d, 0]
+	c = [d, int(c[1]) + 1]
+	acts[kind] = c
+	return int(c[1])
+
+
+## 끌어 겨누기 미리보기 (giant-touch R1 사용자 결정 ④ — 화면 view/giant_hand_ctl.gd가 그림자를 끌 때마다): 그 자리에서 손짓이 될지.
+## tool = "spray" · "tweeze" → {ok, why, warn, pos(겨눌 자리 — 핀셋은 집을 것의 자리)}. 시뮬 상태를 바꾸지 않음
+static func tool_preview(v: Village, tool: String, p: Vector2) -> Dictionary:
+	match tool:
+		"spray":
+			if v.hand != null and v.hand.spray_cd > 0.0:
+				return {"ok": false, "why": "물뿌리개에 물을 채우는 중이에요", "warn": "", "pos": p}
+			if not v.water.inside(p.x, p.y, 1.5):
+				return {"ok": false, "why": "유리벽 가까이는 뿌릴 수 없어요", "warn": "", "pos": p}
+			var n := 1
+			if v.hand != null:
+				for s2: Array in v.hand.soaks:
+					if Vector2(float(s2[0]), float(s2[1])).distance_to(p) < SPRAY_R:
+						n += 1
+			if n >= SPRAY_FLOOD_AT:
+				return {"ok": true, "why": "", "warn": "여기는 방금 적셨어요 — 또 뿌리면 물이 넘쳐요", "pos": p}
+			return {"ok": true, "why": "", "warn": "", "pos": p}
+		"tweeze":
+			var tg := pick_target(v, p)
+			if tg.is_empty():
+				return {"ok": false, "why": "집을 것이 없어요", "warn": "", "pos": p}
+			var warn := "멀리서 집으면 곁의 집이 짓눌릴 수 있어요" if float(tg["d"]) > TWEEZE_CLEAN else ""
+			return {"ok": true, "why": "", "warn": warn, "pos": tg["pos"]}
+	return {"ok": false, "why": "", "warn": "", "pos": p}
 
 
 ## 처음 쓴 날의 연대기 (깨달은 뒤 / 깨닫기 전)
@@ -644,5 +573,9 @@ func to_dict() -> Dictionary:
 
 static func from_dict(d: Dictionary) -> GiantHand:
 	var h := GiantHand.new()
-	SaveCodec.apply(h, d)
+	SaveCodec.apply(h, d)                      # 옛 저장의 cups 값은 변수가 없어 버려짐 (giant-touch AC14)
+	var st := {}
+	for k: String in STATS_KEYS:               # 옛 stats의 cups·cup_fear·curtain·frost도 버림
+		st[k] = h.stats.get(k, 0.0 if k == "water" else 0)
+	h.stats = st
 	return h

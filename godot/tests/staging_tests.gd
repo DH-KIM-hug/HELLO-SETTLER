@@ -140,11 +140,11 @@ func test_tools_locked() -> void:
 	hc.refresh()
 	check(hc.wipe_btn.is_visible_in_tree() and not hc.lamp_btn.is_visible_in_tree() and not hc.spray_btn.is_visible_in_tree() and hc.tool_rows[1].visible and not hc.tool_rows[0].visible,
 		"[유리 닦기]가 열림 → 그것만 보임")
-	check(hc.lid_btn.get_parent() == hc and not hc.lid_btn.is_visible_in_tree(), "[뚜껑 열기]는 손 칸에 없음 (6c-1)")
+	check(hc.get("lid_btn") == null, "[뚜껑 열기]는 손 칸에 없음 (6c-1 · giant-touch — 숨긴 단추도 없앰)")
 	var texts := PackedStringArray()
 	for k: String in hc.tool_buttons():
 		texts.append((hc.tool_buttons()[k] as Button).text)
-	check(not " ".join(texts).contains("감싸") and not " ".join(texts).contains("커튼") and not hc.blow_btn.is_visible_in_tree(), "손 칸에 감싸기·커튼·불기 없음 (6c-1)")
+	check(not " ".join(texts).contains("감싸") and not " ".join(texts).contains("커튼") and hc.get("blow_btn") == null, "손 칸에 감싸기·커튼·불기 없음 (6c-1)")
 	run.root.remove_child(scene)
 	scene.free()
 	Firsts.reset()

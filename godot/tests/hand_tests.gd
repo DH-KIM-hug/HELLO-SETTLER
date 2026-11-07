@@ -1,5 +1,5 @@
-## 거인의 손 테스트 — ROADMAP B6 (sim/giant_hand.gd): 물 뿌리기 · 손으로 감싸기 · 커튼 3단 · 유리 닦기 · 핀셋.
-## docs/WORLD_EVENTS.md 4.2 (병 밖 — 무료·쿨타임) · 4.3 (뚜껑을 열고) · 7.1 (서툰 핀셋) · 기획서 6.3 · 6.4 (커튼: 증발·강·자람·온기).
+## 거인의 손 테스트 — ROADMAP B6 (sim/giant_hand.gd): 물 뿌리기 · 유리 닦기 · 핀셋 (감싸기·커튼은 없앴다 — design/gdd/giant-touch.md).
+## docs/WORLD_EVENTS.md 4.2 (병 밖 — 무료·쿨타임) · 4.3 (뚜껑을 열고) · 7.1 (서툰 핀셋) · 기획서 6.3.
 ## 효과 · 쿨타임 · 뚜껑 규칙 · 깨닫기 전/뒤 반응 · 연대기 · 금지어 · 저장·결정론. tests/run.gd가 부름 (`-- hand` = 이것만, 1분 안).
 extends RefCounted
 
@@ -23,8 +23,8 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	print("== 거인의 손 — 물 뿌리기 · 감싸기 · 커튼 · 유리 닦기 · 핀셋 (B6)")
-	run.timed(self, ["test_spray", "test_spray_flood", "test_cup", "test_curtain", "test_curtain_frost_and_river", "test_wipe",
+	print("== 거인의 손 — 물 뿌리기 · 유리 닦기 · 핀셋 (B6)")
+	run.timed(self, ["test_spray", "test_spray_flood", "test_wipe",
 		"test_tweeze", "test_unaware", "test_save_and_determinism", "test_words"])
 
 
@@ -172,109 +172,6 @@ func test_spray_flood() -> void:
 	check(bool(rr["ok"]) and not bool(rr["flood"]), "한 시간이 지나면 같은 자리라도 넘치지 않음")
 
 
-# ───────────────────────── 손으로 감싸기 ─────────────────────────
-func test_cup() -> void:
-	var v := village(true, 1)                      # 한겨울
-	to_light(v, true)
-	var t0 := Health.temperature_at(v, v.center.x, v.center.y)
-	var belief0 := _belief(v)
-	var bk := v.book.size()
-	var r := v.cup_hands()
-	var t1 := Health.temperature_at(v, v.center.x, v.center.y)
-	print("  겨울 낮 기온 %.1f° → 감싸면 %.1f°" % [t0, t1])
-	check(bool(r["ok"]) and absf(t1 - t0 - GiantHand.CUP_WARM) < 0.01 and not v.air.lid_open, "뚜껑을 열지 않고 병 전체 +%.0f°" % GiantHand.CUP_WARM)
-	check(_belief(v) > belief0 and _lines(v, bk).any(func(t: String) -> bool: return t.contains("손이 세상을 감싸")), "추울 때 감싸면 믿음↑ · 첫 연대기")
-	check(absf(v.water.evap_k() - (GiantHand.CUP_EVAP * (GiantHand.CURTAIN_EVAP[0] as float))) < 1e-6, "손이 유리를 덮어 그동안 증발 ×%.1f" % GiantHand.CUP_EVAP)
-	var r2 := v.cup_hands()
-	check(not bool(r2["ok"]) and String(r2["why"]).contains("온기"), "온기가 남은 동안은 다시 못 함 (쿨타임)")
-	v.advance(GiantHand.CUP_TIME + 60.0)
-	var t2 := Health.temperature_at(v, v.center.x, v.center.y)
-	check(v.water.cup_left == 0.0 and absf(v.water.evap_k() - 1.0) < 1e-6, "한 시간(병 시계) 뒤 끝남 (기온 %.1f°)" % t2)
-	# 하루 4번째부터 두려움
-	var q := village(true, 1)
-	var fears: Array = []
-	for i in 4:
-		var f0 := q.fear
-		var rq := q.cup_hands()
-		fears.append(q.fear - f0)
-		if i == 0 or i == 3:
-			check(bool(rq["ok"]) and bool(rq["fear"]) == (i >= GiantHand.CUP_FREE_PER_DAY), "감싸기 %d번째: %s" % [i + 1, "두려움↑" if i >= 3 else "괜찮음"])
-		if i == 3:
-			check(q.people.any(func(r3: Resident) -> bool: return r3.say.contains("쥐고")), "4번째에 주민 \"하늘이 우리를 쥐고 있어\"")
-		q.advance(GiantHand.CUP_TIME + 30.0)
-		if q.cal_day(q.t) != int(q.hand.cups[0]):
-			break
-	check(fears.size() == 4 and float(fears[3]) > 0.0 and float(fears[0]) <= 0.0, "하루 3번까지는 괜찮고 넘으면 두려움↑")
-
-
-# ───────────────────────── 커튼 ─────────────────────────
-func test_curtain() -> void:
-	var v := village()
-	to_light(v, true)
-	var got: Array = []
-	v.hand.curtain_changed.connect(func(s: int) -> void: got.append(s))
-	var belief0 := _belief(v)
-	var fear0 := v.fear
-	var t0 := Health.temperature_at(v, v.center.x, v.center.y)
-	check(v.curtain() == 0 and GiantHand.grow_mult(v) == 1.0 and v.water.evap_k() == 1.0, "처음엔 열림 — 자람·증발 그대로 (정확히 ×1)")
-	var expect := {1: [0.6, 0.85, -2.5], 2: [0.3, 0.6, -5.0]}
-	for st: int in [1, 2]:
-		var r := v.set_curtain(st)
-		var e: Array = expect[st]
-		var tt := Health.temperature_at(v, v.center.x, v.center.y)
-		check(bool(r["ok"]) and absf(v.water.evap_k() - float(e[0])) < 1e-6 and absf(GiantHand.grow_mult(v) - float(e[1])) < 1e-6 and absf(tt - t0 - float(e[2])) < 0.01,
-			"커튼 %s: 증발 ×%.1f · 자람 ×%.2f · 온기 %+.1f° (낮)" % [GiantHand.CURTAIN_NAMES[st], e[0], e[1], e[2]])
-	check(got == [1, 2], "바뀔 때마다 curtain_changed(단계) — 방의 3D 커튼이 따라옴")
-	check(not v.set_curtain(2)["ok"] and got.size() == 2, "같은 단은 아무 일 없음")
-	check(absf(_belief(v) - belief0) < 1e-9 and absf(v.fear - fear0) < 1e-9, "믿음·두려움 영향 없음 (조용한 손)")
-	check(v.people.any(func(q: Resident) -> bool: return q.say == "하늘이 흐려졌다"), "주민: \"하늘이 흐려졌다\"")
-	# 밤엔 효과 없음
-	to_light(v, false)
-	var tn := Health.temperature_at(v, v.center.x, v.center.y)
-	v.set_curtain(0)
-	var tn0 := Health.temperature_at(v, v.center.x, v.center.y)
-	v.set_curtain(2)
-	check(absf(tn - tn0) < 1e-6 and GiantHand.grow_mult(v) == 1.0 and v.water.evap_k() == 1.0, "밤에는 커튼 효과 없음 (빛이 없으니)")
-	# 밭: 반쯤이면 덜 자람
-	var a := village()
-	var b := village()
-	to_light(a, true)
-	to_light(b, true)
-	var fa := CT.farm_near(a, dry_spot(a))
-	var fb := CT.farm_near(b, dry_spot(b))
-	b.set_curtain(1)
-	a.advance(2.0 * H)
-	b.advance(2.0 * H)
-	print("  낮 두 시간 밭: 열림 %.1f · 반쯤 %.1f" % [fa.timer + fa.out_total() * 100.0, fb.timer + fb.out_total() * 100.0])
-	# v5: 밭 앞 밀은 4분의 1 수레(25)가 쌓여야 나르러 가므로 timer + 쌓인 양으로는 비교가 흔들린다 → 자람 배율로 본다
-	check(GiantHand.farm_mult(b, fb) < GiantHand.farm_mult(a, fa), "반쯤이면 밭이 덜 자람 (자람 ×%.2f < ×%.2f)" % [GiantHand.farm_mult(b, fb), GiantHand.farm_mult(a, fa)])
-
-
-func test_curtain_frost_and_river() -> void:
-	var v := village()
-	var fb := CT.farm_near(v, dry_spot(v))
-	v.set_curtain(2)
-	var bk := v.book.size()
-	v.advance(1.6 * D)
-	print("  낮 닫힘 %.1f시간 · 냉해 %s" % [v.water.curtain_dark / H, str(v.water.curtain_frost)])
-	check(v.water.curtain_frost and GiantHand.grow_mult(v) == 0.0 and GiantHand.farm_mult(v, fb) == 0.0, "낮에 닫힘이 12시간 넘게 이어지면 냉해 — 밭이 자라지 않음")
-	check(_lines(v, bk).any(func(t: String) -> bool: return t.contains("냉해")) and v.crises.any(func(c: Dictionary) -> bool: return String(c["kind"]) == "frost"), "연대기·알림: 냉해")
-	var tm := fb.timer
-	v.advance(1.0 * H)
-	check(fb.timer == tm, "냉해 동안 밭이 멈춤")
-	v.set_curtain(0)
-	check(not v.water.curtain_frost and v.water.curtain_dark == 0.0, "커튼을 열면 냉해가 풀림")
-	# 증발이 줄면 물이 더 남는다 (볕 드는 쪽 강이 멀리 흐름)
-	var sums: Array = []
-	for st in [0, 2]:
-		var q := village(true, 7, 31)
-		q.set_curtain(st)
-		q.advance(2.0 * D)
-		sums.append(water_sum(q))
-	print("  이틀 뒤 병의 물: 열림 %.3f · 닫힘 %.3f" % sums)
-	check(float(sums[1]) > float(sums[0]), "닫힘: 증발이 줄어 물이 더 남음 (강이 그늘 쪽처럼 멀리)")
-
-
 # ───────────────────────── 유리 닦기 ─────────────────────────
 func test_wipe() -> void:
 	var v := village()
@@ -406,7 +303,7 @@ func test_unaware() -> void:
 	var bk := u.book.size()
 	u.open_lid()
 	var b0 := _belief(u)
-	var acts := [func() -> void: u.spray_water(dry_spot(u)), func() -> void: u.cup_hands(),
+	var acts := [func() -> void: u.spray_water(dry_spot(u)),
 		func() -> void:
 			u.water.glass_dust = 0.6
 			u.wipe_glass(),
@@ -420,30 +317,28 @@ func test_unaware() -> void:
 		u.awaken_at = -1.0
 		f.call()
 		gains.append(u.wonder)
-	print("  경이: 물 %.1f · 감싸기 %.1f · 닦기 %.1f · 핀셋 %.1f" % gains)
+	print("  경이: 물 %.1f · 닦기 %.1f · 핀셋 %.1f" % gains)
 	check(gains.all(func(g: float) -> bool: return g > 0.0) and absf(_belief(u) - b0) < 1e-9, "깨닫기 전: 손짓마다 경이가 쌓임 (믿음이 아니라)")
 	var lines := _lines(u, bk) + _said(u)
-	check(not lines.any(func(t: String) -> bool: return t.contains("거인")) and lines.size() >= 4, "깨닫기 전: 연대기·말에 '거인' 이야기 없음 (%d줄)" % lines.size())
+	check(not lines.any(func(t: String) -> bool: return t.contains("거인")) and lines.size() >= 3, "깨닫기 전: 연대기·말에 '거인' 이야기 없음 (%d줄)" % lines.size())
 
 
 # ───────────────────────── 저장 · 결정론 ─────────────────────────
 func _sig(v: Village) -> String:
 	var h := v.hand
 	var w := v.water
-	var out := "%d|%.4f|%s|%.4f|%.6f|%.4f|%.4f|%.3f,%.3f|" % [w.curtain, w.curtain_dark, str(w.curtain_frost), w.cup_left, w.glass_dust, w.glass_clear, w.bright_left, h.spray_cd, h.wipe_cd]
-	out += str(h.soaks) + str(h.watered) + str(h.sprays) + str(h.cups) + str(h.firsts) + str(h.stats)
+	var out := "%.6f|%.4f|%.4f|%.3f,%.3f|" % [w.glass_dust, w.glass_clear, w.bright_left, h.spray_cd, h.wipe_cd]
+	out += str(h.soaks) + str(h.watered) + str(h.sprays) + str(h.acts) + str(h.firsts) + str(h.stats)
 	return out + "|%d|%.3f|%.5f" % [v.rng.state, v.food_total(), water_sum(v)]
 
 
 func _busy(v: Village) -> void:
 	v.open_lid()
 	v.spray_water(dry_spot(v))
-	v.cup_hands()
-	# (6c-1) 커튼은 도구에서 없앰 — 불러오면 열림으로 돌아가므로 쳐 두지 않는다
 	v.water.glass_dust = 0.5
 	v.wipe_glass()
 	CT.farm_near(v, dry_spot(v) + Vector2(0, 1))
-	v.close_lid()                                  # 뚜껑은 현실 1분 뒤 저절로 닫히므로 (배속마다 다름) 닫아 두고 비교
+	v.close_lid()                                  # 뚜껑은 화면이 손짓 뒤 닫는다 — 닫아 두고 비교
 
 
 func test_save_and_determinism() -> void:
@@ -453,7 +348,7 @@ func test_save_and_determinism() -> void:
 	var d := v.to_dict()
 	check(SaveCodec.errors == 0, "저장할 수 없는 값 없음")
 	var w := Village.from_dict(bytes_to_var(var_to_bytes(d)))
-	check(_sig(w) == _sig(v), "저장 → 불러오기: 손의 상태가 그대로 (온기·먼지막·쿨타임·적신 자리)")
+	check(_sig(w) == _sig(v), "저장 → 불러오기: 손의 상태가 그대로 (먼지막·쿨타임·적신 자리)")
 	v.advance(6.0 * H)
 	w.advance(6.0 * H)
 	check(_sig(w) == _sig(v), "불러온 뒤 6시간: 같은 결과")
@@ -475,13 +370,6 @@ func test_save_and_determinism() -> void:
 	if sigs[0] != sigs[1]:
 		print("  ×1 ", sigs[0], "\n  ×8 ", sigs[1])
 	check(sigs[0] == sigs[1], "손을 쓴 병: ×1과 ×8 결과가 같다")
-	# 따라잡기 (거인이 없을 때 몰아서): 온기·커튼이 그대로 흐름
-	var c := village(true, 7, 43)
-	c.set_curtain(2)
-	c.cup_hands()
-	c.water.offline = true
-	c.advance(2.0 * D)
-	check(c.water.cup_left == 0.0 and c.curtain() == 2 and c.water.curtain_frost, "비운 동안에도 그대로 (온기는 끝나고 커튼은 남음 — 냉해까지)")
 
 
 # ───────────────────────── 말 ─────────────────────────
@@ -513,14 +401,6 @@ func test_words() -> void:
 			v.advance(GiantHand.SPRAY_COOLDOWN + 1.0)
 			if not v.air.lid_open:
 				v.open_lid()
-		for i in 4:
-			v.cup_hands()
-			said.append_array(_said(v))
-			whys.append(String(v.cup_hands()["why"]))
-			v.advance(GiantHand.CUP_TIME + 10.0)
-		for st in [1, 2, 0]:
-			v.set_curtain(st)
-			said.append_array(_said(v))
 		v.water.glass_dust = 0.7
 		v.wipe_glass()
 		said.append_array(_said(v))
@@ -535,7 +415,6 @@ func test_words() -> void:
 			var o: Dictionary = dr["drop"]
 			v.tweeze(Vector2(float(o["x"]), float(o["y"])), Vector2(float(o["x"]) + 3.0, float(o["y"])))
 			said.append_array(_said(v))
-		v.set_curtain(2)
 		v.advance(1.6 * D)
 		said.append_array(_said(v))
 		var all_t := _lines(v) + said + whys

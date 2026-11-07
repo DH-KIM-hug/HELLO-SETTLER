@@ -695,7 +695,7 @@ func fine_step(sc: float) -> void:
 		sl[k] += d
 	# 증발·스며듦 (물이 있던 칸·받은 칸만 — cand)
 	var fw := fwarm
-	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	var ev := EVAP
 	for i in cand:
 		var k := cells_l[i]
 		var v := ww[k]
@@ -798,7 +798,7 @@ func fine_step_ref(sc: float) -> void:
 		sl[k] += d
 	# 증발·스며듦
 	var fw := fwarm
-	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	var ev := EVAP
 	for i in nf:
 		var k := cells_l[i]
 		var v := ww[k]
@@ -825,7 +825,7 @@ func _groove_rate(k: int) -> float:
 
 
 func coarse_slice(sc: float, slice: int) -> void:
-	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	var ev := EVAP
 	var V := cV
 	var L := cL
 	var K := cK
@@ -1003,7 +1003,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 
 ## (시험 기준) 옛 거친 묶음 계산 — coarse_slice와 같은 값
 func coarse_slice_ref(sc: float, slice: int) -> void:
-	var ev := EVAP * evap_k()                # 거인의 손 (B6): 커튼·감싼 손
+	var ev := EVAP
 	var V := cV
 	var L := cL
 	var K := cK

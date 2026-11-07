@@ -74,7 +74,7 @@ var altar_built := true               # 제단이 있다 — 그 전엔 기도·
 var wonder := 0.0                     # 경이 (목격이 쌓임 — Awakening.WONDER_NEED에서 깨달음)
 var awaken_at := -1.0                 # 경이가 찼다 → 이 시각에 깨달음 사건
 var awakened_t := -1.0
-var guide: Dictionary = {}            # 첫 병의 안내 자막 (OPENING 3.1 v3 — view/ui/guide_caption.gd): {on, tap, blow}. 비면 안내 없음
+var guide: Dictionary = {}            # 첫 병의 안내 자막 (OPENING 3.1 v3 — view/ui/guide_caption.gd): {on, tap}. 비면 안내 없음
 var _wonder_taps := [-1, 0]           # [날, 그날 경이가 된 톡 수] (거듭될수록 줄어듦)
 var notebook: Dictionary = {}         # [거인의 수첩] 첫 병의 쪽지 (OPENING 3.1b — sim/notebook.gd). 비면 수첩 없음
 var site_logs: Dictionary = {}        # [거인의 수첩] 짓는 터 id(글자) → 하늘에서 내려와 터로 나른 통나무 (짓는 속도↑ — SkyDrops.site_boost)
@@ -1226,7 +1226,10 @@ func _update_belief(dt: float) -> void:
 	# 부락의 두려움(0~100) = 주민 두려움 평균 × 100 — sim/health.gd가 사람마다 내린다 (HEALTH.md 4)
 
 
+## 믿음을 모두에게 — 깨닫기 전엔 아무 일 없음 (design/gdd/giant-touch.md R5 · 사용자 결정 ⑤: 깨닫기 전 손짓은 경이만)
 func bless_all(d: float) -> void:
+	if not aware:
+		return
 	for p in people:
 		p.belief = minf(1.0, p.belief + d)
 
@@ -2535,7 +2538,8 @@ func path_mult(x: float, y: float) -> float:
 ## 등불(해)을 병 둘레 네 자리 중 dir (0~3)로 옮긴다. 이미 그 자리면 false.
 ## 넓은 세상: 데이터는 그대로, 빛만 돈다 (WorldWater.rotate_jar) — 같은 병의 모든 무리가 함께 겪는다.
 ## 소형 병: 물·지형과 병 안의 모든 것이 (x, y) → (−y, x)로 돈다 (JarWater.rotate_jar — 같은 뜻).
-## 하루 세 번까지는 기적(믿음↑), 네 번째부터 두려움↑ (한 번 옮기기 = 한 번 — 몇 칸을 건너든). 깨닫기 전에는 목격(경이).
+## 그날 LAMP_FREE_PER_DAY(1)번까지는 두렵지 않고, 2번째부터 두려움↑ (한 번 옮기기 = 한 번 — 몇 칸을 건너든, 톡과 따로 셈 —
+## design/gdd/giant-touch.md R4 · F2). 깨달은 뒤엔 믿음↑, 깨닫기 전에는 목격(경이)만.
 func move_lamp(dir: int) -> bool:
 	dir = posmod(dir, 4)
 	var steps := posmod(dir - Lamp.spot(water), 4)
@@ -2611,7 +2615,8 @@ func _after_lamp(pv: Dictionary) -> void:
 	_fear_rotate()
 	for b in buildings:
 		b.farm_mult = -1.0
-	bless_all(0.06)
+	if aware:                             # 깨닫기 전엔 경이만 (giant-touch R5)
+		bless_all(0.06)
 	lamp_moved_t = t
 	Discovery.on_lamp(self)               # 발견 S3 해의 길 — 이때 있던 노인들
 	lamp_last = {"from": int(pv.get("from", 0)), "to": int(pv.get("to", 0)), "up": int(pv.get("up", 0)) + int(pv.get("new", 0)),
@@ -2619,7 +2624,8 @@ func _after_lamp(pv: Dictionary) -> void:
 	stats["lamp_moves"] = int(stats.get("lamp_moves", 0)) + 1
 	log_line(Lamp.chronicle(pv))
 	Awakening.witness(self, "lamp")
-	var scared := int(_rots[1]) > Balance.FEAR_FREE_PER_DAY
+	var scared := int(_rots[1]) > Balance.LAMP_FREE_PER_DAY
+	touch_event(&"lamp", int(_rots[1]), not scared)
 	var said := 0
 	for r in people:
 		if said >= 2:
@@ -3560,12 +3566,11 @@ func recalc_fear() -> void:
 	fear = s / people.size() * 100.0
 
 
-## [곰팡이·뚜껑] 거인이 뚜껑을 연다 / 닫는다 (WORLD_EVENTS 3) — 열린 동안 김·연기·탁한 공기가 빠지고 방 기온이 섞인다.
-## 안 닫으면 JarClock이 현실 1분 뒤 닫는다 (병 시계 8분 안전장치는 JarAir). 성공하면 true
+## [곰팡이·뚜껑] 뚜껑이 열린다 / 닫힌다 (WORLD_EVENTS 3) — 열린 동안 김·연기·탁한 공기가 빠지고 방 기온이 섞인다.
+## 손짓(물 뿌리기·핀셋·내려 주기)이 저절로 열고 화면이 곧 닫는다 (giant-touch R7). 뚜껑은 손짓이 아니다 — 경이 없음 (사용자 결정 ⑤).
+## 현실 시간 자동 닫힘은 없앴다 (jar-time E7) — 병 시계 8분 안전장치는 JarAir. 성공하면 true
 func open_lid() -> bool:
 	var ok := air.open_lid(self)
-	if ok:
-		Awakening.witness(self, "lid")     # 하늘이 열려 바람이 듦
 	giant_acted()
 	return ok
 
@@ -3576,17 +3581,17 @@ func close_lid() -> bool:
 	return ok
 
 
-## [하늘의 것] 거인이 뚜껑을 열고 dir 쪽으로 분다 — 솜털 공의 꽃씨가 한꺼번에 (WORLD_EVENTS 2.7). 날린 꽃씨 수, 닫혀 있으면 −1
-func blow_seeds(dir: Vector2) -> int:
+## [하늘의 것] 뚜껑이 열릴 때 들어온 바람 (EVENTS_STAGING 6c-1 — 불기 손짓은 없앴다): dir 쪽으로 다 핀 솜털 공의 꽃씨가 한꺼번에
+## (WORLD_EVENTS 2.7) + 먼지 뭉치도 흩어짐 (2.2). 손짓이 아니라 경이 없음 (giant-touch 사용자 결정 ⑤). 날린 꽃씨 수, 닫혀 있으면 −1
+func lid_breeze(dir: Vector2) -> int:
 	var n := flora.blow_seeds(self, dir)
-	var nd := smalls.blow_dust(self, dir) if n >= 0 else 0      # [작은 위기] 먼지 뭉치도 흩어져 날아감 (WORLD_EVENTS 2.2)
 	if n >= 0:
-		Awakening.witness(self, "blow" if (n > 0 or nd > 0) else "blow_empty")     # 꽃씨가 하늘 가득 (닫혀 있으면 −1)
-	giant_acted()
+		smalls.blow_dust(self, dir)
 	return n
 
 
-## 거인이 유리를 톡 친다 (그날 4번째부터 모두 +0.05) · 크게 친 톡 = 지진 (모두 +0.2).
+## 거인이 유리를 톡 친다 (design/gdd/giant-touch.md R4 · F1 — 그날 FEAR_FREE_PER_DAY(3)번까지 무료, 4번째부터 모두 +0.05).
+## hard = 크게 친 톡 (지진, 모두 +0.2) — 손짓이 아니다: 개발 키(KEY_T)·시험만 (사용자 결정 ③).
 ## [작은 위기] 매달린 물방울이 있으면 미리 떨어진다 — at(누른 땅 자리)을 주면 그쪽으로 (WORLD_EVENTS 2.2)
 func tap_glass(hard := false, at: Variant = null) -> void:
 	smalls.knock(self, at)
@@ -3601,15 +3606,28 @@ func tap_glass(hard := false, at: Variant = null) -> void:
 		raise_fear_all(Balance.FEAR_TAP_HARD)
 	elif _taps[1] > Balance.FEAR_FREE_PER_DAY:
 		raise_fear_all(Balance.FEAR_TAP)
+	if not hard:
+		touch_event(&"tap", int(_taps[1]), int(_taps[1]) <= Balance.FEAR_FREE_PER_DAY)
 	giant_acted()
 
 
+## 손짓이 받아들여짐 → 사건 giant_acted (docs/architecture/event-kinds.md · giant-touch '사건'). v에 숫자·StringName만, 난수 없음
+func touch_event(kind: StringName, n_today: int, free: bool) -> void:
+	emit(&"giant_acted", {"v": {"kind": kind, "n_today": n_today, "free": free}})
+
+
+## 손짓이 거절됨 (쿨타임·대상 없음·뚜껑) → 사건 giant_refused
+func touch_refused(kind: StringName, why: StringName) -> void:
+	emit(&"giant_refused", {"v": {"kind": kind, "why": why}})
+
+
+## 등불 옮기기의 그날 횟수 (톡과 따로 — LAMP_FREE_PER_DAY(1)번까지 무료, 2번째부터 두려움 — giant-touch F2)
 func _fear_rotate() -> void:
 	var d := cal_day(t)
 	if _rots[0] != d:
 		_rots = [d, 0]
 	_rots[1] += 1
-	if _rots[1] > Balance.FEAR_FREE_PER_DAY:
+	if _rots[1] > Balance.LAMP_FREE_PER_DAY:
 		raise_fear_all(Balance.FEAR_ROTATE * Discovery.lamp_fear_mult(self))     # 발견 S3 해의 길 — 두려움 ×0.5
 
 
@@ -3633,23 +3651,6 @@ func spray_water(p: Vector2) -> Dictionary:
 	if bool(r.get("ok", false)) and not bool(r.get("flood", false)):
 		Notebook.on_spray(self, p)         # [거인의 수첩] 첫 밭에 물
 	return r
-
-
-## [거인의 손] 손으로 감싸기 (병 밖 — WORLD_EVENTS 4.2): 병 전체 +6° 한 시간 → {ok, why, fear}
-func cup_hands() -> Dictionary:
-	var r := hand.cup(self)
-	if bool(r.get("ok", false)):
-		Notebook.on(self, "cup")           # [거인의 수첩]
-	return r
-
-
-## [거인의 손] 커튼 0 열림 · 1 반쯤 · 2 닫힘 (기획서 6.4) → {ok, step}. 바뀌면 hand.curtain_changed(단계)
-func set_curtain(step_i: int) -> Dictionary:
-	return hand.set_curtain(self, step_i)
-
-
-func curtain() -> int:
-	return water.curtain
 
 
 ## [거인의 손] 유리 닦기 (병 밖 — WORLD_EVENTS 4.2) → {ok, why, fog, dust, bright}

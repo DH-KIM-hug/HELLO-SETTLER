@@ -157,7 +157,7 @@ func _process(_d: float) -> bool:
 		9:
 			_quiet(v)
 			scene.toggle_lid()
-			scene.spray()
+			scene.spray_at(scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5))          # (giant-touch) 끌어 겨누기 — 캡처는 화면 가운데 땅에 바로
 			_wait = 32
 			step = 10
 		10:
@@ -195,7 +195,7 @@ func _process(_d: float) -> bool:
 			step = 13
 		13:
 			_quiet(v)
-			scene.tweeze()
+			scene.tweeze_at(GiantHand.pick_target(scene.focus_village(), scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5), 9.0).get("pos", scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5)))
 			_wait = 12
 			step = 14
 		14:

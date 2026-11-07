@@ -1,7 +1,7 @@
 ## 거인의 손 — 아래 띠 [손] 칸 (UI 01 · A9) + 손에 든 물건 떨어뜨리기 (SHOP 3 · WORLD_EVENTS 3 · 4 · A7).
-## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 · 물 뿌리기 · 핀셋 (뚜껑이 열린 동안) /
-##   감싸기 · 커튼 (열림·반쯤·닫힘 — 누를 때마다 다음 단) · 유리 닦기 · 등불 옮기기 (병 밖 — ROADMAP B6, sim/giant_hand.gd) /
-##   손에 든 것 (Market.hand — 5칸). 물건을 누르면 → 뚜껑이 열리고 (한 번 열고 여러 개 — 병의 법칙) 떨어뜨릴 자리 고르기:
+## 칸 (아래 띠 위에 펼쳐짐): 물 뿌리기 · 핀셋 / 유리 닦기 · 등불 옮기기 (열린 도구만 — ROADMAP B6, sim/giant_hand.gd ·
+##   design/gdd/giant-touch.md) / 손에 든 것 (Market.hand — 5칸). 뚜껑·불기·감싸기·커튼 단추는 없다 (뚜껑은 손짓마다 저절로).
+##   물 뿌리기·핀셋도 내려 주기와 같은 끌어 겨누기 (사용자 결정 ④ — start_tool): 땅 그림자를 끌어 [뿌리기]·[집기], 손은 그리지 않음. 물건을 누르면 → 뚜껑이 열리고 (한 번 열고 여러 개 — 병의 법칙) 떨어뜨릴 자리 고르기:
 ##   땅 위 그림자 + 그 위에 물건이 옅은 반짝임 속에 떠서 기다림 (A24 2026-11-08: 거인의 손은 그리지 않는다 — view/sky_descent.gd). 손가락으로 끌면 그림자가 따라옴, [떨어뜨리기]로 놓음.
 ##   물건 칸에서 바로 땅으로 끌어 놓으면 곧바로 떨어진다 (경고가 있으면 멈추고 묻는다).
 ##   집·사람 위면 붉게 ("여기 떨어뜨리면 집이 부서져요") — 그래도 놓을 수 있다. 건물은 빈 땅만 + 자리 말 (농사 잘 되는 땅 …).
@@ -16,8 +16,6 @@ const SLOT_PX := 54.0
 
 var sc: Node                           # 장면 (TestVillage 계열)
 var tray: PanelContainer
-var lid_btn: Button
-var blow_btn: Button
 var tweeze_btn: Button                 # [거인의 손] 핀셋 — 뚜껑이 열린 동안 (날벌레·먼지 뭉치·떨어진 것 — WORLD_EVENTS 4.3)
 var spray_btn: Button                  # [거인의 손 B6] 물 뿌리기 — 뚜껑이 열린 동안
 var wipe_btn: Button                   # 유리 닦기
@@ -37,7 +35,7 @@ var b_text: Label
 var drop_btn: Button
 var cancel_btn: Button
 var _hand_sig := ""
-var _aim: Dictionary = {}              # {id, item, p, pv, v, root, shadow, held}
+var _aim: Dictionary = {}              # {id, item, p, pv, v, root, shadow, held} · 도구 겨누기면 {tool, …} (id −1, item "")
 var _press: Dictionary = {}            # 물건 칸을 누름 {id, pos, drag}
 var _t := 0.0
 
@@ -67,14 +65,6 @@ func build(root: Control) -> void:
 	row.add_theme_constant_override("separation", UiTheme.GAP)
 	col.add_child(row)
 	tool_rows.append(row)
-	lid_btn = Button.new()                             # (6c-1) 뚜껑 단추는 손 칸에 없다 — 손짓마다 저절로 열리고 닫힘. 옛 시험·캡처가 읽는 자리만 (트리 밖에 숨김)
-	lid_btn.text = "뚜껑 열기"
-	lid_btn.visible = false
-	add_child(lid_btn)
-	blow_btn = Button.new()                            # (6c-1) 불기 단추 없음 — 손이 들어가 뚜껑이 열릴 때 민들레 솜털이 저절로 날림
-	blow_btn.text = "불기"
-	blow_btn.visible = false
-	add_child(blow_btn)
 	spray_btn = _btn(row, "물 뿌리기", "물뿌리개", Callable(sc, "spray"))
 	tweeze_btn = _btn(row, "핀셋", "핀셋", Callable(sc, "tweeze"))
 	var row2 := HBoxContainer.new()                   # 병 밖의 손짓 (뚜껑을 열지 않음 — WORLD_EVENTS 4.2)
@@ -227,17 +217,16 @@ func _sync_tools() -> void:
 	for r in tool_rows:
 		var on := false
 		for c in r.get_children():
-			if c != lid_btn and (c as Control).visible:
+			if (c as Control).visible:
 				on = true
 		r.visible = on
 		any = any or on
 	tool_sep.visible = any
 
 
-## 매 화면: 뚜껑 글자·불기·손에 든 것
+## 매 화면: 열린 도구·쿨타임·손에 든 것
 func refresh() -> void:
 	var v: Village = sc.focus_village()
-	lid_btn.visible = false               # (v3.3) 뚜껑 단추 없음 — 불기·물 뿌리기·핀셋·떨어뜨리기가 저절로 열고 곧 닫는다 (CorkPop)
 	_sync_tools()
 	spray_btn.disabled = v.hand.spray_cd > 0.0
 	var w := v.water
@@ -305,6 +294,39 @@ func start_drop(id: int, sp: Variant = null) -> void:
 	close()
 	sc.auto_lid()                                      # 병의 법칙: 뚜껑이 저절로 열린다 (날벌레·온기·물 — Village.open_lid)
 	var item := String(h["item"])
+	var parts := _aim_root()
+	var root: Node3D = parts[0]
+	var shadow: MeshInstance3D = parts[1]
+	var ring: MeshInstance3D = parts[2]
+	var held: Node3D = parts[3]
+	var thing: Node3D
+	if Shop.is_building(item):
+		var names: Array = VillageView.BUILDING_MODELS.get(item, ["hut"])
+		thing = Node3D.new()
+		Art.instance(thing, String(names[0]))
+		thing.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG)
+	else:
+		thing = SkyDropView.make_item(item)
+	held.add_child(thing)
+	var size := float(Balance.B[item]["size"]) if Shop.is_building(item) else float(Shop.ITEMS[item].get("size", 1.5))
+	var glint := SkyDescent.shimmer(maxf(0.8, size * 0.75), 0.7)     # (A24) 손 없이 — 물건이 옅은 반짝임 속에 떠 있음
+	glint.position.y = size * 0.4
+	held.add_child(glint)
+	_aim = {"id": id, "item": item, "root": root, "shadow": shadow, "ring": ring, "held": held, "size": size, "pv": {}, "p": Vector2.ZERO}
+	b_icon.texture = GameIcons.tex(item) if not Shop.is_building(item) else GameIcons.tex("마을로 가기")
+	b_name.text = Balance.label(item)
+	banner.visible = true
+	if sp == null:
+		var vs: Vector2 = sc.get_viewport().get_visible_rect().size
+		sp = Vector2(vs.x * 0.5, vs.y * 0.42)
+		aim_at(sp, false)
+	else:
+		aim_at(sp, true)
+	GameAudio.fx("paper", "Room", -10.0)
+
+
+## 끌어 겨누는 표시 (그림자 원판 + 테두리 + 위로 가는 선 + 떠 있는 자리) → [root, shadow, ring, held]. 손 모델 없음 (A24 · giant-touch R6)
+func _aim_root() -> Array:
 	var root := Node3D.new()
 	sc.jar.add_child(root)
 	var shadow := MeshInstance3D.new()
@@ -341,30 +363,46 @@ func start_drop(id: int, sp: Variant = null) -> void:
 	root.add_child(line)
 	var held := Node3D.new()
 	root.add_child(held)
-	var thing: Node3D
-	if Shop.is_building(item):
-		var names: Array = VillageView.BUILDING_MODELS.get(item, ["hut"])
-		thing = Node3D.new()
-		Art.instance(thing, String(names[0]))
-		thing.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG)
-	else:
-		thing = SkyDropView.make_item(item)
-	held.add_child(thing)
-	var size := float(Balance.B[item]["size"]) if Shop.is_building(item) else float(Shop.ITEMS[item].get("size", 1.5))
-	var glint := SkyDescent.shimmer(maxf(0.8, size * 0.75), 0.7)     # (A24) 손 없이 — 물건이 옅은 반짝임 속에 떠 있음
-	glint.position.y = size * 0.4
+	return [root, shadow, ring, held]
+
+
+## 도구 끌어 겨누기 (giant-touch R1 사용자 결정 ④ — 내려 주기와 같은 문법): tool = "spray" · "tweeze".
+## 땅 그림자를 끌어 옮기고 [뿌리기]·[집기] — 뚜껑은 놓는 순간 저절로 열림 (장면의 spray_at · tweeze_at). 손은 그리지 않는다
+const TOOL_SIZE := {"spray": GiantHand.SPRAY_R, "tweeze": 1.0}
+const TOOL_NAME := {"spray": "물 뿌리기", "tweeze": "핀셋"}
+const TOOL_ICON := {"spray": "물뿌리개", "tweeze": "핀셋"}
+const TOOL_GO := {"spray": "뿌리기", "tweeze": "집기"}
+func start_tool(tool: String, sp: Variant = null) -> void:
+	if not TOOL_SIZE.has(tool):
+		return
+	if aiming():
+		_clear_aim()
+	close()
+	var parts := _aim_root()
+	var held: Node3D = parts[3]
+	var glint := SkyDescent.shimmer(0.6, 0.7)          # 도구 끝 (순백·은청 반짝임 — 손 없이, R6)
 	held.add_child(glint)
-	_aim = {"id": id, "item": item, "root": root, "shadow": shadow, "ring": ring, "held": held, "size": size, "pv": {}, "p": Vector2.ZERO}
-	b_icon.texture = GameIcons.tex(item) if not Shop.is_building(item) else GameIcons.tex("마을로 가기")
-	b_name.text = Balance.label(item)
+	_aim = {"id": -1, "item": "", "tool": tool, "root": parts[0], "shadow": parts[1], "ring": parts[2], "held": held,
+		"size": float(TOOL_SIZE[tool]), "pv": {}, "p": Vector2.ZERO}
+	b_icon.texture = GameIcons.tex(String(TOOL_ICON[tool]))
+	b_name.text = String(TOOL_NAME[tool])
 	banner.visible = true
 	if sp == null:
 		var vs: Vector2 = sc.get_viewport().get_visible_rect().size
-		sp = Vector2(vs.x * 0.5, vs.y * 0.42)
-		aim_at(sp, false)
+		aim_at(Vector2(vs.x * 0.5, vs.y * 0.42), false)
 	else:
 		aim_at(sp, true)
 	GameAudio.fx("paper", "Room", -10.0)
+
+
+## 지금 겨누는 도구 ("spray" · "tweeze" · 물건이면 "")
+func aim_tool() -> String:
+	return String(_aim.get("tool", ""))
+
+
+## 겨누는 땅 자리 (시험·캡처)
+func aim_point() -> Vector2:
+	return _aim.get("p", Vector2.ZERO)
 
 
 ## 화면 위 점 → 그림자 자리 (touch = 손가락 위로 띄움)
@@ -376,12 +414,13 @@ func aim_at(sp: Vector2, touch: bool) -> void:
 	var v: Village = sc.village_at(p)
 	_aim["p"] = p
 	_aim["v"] = v
-	var pv := SkyDrops.preview(v, String(_aim["item"]), p)
+	var tool := aim_tool()
+	var pv := SkyDrops.preview(v, String(_aim["item"]), p) if tool == "" else GiantHand.tool_preview(v, tool, p)
 	_aim["pv"] = pv
 	var root: Node3D = _aim["root"]
 	var gy: float = sc.terrain.ground_y(p.x, p.y)
 	root.position = Vector3(p.x, gy, p.y)
-	var size := float(_aim["size"]) * (1.0 if not Shop.is_building(String(_aim["item"])) else 1.15)
+	var size := float(_aim["size"]) * (1.15 if tool == "" and Shop.is_building(String(_aim["item"])) else 1.0)
 	var cy := (_aim["shadow"] as MeshInstance3D).mesh as CylinderMesh
 	cy.top_radius = size
 	cy.bottom_radius = size
@@ -400,21 +439,24 @@ func aim_at(sp: Vector2, touch: bool) -> void:
 		b_text.text = String(pv["why"])
 		b_text.add_theme_color_override("font_color", UiTheme.INK_SOFT)
 		drop_btn.disabled = true
-		drop_btn.text = "떨어뜨리기"
+		drop_btn.text = "떨어뜨리기" if tool == "" else String(TOOL_GO[tool])
 	elif warn != "":
 		m.albedo_color = Color(0.86, 0.16, 0.1, 0.5)
 		rmat.albedo_color = Color(0.95, 0.2, 0.12, 0.95)
 		b_text.text = warn
 		b_text.add_theme_color_override("font_color", Color("b3261e"))
 		drop_btn.disabled = false
-		drop_btn.text = "그래도 떨어뜨리기"
+		drop_btn.text = "그래도 떨어뜨리기" if tool == "" else "그래도 " + String(TOOL_GO[tool])
 	else:
 		m.albedo_color = Color(0.1, 0.08, 0.06, 0.38)
 		rmat.albedo_color = Color(1.0, 0.97, 0.85, 0.9)
 		var good := String(pv.get("good", ""))
-		b_text.text = good if good != "" else "여기에 떨어뜨려요 — 손가락으로 끌어 자리를 옮겨요"
+		b_text.text = good if good != "" else ("여기에 떨어뜨려요 — 손가락으로 끌어 자리를 옮겨요" if tool == "" else "손가락으로 끌어 그림자를 옮겨요")
 		b_text.add_theme_color_override("font_color", UiTheme.INK)
 		drop_btn.disabled = false
+		if tool != "":
+			drop_btn.text = String(TOOL_GO[tool])
+			return
 		drop_btn.text = "여기에 놓기" if Shop.is_building(String(_aim["item"])) else ("내려놓기" if String(_aim["item"]) == Immigrants.ITEM else "떨어뜨리기")
 
 
@@ -437,6 +479,9 @@ func confirm_drop() -> void:
 		return
 	var pv: Dictionary = _aim["pv"]
 	if pv.is_empty() or not bool(pv["ok"]):
+		return
+	if aim_tool() != "":
+		_confirm_tool()
 		return
 	var v: Village = _aim["v"]
 	sc.auto_lid()
@@ -471,6 +516,28 @@ func confirm_drop() -> void:
 		open()
 
 
+## 도구 겨누기 확정 — 놓는 순간 그 땅 자리에서 (핀셋은 다시 찾음 — 대상이 사라졌으면 거절, giant-touch E6)
+func _confirm_tool() -> void:
+	var tool := aim_tool()
+	var p: Vector2 = _aim["p"]
+	var ok := bool(sc.call("spray_at", p)) if tool == "spray" else bool(sc.call("tweeze_at", p))
+	if not ok:
+		aim_at_ground(p)                               # 거절 말은 띠에 (장면이 hint에도 씀)
+		return
+	_clear_aim()
+
+
+## 땅 자리로 다시 미리보기 (그림자는 그대로)
+func aim_at_ground(p: Vector2) -> void:
+	if not aiming():
+		return
+	var pv := GiantHand.tool_preview(_aim["v"], aim_tool(), p) if aim_tool() != "" else SkyDrops.preview(_aim["v"], String(_aim["item"]), p)
+	_aim["pv"] = pv
+	if not bool(pv["ok"]):
+		b_text.text = String(pv["why"])
+		drop_btn.disabled = true
+
+
 # ───────────────────────── 매 화면 ─────────────────────────
 func process(dt: float) -> void:
 	_t += dt
@@ -478,8 +545,7 @@ func process(dt: float) -> void:
 		_say_t = maxf(0.0, _say_t - dt)
 	if tray.visible:
 		refresh()
-	if aiming():
-		sc.clock.lid_real = 0.0                         # 고르는 동안은 뚜껑이 저절로 닫히지 않음
+	if aiming():                                       # 고르는 동안은 뚜껑이 저절로 닫히지 않음 (장면의 _lid_close_tick)
 		var held: Node3D = _aim["held"]
 		held.position.y = HOLD_H + 0.35 * sin(_t * 2.2)
 	if not _press.is_empty():

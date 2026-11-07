@@ -57,10 +57,6 @@ var offline := false
 var offline_mult := 1.0                 # 몰아서 계산할 때 물 계산 간격 배율 (따라잡기 빠른 길 CatchUp.fast — 저장하지 않음)
 var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
 # 거인의 손 (B6 — sim/giant_hand.gd): 병 하나의 상태라 물이 가진다 (넓은 세상의 무리가 함께 씀). 시간은 남은 초로 센다
-var curtain := 0                        # 커튼 0 열림 · 1 반쯤 · 2 닫힘 (기획서 6.4)
-var curtain_dark := 0.0                 # 낮에 닫힘이 이어진 시간 (초)
-var curtain_frost := false              # 냉해 (낮에 닫힘 12시간↑ — 커튼을 열 때까지)
-var cup_left := 0.0                     # 손으로 감싼 온기가 남은 시간 (초)
 var glass_dust := 0.0                   # 유리에 앉은 먼지막 0~1
 var glass_clear := 0.0                  # 닦아서 걷힌 김 0~1 (다시 서림)
 var bright_left := 0.0                  # 닦은 뒤 또렷한 볕이 남은 시간 (초)
@@ -295,18 +291,6 @@ func dew_vapour() -> float:
 	return smoothstep(7.5, 10.0, hr) * (1.0 - smoothstep(15.0, 18.0, hr))
 
 
-## 증발 배율 (B6 거인의 손): 낮의 커튼 ×1·0.6·0.3 (밤엔 볕이 없으니 그대로) · 손으로 감싼 동안 ×0.7. 기본 = 정확히 1
-func evap_k() -> float:
-	var k := 1.0
-	if curtain > 0:
-		var hr := hour_now()
-		if GiantHand.is_light(hr):
-			k = float(GiantHand.CURTAIN_EVAP[clampi(curtain, 0, 2)])
-	if cup_left > 0.0:
-		k *= GiantHand.CUP_EVAP
-	return k
-
-
 # ───────────────────────── 물 한 걸음 (hydroStep) ─────────────────────────
 func hydro_step(sc: float) -> void:
 	var hh := h
@@ -364,8 +348,8 @@ func hydro_step(sc: float) -> void:
 		var d := minf(hv, DISSOLVE * minf(1.0, wet * 20.0) * sc)
 		ha[k] -= d
 		sl[k] += d
-	# 증발과 스며듦 (물만 사라지고 소금은 남는다) — 커튼·감싼 손이 볕을 가리면 덜 (evap_k)
-	var ev := EVAP * evap_k()
+	# 증발과 스며듦 (물만 사라지고 소금은 남는다)
+	var ev := EVAP
 	for k in cells:
 		var v := ww[k]
 		if v <= 0.0:
@@ -610,9 +594,7 @@ static func from_dict(d: Dictionary) -> JarWater:
 	d = WorldPack.unpack_water(d)                 # 누른 넓은 세상 (A16) — 옛 사전은 그대로
 	var s: JarWater = WorldWater.new() if d.get("$kind", "jar") == "world" else JarWater.new()
 	SaveCodec.apply(s, d)
-	s.curtain = 0                                 # (EVENTS_STAGING 6c-1) 커튼 도구는 없앴다 — 옛 저장에 쳐 둔 커튼은 열림으로
-	s.curtain_dark = 0.0
-	s.curtain_frost = false
+	# (giant-touch AC14) 없앤 커튼·감싸기 값(curtain·curtain_dark·curtain_frost·cup_left)은 변수가 없어 SaveCodec이 읽고 버림
 	if not d.has("hs") and s is WorldWater:
 		s._after_load()
 	return s
