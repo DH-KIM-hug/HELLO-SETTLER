@@ -59,6 +59,9 @@ func _initialize() -> void:
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	# 기존 묶음은 '처음부터 거인을 알고 제단이 있는 마을'을 고정으로 쓴다 (A4b 이전 규칙). 깨달음·계시 묶음(era)은 이 값을 끄고 새 규칙을 본다
 	Village.start_aware = true
+	# 기존 묶음은 '비운 시간 = 병 시간' (v4.2 따라잡기 배율 1)으로 쓴다. 자리를 비운 동안 배율(v4.3, 기본 ×6)은 test_away_rate가 따로
+	CatchUp.rate_override = 1.0
+	CatchUp.step_override = Balance.STEP
 	var one := ""
 	for k: String in SUITES:
 		if k in args:
@@ -71,7 +74,7 @@ func _initialize() -> void:
 		load(SUITES[one]).new(self, q).all()
 		_finish(t0)
 		return
-	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls"])
+	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate"])
 	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "animals", "wildlife", "crisis"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
@@ -443,32 +446,37 @@ func clock_sig(v: Village) -> String:
 
 func test_time_controls() -> void:
 	print("== 시간 빨리 돌리기 (기획서 6.6)")
-	# 1) ×8과 ×1 — 같은 병 시간이면 결과가 똑같다 (걸음은 늘 병 시계 1초)
+	# 1) 보통 · 빠르게 · 느리게 — 같은 병 시간이면 결과가 똑같다 (걸음은 늘 따라잡기와 같은 10초)
 	var hours := 2.0
-	var steps := int(hours * Balance.HOUR / Balance.WATCH_STEP)
+	var steps := int(hours * Balance.HOUR / Balance.STEP)
 	var sigs: Array = []
 	var real_s: Array = []
-	for spec: Array in [[0, 1.0 / 30.0], [3, 1.0 / 60.0], [3, 0.25], [1, 0.5]]:     # [속도 번호, 화면 한 장 (초)]
+	for spec: Array in [[2, 1.0 / 30.0], [3, 1.0 / 60.0], [3, 0.25], [0, 0.5]]:     # [속도 번호, 화면 한 장 (초)]
 		var v := Village.new_prototype(3)
 		var c := JarClock.new(v)
+		c.budget_ms = 1.0e9
+		c.auto_slow = false
 		c.set_speed(spec[0])
 		var frames := 0
 		while c.steps_done < steps:
-			c.tick(spec[1])
+			c.tick(minf(float(spec[1]), ((steps - c.steps_done) * Balance.STEP - c.acc) / c.speed()))
 			frames += 1
 		sigs.append(clock_sig(v))
 		real_s.append(frames * float(spec[1]))
-		check(c.steps_done == steps and c.dropped == 0.0, "×%d 화면 %.3f초: %d걸음, 버린 시간 없음 (현실 %.0f초)" % [int(c.speed()), spec[1], c.steps_done, frames * float(spec[1])])
-	check(sigs[1] == sigs[0] and sigs[2] == sigs[0] and sigs[3] == sigs[0], "병 시간 %.0f시간: ×1 · ×8 · ×8(큰 화면) · ×2 결과가 같다 (위치·믿음·연대기·난수)" % hours)
-	check(absf(real_s[1] * 8.0 - real_s[0]) < 1.0, "×8은 현실 시간이 1/8 (×1 %.0f초 → ×8 %.0f초)" % [real_s[0], real_s[1]])
-	# 빨리 돌려도 거인이 지켜보는 시간: ×8 동안 믿음이 오른다
+		check(c.steps_done == steps and c.dropped == 0.0 and c.behind == 0.0, "%s 화면 %.3f초: %d걸음, 버린 시간 없음 (현실 약 %.0f초)" % [JarClock.label_of(spec[0]), spec[1], c.steps_done, frames * float(spec[1])])
+	check(sigs[1] == sigs[0] and sigs[2] == sigs[0] and sigs[3] == sigs[0], "병 시간 %.0f시간: 보통 · 빠르게 · 빠르게(큰 화면) · 느리게 결과가 같다 (위치·믿음·연대기·난수)" % hours)
+	check(absf(real_s[0] - hours * Balance.HOUR / 288.0) < 1.0 and absf(real_s[1] * 2.5 - real_s[0]) < 1.0, "보통 = 병 하루 현실 5분 (병 2시간 → %.0f초) · 빠르게는 2.5배 (%.0f초)" % [real_s[0], real_s[1]])
+	var vn := Village.new_prototype(3)
+	check(JarClock.new(vn).speed() == 288.0 and JarClock.label_of(Balance.SPEED_DEFAULT_I) == "보통", "처음 배속 = 보통 (1일=5분, ×288)")
+	# 빨리 돌려도 거인이 지켜보는 시간: 빠르게 동안 믿음이 오른다
 	var vb := Village.new_prototype(3)
 	var b0 := vb.people[0].belief
 	var cb := JarClock.new(vb)
 	cb.set_speed(3)
-	for i in 900:
+	cb.auto_slow = false
+	for i in 40:
 		cb.tick(0.5)
-	check(vb.is_watching() and vb.people[0].belief > b0, "×8도 지켜보는 시간 — 믿음↑ (%.3f → %.3f)" % [b0, vb.people[0].belief])
+	check(vb.is_watching() and vb.people[0].belief > b0, "빠르게도 지켜보는 시간 — 믿음↑ (%.3f → %.3f)" % [b0, vb.people[0].belief])
 	# 2) 밤 건너뛰기 (v3.7): 낮엔 못 누름 → 모두 잠든 밤에 누르면 다음 06:00까지 현실 약 3초 타임랩스 → ×1로
 	var night_v := func(seed_v: int) -> Village:
 		var vv := Village.new_prototype(seed_v)
@@ -509,9 +517,9 @@ func test_time_controls() -> void:
 	var cost_s := (Time.get_ticks_usec() - t_start) / 1.0e6
 	print("  밤 건너뛰기 %s → %s (병 %.2f시간, 굵은 걸음 %d) · 현실 %.2f초(60fps %d화면) · 계산 %.2f초 · 한 화면 최대 %d걸음 %.1f ms" % [
 		slept_at, v2.fmt_time(v2.t), span / 3600.0, c2.steps_done - steps_before, frames2 / 60.0, frames2, cost_s, worst_steps, worst_ms])
-	check(not c2.skipping and c2.speed() == 1.0 and v2.fmt_time(v2.t).ends_with("06:00") and v2.cal_day(v2.t) == 2, "다음 새벽(2일차 06:00)에 끝나고 ×1로 (%s, ×%d)" % [v2.fmt_time(v2.t), int(c2.speed())])
+	check(not c2.skipping and c2.speed() == JarClock.normal_speed() and v2.fmt_time(v2.t).ends_with("06:00") and v2.cal_day(v2.t) == 2, "다음 새벽(2일차 06:00)에 끝나고 보통으로 (%s, %s)" % [v2.fmt_time(v2.t), c2.speed_text()])
 	check(absf(frames2 / 60.0 - Balance.SKIP_NIGHT_SECONDS) <= 2.0 / 60.0, "남은 밤 길이와 상관없이 현실 약 %.0f초 (%.2f초)" % [Balance.SKIP_NIGHT_SECONDS, frames2 / 60.0])
-	check(prog_ok and is_equal_approx(c2.skip_progress, 1.0) and not v2.water.offline, "진행도 0→1, 끝나면 물 간격 원래대로")
+	check(prog_ok and is_equal_approx(c2.skip_progress, 1.0) and v2.water.offline == c2.fast, "진행도 0→1, 끝나면 물 간격 보통 배속대로")
 	check(c2.notice != "" and c2.dropped == 0.0 and absf(v2.t - t_before - span) < 1e-6, "아침 알림 '%s', 버린 시간 없음" % c2.notice)
 	# 남은 밤이 짧아도 (새벽 4시에 눌러도) 약 3초
 	var v4: Village = night_v.call(1)
@@ -561,7 +569,7 @@ func test_time_controls() -> void:
 		b.out.erase("밀")
 		b.out.erase("빵")
 	c3.tick(0.5)
-	check(c3.speed() == 1.0 and not c3.skipping and c3.last_crisis.get("kind", "") == "hunger" and c3.notice_t > 0.0, "식량이 떨어지면 ×8 → ×1 + 알림 '%s'" % c3.notice)
+	check(c3.speed() == JarClock.normal_speed() and not c3.skipping and c3.last_crisis.get("kind", "") == "hunger" and c3.notice_t > 0.0, "식량이 떨어지면 빠르게 → 보통 + 알림 '%s'" % c3.notice)
 	check(v3.crises.is_empty() and words_ok([c3.notice]) == "", "알림에 금지어 없음")
 	# 밤 건너뛰는 중의 위기도 ×1로 (건너뛰기 끝, 물 간격 원래대로)
 	var v5: Village = night_v.call(1)
@@ -572,7 +580,239 @@ func test_time_controls() -> void:
 	c5.tick(0.5)
 	v5.crisis("starve", "누군가 쓰러졌다")
 	c5.tick(1.0 / 60.0)
-	check(not c5.skipping and c5.speed() == 1.0 and not v5.water.offline and c5.notice.begins_with("누군가 쓰러졌다") and v5.is_night(), "밤 건너뛰는 중 위기 → 그 자리(%s)에서 ×1 + 알림" % v5.fmt_time(v5.t))
+	check(not c5.skipping and c5.speed() == JarClock.normal_speed() and v5.water.offline == c5.fast and c5.notice.begins_with("누군가 쓰러졌다") and v5.is_night(), "밤 건너뛰는 중 위기 → 그 자리(%s)에서 보통 + 알림" % v5.fmt_time(v5.t))
+
+
+## 빠른 흐름 (기획서 6.6 확장: 1초=5분 ~ 1초=12시간) — JarClock._tick_fast
+## 병 시간 secs초를 ×speed_i로: 화면 길이 frames(돌아가며)와 계산 예산 budget(ms)으로. 마지막 화면은 남은 시간에 꼭 맞게 → 걸음 수가 같다
+func fast_run(c: JarClock, secs: float, frames: Array, budget: float) -> Dictionary:
+	c.budget_ms = budget
+	var goal := c.v.t + secs
+	var k := 0
+	var each: Array = []
+	var guard := 0
+	while c.v.t < goal - 1e-6 and guard < 200000:
+		var want := (goal - c.v.t - c.acc) / c.speed()
+		var dt := minf(float(frames[k % frames.size()]), maxf(0.0, want))
+		k += 1
+		guard += 1
+		var t0 := Time.get_ticks_usec()
+		c.tick(dt)
+		each.append((Time.get_ticks_usec() - t0) / 1000.0)
+		if not c.fast:
+			break
+	return {"frames": k, "each": each}
+
+
+func test_fast_speeds() -> void:
+	print("== 빠른 흐름 (1초=5분 ~ 1초=12시간)")
+	# 1) 목록·이름
+	var want_l := ["느리게", "조금 느리게", "보통", "빠르게", "아주 빠르게", "1초=5분", "1초=10분", "1초=1시간", "1초=5시간", "1초=12시간"]
+	var names: Array = []
+	for i in Balance.SPEEDS.size():
+		names.append(JarClock.label_of(i))
+	var per_day: Array = []
+	for i in 5:
+		per_day.append(Balance.DAY / float(Balance.SPEEDS[i]) / 60.0)
+	check(names == want_l and Balance.SPEEDS.slice(5) == [300.0, 600.0, 3600.0, 18000.0, 43200.0] and per_day == [20.0, 10.0, 5.0, 2.0, 1.0]
+		and JarClock.note_of(2) == "1일=5분", "배속 목록: %s (병 하루 = 현실 20·10·5·2·1분)" % " · ".join(PackedStringArray(names)))
+	check(JarClock.rate_label(43200.0) == "1초=12시간" and JarClock.rate_label(300.0) == "1초=5분" and JarClock.rate_label(5400.0) == "1초=1.5시간" and JarClock.rate_label(288.0) == "1일=5분",
+		"실제 배속 이름: %s · %s · %s · %s" % [JarClock.rate_label(43200.0), JarClock.rate_label(5400.0), JarClock.rate_label(288.0), JarClock.rate_label(1000.0)])
+	var vt := Village.new_prototype(3)
+	var ct := JarClock.new(vt)
+	var order: Array = []
+	for i in 6:
+		ct.cycle_speed()
+		order.append(ct.speed_text())
+	check(order == ["빠르게", "아주 빠르게", "느리게", "조금 느리게", "보통", "빠르게"], "속도 칩 누르기: 보통 → %s (1초=…는 길게 눌러 목록에서만)" % " → ".join(PackedStringArray(order)))
+	ct.set_speed(9)
+	check(ct.fast and ct.view_fast() and vt.water.offline and ct.speed_text() == "1초=12시간", "1초=12시간 고르면 빠른 흐름 (물 오프라인 간격 · 화면 가볍게 · 칩 '%s')" % ct.speed_text())
+	ct.cycle_speed()
+	check(ct.fast and not ct.view_fast() and ct.speed() == 288.0, "1초=… 중 칩 누르기 → 보통 (화면 보통으로)")
+	check(JarClock.top_speed_i() == (Balance.FAST_TOP_SLOW if JarClock.slow_device() else 9), "이 기기의 맨 위 배속: %s (느린 기기 %s)" % [JarClock.label_of(JarClock.top_speed_i()), str(JarClock.slow_device())])
+	var old := JarClock.from_dict(vt, {"speed_i": 6})
+	check(old.speed_i == Balance.SPEED_DEFAULT_I, "옛 저장의 배속 번호(×60)는 불러올 때 보통으로")
+	# 2) 결정성: ×43,200 = 따라잡기와 같은 정밀 걸음 (Village.advance 10초 + 물 300초) — 화면 길이·계산 예산과 상관없이 똑같다
+	var hours := 6.0
+	var sig_ref := ""
+	var vr := Village.new_prototype(4)
+	vr.water.offline = true
+	for k in int(hours * Balance.HOUR / CatchUp.EXACT_CHUNK):
+		vr.advance(CatchUp.EXACT_CHUNK)
+	sig_ref = clock_sig(vr)
+	var each_all: Array = []
+	for spec: Array in [[[1.0 / 60.0], 1.0e9], [[1.0 / 60.0, 1.0 / 24.0, 0.2], 1.0e9], [[1.0 / 60.0], 0.3]]:
+		var vf := Village.new_prototype(4)
+		var cf := JarClock.new(vf)
+		cf.auto_slow = false
+		cf.set_speed(9)
+		var r := fast_run(cf, hours * Balance.HOUR, spec[0], spec[1])
+		var ok := clock_sig(vf) == sig_ref
+		check(ok and cf.fast and cf.dropped == 0.0, "병 %.0f시간 1초=12시간 (화면 %s · 예산 %s ms · %d화면 · 버린 시간 %.0f초) = 따라잡기 걸음과 같다 (위치·믿음·연대기·난수)" % [
+			hours, str(spec[0]), str(spec[1]) if spec[1] < 1.0e8 else "∞", r["frames"], cf.behind])
+		if spec[1] < 1.0:
+			each_all = r["each"]
+	# 넓은 세상: 무리 정리(분가·고운 물 범위)까지 JarWorld.advance(300)씩 흘린 것과 같다 (CatchUp과 같은 묶음)
+	var wa := JarWorld.create(5, WorldCfg.SMALL_SIZE)
+	var spw: Array[Vector2] = wa.recommended_kit_spots()
+	wa.place_kit(spw[0].x, spw[0].y)
+	var snap := var_to_bytes(wa.to_dict())
+	var wr := JarWorld.from_dict(bytes_to_var(snap))
+	wr.water.offline = true
+	for k in int(2.0 * Balance.HOUR / CatchUp.EXACT_CHUNK):
+		wr.advance(CatchUp.EXACT_CHUNK)
+	var wf := JarWorld.from_dict(bytes_to_var(snap))
+	var cw := JarClock.new(wf.primary())
+	cw.world = wf
+	cw.auto_slow = false
+	cw.set_speed(8)
+	fast_run(cw, 2.0 * Balance.HOUR, [1.0 / 60.0, 0.05], 2.0)
+	check(clock_sig(wf.primary()) == clock_sig(wr.primary()) and world_sig(wf) == world_sig(wr), "넓은 세상 2시간 1초=5시간 = JarWorld.advance(300)씩 (따라잡기 묶음)과 같다 (물 %s)" % world_sig(wf).left(30))
+	# 현실 그대로(1초 걸음 · 물 60초 — Village.step 1초씩)와는 걸음 크기만 다르다 — 같은 6시간의 큰 흐름이 같다 (정밀 계산이지 요약이 아님)
+	var v1 := Village.new_prototype(4)
+	for k in int(hours * Balance.HOUR):
+		v1.step(1.0)
+	var vf2 := Village.new_prototype(4)
+	var cf2 := JarClock.new(vf2)
+	cf2.auto_slow = false
+	cf2.set_speed(9)
+	fast_run(cf2, hours * Balance.HOUR, [1.0 / 60.0], 1.0e9)
+	var f1 := v1.food_total()
+	var f2 := vf2.food_total()
+	check(v1.people.size() == vf2.people.size() and absi(v1.buildings.size() - vf2.buildings.size()) <= 1 and absf(f1 - f2) <= maxf(4.0, 0.25 * maxf(f1, f2))
+		and v1.check_invariants().is_empty() and vf2.check_invariants().is_empty(),
+		"1초 걸음과 1초=12시간의 병 %.0f시간: 인구 %d = %d · 건물 %d ~ %d · 식량 %.0f ~ %.0f · 값 이상 없음" % [hours, v1.people.size(), vf2.people.size(), v1.buildings.size(), vf2.buildings.size(), f1, f2])
+	# 3) 화면 예산: 한 화면 계산이 예산(+ 걸음 하나) 안 → 못 따라가면 실제 배속이 내려가고 칩에 작게
+	var vb := Village.new_prototype(6)
+	var cb := JarClock.new(vb)
+	cb.auto_slow = false
+	cb.set_speed(9)
+	var ms_list: Array = []
+	for i in 120:
+		var t0 := Time.get_ticks_usec()
+		cb.tick(1.0 / 60.0)
+		ms_list.append((Time.get_ticks_usec() - t0) / 1000.0)
+	var p95 := pctl(ms_list, 0.95)
+	var mean := 0.0
+	for x: float in ms_list:
+		mean += x / ms_list.size()
+	check(mean <= Balance.FAST_BUDGET_MS + 1.5, "1초=12시간 한 화면 계산 평균 %.1f ms · 95%% %.1f ms (예산 %.0f ms — 걸음 하나가 길면 한 번 넘음) · 실제 %s" % [mean, p95, Balance.FAST_BUDGET_MS, JarClock.rate_label(cb.rate)])
+	cb.budget_ms = 0.01
+	for i in 60:
+		cb.tick(1.0 / 60.0)
+	check(cb.fast and cb.rate < 43200.0 * 0.5 and cb.behind > 0.0 and cb.speed_text().contains("(실제 ") and cb.speed() == 43200.0,
+		"기기가 못 따라가면 화면은 그대로, 실제 배속만 내려감 — 칩 '%s'" % cb.speed_text())
+	check(pctl(each_all, 0.95) < 30.0, "예산 0.3 ms로 돌린 화면 95%% %.1f ms (걸음 하나만)" % pctl(each_all, 0.95))
+	# 4) 중요한 일(출생·사망·깨달음·계시·편지·위기 예고)이 생기면 ×1 + 부드러운 알림 · 물 간격 원래대로
+	var ve := Village.new_prototype(7)
+	var ce := JarClock.new(ve)
+	ce.set_speed(9)
+	var guard := 0
+	while ce.speed_i == 9 and guard < 20000:
+		ce.tick(1.0 / 60.0)
+		guard += 1
+	check(ce.speed() == JarClock.normal_speed() and ce.notice == JarClock.EVENT_NOTE and ce.last_event != "",
+		"보통보다 빠를 때 중요한 일 (%s, %s) → 보통 + '%s'" % [ce.last_event, ve.fmt_time(ve.t), ce.notice])
+	check(words_ok([JarClock.EVENT_NOTE]) == "", "알림에 금지어 없음")
+	# 출생은 따로: 첫 아기가 태어나는 날을 빠른 흐름으로 → 그 걸음에서 ×1
+	var vk := Village.new_prototype(7)
+	var ck := JarClock.new(vk)
+	var born0 := int(vk.stats["born"])
+	var g2 := 0
+	while int(vk.stats["born"]) == born0 and g2 < 60000:
+		ck.set_speed(9)
+		ck.tick(1.0 / 60.0)
+		g2 += 1
+	check(int(vk.stats["born"]) > born0 and ck.speed() == JarClock.normal_speed() and ck.last_event == "born", "아기가 태어나면 보통으로 (%s, 까닭 %s)" % [vk.fmt_time(vk.t), ck.last_event])
+	# 위기는 어느 배속이든 ×1 (위기 알림 그대로)
+	var vc := Village.new_prototype(8)
+	var cc := JarClock.new(vc)
+	cc.set_speed(7)
+	cc.tick(1.0 / 60.0)
+	vc.crisis("starve", "누군가 쓰러졌다")
+	cc.tick(1.0 / 60.0)
+	check(cc.speed() == JarClock.normal_speed() and cc.notice.begins_with("누군가 쓰러졌다"), "1초=1시간 중 위기 → 보통 + 위기 알림 '%s'" % cc.notice)
+	# 보통·느리게는 그대로 (중요한 일로 느려지지 않음 — 위기만): 같은 '아기 하나 더' 표식을 보통과 1초=5분에 보여 준다
+	var v6 := Village.new_prototype(7)
+	var c6 := JarClock.new(v6)
+	c6.set_speed(2)
+	var m6: Array = c6._marks()
+	(m6[0] as Array)[0] = int(m6[0][0]) - 1
+	var slow60 := c6._important(m6)
+	c6.set_speed(5)
+	var slow300 := c6._important(m6)
+	check(not slow60 and slow300 and c6.speed() == JarClock.normal_speed(), "보통은 아기가 태어나도 그대로 · 보통보다 빠를 때만 보통으로")
+	# 저장: 빠른 흐름 중 저장 → 불러와도 같은 배속 · 물 간격 (저장 안 하는 값: world·rate·예산)
+	var vs := Village.new_prototype(9)
+	var cs := JarClock.new(vs)
+	cs.set_speed(8)
+	cs.tick(0.1)
+	var d := cs.to_dict()
+	check(not d.has("world") and not d.has("rate") and d.has("fast"), "저장에 world·rate 없음")
+	var cs2 := JarClock.from_dict(vs, bytes_to_var(var_to_bytes(d)))
+	cs2.set_speed(2)
+	check(vs.water.offline and cs2.fast and cs2.speed_i == 2, "불러온 빠른 흐름에서 보통으로 (같은 정밀 걸음)")
+
+
+## 자리를 비운 동안 (v4.3): 병 시간 = min(비운 시간, 등불) × 배율 (느리게 3 · 보통 6 · 빠르게 12) · 걸음 30초 — 정밀 계산 그대로
+func test_away_rate() -> void:
+	print("== 자리를 비운 동안 시간 (v4.3)")
+	var keep_r := CatchUp.rate_override
+	var keep_s := CatchUp.step_override
+	CatchUp.rate_override = -1.0
+	CatchUp.step_override = -1.0
+	var days: Array = []
+	for r: float in Balance.AWAY_RATES:
+		days.append(CatchUp.plan(12.0 * Balance.HOUR, 12.0 * Balance.HOUR, r)["exact"] / Balance.DAY)
+	check(days == [1.5, 3.0, 6.0], "12시간 비우면 병 %s일 (느리게 · 보통 · 빠르게)" % str(days))
+	var pl := CatchUp.plan(30.0 * Balance.HOUR, 12.0 * Balance.HOUR, 6.0)
+	check(pl["exact"] == 3.0 * Balance.DAY and pl["slept"] == 18.0 * Balance.HOUR, "30시간 비워도 등불 12시간만큼(병 3일)만 흐르고 18시간은 잠듦")
+	var pl2 := CatchUp.plan(30.0 * Balance.HOUR, 24.0 * Balance.HOUR, 6.0)
+	check(pl2["exact"] == 6.0 * Balance.DAY, "가장 큰 등불(24시간)이면 보통으로 병 6일")
+	var gs := GameSettings.get_current()
+	var keep_a := gs.away_speed
+	gs.away_speed = Balance.AWAY_DEFAULT_I
+	var v := Village.new_prototype(12)
+	var c := CatchUp.new(v, 12.0 * Balance.HOUR, 12.0 * Balance.HOUR)
+	check(c.rate == 6.0 and c.exact_total == 3.0 * Balance.DAY and c.step_dt == Balance.AWAY_STEP, "기본 설정 '보통': 현실 4시간에 병 하루 (12시간 → %.1f일, 걸음 %.0f초)" % [c.exact_total / Balance.DAY, c.step_dt])
+	gs.away_speed = 2
+	check(CatchUp.new(Village.new_prototype(12), 12.0 * Balance.HOUR, 12.0 * Balance.HOUR).exact_total == 6.0 * Balance.DAY, "설정 '빠르게' → 12시간에 병 6일")
+	gs.away_speed = keep_a
+	check(GameSettings.away_words(0) == "느리게 (12시간 → 1.5일)" and GameSettings.away_words(1) == "보통 (12시간 → 3일)" and GameSettings.away_words(2) == "빠르게 (12시간 → 6일)",
+		"설정 줄: %s · %s · %s" % [GameSettings.away_words(0), GameSettings.away_words(1), GameSettings.away_words(2)])
+	check(words_ok([GameSettings.away_words(1), "자리를 비운 동안의 일을 펼쳐 보는 중…"]) == "", "설정·로딩 글에 금지어 없음")
+	# 정밀: 따라잡기(30초 걸음)를 잘게 나눠 돌려도 = 같은 걸음으로 몰아서 계산한 것
+	var va := Village.new_prototype(13)
+	var ca := CatchUp.new(va, 1.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, 6.0)
+	while not ca.run(0.5):
+		pass
+	ca.finish()
+	var vr := Village.new_prototype(13)
+	vr.watching = false
+	vr.altar_hold = true
+	vr.water.offline = true
+	vr.step_dt = Balance.AWAY_STEP
+	for k in int(6.0 * Balance.HOUR / CatchUp.EXACT_CHUNK):
+		vr.advance(CatchUp.EXACT_CHUNK)
+		vr.crises.clear()
+	check(va.t == vr.t and va.people.size() == vr.people.size() and va.book.size() >= vr.book.size() and va.rng.state == vr.rng.state and va.step_dt == Balance.STEP,
+		"비운 1시간 = 병 6시간: 잘게 나눠도 몰아서 계산한 것과 같다 (난수까지) · 끝나면 걸음 크기 원래대로")
+	# 시간: 작은 마을 병 6일 (넓은 30일 세상은 tools/measure_speeds.gd -- catchup)
+	var vt := Village.new_prototype(14)
+	var ct := CatchUp.new(vt, 24.0 * Balance.HOUR, 24.0 * Balance.HOUR, null, 6.0)
+	ct.run()
+	ct.finish()
+	print("  작은 마을 병 %.0f일 따라잡기 %.1f초 (인구 %d)" % [ct.exact_total / Balance.DAY, ct.real_ms / 1000.0, vt.people.size()])
+	check(vt.check_invariants().is_empty() and ct.real_ms / 1000.0 < 60.0, "병 6일 따라잡기 뒤 값 이상 없음 (%.1f초)" % (ct.real_ms / 1000.0))
+	CatchUp.rate_override = keep_r
+	CatchUp.step_override = keep_s
+
+
+static func world_sig(jw: JarWorld) -> String:
+	var s := 0.0
+	for k in range(0, jw.water.n * jw.water.n, 53):
+		s += jw.water.h[k] * (1 + k % 11)
+	return "%.6f|%d" % [s, jw.settlements.size()]
 
 
 ## 보통 마을 30일 — 인구가 sim_life.py(밸런스 v2)가 예측한 범위에

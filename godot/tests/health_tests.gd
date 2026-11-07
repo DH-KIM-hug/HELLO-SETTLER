@@ -764,7 +764,7 @@ func sig(v: Village) -> String:
 
 func test_winter_speed_equal() -> void:
 	var hours := 2.0
-	var steps := int(hours * H / Balance.WATCH_STEP)
+	var steps := int(hours * H / Balance.STEP)
 	var sigs: Array = []
 	for spec: Array in [[0, 1.0 / 30.0], [3, 0.25]]:
 		var v := village_on(1, 20, 3)
@@ -773,7 +773,7 @@ func test_winter_speed_equal() -> void:
 		var c := JarClock.new(v)
 		c.set_speed(spec[0])
 		while c.steps_done < steps:
-			c.tick(spec[1])
+			c.tick(c.dt_for_steps(steps - c.steps_done, spec[1]))
 		sigs.append(sig(v))
 	check(sigs[0] == sigs[1], "겨울 병 %.0f시간: ×1과 ×8 결과가 같다 (건강·두려움·땔감·건강 난수 포함)" % hours)
 	# 밤 건너뛰기 = 몰아서 계산 (겨울)

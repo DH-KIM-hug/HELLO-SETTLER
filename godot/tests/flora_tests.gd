@@ -626,15 +626,15 @@ func test_determinism() -> void:
 		v.flora.grove_last = -1.0e9
 		var c := JarClock.new(v)
 		c.set_speed(sp)
-		c.tick(1.0)
+		c.tick(c.dt_for_steps(1, 1.0))     # 배속과 상관없이 한 걸음 (v4.3: 걸음 10초)
 		v.flora.grove(v)                     # 다 자란 버섯 숲 + 솜털 공 몇 포기
 		for i in 4:
 			v.flora.dands[i]["st"] = "puff"
 			v.flora.dands[i]["st_t"] = v.t - Balance.DAND_PUFF + 600.0 + i * 300.0
 			v.flora.dands[i]["seeds"] = Balance.DAND_SEEDS
-		var steps := int(hours * H / Balance.WATCH_STEP)
+		var steps := int(hours * H / Balance.STEP)
 		while c.steps_done < steps:
-			c.tick(1.0 / 30.0 if sp == 0 else 0.25)
+			c.tick(c.dt_for_steps(steps - c.steps_done, 1.0 / 30.0 if sp == 0 else 0.25))
 		sigs.append(sig(v))
 		check(v.flora.stats["released"] > 0, "×%d: 꽃씨가 날았다 (%d)" % [int(c.speed()), v.flora.stats["released"]])
 	check(sigs[0] == sigs[1], "×1 · ×8 결과가 같다 (버섯·민들레·꽃씨·주민 — %d자)" % String(sigs[0]).length())

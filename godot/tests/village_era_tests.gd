@@ -24,7 +24,7 @@ func all() -> void:
 	print("== 마을 시대 건물 (A6) · 등불 옮기기 (A11)")
 	run.timed(self, ["test_locked", "test_chief_priorities", "test_chief_builds", "test_herbalist", "test_clinic", "test_chapel",
 		"test_plaza", "test_funeral", "test_watchtower", "test_ferry", "test_era_save",
-		"test_lamp_rules", "test_lamp_preview_world", "test_lamp_preview_jar", "test_lamp_save", "test_lamp_ui"])
+		"test_lamp_rules", "test_lamp_preview_world", "test_lamp_preview_jar", "test_lamp_save", "test_lamp_ui", "test_fast_view"])
 
 
 func proto(seed_v := 20261105) -> Village:
@@ -668,5 +668,36 @@ func test_lamp_ui() -> void:
 	check(lc.previewing() and not lc.hint_box.visible, "두 번째부터는 귀띔 없이 바로 미리보기")
 	lc.confirm()
 	check(not lc.is_open() and v.water.rot == posmod(r0 + 1, 4), "[옮기기] → 등불이 옮겨 감")
+	run.root.remove_child(scene)
+	scene.free()
+
+
+# ───────────────────────── 빠른 흐름 화면 (기획서 6.6 — 1초=5분 ~ 1초=12시간) ─────────────────────────
+func test_fast_view() -> void:
+	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
+	run.root.add_child(scene)
+	var clock: JarClock = scene.get("clock")
+	var view: VillageView = scene.get("view")
+	var items: Array = scene.get("speed_items")
+	check(items.size() == Balance.SPEEDS.size() and (items[9] as Button).text == "1초=12시간" and (items[5] as Button).text == "1초=5분" and (items[2] as Button).text.begins_with("보통"),
+		"배속 목록: 윗줄 %s … · 아랫줄 %s ~ %s" % [(items[2] as Button).text.replace("\n", " "), (items[5] as Button).text, (items[9] as Button).text])
+	(items[9] as Button).pressed.emit()
+	check(clock.speed_i == 9 and clock.fast, "목록에서 1초=12시간을 누르면 빠른 흐름")
+	clock.auto_slow = false
+	var v: Village = scene.get("village")
+	var t0 := v.t
+	var worst := 0.0
+	for i in 30:
+		var tf := Time.get_ticks_usec()
+		scene.call("_process", 1.0 / 60.0)
+		worst = maxf(worst, (Time.get_ticks_usec() - tf) / 1000.0)
+	var btn: Button = scene.get("speed_btn")
+	var bubbles: Control = scene.get("bubbles")
+	check(view.fast and view.alpha == 1.0 and bubbles.get_children().all(func(c: Node) -> bool: return c.is_queued_for_deletion()) and btn.text.contains("1초=12시간"),
+		"빠른 흐름 화면: 주민은 순간이동(보간 없음) · 말풍선 없음 · 칩 '%s'" % btn.text)
+	check(v.t - t0 > 600.0, "30화면 동안 병 %.1f시간 (가장 긴 화면 %.1f ms)" % [(v.t - t0) / 3600.0, worst])
+	clock.set_speed(Balance.SPEED_DEFAULT_I)
+	scene.call("_process", 1.0 / 60.0)
+	check(not view.fast and not clock.view_fast() and btn.text.contains("보통"), "보통으로 돌아오면 화면도 보통으로 ('%s')" % btn.text)
 	run.root.remove_child(scene)
 	scene.free()

@@ -1,5 +1,7 @@
 ## 비운 시간 따라잡기 — docs/SAVE.md 3 (v1.1 등불) · 3.1 · 기획서 14장 · 6.6.
-## 병은 거인이 없어도 ×1로 흐르지만 **거인의 등불이 타는 동안만** (Market.lamp_seconds — 12시간, 업그레이드로 16·20·24시간).
+## v4.3: 비운 동안 병 시간 = min(비운 현실 시간, 등불) × 배율 rate (Balance.AWAY_RATES — 설정 "자리를 비운 동안 시간":
+##   느리게 ×3 (12시간 → 1.5일) · 보통 ×6 (3일, 기본) · 빠르게 ×12 (6일)). 걸음은 Balance.AWAY_STEP (30초, 30일 인구 시험과 같은 걸음).
+## (옛 설명) 병은 거인이 없어도 ×1로 흐르지만 **거인의 등불이 타는 동안만** (Market.lamp_seconds — 12시간, 업그레이드로 16·20·24시간).
 ## 그보다 오래 비우면 나머지는 잠든 시간 (병 시간이 멈춤 — 계절만 현실 달력대로 바뀐다), 연대기에 "긴 밤이 있었다." 한 줄.
 ## 그래서 따라잡기는 언제나 정밀 계산 (10초 걸음, 물 300초 간격 — 화면 없이 최대 속도, 최대 24시간치).
 ## 비운 동안 거인은 보고 있지 않다 (Village.watching = false): 위기 사망 하루 1명·부부 2쌍 아래로는 없음, 시대 점수 30%,
@@ -20,7 +22,9 @@ const LONG_NIGHT := "긴 밤이 있었다."
 var v: Village
 var away := 0.0                       # 비운 현실 시간 (초)
 var lamp := 0.0                       # 등불이 타는 시간 (초)
-var exact_total := 0.0                # 병이 흐르는 시간 = min(비운 시간, 등불)
+var exact_total := 0.0                # 병이 흐르는 시간 = min(비운 시간, 등불) × rate
+var rate := 1.0                       # 비운 현실 1초에 병 몇 초 (Balance.AWAY_RATES)
+var step_dt := Balance.AWAY_STEP      # 따라잡기 걸음 (초)
 var exact_left := 0.0
 var slept := 0.0                      # 등불이 꺼진 뒤 잠든 시간
 var real_ms := 0.0                    # 실제로 걸린 계산 시간
@@ -33,9 +37,22 @@ var _done := false
 
 
 ## 비운 시간을 나눈다 → {exact 흐르는 시간, slept 잠든 시간} (초)
-static func plan(elapsed: float, lamp_s: float) -> Dictionary:
+## exact = 병 시간 (min(비운 시간, 등불) × rate), slept = 등불이 꺼진 뒤의 현실 시간
+static func plan(elapsed: float, lamp_s: float, rate_x := 1.0) -> Dictionary:
 	var e := maxf(0.0, elapsed)
-	return {"exact": minf(e, lamp_s), "slept": maxf(0.0, e - lamp_s)}
+	return {"exact": minf(e, lamp_s) * rate_x, "slept": maxf(0.0, e - lamp_s)}
+
+
+static var step_override := -1.0      # (시험) 0보다 크면 Balance.AWAY_STEP 대신 이 걸음 — 옛 시험 묶음은 10초 (v4.2)
+static var rate_override := -1.0      # (시험) 0보다 크면 설정 대신 이 배율 — 옛 시험 묶음은 1 (비운 시간 = 병 시간, v4.2 규칙)
+
+
+## 설정의 '자리를 비운 동안 시간' 배율 (GameSettings.away_speed → Balance.AWAY_RATES)
+static func away_rate() -> float:
+	if rate_override > 0.0:
+		return rate_override
+	var i := GameSettings.get_current().away_speed
+	return float(Balance.AWAY_RATES[clampi(i, 0, Balance.AWAY_RATES.size() - 1)])
 
 
 ## 기기 시각으로 비운 시간: 뒤로 갔으면 0 (시각 조작), 앞으로 크게 간 것은 그냥 오래 비운 것 — 등불 상한까지만 흐른다 (SAVE.md 3)
@@ -45,13 +62,16 @@ static func elapsed_since(last_unix: float, now_unix: float) -> float:
 	return now_unix - last_unix
 
 
-## lamp_s < 0 = 거인의 지금 등불 (Market.lamp_seconds). 시험은 다른 값을 줄 수 있다
-func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null) -> void:
+## lamp_s < 0 = 거인의 지금 등불 (Market.lamp_seconds). rate_x < 0 = 설정의 배율 (away_rate). 시험은 다른 값을 줄 수 있다
+func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null, rate_x := -1.0) -> void:
 	v = village
 	world = jw
 	away = maxf(0.0, elapsed)
 	lamp = Market.lamp_seconds() if lamp_s < 0.0 else lamp_s
-	var p := plan(away, lamp)
+	rate = away_rate() if rate_x < 0.0 else rate_x
+	if step_override > 0.0:
+		step_dt = step_override
+	var p := plan(away, lamp, rate)
 	exact_total = p["exact"]
 	exact_left = exact_total
 	slept = p["slept"]
@@ -95,6 +115,8 @@ func progress() -> float:
 ## budget_ms 동안 흘린다 (화면이 멈추지 않게 나눠서). 다 끝났으면 true
 func run(budget_ms: float = 1.0e9) -> bool:
 	var t0 := Time.get_ticks_usec()
+	var sdt0 := v.step_dt
+	v.step_dt = step_dt               # 첫 무리의 걸음 크기로 다른 무리도 함께 걷는다
 	while not is_done():
 		var dt := minf(EXACT_CHUNK, exact_left)
 		if world != null:
@@ -109,6 +131,7 @@ func run(budget_ms: float = 1.0e9) -> bool:
 			q.crises.clear()      # 비운 동안의 위기 알림은 화면에 띄우지 않는다 (편지가 대신)
 		if (Time.get_ticks_usec() - t0) / 1000.0 >= budget_ms:
 			break
+	v.step_dt = sdt0
 	real_ms += (Time.get_ticks_usec() - t0) / 1000.0
 	return is_done()
 

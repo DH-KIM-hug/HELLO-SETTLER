@@ -104,17 +104,19 @@ func test_determinism_clock() -> void:
 	var a := Village.new_prototype(9)
 	var ca := JarClock.new(a)
 	ca.set_speed(2)
+	ca.budget_ms = 1.0e9                 # 계산 예산(벽시계)이 걸음 수를 바꾸지 않게
 	for i in 900:
 		ca.tick(0.37)                      # 병 시간 약 22분 — 걸음 사이에 남은 몫(acc)이 생긴다
 	var dv := a.to_dict()
 	var dc := ca.to_dict()
 	var b := Village.from_dict(bytes_to_var(var_to_bytes(dv)))
 	var cb := JarClock.from_dict(b, bytes_to_var(var_to_bytes(dc)))
+	cb.budget_ms = 1.0e9
 	for i in 600:
 		ca.tick(0.37)
 		cb.tick(0.37)
-	check(SaveCodec.digest(a.to_dict()) == SaveCodec.digest(b.to_dict()) and ca.acc == cb.acc and ca.speed() == 4.0 and cb.speed() == 4.0,
-		"결정론 (병 시계 ×4, 남은 몫 포함): 저장을 끼워도 같다 (%s)" % a.fmt_time(a.t))
+	check(SaveCodec.digest(a.to_dict()) == SaveCodec.digest(b.to_dict()) and ca.acc == cb.acc and ca.speed() == 288.0 and cb.speed() == 288.0,
+		"결정론 (병 시계 보통, 남은 몫 포함): 저장을 끼워도 같다 (%s)" % a.fmt_time(a.t))
 
 
 ## 넓은 세상 (작은 세상 하나 + 키트) — 물·무리 둘·함께 걷기까지
@@ -476,7 +478,7 @@ func test_migration_v0() -> void:
 		return
 	check(Market.notes == 812.5 and Market.first_paid and v.people.size() == 10 and v.book.size() == 24 and v.flora != null,
 		"v0 → v1: 지폐 812.5 · 첫 웃돈 · 주민 10명 · 연대기 24줄 (따로 옮김) · 하늘의 것 처음 상태")
-	check(sm.jar_clock(1).speed() == 4.0 and sm.jar_clock(1).creation_done, "v0 배속(×4)과 창세의 날 지남을 옮김")
+	check(sm.jar_clock(1).speed() == JarClock.normal_speed() and sm.jar_clock(1).creation_done, "v0 배속(옛 ×4 → v4.3 보통)과 창세의 날 지남을 옮김")
 	var bad := v.check_invariants()
 	v.water.offline = true
 	v.advance(Balance.HOUR)
@@ -687,18 +689,18 @@ func test_creation_day() -> void:
 	c.creation_until = v.t + 30.0
 	for i in 5:
 		c.tick(1.0)
-	check(not c.creation and c.creation_done and c.speed() == 1.0 and c.notice == JarClock.CREATION_HINT,
+	check(not c.creation and c.creation_done and c.speed() == JarClock.normal_speed() and c.notice == JarClock.CREATION_HINT,
 		"창세의 날이 끝나면 ×1 + 배속 단추 한 줄 ('%s')" % c.notice)
 	var c2 := JarClock.from_dict(v, bytes_to_var(var_to_bytes(c.to_dict())))
 	c2.start_creation_day()
-	check(not c2.creation and c2.speed() == 1.0, "저장 후 다시 켜도 되풀이하지 않는다")
+	check(not c2.creation and c2.speed() == JarClock.normal_speed(), "저장 후 다시 켜도 되풀이하지 않는다")
 	var w := Village.new_prototype(42)
 	var c3 := JarClock.new(w)
 	c3.start_creation_day()
 	c3.cycle_speed()
-	check(not c3.creation and c3.speed() == 1.0 and c3.creation_done and c3.notice == "", "거인이 배속을 고르면 창세의 날은 그 자리에서 끝 (알림 없이)")
+	check(not c3.creation and c3.speed() == JarClock.normal_speed() and c3.creation_done and c3.notice == "", "거인이 배속을 고르면 창세의 날은 그 자리에서 끝 (알림 없이)")
 	c3.cycle_speed()
-	check(c3.speed() == 2.0, "그다음은 보통 배속 (×2)")
+	check(c3.speed() == 720.0, "그다음은 빠르게 (1일=2분)")
 	# 두 번째 병은 창세의 날 없음 — SaveManager가 첫 병에만 부른다
 	var sm := manager()
 	sm.giant = {"first_jar_done": true}
@@ -750,7 +752,7 @@ func test_catchup_and_letter() -> void:
 		print("    · " + e)
 	print("    인구 %d명 → %d명 · 새 얼굴 %d · 떠난 얼굴 %d · 기다리는 것 %s" % [l["pop0"], l["pop1"], l["born"].size(), l["lost"].size(), str(l["waiting"])])
 	check(int(l["pop1"]) == v.people.size() and l["chief"] != "", "편지: 인구 변화·촌장 이름")
-	var bad: String = run.words_ok(ev + l["waiting"] + [l["altar_line"], JarClock.CREATION_HINT, "병 안의 시간이 흐르는 중…", CatchUp.LONG_NIGHT, CatchUp.lamp_words(lamp, 36.0 * Balance.HOUR)])
+	var bad: String = run.words_ok(ev + l["waiting"] + [l["altar_line"], JarClock.CREATION_HINT, "자리를 비운 동안의 일을 펼쳐 보는 중…", CatchUp.LONG_NIGHT, CatchUp.lamp_words(lamp, 36.0 * Balance.HOUR)])
 	check(bad == "", "편지·알림에 금지어 없음 %s" % bad)
 	check(v.crises.is_empty() and v.warnings.size() <= 3, "비운 동안의 위기 알림은 쌓아 두지 않는다")
 
