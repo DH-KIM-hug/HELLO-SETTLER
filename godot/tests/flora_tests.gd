@@ -657,7 +657,8 @@ func test_wheat_bounded() -> void:
 	check(max_off < 1000 and max_off <= need * 0.35, "날마다 바친 밀 %s — 1,000개 넘게 쌓여 바치지 않음 (하루 먹는 양 %.0f)" % [str(offered), need])
 	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "농장이 멈춰도 굶지 않음")
 	# v5: 농부는 창고 밀로 넉넉함을 본다 (밭 앞 밀은 4분의 1 수레가 차야 나르므로 창고 + 밭이 넉넉함을 10%쯤 넘을 수 있다 — 밭 자체는 넘으면 멈춤)
-	check(farmer_rest or worst < 1.1, "넉넉하면 농부도 일을 쉰다 (넉넉한 양의 최대 ×%.2f — v5: 넉넉함 = 죽 값 사흘치, 빵 사슬이 밀을 꾸준히 써서 거의 닿지 않음)" % worst)
+	# (E3-7 이슬이 새벽에 몰아서 → 밭 습기가 하루 안에서 조금 출렁여 최대가 ×1.11쯤까지)
+	check(farmer_rest or worst < 1.15, "넉넉하면 농부도 일을 쉰다 (넉넉한 양의 최대 ×%.2f — v5: 넉넉함 = 죽 값 사흘치, 빵 사슬이 밀을 꾸준히 써서 거의 닿지 않음)" % worst)
 	Market.reset()
 
 

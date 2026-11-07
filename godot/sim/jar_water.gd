@@ -30,6 +30,11 @@ const SALT_FLAT := 0.003                # 소금 들판으로 보는 소금기 (
 const ONLINE_EVERY := 60.0              # 물 계산 간격 (초) — 거인이 볼 때
 const OFFLINE_EVERY := 300.0            # 거인이 없을 때 (몰아서 계산)
 const SUBSTEP := 10.0                   # 프로토타입 goAway와 같은 시간 조각
+# 이슬의 하루 박자 (기획서 4.2b, E3-7): 돌기의 물은 늘 똑똑 떨어지지 않는다. 김이 하루 내내 같은 빠르기로 모여(예전 물방울 양 그대로 —
+# DRIP_RATE × (0.6 + 습도)) 밤에 돌기에 맺혀 부풀고, 새벽(DEW_FROM~DEW_TO)에 몰아서 떨어진다. 하루 물 총량·BALANCE 숫자는 그대로
+const DEW_FROM := 4.0                   # 새벽 이슬이 떨어지기 시작 (시)
+const DEW_TO := 8.0                     # 다 떨어짐 (시) — 사이는 sin 모양 (6시 무렵 가장 잦음)
+const DEW_FULL := DAY / 60.0 * 1.2      # 하루 동안 모이는 김 (보통 습도 — 화면의 '물방울 크기 1')
 
 var h := PackedFloat32Array()           # 땅 높이
 var w := PackedFloat32Array()           # 물 깊이
@@ -45,6 +50,9 @@ var basins: Array[Dictionary] = []      # {name, x, y, r, area0}
 var t := 0.0                            # 흐른 시간 (초)
 var start_clock := 8.0 * HOUR           # 시작 시각 (프로토타입은 실제 시각 — 여기선 고정해 결과를 재현)
 var humid := 0.5
+var dew := 0.0                          # 모인 김·맺힌 이슬 (분 단위 — × DRIP_RATE × 돌기 배율 = 돌기 하나의 물)
+var dew_cum := 0.0                      # 지금까지 떨어진 이슬 (같은 단위, 늘기만 한다)
+var dew_given := 0.0                    # 그중 이미 땅에 준 몫 (소형 병 — 넓은 세상은 돌기마다 WorldWater.drip_got)
 var offline := false
 var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
 # 거인의 손 (B6 — sim/giant_hand.gd): 병 하나의 상태라 물이 가진다 (넓은 세상의 무리가 함께 씀). 시간은 남은 초로 센다
@@ -144,7 +152,8 @@ func _init_prototype() -> void:
 	for a: float in [0.15, 0.85, 1.55, -0.75, 2.6]:
 		grooves.append(Vector2(cos(a) * (R - 1.0), sin(a) * (R - 1.0)))
 	build_tables()
-	for i in 60:            # 물이 자리를 잡게
+	for i in 60:            # 물이 자리를 잡게 (예전처럼 돌기 물도 1분씩)
+		dew_cum += 0.6 + humid
 		hydro_step(1.0)
 	update_wet()
 	basins[0]["area0"] = basin_area(basins[0])
@@ -229,12 +238,60 @@ func advance(seconds: float) -> void:
 		while _hydro_acc >= every:
 			hydro_step(every / 60.0)
 			_hydro_acc -= every
+		dew_step(dt)
 		# 닫힌 병의 물 순환: 낮의 빛으로 증발 → 천장에 맺힘 → 습한 새벽
 		var hr := hour_now()
 		if hr >= 7.0 and hr < 18.0:
 			humid = minf(1.0, humid + dt / (DAY * 0.45))
 		else:
 			humid = maxf(0.2, humid - dt / (DAY * 0.9))
+
+
+static var dew_legacy := false          # (시험용) 예전 방식 — 모으지 않고 그때그때 떨어뜨림 (test_dew_rhythm이 같은 세상을 비교)
+
+
+## 이슬 한 조각 (dt초, 방금 흐른 시간): 김이 모이고, 새벽이면 모인 것의 몫이 떨어진다 (dew → dew_cum).
+## 떨어지는 몫 = 1 − R(u1)/R(u0), R(u) = (1 + cos πu)/2 (새벽 창 안에서 남은 몫) — 곱하면 맞물려 조각 크기와 상관없이 같은 모양,
+## 창 끝(DEW_TO)에는 남김없이 떨어진다. 하루 동안 모인 양 = 예전에 하루 동안 떨어지던 양 (테스트 test_dew_rhythm)
+func dew_step(dt: float) -> void:
+	if dew_legacy:
+		dew_cum += dt / 60.0 * (0.6 + humid)
+		return
+	dew += dt / 60.0 * (0.6 + humid)
+	var h1 := hour_now()
+	var h0 := h1 - dt / HOUR
+	if h1 <= DEW_FROM or h0 >= DEW_TO:
+		return
+	var u0 := clampf((h0 - DEW_FROM) / (DEW_TO - DEW_FROM), 0.0, 1.0)
+	var u1 := clampf((h1 - DEW_FROM) / (DEW_TO - DEW_FROM), 0.0, 1.0)
+	var r0 := (1.0 + cos(PI * u0)) * 0.5
+	var r1 := (1.0 + cos(PI * u1)) * 0.5
+	var out := dew if (u1 >= 1.0 or r0 <= 1e-9) else dew * (1.0 - r1 / r0)
+	dew -= out
+	dew_cum += out
+
+
+## 화면용 (E3-7): 돌기에 맺힌 물방울 크기 0~1.2 — 해 질 녘(16~20시)부터 맺히기 시작해 밤새 부풀고, 새벽에 떨어지며 줄어든다. 낮엔 0 (김)
+func dew_bead() -> float:
+	var hr := hour_now()
+	var nk := 1.0
+	if hr >= DEW_TO and hr < 20.0:
+		nk = smoothstep(16.0, 20.0, hr)
+	return clampf(dew / DEW_FULL, 0.0, 1.2) * nk
+
+
+## 화면용: 새벽에 떨어지는 빠르기 0~1 (6시 무렵 1) — 모인 이슬이 없으면 0
+func dew_drip() -> float:
+	var hr := hour_now()
+	if hr <= DEW_FROM or hr >= DEW_TO or dew < DEW_FULL * 0.002:
+		return 0.0
+	return sin(PI * (hr - DEW_FROM) / (DEW_TO - DEW_FROM))
+
+
+## 화면용: 낮에 등불 볕으로 오르는 김 0~1 (호수 위 아지랑이 · 유리 위쪽이 뿌예짐) — 9~16시 가득
+func dew_vapour() -> float:
+	var hr := hour_now()
+	return smoothstep(7.5, 10.0, hr) * (1.0 - smoothstep(15.0, 18.0, hr))
 
 
 ## 증발 배율 (B6 거인의 손): 낮의 커튼 ×1·0.6·0.3 (밤엔 볕이 없으니 그대로) · 손으로 감싼 동안 ×0.7. 기본 = 정확히 1
@@ -258,9 +315,11 @@ func hydro_step(sc: float) -> void:
 	var wm := warm
 	var nbs := nb_start
 	var nbl := nb_list
-	# 들어오는 물: 물방울 돌기
+	# 들어오는 물: 물방울 돌기 (새벽에 떨어진 이슬 — dew_step)
+	var dd := DRIP_RATE * (dew_cum - dew_given)
+	dew_given = dew_cum
 	for d: Dictionary in drips:
-		ww[cell_idx(d["x"], d["y"])] += DRIP_RATE * sc * (0.6 + humid)
+		ww[cell_idx(d["x"], d["y"])] += dd
 	# 유리벽의 '골': 뚜껑 경사가 모이는 곳으로만 흘러내린다 (그늘일수록 많이)
 	for g: Vector2 in grooves:
 		var k := cell_idx(g.x, g.y)

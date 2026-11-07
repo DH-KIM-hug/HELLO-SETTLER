@@ -656,10 +656,10 @@ func _on_prayer() -> void:
 	say("prayer", pray if not pray.is_empty() else [])
 
 
-## 물방울이 수면에 닿음 (지형 화면이 알림)
+## 물방울이 수면에 닿음 (지형 화면이 알림) — [E3-7] 이슬은 새벽에만 떨어진다 → 아침을 알리는 작은 똑, 똑 (조용히)
 func drip(at: Vector2) -> void:
 	if not fast():
-		play_sfx("drip", "Village", -6.0, at)
+		play_sfx("drip", "Village", -13.0, at)
 
 
 # ───────────────────────── 배경 소리 ─────────────────────────
