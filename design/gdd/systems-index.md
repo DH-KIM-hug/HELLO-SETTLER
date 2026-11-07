@@ -38,11 +38,11 @@
 | 12 | 움직임·길 찾기·나르기·길과 도로 + **손에 든 물건·더미·멈춤 표시** (막힌 곳이 화면에 보임 — 기둥 2, 그림은 28) ✅ | Gameplay | MVP | Not Started | — | 2, 11 |
 | 13 | 건물·짓기 ✅ | Economy | MVP | Not Started | — | 2, 8, 18 |
 | 14 | 시대 ✅ | Progression | MVP | Not Started | — | 13, 17, 20 |
-| 15 | 생산 사슬 (밀·빵·송사리·거대 과일, 애벌레 = 31) ✅ | Economy | MVP | Not Started | — (docs/FOOD.md) | 13, 6, 3 |
+| 15 | 생산 사슬 (밀·빵·송사리·거대 과일, 애벌레 = 31) ✅ | Economy | MVP | Designed | design/gdd/production-chain.md | 13, 6, 3 |
 | 16 | 마을 경제 (창고·가격·장터) ✅ | Economy | MVP | Not Started | — (docs/BALANCE.md) | 15 |
-| 17 | 인구 (출산·혼인·가족·세대) ✅ | Gameplay | MVP | Not Started | — | 8, 9, 10, 16 |
+| 17 | 인구 (출산·혼인·가족·세대) ✅ | Gameplay | MVP | Designed | design/gdd/population.md | 8, 9, 10, 16 |
 | 18 | 촌장의 결정 (inferred) 🔄 — VS는 지금 최소판, 막힌 곳을 보고 고르는 판단은 MVP 밖 | Gameplay | MVP | Designed | design/gdd/mayor-decisions.md | 13, 16, 10 |
-| 19 | 거인의 손길 — **MVP에 열림: 내려 주기·유리 톡·물 뿌리기** / VS(위기와 함께) 열림: 유리 닦기·핀셋·떠돌이 물방울 톡·등불 옮기기 ✅ | Gameplay | MVP | Not Started | — (docs/EVENTS_STAGING.md 6c) | 3, 4, 7 |
+| 19 | 거인의 손길 — **MVP에 열림: 내려 주기·유리 톡·물 뿌리기** / VS(위기와 함께) 열림: 유리 닦기·핀셋·떠돌이 물방울 톡·등불 옮기기 ✅ | Gameplay | MVP | Designed | design/gdd/giant-touch.md | 3, 4, 7 |
 | 20 | 깨달음·믿음 ✅ | Narrative | MVP | Not Started | — | 7, 8, 17 |
 | 21 | 제단·공물 ✅ | Economy | MVP | Not Started | — | 20, 16 |
 | 22 | 거인의 지갑·상점·설계도·이주민 ✅ | Economy | MVP | Not Started | — (docs/SHOP.md) | 21, 16 |
@@ -54,7 +54,7 @@
 | 28 | 주민 모델·초상화·옷 🔄 (4등신 다시) | UI | MVP | Not Started | — (art-bible 5장) | 8, 12 |
 | 29 | HUD·시트·설정·접근성 🔄 | UI | MVP | Not Started | — (art-bible 7장, docs/UI.md) | 전 계통 |
 | 30 | 알림·세션 끝 훅 🔄 | Meta | MVP | Not Started | — | 7, 1 |
-| 31 | 애벌레 사냥 ⬜ (최소판도 가능) | Gameplay | Vertical Slice | Not Started | — (GD 3.0) | 15, 33 |
+| 31 | 애벌레 사냥 — 애벌레·고치·나비 순환·꿀까지 MVP로 (사용자 2026-11-08) | Gameplay | MVP | Designed | design/gdd/production-chain.md R7 | 15, 33 |
 | 32 | 위기 — 곰팡이·떠돌이 물방울 ✅ | Gameplay | Vertical Slice | Not Started | — (docs/WORLD_EVENTS.md) | 3, 8, 19, 7 |
 | 33 | 소인 크기 생물 (사슴·토끼 대신) ⬜ | Gameplay | Vertical Slice | Not Started | — (GD 3.0) | 6, 12 |
 | 34 | 개미 군단 ⬜ | Gameplay | Vertical Slice | Not Started | — (WORLD_EVENTS 2.1b) | 15, 16, 32, 19 |
