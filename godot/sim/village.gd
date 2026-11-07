@@ -918,6 +918,7 @@ func step(dt: float) -> void:
 	GiantHand.step(self, dt)          # [거인의 손] 쿨타임·감싼 온기·유리의 먼지막·커튼 냉해 (B6)
 	SimProf.mark("hand")
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
+	GiantPlants.step(self, dt)        # 해바라기 고개 돌림·씨앗비 (flower-forest R3 — 병 하나에 한 번, sim/giant_plants.gd)
 	SimProf.mark("flora")
 	Caterpillars.step(self, dt)       # 애벌레 → 고치 → 나비 · 꽃숲 피해 · 꿀방울 (production-chain R7)
 	SimProf.mark("caterpillars")
@@ -987,6 +988,7 @@ func step(dt: float) -> void:
 		if owns_water:
 			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
+		GiantPlants.hourly(self)      # 해바라기 철·씨앗비 날·목화 (flower-forest R3·R4)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
@@ -1062,7 +1064,7 @@ func _tree_spread() -> void:
 	for q: Dictionary in trees:
 		if Vector2(float(q["x"]) - x, float(q["y"]) - y).length() < 1.0:
 			return
-	if GreatTrees.blocks(water, x, y, 0.0):
+	if GreatTrees.blocks(water, x, y, 0.0) or GiantPlants.blocks(water, x, y, 0.0):
 		return
 	trees.append({"x": x, "y": y, "s": "sapling", "g": Balance.SAPLING_GROW, "res": 0})
 
@@ -2334,6 +2336,8 @@ func is_free(x: float, y: float, size: float) -> bool:
 	if SkyDrops.blocks(self, x, y, size):              # [상점] 하늘에서 내려온 물건·앰플 탑 자리
 		return false
 	if GreatTrees.blocks(water, x, y, size):           # 큰 나무 다섯의 줄기 둘레 (GD 3.0 — 베지 않음)
+		return false
+	if GiantPlants.blocks(water, x, y, size):          # 해바라기 줄기 둘레 (flower-forest R3 SF_TRUNK_R)
 		return false
 	return true
 
@@ -3642,7 +3646,7 @@ func close_lid() -> bool:
 ## [하늘의 것] 뚜껑이 열릴 때 들어온 바람 (EVENTS_STAGING 6c-1 — 불기 손짓은 없앴다): dir 쪽으로 다 핀 솜털 공의 꽃씨가 한꺼번에
 ## (WORLD_EVENTS 2.7) + 먼지 뭉치도 흩어짐 (2.2). 손짓이 아니라 경이 없음 (giant-touch 사용자 결정 ⑤). 날린 꽃씨 수, 닫혀 있으면 −1
 func lid_breeze(dir: Vector2) -> int:
-	var n := flora.blow_seeds(self, dir)
+	var n := flora.lid_breeze(self, dir)
 	if n >= 0:
 		smalls.blow_dust(self, dir)
 	return n

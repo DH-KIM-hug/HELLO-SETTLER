@@ -218,9 +218,9 @@ const START_STOCK := {"건량": 1000.0,     # v5: 240 → 1,000 (열 명의 약 
 ## v5: 밀은 날로 먹지 않는다 — 모닥불에서 죽으로 끓여야 먹는다 (PORRIDGE_YIELD, 손실). 빵이 낫다 (밀 1 → 가루 1 → 빵 1.5).
 ## 설탕·쌀은 하늘에서 내려온 것 (거인이 준 것 — 제물로 되돌아가지 않는다)
 ## (2026-11-08 production-chain R2) 꿀은 상하지 않으므로 말린 버섯 뒤 (꿀방울 하나 = HONEY_FOOD 식량 단위로 쌓임)
-const FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "꿀", "민들레 잎"]
+const FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "꿀", "민들레 잎", "해바라기씨"]
 ## 창고의 먹을거리 전부 (날벌레·곰팡이·물난리·진흙 항아리가 보는 것 — 밀·밀가루도 곡식)
-const STORE_FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "민들레 잎", "밀", "밀가루"]
+const STORE_FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "민들레 잎", "해바라기씨", "밀", "밀가루"]
 const PORRIDGE := "밀"                  # 다른 먹을 것이 모자라면 창고 밀을 죽으로 끓여 먹는다
 const PORRIDGE_YIELD := 0.75            # 밀 1 → 죽 0.75 (끓이며 버림 — 빵은 밀 1 → 1.5)
 const BREAD_YIELD := 1.5                # 가루 1 → 빵 1.5 (화덕 out)
@@ -290,7 +290,7 @@ const SHELTER_AT := 0.5                 # 밖의 추위·더위 정도가 이 �
 const SHELTER_SCORE := 12.0             # (정함) 점수 = 12 × 밖의 정도 (일 6 × 1.5 = 9를 정도 0.75에서 넘음)
 const HEAT_REST_HOURS := [12.0, 15.0]   # 더위 0.5↑이면 한낮에 쉬는 점수↑
 # 땔감 (HEALTH.md 1.3 · BUILDINGS 7장)
-const FUEL_EVERY := 4.0 * HOUR               # 추위 정도 > 0인 동안 집 1채당 10분마다 통나무 1개
+const FUEL_EVERY := 4.0 * HOUR          # 추위 정도 > 0인 동안 집 1채당 4시간마다 통나무 1개 (v5 — 예전 10분, design/gdd/health.md 메인 판단 ②)
 const FUEL_STONE := 0.5                 # 석조 주택 ×0.5
 const FUEL_TARGET := 4.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
 const FUEL_STOCK_PER_HOUSE := 3.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
@@ -823,7 +823,6 @@ const SEED_LID_ESCAPE := 0.02           # (정함) 뚜껑이 열린 동안 높�
 const BLOW_PUSH := 0.16                 # (정함) 처음 밀어내는 빠르기 (칸/초) — 2분에 걸쳐 잦아듦
 const BLOW_LIFT := 0.03
 const BLOW_TAU := 120.0
-const BLOW_BELIEF := 0.03
 const BLOW_LINE := "하늘에 눈이 내린다!"
 # 쓰임
 const WEED_MULT := 0.8                  # 밭에 내려앉은 꽃씨 = 잡초 → 그 밭 ×0.8 (농부가 뽑을 때까지)
@@ -924,3 +923,40 @@ const HONEY_P := 0.25                   # 꽃 곁 어른 한 사람이 반나절
 const HONEY_R := 4.0                    # 꽃 무리 '둘레' (칸)
 const HONEY_FOOD := 8.0                 # 꿀 1 = 식량 단위
 const HONEY_HAPPY := 0.03               # 꿀을 먹은 날 행복 +
+# ═══════════════ 거대 식물 — 해바라기·씨앗비·목화·그늘 지도 (design/gdd/flower-forest.md R2~R4 · ROADMAP F-2, sim/giant_plants.gd) ═══════════════
+const SHADE_HEAT := 0.6                 # 그늘 지도 (꽃숲 1.5칸 · 큰 갓 · 해바라기 그림자 · 큰 나무 잎 아래) — 더위 ×0.6, 겹쳐도 한 번 (F2)
+const GREAT_SHADE_K := 1.4              # 큰 나무 잎 아래 = 줄기 둘레 TRUNK_R × 이만큼
+const SF_COUNT := 2                     # 병마다 해바라기 (소형 병엔 없음)
+const SF_SHADOW_OFF := 8.0              # 꽃판 그림자가 줄기에서 빛 반대쪽으로 밀리는 거리 (칸, F1)
+const SF_HEAD_R := 5.0                  # 그림자 반지름 (칸)
+const SF_TURN := 2.0 * HOUR             # 등불을 옮기면 꽃판이 이 동안 천천히 돌아감
+const SF_TRUNK_R := 3.0                 # 줄기 둘레 — 짓지 않고 숲이 나지 않음
+const SF_SITE_R := 12.0                 # 첫 마을 터 (키트 건물들) 반지름 — 해바라기는 이 가장자리 밖 SF_NEAR 안에
+const SF_NEAR := [20.0, 26.0]           # (정함) 가장자리 밖 거리 — 네 등불 자리 중 둘 이상에서 그림자가 영역에 닿게 (AC3)
+const SF_FAR_MIN := 120.0               # 둘째 해바라기는 첫 마을에서 이만큼 멀리
+const SF_STAGE_SHADOW := {"grow": 0.7, "bloom": 1.0, "droop": 0.85, "dry": 0.5}   # 철마다 그림자 크기 (겨울 마른 줄기 ×0.5 — 경우 7)
+# 씨앗비 (R3 MVP — 사용자 2026-11-08 "씨앗비 좋다")
+const SEED_RAIN_MONTH := 8              # 늦여름
+const SEED_RAIN_DAYS := [24, 28]        # 그 달 이 날부터 이 날까지 (닷새)
+const SEEDS_PER_DAY := 3                # 핀 해바라기 하나가 하루에 떨어뜨리는 씨앗
+const SEED_HOURS := [9.0, 17.0]         # 떨어지는 때 (낮)
+const SEED_WARN := 1200.0               # 떨어지기 전 그림자가 먼저 커지는 시간 (병 20분 = 보통 배속 현실 약 4초)
+const SEED_FOOD := 0.5 * DAY / FOOD_IV  # 씨앗 하나 = 반 사람 하루치 (48) — 하루 약 3알 ≈ 열 명 마을 하루 필요의 약 15% (village-economy R6)
+const SEED_HIT_R := 0.9                 # 떨어진 자리 이 안에 서 있으면
+const SEED_HIT_P := 0.25                # 이 확률로 다침 (그림자를 보고 대개 비킴 — 아주 작은 위험)
+const SEED_ROT_DAYS := 6.0              # 아무도 안 굴려 오면 상해 사라짐
+const SEED_ROLL_TIME := 600.0           # 씨앗을 흙에서 빼내 굴리기 시작 (병 10분)
+const SEED_KIDS := 3                    # 달려가는 아이
+const SEED_REACH := 12.0                # 영역 반지름 + 이만큼 안 씨앗을 굴려 옴 (걸음 병 한 시간 8.75칸 — 오가는 데 반나절 안)
+# 목화 (R4 MVP)
+const COTTON_DAY := 0.5                 # 하루 기대 돋음 (볕 ≥ 0 · 젖음 ≥ 0.2)
+const COTTON_MAX := 6                   # 무리마다 덤불 상한
+const COTTON_BOLL := 3.0                # 다래 하나 = 솜
+const COTTON_MONTHS := [9, 10, 11]      # 다래가 터지는 달
+const COTTON_WET := 0.2
+# 솜 이불 (design/gdd/health.md 메인 판단 ① · R2)
+const QUILT_COLD := 0.75                # 이불이 있는 집 안 추위 ×0.75 (집·불 막이와 곱함)
+const QUILT_PER := 2.0                  # (정함) 옷 몫(COTTON_PER)을 넘는 솜 이만큼 = 이불 한 채 (#15의 '솜 이불'이 생기면 그것도 셈)
+# 물 보존 (design/gdd/water.md — 증발·스며듦 → 병 안의 김 → 이슬·유리벽 골. 병 밖으로는 뚜껑으로만)
+const VAPOUR_DAYS := 3.0                # 뚜껑을 닫을 때(세상 만들기 끝) 공기에 든 김 = 하루 들어오는 물 × 이만큼
+const VAPOUR_MAX_K := 2.0               # 김이 많이 쌓여도 이슬·골은 보통의 이만큼까지 (김 / (하루 들어오는 물 × VAPOUR_DAYS))

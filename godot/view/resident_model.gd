@@ -1113,8 +1113,8 @@ func set_item(kind: String) -> void:
 	_carry_prop = ""
 	_wheels.clear()
 	_wheel_last = Vector3.INF
-	item.visible = kind != ""
-	if kind == "":
+	item.visible = kind != "" and kind != "해바라기씨"     # (F-2) 굴리는 씨앗은 땅 위에 따로 (SunflowerView)
+	if kind == "" or kind == "해바라기씨":
 		return
 	var sp := carry_spec(kind, _child, _female and _style % 2 == 0)
 	var parts := carry_parts(sp[0])

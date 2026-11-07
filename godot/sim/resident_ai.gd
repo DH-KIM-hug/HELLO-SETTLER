@@ -51,6 +51,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("social_"):         # [마을의 삶] 이야기가 끝나면 하던 일 이름으로 (sim/social.gd)
 		Social.run_op(v, r, d)
 		return
+	if n.begins_with("gplant_"):         # 씨앗비 씨앗 굴리기 · 목화 솜뭉치 (sim/giant_plants.gd)
+		GiantPlants.run_op(v, r, d)
+		return
 	if n.begins_with("fruit_"):          # (E3-3) 거대한 열매 자르기·나르기 (sim/great_trees.gd)
 		GreatTrees.run_op(v, r, d)
 		return

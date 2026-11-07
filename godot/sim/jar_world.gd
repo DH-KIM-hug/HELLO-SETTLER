@@ -239,6 +239,8 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 	settlements.append(v)
 	for s in settlements:
 		s.peers = settlements
+	if sid == 0:
+		GiantPlants.place(water, v)       # 초거대 해바라기 둘 — 하나는 첫 터 곁 (flower-forest R3)
 	_update_interest()
 	return v
 
@@ -400,4 +402,5 @@ static func from_dict(d: Dictionary) -> JarWorld:
 		if i < others.size():
 			for j: Variant in others[i]:
 				s.others.append(jw.settlements[int(j)])
+	GiantPlants.ensure(jw)              # 옛 저장 (해바라기 없음): 지은 것을 피해 두 그루 (flower-forest 경우 3)
 	return jw

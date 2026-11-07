@@ -1,0 +1,219 @@
+"""The giant sunflower (design/gdd/flower-forest.md R3, ROADMAP F-2) + the cotton bush (R4) + a fallen sunflower seed.
+Scale: 1 unit = one adult resident (the view scales the sunflower by SunflowerView.SCALE).
+
+giant_sunflower.glb (PartSet, read with Art.parts):
+  stalk        thick green column with fibre bands + leaf collars, pivot at the foot (0,0,0)
+  leaves       big heart leaves hanging from the stalk (pivot at the foot)
+  head         seed disc + double petal ring + green back; pivot = head centre (the view yaws it toward the lamp).
+               The face looks along -Y (Blender) = +Z (Godot), tilted up 62 deg (toward the lamp above; reads as a face from the 48 deg game camera).
+  head_dry     the same disc, brown petals curled back (autumn droop / winter)
+Every part also has "<part>__far" (art bible 8.7 landmark budget: near <= 6,000 body tris, far <= 1,200).
+cotton_bush.glb: bush (leaf cushion) + boll (a white cotton puff bigger than a resident, autumn) as parts.
+sunflower_seed.glb: one striped seed lying on the ground (~2.4 long), the thing children run to.
+Run: blender -b --factory-startup --python build_sunflower.py -- [out_dir]
+"""
+import math
+import os
+import sys
+
+import bmesh
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from lowpoly import Model, PartSet, Vector, shade, mix, out_dir_from_argv  # noqa: E402
+from flora_kit import V, leaf  # noqa: E402
+from build_bonsai import stube  # noqa: E402
+
+OUT = os.path.join(out_dir_from_argv(), "flora")
+H = 80.0                      # stalk height (residents)
+HEAD_R = 14.0                 # seed disc + petals radius
+STALK = ("6f9a48", "5a8240", "86b058")
+LEAF = ("6aa04c", "4f8a40", "8cc062")
+GOLD = "f2c23a"
+YELLOW = "f7d65a"
+DISC_DARK = "5a3a24"
+DISC_BROWN = "7a5230"
+DRY = "a8783e"
+
+
+def stalk_pts(n):
+    pts = []
+    for i in range(n + 1):
+        t = i / n
+        pts.append(V(1.2 * math.sin(t * 2.2) * t, 0.6 * math.sin(t * 3.1) * t, H * t))
+    return pts
+
+
+def build_stalk(far):
+    m = Model("sf_stalk" + ("_far" if far else ""), 11)
+    n = 6 if far else 16
+    pts = stalk_pts(n)
+    radii = [2.1 - 0.9 * (i / n) for i in range(n + 1)]
+    radii[0] = 2.6
+
+    def col(i, k, N):
+        if far:
+            return STALK[0] if k % 2 == 0 else STALK[1]
+        if i % 4 == 3:
+            return STALK[2]                       # leaf collar band
+        return STALK[1] if k % 3 == 0 else STALK[0]   # fibre streaks
+    stube(m, pts, radii, seg=6 if far else 10, group="body_nl" if far else "body", colfn=col)
+    return m
+
+
+def heart(m, base, az, ln, w, droop, group):
+    d = V(math.cos(az), math.sin(az), 0)
+    pts = []
+    widths = []
+    n = 5
+    for i in range(n + 1):
+        t = i / n
+        p = base + d * (ln * t) + V(0, 0, ln * (0.25 * t - droop * t * t))
+        pts.append(p)
+        widths.append(w * math.sin(math.pi * min(1.0, t * 1.15)) * (1.0 if t < 0.9 else 0.4))
+    widths[-1] = 0.0
+    nrm = [V(0, 0, 1) - d * (0.6 * droop * (i / n)) for i in range(n + 1)]
+    leaf(m, pts, widths, nrm, thick=0.35, color=LEAF[0], color_under=LEAF[1], group=group)
+
+
+def build_leaves(far):
+    m = Model("sf_leaves" + ("_far" if far else ""), 12)
+    pts = stalk_pts(16)
+    spec = [(0.22, 0.4, 16.0, 6.0), (0.36, 2.6, 15.0, 5.5), (0.5, 4.6, 13.0, 5.0), (0.64, 1.4, 11.0, 4.4), (0.76, 3.6, 9.0, 3.6)]
+    if far:
+        spec = spec[:3]
+    for (z, az, ln, w) in spec:
+        p = pts[int(z * 16)]
+        heart(m, p, az, ln, w, 0.55, "body_nl" if far else "body_nl")
+    return m
+
+
+def disc_face(m, c, f, up, r, rings, seg, colfn, group):
+    """Domed seed disc facing f (closed: front dome + flat back)."""
+    s = f.cross(up).normalized()
+    u = s.cross(f).normalized()
+    bm = m._bm(group)
+    ring_v = []
+    for j in range(1, rings + 1):
+        rr = r * j / rings
+        dome = 0.6 * (1.0 - (j / rings) ** 2)
+        ring_v.append([bm.verts.new(c + f * dome + (s * math.cos(a) + u * math.sin(a)) * rr)
+                       for a in [k * math.tau / seg for k in range(seg)]])
+    tip = bm.verts.new(c + f * 0.7)
+    back = bm.verts.new(c - f * 1.4)
+    faces = []
+    for k in range(seg):
+        faces.append(bm.faces.new((tip, ring_v[0][k], ring_v[0][(k + 1) % seg])))
+    for j in range(rings - 1):
+        for k in range(seg):
+            kk = (k + 1) % seg
+            faces.append(bm.faces.new((ring_v[j][k], ring_v[j + 1][k], ring_v[j + 1][kk], ring_v[j][kk])))
+    backf = []
+    for k in range(seg):
+        backf.append(bm.faces.new((back, ring_v[-1][(k + 1) % seg], ring_v[-1][k])))
+    bmesh.ops.recalc_face_normals(bm, faces=faces + backf)
+    bm.normal_update()
+    m._finish(bm, faces, None, True, colfn)
+    m._finish(bm, backf, "4f7a38", True)
+    return s, u
+
+
+def petals(m, c, f, s, u, n, r0, r1, w, color, curl, group, phase=0.0):
+    for i in range(n):
+        a = (i + phase) * math.tau / n
+        d = s * math.cos(a) + u * math.sin(a)
+        pts = []
+        for t in (0.0, 0.35, 0.7, 1.0):
+            rr = r0 + (r1 - r0) * t
+            pts.append(c + d * rr + f * (-curl * t * t * (r1 - r0)))
+        widths = [w * 0.4, w, w * 0.8, 0.0]
+        leaf(m, pts, widths, f, thick=0.15, color=color, color_under=shade(color, 0.85), group=group)
+
+
+def build_head(far, dry):
+    m = Model("sf_head" + ("_dry" if dry else "") + ("_far" if far else ""), 13)
+    c = V(0, 0, 0)
+    tilt = math.radians(62.0)
+    f = V(0, -math.cos(tilt), math.sin(tilt))          # faces -Y, tilted up toward the lamp
+    up = V(0, 0, 1)
+    disc_r = HEAD_R * 0.52
+
+    def seeds(fc):
+        p = fc.calc_center_median() - c
+        rr = (p - f * p.dot(f)).length
+        if far:
+            return DISC_DARK if rr < disc_r * 0.6 else DISC_BROWN
+        return DISC_BROWN if (int(rr * 1.6) % 2) else DISC_DARK
+    group = "body_nl"
+    s, u = disc_face(m, c, f, up, disc_r, 2 if far else 5, 10 if far else 20, seeds, group)
+    if dry:
+        petals(m, c - f * 0.2, f, s, u, 12 if far else 22, disc_r * 0.9, HEAD_R * 0.92, 1.3, DRY, 0.9, group)
+    else:
+        petals(m, c - f * 0.1, f, s, u, 12 if far else 24, disc_r * 0.9, HEAD_R, 1.5, GOLD, 0.1, group)
+        if not far:
+            petals(m, c - f * 0.3, f, s, u, 20, disc_r * 0.85, HEAD_R * 0.86, 1.3, YELLOW, 0.15, group, phase=0.5)
+    # the neck: a short bent stalk piece from the head back down to the column (pivot = head centre)
+    neck = [c - f * 1.2, c - f * 3.0 - up * 1.0, c - f * 3.6 - up * 3.2]
+    stube(m, neck, [1.3, 1.25, 1.2], seg=6 if far else 8, group=group, color=STALK[0])
+    return m
+
+
+def build_sunflower():
+    ps = PartSet("giant_sunflower")
+    head_c = (stalk_pts(16)[-1] + V(0, 3.6 * math.cos(math.radians(62)), 3.2 - 3.6 * math.sin(math.radians(62))))
+    ps.add("stalk", build_stalk(False))
+    ps.add("stalk__far", build_stalk(True))
+    ps.add("leaves", build_leaves(False))
+    ps.add("leaves__far", build_leaves(True))
+    for dry in (False, True):
+        nm = "head_dry" if dry else "head"
+        mm = build_head(False, dry)
+        mf = build_head(True, dry)
+        for mdl in (mm, mf):
+            for bm in mdl.groups.values():
+                bmesh.ops.translate(bm, verts=bm.verts, vec=head_c)
+        ps.add(nm, mm, head_c)
+        ps.add(nm + "__far", mf, head_c)
+    tris = ps.export(OUT)
+    near = tris.get("stalk", 0) + tris.get("leaves", 0) + max(tris.get("head", 0), tris.get("head_dry", 0))
+    far = tris.get("stalk__far", 0) + tris.get("leaves__far", 0) + max(tris.get("head__far", 0), tris.get("head_dry__far", 0))
+    print("  giant_sunflower near %d (<= 6000) far %d (<= 1200) %s" % (near, far, tris))
+    assert near <= 6000 and far <= 1200, "landmark budget"
+
+
+def build_cotton():
+    ps = PartSet("cotton_bush")
+    m = Model("cotton_bush", 21)
+    for (x, y, z, r) in ((0, 0, 1.8, 2.2), (1.6, 0.6, 1.4, 1.6), (-1.5, 0.4, 1.3, 1.5), (0.2, -1.4, 1.2, 1.4)):
+        m.sphere(r, pos=(x, y, z), scl=(1, 1, 0.8), color=LEAF[0], seg=8, rings=5, group="body",
+                 colfn=lambda fc: LEAF[2] if fc.normal.z > 0.5 else (LEAF[0] if fc.normal.z > -0.2 else LEAF[1]), lumps=0.12, seed=x)
+    ps.add("bush", m)
+    b = Model("cotton_boll", 22)
+    for (x, y, z, r) in ((0, 0, 3.9, 1.5), (1.0, 0.4, 3.6, 1.1), (-0.9, 0.5, 3.6, 1.1), (0.1, -0.9, 3.7, 1.0)):
+        b.sphere(r, pos=(x, y, z), color="f6f1e4", seg=8, rings=5, group="body",
+                 colfn=lambda fc: "fbf7ec" if fc.normal.z > 0.3 else "e6dfcc", lumps=0.15, seed=int(x * 10))
+    b.cyl(0.9, 1.3, 0.6, pos=(0, 0, 2.6), color="8a6a3a", seg=6, group="body")
+    ps.add("boll", b)
+    ps.export(OUT)
+
+
+def build_seed():
+    m = Model("sunflower_seed", 31)
+    faces = m.sphere(1.0, pos=(0, 0, 0.55), scl=(1.25, 0.6, 0.45), color="3a3430", seg=12, rings=6, group="body",
+                     colfn=lambda fc: ("e8e0cc" if int((fc.calc_center_median().y + 0.6) * 4.0) % 2 else "3a3430"))
+    # pointed tip
+    bm = m._bm("body")
+    for v in {v: True for f in faces for v in f.verts}:
+        if v.co.x > 0.3:
+            v.co.x += (v.co.x - 0.3) * 0.6
+            v.co.y *= 0.8
+    bm.normal_update()
+    n = m.export(OUT)
+    print("  sunflower_seed %d tris" % n)
+
+
+if __name__ == "__main__":
+    os.makedirs(OUT, exist_ok=True)
+    print("sunflower ->", OUT)
+    build_sunflower()
+    build_cotton()
+    build_seed()

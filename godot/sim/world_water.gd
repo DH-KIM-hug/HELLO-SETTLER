@@ -104,6 +104,14 @@ var wildlife: Array[Dictionary] = []    # 들짐승 무리 {kind: deer/rabbit/wo
 var fish: Array[Dictionary] = []        # 물고기 {name, x, y, n} — 민물 호수만
 var great_trees: Array[Dictionary] = [] # 큰 나무 다섯 {kind, name, x, y, r, yaw} — 한 그루씩, 베지 않음 (sim/great_trees.gd · GD 3.0)
 var giant_fruits: Array[Dictionary] = [] # 과일나무가 떨어뜨린 거대한 열매 {x, y, t, yaw, food}
+# 거대 식물 (sim/giant_plants.gd · design/gdd/flower-forest.md R3·R4) — 병 하나의 것
+var sunflowers: Array[Dictionary] = []  # 초거대 해바라기 {id, x, y, lx, ly (빛 방향), fx, fy (돌기 전), t0 (돌기 시작, −1 = 멈춤), stage, yaw}
+var sf_seeds: Array[Dictionary] = []    # 씨앗비 {id, sf, x, y, t_land, st: sky/ground/roll, food, roller, landed}
+var seed_serial := 0
+var seed_rain_day := -1                 # 씨앗비를 정한 마지막 날 (병 날짜 번호)
+var cotton: Array[Dictionary] = []      # 목화 덤불 {id, sid (무리), x, y, boll, yr}
+var cotton_serial := 0
+var cotton_year := -1                   # cotton_burst를 낸 해
 var creation: Dictionary = {}           # 창조 요약 (핵·물·돌기·씨앗·창세 신화 줄들 — 지구 카드·연대기용)
 
 # 안개·발견
@@ -578,6 +586,25 @@ func _dew_take(i: int) -> float:
 
 ## 한 번: 고운 조각 한 걸음 + 거친 칸 한 묶음 (거친 칸마다 SLICES번에 한 번 = sc × SLICES)
 func world_tick(sc: float) -> void:
+	_ink = inflow_k()
+	var a0 := added
+	var r0 := removed
+	_world_tick(sc)
+	if vapour >= 0.0:                     # 물 보존 (water.md): 증발·스며듦은 김으로, 이슬·골은 김에서
+		vapour += (removed - r0) - (added - a0)
+
+
+## 하루 들어오는 물 (보통 습도의 이슬 + 골) — 김 상한·부드러운 줄임의 기준
+func daily_inflow() -> float:
+	var s := 0.0
+	for i in drip_k.size():
+		s += DRIP_RATE * drip_mult[i] * DEW_FULL
+	for i in groove_k.size():
+		s += _groove_rate(groove_k[i]) * groove_mult[i] * DAY / 60.0
+	return s
+
+
+func _world_tick(sc: float) -> void:
 	var u0 := SimProf.now()
 	if not fcells.is_empty():
 		fine_step(sc)
@@ -609,13 +636,13 @@ func fine_step(sc: float) -> void:
 	for i in drip_k.size():
 		var k := drip_k[i]
 		if is_fine_k(k):
-			var a := _dew_take(i)
+			var a := _dew_take(i) * _ink
 			ww[k] += a
 			added += a
 	for i in groove_k.size():
 		var k := groove_k[i]
 		if is_fine_k(k):
-			var a := _groove_rate(k) * groove_mult[i] * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc * _ink
 			ww[k] += a
 			added += a
 	# 한 번 훑기: 흐른 양 줄이기 (0이면 그대로) · 물이 있는 칸 · 암염 칸
@@ -734,13 +761,13 @@ func fine_step_ref(sc: float) -> void:
 	for i in drip_k.size():
 		var k := drip_k[i]
 		if is_fine_k(k):
-			var a := _dew_take(i)
+			var a := _dew_take(i) * _ink
 			ww[k] += a
 			added += a
 	for i in groove_k.size():
 		var k := groove_k[i]
 		if is_fine_k(k):
-			var a := _groove_rate(k) * groove_mult[i] * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc * _ink
 			ww[k] += a
 			added += a
 	for i in nf:
@@ -844,7 +871,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 		var k := drip_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := _dew_take(i)
+			var a := _dew_take(i) * _ink
 			V[c] += a
 			added += a
 			_relevel(c)
@@ -852,7 +879,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 		var k := groove_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := _groove_rate(k) * groove_mult[i] * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc * _ink
 			V[c] += a
 			added += a
 			_relevel(c)
@@ -1022,7 +1049,7 @@ func coarse_slice_ref(sc: float, slice: int) -> void:
 		var k := drip_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := _dew_take(i)
+			var a := _dew_take(i) * _ink
 			V[c] += a
 			added += a
 			_relevel(c)
@@ -1030,7 +1057,7 @@ func coarse_slice_ref(sc: float, slice: int) -> void:
 		var k := groove_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := _groove_rate(k) * groove_mult[i] * sc
+			var a := _groove_rate(k) * groove_mult[i] * sc * _ink
 			V[c] += a
 			added += a
 			_relevel(c)

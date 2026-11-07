@@ -8,7 +8,7 @@
 ## 큰 민들레: 싹 → 노란 꽃 (2일) → 닫힘 (반나절) → 솜털 공 (1일) → 꽃씨가 날림 → 내려앉은 자리에서 3~4일 뒤 새 싹.
 ##          닫힌 병엔 바람이 없다 — 꽃씨는 볕 쪽에서 오르고 그늘 쪽에서 내려가는 느린 둥근 기류를 탄다 (결정론, 난수 없음).
 ##          꽃잎 → 꽃차(행복)·노란 물감, 잎 → 쓴 나물 (굶을 때), 솜털 → 솜 (옷 속 — 추위 ×0.8), 줄기 → 아이들 피리.
-##          밭에 내려앉은 꽃씨 = 잡초 (그 밭 ×0.8, 농부가 뽑음). 거인이 뚜껑을 열고 불면 꽃씨가 한꺼번에 하늘 가득 (blow_seeds).
+##          밭에 내려앉은 꽃씨 = 잡초 (그 밭 ×0.8, 농부가 뽑음). 뚜껑이 열릴 때 든 바람에 꽃씨가 한꺼번에 하늘 가득 (lid_breeze — 거인의 '불기' 손짓은 없앴다).
 ## 주민은 하늘의 것을 처음엔 두려워하다가 (가까이 가면 움찔) 하루쯤 지나 가장 담대한 사람이 맛본 뒤 익숙해진다 (연대기 한 줄).
 ## 이 파일 밖의 고리: Village.step (step) · Village.consume (on_eat) · Village._update_building (weed_mult) · Village.is_free (blocks) ·
 ##   Village.chief_build (버섯꾼) · ResidentAI.decide (decide) · ResidentAI.work_task (pick_task · weed_task) · Health (그늘·솜·배앓이 ×5).
@@ -35,8 +35,8 @@ var _poison_new := false
 var grove_last := -1.0e9
 var tea_until := -1.0
 var last_ride := -1.0e9
-var blown := 0                        # 거인이 분 횟수
-var just_blown := false               # 화면 연출용 (방금 불었다)
+var breezes := 0                      # 뚜껑 바람으로 꽃씨가 한꺼번에 날린 횟수 (옛 저장의 blown은 읽고 버림 — flower-forest AC8)
+var just_breezed := false             # 화면 연출용 (방금 바람이 들었다)
 var blow_dir := Vector2.ZERO
 var stats := {"shrooms": 0, "groves": 0, "picked": 0.0, "dried": 0.0, "mixed": 0, "spotted": 0, "poisoned": 0, "withered": 0,
 	"sprouts": 0, "released": 0, "landed": 0, "rooted": 0, "lost_water": 0, "escaped": 0, "weeds": 0, "pulled": 0,
@@ -852,7 +852,7 @@ func release(v: Village, d: Dictionary, push := Vector2.ZERO, lift := 0.0) -> in
 			"bx": push.x * j + sp.x, "by": push.y * j + sp.y, "bz": lift * j})
 		made += 1
 	stats["released"] += made
-	if made > 0 and int(stats["released"]) == made and not just_blown:
+	if made > 0 and int(stats["released"]) == made and not just_breezed:
 		v.log_line("하얀 솜털 공에서 꽃씨가 떨어져 나와 천천히 하늘로 떠올랐다.")
 	return made
 
@@ -1097,14 +1097,15 @@ func _move_riders(v: Village) -> void:
 		ride_h[r.id] = sin(PI * u) * 5.5
 
 
-# ───────────────────────── 거인의 숨 (뚜껑을 열고 불기) ─────────────────────────
-## 거인이 dir 쪽으로 분다 — 뚜껑이 열린 동안만. 솜털 공(과 닫힌 꽃)의 꽃씨가 한꺼번에 하늘 가득. 날린 꽃씨 수 (못 불면 −1)
-func blow_seeds(v: Village, dir: Vector2) -> int:
+# ───────────────────────── 뚜껑 바람 (EVENTS_STAGING 6c-1 — '불기' 손짓은 없앰, flower-forest R7·경우 8) ─────────────────────────
+## 뚜껑이 열릴 때 든 바람이 dir 쪽으로 — 다 핀 솜털 공(과 닫힌 꽃)의 꽃씨가 한꺼번에. 손짓이 아니라 믿음·경이 없음
+## (깨닫기 전에도 뒤에도 하늘의 숨결 이야기 없음 — 그냥 바람). 날린 꽃씨 수 (뚜껑이 닫혀 있으면 −1)
+func lid_breeze(v: Village, dir: Vector2) -> int:
 	if v.air == null or not v.air.lid_open:
 		return -1
 	var dn := dir.normalized() if dir.length() > 1e-6 else Vector2(1, 0)
-	blown += 1
-	just_blown = true
+	breezes += 1
+	just_breezed = true
 	blow_dir = dn
 	var n := 0
 	for d: Dictionary in dands:
@@ -1118,19 +1119,17 @@ func blow_seeds(v: Village, dir: Vector2) -> int:
 		s["bx"] = float(s["bx"]) + dn.x * Balance.BLOW_PUSH
 		s["by"] = float(s["by"]) + dn.y * Balance.BLOW_PUSH
 		s["bz"] = float(s["bz"]) + Balance.BLOW_LIFT * 0.5
-	v.bless_all(Balance.BLOW_BELIEF)
-	v._update_belief(0.0)
-	var said := 0
-	for r in v.people:
-		if said >= 3:
-			break
-		if r.sleeping or r.age < 2.5 or r.sick_left > 0.0:
-			continue
-		var third := "{w}의 숨결이다…" if v.aware else "누가 하늘에서 숨을 불었어…"     # 거인을 모르면 (A4b)
-		v.speak(r, Balance.BLOW_LINE if said == 0 else ("꽃씨가 하늘을 덮었어!" if said == 1 else third), 6)
-		said += 1
-	if blown == 1 and n > 0:
-		v.log_line(("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 %s 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.") % ("{w}의 숨결이 불어오자" if v.aware else "어디선가 큰 바람이 불어오자"))
+	if n > 0:
+		var said := 0
+		for r in v.people:
+			if said >= 2:
+				break
+			if r.sleeping or r.age < 2.5 or r.sick_left > 0.0:
+				continue
+			v.speak(r, Balance.BLOW_LINE if said == 0 else "꽃씨가 하늘을 덮었어!", 6)
+			said += 1
+	if breezes == 1 and n > 0:
+		v.log_line("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 어디선가 큰 바람이 불어오자 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.")
 	return n
 
 
