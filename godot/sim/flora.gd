@@ -69,9 +69,10 @@ static func step(v: Village, dt: float) -> void:
 		f._sacc -= Balance.SEED_TICK
 		f._seed_tick(v, Balance.SEED_TICK)
 	f._acc += dt
-	while f._acc >= Balance.FLORA_TICK - 1e-6:
-		f._acc -= Balance.FLORA_TICK
-		f._tick(v, Balance.FLORA_TICK)
+	var tk := Balance.FLORA_TICK * v.tick_mult        # 따라잡기 빠른 길이면 성기게
+	while f._acc >= tk - 1e-6:
+		f._acc -= tk
+		f._tick(v, tk)
 
 
 ## 처음: 흙 붓기 때 묻어 온 민들레 몇 포기 (마을 둘레 들판, 한살이가 제각각)

@@ -190,9 +190,10 @@ static func cancel(v: Village, r: Resident) -> void:
 static func update(v: Village, r: Resident, dt: float) -> void:
 	var left := dt
 	var decisions := 0
+	var max_dec := 3 * maxi(1, int(dt / Balance.AWAY_STEP))     # 걸음 30초에 3번 — 따라잡기 빠른 길(더 큰 걸음)도 같은 빈도로 마음을 정한다
 	while left > 1e-6:
 		if r.steps.is_empty():
-			if decisions >= 3:
+			if decisions >= max_dec:
 				break
 			decide(v, r)
 			decisions += 1

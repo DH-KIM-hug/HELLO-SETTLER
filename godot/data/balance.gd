@@ -30,6 +30,10 @@ const EVENT_SLOW_I := SPEED_DEFAULT_I   # (정함) 보통보다 빠를 때 중�
 const AWAY_RATES := [3.0, 6.0, 12.0]    # 느리게 (12시간 → 1.5일) · 보통 (3일, 기본 — 현실 4시간에 병 하루) · 빠르게 (6일)
 const AWAY_NAMES := ["느리게", "보통", "빠르게"]
 const AWAY_DEFAULT_I := 1
+const AWAY_STEP_FAST := 60.0            # (정함) 따라잡기 빠른 길 (CatchUp.fast — ROADMAP 4): 걸음 60초 · 물 계산 간격 ×AWAY_WATER_MULT. 결과는 통계로 같다 (tests/run.gd test_catchup_fast)
+const AWAY_WATER_MULT := 2.0
+const AWAY_JOBS_EVERY := 180.0          # 따라잡기 빠른 길의 일자리·집 배정 간격 (보통 JOBS_EVERY 20초)
+const AWAY_TICK_MULT := 2.0             # 건강·공기·버섯·혼인출산 계산 간격 배율 (Village.tick_mult)
 const AWAY_STEP := 30.0                 # (정함) 따라잡기 한 걸음 (초) — 30일 인구 시험과 같은 걸음 (병 6일을 몇 초 안에). 측정: tools/measure_speeds.gd -- catchup
 const SKIP_NIGHT_SECONDS := 3.0         # 밤 건너뛰기 = 다음 새벽(6시)까지 현실 약 3초 타임랩스 (기획서 6.6 v3.7 — 남은 밤 길이와 상관없이)
 const MAX_STEPS_PER_FRAME := 240        # (정함) 한 화면에 걷는 최대 걸음 — 넘치면 밀린 시간은 버린다 (느린 기기에서 멈추지 않게)

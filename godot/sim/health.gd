@@ -119,9 +119,10 @@ static func outdoor(v: Village, x: float, y: float) -> Vector2:
 # ───────────────────────── 고정 걸음 ─────────────────────────
 static func step(v: Village, dt: float) -> void:
 	v._health_acc += dt
-	while v._health_acc >= Balance.HEALTH_TICK - 1e-6:
-		v._health_acc -= Balance.HEALTH_TICK
-		tick(v, Balance.HEALTH_TICK, v.t - v._health_acc)
+	var tk := Balance.HEALTH_TICK * v.tick_mult       # 따라잡기 빠른 길이면 성기게 (같은 규칙 — 모든 값이 간격에 비례)
+	while v._health_acc >= tk - 1e-6:
+		v._health_acc -= tk
+		tick(v, tk, v.t - v._health_acc)
 
 
 static func tick(v: Village, dt: float, tt: float) -> void:
