@@ -6,6 +6,10 @@
 ## 그래서 따라잡기는 언제나 정밀 계산 (10초 걸음, 물 300초 간격 — 화면 없이 최대 속도, 최대 24시간치).
 ## 비운 동안 거인은 보고 있지 않다 (Village.watching = false): 위기 사망 하루 1명·부부 2쌍 아래로는 없음, 시대 점수 30%,
 ## 새 위기(곰팡이)는 조짐에서 기다림 — Village·Mold가 지킨다. 그동안 바친 제물은 이틀 상한 없이 쌓인다 (Village.altar_hold, SAVE.md 3.1).
+## 빠른 길 (CatchUp.fast, 기본 — ROADMAP 4 '따라잡기 속도'): 같은 규칙을 더 큰 간격으로 — 걸음 Balance.AWAY_STEP_FAST (60초),
+##   물 계산 간격 ×AWAY_WATER_MULT, 건강·공기·버섯·혼인출산 간격 ×AWAY_TICK_MULT (Village.tick_mult), 일자리 배정 AWAY_JOBS_EVERY.
+##   결과(인구·먹을 것·제물)는 정밀 따라잡기와 통계로 같다 (tests/run.gd test_catchup_fast). 재기: tools/bench_catchup.gd.
+##   화면은 돌아오자마자 편지를 펼치고, 병 시간이 흐르는 동안 큰 일을 한 줄씩 쓴다 (CatchUpScreen — peek()).
 ## 쓰는 법: var c := CatchUp.new(village, elapsed) → 화면마다 c.run(ms) (true면 끝) → c.finish() = 편지 내용 → CatchUp.on_return(village, elapsed).
 ## 넓은 세상: CatchUp.new(world.primary(), elapsed, -1, world) — 세상 전체(모든 무리·물)가 JarWorld.advance로 흐른다
 ## (거인이 없으니 분가 편지는 하루 뒤 스스로 떠난다). 편지는 첫 무리 촌장이 쓰고 다른 무리 소식을 한 줄씩 더한다.
@@ -34,6 +38,7 @@ var befores: Dictionary = {}          # (넓은 세상) 무리 sid → snapshot
 var n_before := 1                     # (넓은 세상) 비우기 전 무리 수
 var _water_offline := false
 var _done := false
+var fast_path := false                # 이 따라잡기가 빠른 길인가 (CatchUp.fast · 시험이 걸음을 정하지 않았을 때)
 
 
 ## 비운 시간을 나눈다 → {exact 흐르는 시간, slept 잠든 시간} (초)
@@ -44,6 +49,7 @@ static func plan(elapsed: float, lamp_s: float, rate_x := 1.0) -> Dictionary:
 
 
 static var step_override := -1.0      # (시험) 0보다 크면 Balance.AWAY_STEP 대신 이 걸음 — 옛 시험 묶음은 10초 (v4.2)
+static var fast := true               # 따라잡기 빠른 길 (ROADMAP 4 — 화면에만 보이는 일 건너뛰기·느린 계통은 성기게). false = 옛 정밀 걸음 (비교 시험)
 static var rate_override := -1.0      # (시험) 0보다 크면 설정 대신 이 배율 — 옛 시험 묶음은 1 (비운 시간 = 병 시간, v4.2 규칙)
 
 
@@ -69,8 +75,11 @@ func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null
 	away = maxf(0.0, elapsed)
 	lamp = Market.lamp_seconds() if lamp_s < 0.0 else lamp_s
 	rate = away_rate() if rate_x < 0.0 else rate_x
+	fast_path = fast and step_override <= 0.0
 	if step_override > 0.0:
 		step_dt = step_override
+	elif fast_path:
+		step_dt = Balance.AWAY_STEP_FAST
 	var p := plan(away, lamp, rate)
 	exact_total = p["exact"]
 	exact_left = exact_total
@@ -85,11 +94,12 @@ func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null
 	_leave_all()
 
 
-## 모든 무리: 거인이 보고 있지 않다 · 바친 제물은 상한 없이 쌓인다
+## 모든 무리: 거인이 보고 있지 않다 · 바친 제물은 상한 없이 쌓인다 · (빠른 길) 느린 계통은 성기게
 func _leave_all() -> void:
 	for q: Village in group():
 		q.watching = false
 		q.altar_hold = true
+		q.tick_mult = Balance.AWAY_TICK_MULT if fast_path else 1.0
 
 
 ## 함께 흐르는 무리 (소형 병 = 하나)
@@ -117,6 +127,8 @@ func run(budget_ms: float = 1.0e9) -> bool:
 	var t0 := Time.get_ticks_usec()
 	var sdt0 := v.step_dt
 	v.step_dt = step_dt               # 첫 무리의 걸음 크기로 다른 무리도 함께 걷는다
+	var wm0 := v.water.offline_mult
+	v.water.offline_mult = Balance.AWAY_WATER_MULT if fast_path else 1.0
 	while not is_done():
 		var dt := minf(EXACT_CHUNK, exact_left)
 		if world != null:
@@ -132,8 +144,19 @@ func run(budget_ms: float = 1.0e9) -> bool:
 		if (Time.get_ticks_usec() - t0) / 1000.0 >= budget_ms:
 			break
 	v.step_dt = sdt0
+	v.water.offline_mult = wm0
 	real_ms += (Time.get_ticks_usec() - t0) / 1000.0
 	return is_done()
+
+
+## (따라잡는 도중) 지금까지의 편지 — 평범한 날의 줄 없이 큰 일만 (화면이 편지를 쓰는 중에 한 줄씩 더한다)
+func peek() -> Dictionary:
+	return letter(v, before, away, false)
+
+
+## 따라잡는 도중의 병 날짜 (비운 동안 며칠째 — 1부터)
+func day_now() -> int:
+	return 1 + int((exact_total - exact_left) / Balance.DAY)
 
 
 ## 따라잡기 끝 — 거인이 다시 본다. 편지 내용을 돌려준다 (letter())
@@ -144,6 +167,7 @@ func finish() -> Dictionary:
 		v.water.offline = _water_offline
 		for q: Village in group():
 			q.watching = true
+			q.tick_mult = 1.0
 			q.altar_hold = false              # 돌아온 뒤엔 제단 규칙이 평소대로 (이틀 지난 제물은 창고로)
 			q.crises.clear()
 			while q.warnings.size() > 3:      # 비운 동안 쌓인 예고는 마지막 몇 개만 (나머지는 편지에)
@@ -226,7 +250,7 @@ static func _ga(w: String) -> String:
 
 ## 촌장이 쓰는 편지 — {chief, away, pop0, pop1, events[3~5], born[id], lost[{id, name, why}], waiting[줄], festival, long,
 ##   altar_line 제단 줄 ("" = 빈 제단), offerings {물건: 개수}, offer_value 장터 값 (지폐)} + finish()가 lamp_h·slept를 더한다
-static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
+static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> Dictionary:
 	var events: Array = []
 	var t0 := float(b["t"])
 	# 떠난 얼굴 (돌아가심)
@@ -303,7 +327,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 	fillers.append("밤마다 모닥불 앞에 모여 노래했어요.")
 	fillers.append("다들 맡은 일을 부지런히 했어요.")
 	var fi := 0
-	while events.size() < 3 and fi < fillers.size():
+	while fill and events.size() < 3 and fi < fillers.size():
 		events.append(fillers[fi])
 		fi += 1
 	# 기다리는 것

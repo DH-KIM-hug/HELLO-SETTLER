@@ -128,6 +128,7 @@ var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들�
 var wild: Wildlife                    # [들짐승] 물고기·사슴·토끼·늑대… 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array, away?: 거인이 비운 동안(등불 시간) 바친 것}
+var tick_mult := 1.0                  # 따라잡기 빠른 길 (CatchUp.fast): 건강·공기·버섯·혼인출산 계산 간격 배율 (저장하지 않음 — 거인이 보면 1)
 var altar_hold := false               # 따라잡기 중 (SAVE.md 3.1): 비운 동안 바친 제물은 이틀이 지나도 창고로 돌아가지 않는다
 var favourites: Dictionary = {}       # 거인님이 받으신 물건 → 받은 개수 합 ('거인님은 빵을 좋아하신다')
 var letters: Array = []               # 주민의 편지 {id, kind: "wish"/"split", t, from, name, type, text, state: "open"/"granted"/"done"}
@@ -899,12 +900,12 @@ func step(dt: float) -> void:
 	# 주기 처리
 	for k in _timers:
 		_timers[k] += dt
-	if _timers["life"] >= Balance.LIFE_EVERY:
+	if _timers["life"] >= Balance.LIFE_EVERY * tick_mult:
 		life_events(_timers["life"])
 		_timers["life"] = 0.0
 		trees = trees.filter(func(tr: Dictionary) -> bool: return water.depth(water.idx(tr["x"], tr["y"])) < 0.03)   # 물에 잠긴 나무는 죽는다
 		SimProf.mark("life")
-	if _timers["jobs"] >= Balance.JOBS_EVERY:
+	if _timers["jobs"] >= (Balance.JOBS_EVERY if tick_mult <= 1.0 else Balance.AWAY_JOBS_EVERY):
 		SimProf.mark("misc")
 		assign_jobs()
 		SimProf.mark("jobs")
@@ -1451,9 +1452,10 @@ func assign_jobs() -> void:
 			if baby_homes.has(p.home) and Production.caring_for(self, p) != null:
 				_assign_jobs()
 				return
-		elif not free_adult and p.is_adult():
-			free_adult = true
-	var can_fill := free_adult and float(stock["도구"]) >= 1.0
+		elif not free_adult and p.is_adult() and (not baby_homes.has(p.home) or Production.caring_for(self, p) == null):
+			free_adult = true             # 일터에 넣을 수 있는 사람 (_assign_jobs의 후보 — 아기를 돌보는 사람은 빼고)
+	var tools := float(stock["도구"]) >= 1.0     # 도구가 없으면 빈 일터에 아무도 넣지 못한다 (_assign_jobs가 건너뜀) — 헛돌지 않게 (따라잡기 속도)
+	var swap := -1                         # 옮겨 올 일꾼이 있는가 (_job_swap — 한 번만 셈): -1 모름 · 0 없음 · 1 있음
 	for b in buildings:
 		if not b.built:
 			continue
@@ -1461,9 +1463,16 @@ func assign_jobs() -> void:
 			if person(b.worker) == null and b.def().get("job", false):
 				_assign_jobs()
 				return
-		elif b.def().get("job", false) and (can_fill or int(Balance.JOB_FIRST.get(b.type, 50)) < 10):     # v5: 먹을 것 일터가 비면 사람을 옮겨서라도 (_job_swap)
-			_assign_jobs()
-			return
+		elif tools and b.def().get("job", false):
+			if free_adult:
+				_assign_jobs()
+				return
+			if int(Balance.JOB_FIRST.get(b.type, 50)) < 10:     # v5: 먹을 것 일터가 비면 사람을 옮겨서라도 (_job_swap) — 옮겨 올 사람이 있을 때만
+				if swap < 0:
+					swap = 1 if _job_swap_from() != null else 0
+				if swap == 1:
+					_assign_jobs()
+					return
 
 
 func _assign_jobs() -> void:
@@ -1524,6 +1533,19 @@ func _assign_jobs() -> void:
 func _job_swap(b: Building) -> Resident:
 	if int(Balance.JOB_FIRST.get(b.type, 50)) >= 10:
 		return null
+	var from := _job_swap_from()
+	if from == null:
+		return null
+	var w := person(from.worker)
+	from.worker = -1
+	if w != null:
+		ResidentAI.cancel(self, w)
+		w.job = -1
+	return w
+
+
+## _job_swap이 일꾼을 빼 올 일터 (가장 덜 급한 일터 — 없으면 null)
+func _job_swap_from() -> Building:
 	var from: Building = null
 	var fp := 9
 	for q in buildings:
@@ -1533,14 +1555,7 @@ func _job_swap(b: Building) -> Resident:
 		if pq > fp and pq < 50:            # 약초사·사제 같은 특별한 일(표에 없는 것)은 빼 오지 않는다
 			fp = pq
 			from = q
-	if from == null:
-		return null
-	var w := person(from.worker)
-	from.worker = -1
-	if w != null:
-		ResidentAI.cancel(self, w)
-		w.job = -1
-	return w
+	return from
 
 
 func household_of(p: Resident) -> Array[Resident]:

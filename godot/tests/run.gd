@@ -77,7 +77,7 @@ func _initialize() -> void:
 		load(SUITES[one]).new(self, q).all()
 		_finish(t0)
 		return
-	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate"])
+	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
 	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "crisis", "hand", "resources", "plan", "waterside"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
@@ -782,16 +782,19 @@ func test_away_rate() -> void:
 	gs.away_speed = Balance.AWAY_DEFAULT_I
 	var v := Village.new_prototype(12)
 	var c := CatchUp.new(v, 12.0 * Balance.HOUR, 12.0 * Balance.HOUR)
-	check(c.rate == 6.0 and c.exact_total == 3.0 * Balance.DAY and c.step_dt == Balance.AWAY_STEP, "기본 설정 '보통': 현실 4시간에 병 하루 (12시간 → %.1f일, 걸음 %.0f초)" % [c.exact_total / Balance.DAY, c.step_dt])
+	check(c.rate == 6.0 and c.exact_total == 3.0 * Balance.DAY and c.step_dt == Balance.AWAY_STEP_FAST and c.fast_path, "기본 설정 '보통': 현실 4시간에 병 하루 (12시간 → %.1f일, 빠른 길 걸음 %.0f초)" % [c.exact_total / Balance.DAY, c.step_dt])
 	gs.away_speed = 2
 	check(CatchUp.new(Village.new_prototype(12), 12.0 * Balance.HOUR, 12.0 * Balance.HOUR).exact_total == 6.0 * Balance.DAY, "설정 '빠르게' → 12시간에 병 6일")
 	gs.away_speed = keep_a
 	check(GameSettings.away_words(0) == "느리게 (12시간 → 1.5일)" and GameSettings.away_words(1) == "보통 (12시간 → 3일)" and GameSettings.away_words(2) == "빠르게 (12시간 → 6일)",
 		"설정 줄: %s · %s · %s" % [GameSettings.away_words(0), GameSettings.away_words(1), GameSettings.away_words(2)])
 	check(words_ok([GameSettings.away_words(1), "자리를 비운 동안의 일을 펼쳐 보는 중…"]) == "", "설정·로딩 글에 금지어 없음")
-	# 정밀: 따라잡기(30초 걸음)를 잘게 나눠 돌려도 = 같은 걸음으로 몰아서 계산한 것
+	# 정밀 (CatchUp.fast = false): 따라잡기(30초 걸음)를 잘게 나눠 돌려도 = 같은 걸음으로 몰아서 계산한 것
+	CatchUp.fast = false
 	var va := Village.new_prototype(13)
 	var ca := CatchUp.new(va, 1.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, 6.0)
+	CatchUp.fast = true
+	check(ca.step_dt == Balance.AWAY_STEP and not ca.fast_path, "정밀 따라잡기: 걸음 %.0f초" % ca.step_dt)
 	while not ca.run(0.5):
 		pass
 	ca.finish()
@@ -805,7 +808,20 @@ func test_away_rate() -> void:
 		vr.crises.clear()
 	check(va.t == vr.t and va.people.size() == vr.people.size() and va.book.size() >= vr.book.size() and va.rng.state == vr.rng.state and va.step_dt == Balance.STEP,
 		"비운 1시간 = 병 6시간: 잘게 나눠도 몰아서 계산한 것과 같다 (난수까지) · 끝나면 걸음 크기 원래대로")
-	# 시간: 작은 마을 병 6일 (넓은 30일 세상은 tools/measure_speeds.gd -- catchup)
+	# 빠른 길도: 잘게 나눠 돌려도 = 한 번에 돌린 것 (난수까지) · 끝나면 걸음·물 간격·계산 간격 원래대로
+	var vf := Village.new_prototype(13)
+	var cf := CatchUp.new(vf, 1.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, 6.0)
+	while not cf.run(0.5):
+		pass
+	cf.finish()
+	var vg := Village.new_prototype(13)
+	var cg := CatchUp.new(vg, 1.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, 6.0)
+	cg.run()
+	cg.finish()
+	check(vf.t == vg.t and vf.people.size() == vg.people.size() and vf.book.size() == vg.book.size() and vf.rng.state == vg.rng.state
+		and vf.step_dt == Balance.STEP and vf.tick_mult == 1.0 and vf.water.offline_mult == 1.0,
+		"빠른 길: 잘게 나눠도 한 번에 계산한 것과 같다 (난수까지) · 끝나면 걸음·계산 간격 원래대로")
+	# 시간: 작은 마을 병 6일 (넓은 30일 세상은 tools/bench_catchup.gd)
 	var vt := Village.new_prototype(14)
 	var ct := CatchUp.new(vt, 24.0 * Balance.HOUR, 24.0 * Balance.HOUR, null, 6.0)
 	ct.run()
@@ -814,6 +830,61 @@ func test_away_rate() -> void:
 	check(vt.check_invariants().is_empty() and ct.real_ms / 1000.0 < 60.0, "병 6일 따라잡기 뒤 값 이상 없음 (%.1f초)" % (ct.real_ms / 1000.0))
 	CatchUp.rate_override = keep_r
 	CatchUp.step_override = keep_s
+
+
+## 따라잡기 빠른 길 (ROADMAP 4 — CatchUp.fast: 걸음 60초 · 물 간격 ×2 · 건강·공기·버섯·혼인출산 간격 ×2 · 일자리 3분):
+## 시드 몇 개로 정밀 따라잡기와 견주면 인구·먹을 것·제물·떠난 사람이 통계로 같다 (평균이 허용 범위 안), 시간은 더 짧다
+func test_catchup_fast() -> void:
+	print("== 따라잡기 빠른 길 = 정밀 따라잡기 (통계)")
+	var keep_r := CatchUp.rate_override
+	var keep_s := CatchUp.step_override
+	CatchUp.rate_override = -1.0
+	CatchUp.step_override = -1.0
+	var seeds := [31, 32, 33] if mode == "quick" else [31, 32, 33, 34, 35, 36, 37, 38]
+	var rate := 3.0 if mode == "quick" else 6.0          # 병 1.5일 ('느리게') · 전체 시험은 3일 ('보통')
+	var sums := {"exact": {}, "fast": {}}
+	var ms := {"exact": 0.0, "fast": 0.0}
+	var ok_inv := true
+	var same_t := true
+	for sd: int in seeds:
+		var t_end := -1.0
+		for mode: String in ["exact", "fast"]:
+			CatchUp.fast = mode == "fast"
+			var v := Village.new_prototype(sd)
+			var c := CatchUp.new(v, 12.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, rate)
+			c.run()
+			c.finish()
+			ms[mode] += c.real_ms
+			if t_end < 0.0:
+				t_end = v.t
+			same_t = same_t and absf(v.t - t_end) < 1e-6
+			ok_inv = ok_inv and v.check_invariants().is_empty()
+			var offer := 0
+			var alt := v.altar_items()
+			for k: String in alt:
+				offer += int(alt[k])
+			var row := {"pop": v.people.size(), "food": v.food_total(), "offer": offer, "dead": v.dead.size(), "built": v.buildings.filter(func(b: Building) -> bool: return b.built).size()}
+			for k: String in row:
+				sums[mode][k] = float(sums[mode].get(k, 0.0)) + float(row[k])
+	CatchUp.fast = true
+	CatchUp.rate_override = keep_r
+	CatchUp.step_override = keep_s
+	var n := float(seeds.size())
+	var line := PackedStringArray()
+	var close := true
+	for k: String in ["pop", "food", "offer", "dead", "built"]:
+		var a := float(sums["exact"][k]) / n
+		var b := float(sums["fast"][k]) / n
+		line.append("%s %.1f/%.1f" % [k, a, b])
+		var tol: float = {"pop": 0.15, "food": 0.3, "offer": 0.35, "dead": 1.0, "built": 0.15}[k]
+		if k == "dead":
+			close = close and absf(a - b) <= 1.5                 # 사람 수가 작아 비율 대신 평균 차이 (1.5명)
+		else:
+			close = close and absf(a - b) <= tol * maxf(1.0, a)
+	print("  정밀/빠른 길 평균 (시드 %d개): %s · %.0f ms / %.0f ms" % [seeds.size(), " · ".join(line), ms["exact"], ms["fast"]])
+	check(same_t and ok_inv, "빠른 길도 같은 병 시간만큼 흐르고 값 이상 없음")
+	check(close, "빠른 길 결과 = 정밀 결과 (평균이 허용 범위 안): %s" % " · ".join(line))
+	check(ms["fast"] < ms["exact"] * 0.85, "빠른 길이 더 빠르다 (%.0f ms < %.0f ms)" % [ms["fast"], ms["exact"]])
 
 
 static func world_sig(jw: JarWorld) -> String:

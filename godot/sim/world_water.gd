@@ -551,7 +551,7 @@ func advance(seconds: float) -> void:
 		left -= dt
 		t += dt
 		_hydro_acc += dt
-		var every := OFFLINE_EVERY_BIG if offline else ONLINE_EVERY
+		var every := OFFLINE_EVERY_BIG * offline_mult if offline else ONLINE_EVERY
 		while _hydro_acc >= every:
 			world_tick(every / 60.0)
 			_hydro_acc -= every
