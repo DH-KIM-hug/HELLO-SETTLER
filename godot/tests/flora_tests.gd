@@ -533,7 +533,7 @@ func test_weeds() -> void:
 	v2.assign_jobs()
 	var w := v2.person(farm2.worker)
 	v2.flora.weeds[farm2.id] = 2
-	v2.advance(2.0 * H)
+	v2.advance(6.0 * H)        # A29: 걸음 0.7칸/초 (병 한 시간에 약 9칸) — 하던 일을 마치고 밭까지 오는 데 오래 걸려 낮 동안 넉넉히 (예전 2시간)
 	check(w != null and not v2.flora.weeds.has(farm2.id) and float(v2.stock["민들레 잎"]) >= 4.0, "농부가 잡초를 뽑음 → 쓴 나물 %.0f" % v2.stock["민들레 잎"])
 	_keep_texts(v2)
 

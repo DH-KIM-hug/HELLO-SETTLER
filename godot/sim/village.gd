@@ -277,7 +277,7 @@ func in_opening() -> bool:
 	return int(stats.get("thanks", 0)) == 0 and t < Balance.OPENING_END and not chief_off     # 촌장이 없으면(시험) 대본도 없다
 
 
-## v5 걸음 배율 — 보통 1. 첫 한 시간 대본(감사 기도 전)은 예전 걸음, 수첩의 첫날은 느린 병 시계에 맞춰 (화면에선 같은 사람 걸음)
+## v5 걸음 배율 — 보통 1. 첫 한 시간 대본·제단 장면은 병 시계로 짠 옛 대본 걸음 (A28에서 다시), 수첩의 첫날은 느린 병 시계 보정뿐 (화면에선 보통과 같은 0.7칸/초 — ×1.25 덤 없앰, A29)
 func pace_walk() -> float:
 	if in_opening() or staged():
 		return Balance.WALK_OPENING / Balance.WALK
@@ -2938,19 +2938,24 @@ func evening_offering() -> Dictionary:
 	return got
 
 
-## 첫 저녁 기도에 남는 물건이 없으면 마을이 만드는 물건 중 가장 많은 것을 몇 개 (FIRST_OFFER_TOKEN) — '첫 제물'이 늘 생기게
+## 첫 저녁 기도에 남는 물건이 없으면 마을이 만드는 물건 중 가장 많은 것을 몇 개 (FIRST_OFFER_TOKEN) — '첫 제물'이 늘 생기게.
+## (A29 걸음 0.7칸/초 — 첫날 통나무가 바닥날 수 있어) 만드는 것이 없으면 창고의 다른 자재(판자·돌 등, 하늘에서 온 몫은 빼고)라도 한 개부터
 func _first_token(by: PackedInt32Array, got: Dictionary) -> void:
 	var best := ""
 	var bh := 0.0
-	for item: String in Balance.PRODUCER:
-		if not makes(item) or item in Balance.FOODS or item == Balance.PORRIDGE:
-			continue
-		var h := Production.own_stock(self, item)
-		if h > bh:
-			bh = h
-			best = item
-	var amt := mini(Balance.FIRST_OFFER_TOKEN, floori(bh * 0.5))
-	if best == "" or amt < 1:
+	var any_work := Balance.PRODUCER.keys().any(func(k: String) -> bool: return makes(k))     # 일터가 하나도 없는 마을은 대신 바치지 않음 (만들지 않는 물건은 바치지 않는다)
+	for pass_made: bool in ([true, false] if any_work else [true]):
+		for item: String in Balance.PRODUCER:
+			if (pass_made and not makes(item)) or item in Balance.FOODS or item == Balance.PORRIDGE:
+				continue
+			var h := Production.own_stock(self, item)
+			if h > bh:
+				bh = h
+				best = item
+		if bh >= 1.0:
+			break
+	var amt := mini(Balance.FIRST_OFFER_TOKEN, maxi(1, floori(bh * 0.5)))
+	if best == "" or bh < 1.0:
 		return
 	stock[best] = float(stock[best]) - amt
 	_put_offering(best, amt, by, _prayer_key())

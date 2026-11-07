@@ -214,7 +214,7 @@ func test_anims() -> void:
 	check(th >= 0 and m.skel.find_bone("skull") >= 0 and m.skel.find_bone("hand.R") >= 0, "뼈대: 엉덩이·머리·손·다리")
 	m.apply_pose("walk", 0.0)
 	var a := m.skel.get_bone_pose_rotation(th)
-	m.apply_pose("walk", 0.14)
+	m.apply_pose("walk", 0.14 / Balance.WALK_SCREEN)     # 다리 박자는 걸음을 따름 (A29: 0.7칸/초 → 같은 자세까지 0.2초)
 	var b := m.skel.get_bone_pose_rotation(th)
 	check(a.angle_to(b) > 0.2, "걷기: 다리 뼈가 움직임 (%.2f rad)" % a.angle_to(b))
 	m.set_anim("walk")
