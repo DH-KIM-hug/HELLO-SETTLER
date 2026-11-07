@@ -1,13 +1,13 @@
 ## 첫 병의 안내 자막 (OPENING 3.1 v3 — 거인에게 하는 말, 강요하지 않음). 아래 띠 위에 한 번에 하나:
 ##   ① 도착 2분쯤 (창세의 날 ×12 → 병 시계 24분): "유리를 톡 두드려 보세요. 사람들이 하늘을 볼 거예요." — 유리를 톡 치면 사라짐
-##   ② 그다음: "뚜껑을 열어 꽃씨를 불어 보세요." — 뚜껑 버튼 → (열리면) 불기 버튼이 부드럽게 빛남. 불면 사라짐
+##   (v3.3: 옛 ② "뚜껑을 열어 꽃씨를 불어 보세요"는 없앰 — 뚜껑은 거인의 손짓마다 저절로 열리고, 첫 병은 거인의 수첩(sim/notebook.gd)이 이끈다)
 ##   주민이 거인을 깨달으면 (Village.aware) 안내는 끝. 상태는 Village.guide (그 병과 함께 저장): {on, tap, blow}.
 ## 장면이 맡는 것: 첫 병을 만들 때 guide = {on: true} · tap_glass / blow에서 done(...) · 버튼 빛 (highlight()가 돌려주는 이름)
 class_name GuideCaption
 extends PanelContainer
 
 const TAP_AT := 24.0 * 60.0          # 병 시계 (창세의 날 ×12 → 현실 약 2분)
-const LINES := {"tap": "유리를 톡 두드려 보세요. 사람들이 하늘을 볼 거예요.", "blow": "뚜껑을 열어 꽃씨를 불어 보세요."}
+const LINES := {"tap": "유리를 톡 두드려 보세요. 사람들이 하늘을 볼 거예요."}
 
 var village: Village
 var label: Label
@@ -41,12 +41,10 @@ func setup(v: Village) -> void:
 
 ## 지금 보일 안내 ("tap" · "blow" · "")
 static func step(v: Village) -> String:
-	if v == null or not bool(v.guide.get("on", false)) or v.aware:
+	if v == null or not bool(v.guide.get("on", false)) or v.aware or Notebook.active(v):
 		return ""
 	if not bool(v.guide.get("tap", false)):
 		return "tap" if v.t >= TAP_AT else ""
-	if not bool(v.guide.get("blow", false)):
-		return "blow"
 	return ""
 
 
@@ -59,11 +57,9 @@ static func done(v: Village, what: String) -> void:
 	v.guide[what] = true
 
 
-## 부드럽게 빛낼 아래 띠 버튼: "lid" · "blow" · ""
-static func highlight(v: Village) -> String:
-	if step(v) != "blow":
-		return ""
-	return "blow" if v.air != null and v.air.lid_open else "lid"
+## 부드럽게 빛낼 아래 띠 버튼 — (v3.3) 뚜껑·불기 안내는 없앰
+static func highlight(_v: Village) -> String:
+	return ""
 
 
 func _process(dt: float) -> void:

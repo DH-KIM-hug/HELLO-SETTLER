@@ -28,7 +28,12 @@ static func has(name: String) -> bool:
 
 
 ## 그림 (없으면 null)
+const ALIAS := {"주운 통나무": "통나무", "하늘 낟알 한 줌": "밀"}     # [거인의 수첩] 무료 물건은 비슷한 그림으로
+
+
 static func tex(name: String) -> Texture2D:
+	if ALIAS.has(name):
+		name = String(ALIAS[name])
 	if _cache.has(name):
 		return _cache[name]
 	var t: Texture2D = null

@@ -34,8 +34,9 @@ var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤
 var creation := false
 var creation_until := 0.0             # 끝나는 병 시각 t
 var creation_done := false            # 창세의 날을 지났다 (끝까지 갔든 거인이 바꿨든)
+var creation_real := 0.0              # [창세의 날 v3.3] 창세의 날이 흐른 현실 초 (빠르기 단계 — Notebook.day_speed)
 
-const CREATION_SPEED := 12.0
+const CREATION_SPEED := 12.0          # (옛 ×12 — 이제 창세의 날 빠르기는 Notebook.day_scale × 보통 하루(현실 5분): 쪽지 동안 0.08 · 장면 앞 0.03~0.04 · 수첩 뒤 1.15, 첫날 ≈ 현실 10~12분)
 const CREATION_HINT := "병의 첫날이 지났어요. 이제부터는 아래 [속도] 단추로 병의 시간을 빠르게 흘릴 수 있어요."
 
 
@@ -67,8 +68,8 @@ func _init(village: Village) -> void:
 func speed() -> float:
 	if skipping:
 		return skip_span / Balance.SKIP_NIGHT_SECONDS
-	if creation:
-		return CREATION_SPEED
+	if creation:                      # [창세의 날 v3.3] 첫날 빠르기 × 거인이 고른 배속
+		return Notebook.day_speed(v, creation_real) * float(Balance.SPEEDS[speed_i]) / float(Balance.SPEEDS[0])     # 보통 하루에 대한 몫 × 고른 배속 (가장 느린 배속에 대해)
 	return float(Balance.SPEEDS[speed_i])
 
 
@@ -76,13 +77,12 @@ func speed() -> float:
 func set_speed(i: int) -> void:
 	if skipping:
 		_end_skip()
-	_end_creation(false)
-	speed_i = clampi(i, 0, Balance.SPEEDS.size() - 1)
+	speed_i = clampi(i, 0, Balance.SPEEDS.size() - 1)     # [창세의 날 v3.3] 배속을 골라도 창세의 날은 이어짐 (그 위에 곱함)
 
 
 ## 배속 버튼: ×1 → ×2 → ×4 → ×8 → ×1 (밤 건너뛰는 중이면 그만두고 ×1). 창세의 날(×12)에 누르면 ×1부터
 func cycle_speed() -> void:
-	if skipping or creation:
+	if skipping:
 		set_speed(0)
 	else:
 		set_speed((speed_i + 1) % Balance.SPEEDS.size())
@@ -152,6 +152,8 @@ func _tick_skip(real_dt: float) -> int:
 		set_speed(0)
 		notice = "아침이 밝았어요"
 		notice_t = 4.0
+		if creation and v.t >= creation_until - 1.0:     # [창세의 날 v3.3] 첫날 밤을 건너뛰면 창세의 날 끝
+			_end_creation(true)
 	return n
 
 
@@ -162,6 +164,11 @@ func tick(real_dt: float) -> int:
 	_lid_auto_close(real_dt)
 	if skipping:
 		return _tick_skip(real_dt)
+	Notebook.tick(v, real_dt)         # [거인의 수첩] 쪽지 차례 (현실 시간)
+	if creation:                      # [창세의 날 v3.3] 첫 저녁 기도 뒤 모두 잠들면 밤을 저절로 건너뜀 (약 3초)
+		creation_real += real_dt
+		if Notebook.nap_time(v) and can_skip_night() and start_skip_night():
+			return _tick_skip(real_dt)
 	acc += real_dt * speed()
 	var n := 0
 	while acc >= step and n < max_steps:
@@ -204,9 +211,7 @@ func _lid_auto_close(real_dt: float) -> void:
 	lid_real += real_dt
 	if lid_real >= Balance.LID_AUTO_CLOSE_REAL:
 		v.close_lid()
-		lid_real = 0.0
-		notice = "뚜껑이 저절로 닫혔어요"
-		notice_t = 3.0
+		lid_real = 0.0                # (v3.3) 뚜껑은 손짓마다 저절로 열고 닫힌다 — 닫힘 알림은 없음 (화면은 CorkPop)
 
 
 # ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────

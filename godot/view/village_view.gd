@@ -351,10 +351,9 @@ func _bld_state(b: Building) -> String:
 	var piles := ""
 	for k in b.out:
 		piles += "%s%d" % [k, mini(6, int(b.out[k]))]
-	var stage := 4
+	var stage := SITE_STAGES
 	if b.is_site():
-		var tm: float = Balance.B[b.site_type()]["time"]
-		stage = int(clampf(b.prog / tm, 0.0, 0.99) * 4.0)
+		stage = site_stage(b)
 	var ripe := b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at
 	# 자리·병 방향도 키에 (병을 돌리면 건물 자리가 돈다)
 	return "%s|%s|%s|%d|%d,%d|%s|%s|%.2f,%.2f|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot]
@@ -379,6 +378,8 @@ func _sync_buildings() -> void:
 		var y := gy(b.x, b.y)
 		for a in 4:      # 비탈에서 뜨지 않게 가장 낮은 곳에
 			y = minf(y, gy(b.x + cos(a * PI / 2.0) * size, b.y + sin(a * PI / 2.0) * size))
+		if not b.built:                      # 짓는 터는 가운데 땅 높이에 (낮은 귀퉁이에 맞추면 말뚝·고랑이 땅에 묻힘)
+			y = gy(b.x, b.y) - 0.02
 		n.position = Vector3(b.x, y, b.y)
 		n.scale = Vector3.ONE * BUILDING_SCALE
 		# 앞(문)이 기본 카메라 쪽(방위 45°)을 보게 + 조금씩 다르게 (시뮬레이션에는 방향이 없음)
@@ -438,19 +439,66 @@ func _build_shape(n: Node3D, b: Building) -> void:
 		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]), y[1]))
 
 
-## 건설 현장: 네 귀퉁이 기둥(진행만큼 높아짐) + 바닥 + 도착한 판자·돌 더미
-func _build_site(n: Node3D, b: Building) -> void:
+## 건설 현장 — 몇 초마다 눈에 띄게 바뀌는 여덟 단계 (OPENING 3.1b v3.3 '늘 무언가 바뀌는 게 보이게'):
+## 말뚝·줄 → 바닥 → 기둥 반 → 기둥·들보 (뼈대) → 벽 반 → 벽 → 서까래 → 지붕 (다 지으면 모델) + 도착한 판자·돌 더미
+const SITE_STAGES := 8
+
+
+static func site_stage(b: Building) -> int:
 	var tm: float = Balance.B[b.site_type()]["time"]
-	var f := clampf(b.prog / tm, 0.0, 1.0)
+	return int(clampf(b.prog / tm, 0.0, 0.999) * SITE_STAGES)
+
+
+func _build_site(n: Node3D, b: Building) -> void:
+	var st := site_stage(b) if b.is_site() else SITE_STAGES - 1
+	if b.built:
+		st = mini(st, 3)                     # 개축: 옛 집 둘레 비계(기둥·들보)만
 	var s := b.size() * 0.85
-	var h := 0.35 + 1.4 * f
+	var d := s * 0.8
+	var wall := Style.WOOD.lightened(0.12)
 	if not b.built:
-		_box(n, Vector3(s * 2.0, 0.1, s * 1.6), Vector3(0, 0.05, 0), Style.WOOD.lightened(0.25))
-	for p: Vector2 in [Vector2(-s, -s * 0.8), Vector2(s, -s * 0.8), Vector2(-s, s * 0.8), Vector2(s, s * 0.8)]:
-		_box(n, Vector3(0.12, h, 0.12), Vector3(p.x, h * 0.5, p.y), Style.WOOD)
-	if f > 0.25:
-		_box(n, Vector3(s * 2.0, 0.08, 0.1), Vector3(0, h, -s * 0.8), Style.WOOD)
-		_box(n, Vector3(s * 2.0, 0.08, 0.1), Vector3(0, h, s * 0.8), Style.WOOD)
+		for p: Vector2 in [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d)]:     # 말뚝
+			_box(n, Vector3(0.08, 0.3, 0.08), Vector3(p.x, 0.15, p.y), Style.WOOD)
+		for e: Array in [[Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, -d)], [Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, d)],
+				[Vector3(0.03, 0.03, d * 2.0), Vector3(-s, 0.26, 0)], [Vector3(0.03, 0.03, d * 2.0), Vector3(s, 0.26, 0)]]:     # 줄
+			_box(n, e[0], e[1], Color("e8dcc0"))
+		if b.site_type() == "농장":                                                      # 밭: 고랑이 한 줄씩 늘고 마지막에 울타리
+			var rows := st + 1
+			for i in rows:
+				var z := -d + (d * 2.0) * (float(i) + 0.5) / float(SITE_STAGES)
+				_box(n, Vector3(s * 1.9, 0.07, d * 2.0 / float(SITE_STAGES) * 0.55), Vector3(0, 0.05, z), Color("4f3420"))
+			if st >= SITE_STAGES - 2:
+				for p: Vector2 in [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d), Vector2(0, -d), Vector2(0, d)]:
+					_box(n, Vector3(0.1, 0.55, 0.1), Vector3(p.x, 0.27, p.y), Style.WOOD)
+			return
+		if st >= 1:
+			_box(n, Vector3(s * 2.0, 0.1, d * 2.0), Vector3(0, 0.05, 0), Style.WOOD.lightened(0.25))
+	var h := 1.5
+	if st >= 2:
+		var ph := h * (0.5 if st == 2 else 1.0)
+		for p: Vector2 in [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d)]:
+			_box(n, Vector3(0.14, ph, 0.14), Vector3(p.x, ph * 0.5, p.y), Style.WOOD)
+	if st >= 3:
+		_box(n, Vector3(s * 2.0, 0.1, 0.12), Vector3(0, h, -d), Style.WOOD)
+		_box(n, Vector3(s * 2.0, 0.1, 0.12), Vector3(0, h, d), Style.WOOD)
+		_box(n, Vector3(0.12, 0.1, d * 2.0), Vector3(-s, h, 0), Style.WOOD)
+		_box(n, Vector3(0.12, 0.1, d * 2.0), Vector3(s, h, 0), Style.WOOD)
+	if st >= 4:
+		var wh := h * (0.5 if st == 4 else 1.0)
+		_box(n, Vector3(s * 2.0, wh, 0.1), Vector3(0, wh * 0.5, -d), wall)               # 뒷벽
+		_box(n, Vector3(0.1, wh, d * 2.0), Vector3(-s, wh * 0.5, 0), wall)
+		_box(n, Vector3(0.1, wh, d * 2.0), Vector3(s, wh * 0.5, 0), wall)
+		_box(n, Vector3(s * 0.7, wh, 0.1), Vector3(-s * 0.65, wh * 0.5, d), wall)        # 앞벽 (문 자리 비움)
+		_box(n, Vector3(s * 0.7, wh, 0.1), Vector3(s * 0.65, wh * 0.5, d), wall)
+	if st >= 6:
+		for side in [-1.0, 1.0]:                                                          # 서까래 / 지붕
+			var mi := MeshInstance3D.new()
+			var rw := sqrt(s * s + 0.8 * 0.8) + 0.25
+			mi.mesh = ResidentModel.box_of(Vector3(rw, 0.1 if st == 6 else 0.22, d * 2.0 + 0.4))
+			mi.material_override = Toon.mat(Style.WOOD if st == 6 else Style.THATCH)
+			mi.position = Vector3(side * s * 0.5, h + 0.42, 0)
+			mi.rotation.z = -side * atan2(0.8, s)
+			n.add_child(mi)
 	for i in mini(6, int(b.delivered["판자"])):
 		_box(n, Vector3(0.9, 0.08, 0.26), Vector3(s + 0.5, 0.05 + i * 0.09, 0.3), Style.THATCH)
 	for i in mini(6, int(b.delivered["돌"])):

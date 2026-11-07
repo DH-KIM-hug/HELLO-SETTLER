@@ -114,9 +114,9 @@ func fall(n: Node3D, ground_y: float) -> void:
 func _animate(dt: float) -> void:
 	var keep: Array = []
 	for f: Dictionary in _falls:
-		var n: Node3D = f["node"]
-		if not is_instance_valid(n):
+		if not is_instance_valid(f["node"]):     # 떨어지는 중에 다 깎여 사라짐 (작은 물건 — 주운 통나무)
 			continue
+		var n: Node3D = f["node"]
 		f["t"] = float(f["t"]) + dt
 		var u := clampf(float(f["t"]) / FALL_SECS, 0.0, 1.0)
 		n.position.y = float(f["y0"]) + FALL_H * (1.0 - u * u)
@@ -137,12 +137,13 @@ func _animate(dt: float) -> void:
 	_falls = keep
 	var dk: Array = []
 	for d: Dictionary in _dust:
+		if not is_instance_valid(d["node"]):
+			continue
 		var n: Node3D = d["node"]
 		d["t"] = float(d["t"]) + dt
 		var u := float(d["t"]) / 0.7
-		if u >= 1.0 or not is_instance_valid(n):
-			if is_instance_valid(n):
-				n.queue_free()
+		if u >= 1.0:
+			n.queue_free()
 			continue
 		n.scale = Vector3.ONE * (1.0 + u * 1.6)
 		for c in n.get_children():
@@ -267,6 +268,18 @@ static func make_item(item: String) -> Node3D:
 		"나무젓가락":
 			_mesh(n, _box(Vector3(0.62, 0.62, 7.6)), Color("d8b27a"), Vector3(0, 0.31, 0), Vector3(0, 0, 0))
 			_mesh(n, _box(Vector3(0.66, 0.08, 1.2)), Color("b98d55"), Vector3(0, 0.66, -2.9))
+		"주운 통나무":                    # [거인의 수첩] 통나무 세 개 묶음 (작게 — 짐꾼이 곧 주워 감)
+			for i in 3:
+				var lg := CylinderMesh.new()
+				lg.top_radius = 0.16
+				lg.bottom_radius = 0.16
+				lg.height = 1.5
+				lg.radial_segments = 7
+				_mesh(n, lg, Color("9a6b3e").lerp(Color("b98552"), 0.3 * i), Vector3(-0.3 + i * 0.3, 0.17 + 0.25 * float(i == 1), 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+		"하늘 낟알 한 줌":                # [거인의 수첩] 금빛 낟알 한 줌 (떨어지면 MannaFx가 쏟아지게)
+			for i in 9:
+				var a := float(i) * 2.39
+				_mesh(n, _sphere(0.18, 5, 3), Color("f4cf62") if i % 3 else Color("fff0b0"), Vector3(cos(a) * 0.35 * sqrt(i), 0.15 + 0.05 * (i % 2), sin(a) * 0.35 * sqrt(i)))
 		"자갈 한 알":
 			_mesh(n, _sphere(1.6, 7, 4), Color("9b968c"), Vector3(0, 0.9, 0), Vector3(0.3, 0.6, 0.1), Vector3(1.05, 0.72, 0.92))
 			_mesh(n, _sphere(0.8, 6, 3), Color("85807a"), Vector3(0.9, 0.5, 0.7), Vector3(0.4, 0.2, 0.0))

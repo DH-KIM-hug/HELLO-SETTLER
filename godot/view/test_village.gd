@@ -100,6 +100,15 @@ var rev_show: RevelationShow
 var guide_cap: GuideCaption
 var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
 var _btn_glow_t := 0.0
+# [거인의 수첩] (OPENING 3.1b — sim/notebook.gd · view/ui/notebook_note.gd) · 첫 아기 이름 · 저절로 열리는 뚜껑 (CorkPop) · 물 맞은 밭의 싹
+var notebook_note: NotebookNote
+var baby_sheet: BabyNameSheet
+var cork_pop: CorkPop
+var _lid_was := false
+var _sprout_seen := -1.0
+var _baby_asked := -1
+var _site_seen := {}                 # 짓는 터 id → 본 단계 (단계가 바뀌면 망치 소리 — 첫 병 첫날)
+const LID_AFTER := 2.0               # 손짓이 끝나고 뚜껑이 저절로 닫히기까지 (현실 초)
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -247,7 +256,7 @@ func _start_save() -> void:
 		if sm.should_start_creation():
 			clock.start_creation_day()
 			if not village.aware:
-				village.guide = {"on": true}    # 첫 병만: 톡·불기 안내 자막 (OPENING 3.1 v3) — 그 병과 함께 저장
+				Notebook.begin(village)          # 첫 병만: 거인의 수첩 (OPENING 3.1b) — 그 병과 함께 저장 (옛 안내 자막 대신)
 		sm.giant["first_jar_done"] = true
 		sm.save_all(true)
 		return
@@ -648,7 +657,11 @@ func _setup_ui() -> void:
 	detail = ResidentDetail.new()
 	detail.setup(village)
 	dlayer.add_child(detail)
-	detail.follow_changed.connect(func(id: int, on: bool) -> void: follow_id = id if on else -1)
+	detail.follow_changed.connect(func(id: int, on: bool) -> void:
+		follow_id = id if on else -1
+		if on:                            # [거인의 수첩] 따라가 보기 → 그 사람의 생각
+			var fvq: Village = _follow_vv[0] if not _follow_vv.is_empty() else village
+			Notebook.followed(fvq, fvq.person(id)))
 	detail.closed.connect(func() -> void: follow_id = -1)
 	altar_sheet = AltarSheet.new()
 	altar_sheet.setup(village)
@@ -678,6 +691,7 @@ func _setup_ui() -> void:
 	guide_cap.custom_minimum_size.x = 280
 	stack.add_child(guide_cap)
 	stack.move_child(guide_cap, 0)
+	_setup_notebook(root, dlayer)
 	for vv: Array in village_views():
 		_awake_seen[vv[0]] = (vv[0] as Village).awakened_t
 	GameSettings.get_current().apply()
@@ -717,6 +731,7 @@ func open_shop() -> void:
 	close_sheets(shop_sheet)
 	shop_sheet.setup(focus_village())
 	shop_sheet.open()
+	Notebook.on(focus_village(), "shop_open")     # [거인의 수첩]
 
 
 ## [선반] (UI 05 — 지금은 '곧 열려요' + 거인의 등불)
@@ -898,6 +913,7 @@ func open_chronicle(tab := -1) -> void:
 		return_letter.close()
 	chronicle.setup(focus_village(), jar_world())
 	chronicle.open(tab)
+	Notebook.on(focus_village(), "chronicle")     # [거인의 수첩]
 
 
 ## 연대기 '사람들'에서 살아 있는 사람을 누름 → 주민 상세 (그 사람의 무리)
@@ -1124,6 +1140,8 @@ func toggle_lid() -> void:
 
 ## [하늘의 것] 거인이 분다 — 카메라가 보는 쪽(땅 위)으로. 뚜껑이 닫혀 있으면 아무 일 없음
 func blow() -> void:
+	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
+	lid_soon()
 	var f := cam.camera.global_transform.basis.z
 	var n := focus_village().blow_seeds(Vector2(-f.x, -f.z))
 	if n >= 0:
@@ -1138,6 +1156,8 @@ func blow() -> void:
 ## [거인의 손] 핀셋 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데에 가장 가까운 것 (날벌레 → 먼지 뭉치 → 떨어진 물건 → 바위)을 집는다.
 ## 가운데에서 멀수록 손끝이 서툴러 곁의 집을 짓누를 수 있다 (가운데에 맞추고 집으면 깔끔)
 func tweeze() -> void:
+	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
+	lid_soon()
 	var fv := focus_village()
 	var vs := get_viewport().get_visible_rect().size
 	var c := screen_to_ground(vs * 0.5)
@@ -1159,6 +1179,8 @@ func tweeze() -> void:
 
 ## [거인의 손] 물 뿌리기 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데 땅에
 func spray() -> void:
+	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
+	lid_soon()
 	var fv := focus_village()
 	var vs := get_viewport().get_visible_rect().size
 	var p := screen_to_ground(vs * 0.5)
@@ -1166,7 +1188,6 @@ func spray() -> void:
 	if not bool(r["ok"]):
 		hand_ctl.say(String(r["why"]))
 		return
-	clock.lid_real = 0.0
 	HandFx.spray(jar, Vector3(p.x, terrain.ground_y(p.x, p.y), p.y), GiantHand.SPRAY_R, bool(r["flood"]))
 	GameAudio.fx("water_spray")
 	if bool(r["flood"]):
@@ -1264,17 +1285,14 @@ func _update_ui() -> void:
 	hand_btn.text = "손 %d" % Market.hand.size() if not Market.hand.is_empty() else "손"
 	_btn_glow_t += get_process_delta_time()
 	_hand_glow_t = maxf(0.0, _hand_glow_t - get_process_delta_time())
-	_glow_button(altar_btn, fv.revelation_pending())     # [계시]를 기다림 (A5)
 	guide_cap.setup(fv)
-	var hl := GuideCaption.highlight(fv)                 # 첫 병 안내 (A4b) — 뚜껑·불기는 [손] 칸 안
-	_glow_button(lid_btn, hl == "lid")
-	_glow_button(blow_btn, hl == "blow")
-	_glow_button(hand_btn, (hl != "" and not hand_ctl.is_open()) or _hand_glow_t > 0.0)
+	_glow_button(hand_btn, _hand_glow_t > 0.0 or _nb_target() == hand_btn)     # [거인의 수첩]이 가리키는 단추도 숨 쉬듯 빛남
 	_sparkle.queue_redraw()
 	if hand_ctl.height() != _tray_h:     # 손 칸이 열리고 닫히면 알림 줄을 그 위로
 		_tray_h = hand_ctl.height()
 		layout_bars()
 	_check_awakening()
+	_update_notebook()
 	if clock.notice_t <= 0.0:         # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		var w := next_warning()
 		if w != "":
@@ -1482,6 +1500,7 @@ func _on_tap(sp: Vector2) -> void:
 		detail.setup(_picked[0])
 		_follow_vv = _picked
 		detail.open(r)
+		Notebook.on_detail(_picked[0], r)     # [거인의 수첩] 아이 하나를 눌러 보기
 		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
 	else:
 		tap_glass(false, screen_to_ground(sp))     # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움) · 매달린 물방울은 누른 쪽으로 떨어짐 (WORLD_EVENTS 2.2)
@@ -1605,3 +1624,241 @@ func on_screen_residents() -> Array:
 			if p.x >= 0.0 and p.x <= vs.x and p.y >= top_h and p.y <= vs.y - bottom_h:
 				out.append(r)
 	return out
+
+
+# ───────────────────────── 거인의 수첩 (OPENING 3.1b — sim/notebook.gd) ─────────────────────────
+## 쪽지·화살표는 시트보다 위 층 (주민 상세의 [따라가 보기]도 가리킬 수 있게) · 아기 이름 칸은 시트 층 · 코르크는 화면 층
+func _setup_notebook(root: Control, dlayer: CanvasLayer) -> void:
+	var nl := CanvasLayer.new()
+	nl.layer = 6
+	add_child(nl)
+	var nroot := Control.new()
+	nroot.set_anchors_preset(Control.PRESET_FULL_RECT)
+	nroot.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	nroot.theme = UiTheme.get_theme()
+	nl.add_child(nroot)
+	notebook_note = NotebookNote.new()
+	notebook_note.setup(village)
+	nroot.add_child(notebook_note)
+	notebook_note.pressed.connect(_on_note_pressed)
+	baby_sheet = BabyNameSheet.new()
+	dlayer.add_child(baby_sheet)
+	cork_pop = CorkPop.new()
+	root.add_child(cork_pop)
+	_lid_was = village.air.lid_open
+	settings_sheet.notebook_requested.connect(func() -> void:
+		var fv := focus_village()
+		if not Notebook.active(fv):
+			Notebook.begin(fv, true)
+		settings_sheet.show_toast("거인의 수첩을 다시 펼쳤어요"))
+
+
+## (v3.3) 뚜껑은 거인의 손짓마다 저절로 — 닫혀 있으면 열고 코르크가 '퐁'
+func auto_lid() -> void:
+	if not focus_village().air.lid_open:
+		toggle_lid()
+		if cork_pop != null:
+			cork_pop.top_y = top_h
+			cork_pop.play(true)
+		_lid_was = true
+	clock.lid_real = 0.0
+
+
+## 손짓이 끝났다 — 뚜껑이 곧 저절로 닫힌다 (JarClock의 자동 닫힘을 당김)
+func lid_soon() -> void:
+	clock.lid_real = maxf(clock.lid_real, Balance.LID_AUTO_CLOSE_REAL - LID_AFTER)
+
+
+## 지금 쪽지가 가리킬 단추 (없으면 null) — [손] 칸 안의 것은 칸이 닫혀 있으면 먼저 [손]
+func _nb_target() -> Button:
+	if notebook_note == null:
+		return null
+	var fv := focus_village()
+	var hl := Notebook.highlight(fv)
+	match hl:
+		"slot":
+			if hand_ctl.aiming():
+				return hand_ctl.drop_btn
+			if not hand_ctl.is_open():
+				return hand_btn
+			var item := Notebook.LOGS if String(Notebook.shown(fv).get("id", "")).begins_with("logs") else Notebook.GRAIN
+			for i in Market.hand.size():
+				if String(Market.hand[i]["item"]) == item and i < hand_ctl.slots.size():
+					return hand_ctl.slots[i]
+			return hand_btn
+		"spray", "wipe", "cup":
+			if not hand_ctl.is_open():
+				return hand_btn
+			var m := {"spray": hand_ctl.spray_btn, "wipe": hand_ctl.wipe_btn, "cup": hand_ctl.cup_btn}
+			return m[hl]
+		"chronicle":
+			return null if chronicle.visible else chron_btn
+		"shop":
+			return null if shop_sheet.visible else shop_btn
+		"altar":
+			return null if altar_sheet.visible else altar_btn
+		"people":
+			if detail.visible and String(Notebook.shown(fv).get("act", "")) == "follow":
+				return detail.follow_btn
+	return null
+
+
+## 쪽지가 가리킬 땅 자리 (데이터 좌표) — 없으면 null
+func _nb_area(fv: Village) -> Variant:
+	var tk := Notebook.shown(fv)
+	var here := Vector2(cam.target.x, cam.target.z)
+	match String(tk.get("area", "")):
+		"site":
+			var b := Notebook._site(fv, here, 1.0e9)
+			return Vector2(b.x, b.y) if b != null else null
+		"farm":
+			var f := Notebook._farm(fv, here, 1.0e9)
+			return Vector2(f.x, f.y) if f != null else null
+		"people", "busy":
+			var best: Resident = null
+			var bd := INF
+			var want_child := String(tk.get("act", "")) == "child"
+			var want_busy := String(tk.get("area", "")) == "busy"
+			for r in fv.people:
+				if r.is_baby() or (want_child and not r.is_child()):
+					continue
+				if want_busy and not (r.carry != "" or r.action in ["haul", "build", "work"]):
+					continue
+				var d := Vector2(r.x, r.y).distance_to(here)
+				if d < bd:
+					bd = d
+					best = r
+			return Vector2(best.x, best.y) if best != null else null
+		"altar":
+			return fv.altar_pos
+		"store":
+			var stb := fv.store()
+			return Vector2(stb.x, stb.y) if stb != null else null
+		"fire":
+			return fv.fire
+	if String(tk.get("hl", "")) == "glass":
+		return here
+	return null
+
+
+const RING_WORDS := {"site": "짓는 터", "farm": "첫 밭", "altar": "제단", "glass": "여기를 톡톡"}
+
+
+func _update_notebook() -> void:
+	if notebook_note == null:
+		return
+	var fv := focus_village()
+	notebook_note.setup(fv)
+	notebook_note.position = Vector2(6.0, top_h + 6.0 + UiTheme.TOUCH + 6.0)
+	var big := false                      # 큰 시트가 열린 동안 쪽지는 비켜 줌 (주민 상세는 [따라가 보기]를 가리키므로 그대로)
+	for sh: Control in [altar_sheet, shop_sheet, chronicle, settings_sheet, shelf_sheet, baby_sheet, return_letter]:
+		if sh != null and sh.visible:
+			big = true
+	notebook_note.hidden_by_sheet = big
+	var tk := Notebook.shown(fv)
+	var btn := _nb_target()
+	var rect := Rect2()
+	if btn != null and btn.is_visible_in_tree():
+		rect = btn.get_global_rect()
+	var ring := Vector2(-1, -1)
+	var word := ""
+	var hl := Notebook.highlight(fv)
+	if not tk.is_empty() and (btn == null or btn == hand_btn or hl == "people") and not hand_ctl.aiming() \
+			and not (detail.visible and String(tk.get("area", "")) == "people"):
+		var area: Variant = _nb_area(fv)
+		if area != null:
+			var p: Vector2 = area
+			var w := Vector3(p.x, terrain.ground_y(p.x, p.y) + 0.3, p.y)
+			if not cam.camera.is_position_behind(w):
+				ring = cam.camera.unproject_position(w)
+				var vs := get_viewport().get_visible_rect().size
+				if ring.y < top_h or ring.y > vs.y - bottom_h or ring.x < 0.0 or ring.x > vs.x:
+					ring = Vector2(-1, -1)
+			var key := String(tk.get("area", "")) if String(tk.get("area", "")) != "" else String(tk.get("hl", ""))
+			word = String(RING_WORDS.get(key, ""))
+	notebook_note.point(rect, ring, word)
+	for b: Button in [hand_ctl.spray_btn, hand_ctl.wipe_btn, hand_ctl.cup_btn, chron_btn, shop_btn]:
+		_glow_button(b, b == btn)
+	_glow_button(altar_btn, btn == altar_btn or fv.revelation_pending())     # [계시]를 기다림 (A5) · 수첩
+	_site_progress(fv)
+	# 뚜껑이 저절로 닫힘 → 코르크가 내려앉음
+	if _lid_was and not fv.air.lid_open and cork_pop != null:
+		cork_pop.top_y = top_h
+		cork_pop.play(false)
+	_lid_was = fv.air.lid_open
+	# 물 맞은 첫 밭 → 그 자리에 싹이 빨리감기로
+	var sp: Dictionary = fv.notebook.get("sprout", {})
+	if not sp.is_empty() and float(sp["real"]) != _sprout_seen:
+		_sprout_seen = float(sp["real"])
+		var b := fv.bld(int(sp["b"]))
+		SproutFx.spawn(jar, Vector2(float(sp["x"]), float(sp["y"])), (b.size() if b != null else 1.4) * 1.3, terrain.ground_y)
+	# 첫 아기 → 이름 짓기 칸 (한 번 저절로 열림 — 닫으면 쪽지를 눌러 다시)
+	if String(tk.get("id", "")) == "baby" and int(fv.notebook.get("baby", -1)) != _baby_asked:
+		_baby_asked = int(fv.notebook.get("baby", -1))
+		_open_baby(fv)
+
+
+func _open_baby(fv: Village) -> void:
+	var b := fv.person(int(fv.notebook.get("baby", -1)))
+	if b == null:
+		return
+	close_sheets()
+	baby_sheet.anchor_left = 0.0
+	baby_sheet.anchor_right = 1.0
+	baby_sheet.anchor_top = 1.0
+	baby_sheet.anchor_bottom = 1.0
+	baby_sheet.offset_left = 10
+	baby_sheet.offset_right = -10
+	baby_sheet.offset_bottom = -bottom_h - 8.0
+	baby_sheet.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	baby_sheet.open(fv, b)
+	baby_sheet.offset_top = baby_sheet.offset_bottom - baby_sheet.get_combined_minimum_size().y
+	look_at_ground(Vector2(b.x, b.y) + Vector2(0.0, 2.0))     # 아기와 엄마가 시트 위쪽에 보이게
+
+
+## 쪽지를 누름 → 그 일의 자리로 카메라 (짓는 터·첫 밭·사람들·제단) · [손] 칸을 엶 · 아기 쪽지면 이름 칸
+func _on_note_pressed() -> void:
+	var fv := focus_village()
+	var tk := Notebook.shown(fv)
+	if String(tk.get("id", "")) == "baby":
+		_open_baby(fv)
+		return
+	var area: Variant = _nb_area(fv)
+	if area != null and String(tk.get("hl", "")) != "glass":
+		_stop_follow()
+		look_at_ground(area)
+	var hl := Notebook.highlight(fv)
+	if hl in ["slot", "spray", "wipe", "cup"] and not hand_ctl.is_open() and not hand_ctl.aiming():
+		toggle_hand()
+
+
+## 첫 병 첫날: 짓는 터마다 진행 고리 · 단계가 바뀔 때마다 망치 소리 · 집이 서면 환호 (OPENING 3.1b v3.3 — 늘 무언가 바뀌게)
+func _site_progress(fv: Village) -> void:
+	var marks: Array = []
+	if not Notebook.first_day(fv):
+		notebook_note.site_marks = marks
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var now := {}
+	for b in fv.buildings:
+		if not b.is_site() or b.site_type() == Awakening.ALTAR:
+			continue
+		var st := VillageView.site_stage(b)
+		now[b.id] = st
+		if _site_seen.has(b.id) and int(_site_seen[b.id]) != st:
+			GameAudio.fx("hammer", "Village", -2.0, Vector2(b.x, b.y))
+		var w := Vector3(b.x, terrain.ground_y(b.x, b.y) + 2.6, b.y)
+		if cam.camera.is_position_behind(w):
+			continue
+		var sp := cam.camera.unproject_position(w)
+		if sp.y > top_h + 10.0 and sp.y < vs.y - bottom_h - 10.0 and sp.x > 0.0 and sp.x < vs.x:
+			marks.append([sp, b.prog / float(Balance.B[b.site_type()]["time"])])
+	for id: int in _site_seen.keys():
+		if not now.has(id):
+			var bb := fv.bld(id)
+			if bb != null and bb.built:     # 터가 섰다 — 망치 + 환호 (말풍선·연대기는 Village.thanksgiving)
+				GameAudio.fx("hammer", "Village", 0.0, Vector2(bb.x, bb.y))
+				GameAudio.fx("child_laugh", "Village", -4.0)
+				GameAudio.fx("chime", "Room", -8.0)
+	_site_seen = now
+	notebook_note.site_marks = marks

@@ -679,10 +679,11 @@ func test_creation_day() -> void:
 	var v := Village.new_prototype(41)
 	var c := JarClock.new(v)
 	c.start_creation_day()
-	check(c.creation and c.speed() == 12.0, "첫 병의 첫날은 ×12")
+	var sp0 := Notebook.PACE * Notebook.NORMAL_BASE
+	check(c.creation and absf(c.speed() - sp0) < 0.01, "첫 병의 첫날은 창세의 날 빠르기 (×%.0f — 보통 하루의 %.2f배)" % [c.speed(), Notebook.PACE])
 	check(absf(c.creation_until - 23.0 * Balance.HOUR) < 1.0, "창세의 날 = 병 시계 7시 → 다음 날 6시 (%.2f시간)" % (c.creation_until / 3600.0))
 	var n := c.tick(1.0)
-	check(n == 12, "현실 1초 = 병 12초 (%d걸음)" % n)
+	check(n == int(sp0), "현실 1초 = 병 %d초 (%d걸음)" % [int(sp0), n])
 	# 끝: 시험이 빨리 끝나게 끝 시각을 당겨서 확인
 	c.creation_until = v.t + 30.0
 	for i in 5:
@@ -696,9 +697,10 @@ func test_creation_day() -> void:
 	var c3 := JarClock.new(w)
 	c3.start_creation_day()
 	c3.cycle_speed()
-	check(not c3.creation and c3.speed() == 1.0 and c3.creation_done and c3.notice == "", "거인이 배속을 고르면 창세의 날은 그 자리에서 끝 (알림 없이)")
-	c3.cycle_speed()
-	check(c3.speed() == 2.0, "그다음은 보통 배속 (×2)")
+	var ratio := float(Balance.SPEEDS[1]) / float(Balance.SPEEDS[0])
+	check(c3.creation and absf(c3.speed() - sp0 * ratio) < 0.01, "거인이 배속을 골라도 창세의 날은 이어지고 그 위에 곱함 (×%.0f)" % c3.speed())
+	c3.set_speed(0)
+	check(absf(c3.speed() - sp0) < 0.01, "다시 가장 느린 배속 → 창세의 날 빠르기")
 	# 두 번째 병은 창세의 날 없음 — SaveManager가 첫 병에만 부른다
 	var sm := manager()
 	sm.giant = {"first_jar_done": true}

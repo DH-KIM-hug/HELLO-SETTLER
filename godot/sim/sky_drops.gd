@@ -56,6 +56,7 @@ const SAY := {
 	"각설탕": ["하늘에서 하얀 바위가 내려왔다!", "하늘에서 하얀 바위가 떨어졌어!"],
 	"밀 이삭 한 줄기": ["하늘에서 황금 나무가 쓰러져 내려왔다!", "황금 나무가 하늘에서 쓰러졌어!"],
 	"나무젓가락": ["하늘에서 거대한 통나무가 내려왔다!", "하늘에서 통나무가 떨어졌어!"],
+	"주운 통나무": ["하늘에서 통나무가 내려왔다!", "하늘에서 통나무가 떨어졌어!"],
 	"자갈 한 알": ["하룻밤 새 바위산이 생겼다!", "하늘에서 바위산이 떨어졌어!"],
 	"알약 부스러기": ["거인님의 약이다!", "하늘에서 하얀 돌이 내려왔어!"],
 	"반창고 조각": ["하늘에서 하얀 천이 내려왔다!", "하늘에서 하얀 천이 떨어졌어!"],
@@ -78,6 +79,7 @@ const BOOK := {
 	"각설탕": "하늘에서 하얀 돌집만 한 단 덩어리가 내려왔다. 사람들은 날마다 그것을 조금씩 깎아 먹었다.",
 	"밀 이삭 한 줄기": "하늘에서 황금 나무가 쓰러져 내려왔다. 낟알 하나가 자루만 했다.",
 	"나무젓가락": "하늘에서 거대한 통나무가 내려왔다. 사람들은 그것을 켜고 쪼개어 날랐다.",
+	"주운 통나무": "하늘에서 통나무 몇 개가 떨어졌다. 짐꾼들이 곧바로 주워 짓는 터로 날랐다.",
 	"자갈 한 알": "하룻밤 새 마을 곁에 바위산이 생겼다. 사람들은 그것을 깨어 돌을 날랐다.",
 	"알약 부스러기": "하늘에서 하얀 바위가 내려왔다. 그것을 깎아 먹은 사람들의 열이 내렸다.",
 	"반창고 조각": "하늘에서 하얀 천 더미가 내려왔다. 다친 사람들의 상처를 감싸자 곧 아물었다.",
@@ -206,7 +208,19 @@ static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 		out["warn"] = "사람들이 있어요 — 놀라서 달아나요"
 	elif bool(out["field"]):
 		out["warn"] = "밭에 떨어지면 땅이 짜져요"
+	if kind_of(item) == "grain":
+		out["crush"] = []
+		out["people"] = 0
+		out["warn"] = ""
+	if bool(d.get("site_logs", false)):          # [거인의 수첩] 주운 통나무 — 짓는 터 곁인가
+		out["good"] = "짓는 터 곁이에요 — 짐꾼이 바로 주워 가요" if Notebook.site_near(v, p) != null else "짓는 터에서 멀어요 — 창고로 날라요"
+	elif kind_of(item) == "grain":
+		out["good"] = "사람들 곁이에요 — 주워 먹을 거예요" if _awake_near(v, p, GRAIN_R).size() > 0 else "곁에 사람이 없어요"
 	return out
+
+
+static func kind_of(item: String) -> String:
+	return String(def(item).get("kind", ""))
 
 
 ## 건물 자리 미리보기 (6.7 — 영역 안, 자리의 농사 배율) → {ok, why, warn, good: 자리 말}
@@ -266,6 +280,11 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 	var d := def(item)
 	var size := float(d.get("size", 1.5))
 	v.begin_giant()
+	if String(d.get("kind", "")) == "grain":     # [거인의 수첩] 하늘 낟알 한 줌 — 금빛 낟알이 보이게 내리고 곁의 사람들이 주워 먹음 (부수지도 쫓지도 않음)
+		var eaters := _grain(v, p)
+		v.end_giant()
+		Notebook.on(v, "grain")
+		return {"ok": true, "why": "", "drop": {}, "crushed": 0, "fled": 0, "eaters": eaters}
 	var crushed := 0
 	for b: Building in pv["crush"]:
 		remove_building(v, b)
@@ -325,6 +344,15 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 			v.stats["sky_drops"] = int(v.stats.get("sky_drops", 0)) + 1
 			v.end_giant()
 			return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled, "people": o["people"]}
+	if bool(d.get("site_logs", false)) and not o.is_empty():     # [거인의 수첩] 터 곁이면 짐꾼이 곧바로 터로 나른다
+		var site := Notebook.site_near(v, p)
+		if site != null:
+			o["site"] = site.id
+			v.site_logs[str(site.id)] = float(v.site_logs.get(str(site.id), 0.0)) + LOG_LAND     # 터 곁에 굴러온 몇 개는 곧바로
+			_haul_to_site(v, o, site)
+			Notebook.on(v, "logs")
+		else:
+			Notebook.on(v, "logs_any")             # 터에서 먼 통나무 (창고로 — 다음 집 지을 때)
 	_miracle(v, item, p)
 	Health.food_carry(v, item)                   # [B7] 먹는 물건 (각설탕·마른 약초)에 바깥의 열병이 묻어 옴 (2% — WORLD_EVENTS 5)
 	v.end_giant()
@@ -507,6 +535,28 @@ static func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 			if take > 0.0:
 				r.carry = String(CARRY.get(String(d["res"]), "낟알"))
 				r.carry_amt = take
+		"sky_site":                        # [거인의 수첩] 터에 통나무를 내려놓음 → 짓는 속도↑
+			if r.carry_amt > 0.0:
+				var b: Building = o.get("b")
+				if b != null and b in v.buildings and b.is_site():
+					var key := str(b.id)
+					v.site_logs[key] = float(v.site_logs.get(key, 0.0)) + r.carry_amt
+					v.stats["site_logs"] = float(v.stats.get("site_logs", 0.0)) + r.carry_amt
+				else:
+					v.stock["통나무"] = float(v.stock.get("통나무", 0.0)) + r.carry_amt
+			r.carry = ""
+			r.carry_amt = 0.0
+		"sky_snack":                       # [거인의 수첩] 하늘 낟알을 주워 먹음 — 배가 부르고 기뻐함
+			var q := Vector2(float(o["x"]), float(o["y"]))
+			for m: Dictionary in v.manna:
+				if Vector2(float(m["x"]), float(m["y"])).distance_to(q) < 0.8 and float(m["amt"]) > 0.0:
+					m["amt"] = maxf(0.0, float(m["amt"]) - SNACK)
+					break
+			r.hunger = 0.0
+			r.happiness = minf(1.0, r.happiness + 0.08)
+			v.stats["snacks"] = int(v.stats.get("snacks", 0)) + 1
+			var lines := ["맛있다!", "하늘이 준 낟알이야!", "배가 든든해!"] if not v.aware else ["거인님의 낟알, 맛있다!", "배가 든든해!", "맛있다!"]
+			v.speak(r, lines[r.id % lines.size()], 6)
 		"sky_unres":
 			var d: Dictionary = o["d"]
 			d["res_n"] = maxi(0, int(d["res_n"]) - 1)
@@ -526,6 +576,96 @@ static func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 					v.stock[String(o["k"])] = float(v.stock.get(String(o["k"]), 0.0)) + r.carry_amt
 		_:
 			push_error("SkyDrops.run_op: 모르는 할 일 %s" % o["op"])
+
+
+# ───────────────────────── [거인의 수첩] 주운 통나무 · 하늘 낟알 한 줌 (OPENING 3.1b) ─────────────────────────
+const GRAIN_R := 9.0                   # 낟알 곁 이만큼 안의 사람이 주워 먹으러 온다 (칸)
+const GRAIN_EATERS := 5
+const SNACK := 0.5
+const LOG_BOOST := 0.25                # 터로 나른 통나무 하나마다 짓는 속도 +25%
+const LOG_BOOST_MAX := 1.5             # 최대 ×2.5
+const LOG_BOOST_MAX_FIRST := 3.0       # 첫 병 첫날 (수첩) — 최대 ×4 (첫 오두막이 눈에 띄게: 현실 ~30초 → ~15초)
+const LOG_BOOST_FIRST := 0.5           # 첫 병 첫날은 통나무 하나마다 +50% (터 곁에 굴러온 6개로 곧바로 ×4)
+const LOG_LAND := 6.0                  # 터 곁에 떨어진 통나무 몇 개는 곧바로 터에 (나머지는 짐꾼이 나름)
+
+
+## 짓는 속도 배율 (Village.build_mult)
+static func site_boost(v: Village, b: Building) -> float:
+	if v.site_logs.is_empty() or not b.is_site():
+		return 1.0
+	var first := Notebook.first_day(v)
+	var mx := LOG_BOOST_MAX_FIRST if first else LOG_BOOST_MAX
+	return 1.0 + minf(mx, float(v.site_logs.get(str(b.id), 0.0)) * (LOG_BOOST_FIRST if first else LOG_BOOST))
+
+
+static func _awake_near(v: Village, p: Vector2, rad: float) -> Array[Resident]:
+	var out: Array[Resident] = []
+	for r in v.people:
+		if not r.sleeping and r.age >= 2.5 and r.sick_left <= 0.0 and Vector2(r.x, r.y).distance_to(p) < rad:
+			out.append(r)
+	out.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
+	return out
+
+
+## 가까운 어른 셋이 하던 일을 놓고 곧바로 물건을 깎아 터로 나른다 (짐꾼 행렬)
+static func _haul_to_site(v: Village, d: Dictionary, site: Building) -> void:
+	var c := Vector2(float(d["x"]), float(d["y"]))
+	var cands := v.people.filter(func(q: Resident) -> bool: return q.age >= 2.5 and not q.sleeping and q.sick_left <= 0.0 and q.action != "build")
+	var maxn := 3
+	if cands.is_empty():                  # 모두 짓는 중이면 가장 가까운 한 사람만
+		cands = v.people.filter(func(q: Resident) -> bool: return q.is_adult() and not q.sleeping and q.sick_left <= 0.0)
+		maxn = 1
+	cands.sort_custom(func(a: Resident, b: Resident) -> bool:     # 짓던 사람은 짓게 두고 (터가 멈추지 않게) 쉬던·다른 일 하던 가까운 사람부터
+		var ba := a.action == "build"
+		var bb := b.action == "build"
+		if ba != bb:
+			return bb
+		return Vector2(a.x, a.y).distance_squared_to(c) < Vector2(b.x, b.y).distance_squared_to(c))
+	var n := mini(maxn, cands.size())
+	var cap := ceilf(float(d["total"]) / maxf(1.0, float(n)))
+	for i in n:
+		var r: Resident = cands[i]
+		ResidentAI.cancel(v, r)
+		d["res_n"] = int(d["res_n"]) + 1
+		var a := Vector2(1, 0).rotated(float(i) * 2.1)
+		var at := c + a * (float(d["size"]) + 0.35)
+		var sp := ResidentAI.near(v, site.x, site.y, 0.8 + site.size() * 0.5)
+		r.action = "haul"
+		r.doing = "하늘에서 내려온 통나무를 터로 나르는 중"
+		r.steps.append(ResidentAI.walk(at.x, at.y))
+		r.steps.append(ResidentAI.act(10.0, "work", ResidentAI.op("sky_carve", {"d": d, "cap": cap}), false, ResidentAI.op("sky_unres", {"d": d})))
+		r.steps.append(ResidentAI.walk(sp.x, sp.y))
+		r.steps.append(ResidentAI.act(4.0, "idle", ResidentAI.op("sky_site", {"b": site}), false, ResidentAI.op("sky_undo", {"d": d, "k": "통나무"})))
+		if i == 0:
+			v.speak(r, "하늘에서 통나무가 왔다! 터로 나르자!" if v.aware else "통나무다! 터로 나르자!", 7)
+
+
+## 하늘 낟알 한 줌: 낟알 무더기 셋이 보이게 내림 (MannaFx — just_manna) + 곁의 사람들이 주워 먹으러 옴 → 먹은 사람 수
+static func _grain(v: Village, p: Vector2) -> int:
+	for i in 3:
+		var a := TAU * i / 3.0 + 0.4
+		var q := p + Vector2(cos(a), sin(a)) * 0.7
+		v.manna.append({"x": q.x, "y": q.y, "amt": 3.0, "born": v.t, "res": 0})
+	v.just_manna = true
+	Awakening.witness(v, "manna")
+	var ws := _awake_near(v, p, GRAIN_R)
+	var n := 0
+	for r: Resident in ws:
+		if n >= GRAIN_EATERS or r.is_baby():
+			continue
+		ResidentAI.cancel(v, r)
+		var a := TAU * n / float(GRAIN_EATERS)
+		var q := p + Vector2(cos(a), sin(a)) * 1.1
+		r.doing = "하늘 낟알을 주워 먹는 중"
+		r.steps.append(ResidentAI.walk(q.x, q.y))
+		r.steps.append(ResidentAI.act(10.0, "eat", ResidentAI.op("sky_snack", {"x": p.x, "y": p.y})))
+		n += 1
+	if n > 0:
+		v.speak(ws[0], "하늘에서 낟알이 내렸어!" if not v.aware else "거인님의 낟알이다!", 7)
+	v.log_line("하늘에서 금빛 낟알 한 줌이 내렸다. 배고픈 사람들이 달려와 주워 먹고 웃었다." if not v.aware
+		else "거인님이 금빛 낟알 한 줌을 내려 주셨다. 배고픈 사람들이 달려와 주워 먹고 웃었다.")
+	v.stats["sky_drops"] = int(v.stats.get("sky_drops", 0)) + 1
+	return n
 
 
 ## 물건에 남은 것 + 나르는 중인 것 (시험용)

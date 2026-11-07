@@ -92,6 +92,11 @@ const ITEMS := {
 	# 이주민 뽑기 (기획서 11.2 · sim/immigrants.gd) — 값은 그날 300부터 ×1.5, 하루 5번. 누가 올지는 놓을 때 드러난다 (확률 공개 — 카드의 [확률 보기])
 	"이주민 뽑기": {"tab": "이주민", "price": 300, "giant": "작은 뗏목 꾸러미 하나 — 누가 탔는지는 몰라요", "inside": "마을 어귀에 내려앉는 새 이웃 — 혼자 또는 작은 가족",
 		"kind": "migrant", "size": Immigrants.SIZE},
+	# [거인의 수첩] (OPENING 3.1b) 첫 병의 쪽지가 손에 쥐여 주는 무료 물건 — 진열되지 않음 (tab 없음). 터 곁에 떨어뜨린 통나무는 짐꾼이 곧바로 터로 나른다
+	"주운 통나무": {"tab": "", "price": 0, "giant": "주워 둔 잔가지 하나", "inside": "통나무 몇 개 — 짓는 터 곁이면 곧바로 터로",
+		"kind": "stuff", "res": "통나무", "amt": 6, "size": 0.9, "free": true, "site_logs": true},
+	"하늘 낟알 한 줌": {"tab": "", "price": 0, "giant": "빵가루 한 줌", "inside": "금빛 낟알 — 곁의 사람들이 주워 먹어요",
+		"kind": "grain", "size": 1.4, "free": true},
 	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
 	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
 }
@@ -282,6 +287,7 @@ static func buy(v: Village, item: String) -> Dictionary:
 		h["seed"] = Immigrants.note_bought()   # 누가 올지는 놓을 때 드러남 (같은 seed = 같은 사람들)
 	Market.hand.append(h)
 	v.giant_acted()
+	Notebook.on(v, "buy")                  # [거인의 수첩]
 	return {"ok": true, "why": "", "hand_id": Market.hand_serial}
 
 

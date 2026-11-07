@@ -70,6 +70,8 @@ var awaken_at := -1.0                 # 경이가 찼다 → 이 시각에 깨�
 var awakened_t := -1.0
 var guide: Dictionary = {}            # 첫 병의 안내 자막 (OPENING 3.1 v3 — view/ui/guide_caption.gd): {on, tap, blow}. 비면 안내 없음
 var _wonder_taps := [-1, 0]           # [날, 그날 경이가 된 톡 수] (거듭될수록 줄어듦)
+var notebook: Dictionary = {}         # [거인의 수첩] 첫 병의 쪽지 (OPENING 3.1b — sim/notebook.gd). 비면 수첩 없음
+var site_logs: Dictionary = {}        # [거인의 수첩] 짓는 터 id(글자) → 하늘에서 내려와 터로 나른 통나무 (짓는 속도↑ — SkyDrops.site_boost)
 # A5 계시 (기획서 8.3 · 6.1 · 14): 시대 점수가 다 차면 주민이 알아채고 거인의 [계시]를 기다린다. 거인만 내린다 (비운 동안은 기다림)
 var revelation: Dictionary = {}       # 계시를 기다림 {t, from: 주민 id, name, text} — 비면 기다리는 계시 없음
 var _rev_say_t := 0.0                 # 기다리는 동안 노인이 하늘을 보며 한마디 하는 다음 시각
@@ -259,7 +261,8 @@ func _arrive_fed() -> void:
 func thanksgiving(b: Building) -> void:
 	stats["thanks"] = 1
 	if not altar_built:                   # 아직 제단이 없다 (A4b) — 기도 대신 모닥불 곁에 모여 첫 집을 기뻐함 (짧게)
-		log_line("%s%s 다 지어지자 모두 모닥불 곁에 모여 손뼉을 쳤다. 우리 손으로 지은 첫 지붕이었다." % [b.type, josa(b.type, "이", "가")])
+		log_line("%s%s 다 지어지자 모두 모닥불 곁에 모여 손뼉을 쳤다. %s" % [b.type, josa(b.type, "이", "가"),
+			"우리 손으로 지은 첫 지붕이었다." if b.is_house() else "우리 손으로 일군 첫 터였다."])
 		var cc := chief()
 		for p in people:
 			if p.is_baby() or p.sleeping or p.sick_left > 0.0:
@@ -271,6 +274,14 @@ func thanksgiving(b: Building) -> void:
 			p.steps.append(ResidentAI.act(Balance.THANKS_TIME * 0.4, "idle"))
 		if cc != null:
 			speak(cc, "우리 손으로 지었어!", 8)
+		var cheer := ["와아, 지붕이다!", "우리 집이야!"] if b.is_house() else ["와아, 다 됐다!", "우리가 해냈어!"]     # [거인의 수첩 v3.3] 첫 터가 서면 짧은 환호
+		var k := 0
+		for p in people:
+			if k >= cheer.size():
+				break
+			if p != cc and not p.is_baby() and not p.sleeping and p.sick_left <= 0.0:
+				speak(p, cheer[k], 7)
+				k += 1
 		return
 	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.type, josa(b.type, "이", "가")])
 	var c := chief()
@@ -2230,7 +2241,7 @@ func is_favourite(item: String) -> bool:
 
 ## 짓는 속도 배율 — 들어준 소원은 ×1.5 (기획서 6.7)
 func build_mult(b: Building) -> float:
-	return Balance.WISH_SPEED if b.wished else 1.0
+	return (Balance.WISH_SPEED if b.wished else 1.0) * SkyDrops.site_boost(self, b) * Notebook.first_build_mult(self, b)     # [거인의 수첩] 하늘에서 내려온 통나무를 터로 나름
 
 
 ## 아직 열려 있는 편지
@@ -2314,6 +2325,7 @@ func grant_wish(id: int) -> bool:
 			speak(who, "거인님이 들어주셨다!", 7)
 		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], ty])
 		giant_acted()
+		Notebook.on(self, "wish")          # [거인의 수첩]
 		return true
 	return false
 
@@ -2495,6 +2507,7 @@ func take_offering(item: String) -> float:
 	if not was and is_favourite(item):
 		log_line("사람들은 거인님이 %s%s 좋아하신다고 믿게 되었다." % [item, josa(item, "을", "를")])
 	giant_acted()
+	Notebook.on(self, "take")             # [거인의 수첩]
 	return got
 
 
@@ -3035,6 +3048,7 @@ func tap_glass(hard := false, at: Variant = null) -> void:
 	_taps[1] += 1
 	if not hard:
 		Awakening.witness(self, "tap")     # 하늘이 울렸다 (A4b — 세게 친 톡은 두려움만)
+		Notebook.on(self, "tap")           # [거인의 수첩]
 	if hard:
 		raise_fear_all(Balance.FEAR_TAP_HARD)
 	elif _taps[1] > Balance.FEAR_FREE_PER_DAY:
@@ -3067,12 +3081,18 @@ func tweeze(p: Vector2, to: Variant = null) -> Dictionary:
 
 ## [거인의 손] 물 뿌리기 (뚜껑을 연 채 — WORLD_EVENTS 4.3 · 기획서 6.3) → {ok, why, water, fields, fires_out, flood, hit}
 func spray_water(p: Vector2) -> Dictionary:
-	return hand.spray(self, p)
+	var r := hand.spray(self, p)
+	if bool(r.get("ok", false)) and not bool(r.get("flood", false)):
+		Notebook.on_spray(self, p)         # [거인의 수첩] 첫 밭에 물
+	return r
 
 
 ## [거인의 손] 손으로 감싸기 (병 밖 — WORLD_EVENTS 4.2): 병 전체 +6° 한 시간 → {ok, why, fear}
 func cup_hands() -> Dictionary:
-	return hand.cup(self)
+	var r := hand.cup(self)
+	if bool(r.get("ok", false)):
+		Notebook.on(self, "cup")           # [거인의 수첩]
+	return r
 
 
 ## [거인의 손] 커튼 0 열림 · 1 반쯤 · 2 닫힘 (기획서 6.4) → {ok, step}. 바뀌면 hand.curtain_changed(단계)
@@ -3086,7 +3106,10 @@ func curtain() -> int:
 
 ## [거인의 손] 유리 닦기 (병 밖 — WORLD_EVENTS 4.2) → {ok, why, fog, dust, bright}
 func wipe_glass() -> Dictionary:
-	return hand.wipe(self)
+	var r := hand.wipe(self)
+	if bool(r.get("ok", false)):
+		Notebook.on(self, "wipe")          # [거인의 수첩]
+	return r
 
 
 ## 물 뿌리기가 집을 잠기게 함 — 반경 안 주민 +0.15

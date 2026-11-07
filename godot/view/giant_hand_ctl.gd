@@ -66,6 +66,7 @@ func build(root: Control) -> void:
 	row.add_theme_constant_override("separation", UiTheme.GAP)
 	col.add_child(row)
 	lid_btn = _btn(row, "뚜껑 열기", "뚜껑", Callable(sc, "toggle_lid"))
+	lid_btn.visible = false                            # (v3.3) 뚜껑은 손짓마다 저절로 열리고 닫힌다 — 따로 누르는 단추 없음 (시험·옛 캡처 도구가 읽는 자리만 남김)
 	blow_btn = _btn(row, "불기", "불기", Callable(sc, "blow"))
 	spray_btn = _btn(row, "물 뿌리기", "물 뿌리기", Callable(sc, "spray"))
 	tweeze_btn = _btn(row, "핀셋", "핀셋", Callable(sc, "tweeze"))
@@ -204,17 +205,8 @@ func layout(bottom_h: float) -> void:
 ## 매 화면: 뚜껑 글자·불기·손에 든 것
 func refresh() -> void:
 	var v: Village = sc.focus_village()
-	var open_lid: bool = v.air.lid_open
-	if open_lid:
-		lid_btn.text = "뚜껑 닫기 %d" % ceili(Balance.LID_AUTO_CLOSE_REAL - sc.clock.lid_real)
-		lid_btn.modulate = Color(1, 0.9, 0.6)
-	else:
-		lid_btn.text = "뚜껑 열기"
-		lid_btn.modulate = Color.WHITE
-	blow_btn.visible = open_lid
-	spray_btn.visible = open_lid
+	lid_btn.visible = false               # (v3.3) 뚜껑 단추 없음 — 불기·물 뿌리기·핀셋·떨어뜨리기가 저절로 열고 곧 닫는다 (CorkPop)
 	spray_btn.disabled = v.hand.spray_cd > 0.0
-	tweeze_btn.visible = open_lid
 	var w := v.water
 	cup_btn.disabled = w.cup_left > 0.0
 	cup_btn.text = "감싸는 중" if w.cup_left > 0.0 else "감싸기"
@@ -281,10 +273,7 @@ func start_drop(id: int, sp: Variant = null) -> void:
 	if aiming():
 		_clear_aim()
 	close()
-	var v: Village = sc.focus_village()
-	if not v.air.lid_open:
-		sc.toggle_lid()                                # 병의 법칙: 뚜껑을 열고 넣는다 (날벌레·온기·물 — Village.open_lid)
-	sc.clock.lid_real = 0.0
+	sc.auto_lid()                                      # 병의 법칙: 뚜껑이 저절로 열린다 (날벌레·온기·물 — Village.open_lid)
 	var item := String(h["item"])
 	var root := Node3D.new()
 	sc.jar.add_child(root)
@@ -401,6 +390,7 @@ func aim_at(sp: Vector2, touch: bool) -> void:
 
 func cancel_drop() -> void:
 	_clear_aim()
+	sc.lid_soon()
 
 
 func _clear_aim() -> void:
@@ -419,8 +409,7 @@ func confirm_drop() -> void:
 	if pv.is_empty() or not bool(pv["ok"]):
 		return
 	var v: Village = _aim["v"]
-	if not v.air.lid_open:
-		sc.toggle_lid()
+	sc.auto_lid()
 	var id := int(_aim["id"])
 	var item := String(_aim["item"])
 	var p: Vector2 = _aim["p"]
@@ -435,7 +424,7 @@ func confirm_drop() -> void:
 	if not bool(r["ok"]):
 		b_text.text = String(r.get("why", ""))
 		return
-	sc.clock.lid_real = 0.0
+	sc.lid_soon()                                      # 놓고 나면 곧 저절로 닫힘
 	var root: Node3D = _aim["root"]
 	var held: Node3D = _aim["held"]
 	_aim = {}

@@ -8,6 +8,7 @@ class_name SettingsSheet
 extends Control
 
 signal closed
+signal notebook_requested          # [거인의 수첩 다시 보기] (OPENING 3.1b — 두 번째 병부터는 저절로 나오지 않음)
 
 const SHEET_FRAC := 0.66
 const LICENSES := "res://audio/LICENSES.csv"
@@ -122,6 +123,10 @@ func _build_settings(body: VBoxContainer) -> void:
 	ll.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label(body, "다른 언어는 준비하고 있어요.", "Small")
 	_section(body, "도움")
+	var nb := _button(body, "거인의 수첩 다시 보기")
+	nb.pressed.connect(func() -> void:
+		GameAudio.ui_click()
+		notebook_requested.emit())
 	var ask := _button(body, "문의하기")
 	ask.pressed.connect(func() -> void: show_page("inquiry"))
 	credit_l = _label(body, credits_text(), "Small")
