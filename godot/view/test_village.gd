@@ -96,6 +96,7 @@ var _sparkle: Control
 var _hand_glow_t := 0.0
 var _tray_h := 0.0
 var chronicle: ChronicleSheet
+var people_sheet: PeopleSheet          # [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] (view/ui/people_sheet.gd)
 var rev_show: RevelationShow
 var guide_cap: GuideCaption
 var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
@@ -168,7 +169,7 @@ func on_back() -> void:
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -523,7 +524,11 @@ func _setup_ui() -> void:
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	info_label.clip_text = true
-	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_label.mouse_filter = Control.MOUSE_FILTER_STOP       # [사람들 목록] 누르면 사람들 목록
+	info_label.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and not (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			GameAudio.ui_click()
+			open_people())
 	trow.add_child(info_label)
 	var bn := GameIcons.rect("지폐", 24)
 	bn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -666,6 +671,11 @@ func _setup_ui() -> void:
 	chronicle.setup(village, jar_world())
 	dlayer.add_child(chronicle)
 	chronicle.resident_pressed.connect(_on_chronicle_person)
+	people_sheet = PeopleSheet.new()      # [사람들 목록]
+	dlayer.add_child(people_sheet)
+	people_sheet.resident_pressed.connect(_on_people_person.bind(false))
+	people_sheet.follow_requested.connect(_on_people_person.bind(true))
+	chronicle.people_requested.connect(open_people)
 	altar_sheet.reveal_requested.connect(start_revelation)
 	var rlayer := CanvasLayer.new()       # 계시·깨달음 연출 — 띠 위, 시트 아래
 	rlayer.layer = 3
@@ -688,7 +698,7 @@ func _setup_ui() -> void:
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
 func close_sheets(keep: Control = null) -> void:
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet]:
 		if sh != null and sh != keep and sh.visible:
 			sh.call("close")
 	if hand_ctl != null:
@@ -908,6 +918,25 @@ func _on_chronicle_person(v: Village, r: Resident) -> void:
 			_follow_vv = vv
 	detail.setup(v)
 	detail.open(r)
+
+
+## [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] → 살아 있는 사람 모두 (넓은 세상은 모든 무리, 무리마다 묶음). 다시 누르면 닫힘
+func open_people() -> void:
+	if people_sheet.visible:
+		people_sheet.close()
+		return
+	close_sheets(people_sheet)
+	var w := jar_world()
+	people_sheet.setup(w.settlements if w != null and not w.settlements.is_empty() else [village])
+	people_sheet.open()
+
+
+## [사람들 목록] 줄을 누름 → 주민 상세 (follow = [따라가기] → 상세 + 카메라가 따라감)
+func _on_people_person(v: Village, r: Resident, follow: bool) -> void:
+	people_sheet.close()
+	_on_chronicle_person(v, r)
+	if follow and not r.dead:
+		detail.set_following(true)
 
 
 ## [계시] (A5): 제단 시트를 닫고 그 무리의 광장으로 → 빛 한 줄기 + 연출 → (0.9초) 시대가 오른다 · 연대기 · 축제 음악
