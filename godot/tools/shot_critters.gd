@@ -4,6 +4,7 @@
 ##   lineup : 생물 여덟 + 주민 (가까이 LOD, 걷기·날기 자세)          → godot_shots/critters_lineup<접미사>.png
 ##   puppy  : 강아지 털빛 넷 × 동작 다섯 (idle·walk·sit·sleep·bark) + 주민 → godot_shots/critters_puppy<접미사>.png
 ##   far    : 기본 확대 (ppu 16)에서 멀리 LOD 한 줄 + 가까이 LOD 한 줄 + 주민 → godot_shots/critters_far<접미사>.png
+##   kkultteok / kkultteok_head / kkultteok_far : 꿀떡이 (평상복·스웨터) × 동작 다섯 + 주민 / 얼굴 가까이 / 게임 확대 → godot_shots/critters_kkultteok*.png
 ## 읽는 법 (dev 참고): glb를 그대로 instantiate → MeshInstance3D마다 Art._Acc로 색(선형→sRGB)·껍데기·선을 만들고 (Art.parts와 같음),
 ## 이름에 "__far"가 든 메시만 멀리 LOD. 동작은 glb 안의 AnimationPlayer (클립 이름 = 위 목록), 관절 노드 "j_<관절>".
 extends SceneTree
@@ -211,6 +212,40 @@ func _puppy() -> void:
 				_label(POSES[pi], p, 20, 0.5)
 	_resident(_at(1.75, 0.45))
 	_resident(_at(1.75, -0.75), -0.4)
+
+
+## 꿀떡이 (puppy_kkultteok · _sweater) × 동작 다섯 + 주민, 그리고 같은 장면의 기본 확대(멀리 LOD) 한 줄은 _kkultteok_far.
+func _kkultteok() -> void:
+	_zoom(330.0)
+	var keys := ["puppy_kkultteok", "puppy_kkultteok_sweater"]
+	for ci in keys.size():
+		for pi in POSES.size():
+			var p := _at((pi - 2.0) * 0.72 - 0.35, (0.5 - ci) * 0.8)
+			_critter(keys[ci], p, -0.9, POSES[pi], 0.25)
+			if ci == 0:
+				_label(POSES[pi], p, 20, 0.55)
+	_resident(_at(1.75, 0.4))
+	_resident(_at(1.75, -0.4), -0.4)
+
+
+## 얼굴 가까이 (머리 무늬·귀 읽기): 정면 쪽으로 돌린 둘 + 옆모습 하나.
+func _kkultteok_head() -> void:
+	_zoom(650.0)
+	_critter("puppy_kkultteok", _at(-0.75, -0.3), 0.25, "idle", 0.0)
+	_critter("puppy_kkultteok", _at(0.0, -0.3), -0.6, "idle", 0.0)
+	_critter("puppy_kkultteok_sweater", _at(0.75, -0.3), 0.75, "idle", 0.0)
+
+
+## 게임 확대 (ppu 60 — 강아지 몸이 30 px 안팎) — 가면·귀가 읽히는지. 위 줄 멀리 LOD, 아래 줄 가까이 LOD, 옆에 마을 강아지·주민.
+func _kkultteok_far() -> void:
+	_zoom(60.0)
+	for far in [true, false]:
+		var row := 0.9 if far else -0.9
+		_critter("puppy_kkultteok", _at(-1.2, row), -0.9, "idle", 0.25, far)
+		_critter("puppy_kkultteok_sweater", _at(-0.4, row), -0.9, "walk", 0.25, far)
+		_critter("puppy_kkultteok", _at(0.4, row), PI - 0.3, "sit", 0.25, far)
+		_critter("puppy_patch", _at(1.2, row), -0.9, "idle", 0.25, far)
+		_resident(_at(2.0, row))
 
 
 func _process(_d: float) -> bool:

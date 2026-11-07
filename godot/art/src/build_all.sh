@@ -3,7 +3,7 @@
 #   godot/art/src/build_all.sh            (모두)
 #   godot/art/src/build_all.sh nature     (build_nature.py만)
 #   flora = 소인의 세상 꽃·풀·가지·재료 (build_flora.py), bonsai = 큰 나무 다섯 + 거대한 열매 (build_bonsai.py) → models/flora/
-#   creatures = 소인 크기 생물·애벌레·고치 (build_creatures.py), puppy = 가축 강아지 털빛 넷 (build_puppy.py) → models/critters/
+#   creatures = 소인 크기 생물·애벌레·고치 (build_creatures.py), puppy = 가축 강아지 털빛 넷 + 꿀떡이 (평상복·스웨터) (build_puppy.py) → models/critters/
 # 그다음 Godot에서 다시 가져오기: 에디터를 한 번 열거나
 #   godot --headless --path godot --editor --quit-after 900   (가져오기가 끝나면 끄기)
 set -e
