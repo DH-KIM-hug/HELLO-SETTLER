@@ -55,6 +55,12 @@ var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Vi
 var _grave_key := ""
 var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
+var lerp_max := 3.0             # 걸음 사이 이만큼(칸) 넘게 옮겼으면 순간이동 (보간 안 함) — 10초 걸음이면 화면이 키운다
+var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주민은 멀리 LOD로 FAST_EVERY초마다 제자리에 순간이동 (걷기·몸짓 멈춤),
+                                # 곰팡이·위기·하늘의 것·상점·들짐승 화면도 그 간격으로만 (효과가 쏟아지지 않게)
+var _fast_t := 0.0
+var _fast_dt := 0.0
+const FAST_EVERY := 0.1
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -108,17 +114,16 @@ func gy(x: float, z: float) -> float:
 # ───────────────────────── 매 화면 ─────────────────────────
 func sync(dt: float, force := false) -> void:
 	_anim_t += dt
-	_sync_residents(dt)
-	mold_view.alpha = alpha         # [곰팡이·뚜껑]
-	mold_view.sync(dt)
-	crisis_view.alpha = alpha       # [작은 위기]
-	crisis_view.sync(dt)
-	flora_view.alpha = alpha        # [하늘의 것]
-	flora_view.sync(dt)
-	if drop_view != null:
-		drop_view.sync(dt)          # [상점]
-	if animal_view != null:
-		animal_view.sync(dt)        # [들짐승]
+	if fast and not force:          # 빠른 흐름: 움직이는 것들은 FAST_EVERY초마다 한 번 (그동안 쌓인 dt로)
+		_fast_t += dt
+		_fast_dt += dt
+		if _fast_t >= FAST_EVERY:
+			_fast_t = 0.0
+			_sync_moving(_fast_dt)
+			_fast_dt = 0.0
+	else:
+		_fast_dt = 0.0
+		_sync_moving(dt)
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
@@ -138,6 +143,21 @@ func sync(dt: float, force := false) -> void:
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
+
+
+## 주민 · 곰팡이 · 작은 위기 · 하늘의 것 · 상점 · 들짐승 (보통은 매 화면)
+func _sync_moving(dt: float) -> void:
+	_sync_residents(dt)
+	mold_view.alpha = alpha         # [곰팡이·뚜껑]
+	mold_view.sync(dt)
+	crisis_view.alpha = alpha       # [작은 위기]
+	crisis_view.sync(dt)
+	flora_view.alpha = alpha        # [하늘의 것]
+	flora_view.sync(dt)
+	if drop_view != null:
+		drop_view.sync(dt)          # [상점]
+	if animal_view != null:
+		animal_view.sync(dt)        # [들짐승]
 
 
 static func age_stage(r: Resident) -> int:
@@ -164,7 +184,8 @@ func _sync_residents(dt: float) -> void:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
 		var key := ResidentModel.look_key(r)      # 나이·대머리·흰머리 단계가 바뀌면 다시 만든다 (7단계)
-		if m == null or _res_key.get(r.id, -1) != key:
+		var fresh: bool = m == null or _res_key.get(r.id, -1) != key
+		if fresh:
 			if m != null:
 				m.queue_free()
 			m = ResidentModel.new()
@@ -180,7 +201,7 @@ func _sync_residents(dt: float) -> void:
 			continue
 		var x := r.x
 		var z := r.y
-		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < 3.0:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
+		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
 		m.position = Vector3(x, gy(x, z), z)
@@ -196,10 +217,13 @@ func _sync_residents(dt: float) -> void:
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
 		m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
-		if r.action == "social" and r.anim != "walk":
+		if r.action == "social" and r.anim != "walk" and not fast:
 			_face_partner(r, m)
-		m.set_lod(lod_close)
-		m.tick(dt)
+		m.set_lod(lod_close and not fast)
+		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다
+			m.tick(dt)
+		elif fresh:
+			m.tick(0.0)
 		_torch(r, m)
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):

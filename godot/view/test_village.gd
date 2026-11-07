@@ -89,7 +89,8 @@ var lamp_ctl: LampCtl                 # [등불 옮기기] 나침반 · 미리�
 var _bell_seen := {}                  # 무리 → 들은 교회 종 (Village.bell_t)
 var lamp_btn: Button
 var notes_label: Label
-var speed_list: HBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6)
+var speed_list: VBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6 v4.3) — 윗줄 느리게~아주 빠르게 (1일=…) · 아랫줄 1초=5분~12시간
+var speed_items: Array = []          # 목록의 단추 (SPEEDS 번호 순서)
 var _speed_down_t := -1.0
 var _speed_long := false
 var _sparkle: Control
@@ -113,6 +114,8 @@ func _ready() -> void:
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	village = _load_or_make_village()
 	clock = _loaded_clock if _loaded_clock != null else JarClock.new(village)
+	if clock.speed_i > JarClock.top_speed_i():     # 빠른 기기에서 저장한 배속을 느린 기기에서 열면 그 기기의 맨 위로
+		clock.set_speed(JarClock.top_speed_i())
 	sun = JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
@@ -379,9 +382,13 @@ func _process(dt: float) -> void:
 		var was_skipping := clock.skipping
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
-		var al := 1.0 if clock.skipping else clampf(clock.acc / clock.step, 0.0, 1.0)
+		var vfast := clock.view_fast()
+		var sdt := village.step_dt if clock.fast else clock.step
+		var al := 1.0 if clock.skipping or vfast else clampf(clock.acc / sdt, 0.0, 1.0)
 		for vv: Array in village_views():
 			(vv[1] as VillageView).alpha = al
+			(vv[1] as VillageView).lerp_max = 3.0 * sdt / Balance.WATCH_STEP * 0.7 if clock.fast else 3.0   # 10초 걸음 사이도 걸어가는 것으로 (순간이동만 건너뜀)
+			(vv[1] as VillageView).fast = vfast           # 1초=5분~: 주민은 멀리 LOD 점처럼 순간이동, 움직임·효과는 띄엄띄엄
 		_terrain_t += dt
 		# 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림 (밤 건너뛰기 중엔 1초마다, 끝나면 바로)
 		if _terrain_t > (1.0 if clock.skipping else 4.0) or (was_skipping and not clock.skipping):
@@ -629,16 +636,27 @@ func _setup_ui() -> void:
 		speed_list.visible = false
 		clock.cycle_speed())
 	root.add_child(speed_btn)
-	speed_list = HBoxContainer.new()
+	speed_list = VBoxContainer.new()
 	speed_list.add_theme_constant_override("separation", 3)
 	speed_list.visible = false
 	root.add_child(speed_list)
+	var rows: Array = []
+	for k in 2:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 3)
+		speed_list.add_child(row)
+		rows.append(row)
+	speed_items.clear()
 	for i in Balance.SPEEDS.size():
-		var sb := _bar_button(speed_list, "×%d" % int(Balance.SPEEDS[i]), func() -> void:
+		var second := i >= Balance.SPEED_TAP_N
+		var nt := JarClock.note_of(i)
+		var sb := _bar_button(rows[1 if second else 0], JarClock.label_of(i) + ("\n" + nt if nt != "" else ""), func() -> void:
 			clock.set_speed(i)
 			speed_list.visible = false)
 		sb.custom_minimum_size = Vector2(40, UiTheme.TOUCH)
-		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
+		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)
+		sb.visible = i <= JarClock.top_speed_i() and not (i in Balance.SPEED_HIDDEN)      # 느린 기기는 따라가지 못하는 맨 위 배속을 뺀다 · 겹치는 단계는 숨김
+		speed_items.append(sb)
 	store_strip = StoreStrip.new()          # [창고] 창고 띠 — 배속 칩 아래 (누르면 창고 시트)
 	store_strip.setup(self)
 	root.add_child(store_strip)
@@ -1277,7 +1295,7 @@ func status_text() -> String:
 		elif p.is_elder():
 			elders += 1
 	var c := v.chief()
-	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "×%d" % int(clock.speed())
+	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "%s · 실제 %s" % [clock.speed_text(), JarClock.rate_label(clock.rate)]
 	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리 · 지폐 %d\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
 		v.fmt_time(v.t), spd, " (멈춤)" if paused else "",
 		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(), roundi(Market.notes),
@@ -1319,8 +1337,8 @@ func _update_ui() -> void:
 		if SafeArea.insets(get_viewport()) != _insets:
 			layout_bars()
 	var fv := focus_village()
-	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  ×%d" % [fv.fmt_time(fv.t), int(clock.speed())]
-	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
+	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  %s" % [fv.fmt_time(fv.t), clock.speed_text()]
+	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > JarClock.normal_speed() + 1e-6 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
 	_layout_store()                         # [창고] 배속 목록·띠 숨김을 따라
 	hand_ctl.refresh()                   # [손] 뚜껑 (저절로 닫힐 때까지 남은 현실 초) · 불기 (뚜껑이 열린 동안만) · 손에 든 것
@@ -1345,9 +1363,11 @@ func _update_ui() -> void:
 			clock.notice_t = 6.0
 	notice_label.visible = clock.notice_t > 0.0
 	notice_label.text = clock.notice
-	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명
+	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명 — 1초=5분~에선 띄우지 않는다 (말은 그대로 기록됨, 0.1초마다 바뀌어 못 읽음)
 	for c in bubbles.get_children():
 		c.queue_free()
+	if clock.view_fast():
+		return
 	var shown := 0
 	var vs := get_viewport().get_visible_rect().size
 	for vv: Array in village_views():
@@ -1650,7 +1670,7 @@ func _update_audio() -> void:
 		return
 	if a.village != focus_village() and not leaving:     # 넓은 세상: 카메라가 보는 무리의 소리 (불·일터·말소리)
 		a.attach(focus_village())
-	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed())
+	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed() / JarClock.normal_speed())   # 소리는 '보통'을 1로 본다 (v4.3)
 	a.outside = GameAudio.outside_from_ppu(cam.ppu)
 	a.listener = Vector2(cam.target.x, cam.target.z)
 

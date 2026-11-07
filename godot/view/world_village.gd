@@ -714,6 +714,8 @@ func _process(dt: float) -> void:
 	if arrival != null:
 		_arrival_process()
 	var t0 := Time.get_ticks_usec()
+	if clock != null and clock.world != world:
+		clock.world = world               # 빠른 흐름(1초=5분~)이 따라잡기처럼 세상 정리(분가·고운 물 범위)도 함께
 	super(dt)
 	if catching:
 		return

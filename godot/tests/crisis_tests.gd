@@ -527,8 +527,8 @@ func test_save_and_determinism() -> void:
 		var ck := JarClock.new(q)
 		ck.set_speed(sp)
 		var dt := 1.0 / 30.0 if sp == 0 else 0.25
-		while ck.steps_done < int(1.5 * H):
-			ck.tick(dt)
+		while ck.steps_done < int(1.5 * H / Balance.STEP):
+			ck.tick(ck.dt_for_steps(int(1.5 * H / Balance.STEP) - ck.steps_done, dt))
 		sigs.append(_sig(q))
 	check(sigs[0] == sigs[1], "위기가 있는 병: ×1과 ×8 결과가 같다")
 

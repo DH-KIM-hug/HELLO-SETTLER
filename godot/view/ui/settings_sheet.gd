@@ -19,6 +19,7 @@ var page := "settings"                   # settings · inquiry
 var kind := ""                           # 고른 문의 종류
 var portrait_mode := true
 var settings: GameSettings
+var away_btn: Button                   # 자리를 비운 동안 시간 (느리게 · 보통 · 빠르게 — v4.3)
 
 var panel: PanelContainer
 var title_l: Label
@@ -112,6 +113,16 @@ func _build_settings(body: VBoxContainer) -> void:
 	_toggle_row(body, "music", "음악")
 	_toggle_row(body, "sfx", "효과음")
 	_toggle_row(body, "voice", "목소리")
+	_section(body, "시간")
+	var aw := _row(body, "자리를 비운 동안 시간")
+	away_btn = _button(aw, GameSettings.away_words(settings.away_speed), false)
+	away_btn.pressed.connect(func() -> void:
+		GameAudio.ui_click()
+		settings.away_speed = (settings.away_speed + 1) % Balance.AWAY_RATES.size()
+		settings.save()
+		away_btn.text = GameSettings.away_words(settings.away_speed))
+	var an := _label(body, "앱을 끈 동안 병 안의 시간이 흐르는 빠르기예요. 등불이 타는 동안만 흘러요.", "Small")
+	an.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_section(body, "기기")
 	_toggle_row(body, "vibration", "진동")
 	_toggle_row(body, "notify", "알림")
