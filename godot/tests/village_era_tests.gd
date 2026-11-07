@@ -182,6 +182,7 @@ func test_herbalist() -> void:
 	v.advance(Balance.HOUR)
 	rich(v)
 	v.stock[Balance.HERB] = 0.0
+	v.chief_off = true                    # v5: 걸음이 느려 짓는 터가 오래 남아 약초꾼이 짓기를 도우러 가고, 새 터가 약초 자리를 덮는다 — 약초꾼만 본다
 	var sp: Variant = v.find_spot("약초꾼")
 	check(sp != null, "약초꾼 자리 (습한 숲가 곁)")
 	var b := built(v, "약초꾼", sp)

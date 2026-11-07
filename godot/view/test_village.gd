@@ -29,6 +29,8 @@ var paused := false
 var speed_btn: Button
 var skip_btn: Button
 var notice_label: Label
+var slow_card: SlowdownCard          # 느려진 까닭 카드 (빠른 흐름 중 중요한 일 — 누구·어디 · [보러 가기] · [계속 빠르게])
+var _toast_q: Array = []             # 멈추지 않은 자잘한 일의 짧은 알림 (차례로)
 var _sim_ms := 0.0                   # 이번 화면에 시뮬레이션이 쓴 시간 (표시용, 평균)
 var lineup: Node3D
 var _terrain_t := 0.0
@@ -586,6 +588,10 @@ func _setup_ui() -> void:
 	nsb.set_content_margin_all(4)
 	notice_label.add_theme_stylebox_override("normal", nsb)
 	notice_label.visible = false
+	slow_card = SlowdownCard.new()
+	slow_card.see.connect(go_see)
+	slow_card.resume.connect(func() -> void: clock.resume_fast())
+	stack.add_child(slow_card)
 	stack.add_child(notice_label)
 	skip_btn = _bar_button(stack, "밤 건너뛰기", func() -> void: clock.start_skip_night())
 	skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1374,6 +1380,10 @@ func _update_ui() -> void:
 		layout_bars()
 	_check_awakening()
 	_update_notebook()
+	_take_clock_events()
+	if clock.notice_t <= 0.0 and not _toast_q.is_empty():     # 멈추지 않은 자잘한 일 (짧게, 하나씩)
+		clock.notice = String(_toast_q.pop_front())
+		clock.notice_t = 3.5
 	if clock.notice_t <= 0.0:         # 위기 예고·중증 편지 (HEALTH.md 2.2·2.4) — 지금은 알림 한 줄로, 하나씩
 		var w := next_warning()
 		if w != "":
@@ -1390,6 +1400,47 @@ func _update_ui() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	for vv: Array in village_views():
 		shown = _bubbles_of(vv[0], vv[1], vs, shown)
+
+
+## 빠른 흐름 중 생긴 일 (JarClock.events): 멈춘 일 → 느려진 까닭 카드 · 멈추지 않은 일 → 짧은 알림 줄.
+## 위기 예고는 카드에 올렸으면 같은 예고를 알림 줄로 또 띄우지 않고, 멈추지 않았으면 원래 알림(주민의 말)에 맡긴다
+func _take_clock_events() -> void:
+	var evs := clock.take_events()
+	if evs.is_empty():
+		return
+	var stops: Array = []
+	for e: Dictionary in evs:
+		if e["stop"]:
+			stops.append(e)
+			if e.has("ref"):
+				(e["village"] as Village).warnings.erase(e["ref"])
+		elif not e.has("ref"):
+			_toast_q.append(String(e["text"]))
+	if _toast_q.size() > 4:
+		_toast_q = _toast_q.slice(_toast_q.size() - 4)
+	if not stops.is_empty():
+		slow_card.push(stops)
+		if clock.notice == String(stops[0]["text"]):
+			clock.notice_t = 0.0      # 카드가 대신 보여 줌
+
+
+## [보러 가기]: 살아 있는 사람이면 그 사람의 상세 + 따라가기, 아니면 (잠든 사람·마을·광장) 그 자리로 카메라
+func go_see(e: Dictionary) -> void:
+	var v: Village = e["village"]
+	var who := int(e.get("who", -1))
+	var r := v.person(who) if who >= 0 else null
+	close_sheets()
+	if r != null and not r.dead:
+		_on_chronicle_person(v, r)
+		detail.set_following(true)
+		return
+	_stop_follow()
+	see_ground(e["pos"])
+
+
+## 땅 위 점(데이터 좌표)으로 카메라 — 넓은 세상은 날아감 (world_village)
+func see_ground(p: Vector2) -> void:
+	look_at_ground(p)
 
 
 ## 말하고 있는 주민 머리 위 말풍선 (화면 안, 모두 합쳐 4개까지) — 지금까지 띄운 수를 돌려줌

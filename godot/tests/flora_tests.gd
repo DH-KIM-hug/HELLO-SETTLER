@@ -239,15 +239,15 @@ func test_picker() -> void:
 	v.advance(2.0 * H)                 # 09:00
 	var hut := v.add_building("버섯꾼", -6.0, 8.0, true)
 	var near := [Vector2(-9.5, 10.5), Vector2(-3.0, 12.0)]
-	f.add_shroom(v, near[0], "흰갓버섯", 1.0)
-	var brown := f.add_shroom(v, near[1], "갈색갓버섯", 1.0)
+	var brown := f.add_shroom(v, near[0], "갈색갓버섯", 1.0)     # v5: 걸음이 느려 갈색갓을 가까이 (먼저 베어 말림대로) — 흰갓은 그다음
+	f.add_shroom(v, near[1], "흰갓버섯", 1.0)
 	v.assign_jobs()
 	var w := v.person(hut.worker)
 	check(w != null, "버섯꾼 일꾼이 정해짐 (%s)" % (w.name if w != null else "-"))
 	var food0 := float(v.stock["버섯"])
-	v.advance(12.0 * H)                # v5: 걸음이 현실 사람 걸음 — 오가는 데 병 시간이 더 든다 (예전 4시간 — 흰갓을 다 베고 갈색갓까지)
+	v.advance(20.0 * H)                # v5: 걸음이 현실 사람 걸음 — 오가는 데 병 시간이 더 든다 (예전 4시간 — 흰갓을 다 베고 갈색갓까지, 길·마을 배치에 따라 오감이 다름)
 	var got := float(v.stock["버섯"]) - food0
-	check(float(f.stats["picked"]) >= Balance.PICK_CHUNK * 2.0, "12시간에 버섯 %.0f개를 베어 창고로 (나무꾼처럼 조각내 나름 — 창고에 %.0f)" % [float(f.stats["picked"]), got])
+	check(float(f.stats["picked"]) >= Balance.PICK_CHUNK * 2.0, "20시간에 버섯 %.0f개를 베어 창고로 (나무꾼처럼 조각내 나름 — 창고에 %.0f)" % [float(f.stats["picked"]), got])
 	check(float(brown["food"]) < 60.0 and f.drying.size() + int(float(f.stats["dried"]) > 0.0) > 0, "갈색갓버섯 조각은 말림대로 (말리는 중 %.0f)" % f.drying_at(hut.id))
 	v.advance(Balance.DRY_TIME + 2.0 * H)
 	var dried := float(v.stock["말린 버섯"]) + float(hut.out.get("말린 버섯", 0.0))
@@ -656,7 +656,8 @@ func test_wheat_bounded() -> void:
 	check(worst <= 1.3, "밀(창고 + 밭)이 넉넉한 양을 크게 넘지 않음 — 인구가 줄면 기준도 줄어듦 (최대 ×%.2f, 넉넉한 양 %.0f = 인구 %d × %.1f일치)" % [worst, v.enough("밀"), v.people.size(), Balance.FARM_ENOUGH_DAYS])
 	check(max_off < 1000 and max_off <= need * 0.35, "날마다 바친 밀 %s — 1,000개 넘게 쌓여 바치지 않음 (하루 먹는 양 %.0f)" % [str(offered), need])
 	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "농장이 멈춰도 굶지 않음")
-	check(farmer_rest or worst < 0.98, "넉넉하면 농부도 일을 쉰다 (넉넉한 양의 최대 ×%.2f — v5: 넉넉함 = 죽 값 사흘치, 빵 사슬이 밀을 꾸준히 써서 닿지 않으면 쉬지 않음)" % worst)
+	# v5: 농부는 창고 밀로 넉넉함을 본다 (밭 앞 밀은 4분의 1 수레가 차야 나르므로 창고 + 밭이 넉넉함을 10%쯤 넘을 수 있다 — 밭 자체는 넘으면 멈춤)
+	check(farmer_rest or worst < 1.1, "넉넉하면 농부도 일을 쉰다 (넉넉한 양의 최대 ×%.2f — v5: 넉넉함 = 죽 값 사흘치, 빵 사슬이 밀을 꾸준히 써서 거의 닿지 않음)" % worst)
 	Market.reset()
 
 

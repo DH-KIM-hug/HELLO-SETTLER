@@ -355,7 +355,7 @@ const B := {
 	"화덕": {"plank": 1, "stone": 1, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 90.0},
 	"빵집": {"plank": 2, "stone": 3, "time": 150 * BUILD_K, "era": 2, "size": 1.2, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 40.0, "replaces": "화덕"},
 	"소금밭": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 1800.0, "needs_salt": true},
-	"제단": {"plank": 0, "stone": 0, "time": 6000, "era": 0, "size": 0.9},   # v5: 9,000 → 6,000 (아기를 돌보는 부모·짐꾼이 생겨 짓는 손이 줄었다 — 현실 ~7:30에 서게) · A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
+	"제단": {"plank": 0, "stone": 0, "time": 5000, "era": 0, "size": 0.9},   # v5: 9,000 → 5,000 (아기를 돌보는 부모·짐꾼이 생겨 짓는 손이 줄었다 — 현실 ~7:30에 서게) · A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
 	"버섯꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0 * GATHER_K},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
 	# 마을 시대 건물 1차 (A6 — BUILDINGS 3.1 · 4.1 · 6, buildings_v1.xlsx '건물' 시트의 판자/돌/시간 — sim/village_era.gd)
 	"묘지": {"plank": 0, "stone": 1, "time": 30 * BUILD_K, "era": 0, "size": 1.3},    # 개척기 — 첫 사망 뒤. 반경 행복 −0.01 · 슬픔이 덜함

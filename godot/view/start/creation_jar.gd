@@ -7,8 +7,6 @@ class_name CreationJar
 extends Node3D
 
 const ROOM := "room/"
-const BOX_HOME := Vector3(-5.6, 0, 9.4)
-const BOTTLE_HOME := Vector3(5.8, 0, 9.6)
 const RIN := 5.42
 const FLOOR_Y := 0.42
 const ROCK_TOP := 1.7
@@ -26,8 +24,6 @@ const SAND_C := Color("d9c08e")
 const GRASS_C := Color("9fcf78")
 const MOSS_C := Color("6fae5c")
 const FOREST_FLOOR := Color("6aa66a")
-const KINDS := {"deer": [Color("b07a4a"), 0.11], "rabbit": [Color("e6ddd0"), 0.07], "wolf": [Color("8a8f98"), 0.1], "boar": [Color("5a4636"), 0.1],
-	"sheep": [Color("f1ead6"), 0.1], "aurochs": [Color("4a3426"), 0.14]}
 
 var plan: CreationPlan
 var nzs: Array
@@ -43,7 +39,7 @@ var green := 0.0                        # 씨앗 배양: 0 → 1 (이끼 → 풀
 var tod := "morning"
 
 var cam: Camera3D
-var rig := {"yaw": 0.0, "pitch": 0.25, "dist": 62.0, "ty": 9.0}
+var rig := {"yaw": 0.0, "pitch": 0.25, "dist": 62.0, "ty": 9.0, "tx": 0.0, "tz": 0.0}   # tx · tz = 바라보는 곳 (병 가운데에서 비켜)
 var sun: DirectionalLight3D
 var post: ShaderMaterial
 var glass_mat: ShaderMaterial
@@ -67,15 +63,11 @@ var streams: Array[MeshInstance3D] = []
 var stream_mat: ShaderMaterial
 var pour_fx: CPUParticles3D
 var smoke_fx: CPUParticles3D
-var animals_root: Node3D
-var box: Node3D
-var bottle: Node3D
+var release: CreationRelease           # 들짐승·물고기 풀기 (build_kit)
 var _wl := -1.0e9                       # 미리보기 물 높이 (세상 단위)
 var _dirty := true
 var _t := 0.0
 var _trees: Array = []                  # [{node, grow_at}]
-var _animals: Array = []                # [{node, from, to, t0, dur, kind}]
-var _fish_jumps: Array = []
 var _built_t := -1.0
 
 
@@ -255,8 +247,6 @@ func _build_jar() -> void:
 	speck_mm.multimesh = mm
 	tree_root = Node3D.new()
 	add_child(tree_root)
-	animals_root = Node3D.new()
-	add_child(animals_root)
 	nubs_root = Node3D.new()
 	# 유리 · 코르크
 	glass_mat = ShaderMaterial.new()
@@ -375,11 +365,27 @@ const SHOTS := {
 	"top": {"yaw": 0.0, "pitch": 0.5, "dist": 27.0, "ty": 3.9},
 	"seeds": {"yaw": 0.0, "pitch": 0.66, "dist": 30.0, "ty": 3.0},
 	"wildlife": {"yaw": 0.0, "pitch": 0.6, "dist": 33.0, "ty": 3.0},
+	"wild_ask": {"yaw": 0.0, "pitch": 0.34, "dist": 20.5, "ty": 9.6},       # 병 입구 위에 든 상자·유리병 + 병 안 땅
 }
 
 
 func shot(nm: String, dur := 1.0) -> Tween:
-	var to: Dictionary = SHOTS.get(nm, SHOTS["core"])
+	var to: Dictionary = (SHOTS.get(nm, SHOTS["core"]) as Dictionary).duplicate()
+	to.merge({"tx": 0.0, "tz": 0.0})
+	return _cam_to(to, dur)
+
+
+## 병 안 한 곳 p를 가까이 (짐승을 따라가기 · 호수)
+func focus(p: Vector3, dist: float, pitch: float, dur := 1.0) -> Tween:
+	return _cam_to({"yaw": 0.0, "pitch": pitch, "dist": dist, "ty": p.y, "tx": p.x, "tz": p.z}, dur)
+
+
+var _cam_tw: Tween
+
+
+func _cam_to(to: Dictionary, dur: float) -> Tween:
+	if _cam_tw != null and _cam_tw.is_valid():
+		_cam_tw.kill()                           # 앞 카메라 움직임과 다투지 않게
 	var tw := create_tween().set_parallel(true).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	for k: String in to:
 		tw.tween_method(func(x: float) -> void:
@@ -388,13 +394,14 @@ func shot(nm: String, dur := 1.0) -> Tween:
 	if dur <= 0.0:
 		rig = to.duplicate()
 		_apply_cam()
+	_cam_tw = tw
 	return tw
 
 
 func _apply_cam() -> void:
 	if cam == null:
 		return
-	var t := Vector3(0, float(rig["ty"]), 0)
+	var t := Vector3(float(rig.get("tx", 0.0)), float(rig["ty"]), float(rig.get("tz", 0.0)))
 	var b := Basis.from_euler(Vector3(-float(rig["pitch"]), float(rig["yaw"]), 0))
 	cam.position = t + b * Vector3(0, 0, float(rig["dist"]))
 	cam.look_at(t, Vector3.UP)
@@ -669,7 +676,6 @@ func _process(dt: float) -> void:
 		var nd: Node3D = tr["node"]
 		var s := clampf((green - float(tr["at"])) / 0.25, 0.0, 1.0)
 		nd.scale = Vector3.ONE * float(tr["s"]) * maxf(0.001, s)
-	_animate_animals(dt)
 
 
 func core_radius() -> float:
@@ -903,187 +909,59 @@ func plant_trees() -> void:
 			_trees.append({"node": nd, "at": 0.5 + r.randf() * 0.35, "s": s})
 
 
-# ───────────────────────── 들짐승 · 물고기 ─────────────────────────
-## 상자(들짐승 키트) · 물고기 병 — 병 옆 선반 위
+# ───────────────────────── 들짐승 · 물고기 (view/start/creation_release.gd) ─────────────────────────
+## 상자 · 물고기 유리병 · 거인의 손가락 · 짐승 · 물고기 연출 묶음
 func build_kit() -> void:
-	box = Node3D.new()
-	add_child(box)
-	var body := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(3.6, 2.2, 2.6)
-	body.mesh = bm
-	body.material_override = Toon.mat(Color("e8c99a"))
-	body.position.y = 1.1
-	box.add_child(body)
-	var lid := MeshInstance3D.new()
-	var lm := BoxMesh.new()
-	lm.size = Vector3(3.8, 0.45, 2.8)
-	lid.mesh = lm
-	lid.material_override = Toon.mat(Color("6aa37a"))
-	lid.position.y = 2.4
-	lid.name = "Lid"
-	box.add_child(lid)
-	var band := MeshInstance3D.new()
-	var bb := BoxMesh.new()
-	bb.size = Vector3(0.5, 2.25, 2.65)
-	band.mesh = bb
-	band.material_override = Toon.mat(Color("d6694f"))
-	band.position.y = 1.1
-	box.add_child(band)
-	var dots := [Vector3(-1.35, 1.5, 1.32), Vector3(-0.8, 1.5, 1.32), Vector3(-1.07, 0.85, 1.32), Vector3(0.8, 1.5, 1.32), Vector3(1.35, 1.5, 1.32), Vector3(1.07, 0.85, 1.32)]
-	var i := 0
-	for k: String in ["deer", "rabbit", "wolf", "boar", "sheep", "aurochs"]:     # 상자 겉면 그림 (짐승 색 점 — 사슴·토끼·늑대·멧돼지·들양·들소)
-		var dot := MeshInstance3D.new()
-		var dm := SphereMesh.new()
-		dm.radius = 0.24
-		dm.height = 0.3
-		dot.mesh = dm
-		dot.material_override = Toon.mat(KINDS[k][0])
-		dot.position = dots[i]
-		box.add_child(dot)
-		i += 1
-	box.position = BOX_HOME
-	bottle = Node3D.new()
-	add_child(bottle)
-	var bmi := MeshInstance3D.new()
-	var cm := CylinderMesh.new()
-	cm.top_radius = 0.9
-	cm.bottom_radius = 1.1
-	cm.height = 3.2
-	bmi.mesh = cm
-	bmi.material_override = glass_mat
-	bmi.position.y = 1.6
-	bottle.add_child(bmi)
-	var wmi := MeshInstance3D.new()
-	var wcm := CylinderMesh.new()
-	wcm.top_radius = 0.85
-	wcm.bottom_radius = 1.0
-	wcm.height = 2.2
-	wmi.mesh = wcm
-	wmi.material_override = Toon.mat(Color("9fd8e2"))
-	wmi.position.y = 1.15
-	bottle.add_child(wmi)
-	var ck := MeshInstance3D.new()
-	var ckm := CylinderMesh.new()
-	ckm.top_radius = 0.55
-	ckm.bottom_radius = 0.5
-	ckm.height = 0.7
-	ck.mesh = ckm
-	ck.material_override = Toon.mat(Color("c99a62"))
-	ck.position.y = 3.5
-	bottle.add_child(ck)
-	var r := RandomNumberGenerator.new()
-	r.seed = 3
-	for j in 6:
-		var f := MeshInstance3D.new()
-		var fm := SphereMesh.new()
-		fm.radius = 0.16
-		fm.height = 0.2
-		f.mesh = fm
-		f.material_override = Toon.mat(Color("e4ecf2"))
-		f.scale = Vector3(1.8, 1, 1)
-		f.position = Vector3(r.randf_range(-0.5, 0.5), r.randf_range(0.5, 1.8), r.randf_range(0.2, 0.9))
-		bottle.add_child(f)
-	bottle.position = BOTTLE_HOME
+	release = CreationRelease.new()
+	add_child(release)
+	release.setup(self)
 
 
-## 상자를 연다 → 짐승들이 놓은 곳에서 나와 서식지로 흩어짐 (plan = WorldGen.wildlife_plan 결과)
-func release_animals(drop_uv: Vector2, groups: Array) -> void:
-	var lid: Node3D = box.get_node("Lid")
-	var tw := create_tween()
-	tw.tween_property(lid, "rotation:x", -1.9, 0.35).set_trans(Tween.TRANS_BACK)
-	var r := RandomNumberGenerator.new()
-	r.seed = plan.seed_v + 5
-	var from := uv_point(drop_uv.x, drop_uv.y, 0.06)
-	var delay := 0.3
-	for g: Dictionary in groups:
-		var kind: String = g["kind"]
-		var to_uv := Vector2(float(g["x"]), float(g["y"])) / R
-		var n := clampi(int(g["n"]) / 2, 2, 4)
-		for i in n:
-			var mi := MeshInstance3D.new()
-			var cm := CapsuleMesh.new()
-			var s: float = KINDS[kind][1] * 2.2
-			cm.radius = s
-			cm.height = s * 3.2
-			cm.radial_segments = 8
-			cm.rings = 2
-			mi.mesh = cm
-			mi.rotation.z = PI * 0.5
-			mi.material_override = Toon.mat(KINDS[kind][0])
-			mi.position = from
-			mi.visible = false
-			animals_root.add_child(mi)
-			var tuv := to_uv + Vector2(r.randf_range(-0.05, 0.05), r.randf_range(-0.05, 0.05))
-			if tuv.length() > 0.95:
-				tuv = tuv.normalized() * 0.95
-			_animals.append({"node": mi, "from": drop_uv, "to": tuv, "t0": _t + delay, "dur": r.randf_range(2.0, 3.2), "kind": kind, "home": tuv, "baby": false})
-			delay += 0.06
+## 상자를 놓을 마른 땅 (병 입구 안쪽 — 반지름 0.5 안): 짐승들의 집에서 가장 먼 곳 (상자가 서식지를 가리지 않고, 뛰어나가는 게 보이게)
+func crate_spot(groups: Array) -> Vector2:
+	var best := Vector2.ZERO
+	var bs := -INF
+	for j in range(-5, 6):
+		for i in range(-5, 6):
+			var q := Vector2(i, j) * 0.1
+			if q.length() > 0.5 or water_h(q.x, q.y, ground_h(q.x, q.y)) != -INF:
+				continue
+			var m := INF
+			for g: Dictionary in groups:
+				m = minf(m, q.distance_to(Vector2(float(g["x"]), float(g["y"])) / R))
+			var sc := m - q.length() * 0.3              # 비슷하면 가운데 쪽
+			if sc > bs:
+				bs = sc
+				best = q
+	return best
 
 
-## 새끼 (배양 — 무리마다 작은 것 하나)
-func add_babies() -> void:
-	var adults := _animals.duplicate()
-	var seen := {}
-	for a: Dictionary in adults:
-		if seen.has(a["kind"]) or bool(a["baby"]):
+## 물고기를 풀 호수 그림 (세상 자리 p에서 가장 가까운 민물 수면 원판): {p: 수면 가운데 3D, rad}. 없으면 {}
+func lake_near(p: Vector2) -> Dictionary:
+	var best: Dictionary = {}
+	var bd := INF
+	for l: Dictionary in _lakes:
+		if bool(l["salty"]):
 			continue
-		seen[a["kind"]] = true
-		var mi := (a["node"] as MeshInstance3D).duplicate() as MeshInstance3D
-		mi.scale = Vector3.ONE * 0.6
-		animals_root.add_child(mi)
-		var h: Vector2 = a["home"]
-		_animals.append({"node": mi, "from": h, "to": h + Vector2(0.02, 0.015), "t0": _t, "dur": 1.5, "kind": a["kind"], "home": h, "baby": true})
+		var d := (l["uv"] as Vector2).distance_to(p / R)
+		if d < bd:
+			bd = d
+			best = l
+	if best.is_empty():
+		return {}
+	var mi: MeshInstance3D = best["node"]
+	var uv: Vector2 = best["uv"]
+	return {"p": Vector3(uv.x * RIN, to_y(float(best["h"])) + 0.05, uv.y * RIN), "rad": (mi.mesh as CylinderMesh).top_radius}
 
 
-func _animate_animals(_dt: float) -> void:
-	for a: Dictionary in _animals:
-		var mi: MeshInstance3D = a["node"]
-		var k := (_t - float(a["t0"])) / float(a["dur"])
-		if k < 0.0:
-			continue
-		mi.visible = true
-		var f: Vector2 = a["from"]
-		var to: Vector2 = a["to"]
-		var e := clampf(k, 0.0, 1.0)
-		var e2 := e * e * (3.0 - 2.0 * e)
-		var p := f.lerp(to, e2)
-		var hop := absf(sin(_t * 14.0 + float(a["dur"]) * 9.0)) * 0.12 * (1.0 - e) if e < 1.0 else 0.0
-		mi.position = uv_point(p.x, p.y, 0.08 + hop)
-		if e < 1.0 and f.distance_to(to) > 0.001:
-			var d := to - f
-			mi.rotation.y = -atan2(d.y, d.x)
-		elif k > 1.6:                               # 자리를 잡으면 가끔 조금씩 움직임
-			a["from"] = to
-			a["to"] = (a["home"] as Vector2) + Vector2(randf_range(-0.03, 0.03), randf_range(-0.03, 0.03))
-			a["t0"] = _t + randf_range(0.5, 2.5)
-			a["dur"] = randf_range(1.0, 2.0)
-	for j: Dictionary in _fish_jumps:
-		var mi: MeshInstance3D = j["node"]
-		var ph := fmod(_t + float(j["ph"]), 2.4)
-		mi.visible = ph < 0.6
-		var p: Vector3 = j["at"]
-		mi.position = p + Vector3(0, sin(ph / 0.6 * PI) * 0.35, 0)
-
-
-## 물고기 (호수마다 튀어 오르는 은빛 하나)
-func show_fish(lakes: Array) -> void:
-	for l: Dictionary in lakes:
-		var c: Vector2 = l["p"] / R
-		var mi := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.07
-		sm.height = 0.1
-		mi.mesh = sm
-		mi.scale = Vector3(2.2, 1, 1)
-		mi.material_override = Toon.mat(Color("e4ecf2"))
-		animals_root.add_child(mi)
-		var wy := uv_point(c.x, c.y).y
-		var g := ground_h(c.x, c.y)
-		var wh := water_h(c.x, c.y, g)
-		if wh > -INF:
-			wy = to_y(wh)
-		_fish_jumps.append({"node": mi, "at": Vector3(c.x * RIN, wy, c.y * RIN), "ph": randf() * 2.4})
+## 민물 호수 그림 모두 (배양 — 가끔 뛰는 물고기)
+func fresh_lake_spots() -> Array:
+	var out := []
+	for l: Dictionary in _lakes:
+		if not bool(l["salty"]):
+			var uv: Vector2 = l["uv"]
+			out.append({"p": Vector3(uv.x * RIN, to_y(float(l["h"])) + 0.05, uv.y * RIN)})
+	return out
 
 
 # ───────────────────────── 셰이더 ─────────────────────────

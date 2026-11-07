@@ -250,8 +250,11 @@ static func caring_for(v: Village, r: Resident) -> Resident:
 		if q.age < Balance.CARE_DAYS and q.home == r.home and r.id in q.parents:
 			if r.sex == "m" and q.age >= Balance.CARE_ELDER_DAYS and _elder_home(v, r.home):
 				return null               # 할머니·할아버지가 같은 집에 있으면 아빠는 일찍 일터로
-			if r.sex == "m" and v.food_total() < Balance.BIRTH_FOOD_DAYS * day_need(v):
+			var ft := v.food_total()
+			if r.sex == "m" and ft < Balance.BIRTH_FOOD_DAYS * day_need(v):
 				return null               # 먹을 것이 모자라면 아빠는 밭으로 (꼭 필요한 일 — GD 7.3)
+			if ft < day_need(v):
+				return null               # 하루치도 안 남으면 엄마도 번갈아 일터로 (아기는 이웃·노인이 봄)
 			return q
 	return null
 

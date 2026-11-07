@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -45,7 +45,9 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"village": "res://tests/village_era_tests.gd", "looks": "res://tests/resident_look_tests.gd",
 	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "discovery": "res://tests/discovery_tests.gd", "room": "res://tests/room_zoom_tests.gd",
 	"immigrant": "res://tests/immigrant_tests.gd", "crisis": "res://tests/crisis_tests.gd", "shelf": "res://tests/shelf_tests.gd",
-	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd"}
+	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd",
+	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
+	"slowdown": "res://tests/slowdown_tests.gd"}
 
 
 func _initialize() -> void:
@@ -76,7 +78,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "animals", "wildlife", "crisis", "hand", "resources"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "crisis", "hand", "resources", "plan"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()
@@ -683,10 +685,10 @@ func test_fast_speeds() -> void:
 	fast_run(cf2, hours * Balance.HOUR, [1.0 / 60.0], 1.0e9)
 	var f1 := v1.food_total()
 	var f2 := vf2.food_total()
-	# v5: 첫 아기 보장이 도착 1시간 뒤부터라 (빈자리 있는 집이 서는 때가 걸음 크기에 따라 조금 다름) 6시간 안에 한쪽만 태어날 수 있다 → 인구 ±1
+	# 출생은 걸음마다 주사위 — 걸음 크기가 다르면 한 명 차이는 날 수 있다 (v5: 첫 아기 보장이 도착 1시간 뒤부터라 6시간 안에 한쪽만 태어날 수 있다)
 	check(absi(v1.people.size() - vf2.people.size()) <= 1 and absi(v1.buildings.size() - vf2.buildings.size()) <= 1 and absf(f1 - f2) <= maxf(4.0, 0.25 * maxf(f1, f2))
 		and v1.check_invariants().is_empty() and vf2.check_invariants().is_empty(),
-		"1초 걸음과 1초=12시간의 병 %.0f시간: 인구 %d = %d · 건물 %d ~ %d · 식량 %.0f ~ %.0f · 값 이상 없음" % [hours, v1.people.size(), vf2.people.size(), v1.buildings.size(), vf2.buildings.size(), f1, f2])
+		"1초 걸음과 1초=12시간의 병 %.0f시간: 인구 %d ~ %d · 건물 %d ~ %d · 식량 %.0f ~ %.0f · 값 이상 없음" % [hours, v1.people.size(), vf2.people.size(), v1.buildings.size(), vf2.buildings.size(), f1, f2])
 	# 3) 화면 예산: 한 화면 계산이 예산(+ 걸음 하나) 안 → 못 따라가면 실제 배속이 내려가고 칩에 작게
 	var vb := Village.new_prototype(6)
 	var cb := JarClock.new(vb)
@@ -716,9 +718,10 @@ func test_fast_speeds() -> void:
 	while ce.speed_i == 9 and guard < 20000:
 		ce.tick(1.0 / 60.0)
 		guard += 1
-	check(ce.speed() == JarClock.normal_speed() and ce.notice == JarClock.EVENT_NOTE and ce.last_event != "",
-		"보통보다 빠를 때 중요한 일 (%s, %s) → 보통 + '%s'" % [ce.last_event, ve.fmt_time(ve.t), ce.notice])
-	check(words_ok([JarClock.EVENT_NOTE]) == "", "알림에 금지어 없음")
+	var cev := ce.take_events().filter(func(e: Dictionary) -> bool: return e["stop"])
+	check(ce.speed() == JarClock.normal_speed() and ce.last_event != "" and not cev.is_empty() and ce.notice == String(cev[0]["text"]) and ce.notice != JarClock.EVENT_NOTE,
+		"보통보다 빠를 때 중요한 일 (%s, %s) → 보통 + 무슨 일인지 '%s'" % [ce.last_event, ve.fmt_time(ve.t), ce.notice])
+	check(words_ok([ce.notice]) == "", "알림에 금지어 없음")
 	# 출생은 따로: 첫 아기가 태어나는 날을 빠른 흐름으로 → 그 걸음에서 ×1
 	var vk := Village.new_prototype(7)
 	var ck := JarClock.new(vk)

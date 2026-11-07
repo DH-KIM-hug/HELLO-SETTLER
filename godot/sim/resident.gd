@@ -114,6 +114,8 @@ func best_skill() -> float:
 
 ## 혈통 효과 (곱하는 능력의 기본 1, 더하는 능력은 기본 0을 넘김)
 func f(stat: String, def := 1.0) -> float:
+	if fx.is_empty():                 # 혈통 없음 (대부분) — 빠른 길
+		return def
 	var x: Variant = fx.get(stat, def)
 	return float(x) if not x is Array else def
 

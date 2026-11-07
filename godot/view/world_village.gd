@@ -1100,6 +1100,11 @@ func fly_to_ground(p: Vector2, end_ppu: float) -> void:
 	cam.fly_to(Vector3(q.x, terrain.ground_y(p.x, p.y), q.y), end_ppu)
 
 
+## [보러 가기] (느려진 까닭 카드): 그 자리로 날아감
+func see_ground(p: Vector2) -> void:
+	fly_to_ground(p, maxf(cam.ppu, ARRIVE_PPU))
+
+
 ## 그 무리의 광장(모닥불)으로
 func fly_to_settlement(v: Village) -> void:
 	var sq := v.fire if v.fire.distance_to(v.center) < 30.0 else v.center

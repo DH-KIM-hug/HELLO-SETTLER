@@ -246,7 +246,8 @@ func test_curtain() -> void:
 	a.advance(2.0 * H)
 	b.advance(2.0 * H)
 	print("  낮 두 시간 밭: 열림 %.1f · 반쯤 %.1f" % [fa.timer + fa.out_total() * 100.0, fb.timer + fb.out_total() * 100.0])
-	check(fb.timer + fb.out_total() * 1000.0 < fa.timer + fa.out_total() * 1000.0, "반쯤이면 밭이 덜 자람")
+	# v5: 밭 앞 밀은 4분의 1 수레(25)가 쌓여야 나르러 가므로 timer + 쌓인 양으로는 비교가 흔들린다 → 자람 배율로 본다
+	check(GiantHand.farm_mult(b, fb) < GiantHand.farm_mult(a, fa), "반쯤이면 밭이 덜 자람 (자람 ×%.2f < ×%.2f)" % [GiantHand.farm_mult(b, fb), GiantHand.farm_mult(a, fa)])
 
 
 func test_curtain_frost_and_river() -> void:

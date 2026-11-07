@@ -41,7 +41,43 @@ const SHAWL_COLORS := ["7d8a68", "8b7560", "6c7d8a", "94785a", "7b6a7e", "6f8572
 ## 짐 이름 → 부품 (없으면 상자)
 const ITEMS := {"통나무": "item_log", "판자": "item_plank", "돌": "item_stone", "낟알": "item_sack", "밀": "item_sack",
 	"밀가루": "item_sack", "빵": "item_basket", "물": "item_water", "소금": "item_sack",
-	"버섯": "item_basket", "빛버섯": "item_basket", "붉은 물감": "item_basket", "말린 버섯": "item_basket"}   # [하늘의 것]
+	"버섯": "item_basket", "빛버섯": "item_basket", "붉은 물감": "item_basket", "말린 버섯": "item_basket"}   # [하늘의 것] (옛 소품 — carry glb가 없을 때만)
+## (A22 · E0 · OPENING 3.1c) 나르는 짐 — 밀 단 → 밀가루 자루 → 반죽 그릇 → 빵 바구니가 길 따라 옮겨 가는 모습이 핵심.
+## 소품 = art/models/carry/<이름>.glb (art/src/build_carry.py, 부품 "<이름>" · 멀리 LOD 덩어리 "<이름>_far").
+## 짐 이름 → [소품, 드는 자리]. 자리: front 두 손으로 안음 · shoulder 오른 어깨에 멤 · back 등에 짊어짐(오른손이 목을 잡음) ·
+## head 머리에 임 · hand 오른손에 늘어뜨림. 표에 없는 짐 = 보따리 (CARRY_GENERIC)
+const CARRY := {
+	"밀": ["wheat_sheaf", "shoulder"], "밀가루": ["flour_sack", "back"], "반죽": ["dough_bowl", "front"],
+	"빵": ["bread_basket", "front"], "죽": ["porridge_pot", "front"], "건량": ["grain_sack", "back"], "낟알": ["grain_sack", "back"],
+	"통나무": ["log", "shoulder"], "판자": ["plank_stack", "shoulder"],
+	"돌": ["stone_block", "front"], "철광석": ["stone_block", "front"], "석탄": ["stone_block", "front"], "철": ["stone_block", "front"],
+	"소금": ["salt_sack", "back"], "물": ["water_bucket", "hand"], "생선": ["fish_string", "hand"],
+	"약초": ["herb_bundle", "hand"], "민들레 잎": ["herb_bundle", "hand"], "꽃잎": ["herb_bundle", "hand"],
+	"버섯": ["mushroom_basket", "front"], "빛버섯": ["mushroom_basket", "front"], "말린 버섯": ["mushroom_basket", "front"],
+}
+const CARRY_GENERIC := ["bundle", "back"]
+const CARRY_PROPS := ["wheat_sheaf", "flour_sack", "grain_sack", "salt_sack", "dough_bowl", "bread_basket", "loaf",
+	"porridge_pot", "log", "plank_stack", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle"]
+## 아이: 작은 것으로 바꿔 (빵 바구니 → 빵 한 덩이) 두 손으로 안는다 · 머리에 이는 건 바구니만 (어른 여자 반쯤)
+const CARRY_CHILD := {"bread_basket": "loaf"}
+const CARRY_HEAD_OK := ["bread_basket", "mushroom_basket"]
+const CARRY_SCALE := 1.12          # 기본 확대에서도 읽히게 조금 크게
+const CARRY_CHILD_SCALE := 0.95
+## 작은 소품은 더 크게 (손에 늘어뜨린 것은 기본 확대에서 안 읽힘)
+const CARRY_PROP_SCALE := {"fish_string": 1.55, "wheat_sheaf": 1.2, "flour_sack": 1.2, "salt_sack": 1.15, "grain_sack": 1.15, "bundle": 1.15, "herb_bundle": 1.5, "water_bucket": 1.15, "loaf": 1.15}
+const CARRY_FAR_SCALE := 1.35
+const CARRY_BOB := 0.035          # 걸음에 맞춰 짐이 통통
+## 자리 → 붙는 곳 (모델 좌표, 쉴 자세 — 앞 = +Z, 오른쪽 = -X)
+const CARRY_SOCKET := {"front": Vector3(0, 0.86, 0.42), "shoulder": Vector3(-0.22, 1.18, -0.1), "back": Vector3(0, 0.96, -0.17),
+	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02)}
+## 자리 → 팔 자세 (build_residents.py arms()와 같은 말: [윗팔 (x 앞으로 듦(-), y 옆으로 벌림, z), 팔뚝 굽힘(-)]). 빠진 팔은 살랑
+const CARRY_ARMS := {
+	"shoulder": {"R": [Vector3(-1.25, 0.75, 0.0), -2.1]},
+	"back": {"R": [Vector3(-0.45, 0.4, 0.0), -2.55]},
+	"head": {"R": [Vector3(-2.75, 0.5, 0.0), -0.45], "L": [Vector3(-2.75, -0.5, 0.0), -0.45]},
+	"hand": {"R": [Vector3(0.0, 0.3, 0.0), -0.08]},
+}
+const A_OUT := 0.12                # 쉴 때 팔이 몸에서 벌어진 정도 (build_residents.py A_OUT)
 ## 직업(일터 종류) → 옷·연장 (A20, design/characters/jobs_a·jobs_b). hat = 모자(본디 모자 대신), over = 겉옷, robe = 긴 옷,
 ## tool = 일할 때 손에 드는 연장 ("-" = 빈손). 표에 없는 일터 = 망치 (짓기 · 일꾼). "" = 일자리 없음(짓는 사람).
 const JOB_LOOK := {
@@ -118,6 +154,13 @@ var shown_parts: Array[String] = []   # 지금 합쳐 그리는 몸 부품
 var lod_close := true
 var _t := 0.0
 var _item_kind := ""
+var _carry_style := ""          # 지금 짐 드는 자리 (CARRY_SOCKET 키, "" = 옛 소품)
+var _carry_prop := ""
+var _carry_close: MeshInstance3D
+var _carry_far: MeshInstance3D
+var _item_base := Vector3.ZERO
+var _female := false
+var _arm_bi := PackedInt32Array([-1, -1, -1, -1])   # upper_arm.R · forearm.R · upper_arm.L · forearm.L
 var _tool_kind := "?"
 var _job_tool := ""             # 직업 연장 (set_job이 정함, "" = set_tool의 일터 표를 따름)
 var _base_scale := 1.0
@@ -686,6 +729,13 @@ func build_look(lk: Dictionary) -> void:
 	chest = _space("chest")
 	item = _pivot(chest, origin("item_log"))
 	item.visible = false
+	_carry_style = ""
+	_carry_prop = ""
+	_carry_close = null
+	_carry_far = null
+	_female = sex == "f"
+	for j in 4:
+		_arm_bi[j] = skel.find_bone(["upper_arm.R", "forearm.R", "upper_arm.L", "forearm.L"][j])
 	tool = _pivot(arm_r, origin("tool_axe"))
 	tool.visible = false
 	_item_kind = ""
@@ -758,6 +808,9 @@ func set_lod(close: bool) -> void:
 	if _close_mi != null:
 		_close_mi.visible = close
 		_far_mi.visible = not close
+	if _carry_close != null:
+		_carry_close.visible = close
+		_carry_far.visible = not close
 
 
 ## 직업 옷 (일터 종류 · 촌장 띠) — 바뀔 때만 몸 메시를 다시 고른다. 아기는 그대로.
@@ -812,16 +865,107 @@ func set_face(f: String) -> void:
 	mat.set_shader_parameter("sick", 1.0 if f == "sick" else 0.0)
 
 
-## 들고 있는 짐 모양 (통나무·판자 / 돌 / 자루 / 바구니 / 물통 / 그 밖의 상자)
+## (A22) 짐 이름 → [소품, 드는 자리, 크기]. child = 아이 (작은 것을 두 손으로), head = 머리에 일 수 있는 사람 (바구니만)
+static func carry_spec(kind: String, child := false, head_ok := false) -> Array:
+	var e: Array = CARRY.get(kind, CARRY_GENERIC)
+	var prop: String = e[0]
+	var style: String = e[1]
+	if child:
+		prop = CARRY_CHILD.get(prop, prop)
+		return [prop, "front", CARRY_CHILD_SCALE * float(CARRY_PROP_SCALE.get(prop, 1.0))]
+	if head_ok and prop in CARRY_HEAD_OK:
+		style = "head"
+	return [prop, style, CARRY_SCALE * float(CARRY_PROP_SCALE.get(prop, 1.0))]
+
+
+## 소품 메시 사전 (없으면 빈 사전) — {"mesh", "far"}
+static func carry_parts(prop: String) -> Dictionary:
+	if not Art.exists("carry/" + prop):
+		return {}
+	var ps := Art.parts("carry/" + prop)
+	if not ps.has(prop):
+		return {}
+	return {"mesh": ps[prop].get("mesh"), "far": ps.get(prop + "_far", {}).get("mesh")}
+
+
+## 자리 → 소품 돌림 (긴 것은 어깨 위에서 앞뒤로 눕힘, 자루는 오른 어깨 쪽으로 기울여 등에)
+static func carry_basis(prop: String, style: String) -> Basis:
+	match style:
+		"shoulder":
+			# 앞뒤로 눕히면 위에서 보는 카메라에 얼굴을 가림 → 오른쪽 뒤로 비스듬히 (끝(+X, 밀 이삭)이 오른쪽 뒤로)
+			return Basis(Vector3.UP, 2.3) * Basis(Vector3.BACK, 0.35 if prop == "wheat_sheaf" else 0.18)
+		"back":
+			return Basis(Vector3.RIGHT, -0.2) * Basis(Vector3.BACK, 0.32)
+		"hand":
+			return Basis(Vector3.UP, 0.5)
+		"head":
+			return Basis(Vector3.UP, 0.4)
+	return Basis.IDENTITY
+
+
+## 들고 있는 짐 (A22): 소품을 자리(뼈)에 붙이고 크기·돌림을 맞춤. 바뀔 때만 (매 화면 할당 없음)
 func set_item(kind: String) -> void:
 	if kind == _item_kind or item == null:
 		return
 	_item_kind = kind
 	for c in item.get_children():
+		item.remove_child(c)
 		c.queue_free()
+	_carry_close = null
+	_carry_far = null
+	_carry_style = ""
+	_carry_prop = ""
 	item.visible = kind != ""
-	if kind != "":
+	if kind == "":
+		return
+	var sp := carry_spec(kind, _child, _female and _style % 2 == 0)
+	var parts := carry_parts(sp[0])
+	if parts.is_empty() or parts["mesh"] == null:      # carry 소품이 없으면 옛 소품 (가슴 앞)
+		_reparent_item(chest)
+		item.transform = Transform3D(Basis.IDENTITY, origin("item_log"))
 		_mesh(item, ITEMS.get(kind, "item_crate"))
+		_item_base = item.position
+		return
+	_carry_prop = sp[0]
+	_carry_style = sp[1]
+	_reparent_item(head if _carry_style == "head" else (arm_r if _carry_style == "hand" else chest))
+	_carry_close = _carry_mi(parts["mesh"])
+	_carry_far = _carry_mi(parts["far"] if parts["far"] != null else parts["mesh"])
+	_carry_close.visible = lod_close
+	_carry_far.visible = not lod_close
+	_carry_far.scale = Vector3.ONE * CARRY_FAR_SCALE        # 멀리 LOD: 덩어리를 조금 더 크게 (기본 확대에서 색 점으로 읽히게)
+	var b := carry_basis(_carry_prop, _carry_style).scaled(Vector3.ONE * float(sp[2]))
+	var bb := Transform3D(b) * (parts["mesh"] as Mesh).get_aabb()
+	var h := bb.size * 0.5
+	var c := bb.get_center()
+	var at: Vector3 = CARRY_SOCKET[_carry_style]
+	var pos := at
+	match _carry_style:
+		"front":
+			pos = Vector3(at.x, at.y - h.y * 0.15, maxf(at.z, 0.24 + h.z))
+		"shoulder":
+			pos = at + Vector3(-h.x * 0.3, h.y * 0.75, -h.z * 0.3)
+		"back":
+			pos = at + Vector3(-0.05, h.y * 0.45, -h.z * 0.85)
+		"head":
+			pos = at + Vector3(0, h.y * 0.8, 0)
+		"hand":
+			pos = at + Vector3(0, -h.y * 0.9, 0)
+	item.transform = Transform3D(b, pos - c)
+	_item_base = item.position
+
+
+func _reparent_item(host: Node3D) -> void:
+	if item.get_parent() != host:
+		item.reparent(host, false)
+
+
+func _carry_mi(m: Mesh) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.material_override = mat
+	item.add_child(mi)
+	return mi
 
 
 ## 일할 때 드는 연장 — 직업 옷(set_job)이 정한 연장, 없으면 일터 표 (없는 일터 = 망치: 짓기). "-" = 빈손
@@ -911,6 +1055,9 @@ func _pick(dt: float) -> String:
 		if not first and _var_clip != "wave":       # 하던 일이 바뀌면 사이 동작은 그만 (인사는 마저)
 			_var_clip = ""
 		_var_next = minf(_var_next, _rng.randf_range(VARIETY_GAP.x, VARIETY_GAP.y))
+	if _item_kind != "" and (b == "carry" or b == "hold"):     # 짐을 든 동안엔 사이 동작 없이 (팔이 짐을 놓지 않게)
+		_var_clip = ""
+		return b
 	if _var_clip != "":
 		_var_left -= dt
 		if _var_left > 0.0:
@@ -994,6 +1141,8 @@ func apply_pose(a: String, t: float) -> void:
 func _after() -> void:
 	var a := anim
 	item.visible = _item_kind != "" and (a == "carry" or a == "idle")
+	if item.visible and _carry_style != "":
+		_carry_pose(a == "carry")
 	tool.visible = a == "work" or a == "torch"
 	if _cane != null:
 		_cane.visible = not a in ["sit", "eat", "sleep", "pray", "work", "fly", "play", "carry"]
@@ -1020,6 +1169,44 @@ func _after() -> void:
 		if _lean != 0.0:
 			_rot_world(skel.find_bone("spine"), Vector3.RIGHT, _lean)
 		_rot_world(skel.find_bone("skull"), Vector3.RIGHT, HEAD_TILT - _lean * 0.6)
+
+
+## (A22) 짐 든 자세: 걸음에 맞춰 짐이 통통 + 자리마다 팔 자세 (front는 carry/hold 클립 그대로). 값만 씀 — 할당 없음
+func _carry_pose(walking: bool) -> void:
+	var ph := 0.0
+	if _player != null and _player.current_animation != "":
+		var ln := _player.current_animation_length
+		ph = _player.current_animation_position / ln if ln > 0.0 else 0.0
+	var bob := absf(cos(ph * TAU)) * CARRY_BOB if walking else 0.0
+	item.position = _item_base + Vector3(0, bob, 0)
+	if _carry_style == "front":
+		return
+	var arms: Dictionary = CARRY_ARMS.get(_carry_style, {})
+	var swing := sin(ph * TAU) * (0.4 if walking else 0.0)
+	for side in 2:
+		var key := "R" if side == 0 else "L"
+		var ua := _arm_bi[side * 2]
+		var fa := _arm_bi[side * 2 + 1]
+		if ua < 0 or fa < 0:
+			continue
+		var sg := 1.0 if side == 0 else -1.0
+		if arms.has(key):
+			var e: Array = arms[key]
+			var u: Vector3 = e[0]
+			if _carry_style == "hand":
+				u.x += swing * 0.25 * sg
+			_set_bone_euler(ua, Vector3(u.x, u.y * sg, u.z))
+			_set_bone_euler(fa, Vector3(float(e[1]), 0, 0))
+		else:                           # 빈 팔: 걸음에 맞춰 살랑
+			_set_bone_euler(ua, Vector3(swing * sg * -1.0, A_OUT * sg, 0))
+			_set_bone_euler(fa, Vector3(-0.25 - maxf(0.0, swing * sg) * 0.3, 0, 0))
+
+
+## 뼈를 쉴 자세 기준 '모델 축 오일러'로 (build_residents.py key()와 같은 셈: Euler YXZ, Blender 축 → Godot 축)
+func _set_bone_euler(i: int, e: Vector3) -> void:
+	var rw := Basis(Vector3.UP, e.z) * Basis(Vector3.RIGHT, e.x) * Basis(Vector3.FORWARD, e.y)
+	var bg := skel.get_bone_global_rest(i).basis
+	skel.set_bone_pose_rotation(i, skel.get_bone_rest(i).basis.get_rotation_quaternion() * (bg.inverse() * rw * bg).get_rotation_quaternion())
 
 
 ## 뼈를 (쉴 자세 기준) 세계 축 둘레로 더 돌림

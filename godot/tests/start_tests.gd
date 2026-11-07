@@ -202,7 +202,8 @@ func test_first_run_and_back() -> void:
 	c.call("jump", "wildlife")
 	c.call("next")
 	c.call("next")
-	check(StartFlow.last_target == StartFlow.GAME_SCENE and StartFlow.mode == "new" and StartFlow.pending_world != null, "들짐승 단계 뒤 [다음] → 넓은 세상 (키트 자리 고르기, 창조가 만든 세상을 넘김)")
+	c.call("next")
+	check(StartFlow.last_target == StartFlow.GAME_SCENE and StartFlow.mode == "new" and StartFlow.pending_world != null, "들짐승 · 물고기 박자 뒤 [다음] → 넓은 세상 (키트 자리 고르기, 창조가 만든 세상을 넘김)")
 	remove(c)
 	var s: Node = load(StartFlow.GAME_SCENE).instantiate()
 	s.set("kit_anim", false)
@@ -293,10 +294,23 @@ func test_creation_stages() -> void:
 	c.call("pick", 1)
 	check(c.get("step") == "grow" and (plan.seeds["tree"] as Array).size() > (plan.seeds["grass"] as Array).size(), "숲을 더 → 나무 씨앗이 많음 → 배양")
 	c.call("next")
-	check(c.get("step") == "release" and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "풀어 주기", "→ 들짐승·물고기: [풀어 주기] 하나")
+	var cr: CreationRelease = (c.get("jar") as CreationJar).release
+	check(c.get("step") == "release" and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "들짐승 풀어 주기"
+		and String(c.get("_said")).contains("짐승") and cr != null and cr.crate.visible and cr.crate_inside.get_child_count() >= 4,
+		"→ ① 들짐승: 짐승 얼굴이 보이는 상자를 들고 \"숲과 들에 살 짐승들이에요.\" [들짐승 풀어 주기]")
 	c.call("pick", 0)
-	check(c.get("step") == "settle" and plan.animals.size() == 2 and plan.fish.size() == 2 and not jw.water.wildlife.is_empty() and not jw.water.fish.is_empty(),
-		"풀어 주기 → 숲에 들짐승 · 민물 호수에 물고기 (자리는 알아서)")
+	var kinds := {}
+	for a: Dictionary in cr.get("_animals"):
+		kinds[a["kind"]] = true
+	check(c.get("step") == "fish" and plan.animals.size() == 2 and plan.fish.is_empty() and not jw.water.wildlife.is_empty() and CreationPlan.load_from(sm.dir).animals.size() == 2,
+		"들짐승 풀어 주기 → 숲에 들짐승 (자리는 알아서 · 저장) → ② 물고기 차례")
+	check(kinds.has("deer") and kinds.has("rabbit") and kinds.has("wolf") and kinds.has("boar") and kinds.has("sheep") and not cr.crate.visible,
+		"병 안에 사슴·토끼·늑대·멧돼지·들양이 보이고 상자는 치움 (종 %d)" % kinds.size())
+	check((chips.get_child(0) as Button).text == "물고기 풀어 주기" and String(c.get("_said")) == "호수에 살 물고기예요." and cr.fish_jar.visible,
+		"② 물고기: 유리병을 들고 \"호수에 살 물고기예요.\" [물고기 풀어 주기]")
+	c.call("pick", 0)
+	check(c.get("step") == "settle" and plan.fish.size() == 2 and not jw.water.fish.is_empty() and not (cr.get("_swim") as Array).is_empty() and not cr.fish_jar.visible,
+		"물고기 풀어 주기 → 민물 호수에 물고기 (헤엄침) → 짧은 배양 → [다음]")
 	var lake := false
 	var fp := Vector2(plan.fish[0], plan.fish[1]) * jw.water.rr
 	for k in jw.water.cells_near(fp, 10.0):
@@ -504,6 +518,37 @@ func test_creation_resume() -> void:
 	run.root.add_child(c)
 	check(c.get("step") == "sow" and c.get("_world") != null, "씨앗 단계에서 꺼짐 → 세상을 다시 만들고 씨앗 단계부터")
 	remove(c)
+	# 들짐승 단계: 아직 안 풀었으면 ① · 짐승만 풀었으면 ② 물고기부터 (짐승은 제자리에) · 다 풀었으면 (옛 한 단추 저장) 배양
+	p.stage = "wildlife"
+	p.save(sm.dir)
+	StartFlow.plan = null
+	c = load(StartFlow.CREATION_SCENE).instantiate()
+	c.set("instant", true)
+	run.root.add_child(c)
+	check(c.get("step") == "release" and ((c.get("chips") as HBoxContainer).get_child(0) as Button).text == "들짐승 풀어 주기", "들짐승 단계에서 꺼짐 (아직 안 풂) → [들짐승 풀어 주기]부터")
+	remove(c)
+	p.animals = [0.2, -0.1]
+	p.save(sm.dir)
+	StartFlow.plan = null
+	c = load(StartFlow.CREATION_SCENE).instantiate()
+	c.set("instant", true)
+	run.root.add_child(c)
+	var rel: CreationRelease = (c.get("jar") as CreationJar).release
+	check(c.get("step") == "fish" and not (rel.get("_animals") as Array).is_empty() and not (c.get("_world") as JarWorld).water.wildlife.is_empty(),
+		"짐승만 풀고 꺼짐 → 짐승은 병 안 제자리 · [물고기 풀어 주기]부터")
+	c.call("pick", 0)
+	check(c.get("step") == "settle" and (c.get("plan") as CreationPlan).fish.size() == 2, "→ 물고기 풀기 → 배양")
+	remove(c)
+	p.fish = [0.1, 0.1]
+	p.save(sm.dir)
+	StartFlow.plan = null
+	c = load(StartFlow.CREATION_SCENE).instantiate()
+	c.set("instant", true)
+	run.root.add_child(c)
+	check(c.get("step") == "settle" and (c.get("next_btn") as Button).visible, "옛 저장 (한 단추로 다 푼 뒤 꺼짐) → 배양 끝 [다음]")
+	remove(c)
+	p.animals = []
+	p.fish = []
 	var f := FileAccess.open(CreationPlan.path_in(sm.dir), FileAccess.WRITE)
 	f.store_string("{broken")
 	f.close()

@@ -205,6 +205,9 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				VillageEra.route(v, r, s)          # 강 건너: 나루터로 돌아가는 게 빠르면 (A6) — 걸음이 늘면 첫 걸음부터 다시
 				if r.steps[0] != s:
 					continue
+				VillagePlan.route(v, r, s)         # [길] 길을 따라 (sim/village_plan.gd) — 사이 걸음이 끼면 첫 걸음부터
+				if r.steps[0] != s:
+					continue
 			var to := Vector2(s["x"], s["y"])
 			var from := Vector2(r.x, r.y)
 			var d := to - from
@@ -741,7 +744,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return true
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
-		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):
+		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y) or not VillagePlan.plantable(v, sp):     # [배치] 길·광장·집 앞은 비움
 			r.steps.append(act(45.0, "idle"))
 			return true
 		r.steps.append(walk(sp.x, sp.y))
@@ -827,20 +830,26 @@ static func _drop_at_store(v: Village, r: Resident, s: Building, item: String, a
 # ───────────────────────── 운반 (5.3) ─────────────────────────
 static func haul_requests(v: Village) -> int:
 	var n := 0
+	var cold := v.cold_season and float(v.stock.get("통나무", 0.0)) >= 1.0
+	var plank_ok := float(v.stock["판자"]) >= 1.0
+	var stone_ok := float(v.stock["돌"]) >= 1.0
 	for b in v.buildings:
-		if b.built and not b.is_store:
-			for k in b.out:
-				if float(b.out[k]) >= haul_min(k):
-					n += 1
+		if b.built:
+			if not b.is_store:
+				for k in b.out:
+					if float(b.out[k]) >= haul_min(k):     # v5: 수레 물건은 4분의 1 수레가 쌓여야
+						n += 1
+			var d := b.def()
+			if d.has("in") and b.upgrade_to == "":
+				for k in d["in"]:
+					if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < _inbuf_low(k) and float(v.stock.get(k, 0.0)) >= 1.0:
+						n += 1
 		if b.is_site():
-			for k: String in ["판자", "돌"]:
-				if b.need(k) - int(b.delivered[k]) - int(b.incoming[k]) > 0 and float(v.stock[k]) >= 1.0:
-					n += 1
-		if b.built and b.def().has("in") and b.upgrade_to == "":
-			for k in b.def()["in"]:
-				if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < _inbuf_low(k) and float(v.stock.get(k, 0.0)) >= 1.0:
-					n += 1
-		if v.cold_season and Health.fuel_lack(v, b) >= 1.0 and float(v.stock.get("통나무", 0.0)) >= 1.0:
+			if plank_ok and b.need("판자") - int(b.delivered["판자"]) - int(b.incoming["판자"]) > 0:
+				n += 1
+			if stone_ok and b.need("돌") - int(b.delivered["돌"]) - int(b.incoming["돌"]) > 0:
+				n += 1
+		if cold and Health.fuel_lack(v, b) >= 1.0:
 			n += 1
 	return n
 
@@ -848,6 +857,16 @@ static func haul_requests(v: Village) -> int:
 static func haul_task(v: Village, r: Resident) -> bool:
 	var s := v.store()
 	var cap := r.carry_cap()
+	# v5: 걸음이 느려 밭의 밀 나르기가 끝이 없다 — 짐꾼 절반은 짓는 터 자재부터, 절반은 산출물부터 (터가 자재를 영영 못 받는 일이 없게)
+	if r.id % 2 == 0:
+		if _haul_sites(v, r, s, cap) or _haul_inputs(v, r, s, cap) or _haul_out(v, r, s, cap):
+			return true
+	elif _haul_out(v, r, s, cap) or _haul_inputs(v, r, s, cap) or _haul_sites(v, r, s, cap):
+		return true
+	return _haul_fuel(v, r, s, cap)
+
+
+static func _haul_out(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ① 건물 앞 산출물 → 창고
 	for b in v.buildings:
 		if not b.built or b.is_store:
@@ -861,6 +880,10 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var put := op("stock_add", {"k": k, "amt": take})
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
+	return false
+
+
+static func _haul_sites(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ② 건설 현장 ← 창고 자재 (들어준 소원의 터 먼저)
 	var sites: Array[Building] = []
 	for b in v.buildings:
@@ -880,6 +903,10 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var undo := op("site_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
+	return false
+
+
+static func _haul_inputs(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ③ 가공 건물 ← 창고 재료
 	for b in v.buildings:
 		if not b.built or not b.def().has("in") or b.upgrade_to != "":
@@ -900,6 +927,10 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
+	return false
+
+
+static func _haul_fuel(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ④ 집 ← 창고 통나무 (땔감 — HEALTH.md 1.3, 추운 철에만). 가장 모자란 집부터
 	if v.cold_season and float(v.stock.get("통나무", 0.0)) >= 1.0:
 		var best: Building = null
