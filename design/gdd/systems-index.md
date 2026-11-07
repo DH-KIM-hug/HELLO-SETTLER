@@ -43,8 +43,8 @@
 | 17 | 인구 (출산·혼인·가족·세대) ✅ | Gameplay | MVP | Designed | design/gdd/population.md | 8, 9, 10, 16 |
 | 18 | 촌장의 결정 (inferred) 🔄 — VS는 지금 최소판, 막힌 곳을 보고 고르는 판단은 MVP 밖 | Gameplay | MVP | Designed | design/gdd/mayor-decisions.md | 13, 16, 10 |
 | 19 | 거인의 손길 — **MVP에 열림: 내려 주기·유리 톡·물 뿌리기** / VS(위기와 함께) 열림: 유리 닦기·핀셋·떠돌이 물방울 톡·등불 옮기기 ✅ | Gameplay | MVP | Designed | design/gdd/giant-touch.md | 3, 4, 7 |
-| 20 | 깨달음·믿음 ✅ | Narrative | MVP | Not Started | — | 7, 8, 17 |
-| 21 | 제단·공물 ✅ | Economy | MVP | Not Started | — | 20, 16 |
+| 20 | 깨달음·믿음 ✅ | Narrative | MVP | Designed | design/gdd/awakening-altar.md | 7, 8, 17 |
+| 21 | 제단·공물 ✅ | Economy | MVP | Designed | design/gdd/awakening-altar.md | 20, 16 |
 | 22 | 거인의 지갑·상점·설계도·이주민 ✅ | Economy | MVP | Not Started | — (docs/SHOP.md) | 21, 16 |
 | 23 | 소원 들어주기·계시 🔄 | Gameplay | MVP | Not Started | — (EVENTS_STAGING 6d·3b) | 20, 19, 22, 18 |
 | 24 | 카메라·확대·병 안 ↔ 방 ✅ | UI | MVP | Not Started | — (docs/GIANT_ROOM.md) | 2 |
