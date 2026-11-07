@@ -107,6 +107,7 @@ const ERA_MULT := [1.0, 0.08, 0.03]
 const ERA_POP := 0.4
 const ERA_BUILDING := 0.6
 const OFFLINE_ERA := 0.3
+const ERA_WATCH_HOURS := 2.0            # 지켜봄 100%는 병의 하루에 이만큼까지 (그 뒤는 OFFLINE_ERA) — sim_life.py 'watch_hours' 하루 2시간 → 마을 ~1.8일
 const SALT_DISCOVERY_PTS := 15.0
 const REV_MURMUR := 2.0 * 3600.0     # 계시를 기다리는 동안 노인이 하늘을 보며 한마디 하는 간격 (병 시간)
 const REV_KNEEL := 45.0              # 계시 때 깨어 있는 사람이 그 자리에서 무릎 꿇고 하늘을 보는 시간 (병 초)

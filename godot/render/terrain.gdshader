@@ -3,7 +3,8 @@
 // UV = (맨흙, 소금) · UV2 = (강, 바위) · CUSTOM0 = (모래·자갈 물가, 진흙·습지, 숲 바닥, 이끼) · CUSTOM1 = (마른 풀 바탕값, 폭포 웅덩이, -, -)
 // 꼭짓점 사이에서 보간된 값을 (잡음으로 조금 흔든) 문턱으로 끊어 또렷한 곡선 경계의 평면 색으로 쌓는다 (칸 계단이 보이지 않게).
 // 쌓는 순서 (뒤가 위): 풀 → 마른 풀 → 이끼 → 숲 바닥 → 물가 → 맨흙 → 진흙 → 바위 → 오솔길/돌길 → 소금 → 눈 → 강.
-// 오솔길은 무리마다 오솔길 지도 텍스처 (path_tex[i], 사각형 path_rect[i] = (x0, z0, 한 변, 돌길 0/1)) — 조각 LOD와 상관없이 또렷.
+// 오솔길은 무리마다 오솔길 지도 텍스처 (path_tex[i], 사각형 path_rect[i] = (x0, z0, 한 변, 돌길 마을 0/1 — GroundLook.stone_roads)) — 조각 LOD와 상관없이 또렷.
+// 돌은 돌길 마을에서도 큰길(값 ≥ STONE_V)만 — 나머지는 흙길.
 // 무늬(들꽃 점·이끼 점·낙엽·밭이랑·자갈·물웅덩이·바위 금·소금 금·돌길 돌)는 세계 좌표 해시·잡음, 한 픽셀보다 작아지면 사라진다.
 // 계절 (season_*·flower_amt·leaf_amt·dry_thr·frost_amt·snow_amt)은 view/ground_look.gd가 병 날짜로 넣는다.
 // 높이는 선 대신 색 단계 + 작은 둔덕 테두리 (band_h마다) + (멀리 축소) 언덕 명암.
@@ -166,6 +167,32 @@ float path_at(sampler2D t, vec4 r, vec2 p) {
 	return v;
 }
 
+// 돌길 자갈: 비틀린 보로노이 — (가장 가까운 점까지, 둘째 − 첫째 = 틈까지 거리 비슷한 값, 돌마다 해시)
+const float STONE_V = 0.92;
+vec3 cobble(vec2 q) {
+	vec2 i = floor(q);
+	vec2 f = fract(q);
+	float d1 = 8.0;
+	float d2 = 8.0;
+	vec2 id = i;
+	for (int y = -1; y <= 1; y++) {
+		for (int x = -1; x <= 1; x++) {
+			vec2 g = vec2(float(x), float(y));
+			vec2 o = vec2(hash(i + g), hash(i + g + 19.7)) * 0.7 + 0.15;
+			vec2 r = g + o - f;
+			float d = dot(r, r);
+			if (d < d1) {
+				d2 = d1;
+				d1 = d;
+				id = i + g;
+			} else if (d < d2) {
+				d2 = d;
+			}
+		}
+	}
+	return vec3(sqrt(d1), sqrt(d2) - sqrt(d1), hash(id + 3.3));
+}
+
 void vertex() {
 #ifdef WHOLE_UNDER
 	VERTEX.y -= sink;
@@ -284,22 +311,37 @@ void fragment() {
 		pth = path_at(path_tex3, path_rect3, p);
 		pv = pth > pv.x ? vec2(pth, path_rect3.w) : pv;
 		float pthr = mix(0.5, 0.3, path_far);
-		vec3 pcol = path_col;
 		vec3 pedge = mix(path_edge, path_edge * 0.82, path_far);
-		if (pv.y > 0.5) {
-			// 돌길: 둥근 돌 + 사이 틈 (칸의 0.5 격자 비틀린 벽돌)
-			vec2 sp = p * 2.2;
-			sp.x += floor(sp.y) * 0.5;
-			vec2 sf = fract(sp) - 0.5;
-			float sd = max(abs(sf.x), abs(sf.y));
-			float sw = fwidth(sd) + 1e-4;
-			float gap = smoothstep(0.36 - sw, 0.36 + sw, sd) * near;
-			pcol = mix(stone_col * (0.95 + 0.1 * hash(floor(sp))), stone_gap, gap);
-			pedge = stone_gap;
+		// 흙길: 밟아 다진 흙 (얼룩 + 작은 돌 알갱이)
+		vec3 pcol = path_col * (0.93 + 0.12 * vnoise(p * 1.6 + 2.0));
+		vec2 pgr = dots(p + 1.3, 0.27, 0.3, 0.16);
+		pcol = mix(pcol, path_edge * (0.92 + 0.12 * pgr.y), pgr.x * near * 0.75);
+		if (pv.y > 0.5 && pv.x > STONE_V - 0.08) {
+			// 돌길: 많이 밟은 큰길만 (path_value ≥ STONE_V — GroundLook.STONE_V). 작고 둥근 자갈 (칸에 3개 남짓, 비틀린 보로노이) +
+			// 흙 메운 틈. 가장자리에선 돌이 드문드문 흩어지며 흙길로 녹아든다
+			vec3 cb = cobble(p * 4.6);
+			float st = smoothstep(STONE_V - 0.07, STONE_V + 0.06, pv.x + wob * 0.12);
+			float keep = step(cb.z, st * 1.05);                          // 이 돌이 있나 (가장자리일수록 드묾)
+			float ew = fwidth(cb.y) + 1e-4;
+			float rim = smoothstep(0.1 - ew, 0.1 + ew + 0.06 * (1.0 - st), cb.y);      // 틈 (가장자리 돌은 더 둥글게 떨어짐)
+			float h2 = fract(cb.z * 7.31);
+			vec3 sc = stone_col * (0.88 + 0.16 * h2) * vec3(1.0 + 0.04 * (h2 - 0.5), 1.0, 1.0 - 0.05 * (h2 - 0.5));
+			sc *= 0.9 + 0.1 * smoothstep(0.05, 0.3, cb.y);              // 둥근 돌: 가장자리로 조금 어둡게
+			vec3 gapc = mix(pcol, stone_gap, st * 0.85);
+			pcol = mix(pcol, mix(gapc, sc, rim), keep * mix(0.6, 1.0, near));
+			pedge = mix(pedge, stone_gap, st * 0.5);
 		}
 		// 덜 다닌 곳은 풀이 닳아 옅은 흙빛 (길 둘레의 닳은 풀 — 길이 어디로 이어지는지 읽힘)
 		c = mix(c, mix(c, path_col, 0.4), smoothstep(pthr * 0.35, pthr * 0.85, pv.x) * (1.0 - step(pthr, pv.x)));
-		c = layer(c, pv.x + wob * 0.15, pthr, 0.06 + 0.05 * path_far, pcol, pedge);
+		{
+			// 흙길 가장자리: 부드럽게 (풀이 길 안으로 조금씩 번짐) + 옅은 테두리
+			float pv2 = pv.x + wob * 0.15;
+			float aa = fwidth(pv2) * 0.75 + 1e-4;
+			float soft = 0.025 + 0.01 * path_far;
+			float inside = smoothstep(pthr - aa - soft, pthr + aa + soft, pv2);
+			float core = smoothstep(pthr + 0.05 - aa, pthr + 0.12 + aa, pv2);
+			c = mix(c, mix(pedge, pcol, core), inside);
+		}
 		if (UV.y > 0.05) {
 			// 소금 들판: 흰 땅 + 금
 			float sa = cover(UV.y, 0.5);

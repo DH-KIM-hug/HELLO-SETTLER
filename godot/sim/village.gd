@@ -62,6 +62,8 @@ var auto_reveal := false             # 시대 점수가 차면 지켜보는 때�
 
 var era := 0
 var era_pts := 0.0
+var era_watch_day := -1               # 시대 점수 '지켜봄' 몫을 센 달력 날 (era_watch_k)
+var era_watch_secs := 0.0             # 그날 지켜봄 100%로 센 병 초 (Balance.ERA_WATCH_HOURS까지)
 # A4b 깨달음 (기획서 6.5 · 11.1 — sim/awakening.gd). 기본값 true = 옛 저장(제단이 있던 병)은 그대로 안다. 새 병은 Awakening.start가 끈다
 var aware := true                     # 주민이 하늘 너머의 거인을 안다 (깨달음 뒤)
 var altar_built := true               # 제단이 있다 — 그 전엔 기도·제물·소원 편지가 없다
@@ -929,8 +931,7 @@ func _update_era(dt: float) -> void:
 		if b.built:
 			built_n += 1
 	var rate: float = (people.size() * Balance.ERA_POP + built_n * Balance.ERA_BUILDING) * Balance.ERA_MULT[era]
-	if not is_watching():
-		rate *= Balance.OFFLINE_ERA
+	rate *= era_watch_k(dt)
 	era_pts = minf(Balance.ERA_NEED[era], era_pts + rate * dt / HOUR)
 	if era_pts < Balance.ERA_NEED[era]:
 		return
@@ -941,6 +942,25 @@ func _update_era(dt: float) -> void:
 		_revelation_notice()
 	elif is_watching() and t >= _rev_say_t:
 		_revelation_murmur()
+
+
+## 시대 점수의 지켜봄 배율 (BALANCE v2: 지켜봄 1 / 0.3). 100%는 병의 하루에 Balance.ERA_WATCH_HOURS 병 시간까지만 —
+## 밸런스 모델(sim_life.py)은 거인이 하루 2시간 지켜본다고 보고 '마을 1.8일'을 냈다. 빨리 돌리며 내내 지켜보면
+## (창세의 날 ×12 · 배속) 하루 24시간이 다 100%가 되어 반나절 만에 마을이 됐다 → 지켜봄 몫을 병 시간으로 하루 2시간까지.
+## dt만큼을 쓴다 (호출할 때마다 그날 몫이 준다). 반환 = 이 dt의 평균 배율
+func era_watch_k(dt: float) -> float:
+	if not is_watching():
+		return Balance.OFFLINE_ERA
+	var day_i := floori((start_clock + t) / DAY)
+	if day_i != era_watch_day:
+		era_watch_day = day_i
+		era_watch_secs = 0.0
+	var left := maxf(0.0, Balance.ERA_WATCH_HOURS * HOUR - era_watch_secs)
+	if dt <= 0.0:
+		return 1.0 if left > 0.0 else Balance.OFFLINE_ERA
+	var full := minf(dt, left)
+	era_watch_secs += full
+	return (full + (dt - full) * Balance.OFFLINE_ERA) / dt
 
 
 ## 시대 점수가 다 찼다 (계시를 기다림)

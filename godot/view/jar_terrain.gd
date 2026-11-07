@@ -448,7 +448,7 @@ func _update_paths() -> void:
 	else:
 		_path_tex.update(img)
 	_mat.set_shader_parameter("path_tex0", _path_tex)
-	var stone := 1.0 if village != null and village.era >= GroundLook.STONE_ERA else 0.0
+	var stone := 1.0 if GroundLook.stone_roads(village) else 0.0
 	_mat.set_shader_parameter("path_rect0", Vector4(-R, -R, 2.0 * R, stone))
 
 
@@ -577,7 +577,7 @@ func _cover_jar(GA: PackedVector4Array, GB: PackedVector4Array, SR: PackedVector
 	if cover == null:
 		return
 	var groups := {}
-	var stone := village != null and village.era >= GroundLook.STONE_ERA
+	var stone := GroundLook.stone_roads(village)
 	var leaves := float(season.get("leaves", 0.0))
 	for k in N * N:
 		if _inside[k] != 1 or GroundLook.hash01(k % N, k / N, 11) > 0.25:     # 덮개 확률은 0.25 아래 — 대부분 칸을 일찍 건너뜀
