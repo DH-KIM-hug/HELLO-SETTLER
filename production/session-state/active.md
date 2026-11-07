@@ -1,7 +1,7 @@
 # Active session state
 
-- Task: Systems decomposition (/map-systems)
-- Status: Systems index created (46 systems; TD-SYSTEM-BOUNDARY, PR-SCOPE, CD-SYSTEMS concerns applied)
-- File: design/gdd/systems-index.md
-- Next: ADR-0001 Accepted — start village.gd split (one owner, lock) and event-stream implementation; then /design-system in index order; ADR-0002 save contract, ADR-0003 performance budget after phone measurement
-- Parallel (user choice): phone measurement A15 alongside art-bible rework A23–A27
+- Task: Designing needs-and-mood GDD (/design-system 필요와 기분)
+- Current section: Starting (skeleton created)
+- File: design/gdd/needs-and-mood.md
+- Decisions so far: needs = hunger · happiness · fear (no new needs); age differences small (children more sensitive to hunger, elders to cold/loneliness-like factors)
+- Parallel: phone perf A15 running; art A23 residents 4 heads, trees budget + cherry; EventStream ADR-0001 steps 1–2
