@@ -6,7 +6,8 @@
 ##   같은 병 시간이면 어느 배속이든, 화면 길이·계산 예산이 어떻든 결과가 똑같다 (= JarWorld.advance(300)씩 흘린 것, 테스트).
 ##   한 화면에 Balance.FAST_BUDGET_MS 동안만 걷고, 못 따라가면 밀린 시간은 버린다 (실제 배속 rate가 내려가고 칩에 작게 — 화면은 멈추지 않음).
 ## 위기(굶주림·재해)가 시작되면 보통보다 빠를 때 보통으로 + 알림. 보통보다 빠를 때 중요한 일(출생·사망·깨달음·계시·편지·위기 예고)이
-##   생기면 보통으로 + "중요한 일이 생겨서 천천히 흘러가요". 빨리 돌려도 거인이 지켜보는 시간 (Village.watching 그대로).
+##   생기면 보통으로 + 무슨 일인지 (events — 화면이 '느려진 까닭' 카드로: 누구·어디 · [보러 가기] · [계속 빠르게] = resume_fast).
+##   멈출 일은 설정 "빠르게 갈 때 멈출 일" (GameSettings.stop_*) — 끈 일·자잘한 일(잇단 편지·큰 버섯)은 멈추지 않고 짧은 알림만. 빨리 돌려도 거인이 지켜보는 시간 (Village.watching 그대로).
 ## 창세의 날(첫 병 첫날, CREATION_SPEED)만은 1초 걸음 (Balance.WATCH_STEP — 옛 방식).
 ## 오프라인(앱을 끈 동안)은 이 시계를 쓰지 않는다 — CatchUp (등불 · 자리를 비운 동안 배율).
 ## 밤 건너뛰기: 다음 새벽(6시)까지 현실 약 3초 — 같은 굵은 걸음 (Village.step_dt, 물 오프라인).
@@ -41,7 +42,11 @@ var rate := 0.0                       # 실제로 흐른 배속 (병 초 ÷ 현�
 var behind := 0.0                     # 빠른 흐름이 따라가지 못해 버린 병 시간 (초)
 var budget_ms := -1.0                 # 빠른 흐름 한 화면 계산 시간 (ms) — <0이면 기기에 맞게 (fast_budget_ms)
 var auto_slow := true                 # 빠른 흐름 중 중요한 일 → ×1 (시험은 끌 수 있음)
-var last_event := ""                  # 마지막으로 천천히 되돌린 까닭 (born·died·aware·revelation·letter·omen)
+var last_event := ""                  # 마지막으로 천천히 되돌린 까닭 (born·died·aware·revelation·letter·omen·settle)
+var events: Array = []                # 빠른 흐름 중 생긴 일 — 화면이 가져감 (take_events). {cat, kind, text, icon, village, who, pos, stop} (저장 안 함)
+var prev_speed_i := -1                # 중요한 일로 보통이 되기 전 배속 ([계속 빠르게] — resume_fast). -1 = 없음
+var stop_count := {}                  # 갈래 → 지금까지 그 일로 멈춘 횟수 (탄생·편지는 처음 몇 번만 — STOP_FIRST_FEW)
+var stop_last_t := {}                 # 갈래 → 마지막으로 멈춘 병 시각 (편지가 잇달아 오면 알림만 — LETTER_GAP)
 var _step_ms := 0.0                   # 빠른 걸음 하나의 평균 계산 시간 (예산 맞추기)
 var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
 # 창세의 날 (OPENING 3.0 v3.3): 첫 병의 첫날(7시 → 다음 6시)은 현실 약 12분 — 빠르기는 Notebook.day_speed (보통에 대한 몫,
@@ -53,8 +58,15 @@ var creation_done := false            # 창세의 날을 지났다 (끝까지 �
 var creation_real := 0.0              # [창세의 날 v3.3] 창세의 날이 흐른 현실 초 (빠르기 단계 — Notebook.day_speed)
 
 const CREATION_SPEED := 12.0          # (옛 ×12 — 이제 창세의 날 빠르기는 Notebook.day_scale × 보통(1일=5분) × 고른 배속÷보통: 쪽지 동안 0.08 · 장면 앞 0.03~0.04 · 수첩 뒤 1.15, 첫날 ≈ 현실 10~12분)
-const EVENT_NOTE := "중요한 일이 생겨서 천천히 흘러가요"
-const SAVE_SKIP := ["v", "world", "rate", "budget_ms", "auto_slow", "_step_ms"]
+const EVENT_NOTE := "중요한 일이 생겨서 천천히 흘러가요"     # (옛 알림 — 이제 무슨 일인지 이름으로: events[i].text)
+const SAVE_SKIP := ["v", "world", "rate", "budget_ms", "auto_slow", "_step_ms", "events"]
+const STOP_CATS := ["born", "died", "omen", "letter", "reveal", "settle"]   # 설정 "빠르게 갈 때 멈출 일" 갈래 (GameSettings.stop_<갈래>)
+const STOP_FIRST_FEW := 3             # 탄생·편지는 설정이 꺼져 있어도 처음 세 번은 멈춘다
+const LETTER_GAP := 6.0 * 3600.0      # 편지가 병 6시간 안에 또 오면 멈추지 않고 알림만
+const MINOR_KINDS := ["grove"]        # 자잘한 일 (멈추지 않고 알림만) — 큰 버섯 같은 작은 발견
+const OMEN_WORDS := {"mold_omen": "곰팡이 조짐", "gnat": "날벌레 조짐", "drop_omen": "물방울 조짐", "dust_omen": "잿빛 가루 조짐",
+	"frost": "서리 조짐", "sick": "병 조짐", "severe": "아픈 사람"}
+const OMEN_ICONS := {"mold_omen": "빵", "sick": "약초", "severe": "약초", "frost": "해", "drop_omen": "물", "dust_omen": "돌", "gnat": "불기", "grove": "버섯"}
 const CREATION_HINT := "병의 첫날이 지났어요. 이제부터는 아래 [속도] 단추로 병의 시간을 빠르게 흘릴 수 있어요."
 
 
@@ -350,46 +362,163 @@ func _group() -> Array:
 
 
 ## 중요한 일 표식 — 걸음 앞뒤를 비교한다: 출생·사망 수 · 깨달음 · 계시 · 편지 수 · 위기 예고(warnings) 수
+##   + 누구인지 찾을 실마리: 다음 주민 번호 · 잠든 사람 수 · 마지막 위기 예고 (warnings는 20개에서 앞이 잘리므로 수 대신 마지막 것)
 func _marks() -> Array:
 	var m: Array = []
 	for q: Village in _group():
-		m.append([int(q.stats["born"]), int(q.stats["died"]), q.aware, q.revelation.is_empty(), q.letters.size(), q.warnings.size()])
+		m.append([int(q.stats["born"]), int(q.stats["died"]), q.aware, q.revelation.is_empty(), q.letters.size(), q.warnings.size(),
+			q.next_id, q.dead.size(), q.warnings.back() if not q.warnings.is_empty() else null, q])
 	return m
 
 
-## 빠른 흐름 중 중요한 일이 생겼으면 ×1 + 알림 (true). 새로 선 무리(분가)도 중요한 일
+## 빠른 흐름 중 중요한 일이 생겼으면 ×1 + 무슨 일인지 (true). 새로 선 무리(분가)도 중요한 일.
+## 생긴 일은 모두 events에 (화면이 카드·알림으로) — 설정이 끈 일·자잘한 일은 stop = false (멈추지 않음)
 func _important(before: Array) -> bool:
 	if not fast or not auto_slow or speed() <= normal_speed() + 1e-6:
 		return false
 	var now := _marks()
-	var why := ""
-	if now.size() != before.size():
-		why = "settle"
-	else:
-		for k in now.size():
-			var a: Array = before[k]
-			var b: Array = now[k]
-			if b[0] > a[0]:
-				why = "born"
-			elif b[1] > a[1]:
-				why = "died"
-			elif b[2] and not a[2]:
-				why = "aware"
-			elif a[3] and not b[3]:
-				why = "revelation"
-			elif b[4] > a[4]:
-				why = "letter"
-			elif b[5] > a[5]:
-				why = "omen"
-			if why != "":
-				break
-	if why == "":
+	var found: Array = []
+	if now.size() > before.size():
+		for k in range(before.size(), now.size()):
+			var nv: Village = now[k][9]
+			found.append(_ev("settle", "settle", "새 마을이 생겼어요: %s" % nv.settlement_name, "마을로 가기", nv, -1, nv.center))
+	for k in mini(now.size(), before.size()):
+		var a: Array = before[k]
+		var b: Array = now[k]
+		var q: Village = b[9] if b.size() > 9 else _group()[k]
+		if a.size() <= 9 or a[9] != q:
+			continue
+		if b[0] > a[0]:
+			found.append_array(_births(q, a))
+		if b[1] > a[1]:
+			for i in range(mini(int(a[7]), q.dead.size()), q.dead.size()):
+				var d: Resident = q.dead[i]
+				found.append(_ev("died", "died", "%s%s 세상을 떠났어요" % [d.name, Village.josa(d.name, "이", "가")], "", q, d.id, Vector2(d.x, d.y)))
+		if b[2] and not a[2]:
+			found.append(_ev("reveal", "aware", "하늘 너머에 누군가 있다는 걸 알았어요", "disc_stars", q, -1, _square(q)))
+		if a[3] and not b[3]:
+			var who := int(q.revelation.get("from", -1))
+			var nm := String(q.revelation.get("name", ""))
+			found.append(_ev("reveal", "revelation", "노인들이 자꾸 하늘을 올려다봐요" + (" (%s)" % nm if nm != "" else ""), "제단", q, who, _pos_of(q, who)))
+		if b[4] > a[4]:
+			for i in range(clampi(int(a[4]), 0, q.letters.size()), q.letters.size()):
+				var l: Dictionary = q.letters[i]
+				var who := int(l.get("from", -1))
+				var nm := String(l.get("name", ""))
+				var txt := ("새 땅으로 떠나고 싶대요 (%s)" if String(l.get("kind", "")) == "split" else "소원 편지가 왔어요 (%s)") % nm
+				found.append(_ev("letter", String(l.get("kind", "wish")), txt, "편지", q, who, _pos_of(q, who)))
+		for w: Dictionary in _new_warnings(q, a[8]):
+			found.append(_omen(q, w))
+	if found.is_empty():
 		return false
-	last_event = why
+	var stop := false
+	for e: Dictionary in found:
+		e["stop"] = _should_stop(e)
+		if e["stop"]:
+			stop = true
+			stop_count[e["cat"]] = int(stop_count.get(e["cat"], 0)) + 1
+			stop_last_t[e["cat"]] = (e["village"] as Village).t
+	events.append_array(found)
+	if events.size() > 12:
+		events = events.slice(events.size() - 12)
+	if not stop:
+		return false
+	var first: Dictionary = found.filter(func(e: Dictionary) -> bool: return e["stop"])[0]
+	last_event = String(first["kind"]) if first["cat"] == "reveal" else String(first["cat"])
+	prev_speed_i = speed_i
 	set_speed(Balance.EVENT_SLOW_I)
-	notice = EVENT_NOTE
+	notice = String(first["text"])        # 화면이 카드를 띄우면 이 한 줄은 지운다 (카드 없는 곳 — 시험·캡처 — 에서도 무슨 일인지)
 	notice_t = 5.0
 	return true
+
+
+## 화면이 가져가는 생긴 일 (가져가면 비움)
+func take_events() -> Array:
+	var e := events
+	events = []
+	return e
+
+
+## [계속 빠르게] — 중요한 일로 느려지기 전 배속으로 (없으면 false)
+func resume_fast() -> bool:
+	if prev_speed_i < 0:
+		return false
+	var i := prev_speed_i
+	prev_speed_i = -1
+	set_speed(i)
+	return true
+
+
+## 이 일로 멈출까: 설정 "빠르게 갈 때 멈출 일" · 탄생·편지는 처음 몇 번은 늘 · 잇단 편지·자잘한 일은 알림만
+func _should_stop(e: Dictionary) -> bool:
+	var cat := String(e["cat"])
+	if String(e["kind"]) in MINOR_KINDS:
+		return false
+	if cat == "letter" and stop_last_t.has("letter") and (e["village"] as Village).t - float(stop_last_t["letter"]) < LETTER_GAP:
+		return false
+	if stop_on(cat):
+		return true
+	return cat in ["born", "letter"] and int(stop_count.get(cat, 0)) < STOP_FIRST_FEW
+
+
+## 설정의 갈래 켜짐 (GameSettings.stop_<갈래>)
+static func stop_on(cat: String) -> bool:
+	var gs := GameSettings.get_current()
+	var key := "stop_" + cat
+	return bool(gs.get(key)) if key in gs else true
+
+
+func _ev(cat: String, kind: String, text: String, icon: String, q: Village, who: int, pos: Vector2) -> Dictionary:
+	return {"cat": cat, "kind": kind, "text": text, "icon": icon, "village": q, "who": who, "pos": pos, "stop": false}
+
+
+## 이번 걸음에 태어난 아기 (번호가 before 뒤인 사람 중 부모가 있는) — 못 찾으면 이름 없이 한 줄
+func _births(q: Village, a: Array) -> Array:
+	var out: Array = []
+	for r in q.people:
+		if r.id >= int(a[6]) and not r.parents.is_empty() and r.age < 0.5:
+			var mom := q.person(r.parents[0])
+			var mn := mom.name if mom != null else ""
+			var txt := "%s%s 아기를 낳았어요 (%s)" % [mn, Village.josa(mn, "이", "가"), r.name] if mn != "" else "아기 %s%s 태어났어요" % [r.name, Village.josa(r.name, "이", "가")]
+			out.append(_ev("born", "born", txt, "", q, r.id, Vector2(r.x, r.y)))
+	if out.is_empty():
+		out.append(_ev("born", "born", "아기가 태어났어요", "", q, -1, _square(q)))
+	return out
+
+
+## 마지막 위기 예고(last) 뒤에 새로 붙은 것들
+func _new_warnings(q: Village, last: Variant) -> Array:
+	if q.warnings.is_empty():
+		return []
+	if last == null:
+		return q.warnings.duplicate()
+	for i in range(q.warnings.size() - 1, -1, -1):
+		if is_same(q.warnings[i], last):
+			return q.warnings.slice(i + 1)
+	return [q.warnings.back()]
+
+
+## 위기 예고 한 줄 → 카드 줄 ("빵에 하얀 털이 났어요 (곰팡이 조짐)"). 깨닫기 전에는 거인 이야기를 빼고
+func _omen(q: Village, w: Dictionary) -> Dictionary:
+	var kind := String(w.get("kind", ""))
+	var txt := String(w.get("text", "")).trim_prefix("거인님, ").trim_suffix(".")
+	if not q.aware and txt.contains("거인"):
+		txt = "이상한 조짐이 보여요"
+	if OMEN_WORDS.has(kind) and kind != "severe":
+		txt += " (%s)" % OMEN_WORDS[kind]
+	var who := int(w.get("who", -1))
+	var e := _ev("omen", kind, txt, String(OMEN_ICONS.get(kind, "")), q, who, _pos_of(q, who))
+	e["ref"] = w                      # 화면이 같은 위기 예고를 알림 줄로 또 띄우지 않게
+	return e
+
+
+static func _square(q: Village) -> Vector2:
+	return q.fire if q.fire.distance_to(q.center) < 30.0 else q.center
+
+
+static func _pos_of(q: Village, who: int) -> Vector2:
+	var r := q.person(who) if who >= 0 else null
+	return Vector2(r.x, r.y) if r != null else _square(q)
 
 
 ## 걸음마다: 위기 → ×1 + 알림, 밤 건너뛰기는 아침이 되면 끝. 배속이 바뀌었으면 true

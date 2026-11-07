@@ -17,6 +17,14 @@ var vibration := true
 var language := "ko"
 var notify := true
 var away_speed := Balance.AWAY_DEFAULT_I   # 자리를 비운 동안 시간 (v4.3): 0 느리게 · 1 보통 · 2 빠르게 → Balance.AWAY_RATES
+# 빠르게 갈 때 멈출 일 (JarClock.STOP_CATS) — 꺼도 처음 몇 번의 탄생·편지는 멈추고, 꺼진 일은 짧은 알림만
+var stop_born := false
+var stop_died := true
+var stop_omen := true
+var stop_letter := false
+var stop_reveal := true
+var stop_settle := true
+const STOP_NAMES := {"born": "탄생", "died": "죽음", "omen": "위기 조짐", "letter": "소원 편지", "reveal": "계시", "settle": "새 마을"}
 
 
 static func get_current() -> GameSettings:
@@ -36,6 +44,8 @@ static func load_from(p: String) -> GameSettings:
 	s.vibration = bool(cf.get_value("device", "vibration", s.vibration))
 	s.notify = bool(cf.get_value("device", "notify", s.notify))
 	s.away_speed = clampi(int(cf.get_value("time", "away", s.away_speed)), 0, Balance.AWAY_RATES.size() - 1)
+	for c: String in STOP_NAMES:
+		s.set("stop_" + c, bool(cf.get_value("stop", c, s.get("stop_" + c))))
 	var lang := str(cf.get_value("general", "language", s.language))
 	s.language = lang if LANGS.has(lang) else "ko"
 	return s
@@ -50,6 +60,8 @@ func save(p := "") -> Error:
 	cf.set_value("device", "notify", notify)
 	cf.set_value("general", "language", language)
 	cf.set_value("time", "away", away_speed)
+	for c: String in STOP_NAMES:
+		cf.set_value("stop", c, get("stop_" + c))
 	return cf.save(p if p != "" else path)
 
 
