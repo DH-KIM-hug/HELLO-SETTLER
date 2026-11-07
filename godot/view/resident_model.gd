@@ -20,7 +20,7 @@ extends Node3D
 ## 걸음 동작이 1배속일 때 디딘 발이 몸 뒤로 미는 빠르기 (칸/초, 모델 배율 1 기준 — tools/measure_stride.gd로 잰 값).
 ## 동작 빠르기 = 땅 위 실제 빠르기 ÷ (이 값 × 모델 배율) → 발이 미끄러지지 않는다 (GD 6.6 '걸음 다시' 2026-11-07)
 const STRIDE := {"walk": 1.35, "carry": 1.18, "run": 2.28, "walk_elder": 0.67}   # A23 4등신 (칸/초, 모델 배율 1)
-const GROUND_NORMAL := 1.0        # 땅 빠르기를 모를 때(초상화·사진) 어른 걸음 = 보통 배속 1초에 1칸 (Balance.WALK × 288)
+const GROUND_NORMAL := Balance.WALK_SCREEN   # 땅 빠르기를 모를 때(초상화·사진) 어른 걸음 = 보통 배속 1초에 0.7칸 (Balance.WALK × 288)
 const GROUND_EASE := 6.0          # 잰 땅 빠르기를 부드럽게 따라가는 정도 (1/초)
 const PARTS := "resident_props"   # 소품: art/models/resident_props.glb (Art.parts)
 const BODY := "res://art/models/resident.glb"
