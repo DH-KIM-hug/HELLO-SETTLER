@@ -4,7 +4,8 @@
 ## 모든 배속은 따라잡기(CatchUp)와 같은 정밀 걸음 — Village.step_dt(10초) 걸음 + 물 오프라인 간격(300초) +
 ##   넓은 세상 정리(JarWorld 분가·고운 물 범위)를 FAST_HOOK_EVERY(300초)마다. 배속은 '한 화면에 몇 걸음을 걷는가'만 바꾼다 →
 ##   같은 병 시간이면 어느 배속이든, 화면 길이·계산 예산이 어떻든 결과가 똑같다 (= JarWorld.advance(300)씩 흘린 것, 테스트).
-##   한 화면에 Balance.FAST_BUDGET_MS 동안만 걷고, 못 따라가면 밀린 시간은 버린다 (실제 배속 rate가 내려가고 칩에 작게 — 화면은 멈추지 않음).
+##   보통보다 빠를 때: 한 화면에 Balance.FAST_BUDGET_MS 동안만 걷고, 못 따라가면 밀린 시간은 버린다 (실제 배속 rate가 내려가고 칩에 작게 — 화면은 멈추지 않음).
+##   보통 이하: 벽시계 예산을 쓰지 않는다 (시간 기준 그대로 — 기계가 바빠도 결과가 같다). 한 화면 MAX_STEPS_PER_FRAME 걸음까지.
 ## 위기(굶주림·재해)가 시작되면 보통보다 빠를 때 보통으로 + 알림. 보통보다 빠를 때 중요한 일(출생·사망·깨달음·계시·편지·위기 예고)이
 ##   생기면 보통으로 + 무슨 일인지 (events — 화면이 '느려진 까닭' 카드로: 누구·어디 · [보러 가기] · [계속 빠르게] = resume_fast).
 ##   멈출 일은 설정 "빠르게 갈 때 멈출 일" (GameSettings.stop_*) — 끈 일·자잘한 일(잇단 편지·큰 버섯)은 멈추지 않고 짧은 알림만. 빨리 돌려도 거인이 지켜보는 시간 (Village.watching 그대로).
@@ -314,11 +315,16 @@ func _tick_fast(real_dt: float) -> int:
 	acc += real_dt * speed()
 	var sdt := v.step_dt
 	var budget := fast_budget_ms()
+	# 보통 이하는 시간 기준 그대로 (병 하루 = 현실 5분): 벽시계 예산으로 병 시간을 버리지 않는다 — 기계가 바빠도 같은 화면 길이면
+	# 같은 걸음 수 (결과가 계산 속도와 상관없음). 한 화면 걸음 수만 MAX_STEPS_PER_FRAME으로 막고, 넘친 시간은 dropped (걸음 수 기준).
+	var exact := speed() <= normal_speed() + 1e-6
 	var t0 := Time.get_ticks_usec()
 	var n := 0
 	while acc >= sdt - 1e-6:
-		var used := (Time.get_ticks_usec() - t0) / 1000.0
-		if n > 0 and used + _step_ms > budget:
+		if exact:
+			if n >= max_steps:
+				break
+		elif n > 0 and (Time.get_ticks_usec() - t0) / 1000.0 + _step_ms > budget:
 			break
 		var ts := Time.get_ticks_usec()
 		var marks := _marks()
@@ -335,7 +341,10 @@ func _tick_fast(real_dt: float) -> int:
 		if _after_step() or _important(marks):
 			break                     # 배속이 바뀜 (빠른 흐름 끝)
 	if fast and acc >= sdt:
-		behind += acc - fmod(acc, sdt)
+		if exact:
+			dropped += acc - fmod(acc, sdt)
+		else:
+			behind += acc - fmod(acc, sdt)
 		acc = fmod(acc, sdt)
 	if real_dt > 0.0:
 		var got := (v.t - t_start) / real_dt
