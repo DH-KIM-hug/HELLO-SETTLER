@@ -76,6 +76,7 @@ const FAST_EVERY := 0.1
 ## (OPENING 8 v3.9 스타터킷 풀기) 장면이 잠깐 감추거나 직접 움직이는 것 — 상자에서 기어 나오는 주민 · 아직 놓지 않은 키트 건물·모닥불
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
+var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
 
@@ -114,6 +115,8 @@ func _ready() -> void:
 	add_child(drop_view)
 	animal_view = AnimalView.new(v, self)   # [들짐승]
 	add_child(animal_view)
+	social = SocialStage.new(v, self)   # [마을의 삶]
+	add_child(social)
 	_build_fire()
 	sync(0.0, true)
 
@@ -163,8 +166,14 @@ func sync(dt: float, force := false) -> void:
 		manna_fx.sync(dt)
 
 
+func _exit_tree() -> void:
+	Social.stage_on = false
+
+
 ## 주민 · 곰팡이 · 작은 위기 · 하늘의 것 · 상점 · 들짐승 (보통은 매 화면)
 func _sync_moving(dt: float) -> void:
+	if social != null:
+		social.sync(dt, fast)
 	_sync_residents(dt)
 	mold_view.alpha = alpha         # [곰팡이·뚜껑]
 	mold_view.sync(dt)
@@ -254,6 +263,8 @@ func _sync_residents(dt: float) -> void:
 		m.set_anim("idle" if rafting else ("work" if r.anim == "torch" else r.anim), r.action)
 		if r.action == "social" and r.anim != "walk" and not fast:
 			_face_partner(r, m)
+		if social != null and not fast:
+			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
 		var po: Dictionary = pose_over.get(r.id, {})
 		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함
 			if po.has("face"):
@@ -263,6 +274,8 @@ func _sync_residents(dt: float) -> void:
 		m.set_lod(lod_close and not fast)
 		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다
 			m.tick(dt)
+			if social != null:
+				social.after_tick(r, m)
 		elif fresh:
 			m.tick(0.0)
 		if not po.is_empty():

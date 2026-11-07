@@ -35,6 +35,7 @@ var blood_info: Label
 var blood_note: Label
 var blood_empty: Label
 var look_box: VBoxContainer
+var rel_box: VBoxContainer           # [마을의 삶] 사람들과의 사이 (배우자·연인·좋아하는 사람·친구·서먹한 사이 — 말로)
 var tree_box: VBoxContainer
 var tree_section: Control
 var follow_btn: Button
@@ -122,6 +123,11 @@ func _build() -> void:
 	trait_box = VBoxContainer.new()
 	trait_box.add_theme_constant_override("separation", 2)
 	body.add_child(trait_box)
+	# 사람들과의 사이 (ROADMAP E2-7 — 주민 상세에 '좋아하는 사람')
+	_section(body, "사람들과의 사이")
+	rel_box = VBoxContainer.new()
+	rel_box.add_theme_constant_override("separation", 2)
+	body.add_child(rel_box)
 	# 혈통
 	_section(body, "혈통")
 	blood_flow = HFlowContainer.new()
@@ -349,10 +355,25 @@ func _refresh() -> void:
 			_label(trait_box, r.trait_desc, "Small")
 	else:
 		_label(trait_box, "아직 눈에 띄는 특징이 없음", "Small")
+	_fill_relations()
 	_fill_blood()
 	_fill_looks()
 	_fill_tree()
 	follow_btn.disabled = r.dead
+
+
+## 사이를 말로: '배우자 — 마르타' · '좋아하는 사람 — 한스' … (숫자 없이)
+func _fill_relations() -> void:
+	for c in rel_box.get_children():
+		c.queue_free()
+	var jv := _village_of(r)
+	var rel: Array = Social.relations(jv, r) if jv != null and not r.dead else []
+	if rel.is_empty():
+		_label(rel_box, "아직 가까운 사람이 없음" if not r.dead else "—", "Small")
+		return
+	for e: Array in rel:
+		var l := _label(rel_box, "%s — %s" % [e[0], " · ".join(PackedStringArray(e[1]))])
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 
 
 func _fill_blood() -> void:
