@@ -470,7 +470,7 @@ func test_save_and_determinism() -> void:
 		ck.set_speed(sp)
 		var dt := 1.0 / 30.0 if sp == 0 else 0.25
 		while ck.steps_done < int(1.5 * H):
-			ck.tick(dt)
+			ck.tick(ck.dt_for_steps(int(1.5 * H) - ck.steps_done, dt))     # 마지막 화면이 걸음 수를 넘지 않게 (계산 예산이 화면 경계를 바꿔도)
 		sigs.append(_sig(q))
 	if sigs[0] != sigs[1]:
 		print("  ×1 ", sigs[0], "\n  ×8 ", sigs[1])
