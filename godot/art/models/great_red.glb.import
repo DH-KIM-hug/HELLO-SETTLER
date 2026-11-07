@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://db4onsweh8ryn"
-path="res://.godot/imported/giant_fruit_cut.glb-6155e2083c65a3bc189fbc9d5fc46f2b.scn"
+uid="uid://buxeqowlwj874"
+path="res://.godot/imported/great_red.glb-509d8ee279e9828fc5b44c1405d43100.scn"
 
 [deps]
 
-source_file="res://art/models/flora/giant_fruit_cut.glb"
-dest_files=["res://.godot/imported/giant_fruit_cut.glb-6155e2083c65a3bc189fbc9d5fc46f2b.scn"]
+source_file="res://art/models/great_red.glb"
+dest_files=["res://.godot/imported/great_red.glb-509d8ee279e9828fc5b44c1405d43100.scn"]
 
 [params]
 

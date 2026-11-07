@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://bm0dqtbhseuko"
-path="res://.godot/imported/giant_brown.glb-ef7e0524772c95d72077f16e32850aba.scn"
+uid="uid://ct050hsp1tfbp"
+path="res://.godot/imported/great_fan.glb-9a1ab7214ef1e25c0a5df556ffb550fb.scn"
 
 [deps]
 
-source_file="res://art/models/giant_brown.glb"
-dest_files=["res://.godot/imported/giant_brown.glb-ef7e0524772c95d72077f16e32850aba.scn"]
+source_file="res://art/models/great_fan.glb"
+dest_files=["res://.godot/imported/great_fan.glb-9a1ab7214ef1e25c0a5df556ffb550fb.scn"]
 
 [params]
 

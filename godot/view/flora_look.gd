@@ -10,7 +10,7 @@ extends RefCounted
 const K := 2.3                    # 화면 높이 = K·√(모델 높이)
 const W_MAX := 7.0                # 꽃 폭 상한 (칸)
 const W_MAX_GREEN := 5.5          # 풀·고사리·이끼 폭 상한
-const GREAT_SCALE := 0.6          # 큰 나무 다섯 (세계수 높이 115 → 69칸)
+const GREAT_SCALE := 0.6          # 큰 나무 다섯 (은행나무 높이 약 92 → 55칸)
 const FRUIT_SCALE := 0.9          # 떨어진 거대한 열매
 
 ## 철마다 꽃 (GD 3.0 꽃 표) — 앞쪽일수록 자주
@@ -84,29 +84,30 @@ static func sprout(h: float) -> Array:
 	return [name, base_scale(name) * 0.35]
 
 
-## 큰 나무 모델 (철마다): 은행 가을 노랑 · 단풍 여름 초록/가을 빨강 · 과일나무 봄 꽃/여름·가을 열매 · 겨울엔 잎 진 가지(줄기만)
+## 큰 나무 모델 (철마다) — art/models/flora/tree_<kind>.glb 하나에 부품이 다 있고 (색만 다른 잎은 같은 모양), 철마다 보일 부품만 고른다.
+## 부품마다 멀리 LOD "<부품>__far"도 있다 (GreatTreeView가 확대에 따라 바꿈). art/src/build_bonsai.py의 sets와 같게 둔다.
+##   소나무: 봄 연두 새순 · 여름·가을 짙은 청록 · 겨울 방석 위 서리 (늘 푸름)
+##   과일나무: 봄 크림 흰 꽃 · 여름 초록 + 덜 익은 열매 · 가을 익은 열매 · 겨울 맨가지 + 마른 열매 하나
+##   은행나무: 봄 연두 · 여름 초록 · 가을 노랑 + 노란 융단 · 겨울 위로 뻗은 맨가지
+##   단풍나무: 봄 붉은 기운 새잎 · 여름 초록 · 가을 붉은 손 · 겨울 맨가지 + 날개 씨앗
+##   벚나무: 봄 분홍 꽃구름 + 꽃잎 · 여름 초록 + 버찌 · 가을 주황 · 겨울 맨가지 + 줄무늬 줄기
+## 옛 저장의 "world"(세계수)는 벚나무로 (GreatTrees.LEGACY — 불러올 때 바꾸지만 화면도 받아 줌)
+const GREAT_PARTS := {
+	"pine": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage"], "겨울": ["foliage_winter"]},
+	"fruit": {"봄": ["foliage_bloom"], "여름": ["foliage", "fruit_green"], "가을": ["foliage_autumn", "fruit"], "겨울": ["fruit_dry"]},
+	"ginkgo": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn", "carpet"], "겨울": []},
+	"maple": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": ["seeds"]},
+	"cherry": {"봄": ["blossom"], "여름": ["foliage", "cherries"], "가을": ["foliage_autumn"], "겨울": []},
+}
+const GREAT_MAX_H := 100.0        # 가장 큰 나무 높이 (모델 단위 — 은행나무 약 92, 화면 ×GREAT_SCALE)
+
+
+## → {"parts": 모델 이름, "keep": [보일 부품]} (줄기는 늘)
 static func great_model(kind: String, season: String) -> Dictionary:
-	match kind:
-		"world":
-			return {"model": "flora/tree_world"}
-		"pine":
-			return {"model": "flora/tree_pine"}
-		"fruit":
-			if season == "봄":
-				return {"model": "flora/tree_fruit_bloom"}
-			if season == "겨울":
-				return {"parts": "flora/tree_fruit", "keep": ["trunk"]}
-			return {"model": "flora/tree_fruit"}
-		"ginkgo":
-			if season == "가을":
-				return {"model": "flora/tree_ginkgo_autumn"}
-			if season == "겨울":
-				return {"parts": "flora/tree_ginkgo", "keep": ["trunk"]}
-			return {"model": "flora/tree_ginkgo"}
-		"maple":
-			if season == "가을":
-				return {"model": "flora/tree_maple"}
-			if season == "겨울":
-				return {"parts": "flora/tree_maple", "keep": ["trunk"]}
-			return {"model": "flora/tree_maple_green"}
-	return {"model": "flora/tree_world"}
+	var k := String(GreatTrees.LEGACY.get(kind, kind))
+	if not GREAT_PARTS.has(k):
+		k = "cherry"
+	var by_season: Dictionary = GREAT_PARTS[k]
+	var keep: Array = ["trunk"]
+	keep.append_array(by_season.get(season, by_season["여름"]))
+	return {"parts": "flora/tree_" + k, "keep": keep}

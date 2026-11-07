@@ -34,7 +34,7 @@ const FLUFF_CORE := Color("cbb58a")
 const DROP := Color("cdeef2")
 
 ## Blender 모델 (art/src/build_giants.py → art/models/*.glb)이 있으면 그것을 씀 (없으면 아래 절차 메시)
-const ART_SHROOM := {"흰갓버섯": "giant_white", "갈색갓버섯": "giant_brown", "얼룩버섯": "giant_red", "부채버섯": "giant_fan", "빛버섯": "giant_glow"}
+const ART_SHROOM := {"흰갓버섯": "great_white", "갈색갓버섯": "great_brown", "얼룩버섯": "great_red", "부채버섯": "great_fan", "빛버섯": "great_glow"}
 const ART_DAND := {"flower": "dand_flower", "closed": "dand_closed", "puff": "dand_puff", "bare": "dand_bare"}
 
 static var _meshes: Dictionary = {}

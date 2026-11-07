@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://d1q174sdieses"
-path="res://.godot/imported/tree_world.glb-9eb357a5d09ad8ff7f17a2ee9c04e6ac.scn"
+uid="uid://5ekpijjo6fog"
+path="res://.godot/imported/great_brown.glb-a7cb1dd1f2fddbe73110927ea445c95c.scn"
 
 [deps]
 
-source_file="res://art/models/flora/tree_world.glb"
-dest_files=["res://.godot/imported/tree_world.glb-9eb357a5d09ad8ff7f17a2ee9c04e6ac.scn"]
+source_file="res://art/models/great_brown.glb"
+dest_files=["res://.godot/imported/great_brown.glb-a7cb1dd1f2fddbe73110927ea445c95c.scn"]
 
 [params]
 

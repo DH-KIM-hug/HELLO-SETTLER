@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://d0040xfwcvv0f"
-path="res://.godot/imported/giant_glow.glb-8f32f01527435937e84112733d6c66ef.scn"
+uid="uid://mxku2d7xuj45"
+path="res://.godot/imported/great_glow.glb-bc72927494cf4cae0dbabf6ed1e7f1b1.scn"
 
 [deps]
 
-source_file="res://art/models/giant_glow.glb"
-dest_files=["res://.godot/imported/giant_glow.glb-8f32f01527435937e84112733d6c66ef.scn"]
+source_file="res://art/models/great_glow.glb"
+dest_files=["res://.godot/imported/great_glow.glb-bc72927494cf4cae0dbabf6ed1e7f1b1.scn"]
 
 [params]
 

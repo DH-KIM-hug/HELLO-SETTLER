@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://cwm1sgohfy0d4"
-path="res://.godot/imported/tree_fruit_bloom.glb-f4800a291d9c4dd69a595e60d0ebbe6d.scn"
+uid="uid://bpl6np7iyd6o8"
+path="res://.godot/imported/great_white.glb-b85aeeca81af2feeee19b176d97b1546.scn"
 
 [deps]
 
-source_file="res://art/models/flora/tree_fruit_bloom.glb"
-dest_files=["res://.godot/imported/tree_fruit_bloom.glb-f4800a291d9c4dd69a595e60d0ebbe6d.scn"]
+source_file="res://art/models/great_white.glb"
+dest_files=["res://.godot/imported/great_white.glb-b85aeeca81af2feeee19b176d97b1546.scn"]
 
 [params]
 

@@ -1,4 +1,4 @@
-"""Giant-scale outside life (WORLD_EVENTS 1.1 / 2.6 / 2.7): the five giant mushrooms and the dandelion parts.
+"""Giant-scale outside life (WORLD_EVENTS 1.1 / 2.6 / 2.7): the five great mushrooms (models great_*: "giant_" is reserved for the giant - art bible 8.3) and the dandelion parts.
 References: design/concept/small_world/giant_mushrooms_b.png, dandelion_seeds_b.png.
 Sizes follow Balance.SHROOM (h, cap_r) and Balance.DAND_H - flora_view.gd scales them while they grow.
 Dandelion heads: origin = top of the stem, head tilted towards the camera (front, -Y here = +Z in Godot).
@@ -149,7 +149,7 @@ def skirt(m, z, r_top, r_bot, ln, col, seg=20):
 def build_white():
     d = SHROOM["흰갓버섯"]
     h, cr = d["h"], d["cap_r"]
-    m = Model("giant_white", 201)
+    m = Model("great_white", 201)
     m.sphere(1.0, pos=(0, 0, 0.32), scl=(1.0, 1.0, 0.55), color=shade(C("STEM"), 0.95), seg=16, rings=6, lumps=0.06)
     top = stem(m, 0.1, h - 1.2, 0.8, 0.6, C("STEM"), bend=0.35)
     skirt(m, top.z - 1.0, 0.64, 1.08, 0.45, C("WHITE_SH"))
@@ -170,7 +170,7 @@ def build_white():
 def build_brown():
     d = SHROOM["갈색갓버섯"]
     h, cr = d["h"], d["cap_r"]
-    m = Model("giant_brown", 202)
+    m = Model("great_brown", 202)
     m.sphere(1.25, pos=(0, 0, 0.38), scl=(1.0, 1.0, 0.5), color=shade(C("STEM"), 0.86), seg=16, rings=6, lumps=0.06)
     top = stem(m, 0.1, h - 1.5, 1.0, 0.85, shade(C("STEM"), 0.94), bend=-0.3)
     gills(m, (top.x, 0), 0.7, cr, top.z + 0.05, top.z - 0.1, seg=40, col=shade(C("GILL"), 0.9))
@@ -224,7 +224,7 @@ def build_brown():
 def build_red():
     d = SHROOM["얼룩버섯"]
     h, cr = d["h"], d["cap_r"]
-    m = Model("giant_red", 203)
+    m = Model("great_red", 203)
     m.sphere(0.9, pos=(0, 0, 0.42), scl=(1.0, 1.0, 0.62), color=shade(C("SPOT"), 0.93), seg=16, rings=6, lumps=0.08)
     top = stem(m, 0.2, h - 1.3, 0.6, 0.44, C("SPOT"), bend=0.2)
     skirt(m, top.z - 0.85, 0.48, 0.9, 0.4, shade(C("SPOT"), 0.95))
@@ -249,7 +249,7 @@ def build_red():
 def build_fan():
     d = SHROOM["부채버섯"]
     cr = d["cap_r"]
-    m = Model("giant_fan", 204)
+    m = Model("great_fan", 204)
     # rotting stump the brackets grow on
     m.cyl(0.62, 0.48, 2.9, color=mix(C("FAN_DARK"), "TRUNK", 0.5), seg=10, smooth=True, cap=mix("STUMP_TOP", "TRUNK", 0.4))
     m.sphere(0.45, pos=(0.1, 0.05, 2.9), scl=(1.2, 1.1, 0.35), color="MOSS", seg=8, rings=4, lumps=0.2, group="body_nl")
@@ -305,7 +305,7 @@ def build_fan():
 def build_glow():
     d = SHROOM["빛버섯"]
     h = d["h"]
-    m = Model("giant_glow", 205)
+    m = Model("great_glow", 205)
     for k, (off, sc) in enumerate((((0, 0), 1.0), ((0.26, -0.12), 0.72), ((-0.18, -0.22), 0.58), ((0.1, 0.24), 0.45))):
         hh = h * sc
         m.cyl(0.05 * sc, 0.035 * sc, hh, pos=(off[0], off[1], 0), color=C("GLOW_STEM"), seg=6, smooth=True)
