@@ -100,6 +100,8 @@ var rev_show: RevelationShow
 var guide_cap: GuideCaption
 var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
 var _btn_glow_t := 0.0
+var store_strip: StoreStrip            # [창고] 위 띠 아래 창고 띠 (view/ui/store_strip.gd)
+var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_sheet.gd)
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -168,7 +170,7 @@ func on_back() -> void:
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, store_sheet]:   # [창고] store_sheet
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -631,6 +633,9 @@ func _setup_ui() -> void:
 			speed_list.visible = false)
 		sb.custom_minimum_size = Vector2(40, UiTheme.TOUCH)
 		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
+	store_strip = StoreStrip.new()          # [창고] 창고 띠 — 배속 칩 아래 (누르면 창고 시트)
+	store_strip.setup(self)
+	root.add_child(store_strip)
 	# 거인의 손 칸 (뚜껑 · 불기 · 등불 + 손에 든 것) · 떨어뜨릴 자리 띠
 	hand_ctl = GiantHandCtl.new(self)
 	add_child(hand_ctl)
@@ -666,6 +671,12 @@ func _setup_ui() -> void:
 	chronicle.setup(village, jar_world())
 	dlayer.add_child(chronicle)
 	chronicle.resident_pressed.connect(_on_chronicle_person)
+	store_sheet = StoreSheet.new()          # [창고]
+	store_sheet.setup(store_strip.book, self)
+	dlayer.add_child(store_sheet)
+	store_strip.pressed.connect(func() -> void:
+		close_sheets(store_sheet)
+		store_sheet.open(focus_village()))
 	altar_sheet.reveal_requested.connect(start_revelation)
 	var rlayer := CanvasLayer.new()       # 계시·깨달음 연출 — 띠 위, 시트 아래
 	rlayer.layer = 3
@@ -688,7 +699,7 @@ func _setup_ui() -> void:
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
 func close_sheets(keep: Control = null) -> void:
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, store_sheet]:   # [창고] store_sheet
 		if sh != null and sh != keep and sh.visible:
 			sh.call("close")
 	if hand_ctl != null:
@@ -1090,6 +1101,7 @@ func layout_bars() -> void:
 	speed_btn.size = Vector2(0, UiTheme.TOUCH)
 	speed_list.position = Vector2(6, top_h + 6.0 + UiTheme.TOUCH + 4.0)
 	ui_label.position = Vector2(8, top_h + UiTheme.TOUCH + 12.0)
+	_layout_store()                         # [창고]
 	if hand_ctl != null:
 		hand_ctl.layout(bottom_h)
 	if lamp_ctl != null:
@@ -1103,6 +1115,26 @@ func layout_bars() -> void:
 	var tray_h := maxf(hand_ctl.height() if hand_ctl != null else 0.0, lamp_ctl.height() if lamp_ctl != null else 0.0)
 	stack.offset_bottom = -bottom_h - 6.0 - (tray_h + 4.0 if tray_h > 0.0 else 0.0)
 	stack.offset_top = stack.offset_bottom
+
+
+## [창고] 창고 띠 자리: 배속 칩 · 구석의 작은 해 아래 (배속 목록이 열리면 그 아래) · 오른쪽은 store_right() 만큼 비움 · 개발 글은 그 밑으로
+func _layout_store() -> void:
+	if store_strip == null:
+		return
+	var y := top_h + 6.0 + UiTheme.TOUCH + 6.0
+	if lamp_ctl != null and lamp_ctl.badge != null and lamp_ctl.badge.visible:     # 구석의 작은 해 아래
+		y = maxf(y, lamp_ctl.badge.position.y + lamp_ctl.badge.size.y + 6.0)
+	if speed_list.visible:
+		y = maxf(y, speed_list.position.y + UiTheme.TOUCH + 6.0)
+	store_strip.position = Vector2(6, y)
+	store_strip.max_width = get_viewport().get_visible_rect().size.x - 6.0 - store_right()
+	store_strip.visible = speed_btn.visible
+	ui_label.position.y = y + store_strip.size.y + 6.0
+
+
+## [창고] 창고 띠 오른쪽에 비울 폭 (넓은 세상은 둥근 지도)
+func store_right() -> float:
+	return 6.0
 
 
 func _bar_style(p: PanelContainer, variation: String, extra_top: float, extra_bottom: float) -> void:
@@ -1260,6 +1292,7 @@ func _update_ui() -> void:
 	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  ×%d" % [fv.fmt_time(fv.t), int(clock.speed())]
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
+	_layout_store()                         # [창고] 배속 목록·띠 숨김을 따라
 	hand_ctl.refresh()                   # [손] 뚜껑 (저절로 닫힐 때까지 남은 현실 초) · 불기 (뚜껑이 열린 동안만) · 손에 든 것
 	hand_btn.text = "손 %d" % Market.hand.size() if not Market.hand.is_empty() else "손"
 	_btn_glow_t += get_process_delta_time()
