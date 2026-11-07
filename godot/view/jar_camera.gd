@@ -377,7 +377,7 @@ func _apply() -> void:
 
 
 ## 병 안 카메라 거리: 화면 아래쪽 땅이 카메라 앞에 있을 만큼 (정사영이라 거리는 크기와 상관없음)
-## + INSIDE_MARGIN: 화면 아래 끝에 선 큰 나무(세계수 약 69칸 — FloraLook.GREAT_SCALE)의 꼭대기도 카메라 앞에 (높이 / sin 48° ≈ 93)
+## + INSIDE_MARGIN: 화면 아래 끝에 선 큰 나무(벚나무 약 69칸 — FloraLook.GREAT_SCALE)의 꼭대기도 카메라 앞에 (높이 / sin 48° ≈ 93)
 const INSIDE_MARGIN := 100.0
 
 
