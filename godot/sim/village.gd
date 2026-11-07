@@ -1869,6 +1869,8 @@ func is_free(x: float, y: float, size: float) -> bool:
 			return false
 	if flora != null and flora.blocks(x, y, size):    # [하늘의 것] 큰 버섯의 굵은 대 둘레에는 짓지 않는다
 		return false
+	if VillagePlan.blocks(self, x, y, size):           # [배치] 광장·큰길 위에는 짓지 않는다 (sim/village_plan.gd)
+		return false
 	if SkyDrops.blocks(self, x, y, size):              # [상점] 하늘에서 내려온 물건·앰플 탑 자리
 		return false
 	return true
@@ -1876,6 +1878,9 @@ func is_free(x: float, y: float, size: float) -> bool:
 
 ## 마을 중심에서 가까운 빈 땅부터 나선형으로. 나무꾼은 숲 옆, 채석장은 바위 옆, 농장은 따뜻하고 촉촉한 곳
 func find_spot(type: String) -> Variant:
+	var planned: Variant = VillagePlan.find_spot(self, type)      # [배치] 광장·큰길 계획 (sim/village_plan.gd) — 계획 밖 종류면 null → 아래 옛 방식
+	if planned != null:
+		return planned
 	var size: float = Balance.B[type]["size"]
 	var c := center
 	if type == "나루터":                       # 물가 (건너편이 보이는 곳 — A6)
@@ -2831,6 +2836,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		if bd[0] == "창고":
 			b.is_store = true
 		_clear_trees(Vector2(b.x, b.y), b.size())
+	VillagePlan.found(self)                   # [배치] 키트 건물을 광장 둘레로 (sim/village_plan.gd)
 	altar_pos = pick_altar_pos()              # 키트 건물을 피해 모닥불 곁 (제단 돌 단이 창고에 묻히지 않게)
 	_clear_trees(altar_pos, ALTAR_CLEAR)
 	var ids: Array[Resident] = []

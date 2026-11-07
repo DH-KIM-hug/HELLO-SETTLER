@@ -729,7 +729,7 @@ func _update_path(i: int) -> void:
 	var v: Village = villages[i]
 	while _path_texs.size() <= i:
 		_path_texs.append(null)
-	var img := GroundLook.path_image(v.paths, v.path_n, path_sum(v))
+	var img := VillagePlan.road_image(v, path_sum(v))      # [길] 그래프를 따라 매끈한 띠 (sim/village_plan.gd)
 	var tex: ImageTexture = _path_texs[i]
 	if tex == null or tex.get_width() != v.path_n:
 		tex = ImageTexture.create_from_image(img)
