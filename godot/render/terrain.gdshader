@@ -254,14 +254,14 @@ void fragment() {
 		}
 		if (leaf_amt > 0.001) {
 			// 가을 낙엽: 숲 가장자리 풀밭에 짙게, 바람에 날려 온 잎은 풀밭 어디에나 드문드문
-			float lp = leaf_amt * (0.08 + 0.6 * smoothstep(0.02, 0.4, c0.z));
+			float lp = leaf_amt * 0.6 * smoothstep(0.08, 0.4, c0.z);      // 숲 가장자리에만 (풀밭 한가운데 흩뿌린 점은 '이상한 점'으로 보임 — 2026-11-07 사용자)
 			vec2 ld = dots(p + 7.7, 0.5, lp, 0.17);
 			c = mix(c, mix(leaf_col, leaf_col2, ld.y), ld.x * grass_here);
 		}
 		if (flower_amt > 0.001) {
 			// 들꽃은 무리 지어 핀다 (넓은 잡음 덩어리 안에서만) — 풀밭 전체에 고르게 흩뿌리면 색종이처럼 보임
-			float patch = smoothstep(0.45, 0.66, vnoise(p * 0.11 + 17.0));
-			vec2 fl = dots(p + 3.3, 0.6, flower_amt * (0.04 + 0.42 * patch), 0.15);
+			float patch = smoothstep(0.58, 0.72, vnoise(p * 0.11 + 17.0));      // 드문 꽃밭 덩어리 안에서만 — 풀밭 전체의 흰 점 없음 (2026-11-07 사용자)
+			vec2 fl = dots(p + 3.3, 0.6, flower_amt * 0.4 * patch, 0.15);
 			c = mix(c, mix(flower_col, flower_col2, step(0.72, fl.y)), fl.x * grass_here * (1.0 - desert));
 		}
 		if (c0.x > 0.05) {
