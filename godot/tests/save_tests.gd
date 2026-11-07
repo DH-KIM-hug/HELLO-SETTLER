@@ -656,6 +656,7 @@ func test_offline_era_altar() -> void:
 	var b := through_bytes(a)
 	b.watching = false
 	var e0 := a.era_pts
+	a.era_watch_secs = 0.0                # 그날 지켜봄 몫(ERA_WATCH_HOURS)이 남은 채로 비교
 	a._update_era(Balance.HOUR)
 	b._update_era(Balance.HOUR)
 	var ra := a.era_pts - e0

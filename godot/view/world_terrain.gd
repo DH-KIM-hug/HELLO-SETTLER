@@ -500,7 +500,7 @@ func _stone_at(k: int) -> bool:
 	var p := Vector2(ww.cx(k), ww.cy(k))
 	for v: Village in villages:
 		if absf(p.x - v.center.x) < v.path_r and absf(p.y - v.center.y) < v.path_r:
-			return v.era >= GroundLook.STONE_ERA
+			return GroundLook.stone_roads(v)
 	return false
 
 
@@ -687,7 +687,7 @@ func _update_path(i: int) -> void:
 		_path_texs[i] = tex
 	else:
 		tex.update(img)
-	var stone := 1.0 if v.era >= GroundLook.STONE_ERA else 0.0
+	var stone := 1.0 if GroundLook.stone_roads(v) else 0.0
 	for m: ShaderMaterial in _ground_mats():
 		m.set_shader_parameter("path_tex%d" % i, tex)
 		m.set_shader_parameter("path_rect%d" % i, Vector4(v.center.x - v.path_r, v.center.y - v.path_r, 2.0 * v.path_r, stone))
