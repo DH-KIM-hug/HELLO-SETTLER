@@ -186,7 +186,9 @@ func _sync_residents(dt: float) -> void:
 		if r.anim == "work":
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
-		m.set_anim("work" if r.anim == "torch" else r.anim)
+		m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
+		if r.action == "social" and r.anim != "walk":
+			_face_partner(r, m)
 		m.set_lod(lod_close)
 		m.tick(dt)
 		_torch(r, m)
@@ -206,6 +208,21 @@ func _sync_residents(dt: float) -> void:
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()
 			_rafts.erase(id)
+
+
+## 어울리는 사람: 가까이 있는 다른 어울리는 사람 쪽으로 몸을 돌림 (둘씩 마주 보고 이야기) — 화면만, 시뮬레이션은 그대로
+func _face_partner(r: Resident, m: ResidentModel) -> void:
+	var best: Resident = null
+	var bd := 2.4 * 2.4
+	for q in v.people:
+		if q == r or q.action != "social" or q.anim == "walk":
+			continue
+		var d := Vector2(q.x - r.x, q.y - r.y).length_squared()
+		if d < bd and d > 0.0001:
+			bd = d
+			best = q
+	if best != null:
+		m.rotation.y = lerp_angle(r.facing, atan2(best.x - r.x, best.y - r.y), 0.85)
 
 
 ## (A6) 무덤: 흙 둔덕 + 작은 비석 (묘지 안이면 줄지어, 묘지가 없을 땐 마을 끝에 홀로)
