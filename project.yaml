@@ -25,3 +25,32 @@ framework:
 # here. `/settings --local <key>=<value>` writes there; `/settings <key>=<value>`
 # edits this file. See `.claude/docs/config-resolution.md` for the full
 # precedence order.
+
+# ── 나의 작은 지구 (2026-11-07 설치 시 메인 세션이 채움 — CLAUDE.md 6장) ──
+project:
+  name: "나의 작은 지구 (My Little Earth)"
+  genre: "모바일 3D 마을 시뮬레이션 (유리병 속 소인의 세상)"
+  stage: "Production"
+
+modes:
+  rigor: minimal
+  automation: guided
+
+engine:
+  name: "Godot"
+  version: "4.7.2"
+  language: "GDScript"
+  rendering: "Forward+"
+  physics: "Jolt"
+  path: "/opt/homebrew/bin/godot"
+
+specialists:
+  primary: godot-specialist
+  language: godot-gdscript-specialist
+  shader: godot-shader-specialist
+
+commands:
+  build: "cd godot && godot --headless --path . --export-debug 'Android' ../build/nazakji-debug.apk"
+  test: "cd godot && godot --headless --path . -s tests/run.gd -- quick"
+  run: "cd godot && godot --path . --windowed"
+  smoke: "cd godot && godot --headless --path . --import"
