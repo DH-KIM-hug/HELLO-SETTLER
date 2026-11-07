@@ -12,6 +12,10 @@ const FLOOR_Y := 0.42
 const ROCK_TOP := 1.7
 const Y_BASE := 1.95
 const Y_K := 4.0                        # 세상 높이 1 → 병 안 4cm (실제보다 과장 — 산·골짜기가 보이게)
+const RELIEF := 4.5                     # 병 안 그림에서 빚은 높낮이(땅 단추)를 이만큼 과장 — 세 모양이 한눈에 다르게 (세상 높이는 그대로)
+const BASE_K := 0.3                     # 미리보기의 시드 바탕 굴곡은 덜 (땅 단추의 모양이 먼저 보이게)
+const NUB_S := 3.6                      # 뚜껑 안쪽 돌기 자리 (u, v) → 코르크 아랫면 (cm)
+const SMALL_NUBS := 8                   # 메이슨 자의 저절로 난 작은 돌기 (가장자리 — 거인의 큰 돌기 셋은 거인이 찍음)
 const RINGS := 36
 const SEGS := 96
 const NECK_Y := 13.4
@@ -37,6 +41,9 @@ var lake_rise := 0.0                    # 세상 물 (배양에서 0 → 1)
 var damp := 0.0                         # 배양 뒤 흙이 촉촉하게
 var green := 0.0                        # 씨앗 배양: 0 → 1 (이끼 → 풀 → 숲)
 var tod := "morning"
+var shape := 1.0                        # 흙 모양 0 평평 → 1 (흙을 처음 부을 때는 평평 — 땅 단추를 누르면 그 모양으로 솟고 꺼짐)
+var shake := 0.0                        # 카메라 흔들림 (땅이 솟을 때 우르릉)
+var _flat_h := 0.3                      # 평평한 흙 높이 (세상 단위 — 바탕의 평균)
 
 var cam: Camera3D
 var rig := {"yaw": 0.0, "pitch": 0.25, "dist": 62.0, "ty": 9.0, "tx": 0.0, "tz": 0.0}   # tx · tz = 바라보는 곳 (병 가운데에서 비켜)
@@ -63,6 +70,10 @@ var streams: Array[MeshInstance3D] = []
 var stream_mat: ShaderMaterial
 var pour_fx: CPUParticles3D
 var smoke_fx: CPUParticles3D
+var dust_fx: CPUParticles3D             # 땅이 솟고 꺼질 때 흙먼지
+var nub_nodes: Array[Node3D] = []       # 거인의 돌기 (plan.drips 순서) — 뚜껑 안쪽
+var marks: Array[Node3D] = []           # 그 아래 흙 위 표시 (물방울이 떨어져 호수가 생길 곳)
+var small_root: Node3D                  # 저절로 난 작은 돌기
 var release: CreationRelease           # 들짐승·물고기 풀기 (build_kit)
 var _wl := -1.0e9                       # 미리보기 물 높이 (세상 단위)
 var _dirty := true
@@ -76,6 +87,16 @@ func setup(p: CreationPlan, time_of_day: String) -> void:
 	tod = time_of_day
 	R = p.size * 0.5
 	nzs = WorldGen.noises(p.seed_v)
+	var s := 0.0
+	var n := 0
+	for j in 9:
+		for i in 9:
+			var u := (i - 4) / 4.5
+			var v := (j - 4) / 4.5
+			if u * u + v * v <= 1.0:
+				s += WorldGen.base_h(nzs, u * R, v * R, R)
+				n += 1
+	_flat_h = s / maxf(1.0, n)
 	_build_room()
 	_build_jar()
 	_dirty = true
@@ -324,6 +345,53 @@ func _build_jar() -> void:
 	smat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	smoke_fx.material_override = smat
 	add_child(smoke_fx)
+	dust_fx = CPUParticles3D.new()
+	dust_fx.emitting = false
+	dust_fx.amount = 70
+	dust_fx.lifetime = 1.1
+	dust_fx.emission_shape = CPUParticles3D.EMISSION_SHAPE_POINTS
+	dust_fx.emission_points = PackedVector3Array([Vector3.ZERO])
+	dust_fx.direction = Vector3.UP
+	dust_fx.spread = 70.0
+	dust_fx.initial_velocity_min = 0.8
+	dust_fx.initial_velocity_max = 2.0
+	dust_fx.gravity = Vector3(0, -0.6, 0)
+	dust_fx.damping_min = 1.0
+	dust_fx.damping_max = 2.0
+	dust_fx.scale_amount_min = 0.7
+	dust_fx.scale_amount_max = 1.6
+	var dc := Curve.new()
+	dc.add_point(Vector2(0, 0.3))
+	dc.add_point(Vector2(0.4, 1.0))
+	dc.add_point(Vector2(1, 1.0))
+	dust_fx.scale_amount_curve = dc
+	var dg := Gradient.new()
+	dg.set_color(0, Color(0.86, 0.72, 0.56, 0.85))
+	dg.set_color(1, Color(0.86, 0.74, 0.6, 0.0))
+	dust_fx.color_ramp = dg
+	var dsp := SphereMesh.new()
+	dsp.radius = 0.22
+	dsp.height = 0.4
+	dsp.radial_segments = 8
+	dsp.rings = 4
+	dust_fx.mesh = dsp
+	var dmat := StandardMaterial3D.new()
+	dmat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dmat.vertex_color_use_as_albedo = true
+	dmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	dust_fx.material_override = dmat
+	add_child(dust_fx)
+	small_root = Node3D.new()
+	nubs_root.add_child(small_root)
+	var nr := RandomNumberGenerator.new()
+	nr.seed = plan.seed_v * 3 + 17
+	var na := nr.randf() * TAU
+	for i in SMALL_NUBS:
+		var a := na + TAU * i / SMALL_NUBS + nr.randf_range(-0.2, 0.2)
+		var d := nr.randf_range(0.86, 0.96)
+		var sn := _nub_node(0.55)
+		sn.position = nub_local(cos(a) * d, sin(a) * d)
+		small_root.add_child(sn)
 
 
 ## 툰 재질 (카메라 쪽 면을 밝히는 view_fill 없이 — 병 안 흙·바위 옆면이 하얗게 바래지 않게)
@@ -358,9 +426,10 @@ const SHOTS := {
 	"wide": {"yaw": 0.0, "pitch": 0.2, "dist": 78.0, "ty": 10.0},
 	"quick": {"yaw": 0.0, "pitch": 0.42, "dist": 44.0, "ty": -3.5},          # 빠른 창조 (C1 — 아래 반은 고르기 칸이라 병을 위쪽에)
 	"core": {"yaw": 0.0, "pitch": 0.16, "dist": 42.0, "ty": 11.0},
-	"soil": {"yaw": 0.0, "pitch": 0.62, "dist": 30.0, "ty": 3.0},
+	"soil": {"yaw": 0.0, "pitch": 0.52, "dist": 25.0, "ty": 3.4},
 	"water": {"yaw": 0.0, "pitch": 0.66, "dist": 35.0, "ty": 3.4},
 	"lid": {"yaw": 0.0, "pitch": 0.5, "dist": 46.0, "ty": 11.0},
+	"nubs": {"yaw": 0.0, "pitch": 0.68, "dist": 34.0, "ty": 11.5},           # 뒤집어 든 뚜껑 안쪽 (위) + 그 아래 흙 (표시)
 	"lapse": {"yaw": 0.0, "pitch": 0.5, "dist": 40.0, "ty": 6.0},
 	"top": {"yaw": 0.0, "pitch": 0.5, "dist": 27.0, "ty": 3.9},
 	"seeds": {"yaw": 0.0, "pitch": 0.66, "dist": 30.0, "ty": 3.0},
@@ -403,13 +472,21 @@ func _apply_cam() -> void:
 		return
 	var t := Vector3(float(rig.get("tx", 0.0)), float(rig["ty"]), float(rig.get("tz", 0.0)))
 	var b := Basis.from_euler(Vector3(-float(rig["pitch"]), float(rig["yaw"]), 0))
-	cam.position = t + b * Vector3(0, 0, float(rig["dist"]))
-	cam.look_at(t, Vector3.UP)
+	var sh := Vector3(sin(_t * 47.0), sin(_t * 59.0 + 1.3) * 0.7, 0.0) * shake
+	cam.position = t + b * Vector3(0, 0, float(rig["dist"])) + sh
+	cam.look_at(t + sh * 0.6, Vector3.UP)
 
 
 # ───────────────────────── 땅 높이 ─────────────────────────
+## 병 안 그림의 미리보기 높이: 평평한 흙(shape 0) → 시드 바탕(덜) + 빚은 높낮이(과장 RELIEF). 세상 만들기는 CreationPlan.preview_h 그대로
 func preview_h(u: float, v: float) -> float:
-	return CreationPlan.preview_h(nzs, plan.sculpt, u, v, R)
+	var b := lerpf(_flat_h, WorldGen.base_h(nzs, u * R, v * R, R), BASE_K * shape)
+	return b + WorldGen.SCULPT_H * RELIEF * CreationPlan.sample(plan.sculpt, u, v)
+
+
+## 그림에서 더 얹은 높낮이 (세상 높이 위에도 같게 — 배양 뒤에도 산·골짜기가 그대로 보이게)
+func relief_extra(u: float, v: float) -> float:
+	return WorldGen.SCULPT_H * (RELIEF - 1.0) * CreationPlan.sample(plan.sculpt, u, v)
 
 
 func world_h(u: float, v: float) -> float:
@@ -423,7 +500,7 @@ func world_h(u: float, v: float) -> float:
 		if not ww.inside(p.x, p.y, 1.0):
 			p = p.normalized() * (ww.rr - 2.0)
 		s += ww.h[ww.idx(p.x, p.y)]
-	return s / 5.0
+	return s / 5.0 + relief_extra(u, v)
 
 
 func ground_h(u: float, v: float) -> float:
@@ -434,7 +511,16 @@ func ground_h(u: float, v: float) -> float:
 
 func to_y(h: float) -> float:
 	var top := Y_BASE + h * Y_K
+	var fl := ROCK_TOP + 0.35                       # 깊은 골짜기도 바위 위에 흙이 남게 (부드럽게 눌림)
+	if top < fl:
+		top = maxf(ROCK_TOP + 0.08, fl - (fl - top) * 0.3)
 	return lerpf(ROCK_TOP + 0.05, top, soil_rise)
+
+
+## 호수 수면 원판 높이 (세상 물 높이 + 그림의 과장)
+func lake_y(l: Dictionary) -> float:
+	var uv: Vector2 = l["uv"]
+	return to_y(float(l["h"]) + relief_extra(uv.x, uv.y))
 
 
 ## 병 안 원판 위 점 → 3D (흙 위)
@@ -663,6 +749,8 @@ func screen_of(p: Vector3) -> Vector2:
 # ───────────────────────── 매 화면 ─────────────────────────
 func _process(dt: float) -> void:
 	_t += dt
+	if shake > 0.0:
+		_apply_cam()
 	if _dirty and _t - _built_t >= 0.045:          # 많아야 1초에 22번 (빚는 동안)
 		_built_t = _t
 		rebuild()
@@ -692,44 +780,207 @@ func show_core(sz: int) -> void:
 
 
 # ───────────────────────── 물방울 돌기 (뚜껑 안쪽) ─────────────────────────
-## 뒤집힌 코르크 아랫면 위 (u, v) → 코르크 안쪽 좌표 (코르크를 뒤집어 들고 있을 때 위를 봄)
+## 코르크 아랫면 위 (u, v) → 코르크 안쪽 좌표 (닫혔을 때 그 아래 흙 = 물방울 호수 자리 (u, v) × 0.86 — WorldGen)
 func nub_local(u: float, v: float) -> Vector3:
-	return Vector3(u * 3.6, -CORK_C + NECK_Y, v * 3.6)
+	return Vector3(u * NUB_S, -CORK_C + NECK_Y, v * NUB_S)
 
 
+## 돌기 하나 (코르크 혹 + 끝에 맺힌 이슬). k = 크기 (거인의 돌기 1 · 저절로 난 작은 돌기 0.45)
+func _nub_node(k: float) -> Node3D:
+	var nd := Node3D.new()
+	var bump := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.5 * k
+	sm.height = 1.1 * k
+	sm.radial_segments = 12
+	sm.rings = 6
+	bump.mesh = sm
+	bump.material_override = Toon.mat(Color("b98a55"))
+	bump.position.y = -0.18 * k
+	bump.name = "Bump"
+	nd.add_child(bump)
+	var dew := MeshInstance3D.new()
+	var dm := SphereMesh.new()
+	dm.radius = 0.24 * k
+	dm.height = 0.56 * k
+	dm.radial_segments = 10
+	dm.rings = 5
+	dew.mesh = dm
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.78, 0.94, 0.98, 0.9)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	dew.material_override = mat
+	dew.position.y = -0.82 * k
+	dew.name = "Dew"
+	nd.add_child(dew)
+	return nd
+
+
+## 흙 위 표시 (물방울이 떨어질 곳 — 옅은 물빛 원 + 테)
+func _mark_node() -> Node3D:
+	var nd := Node3D.new()
+	var mat := StandardMaterial3D.new()
+	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.albedo_color = Color(0.45, 0.82, 0.96, 0.6)
+	mat.render_priority = 3
+	mat.no_depth_test = true
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.75
+	cm.bottom_radius = 0.75
+	cm.height = 0.02
+	cm.radial_segments = 28
+	var disc := MeshInstance3D.new()
+	disc.mesh = cm
+	disc.material_override = mat
+	disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	nd.add_child(disc)
+	var tm := TorusMesh.new()
+	tm.inner_radius = 0.72
+	tm.outer_radius = 0.86
+	tm.rings = 28
+	tm.ring_segments = 4
+	var ring := MeshInstance3D.new()
+	ring.mesh = tm
+	var rm := mat.duplicate() as StandardMaterial3D
+	rm.albedo_color = Color(0.95, 1.0, 1.0, 0.95)
+	ring.material_override = rm
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	ring.scale.y = 0.3
+	nd.add_child(ring)
+	return nd
+
+
+## 표시 자리: 돌기 (u, v) 아래 = 세상의 물방울 호수 (WorldGen: (u, v) × 0.86)
+func mark_point(u: float, v: float) -> Vector3:
+	return uv_point(u * 0.86, v * 0.86, 0.05)
+
+
+## 돌기들을 한꺼번에 (연출 없이 — 다시 켰을 때 · 시험)
 func set_nubs(list: Array) -> void:
-	for c in nubs_root.get_children():
-		c.queue_free()
+	for nd in nub_nodes:
+		nd.queue_free()
+	for m in marks:
+		m.queue_free()
+	nub_nodes.clear()
+	marks.clear()
 	for dv: Variant in list:
-		var sm := SphereMesh.new()
-		sm.radius = 0.42
-		sm.height = 0.5
-		sm.radial_segments = 10
-		sm.rings = 5
-		var mi := MeshInstance3D.new()
-		mi.mesh = sm
-		mi.material_override = Toon.mat(Color("cfeef2"))
-		mi.position = nub_local(float(dv[0]), float(dv[1]))
-		nubs_root.add_child(mi)
+		pop_nub(float(dv[0]), float(dv[1]), false)
 
 
-## 돌기에서 떨어지는 첫 물방울 (뚜껑이 닫힌 뒤)
+## 거인이 찍은 자리에서 돌기가 톡 솟음 (살짝 넘쳤다 돌아옴) → 끝에 이슬이 맺힘 · 흙 위에 표시
+func pop_nub(u: float, v: float, anim := true) -> void:
+	var nd := _nub_node(1.5)
+	nd.position = nub_local(u, v)
+	nubs_root.add_child(nd)
+	nub_nodes.append(nd)
+	var mk := _mark_node()
+	add_child(mk)
+	mk.position = mark_point(u, v)
+	marks.append(mk)
+	if not anim:
+		return
+	var dew: Node3D = nd.get_node("Dew")
+	nd.scale = Vector3.ONE * 0.01
+	dew.scale = Vector3.ONE * 0.01
+	mk.scale = Vector3.ONE * 0.01
+	var tw := nd.create_tween()
+	tw.tween_property(nd, "scale", Vector3(1.0, 1.35, 1.0), 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(nd, "scale", Vector3(1.12, 0.85, 1.12), 0.1)
+	tw.tween_property(nd, "scale", Vector3.ONE, 0.18).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tw.tween_property(dew, "scale", Vector3(1.0, 1.25, 1.0), 0.45).set_trans(Tween.TRANS_SINE)
+	tw.tween_property(dew, "scale", Vector3.ONE, 0.25)
+	var mt := mk.create_tween()
+	mt.tween_interval(0.25)
+	mt.tween_property(mk, "scale", Vector3.ONE * 1.2, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	mt.tween_property(mk, "scale", Vector3.ONE, 0.2)
+
+
+## 돌기를 다시 누르면 쏙 들어감 (되돌리기)
+func unpop_nub(i: int, anim := true) -> void:
+	if i < 0 or i >= nub_nodes.size():
+		return
+	var nd := nub_nodes[i]
+	var mk := marks[i]
+	nub_nodes.remove_at(i)
+	marks.remove_at(i)
+	if not anim:
+		nd.queue_free()
+		mk.queue_free()
+		return
+	var tw := nd.create_tween()
+	tw.tween_property(nd, "scale", Vector3(1.15, 0.6, 1.15), 0.08)
+	tw.tween_property(nd, "scale", Vector3.ONE * 0.01, 0.16).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_callback(nd.queue_free)
+	var mt := mk.create_tween()
+	mt.tween_property(mk, "scale", Vector3.ONE * 0.01, 0.2)
+	mt.tween_callback(mk.queue_free)
+
+
+func show_marks(on: bool) -> void:
+	for m in marks:
+		m.visible = on
+
+
+## 화면의 한 점 → 뚜껑 안쪽 (u, v) (코르크 아랫면을 맞히지 않으면 null)
+func lid_uv_at(screen: Vector2) -> Variant:
+	var o := cam.project_ray_origin(screen)
+	var d := cam.project_ray_normal(screen)
+	var xf := cork.global_transform
+	var c := xf * nub_local(0, 0)
+	var n := (xf.basis * Vector3.DOWN).normalized()
+	var den := d.dot(n)
+	if absf(den) < 1e-4:
+		return null
+	var t := (c - o).dot(n) / den
+	if t <= 0.0:
+		return null
+	var p := xf.affine_inverse() * (o + d * t)
+	var uv := Vector2(p.x, p.z) / NUB_S
+	if uv.length() > 4.05 / NUB_S:
+		return null
+	return uv
+
+
+## 뚜껑 안쪽 (u, v) → 화면 (시험·캡처)
+func lid_screen(u: float, v: float) -> Vector2:
+	return cam.unproject_position(cork.global_transform * nub_local(u, v))
+
+
+## 땅이 솟고 꺼질 때 흙먼지 (pts = 많이 움직이는 흙 위 점들 — 비면 끔)
+func dust(pts: PackedVector3Array) -> void:
+	if pts.is_empty():
+		dust_fx.emitting = false
+		return
+	dust_fx.emission_points = pts
+	dust_fx.emitting = true
+
+
+## 돌기에서 떨어지는 첫 물방울 (뚜껑이 닫힌 뒤) → 흙 위 표시 자리로 (표시는 물이 닿으면 사라짐)
 func drop_from_nubs() -> void:
-	for dv: Variant in plan.drips:
-		var u := float(dv[0]) * 0.86
-		var v := float(dv[1]) * 0.86
+	for i in plan.drips.size():
+		var dv: Array = plan.drips[i]
+		var u := float(dv[0])
+		var v := float(dv[1])
 		var sm := SphereMesh.new()
-		sm.radius = 0.16
-		sm.height = 0.4
+		sm.radius = 0.2
+		sm.height = 0.5
 		var mi := MeshInstance3D.new()
 		mi.mesh = sm
 		mi.material_override = Toon.mat(Color("bfe9f0"))
 		add_child(mi)
-		mi.position = Vector3(u * 3.6, NECK_Y - 0.2, v * 3.6)
-		var to := uv_point(u * 3.6 / RIN, v * 3.6 / RIN)
+		mi.position = cork.global_transform * nub_local(u, v) + Vector3(0, -0.8, 0)
+		var to := mark_point(u, v)
 		var tw := create_tween()
-		tw.tween_property(mi, "position", to, 0.7).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+		tw.tween_interval(0.15 * i)
+		tw.tween_property(mi, "position", to, 0.75).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.tween_callback(mi.queue_free)
+		if i < marks.size():
+			var mk := marks[i]
+			tw.tween_property(mk, "scale", Vector3.ONE * 1.6, 0.25)
+			tw.tween_property(mk, "scale", Vector3.ONE * 0.01, 0.8)
+			tw.tween_callback(mk.hide)
 
 
 # ───────────────────────── 세상이 생긴 뒤 ─────────────────────────
@@ -817,7 +1068,7 @@ func place_lakes(rise: float) -> void:
 		var mi: MeshInstance3D = l["node"]
 		var uv: Vector2 = l["uv"]
 		mi.visible = rise > 0.02
-		var y := to_y(float(l["h"]))
+		var y := lake_y(l)
 		mi.position = Vector3(uv.x * RIN, lerpf(y - 0.5, y, rise) + 0.03, uv.y * RIN)
 		mi.scale = Vector3(lerpf(0.4, 1.0, rise), 1.0, lerpf(0.4, 1.0, rise))
 
@@ -951,7 +1202,7 @@ func lake_near(p: Vector2) -> Dictionary:
 		return {}
 	var mi: MeshInstance3D = best["node"]
 	var uv: Vector2 = best["uv"]
-	return {"p": Vector3(uv.x * RIN, to_y(float(best["h"])) + 0.05, uv.y * RIN), "rad": (mi.mesh as CylinderMesh).top_radius}
+	return {"p": Vector3(uv.x * RIN, lake_y(best) + 0.05, uv.y * RIN), "rad": (mi.mesh as CylinderMesh).top_radius}
 
 
 ## 민물 호수 그림 모두 (배양 — 가끔 뛰는 물고기)
@@ -960,7 +1211,7 @@ func fresh_lake_spots() -> Array:
 	for l: Dictionary in _lakes:
 		if not bool(l["salty"]):
 			var uv: Vector2 = l["uv"]
-			out.append({"p": Vector3(uv.x * RIN, to_y(float(l["h"])) + 0.05, uv.y * RIN)})
+			out.append({"p": Vector3(uv.x * RIN, lake_y(l) + 0.05, uv.y * RIN)})
 	return out
 
 

@@ -18,8 +18,11 @@ var pending: Array = []                 # [[찍을 때, 이름]…]
 var plan_steps := [
 	["core", "creation_buttons_core", 1],
 	["soil", "creation_buttons_land", 2],
+	["soil", "", -1],                    # 땅이 솟은 뒤 [다음]
 	["water", "creation_buttons_water", 1],
-	["lapse", "", -1],
+	["nubs", "", 0],                     # 돌기 [알아서] (손으로 찍기는 shot_creation_land.gd)
+	["nubs", "", -1],
+	["lapse", "creation_lid_lapse", -1],
 	["sow", "creation_buttons_seeds", 0],
 	["grow", "", -1],
 	["release", "creation_wild_crate", 0, [[1.0, "creation_wild_drop"], [3.6, "creation_wild_released"]]],

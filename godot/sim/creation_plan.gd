@@ -1,8 +1,9 @@
 ## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md 1·2 — 첫 병 줄임판).
 ## 단계: core 핵 → soil 땅 → water 물 → lid 물방울 돌기·뚜껑 잠그기(배양, 저절로) → seeds 씨앗(배양) →
 ##       wildlife 들짐승·물고기 풀기(배양) → spot 스타터킷 자리 (넓은 세상 장면) → name 지구 이름 → 병 안.
-## 단계마다 큰 단추 2~3개 (2026-11-07 — 손으로 빚기·게이지·돌기 찍기·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
-##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 돌기 auto_drips · 씨앗 seed_preset.
+## 단계마다 큰 단추 2~3개 (2026-11-07 — 손으로 빚기·게이지·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
+##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 씨앗 seed_preset.
+## 돌기는 거인이 뚜껑 안쪽을 콕콕 찍는다 (2026-11-07 다시 — 큰 호수 자리를 고름): add_drip · 다시 누르면 drip_near → remove_drip · [알아서] fill_drips.
 ##   sculpt · drips · seeds · animals · fish 칸은 그대로 (옛 저장·세상 만들기와 같은 모양).
 ## 빈 병 두드리기(0)는 타이틀 → 병 연출에, 암반 컵(2)은 시드(광맥·암염은 WorldGen이 보장), 태양(5)은 첫 병 온대 고정 (나중 병의 자리만 climate).
 ## 좌표: 병 안 원판을 [-1, 1]로 (u = 세상 x / 반지름, v = 세상 y / 반지름). 빚기 = SG×SG 격자 (−1 파냄 ~ +1 쌓음).
@@ -22,6 +23,9 @@ const WATER_PICKS_T := ["조금", "알맞게", "넉넉히"]
 const WATER_PICKS := [0.22, 0.5, 0.82]   # 물 단추 → 부은 양 (신화: 0.35 아래 '조금' · 0.75 위 '넉넉히')
 const SEED_PICKS := ["알아서", "숲을 더", "풀밭을 더"]
 const DRIP_N := 3                       # 거인의 돌기 (세상이 나머지를 채워 메이슨 자 8~12 — GD 3.3)
+const DRIP_MAX_R := 0.8                 # 뚜껑 안쪽에 돌기를 찍을 수 있는 곳 (가장자리 테 안)
+const DRIP_GAP := 0.24                  # 돌기 사이 (너무 붙으면 안 찍힘)
+const DRIP_HIT := 0.17                  # 이만큼 가까이 누르면 그 돌기를 뗌 (되돌리기)
 const CORE_WORDS := ["조용한 별이네요.", "따뜻한 별이네요.", "뜨거운 별이네요.\n땅이 자주 흔들릴지도 몰라요."]
 
 var seed_v := 0
@@ -194,6 +198,54 @@ func auto_drips() -> void:
 		var a := a0 + TAU * i / DRIP_N + r.randf_range(-0.35, 0.35)
 		var d := r.randf_range(0.32, 0.62)
 		drips.append([_q(cos(a) * d), _q(sin(a) * d)])
+
+
+## 거인이 뚜껑 안쪽 (u, v)를 콕: 돌기 하나 (DRIP_N개까지 · 테 안 · 다른 돌기와 떨어져야) → 찍혔으면 true
+func add_drip(u: float, v: float) -> bool:
+	if drips.size() >= DRIP_N:
+		return false
+	var p := Vector2(u, v)
+	if p.length() > DRIP_MAX_R:
+		p = p.normalized() * DRIP_MAX_R
+	for d: Variant in drips:
+		if p.distance_to(Vector2(float(d[0]), float(d[1]))) < DRIP_GAP:
+			return false
+	drips.append([_q(p.x), _q(p.y)])
+	return true
+
+
+## (u, v) 가까이 찍힌 돌기 번호 (없으면 −1) — 다시 누르면 떼기
+func drip_near(u: float, v: float, rad := DRIP_HIT) -> int:
+	var best := -1
+	var bd := rad
+	for i in drips.size():
+		var d := Vector2(float(drips[i][0]), float(drips[i][1])).distance_to(Vector2(u, v))
+		if d < bd:
+			bd = d
+			best = i
+	return best
+
+
+func remove_drip(i: int) -> void:
+	if i >= 0 and i < drips.size():
+		drips.remove_at(i)
+
+
+## [알아서]: 모자란 돌기를 채움 (찍어 둔 것은 그대로 · 서로 떨어지게 · 같은 시드면 같은 자리)
+func fill_drips() -> void:
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 5 + 31
+	var tries := 0
+	while drips.size() < DRIP_N and tries < 400:
+		tries += 1
+		var a := r.randf() * TAU
+		var d := r.randf_range(0.3, 0.66)
+		var p := Vector2(cos(a), sin(a)) * d
+		var ok := true
+		for q: Variant in drips:
+			ok = ok and p.distance_to(Vector2(float(q[0]), float(q[1]))) >= (0.42 if tries < 200 else DRIP_GAP)
+		if ok:
+			drips.append([_q(p.x), _q(p.y)])
 
 
 ## 씨앗 단추 (0 알아서 · 1 숲을 더 · 2 풀밭을 더) → 씨앗 점 무리 (무리 = 한 숲·한 들판)

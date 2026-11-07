@@ -27,7 +27,7 @@ func all() -> void:
 	StartFlow.navigate = false
 	var old_plan := StartFlow.plan
 	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick",
-		"test_creation_stages", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
+		"test_creation_stages", "test_creation_land_morph", "test_creation_nubs", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
 	StartFlow.plan = old_plan
 	StartFlow.pending_world = null
 	_clean()
@@ -281,13 +281,31 @@ func test_creation_stages() -> void:
 	c.call("pick", 2)
 	check(plan.core == 2 and c.get("step") == "soil" and CreationPlan.load_from(sm.dir).stage == "soil", "핵 크게 → 바위 → 흙 단계 (단계마다 저장)")
 	check(chips.visible and chips.get_child_count() == 3 and (chips.get_child(0) as Button).text == "너른 들", "땅: [너른 들 · 언덕 · 산과 골짜기]")
+	check(not (c.get("next_btn") as Button).visible, "땅을 고르기 전엔 [다음] 없음")
 	c.call("pick", 2)
 	var g := plan.sculpt.duplicate()
-	check(c.get("step") == "water" and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "넉넉히", "산과 골짜기 → 물: [조금 · 알맞게 · 넉넉히]")
+	check(c.get("step") == "soil" and chips.visible and (c.get("next_btn") as Button).visible, "산과 골짜기 → 흙이 그 모양으로 · 다른 단추로 다시 바꿀 수 있고 [다음]")
+	c.call("next")
+	check(c.get("step") == "water" and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "넉넉히", "[다음] → 물: [조금 · 알맞게 · 넉넉히]")
 	c.call("pick", 0)
+	check(is_equal_approx(plan.water, CreationPlan.WATER_PICKS[0]) and c.get("step") == "nubs" and plan.drips.is_empty() and chips.visible
+		and (chips.get_child(0) as Button).text == "알아서" and not (c.get("next_btn") as Button).visible, "물 조금 → 뚜껑 안쪽: 돌기를 찍을 차례 ([알아서] · [다음]은 세 곳을 찍은 뒤)")
+	var taps := [[-0.45, -0.3], [0.45, -0.2], [0.05, 0.55]]
+	for tp: Array in taps:
+		c.call("tap_lid", tp[0], tp[1])
+	check(plan.drips.size() == CreationPlan.DRIP_N and (c.get("next_btn") as Button).visible, "세 곳을 콕 → 돌기 셋 → [다음]")
+	c.call("next")
 	var jw: JarWorld = c.get("_world")
-	check(is_equal_approx(plan.water, CreationPlan.WATER_PICKS[0]) and plan.drips.size() == CreationPlan.DRIP_N, "물 조금 → 뚜껑 안쪽 돌기 %d개가 저절로" % plan.drips.size())
-	check(jw != null and c.get("step") == "lapse" and (c.get("next_btn") as Button).visible, "뚜껑이 저절로 잠기고 배양 (세상이 만들어짐) → [다음]")
+	check(jw != null and c.get("step") == "lapse" and (c.get("next_btn") as Button).visible and (c.get("jar") as CreationJar).cork.rotation == Vector3.ZERO,
+		"[다음] → 뚜껑이 내려와 잠기고 배양 (세상이 만들어짐) → [다음]")
+	var under := 0
+	for tp: Array in taps:
+		var q := Vector2(float(tp[0]), float(tp[1])) * jw.water.rr * 0.86
+		for d: Dictionary in jw.water.drips:
+			if Vector2(d["x"], d["y"]).distance_to(q) < 60.0:
+				under += 1
+				break
+	check(under == 3, "거인이 찍은 돌기 아래에 물방울 호수 (%d/3)" % under)
 	check(jw.water.drips.size() >= 8 and jw.water.drips.size() <= 12, "세상의 물방울 호수 %d곳 (메이슨 자 8~12)" % jw.water.drips.size())
 	c.call("next")
 	check(c.get("step") == "sow" and (chips.get_child(1) as Button).text == "숲을 더", "→ 씨앗: [알아서 · 숲을 더 · 풀밭을 더]")
@@ -325,6 +343,125 @@ func test_creation_stages() -> void:
 	StartFlow.take()
 	StartFlow.pending_world = null
 	remove(c)
+	drop(sm)
+
+
+## 땅 단추: 평평한 흙에서 시작 → 누르면 1.2초 동안 그 모양으로 솟고 꺼짐 (도중에 다른 단추 → 지금 모양에서 다시) · 세 모양의 높낮이가 또렷이 다름
+func _relief(jar: CreationJar) -> float:
+	var lo := INF
+	var hi := -INF
+	for j in 11:
+		for i in 11:
+			var u := (i - 5) / 6.0
+			var v := (j - 5) / 6.0
+			if u * u + v * v > 0.8:
+				continue
+			var h := jar.preview_h(u, v)
+			lo = minf(lo, h)
+			hi = maxf(hi, h)
+	return hi - lo
+
+
+func test_creation_land_morph() -> void:
+	var sm := manager()
+	var c := creation(CreationPlan.make(12, WorldCfg.SMALL_SIZE))
+	var plan: CreationPlan = c.get("plan")
+	var jar: CreationJar = c.get("jar")
+	c.call("pick", 1)
+	check(c.get("step") == "soil" and jar.shape == 0.0 and _relief(jar) < 0.01, "흙을 처음 덮으면 평평 (높낮이 %.3f)" % _relief(jar))
+	var want: Array[PackedFloat32Array] = []
+	for i in 3:
+		var q := CreationPlan.make(12, WorldCfg.SMALL_SIZE)
+		q.land_preset(i)
+		want.append(q.sculpt)
+	c.set("instant", false)
+	c.call("pick", 1)
+	var tw: Tween = c.get("_land_tw")
+	check(c.get("step") == "shaping" and tw != null and plan.sculpt != want[1], "[언덕] → 흙이 솟기 시작 (바로 바뀌지 않음)")
+	tw.custom_step(0.6)
+	check(jar.shape > 0.1 and jar.shape < 0.95 and jar.shake > 0.0 and (jar.dust_fx as CPUParticles3D).emitting, "도중: 반쯤 솟음 (모양 %.2f) · 흙먼지 · 살짝 흔들림" % jar.shape)
+	tw.custom_step(1.0)
+	var r1 := _relief(jar)
+	check(c.get("step") == "soil" and plan.sculpt == want[1] and jar.shape == 1.0 and jar.shake == 0.0 and not (jar.dust_fx as CPUParticles3D).emitting,
+		"1.2초 뒤 언덕 모양 그대로 (프리셋과 같음 · 높낮이 %.2f)" % r1)
+	c.call("pick", 2)
+	tw = c.get("_land_tw")
+	tw.custom_step(0.5)
+	var part := plan.sculpt.duplicate()
+	c.call("pick", 0)                          # 도중에 다른 단추 → 지금 모양에서 다시
+	tw = c.get("_land_tw")
+	check(c.get("step") == "shaping" and plan.sculpt == part, "솟는 도중 [너른 들] → 지금 모양에서 다시 바뀜")
+	tw.custom_step(2.0)
+	var r0 := _relief(jar)
+	check(plan.sculpt == want[0] and c.get("step") == "soil", "→ 너른 들 모양에 닿음")
+	c.call("pick", 2)
+	(c.get("_land_tw") as Tween).custom_step(2.0)
+	var r2 := _relief(jar)
+	check(plan.sculpt == want[2] and r0 * 1.4 < r1 and r1 * 1.6 < r2, "병 그림의 높낮이 너른 들 %.2f < 언덕 %.2f < 산과 골짜기 %.2f (또렷이 다름)" % [r0, r1, r2])
+	var ld := CreationPlan.load_from(sm.dir)
+	var dmax := 9.0
+	if ld != null and ld.sculpt.size() == want[2].size():
+		dmax = 0.0
+		for i in ld.sculpt.size():
+			dmax = maxf(dmax, absf(ld.sculpt[i] - want[2][i]))
+	check(dmax < 0.002, "고른 땅은 바로 저장 (차이 %.4f)" % dmax)
+	c.set("instant", true)
+	c.call("next")
+	check(c.get("step") == "water", "[다음] → 물")
+	remove(c)
+	drop(sm)
+
+
+## 뚜껑 안쪽 돌기: 거인이 콕 → 돌기 (DRIP_N개까지) · 다시 누르면 뗌 · [알아서] 채움 · 저장되고 세상 만들기가 씀
+func test_creation_nubs() -> void:
+	var sm := manager()
+	var c := creation(CreationPlan.make(13, WorldCfg.SMALL_SIZE))
+	var plan: CreationPlan = c.get("plan")
+	var jar: CreationJar = c.get("jar")
+	c.call("jump", "lid")
+	check(c.get("step") == "nubs" and plan.drips.is_empty() and jar.cork.visible and jar.nub_nodes.is_empty() and jar.small_root.get_child_count() == CreationJar.SMALL_NUBS,
+		"뚜껑 단계: 뒤집어 든 뚜껑 안쪽 (가장자리에 저절로 난 작은 돌기 %d) · 거인의 돌기는 아직" % jar.small_root.get_child_count())
+	# 화면 탭 → 뚜껑 안쪽 자리 (카메라 광선)
+	var sp := jar.lid_screen(0.3, -0.4)
+	var back: Variant = jar.lid_uv_at(sp)
+	check(back != null and (back as Vector2).distance_to(Vector2(0.3, -0.4)) < 0.01, "화면의 뚜껑 안쪽 한 점을 누르면 그 자리 (%s)" % [back])
+	check(jar.lid_uv_at(Vector2(2, 2)) == null, "뚜껑 밖을 누르면 아무 일 없음")
+	check(c.call("tap_lid", 0.3, -0.4) and plan.drips.size() == 1 and jar.nub_nodes.size() == 1 and jar.marks.size() == 1, "콕 → 돌기 하나 + 그 아래 흙에 표시")
+	var mk: Node3D = jar.marks[0]
+	check(Vector2(mk.position.x, mk.position.z).distance_to(Vector2(0.3, -0.4) * 0.86 * CreationJar.RIN) < 0.05, "표시 = 물방울이 떨어져 호수가 생길 곳 (돌기 자리 × 0.86)")
+	check(c.call("tap_lid", 0.36, -0.35) and plan.drips.is_empty(), "돌기를 다시 누르면 쏙 들어감 (되돌리기)")
+	check( jar.nub_nodes.is_empty() and jar.marks.is_empty() and CreationPlan.load_from(sm.dir).drips.is_empty(), "뗀 돌기는 저장에서도 빠짐")
+	c.call("tap_lid", -0.5, 0.2)
+	c.call("tap_lid", 0.5, 0.3)
+	check(CreationPlan.load_from(sm.dir).drips.size() == 2 and not (c.get("next_btn") as Button).visible and (c.get("chips") as Control).visible, "두 곳 → 저장 · 아직 [다음] 없음 · [알아서] 있음")
+	c.call("next")
+	check(c.get("step") == "nubs", "셋이 안 되면 [다음]은 아무 일 없음")
+	c.call("pick", 0)
+	check(plan.drips.size() == CreationPlan.DRIP_N and jar.nub_nodes.size() == CreationPlan.DRIP_N and Vector2(plan.drips[0][0], plan.drips[0][1]) == Vector2(-0.5, 0.2)
+		and (c.get("next_btn") as Button).visible and not (c.get("chips") as Control).visible, "[알아서] → 찍은 둘은 그대로 · 하나를 채움 → [다음]")
+	check(not c.call("tap_lid", -0.1, -0.6) and plan.drips.size() == CreationPlan.DRIP_N, "셋이 다 차면 더 찍히지 않음")
+	var saved := str(plan.drips)
+	c.call("next")
+	check(c.get("step") == "lapse" and str(plan.drips) == saved and str(CreationPlan.load_from(sm.dir).drips) == saved, "[다음] → 뚜껑이 잠기고 배양 (돌기 자리 저장)")
+	var jw: JarWorld = c.get("_world")
+	var under := 0
+	for dv: Array in plan.drips:
+		var q := Vector2(float(dv[0]), float(dv[1])) * jw.water.rr * 0.86
+		for d: Dictionary in jw.water.drips:
+			if Vector2(d["x"], d["y"]).distance_to(q) < 60.0:
+				under += 1
+				break
+	check(under == CreationPlan.DRIP_N and jw.water.drips.size() >= 8 and jw.water.drips.size() <= 12, "돌기 셋 아래 큰 호수 (%d/3) · 나머지는 세상이 채워 %d곳" % [under, jw.water.drips.size()])
+	remove(c)
+	# 플랜만: 테 밖은 테 안으로 · 붙어 있으면 안 찍힘 · [알아서]는 같은 시드면 같은 자리
+	var p := CreationPlan.make(14, 512)
+	check(p.add_drip(2.0, 0.0) and Vector2(p.drips[0][0], p.drips[0][1]).length() <= CreationPlan.DRIP_MAX_R + 0.001, "테 밖을 누르면 테 안쪽에")
+	check(not p.add_drip(0.75, 0.05), "다른 돌기에 붙여서는 안 찍힘")
+	var a := CreationPlan.make(15, 512)
+	a.fill_drips()
+	var b := CreationPlan.make(15, 512)
+	b.fill_drips()
+	check(a.drips.size() == CreationPlan.DRIP_N and str(a.drips) == str(b.drips), "[알아서] 같은 시드면 같은 자리")
 	drop(sm)
 
 
@@ -506,7 +643,11 @@ func test_creation_resume() -> void:
 	c.set("instant", true)
 	run.root.add_child(c)
 	rp = c.get("plan")
-	check(c.get("step") == "lapse" and c.get("_world") != null and rp.drips.size() == 2, "옛 저장 (돌기 찍던 중) → 찍은 돌기 그대로 뚜껑이 잠기고 배양")
+	var rj: CreationJar = c.get("jar")
+	check(c.get("step") == "nubs" and rp.drips.size() == 2 and rj.nub_nodes.size() == 2 and str(rp.drips) == str([[0.2, -0.3], [-0.4, 0.1]]), "옛 저장 (돌기 찍던 중) → 찍은 돌기 둘 그대로 뚜껑 안쪽")
+	c.call("pick", 0)
+	c.call("next")
+	check(c.get("step") == "lapse" and c.get("_world") != null and rp.drips.size() == 3, "→ [알아서]로 하나 더 → 뚜껑이 잠기고 배양")
 	c.call("next")
 	check(c.get("step") == "sow" and (c.get("chips") as Control).visible, "→ 씨앗 단추")
 	remove(c)

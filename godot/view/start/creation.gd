@@ -1,11 +1,13 @@
 ## 창조 오프닝 — docs/OPENING.md 1·2 (첫 병 줄임판) · UI.md 00 #5a · 08.
 ## 타이틀 [시작하기] → 병으로 다가가는 연출(빈 병을 '톡' — 단계 0을 여기에) → 아래 단계. 단계마다 큰 단추 2~3개 + 아래 손글씨 자막.
-## 단추를 누르면 그 연출이 나오고 다음 단계로 (땅·물은 잠깐 보여 주는 동안 [다시 고르기]). 2026-11-07: 손으로 빚기·물 게이지·
-## 돌기 찍기·씨앗 문지르기·상자 끌기는 없앴다 (거의 차이가 없어서) — 단추가 CreationPlan 프리셋을 고른다.
+## 단추를 누르면 그 연출이 나오고 다음 단계로 (물은 잠깐 보여 주는 동안 [다시 고르기]). 2026-11-07: 손으로 빚기·물 게이지·
+## 씨앗 문지르기·상자 끌기는 없앴다 (거의 차이가 없어서) — 단추가 CreationPlan 프리셋을 고른다. 뚜껑 돌기만은 거인이 콕콕 찍는다.
 ##   core     핵: [작게 · 보통 · 크게] → 빛·맥동 → 병 바닥으로 쿵 → 바위가 핵을 감쌈 (암반은 시드)
-##   soil     흙이 쏟아짐 → [너른 들 · 언덕 · 산과 골짜기] → 흙이 그 모양으로 (CreationPlan.land_preset)
+##   soil     평평한 흙이 쏟아짐 → [너른 들 · 언덕 · 산과 골짜기] → 흙이 그 모양으로 우르릉 솟고 꺼짐 (1.2초 · 흙먼지 · CreationPlan.land_preset)
+##            → 다른 단추를 누르면 지금 모양에서 다시 바뀜 · [다음] (병 그림은 높낮이를 과장 — CreationJar.RELIEF)
 ##   water    [조금 · 알맞게 · 넉넉히] → 물병이 그만큼 부음 (WATER_PICKS)
-##   lid      저절로: 뚜껑 안쪽에 물방울 돌기가 맺힘 (auto_drips) → 뚜껑이 내려와 딸깍 ×3 → 잠시 배양
+##   lid      뚜껑을 뒤집어 들고 안쪽을 보여 줌 (가장자리에 저절로 난 작은 돌기) → 거인이 세 곳을 콕 → 돌기가 톡 솟고 끝에 이슬이 맺힘 ·
+##            그 아래 흙에 표시 (큰 호수 자리). 돌기를 다시 누르면 뗌 · [알아서] 채움 → [다음] → 뚜껑이 내려와 딸깍 ×3 → 잠시 배양
 ##            (김 서림 · 첫 물방울 · 호수가 참 · 유리벽 물줄기 · 밤낮 · 핵이 크면 화산 연기). 세상은 이때 뒤 스레드에서 만든다
 ##   seeds    [알아서 · 숲을 더 · 풀밭을 더] → 씨앗이 흩뿌려짐 → 배양 (이끼 → 풀 → 숲)
 ##   wildlife 두 박자 (2026-11-07 — 한 단추일 때 무엇을 왜 하는지 몰랐음, view/start/creation_release.gd):
@@ -29,7 +31,12 @@ const WILD_ASK := "숲과 들에 살 짐승들이에요."
 const WILD_DONE := "사슴과 토끼는 숲과 들로,\n늑대는 깊은 숲으로 갔어요."
 const FISH_ASK := "호수에 살 물고기예요."
 const FISH_DONE := "물고기들이 호수에서 헤엄쳐요."
-const HOLD := 1.8                       # 땅·물을 고른 뒤 보여 주는 동안 ([다시 고르기])
+const HOLD := 1.8                       # 물을 고른 뒤 보여 주는 동안 ([다시 고르기])
+const LAND_MORPH := 1.2                 # 땅이 그 모양으로 솟고 꺼지는 동안
+const LID_HOLD := Vector3(0, 20.0, 0)   # 돌기를 찍는 동안 뚜껑을 뒤집어 드는 곳
+const LID_TILT := -2.3                  # (안쪽이 카메라를 보게)
+const NUB_WORDS := ["뚜껑 안쪽을 세 곳 콕 찍어 주세요.\n물방울 돌기 아래에 큰 호수가 생겨요.", "두 곳 더 찍어 주세요.\n돌기를 다시 누르면 떼어 내요.",
+	"한 곳 더 찍어 주세요.", "이 세 돌기 아래에 큰 호수가 생겨요.\n돌기를 다시 누르면 떼어 내요."]
 const LAND_WORDS := ["너른 들이 펼쳐졌어요.", "둥근 언덕이 솟았어요.", "높은 산과 깊은 골짜기가 생겼어요.\n골짜기에는 물이 고일 거예요."]
 const WATER_WORDS := ["물을 조금 부었어요.\n작은 호수 몇이 생기겠어요.", "알맞게 부었어요.", "물을 넉넉히 부었어요.\n호수가 가득하겠어요."]
 const SEED_WORDS := ["이끼·풀·나무 씨앗을 고루 뿌렸어요.", "나무 씨앗을 듬뿍 뿌렸어요.", "풀씨를 듬뿍 뿌렸어요."]
@@ -60,6 +67,8 @@ var _cap_h := 0.0                       # 자막 높이 (줄이 늘면 다시 �
 var _beat: Tween                        # 들짐승·물고기 박자의 기다림 ([다음]이 건너뜀)
 var _crate_uv := Vector2.ZERO
 var _lake: Dictionary = {}
+var _land_i := -1                       # 고른 땅 (−1 아직)
+var _land_tw: Tween
 
 
 func _ready() -> void:
@@ -294,6 +303,7 @@ func _resume() -> void:
 	jar.rock_root.scale.y = 1.0
 	jar.soil_rise = 1.0
 	jar.soil_mi.visible = si >= 1
+	jar.shape = 0.0 if (plan.stage == "soil" and _flat_soil()) else 1.0
 	jar.mark_dirty()
 	if si <= CreationPlan.STAGES.find("lid"):
 		if si >= 3:
@@ -333,6 +343,9 @@ func go(s: String) -> void:
 			_dim(0.0)
 			jar.shot("soil", 0.0 if instant else 1.2)
 			jar.soil_mi.visible = true
+			_land_i = -1
+			if _flat_soil():
+				jar.shape = 0.0                   # 평평한 흙 — 땅 단추를 누르면 솟고 꺼짐
 			_say("흙을 덮어요.")
 			step = "pour"
 			GameAudio.fx("soil_pour", "Room", -4.0)          # 흙 붓기 (A17)
@@ -348,7 +361,7 @@ func go(s: String) -> void:
 		"lid":
 			jar.water_show = 1.0
 			jar.update_water_level(plan.water)
-			close_lid()
+			place_nubs()
 		"seeds":
 			jar.shot("seeds", 0.0 if instant else 1.0)
 			_lift_cork(true)
@@ -391,8 +404,10 @@ func pick(i: int) -> void:
 			pass
 		"core":
 			pick_core(i)
-		"soil":
+		"soil", "shaping":
 			pick_land(i)
+		"nubs":
+			auto_nubs()
 		"water":
 			pick_water(i)
 		"sow":
@@ -410,6 +425,12 @@ func next() -> void:
 	match step:
 		"quick":
 			quick_make()
+		"soil":
+			if _land_i >= 0:
+				go("water")
+		"nubs":
+			if plan.drips.size() >= CreationPlan.DRIP_N:
+				close_lid()
 		"hold":
 			go(_hold_stage)
 		"lapse":
@@ -432,7 +453,7 @@ func next() -> void:
 			leave()
 
 
-## [다시 고르기]: 땅·물을 고른 뒤 넘어가기 전에
+## [다시 고르기]: 물을 고른 뒤 넘어가기 전에
 func repick() -> void:
 	if step != "hold":
 		return
@@ -568,33 +589,84 @@ func _tween_jar_node_scale() -> void:
 
 
 # ───────────────────────── 3. 땅 ─────────────────────────
-## [너른 들 · 언덕 · 산과 골짜기]: 흙이 조금 더 쏟아지며 그 모양으로 솟고 꺼짐
+func _flat_soil() -> bool:
+	for x in plan.sculpt:
+		if absf(x) > 0.001:
+			return false
+	return true
+
+
+## [너른 들 · 언덕 · 산과 골짜기]: 흙이 지금 모양에서 그 모양으로 우르릉 솟고 꺼짐 (흙먼지 · 살짝 흔들림) → 다른 단추로 다시 · [다음]
 func pick_land(i: int) -> void:
-	if step != "soil":
+	if step != "soil" and step != "shaping":
 		return
-	chips.visible = false
+	i = clampi(i, 0, 2)
+	if _land_tw != null and _land_tw.is_valid():
+		_land_tw.kill()
+	_land_i = i
 	var from := plan.sculpt.duplicate()
+	var s0 := jar.shape
 	plan.land_preset(i)
 	var to := plan.sculpt.duplicate()
 	plan.save(StartFlow.save_dir())
-	_say(LAND_WORDS[clampi(i, 0, 2)])
+	_say(LAND_WORDS[i])
+	_mark_chip(i)
 	if instant:
+		jar.shape = 1.0
 		jar.mark_dirty()
-		_hold_then("water")
+		_land_done()
 		return
 	step = "shaping"
-	GameAudio.fx("soil_pour", "Room", -8.0, null, 1.2)
-	jar.set_pour("soil", Vector3(0, 16.0, 0))
-	var tw := create_tween()
-	tw.tween_method(func(x: float) -> void:
+	_show_next(false)
+	plan.sculpt = from.duplicate()
+	GameAudio.fx("drop_thud", "Room", -6.0, null, 0.5)            # 땅 밑에서 우르릉 (낮게)
+	GameAudio.fx("soil_pour", "Room", -5.0, null, 0.55)           # 흙이 밀려 움직이는 소리
+	GameAudio.buzz()
+	jar.dust(_dust_points(from, to, s0))
+	_land_tw = create_tween()
+	_land_tw.tween_method(func(x: float) -> void:
 		for k in plan.sculpt.size():
 			plan.sculpt[k] = lerpf(from[k], to[k], x)
-		jar.mark_dirty(), 0.0, 1.0, 1.3).set_trans(Tween.TRANS_SINE)
-	tw.tween_callback(func() -> void:
+		jar.shape = lerpf(s0, 1.0, x)
+		jar.shake = 0.1 * sin(PI * clampf(x * 1.15, 0.0, 1.0))
+		jar.mark_dirty(), 0.0, 1.0, LAND_MORPH).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	_land_tw.tween_callback(func() -> void:
 		plan.sculpt = to
-		jar.set_pour("")
+		jar.shape = 1.0
+		jar.shake = 0.0
+		jar.dust(PackedVector3Array())
 		jar.mark_dirty()
-		_hold_then("water"))
+		_land_done())
+
+
+func _land_done() -> void:
+	step = "soil"
+	chips.visible = true
+	_show_next(true)
+
+
+## 고른 땅 단추만 또렷하게
+func _mark_chip(i: int) -> void:
+	for j in chips.get_child_count():
+		(chips.get_child(j) as Control).modulate = Color.WHITE if j == i else Color(1, 1, 1, 0.62)
+
+
+## 흙먼지가 이는 곳: 많이 솟거나 꺼지는 흙 위 (없으면 가운데 둘레)
+func _dust_points(from: PackedFloat32Array, to: PackedFloat32Array, s0: float) -> PackedVector3Array:
+	var cand: Array = []
+	for j in 13:
+		for i in 13:
+			var u := (i - 6) / 7.0
+			var v := (j - 6) / 7.0
+			if u * u + v * v > 0.8:
+				continue
+			var dd := absf(CreationPlan.sample(to, u, v) - CreationPlan.sample(from, u, v)) + (1.0 - s0) * 0.2
+			cand.append([dd, u, v])
+	cand.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+	var out := PackedVector3Array()
+	for c: Array in cand.slice(0, 26):
+		out.append(jar.uv_point(float(c[1]), float(c[2]), 0.25))
+	return out
 
 
 # ───────────────────────── 4. 물 ─────────────────────────
@@ -634,37 +706,114 @@ func _pour_to(w: float, done: Callable) -> void:
 		done.call())
 
 
-# ───────────────────────── 6. 뚜껑 (저절로) ─────────────────────────
-## 뚜껑 안쪽에 물방울 돌기가 하나씩 맺힘 → 뒤집혀 병 위로 → 딸깍 ×3 → 배양
+# ───────────────────────── 6. 뚜껑 (거인의 돌기 셋) ─────────────────────────
+## 뚜껑을 뒤집어 병 위에 들고 안쪽을 보여 줌 (가장자리 작은 돌기는 저절로) → 거인이 콕 (tap_lid) · [알아서] · [다음]
+func place_nubs() -> void:
+	step = "nubs"
+	jar.cork.visible = true
+	jar.cork.rotation = Vector3(LID_TILT, 0, 0)
+	jar.set_nubs(plan.drips)
+	_set_choices(["알아서"])
+	if instant:
+		jar.cork.position = LID_HOLD
+		jar.shot("nubs", 0.0)
+	else:
+		jar.cork.position = LID_HOLD + Vector3(0, 9.0, 0)
+		var tw := create_tween()
+		tw.tween_property(jar.cork, "position", LID_HOLD, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		jar.shot("nubs", 1.1)
+		GameAudio.fx("cork_open", "Room", -6.0)
+	_nub_ui()
+
+
+func _nub_ui() -> void:
+	var n := plan.drips.size()
+	_say(NUB_WORDS[clampi(n, 0, 3)])
+	chips.visible = n < CreationPlan.DRIP_N
+	_show_next(n >= CreationPlan.DRIP_N)
+
+
+## 뚜껑 안쪽 (u, v)를 콕 (화면 탭 · 시험): 빈 곳이면 돌기가 톡 솟음 · 돌기를 다시 누르면 뗌 → 바뀌었으면 true
+func tap_lid(u: float, v: float) -> bool:
+	if step != "nubs":
+		return false
+	var i := plan.drip_near(u, v)
+	if i >= 0:
+		plan.remove_drip(i)
+		jar.unpop_nub(i, not instant)
+		GameAudio.fx("mold_puff", "Room", -10.0, null, 1.5)
+	elif plan.add_drip(u, v):
+		var dv: Array = plan.drips[plan.drips.size() - 1]
+		jar.pop_nub(float(dv[0]), float(dv[1]), not instant)
+		_pop_sound()
+	else:
+		return false
+	plan.save(StartFlow.save_dir())
+	_nub_ui()
+	return true
+
+
+func _pop_sound() -> void:
+	GameAudio.fx("mold_puff", "Room", -6.0, null, 1.9)           # 톡 (코르크 혹이 솟음)
+	if not instant:
+		var tw := create_tween()
+		tw.tween_interval(0.35)
+		tw.tween_callback(func() -> void: GameAudio.fx("drip", "Room", -12.0, null, 1.4))     # 이슬이 맺힘
+
+
+## [알아서]: 모자란 돌기를 채움 (찍은 것은 그대로) — 하나씩 톡톡
+func auto_nubs() -> void:
+	if step != "nubs":
+		return
+	var n0 := plan.drips.size()
+	plan.fill_drips()
+	plan.save(StartFlow.save_dir())
+	chips.visible = false
+	for k in range(n0, plan.drips.size()):
+		var dv: Array = plan.drips[k]
+		if instant:
+			jar.pop_nub(float(dv[0]), float(dv[1]), false)
+			continue
+		var tw := create_tween()
+		tw.tween_interval(0.3 * (k - n0))
+		tw.tween_callback(func() -> void:
+			jar.pop_nub(float(dv[0]), float(dv[1]))
+			_pop_sound())
+	_nub_ui()
+
+
+func _gui_input(e: InputEvent) -> void:
+	if step != "nubs":
+		return
+	var mb := e as InputEventMouseButton
+	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+		var uv: Variant = jar.lid_uv_at(mb.position)
+		if uv != null:
+			tap_lid((uv as Vector2).x, (uv as Vector2).y)
+			accept_event()
+
+
+## [다음]: 뒤집어 든 뚜껑이 돌아 병 위로 → 딸깍 ×3 → 배양
 func close_lid() -> void:
 	step = "closing"
-	plan.auto_drips()
+	chips.visible = false
+	_show_next(false)
 	plan.save(StartFlow.save_dir())
 	jar.cork.visible = true
-	_say("뚜껑 안쪽에 물방울 돌기가 맺혀요.\n그 아래에 호수가 생겨요.")
 	if instant:
 		jar.set_nubs(plan.drips)
 		jar.cork.rotation = Vector3.ZERO
 		_lid_closed()
 		return
+	_say("뚜껑을 닫아요.")
 	jar.shot("lid", 1.0)
-	jar.cork.position = Vector3(0, 21.0, 0)
-	jar.cork.rotation = Vector3(-2.05, 0, 0)            # 뒤집어 들고 안쪽이 카메라를 보게
-	jar.set_nubs([])
-	var steps: Array = [[0.6, func() -> void: pass]]
-	for n in plan.drips.size():
-		var k := n + 1
-		steps.append([0.45, func() -> void:
-			jar.set_nubs(plan.drips.slice(0, k))
-			GameAudio.fx("drip", "Room", -4.0)])
-	steps.append([0.7, func() -> void:
-		_say("뚜껑을 닫아요.")
+	var steps: Array = [[0.3, func() -> void:
 		var tw := create_tween().set_parallel(true)
-		tw.tween_property(jar.cork, "rotation", Vector3.ZERO, 0.6).set_trans(Tween.TRANS_BACK)
-		tw.tween_property(jar.cork, "position", Vector3(0, CreationJar.CORK_C + 0.6, 0), 0.7).set_trans(Tween.TRANS_QUAD)])
+		tw.tween_property(jar.cork, "rotation", Vector3.ZERO, 0.7).set_trans(Tween.TRANS_BACK)
+		tw.tween_property(jar.cork, "position", Vector3(0, CreationJar.CORK_C + 0.6, 0), 0.8).set_trans(Tween.TRANS_QUAD)]]
 	for c in 3:
 		var k := c + 1
-		steps.append([0.8 if c == 0 else 0.35, func() -> void:
+		steps.append([0.9 if c == 0 else 0.35, func() -> void:
 			jar.cork.rotation.y = 0.7 * k
 			jar.cork.position.y = CreationJar.CORK_C + 0.6 - 0.2 * k
 			GameAudio.fx("cork_close", "Room", -8.0 + k * 2.0)
@@ -800,6 +949,7 @@ func _finish_lapse() -> void:
 	jar.place_lakes(1.0)
 	jar.set_mist(0.0)
 	jar.set_streams(false)
+	jar.show_marks(false)
 	jar.shot("top", 0.0 if instant else 1.4)
 	jar.set_night(0.0)
 	jar._set_sun(0.0)
@@ -1216,7 +1366,8 @@ func leave() -> void:
 
 # ───────────────────────── 매 화면 ─────────────────────────
 func _process(dt: float) -> void:
-	if SafeArea.insets(get_viewport()) != _insets or absf(caption.size.y - _cap_h) > 0.5:
+	if SafeArea.insets(get_viewport()) != _insets or absf(caption.size.y - _cap_h) > 0.5 \
+			or absf(caption.get_combined_minimum_size().y - caption.size.y) > 0.5:
 		layout()                            # 자막이 한 줄씩 써지며 커지면 위로 올림
 	_poll_gen()
 	if step == "lapse" and not next_btn.visible:
@@ -1249,7 +1400,10 @@ func jump(s: String) -> void:
 		go("core")
 	while order.find(plan.stage) < target and not leaving:
 		var before: String = plan.stage + "/" + step
-		if step in ["core", "soil", "water", "sow", "release", "fish"]:
+		if step == "soil" or step == "nubs":
+			pick(1 if step == "soil" else 0)
+			next()
+		elif step in ["core", "water", "sow", "release", "fish"]:
 			pick(1 if step != "sow" else 0)
 		else:
 			next()
