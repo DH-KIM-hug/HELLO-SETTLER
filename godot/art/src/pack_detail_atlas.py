@@ -47,7 +47,36 @@ CLOTH = {
     7: ("cloth_knit", 1.0, False, True, 0.6),
     8: ("cloth_straw", 1.0, False, True, 0.6),
     9: ("cloth_wool", 1.0, False, True, 0.6),
+    # (A20 round 2) tiny-folk materials, drawn procedurally here (proc_*): petal veins, leaf veins, woven grass
+    10: ("proc_petal", 1.0, False, True, 1.0),
+    11: ("proc_leaf", 1.0, False, True, 1.0),
+    12: ("proc_weave", 1.0, False, True, 1.0),
 }
+
+
+def procedural(name, n=512):
+    """Periodic greyscale swatches (integer frequencies -> they tile by themselves). 0..1, mean ~0.6."""
+    y, x = np.mgrid[0:n, 0:n] / n
+    rng = np.random.default_rng(len(name) * 7919)
+    nz = np.asarray(Image.fromarray((rng.random((n // 32, n // 32)) * 255).astype(np.uint8)).resize((n, n), Image.BICUBIC), np.float32) / 255.0
+    if name == "proc_petal":       # fine veins running down the petal, gently wavy, a soft sheen across
+        v = np.cos(2 * np.pi * (x * 14 + 0.25 * np.sin(2 * np.pi * y * 2)))
+        a = 0.62 + 0.07 * v + 0.05 * np.cos(2 * np.pi * x * 2) + 0.04 * (nz - 0.5)
+    elif name == "proc_leaf":      # parallel side veins slanting from the midrib, a little mottling
+        ph = (x * 2 + y * 6) % 1.0
+        vein = np.exp(-((ph - 0.5) / 0.05) ** 2)
+        a = 0.64 - 0.13 * vein + 0.06 * (nz - 0.5) + 0.03 * np.cos(2 * np.pi * (x * 16 + y * 3))
+    elif name == "proc_weave":     # basket weave: blocks of over/under grass strands
+        cx, cy = (x * 6) % 1.0, (y * 6) % 1.0
+        blk = ((np.floor(x * 6) + np.floor(y * 6)) % 2).astype(np.float32)
+        along = np.where(blk > 0.5, cy, cx)        # strand runs across this block
+        strand = 0.5 + 0.5 * np.cos(2 * np.pi * along * 3)
+        edge = np.where(blk > 0.5, cx, cy)
+        dip = np.exp(-((edge - 0.0) / 0.08) ** 2) + np.exp(-((edge - 1.0) / 0.08) ** 2)
+        a = 0.5 + 0.18 * strand - 0.2 * dip + 0.04 * (nz - 0.5)
+    else:
+        return None
+    return np.clip(a, 0.0, 1.0).astype(np.float32)
 
 
 def seamless(a, axes="xy"):
@@ -75,7 +104,9 @@ def fallback(name, n=512):
 def cell_img(spec):
     name, contrast, flip, seam, zoom = spec
     p = os.path.join(SRC, name + ".png")
-    if os.path.exists(p):
+    if name.startswith("proc_"):
+        a = procedural(name)
+    elif os.path.exists(p):
         im = Image.open(p).convert("L")
         s = min(im.size)
         c = int(s * zoom)

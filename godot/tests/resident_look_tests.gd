@@ -54,7 +54,30 @@ func test_look_deterministic() -> void:
 		hairs[a["hair"]] = true
 	check(same, "같은 주민 → 같은 부품 (200명)")
 	check(bodies.size() == 3, "체형 3종이 모두 나옴 (호리호리·다부진·둥근): %s" % [bodies.keys()])
-	check(hairs.size() >= 6, "머리 모양 여러 가지: %d종" % hairs.size())
+	check(hairs.size() >= 10, "머리 모양 여러 가지: %d종 %s" % [hairs.size(), hairs.keys()])
+	# (A20 2차) 시대마다 옷·꾸밈이 달라짐 · 얼굴형 4종
+	var by_era := []
+	var shapes := {}
+	for era in 3:
+		var seen := {}
+		var rng2 := RandomNumberGenerator.new()
+		rng2.seed = 99
+		for i in 300:
+			var r := _resident(rng2, i)
+			var lk := ResidentModel.look_of(r)
+			lk["era"] = era
+			var p := ResidentModel.parts_for(lk)
+			shapes[p["face_shape"]] = true
+			var lst: Array = [p["torso"], p["hat"]]
+			lst.append_array(p["acc"])
+			for a: String in lst:
+				seen[a] = int(seen.get(a, 0)) + 1
+		by_era.append(seen)
+	check(int(by_era[0].get("buttons_seed", 0)) == 0 and int(by_era[2].get("buttons_seed", 0)) > 30, "씨앗 단추: 개척기엔 없고 읍내엔 흔함 (%d → %d)" % [by_era[0].get("buttons_seed", 0), by_era[2].get("buttons_seed", 0)])
+	check(int(by_era[0].get("cape_leaf", 0)) > int(by_era[2].get("cape_leaf", 0)), "잎 망토: 개척기에 더 흔함")
+	check(int(by_era[2].get("torso_petal", 0)) > int(by_era[0].get("torso_petal", 0)) and int(by_era[0].get("torso_petal", 0)) > 0, "꽃잎 치마: 시대가 갈수록 많아짐")
+	check(int(by_era[1].get("hat_acorn", 0)) > 0 and int(by_era[1].get("acc_scarf", 0)) > 0, "도토리 모자 · 목수건도 나옴")
+	check(shapes.size() == 4, "얼굴형 4종이 모두 나옴")
 
 
 func test_look_ignores_stats() -> void:
@@ -93,6 +116,9 @@ func test_parts_exist() -> void:
 	for row: Array in ResidentModel.HAIR_BY_LOOK:
 		want.append_array(row)
 	want.append_array(["hair_curly", "hair_curly_long", "hair_curly_under", "hair_curly_long_under", "hair_wave", "hair_wave_long"])
+	# (A20 2차) 머리 모양 더 · 소인의 옷 · 꾸밈
+	want.append_array(["hair_crop", "hair_bob", "hair_pony", "hair_twinbuns", "torso_petal", "cape_leaf", "acc_scarf", "buttons_seed", "hat_acorn"])
+	want.append_array(ResidentModel.FLOWERS)
 	var want_props: Array = ["cane"]
 	for j: String in ResidentModel.JOB_LOOK:
 		var jl := ResidentModel.job_look(j)
