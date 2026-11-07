@@ -48,12 +48,12 @@
 | 22 | 거인의 지갑·상점·설계도·이주민 ✅ | Economy | MVP | Designed | design/gdd/wallet-shop.md | 21, 16 |
 | 23 | 소원 들어주기·계시 🔄 | Gameplay | MVP | Designed | design/gdd/wishes-revelations.md | 20, 19, 22, 18 |
 | 24 | 카메라·확대·병 안 ↔ 방 ✅ | UI | MVP | Not Started | — (docs/GIANT_ROOM.md) | 2 |
-| 25 | 사건 연출 ✅ | Narrative | MVP | Not Started | — (EVENTS_STAGING) | 7, 24 |
-| 26 | 처음 겪는 사건 안내·거인의 수첩·튜토리얼 ✅ | Meta | MVP | Not Started | — (OPENING 3.1b) | 7, 19 |
-| 27 | 연대기·돌아온 편지 ✅ (도감은 VS — #44) | Narrative | MVP | Not Started | — | 7, 1 |
+| 25 | 사건 연출 ✅ | Narrative | MVP | Designed | design/gdd/staging.md | 7, 24 |
+| 26 | 처음 겪는 사건 안내·거인의 수첩·튜토리얼 ✅ | Meta | MVP | Designed | design/gdd/notebook.md | 7, 19 |
+| 27 | 연대기·돌아온 편지 ✅ (도감은 VS — #44) | Narrative | MVP | Designed | design/gdd/chronicle-letters.md | 7, 1 |
 | 28 | 주민 모델·초상화·옷 🔄 (4등신 다시) | UI | MVP | Not Started | — (art-bible 5장) | 8, 12 |
-| 29 | HUD·시트·설정·접근성 🔄 | UI | MVP | Not Started | — (art-bible 7장, docs/UI.md) | 전 계통 |
-| 30 | 알림·세션 끝 훅 🔄 | Meta | MVP | Not Started | — | 7, 1 |
+| 29 | HUD·시트·설정·접근성 🔄 | UI | MVP | Designed | design/gdd/hud.md | 전 계통 |
+| 30 | 알림·세션 끝 훅 🔄 | Meta | MVP | Designed | design/gdd/notifications.md | 7, 1 |
 | 31 | 애벌레 사냥 — 애벌레·고치·나비 순환·꿀까지 MVP로 (사용자 2026-11-08) | Gameplay | MVP | Designed | design/gdd/production-chain.md R7 | 15, 33 |
 | 32 | 위기 — 곰팡이·떠돌이 물방울 ✅ | Gameplay | Vertical Slice | Not Started | — (docs/WORLD_EVENTS.md) | 3, 8, 19, 7 |
 | 33 | 소인 크기 생물 (사슴·토끼 대신) ⬜ | Gameplay | Vertical Slice | Not Started | — (GD 3.0) | 6, 12 |
@@ -66,7 +66,7 @@
 | 40 | 성능·계측 🔄 | Meta | Vertical Slice | Not Started | — | 1, 39 |
 | 41 | 출시 트랙 (스토어·개인정보·등급·AAB·Play 비공개 테스트) ⬜ | Meta | Vertical Slice | Not Started | — | 40 |
 | 45 | 안개 보이기 (덮인 상태·칠하지 않은 스케치·경계의 윤곽과 소리) — CD-SYSTEMS로 36에서 나눔 🔄 | Core | MVP | Not Started | — (art-bible 6.6) | 2, 39 |
-| 46 | 마을의 삶 MVP 최소판 (대화·생각 말풍선·하루의 흐름·저녁 모닥불) — CD-SYSTEMS로 35에서 나눔 ✅ | Narrative | MVP | Not Started | — | 8, 10, 11, 12, 7 |
+| 46 | 마을의 삶 MVP 최소판 (대화·생각 말풍선·하루의 흐름·저녁 모닥불) — CD-SYSTEMS로 35에서 나눔 ✅ | Narrative | MVP | Designed | design/gdd/village-life-min.md | 8, 10, 11, 12, 7 |
 | 44 | 도감 (발견 기록) ✅ | Narrative | Vertical Slice | Not Started | — (docs/DISCOVERIES.md) | 7 |
 | 42 | 선반·여러 병 ✅ | Progression | Alpha | Not Started | — | 5, 2, 1 |
 | 43 | 친구의 선반 (온라인 이웃) ⬜ | Meta | Full Vision | Not Started | — | 42, 5 |
