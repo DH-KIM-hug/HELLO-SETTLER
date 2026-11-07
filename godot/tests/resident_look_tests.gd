@@ -244,7 +244,8 @@ func test_lod_budget() -> void:
 	var ca := close_sum / maxi(n, 1)
 	var fa := far_sum / maxi(n, 1)
 	print("    삼각형: 가까이 평균 %d 최대 %d · 멀리 평균 %d 최대 %d (%d명)" % [ca, close_max, fa, far_max, n])
-	check(ca >= 2000 and ca <= 3800 and close_max <= 4800, "가까이 LOD 예산 (평균 2000~3800, 최대 4800): 평균 %d 최대 %d" % [ca, close_max])
+	# v5: 머리카락 실루엣(둥근 곱슬·말린 가장자리·가르마)·손가락·앞치마 리본에 삼각형을 더 씀 — 가까이 LOD는 확대·초상화에서만 보이므로 평균 ~4500 · 최대 6000까지
+	check(ca >= 2000 and ca <= 4500 and close_max <= 6000, "가까이 LOD 예산 (평균 2000~4500, 최대 6000): 평균 %d 최대 %d" % [ca, close_max])
 	check(fa >= 400 and fa <= 700 and far_max <= 760, "멀리 LOD 예산 (평균 ~600, 최대 760): 평균 %d 최대 %d" % [fa, far_max])
 	var m := ResidentModel.new()
 	m.setup_from(Resident.new())
