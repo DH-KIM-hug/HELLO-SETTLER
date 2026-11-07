@@ -1,6 +1,10 @@
 ## 가계도용 작은 얼굴 — 3D 초상 대신 2D로 (피부 톤·머리색·머리결·대머리·흰머리·점박이, 보이는 것만). 잠든 사람은 회색.
+## 그림 초상 층(PortraitComposer)이 다 있으면 그 그림의 머리 부분을 보이고, 없으면 아래 간단한 그림.
 class_name FaceIcon
 extends Control
+
+const HEAD_VIEW := Rect2(0.13, 0.1, 0.74, 0.74)    # 그림 초상에서 머리·어깨 위
+var paper: PortraitView
 
 var skin := Color("e6b88b")
 var hair := Color("5b3b29")
@@ -19,6 +23,16 @@ func _init() -> void:
 
 func set_resident(r: Resident) -> void:
 	empty = r == null
+	var ls: Array = PortraitComposer.layers_for(r) if r != null else []
+	if not ls.is_empty():
+		if paper == null:
+			paper = PortraitView.new()
+			paper.view = HEAD_VIEW
+			paper.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+			add_child(paper)
+		paper.set_layers(ls)
+	if paper != null:
+		paper.visible = not ls.is_empty()
 	if r != null and r.genes.size() >= Genetics.GENE_BYTES:
 		var g := r.genes
 		var cues := Bloodlines.looks(r.blood)
@@ -40,6 +54,9 @@ func _draw() -> void:
 	var c := s * 0.5 + Vector2(0, 1)
 	var rad := minf(s.x, s.y) * 0.4
 	var line := UiTheme.INK
+	if paper != null and paper.visible:
+		draw_rect(Rect2(Vector2.ZERO, s), UiTheme.PORTRAIT_BG)
+		return
 	if empty:
 		draw_arc(c, rad, 0, TAU, 20, UiTheme.PAPER_LINE, 1.0)
 		return

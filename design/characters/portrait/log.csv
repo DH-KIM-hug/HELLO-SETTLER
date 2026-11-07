@@ -1,0 +1,9 @@
+file,model,size,date,refs,layers,note
+sheets/hair_a_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,tools/template_3x2.png (guide) + jobs_a.png + expressions_a.png (style),"hair_short,hair_long,hair_braids,hair_bun,hair_curly,hair_curly_long","grey hair on the green guide busts; prompt = tools/prompts.py hair_a; registered at identity"
+sheets/hair_b_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"hair_wave,hair_wave_long,hair_receding,hair_bald_ring,hair_child,hair_baby",
+sheets/face_a_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"face_normal,face_happy,face_sad,face_sick,face_sleep,face_surprised","blush softened to 55% alpha in split.py; cell 1 stray jaw line removed by the guide-outline filter"
+sheets/face_b_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"face_talking,beard_full,beard_long,freckles,beard_jaw","cell 2 (wrinkles) unusable: drew closed eyes -> redone in face_c"
+sheets/face_c_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"age_wrinkles (cell 2)","bushy brows / moustache cells not used (would hide the expression brows)"
+sheets/cloth_a_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"cloth_tunic,cloth_dress,cloth_robe,cloth_hood,over_shawl,over_sash",
+sheets/cloth_b_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"over_apron,over_strap,cloth_child,baby_blanket,cloth_tunic_tie,cloth_vest",
+sheets/hats_a.png,codex-cli 0.163.0 (built-in image generation),1536x1024,2026-11-07,same,"hat_straw,hat_scarf,hat_cap,hat_baker,hat_fisher,hat_scarf_top",
