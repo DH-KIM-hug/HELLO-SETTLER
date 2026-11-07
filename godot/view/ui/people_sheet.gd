@@ -28,12 +28,6 @@ const JOB_ICON := {
 	"빵집": "빵", "우물": "물", "소금밭": "소금", "버섯꾼": "버섯", "약초꾼": "약초", "치료소": "약초", "어부": "생선", "사냥꾼": "고기",
 }
 
-## [MERGE] 건물 이름 — 다른 작업이 Balance.B_LABEL / Building.label(type)을 더한다. 있으면 그것을 쓰고, 없으면 이 표 (합칠 때 이 표를 지우고 바꿔 끼울 것)
-const PLACE_FALLBACK := {
-	"나무꾼": "벌목장", "산림관": "묘목원", "채석장": "채석장", "제재소": "제재소", "농장": "밀밭", "우물": "우물",
-	"방앗간": "방앗간", "빵집": "빵집", "소금밭": "소금밭", "버섯꾼": "버섯 말림터", "약초꾼": "약초원", "치료소": "치료소",
-	"교회": "예배당", "나루터": "나루터", "어부": "어장", "사냥꾼": "사냥막", "방직소": "베틀집",
-}
 ## ResidentText.JOB에 없는 일터의 직업 이름 (없으면 "○○ 일꾼")
 const JOB_FALLBACK := {"버섯꾼": "버섯꾼", "약초꾼": "약초꾼", "치료소": "약초사", "교회": "사제", "나루터": "뱃사공", "어부": "어부", "사냥꾼": "사냥꾼", "방직소": "베 짜는 이"}
 
@@ -120,12 +114,9 @@ static func idle(r: Resident) -> bool:
 	return not r.is_child() and r.job < 0
 
 
-## 건물 종류의 이름 ("나무꾼" → "벌목장") — [MERGE] Balance.B_LABEL이 생기면 그것 먼저
+## 건물 종류의 이름 ("나무꾼" → "벌목장") — 건물 이름표 하나 (Balance.label)
 static func place_label(type: String) -> String:
-	var bl: Variant = (Balance as Script).get_script_constant_map().get("B_LABEL")
-	if bl is Dictionary and (bl as Dictionary).has(type):
-		return String(bl[type])
-	return String(PLACE_FALLBACK.get(type, type))
+	return Balance.label(type)
 
 
 static func job_name(type: String) -> String:
