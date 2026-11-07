@@ -202,7 +202,7 @@ func _add_world(l: Dictionary) -> void:
 		var b0 := int(befores[q.sid]["pop"])
 		var top := ""
 		for e: String in ql["events"]:
-			if not e in ["다들 거인님을 기다리며 하루하루 잘 지냈어요.", "아이들이 들판에서 뛰어놀았어요.", "밤마다 모닥불 앞에 모여 노래했어요.", "다들 맡은 일을 부지런히 했어요."]:
+			if not e in [filler_wait(q), "아이들이 들판에서 뛰어놀았어요.", "밤마다 모닥불 앞에 모여 노래했어요.", "다들 맡은 일을 부지런히 했어요."]:
 				top = e
 				break
 		if top == "":
@@ -213,7 +213,7 @@ func _add_world(l: Dictionary) -> void:
 		if q.open_letters("split").size() > 0:
 			(l["waiting"] as Array).append("%s에서도 새 땅으로 떠나고 싶다는 편지가 와 있어요." % nm)
 		if q.revelation_pending():
-			(l["waiting"] as Array).append("%s에서도 거인님의 계시를 기다려요." % nm)
+			(l["waiting"] as Array).append(WatcherName.fill(q, "%s에서도 {w}의 계시를 기다려요." % nm))
 	# 첫 무리 소식은 4줄까지, 다른 무리 소식을 그 아래에 (모두 6줄까지)
 	l["events"] = events.slice(0, maxi(3, 6 - extra.size())) + extra.slice(0, 3)
 	l["world_pop0"] = p0
@@ -246,6 +246,11 @@ static func snapshot(vv: Village) -> Dictionary:
 
 static func _ga(w: String) -> String:
 	return Village.josa(w, "이", "가")
+
+
+## 편지의 평범한 날 첫 줄 — 깨달은 마을은 부르는 말로 기다림 (N2 · STORY 4), 깨닫기 전엔 부름 없이
+static func filler_wait(vv: Village) -> String:
+	return WatcherName.fill(vv, "다들 {w:을/를} 기다리며 하루하루 잘 지냈어요.") if vv.aware else "다들 하루하루 잘 지냈어요."
 
 
 ## 촌장이 쓰는 편지 — {chief, away, pop0, pop1, events[3~5], born[id], lost[{id, name, why}], waiting[줄], festival, long,
@@ -321,7 +326,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 		if tx.contains("마침내 사라졌다"):
 			events.append(tx.split(".")[0].replace("마침내 사라졌다", "마침내 사라졌어요") + ".")
 	# 큰 일이 3줄이 안 되면 평범한 날의 줄로 채움 (SAVE.md 4장: 3~5줄)
-	var fillers: Array = ["다들 거인님을 기다리며 하루하루 잘 지냈어요."]
+	var fillers: Array = [filler_wait(vv)]
 	if vv.people.any(func(q: Resident) -> bool: return q.is_child()):
 		fillers.append("아이들이 들판에서 뛰어놀았어요.")
 	fillers.append("밤마다 모닥불 앞에 모여 노래했어요.")
@@ -343,11 +348,11 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 		altar_line = "제단에 %s%s 있어요 (장터 값 약 %s 지폐)." % ["·".join(parts), Village.josa(parts[parts.size() - 1], "이", "가"), _num(value)]
 	var wishes := vv.open_letters("wish").size()
 	if wishes > 0:
-		waiting.append("소원 편지 %d통이 거인님을 기다려요." % wishes)
+		waiting.append(WatcherName.fill(vv, "소원 편지 %d통이 {w:을/를} 기다려요." % wishes))
 	if vv.open_letters("split").size() > 0:
 		waiting.append("새 땅으로 떠나고 싶다는 편지가 와 있어요.")
 	if vv.revelation_pending():           # A5: 계시는 거인만 내린다 — 비운 동안 시대 점수가 찼으면 기다림 (GD 14)
-		waiting.append("노인들이 하늘을 올려다보며 거인님의 계시를 기다려요.")
+		waiting.append(WatcherName.fill(vv, "노인들이 하늘을 올려다보며 {w}의 계시를 기다려요."))
 	if vv.mold != null and vv.mold.phase == "omen":
 		waiting.append("유리에 김이 서리기 시작했어요. 빵에 푸른 털이 났어요.")
 	if vv.smalls != null:                 # [작은 위기] 조짐에서 기다리는 것 (물방울·날벌레·먼지)
@@ -355,7 +360,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 	var c := vv.chief()
 	return {"chief": c.name if c != null else "", "chief_id": c.id if c != null else -1, "away": away_s,
 		"pop0": int(b["pop"]), "pop1": vv.people.size(), "events": events.slice(0, 5), "born": born, "lost": lost,
-		"waiting": waiting, "festival": away_s > FESTIVAL_AWAY, "long": away_s >= LONG_AWAY,
+		"waiting": waiting, "festival": vv.aware and away_s > FESTIVAL_AWAY, "long": vv.aware and away_s >= LONG_AWAY,     # N2: 깨닫기 전엔 기다림·옛이야기 줄 없음
 		"altar_line": altar_line, "offerings": alt, "offer_value": value}
 
 
@@ -411,10 +416,12 @@ static func on_return(vv: Village, away_s: float) -> Array:
 	var crowd: Array = []
 	if away_s <= QUICK:
 		return crowd
+	if not vv.aware:                     # N2: 깨닫기 전에는 지켜보는 이를 모른다 — 귀환 축제·축복·반기는 말 없음 (STORY 4 · CLAUDE.md 1)
+		return crowd
 	if away_s >= LONG_AWAY:
 		for p in vv.people:
 			p.belief *= COOL
-		vv.log_line("거인님이 오래 보이지 않자, 거인 이야기를 옛날이야기로 여기는 아이들이 생겼다.")
+		vv.log_line("{w:이/가} 오래 보이지 않자, {w} 이야기를 옛날이야기로 여기는 아이들이 생겼다.")
 		var elder: Resident = null
 		var kid: Resident = null
 		for p in vv.people:
@@ -423,16 +430,16 @@ static func on_return(vv: Village, away_s: float) -> Array:
 			if p.is_child() and not p.is_baby() and kid == null:
 				kid = p
 		if elder != null:
-			vv.speak(elder, "옛날 옛적, 하늘의 거인님이 우리 조상을 이 땅에 내려놓으셨단다…", 10)
+			vv.speak(elder, "옛날 옛적, {w:이/가} 우리 조상을 이 땅에 내려놓으셨단다…", 10)
 			if kid != null:
-				vv.speak(kid, "정말요? 거인님이 진짜 있어요?", 8)
+				vv.speak(kid, "정말요? {w:이/가} 진짜 계세요?", 8)
 	if away_s > FESTIVAL_AWAY:
 		vv.festival_t = vv.t
 		var days := minf(5.0, away_s / 86400.0)
 		vv.bless_all(0.06 + 0.02 * days)           # 비운 시간에 비례해 모두 크게 (RESIDENT_AI 2.2), 일주일 넘으면 식은 만큼 덜
 		if vv.altar.size() < 2:
 			vv.evening_offering()                  # 제단 가득 — 기쁜 마음에 남는 것을 더 바친다
-		var lines := ["거인님이 돌아오셨다!", "거인님!", "돌아오셨어요!", "하늘을 봐!"]
+		var lines := ["{w:이/가} 돌아오셨다!", "{w}!", "돌아오셨어요!", "하늘을 봐!"]
 		var i := 0
 		for p in vv.people:
 			if p.is_baby() or p.sick_left > 0.0:
@@ -441,7 +448,7 @@ static func on_return(vv: Village, away_s: float) -> Array:
 			p.sleeping = false
 			p.action = "festival"
 			p.last_action = "festival"
-			p.doing = "거인님의 귀환을 반기는 중"
+			p.doing = WatcherName.fill(vv, "{w}의 귀환을 반기는 중")
 			var a := float(i) * 2.399
 			var spot := vv.fire + Vector2(cos(a), sin(a)) * (1.6 + 0.35 * sqrt(float(i)))
 			p.steps.append(ResidentAI.walk(spot.x, spot.y))
@@ -450,12 +457,12 @@ static func on_return(vv: Village, away_s: float) -> Array:
 				vv.speak(p, lines[i], 8)
 			crowd.append(p)
 			i += 1
-		vv.log_line("거인님이 돌아오셨다. 사람들은 광장에 모여 하늘을 올려다보며 환호했다.")
+		vv.log_line("{w:이/가} 돌아오셨다. 사람들은 광장에 모여 하늘을 올려다보며 환호했다.")
 	else:
 		var n := 0
 		for p in vv.people:
 			if not p.sleeping and p.age >= 2.5 and n < 3:
-				vv.speak(p, ["거인님, 다시 오셨네요!", "거인님이다!", "어서 오세요, 거인님."][n], 6)
+				vv.speak(p, ["{w}, 다시 오셨네요!", "{w:이다/다}!", "어서 오세요, {w}."][n], 6)
 				crowd.append(p)
 				n += 1
 	vv._update_belief(0.0)

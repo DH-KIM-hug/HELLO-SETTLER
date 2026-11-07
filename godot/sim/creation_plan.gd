@@ -357,8 +357,8 @@ func add_seed(kind: String, u: float, v: float) -> void:
 static func myth_of(cr: Dictionary) -> Array:
 	var core := int(cr.get("core", 1))
 	var lines: Array = []
-	lines.append(["태초에 거인이 어둠 속에 작고 은은한 별 하나를 심었다.", "태초에 거인이 어둠 속에 붉은 별 하나를 심었다.",
-		"태초에 거인이 어둠 속에 뜨겁게 타는 별 하나를 심었다."][clampi(core, 0, 2)])
+	lines.append(["태초에 {c:이/가} 어둠 속에 작고 은은한 별 하나를 심었다.", "태초에 {c:이/가} 어둠 속에 붉은 별 하나를 심었다.",
+		"태초에 {c:이/가} 어둠 속에 뜨겁게 타는 별 하나를 심었다."][clampi(core, 0, 2)])
 	var g := sculpt_of(cr)
 	var hi := 0.0
 	var lo := 0.0
@@ -366,27 +366,27 @@ static func myth_of(cr: Dictionary) -> Array:
 		hi = maxf(hi, x)
 		lo = minf(lo, x)
 	if hi > 0.5 and lo < -0.5:
-		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 높은 산과 깊은 골짜기를 빚었다.")
+		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 높은 산과 깊은 골짜기를 빚었다.")
 	elif hi > 0.5:
-		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 산을 빚었다.")
+		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 산을 빚었다.")
 	elif hi > 0.3:
-		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 나지막한 언덕을 빚었다.")
+		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 나지막한 언덕을 빚었다.")
 	else:
-		lines.append("거인은 별을 바위로 감싸고, 그 위에 흙을 덮어 너른 땅을 폈다.")
+		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 너른 땅을 폈다.")
 	var w := float(cr.get("water", 0.5))
-	lines.append("거인이 물을 조금 부으니 작은 호수 몇이 남았다." if w < 0.35 else ("거인이 물을 넉넉히 부으니 호수가 가득했다." if w > 0.75 else "거인이 물을 부으니 호수가 생겼다."))
-	lines.append("거인이 하늘을 닫자 하늘에서 첫 물방울이 떨어졌고, 긴 세월이 흘렀다.")
+	lines.append("{c:이/가} 물을 조금 부으니 작은 호수 몇이 남았다." if w < 0.35 else ("{c:이/가} 물을 넉넉히 부으니 호수가 가득했다." if w > 0.75 else "{c:이/가} 물을 부으니 호수가 생겼다."))
+	lines.append("{c:이/가} 하늘을 닫자 하늘에서 첫 물방울이 떨어졌고, 긴 세월이 흘렀다.")
 	var sd: Dictionary = cr.get("seeds", {})
 	var nt: int = (sd.get("tree", []) as Array).size()
 	var ng: int = (sd.get("grass", []) as Array).size()
 	if ng > nt * 2:
-		lines.append("거인이 생명을 뿌리니 풀밭이 너르게 펼쳐졌다.")
+		lines.append("{c:이/가} 생명을 뿌리니 풀밭이 너르게 펼쳐졌다.")
 	elif nt > ng * 3:
-		lines.append("거인이 생명을 뿌리니 거대한 꽃숲이 우거졌다.")
+		lines.append("{c:이/가} 생명을 뿌리니 거대한 꽃숲이 우거졌다.")
 	else:
-		lines.append("거인이 생명을 뿌리니 이끼와 풀 사이로 꽃숲이 자랐다.")
-	lines.append("사람보다 먼저, 거인은 숲에 짐승을 물에 물고기를 풀어 놓으셨다.")
-	lines.append("그리고 어느 새벽, 거인이 우리의 조상 열 명을 이 땅에 내려놓으셨다.")
+		lines.append("{c:이/가} 생명을 뿌리니 이끼와 풀 사이로 꽃숲이 자랐다.")
+	lines.append("사람보다 먼저, {c:은/는} 숲에 짐승을 물에 물고기를 풀어 놓으셨다.")
+	lines.append("그리고 어느 새벽, {c:이/가} 우리의 조상 열 명을 이 땅에 내려놓으셨다.")
 	return lines
 
 

@@ -353,7 +353,21 @@ func giant_payload() -> Dictionary:
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
 		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
-		"climates": giant.get("climates", []).duplicate(), "firsts": Firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system()}
+		"climates": giant.get("climates", []).duplicate(), "firsts": Firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system(),
+		"star_since_unix": star_since()}
+
+
+## 별생활을 시작한 현실 시각 (거인 묶음 — 처음 물으면 지금으로 정함)
+func star_since() -> float:
+	if not giant.has("star_since_unix"):
+		giant["star_since_unix"] = Time.get_unix_time_from_system()
+	return float(giant["star_since_unix"])
+
+
+## '별생활 N일째' (STORY 4 · N2) — 시작한 날이 1일째 (현실 날짜 기준)
+func star_days(now_unix := -1.0) -> int:
+	var now := now_unix if now_unix >= 0.0 else Time.get_unix_time_from_system()
+	return maxi(1, int(floor((now - star_since()) / 86400.0)) + 1)
 
 
 ## 병의 시대 (타이틀 병 안의 작은 마을 모습 — B1. 넓은 세상은 무리 중 가장 앞선 시대)
@@ -643,7 +657,8 @@ func load_all(with_jar := true) -> bool:
 	Market.set_draws(gp.get("draws", {}) as Dictionary)                # 이주민 뽑기 — 그날 횟수 · seed (옛 저장엔 없음 → 0번)
 	Firsts.from_dict(gp.get("firsts", null))                         # 처음 겪는 일의 안내 창 · 열린 손 도구 (EVENTS_STAGING 6b·6c — 옛 저장엔 없음 → 모두 본 것·모두 열림)
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
-		"upgrades_off": gp.get("upgrades_off", []), "built": gp.get("built", []), "climates": gp.get("climates", [])}
+		"upgrades_off": gp.get("upgrades_off", []), "built": gp.get("built", []), "climates": gp.get("climates", []),
+		"star_since_unix": float(gp.get("star_since_unix", gp.get("last_save_unix", Time.get_unix_time_from_system())))}     # 옛 저장(v2 아래): 마지막 저장 시각부터
 	if gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty():
 		giant["pending_jar"] = (gp["pending_jar"] as Dictionary).duplicate()
 	var now := Time.get_unix_time_from_system()
@@ -733,6 +748,7 @@ func _load_jar(id: int) -> bool:
 		if not books.is_empty():
 			v.book = books[0]
 	for q: Village in (w.settlements if w != null else [v]):
+		WatcherName.fix_texts(q)         # N2: 옛 저장의 연대기·신화에 남은 '거인님'·'하늘의 분' → 마을이 부르는 말
 		q.watching = true                # 불러온 병은 거인이 보는 중 (비운 시간은 catch_up이 '거인 없음'으로 따로 흘린다)
 	var c := JarClock.from_dict(v, p.get("clock", {}))
 	var old_preview: Variant = (shelf_info.get(id, {}) as Dictionary).get("preview")
@@ -761,6 +777,8 @@ static func migrate(kind: String, payload: Variant, from_version: int) -> Varian
 				p = _v0_to_v1(kind, p)
 			1:
 				p = _v1_to_v2(kind, p)
+			2:
+				p = _v2_to_v3(kind, p)
 		ver += 1
 	return p
 
@@ -803,6 +821,13 @@ static func _v1_to_v2(kind: String, p: Variant) -> Variant:
 	for k in h.size():
 		h[k] = WorldPack.snap(h[k])
 	(water as Dictionary)["h"] = h
+	return p
+
+
+## v2 → v3 (N2, 2026-11-08): 마을의 부르는 말(Village.watcher)과 거인 묶음의 별생활 시작 시각(star_since_unix)이 생김.
+## 모양은 그대로 — 빈 칸은 불러올 때 채운다 (Village.from_dict: 깨달은 마을은 마을 씨앗으로 · _load_jar: 옛 연대기·신화의 '거인' 말을 고침 ·
+## load_all: 시작 시각이 없으면 마지막 저장 시각)
+static func _v2_to_v3(_kind: String, p: Variant) -> Variant:
 	return p
 
 

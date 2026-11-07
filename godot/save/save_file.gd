@@ -7,7 +7,7 @@ class_name SaveFile
 extends RefCounted
 
 const MAGIC := "NZJS"
-const FORMAT := 2                      # 지금 형식 — 바뀌면 SaveManager.migrate에 옮기는 함수를 더한다 (옛 저장을 버리지 않는다)
+const FORMAT := 3                      # (v3 N2: 마을의 부르는 말 watcher · 별생활 시작 시각) 지금 형식 — 바뀌면 SaveManager.migrate에 옮기는 함수를 더한다 (옛 저장을 버리지 않는다)
                                        # v2 (A16): 넓은 세상의 물 사전을 WorldPack으로 누름 ("$pack") · 땅 높이 1/65536 눈금
 
 

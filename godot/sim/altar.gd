@@ -62,7 +62,7 @@ static func expand(v: Village) -> bool:
 	var c := v.chief()
 	var nm := level_name(v)
 	if v.aware:
-		v.log_line("거인님이 제단을 넓혀 주셨다. 사람들은 돌을 날라 %s%s 다시 쌓았다." % [nm, Village.josa(nm, "을", "를")])
+		v.log_line("{w:이/가} 제단을 넓혀 주셨다. 사람들은 돌을 날라 %s%s 다시 쌓았다." % [nm, Village.josa(nm, "을", "를")])
 	if c != null:
 		v.speak(c, "다 함께 돌을 나르자! 제단을 더 크게 쌓는 거야.", 8)
 	Awakening.gather_ring(v, Awakening.EVENING_RING, "제단을 다시 쌓는 중", false)

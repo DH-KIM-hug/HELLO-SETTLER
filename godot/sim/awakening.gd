@@ -30,7 +30,7 @@ const EVENING_RING := 300.0          # 저녁 기도 — 제단 둘레에 모여
 const LINES_CHILD := ["하늘에 누가 있어!", "봤어? 하늘이 움직였어!", "하늘에 누가 있어! 진짜야!"]
 const LINES_ELDER := ["하늘이… 우리를 보고 있구나", "저 위에 누군가 계신 게야"]
 const LINES_ADULT := ["그냥 바람이야", "하늘이 원래 그렇지 뭐"]
-const LINE_CHIEF := "하늘의 분께 드릴 자리를 만들자."
+const LINE_CHIEF := "{w}께 드릴 자리를 만들자."     # {w} = 이 마을이 부르는 말 (WatcherName — 깨달음 때 정함)
 const LINE_AWAKEN := "그날 사람들은 하늘 너머에 누군가 있다는 것을 알았다."
 
 
@@ -128,6 +128,7 @@ static func awaken(v: Village) -> void:
 	v.awaken_at = -1.0
 	v.event_serial += 1
 	v.log_line(LINE_AWAKEN)
+	WatcherName.on_awaken(v)           # N2: 부르는 말을 정함 — "그날부터 사람들은 그를 ○○이라 불렀다."
 	for r in v.people:
 		r.belief = maxf(r.belief, BELIEF_AWAKEN if not r.is_baby() else BELIEF_AWAKEN * 0.6)
 		if not r.sleeping and not r.is_baby() and r.sick_left <= 0.0:
@@ -172,12 +173,12 @@ static func altar_building(v: Village) -> Building:
 static func on_altar_built(v: Village, b: Building) -> void:
 	v.altar_built = true
 	v.altar_pos = Vector2(b.x, b.y)
-	v.log_line("모닥불 곁에 돌 제단이 섰다. 사람들은 제단을 둘러싸고 처음으로 하늘의 분께 기도를 드렸다.")
+	v.log_line("모닥불 곁에 돌 제단이 섰다. 사람들은 제단을 둘러싸고 처음으로 {w}께 기도를 드렸다.")
 	gather_ring(v, FIRST_PRAYER, "첫 기도를 드리는 중")
 	v.staged_until = v.t + FIRST_PRAYER * 2.0      # v5: 첫 기도 장면까지는 예전 걸음 (Village.staged)
 	var c := v.chief()
 	if c != null and not c.sleeping:
-		v.speak(c, "하늘의 분이시여, 우리를 지켜 주소서", 8)
+		v.speak(c, "{w:이시여/시여}, 우리를 지켜 주소서", 8)
 	first_offering(v)
 	v._next_wish_t = minf(v._next_wish_t, v.t + WISH_AFTER_ALTAR) if v._next_wish_t > v.t else v.t + WISH_AFTER_ALTAR
 

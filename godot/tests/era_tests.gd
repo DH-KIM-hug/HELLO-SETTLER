@@ -141,7 +141,7 @@ func test_awakening_and_altar() -> void:
 	check(v.faith > 0.0, "믿음이 처음 생김 (%.0f)" % v.faith)
 	var site := Awakening.altar_site(v)
 	check(site != null and site.wished and site.x == v.altar_pos.x, "촌장이 모닥불 곁에 제단 터를 잡음 (맨 앞)")
-	check(has_line(v, Awakening.LINE_CHIEF), "촌장: \"%s\"" % Awakening.LINE_CHIEF)
+	check(has_line(v, WatcherName.fill(v, Awakening.LINE_CHIEF)), "촌장: \"%s\"" % WatcherName.fill(v, Awakening.LINE_CHIEF))
 	check(v.altar_pos.distance_to(v.fire) >= 2.9 and v.altar_spot_ok(v.altar_pos), "제단 자리는 모닥불에서 3칸, 건물·물과 겹치지 않음")
 	var t0 := v.t
 	while not v.altar_built and v.t - t0 < 3.0 * Balance.HOUR:
@@ -290,14 +290,14 @@ func test_revelation_flow() -> void:
 	check(v.revelation_pending() and v.era == 0, "점수가 차면 계시를 기다림 (시대는 그대로)")
 	check(String(v.revelation.get("text", "")).contains("하늘이 무언가를 알려 주실 것 같아요"), "노인의 편지: \"%s\"" % v.revelation.get("text", ""))
 	check(has_line(v, "하늘을 올려다보았다"), "연대기: 노인들이 하늘을 올려다봄")
-	var said := v.people.any(func(r: Resident) -> bool: return r.is_elder() and (r.say.contains("하늘") or r.say.contains("거인님이 곧")))
+	var said := v.people.any(func(r: Resident) -> bool: return r.is_elder() and (r.say.contains("하늘") or r.say.contains(WatcherName.fill(v, "{w:이/가} 곧"))))
 	check(said, "노인이 하늘을 보며 말함")
 	var b := through_bytes(v)
 	check(b.revelation_pending() and b.revelation == v.revelation, "저장/불러오기: 기다리는 계시 그대로")
 	var t := v.t
 	check(v.giant_reveal(), "[계시] → 내려짐")
 	check(v.era == 1 and v.era_pts == 0.0 and not v.revelation_pending(), "시대 '마을' (1)")
-	check(has_line(v, "거인이 새 시대를 열었다 — 마을"), "연대기: \"거인이 새 시대를 열었다 — 마을\"")
+	check(has_line(v, WatcherName.fill(v, "{w:이/가} 새 시대를 열었다 — 마을")), "연대기: \"%s\"" % WatcherName.fill(v, "{w:이/가} 새 시대를 열었다 — 마을"))
 	check(v.festival_t == t, "광장 축제 (축제 음악)")
 	var kneel := v.people.filter(func(r: Resident) -> bool: return not r.steps.is_empty() and r.steps[0].get("anim", "") == "pray").size()
 	check(kneel >= 5, "깨어 있는 사람 %d명이 그 자리에서 무릎 꿇고 하늘을 봄" % kneel)
@@ -394,8 +394,9 @@ func test_chronicle_recent_myth() -> void:
 	check(Chronicle.recent([v], 5)[0]["entries"].size() <= 5, "최근: 줄 수 상한 (더 보기)")
 	var m := Chronicle.myth(v)
 	check(m.size() >= 2 and m[0].contains("조상 열 명"), "창세 신화 = 첫 기록 (%d줄)" % m.size())
-	v.myth = ["태초에 거인이 어둠 속에 붉은 별 하나를 심었다."]
-	check(Chronicle.myth(v) == PackedStringArray(["태초에 거인이 어둠 속에 붉은 별 하나를 심었다."]), "창조가 적은 신화가 있으면 그것")
+	v.myth = ["태초에 {c:이/가} 어둠 속에 붉은 별 하나를 심었다."]
+	var mw := WatcherName.of(v) if v.aware else WatcherName.UNKNOWN
+	check(Chronicle.myth(v) == PackedStringArray(["태초에 %s이 어둠 속에 붉은 별 하나를 심었다." % mw]), "창조가 적은 신화가 있으면 그것 (부르는 말로: %s)" % mw)
 	var e := Village.new()
 	check(Chronicle.myth(e).is_empty() and Chronicle.recent([e]).is_empty(), "기록이 없으면 빈 자리 (화면은 부드러운 안내)")
 	Village.start_aware = true

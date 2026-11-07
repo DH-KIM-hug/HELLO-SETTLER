@@ -59,7 +59,7 @@ const SCENES := {
 			{"t": 5.0, "fx": ["finger_place", -5.0], "pose": {"who": "child", "anim": "idle", "face": "happy"}},
 			{"t": 5.5, "fx": ["finger_place", -6.0]},
 			{"t": 6.5, "pose": {"who": "all", "anim": "pray", "face": "", "up": 0.1, "stagger": 0.12}, "fx": ["core_hum", -10.0]},
-			{"t": 8.0, "caption": "사람들은 하늘의 분께 드릴 자리를 만들었다.", "fx": ["chime", -2.0], "glow": "altar"},
+			{"t": 8.0, "caption": "사람들은 {w}께 드릴 자리를 만들었다.", "fx": ["chime", -2.0], "glow": "altar"},
 			{"t": 9.2, "back": 1.2, "vignette": 0.0},
 		]},
 }

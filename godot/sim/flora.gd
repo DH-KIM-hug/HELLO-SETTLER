@@ -358,7 +358,7 @@ func grove(v: Village) -> int:
 		elif doubter == null and r.belief < 0.45:
 			doubter = r
 	if believer != null:
-		v.speak(believer, "거인님이 내려 주신 양식이야!" if trust else "하늘의 것이 솟았다…!", 7)
+		v.speak(believer, "{w:이/가} 내려 주신 양식이야!" if trust else "하늘의 것이 솟았다…!", 7)
 	if doubter != null:
 		v.speak(doubter, "젖은 땅에선 원래 나.", 6)
 	return made
@@ -1131,11 +1131,11 @@ func blow_seeds(v: Village, dir: Vector2) -> int:
 			break
 		if r.sleeping or r.age < 2.5 or r.sick_left > 0.0:
 			continue
-		var third := "거인님의 숨결이다…" if v.aware else "누가 하늘에서 숨을 불었어…"     # 거인을 모르면 (A4b)
+		var third := "{w}의 숨결이다…" if v.aware else "누가 하늘에서 숨을 불었어…"     # 거인을 모르면 (A4b)
 		v.speak(r, Balance.BLOW_LINE if said == 0 else ("꽃씨가 하늘을 덮었어!" if said == 1 else third), 6)
 		said += 1
 	if blown == 1 and n > 0:
-		v.log_line(("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 %s 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.") % ("거인님의 숨결이 불어오자" if v.aware else "어디선가 큰 바람이 불어오자"))
+		v.log_line(("들판이 노랗게 물들었다가 하얗게 바뀌었다. 그리고 %s 하늘 가득 꽃씨가 떠올랐다. 사람들은 \"하늘에 눈이 내린다!\" 하고 외쳤다.") % ("{w}의 숨결이 불어오자" if v.aware else "어디선가 큰 바람이 불어오자"))
 	return n
 
 

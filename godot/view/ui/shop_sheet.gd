@@ -67,7 +67,7 @@ func _build() -> void:
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 4)
 	outer.add_child(head)
-	var title := _label(head, "거인의 상점", "Title")
+	var title := _label(head, "별지기의 상점", "Title")
 	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	var bn := GameIcons.rect("지폐", 22)
 	bn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -75,7 +75,7 @@ func _build() -> void:
 	notes_l = _label(head, "")
 	notes_l.add_theme_font_override("font", UiTheme.font(true))
 	notes_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	var sub := _label(outer, "거인의 방에 굴러다니는 작은 것이 병 안에서는 기적이 돼요. 산 것은 손에 들고, 뚜껑을 열어 떨어뜨려요.", "Small")
+	var sub := _label(outer, "별지기의 방에 굴러다니는 작은 것이 병 안에서는 기적이 돼요. 산 것은 손에 들고, 뚜껑을 열어 떨어뜨려요.", "Small")
 	sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	tab_scroll = ScrollContainer.new()
 	tab_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -426,7 +426,7 @@ func _card(item: String) -> void:
 	nm.add_theme_font_override("font", UiTheme.font(true))
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	var g := _two(col, "거인에게는", String(c["giant"]))
+	var g := _two(col, "별지기에게는", String(c["giant"]))
 	var ins := _two(col, "병 안에서는", String(c["inside"]))
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -446,7 +446,7 @@ func _card(item: String) -> void:
 			b.modulate = Color(1, 1, 1, 0.5)            # 못 사면 값이 흐리게 (누르면 까닭)
 	b.pressed.connect(press.bind(item))
 	col.add_child(b)
-	_cards.append({"name": item, "text": "거인에게는: %s\n병 안에서는: %s" % [c["giant"], c["inside"]], "dim": lock != "" or not bool(can["ok"]), "btn": b,
+	_cards.append({"name": item, "text": "별지기에게는: %s\n병 안에서는: %s" % [c["giant"], c["inside"]], "dim": lock != "" or not bool(can["ok"]), "btn": b,
 		"labels": [g, ins]})
 	if item == Shop.AMPOULE and lock == "":
 		_two(col, "", "탑은 한 병에 둘까지 · 물가는 녹조 주의").modulate = Color(1, 1, 1, 0.85)

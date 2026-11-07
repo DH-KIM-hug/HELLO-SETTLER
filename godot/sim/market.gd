@@ -22,7 +22,7 @@ static var mig_seed := 0              # 거인의 뽑기 흐름 (0 = 처음 뽑�
 
 const LAMP_HOURS := [12, 16, 20, 24]                       # 단계별 등불 시간 (비운 동안 병이 흐르는 최대 시간)
 const LAMP_COST := [1500.0, 5000.0, 12000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1 (BALANCE v5 — 가격 연구 2장)
-const LAMP_NAMES := ["큰 기름병", "더 큰 등잔", "거인의 램프"]
+const LAMP_NAMES := ["큰 기름병", "더 큰 등잔", "별지기의 램프"]
 
 
 static func reset(start_notes := 0.0) -> void:

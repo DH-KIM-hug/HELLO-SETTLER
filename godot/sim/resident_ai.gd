@@ -989,7 +989,7 @@ static func haul_manna_task(v: Village, r: Resident) -> bool:
 	r.steps.append(walk(s.x + 0.6, s.y + 0.7))
 	r.steps.append(act(4.0, "idle", put, false, undo))
 	if v.rng.randf() < 0.15:
-		v.speak(r, "거인님의 낟알이다!" if v.aware else "하늘이 또 주었네", 5)     # 거인을 모르면 '하늘이 주는 것' (A4b)
+		v.speak(r, "{w}의 낟알이다!" if v.aware else "하늘이 또 주었네", 5)     # 거인을 모르면 '하늘이 주는 것' (A4b)
 	return true
 
 

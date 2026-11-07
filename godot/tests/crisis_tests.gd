@@ -286,7 +286,7 @@ func test_tweeze() -> void:
 	var belief0 := v.people[0].belief
 	var r1 := v.tweeze(g.pos() + Vector2(0.3, 0.0))
 	check(bool(r1["picked"]) and String(r1["crushed"]) == "" and v.buildings.size() == b0, "가까이 집으면 깔끔히 집어냄 (부서진 것 없음)")
-	check(v.people[0].belief > belief0 and v.book.back()["text"].contains("거인님"), "깨달은 마을: 믿음↑ · '거인님의 커다란 집게'")
+	check(v.people[0].belief > belief0 and v.book.back()["text"].contains(WatcherName.of(v) + "의 커다란 집게"), "깨달은 마을: 믿음↑ · '%s의 커다란 집게'" % WatcherName.of(v))
 	v.advance(60.0)
 	# 서툰 핀셋: 날벌레가 집 곁 — 멀리 집으면 지붕을 짓누름
 	var w := village()

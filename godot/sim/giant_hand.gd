@@ -74,17 +74,17 @@ const MOVE_MAX := 6.0                  # 옮겨 놓을 수 있는 거리 (칸)
 const PICK_BELIEF := 0.02
 
 const FIRST := {
-	"water": ["거인님이 하늘에서 물을 뿌려 주셨다. 마른 땅이 촉촉해지고 사람들은 젖은 얼굴로 하늘을 올려다보았다.",
+	"water": ["{w:이/가} 하늘에서 물을 뿌려 주셨다. 마른 땅이 촉촉해지고 사람들은 젖은 얼굴로 하늘을 올려다보았다.",
 		"하늘에서 물이 쏟아져 내렸다. 사람들은 젖은 얼굴로 하늘을 올려다보며 어디서 온 물인지 물었다."],
-	"cup": ["거인님의 커다란 손이 세상을 감싸자 차가운 땅에 온기가 돌았다.",
+	"cup": ["{w}의 커다란 손이 세상을 감싸자 차가운 땅에 온기가 돌았다.",
 		"하늘이 어둑해지더니 어디선가 따뜻한 기운이 세상을 감쌌다."],
 	"curtain": ["어느 날 하늘 한쪽이 어둑해졌다. 사람들은 하늘이 흐려졌다고 말했다.",
 		"어느 날 하늘 한쪽이 어둑해졌다. 사람들은 하늘이 흐려졌다고 말했다."],
-	"wipe": ["거인님이 하늘을 닦으시자 뿌옇던 하늘이 맑아지고 햇살이 또렷해졌다.",
+	"wipe": ["{w:이/가} 하늘을 닦으시자 뿌옇던 하늘이 맑아지고 햇살이 또렷해졌다.",
 		"뿌옇던 하늘이 한순간에 맑아지고 햇살이 또렷해졌다."],
-	"pick": ["거인님의 커다란 집게가 내려와 땅에 떨어진 것을 집어 가셨다.",
+	"pick": ["{w}의 커다란 집게가 내려와 땅에 떨어진 것을 집어 가셨다.",
 		"하늘에서 커다란 집게가 내려와 땅에 떨어진 것을 집어 갔다."],
-	"move": ["거인님의 커다란 집게가 내려와 떨어진 것을 옆으로 옮겨 놓으셨다.",
+	"move": ["{w}의 커다란 집게가 내려와 떨어진 것을 옆으로 옮겨 놓으셨다.",
 		"하늘에서 커다란 집게가 내려와 떨어진 것을 옆으로 옮겨 놓았다."],
 }
 
@@ -260,7 +260,7 @@ func spray(v: Village, p: Vector2) -> Dictionary:
 			if Vector2(r.x - p.x, r.y - p.y).length() < SPRAY_R + 1.0 and not r.is_baby() and r.sick_left <= 0.0:
 				ResidentAI.cancel(v, r)       # 물을 헤치고 나옴 (다치지 않음)
 		stats["floods"] += 1
-		v.log_line(SmallCrises.say_for(v, "거인님의 물이 넘쳐 둘레가 물바다가 되었다. 사람들은 물을 헤치고 높은 곳으로 피했다.",
+		v.log_line(SmallCrises.say_for(v, "{w}의 물이 넘쳐 둘레가 물바다가 되었다. 사람들은 물을 헤치고 높은 곳으로 피했다.",
 			"하늘에서 물이 끝없이 쏟아져 둘레가 물바다가 되었다. 사람들은 물을 헤치고 높은 곳으로 피했다."))
 	else:
 		for b in v.buildings:
@@ -292,14 +292,14 @@ func spray(v: Village, p: Vector2) -> Dictionary:
 		else:
 			Awakening.witness(v, "water")
 		if near != null:
-			var line := "거인님이 물을 내려 주셨다!" if v.aware else "하늘에서 물이 쏟아져!"
+			var line := "{w:이/가} 물을 내려 주셨다!" if v.aware else "하늘에서 물이 쏟아져!"
 			if out > 0:
-				line = "거인님의 물이 불을 꺼 주셨다!" if v.aware else "하늘에서 쏟아진 물에 불이 꺼졌어!"
+				line = "{w}의 물이 불을 꺼 주셨다!" if v.aware else "하늘에서 쏟아진 물에 불이 꺼졌어!"
 			elif fields > 0:
 				line = "마른 밭이 살아난다!"
 			v.speak(near, line, 7)
 		if out > 0:
-			v.log_line(SmallCrises.say_for(v, "거인님의 물이 쏟아져 피우던 불이 꺼졌다.", "하늘에서 물이 쏟아져 피우던 불이 꺼졌다."))
+			v.log_line(SmallCrises.say_for(v, "{w}의 물이 쏟아져 피우던 불이 꺼졌다.", "하늘에서 물이 쏟아져 피우던 불이 꺼졌다."))
 	elif near != null:
 		v.speak(near, "물이 넘친다! 높은 데로!", 7)
 	_first(v, "water")
@@ -362,7 +362,7 @@ func cup(v: Village) -> Dictionary:
 			if cold:
 				v.bless_all(CUP_BELIEF)
 			if near != null:
-				v.speak(near, "거인님의 손이 따뜻해요" if cold else "하늘이 포근해졌어", 7)
+				v.speak(near, "{w}의 손이 따뜻해요" if cold else "하늘이 포근해졌어", 7)
 		else:
 			Awakening.witness(v, "cup")
 			if near != null:
@@ -421,7 +421,7 @@ func wipe(v: Village) -> Dictionary:
 		if v.aware:
 			v.bless_all(0.01)
 			if near != null:
-				v.speak(near, "거인님이 하늘을 닦아 주셨다", 6)
+				v.speak(near, "{w:이/가} 하늘을 닦아 주셨다", 6)
 		else:
 			Awakening.witness(v, "wipe")
 			if near != null:
@@ -536,7 +536,7 @@ func tweeze(v: Village, p: Vector2, to: Variant = null) -> Dictionary:
 		if crushed == "":
 			v.bless_all(PICK_BELIEF)
 		if near != null:
-			v.speak(near, "거인님이 %s%s 집어 가셨다!" % [name, Village.josa(name, "을", "를")] if dest == null else "거인님이 %s%s 옮기셨다!" % [name, Village.josa(name, "을", "를")], 7)
+			v.speak(near, "{w:이/가} %s%s 집어 가셨다!" % [name, Village.josa(name, "을", "를")] if dest == null else "{w:이/가} %s%s 옮기셨다!" % [name, Village.josa(name, "을", "를")], 7)
 	else:
 		Awakening.witness(v, "tweeze")
 		if near != null:

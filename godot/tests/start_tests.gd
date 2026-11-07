@@ -249,7 +249,7 @@ func test_first_run_and_back() -> void:
 	var t_now: float = (s.get("village") as Village).t
 	s.call("on_back")
 	var cs: ConfirmSheet = s.get("confirm_sheet")
-	check(cs.visible and cs.text_l.text == "거인의 방으로 돌아갈까요?", "뒤로 가기 → '거인의 방으로 돌아갈까요?'")
+	check(cs.visible and cs.text_l.text == "별지기의 방으로 돌아갈까요?", "뒤로 가기 → '별지기의 방으로 돌아갈까요?'")
 	cs.answer(false)
 	check(not cs.visible and not bool(s.get("leaving")), "[병 안에 있기] → 그대로")
 	(s.get("altar_sheet") as Control).call("open")

@@ -514,7 +514,7 @@ func _new_warnings(q: Village, last: Variant) -> Array:
 ## 위기 예고 한 줄 → 카드 줄 ("빵에 하얀 털이 났어요 (곰팡이 조짐)"). 깨닫기 전에는 거인 이야기를 빼고
 func _omen(q: Village, w: Dictionary) -> Dictionary:
 	var kind := String(w.get("kind", ""))
-	var txt := String(w.get("text", "")).trim_prefix("거인님, ").trim_suffix(".")
+	var txt := String(w.get("text", "")).trim_prefix(WatcherName.of(q) + ", ").trim_prefix("거인님, ").trim_suffix(".")     # 부르는 말 (N2) · 옛 저장의 말
 	if not q.aware and txt.contains("거인"):
 		txt = "이상한 조짐이 보여요"
 	if OMEN_WORDS.has(kind) and kind != "severe":

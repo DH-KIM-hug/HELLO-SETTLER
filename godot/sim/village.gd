@@ -69,6 +69,7 @@ var era_watch_day := -1               # 시대 점수 '지켜봄' 몫을 센 달
 var era_watch_secs := 0.0             # 그날 지켜봄 100%로 센 병 초 (Balance.ERA_WATCH_HOURS까지)
 # A4b 깨달음 (기획서 6.5 · 11.1 — sim/awakening.gd). 기본값 true = 옛 저장(제단이 있던 병)은 그대로 안다. 새 병은 Awakening.start가 끈다
 var aware := true                     # 주민이 하늘 너머의 거인을 안다 (깨달음 뒤)
+var watcher := ""                     # N2 (STORY 4): 이 마을이 지켜보는 이를 부르는 말 (깨달을 때 정함 — sim/watcher_name.gd). 비면 아직 없음
 var altar_built := true               # 제단이 있다 — 그 전엔 기도·제물·소원 편지가 없다
 var wonder := 0.0                     # 경이 (목격이 쌓임 — Awakening.WONDER_NEED에서 깨달음)
 var awaken_at := -1.0                 # 경이가 찼다 → 이 시각에 깨달음 사건
@@ -341,7 +342,7 @@ func thanksgiving(b: Building) -> void:
 				speak(p, cheer[k], 7)
 				k += 1
 		return
-	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.label(), josa(b.label(), "이", "가")])
+	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 {w}께 감사 기도를 드렸다." % [b.label(), josa(b.label(), "이", "가")])
 	var c := chief()
 	for p in people:
 		if p.is_baby() or p.sleeping or p.sick_left > 0.0:
@@ -636,7 +637,7 @@ func note_discovery(id: String, who: Resident) -> void:
 
 
 func log_line(text: String) -> void:
-	emit(&"chronicle", {"v": text})
+	emit(&"chronicle", {"v": WatcherName.fill(self, text)})     # {w} = 마을이 부르는 말 (STORY 4 · N2)
 
 
 ## 사건을 낸다 (ADR-0001 — 시뮬레이션의 출구). t·village는 이 마을 것으로 채움. 연대기·위기 kind는 여기서 바로 book·저장 순번에.
@@ -672,7 +673,7 @@ func crisis(kind: String, text: String) -> void:
 
 
 func speak(r: Resident, text: String, dur := 6.0) -> void:
-	r.say = text
+	r.say = WatcherName.fill(self, text)      # {w} = 마을이 부르는 말 (STORY 4 · N2)
 	r.say_t = dur
 
 
@@ -802,9 +803,9 @@ func manna_fall(reason: String) -> void:
 			log_line("새벽, 들판에 하늘의 낟알이 금빛으로 깔렸다. 하늘이 또 주었다.")
 	elif reason == "arrival":
 		speak(who, "엄마, 하늘에서 뭐가 내렸어요!", 8)
-		log_line("굶주린 조상들에게 거인이 하늘에서 낟알을 내렸다.")
+		log_line("굶주린 조상들에게 {w:이/가} 하늘에서 낟알을 내렸다.")
 	else:
-		speak(who, "거인님의 낟알이다!", 6)
+		speak(who, "{w}의 낟알이다!", 6)
 		log_line("새벽, 들판에 하늘의 낟알이 하얗게 깔렸다.")
 
 
@@ -1137,7 +1138,7 @@ func _revelation_notice() -> void:
 	var who: Resident = seers[0] if not seers.is_empty() else chief()
 	revelation = {"t": t, "from": who.id if who != null else -1, "name": who.name if who != null else "",
 		"text": "하늘이 무언가를 알려 주실 것 같아요. 노인들이 자꾸 하늘을 올려다봐요."}
-	log_line("노인들이 자꾸 하늘을 올려다보았다. 거인님이 무언가를 알려 주실 것만 같았다.")
+	log_line("노인들이 자꾸 하늘을 올려다보았다. {w:이/가} 무언가를 알려 주실 것만 같았다.")
 	_revelation_murmur()
 
 
@@ -1146,7 +1147,7 @@ func _revelation_murmur() -> void:
 	_rev_say_t = t + Balance.REV_MURMUR
 	if not is_watching():
 		return
-	var lines := ["하늘이 무언가를 알려 주실 것 같아요", "하늘을 보게. 무언가 다가오고 있어", "거인님이 곧 무언가 보여 주실 게야"]
+	var lines := ["하늘이 무언가를 알려 주실 것 같아요", "하늘을 보게. 무언가 다가오고 있어", "{w:이/가} 곧 무언가 보여 주실 게야"]
 	var seers := _sky_watchers()
 	for i in mini(2, seers.size()):
 		var r: Resident = seers[i]
@@ -1177,7 +1178,7 @@ func reveal(line := "") -> bool:
 	era_pts = 0.0
 	revelation = {}
 	bless_all(0.15)
-	log_line(line if line != "" else "거인님의 계시가 내렸다. 우리는 '%s'%s 되었다." % [Balance.ERAS[era], josa(Balance.ERAS[era], "이", "가")])
+	log_line(line if line != "" else "{w}의 계시가 내렸다. 우리는 '%s'%s 되었다." % [Balance.ERAS[era], josa(Balance.ERAS[era], "이", "가")])
 	return true
 
 
@@ -1188,7 +1189,7 @@ func giant_reveal() -> bool:
 		return false
 	begin_giant()
 	var nx: String = Balance.ERAS[era + 1]
-	log_line("거인이 새 시대를 열었다 — %s" % nx)
+	log_line("{w:이/가} 새 시대를 열었다 — %s" % nx)
 	reveal("하늘에서 한 줄기 빛이 광장으로 내려왔다. 사람들은 무릎을 꿇고 하늘을 올려다보았다. 이제 우리는 '%s'%s." % [nx, josa(nx, "이다", "다")])
 	festival_t = t
 	var spoke := 0
@@ -1197,7 +1198,7 @@ func giant_reveal() -> bool:
 			continue
 		r.steps.push_front(ResidentAI.act(Balance.REV_KNEEL, "pray"))
 		if spoke < 3 and r.age >= 2.5:
-			speak(r, ["빛이다…!", "거인님이 길을 여셨다", "새 시대가 왔어!"][spoke], 8)
+			speak(r, ["빛이다…!", "{w:이/가} 길을 여셨다", "새 시대가 왔어!"][spoke], 8)
 			spoke += 1
 	var un := era_unlocks(era)
 	if not un.is_empty():
@@ -1454,7 +1455,7 @@ func on_built(b: Building) -> void:
 	elif b.is_house():
 		log_line("%s 한 채가 다 지어졌다. 이제 한 가족이 지붕 아래에서 잔다." % b.label())
 	elif b.wished:
-		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.label(), josa(b.label(), "이", "가")])
+		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 {w:이/가} 들어주셨다며 기뻐했다." % [b.label(), josa(b.label(), "이", "가")])
 	else:
 		log_line("%s%s 다 지어졌다." % [b.label(), josa(b.label(), "이", "가")])
 	VillageEra.on_built(self, b)          # 망루 안개·세상 끝 · 묘지·교회·광장·나루터 한 줄 (A6)
@@ -1767,7 +1768,7 @@ func _marriages(dt: float) -> void:
 				b.home = -1
 			if not VillageEra.wedding(self, a, b):       # 교회가 있으면 교회에서 혼례 잔치 (A6)
 				log_line("%s%s %s%s 모닥불 앞에서 혼인을 약속했다." % [a.name, josa(a.name, "과", "와"), b.name, josa(b.name, "이", "가")])
-			speak(a, "거인님, 저희를 지켜봐 주세요" if aware else "우리 오래오래 함께해요", 6)
+			speak(a, "{w}, 저희를 지켜봐 주세요" if aware else "우리 오래오래 함께해요", 6)
 
 
 func _shuffle(a: Array) -> void:
@@ -2209,7 +2210,7 @@ func chief_build() -> void:
 	if want == wish:
 		nb.wished = true
 		wishes.erase(wish)
-		log_line("촌장 %s%s 거인님이 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
+		log_line("촌장 %s%s {w:이/가} 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 		return
 	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 
@@ -2442,7 +2443,7 @@ func salt_discovery() -> void:
 	if not aware:
 		log_line("사람들은 짠 흙을 조금씩 모아 두었다. 고기와 생선에 뿌리면 오래 간다는 것을 곧 알게 되었다.")
 	else:
-		log_line("어떤 이는 거인님이 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다." if doubters() > 0 else "사람들은 거인님이 호수를 거두어 소금을 남기셨다고 믿었다.")
+		log_line("어떤 이는 {w:이/가} 호수를 소금으로 바꾸셨다 하고, 어떤 이는 그냥 물이 마른 것뿐이라 했다." if doubters() > 0 else "사람들은 {w:이/가} 호수를 거두어 소금을 남기셨다고 믿었다.")
 
 
 # ───────────────────────── 판매가 (기획서 11장 — 판매는 거인만, 여기선 값 계산만) ─────────────────────────
@@ -2642,7 +2643,7 @@ func lamp_hint() -> Dictionary:
 		elder = chief()
 	if elder == null:
 		return {}
-	var txt := Balance.LINE_LAMP_HINT if aware else Balance.LINE_LAMP_HINT_UNAWARE
+	var txt := WatcherName.fill(self, Balance.LINE_LAMP_HINT) if aware else Balance.LINE_LAMP_HINT_UNAWARE
 	return {"who": elder, "text": txt}
 
 
@@ -2764,7 +2765,7 @@ func write_wish(type := "") -> Dictionary:
 	var text: String = WISH_REASON.get(ty, "%s%s 짓고 싶어요." % [Balance.label(ty), josa(Balance.label(ty), "을", "를")])
 	var l := {"id": _letter_id, "kind": "wish", "t": t, "from": who.id, "name": who.name, "type": ty, "text": text, "state": "open"}
 	letters.append(l)
-	speak(who, "거인님, 소원이 있어요", 6)
+	speak(who, "{w}, 소원이 있어요", 6)
 	return l
 
 
@@ -2790,8 +2791,8 @@ func grant_wish(id: int) -> bool:
 		_update_belief(0.0)
 		var who := person(int(l["from"]))
 		if who != null:
-			speak(who, "거인님이 들어주셨다!", 7)
-		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], Balance.label(ty)])
+			speak(who, "{w:이/가} 들어주셨다!", 7)
+		log_line("{w:이/가} %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], Balance.label(ty)])
 		giant_acted()
 		Notebook.on(self, "wish")          # [거인의 수첩]
 		return true
@@ -2926,7 +2927,7 @@ func evening_offering() -> Dictionary:
 				got[item] = int(got.get(item, 0)) + amt
 				dark = true
 		if dark:
-			log_line("굶주리는 저녁에도 사람들은 마지막 곡식을 제단에 올렸다. 거인님이 노하실까 두려웠다.")
+			log_line("굶주리는 저녁에도 사람들은 마지막 곡식을 제단에 올렸다. {w:이/가} 노하실까 두려웠다.")
 	if not got.is_empty():
 		if int(stats.get("offered", 0)) == 0:
 			var first: String = got.keys()[0]
@@ -2934,7 +2935,7 @@ func evening_offering() -> Dictionary:
 		stats["offered"] = int(stats.get("offered", 0)) + 1
 		var who := person(by[econ_rng.randi() % by.size()])
 		if who != null and not who.sleeping:
-			speak(who, "거인님, 받아 주세요", 6)
+			speak(who, "{w}, 받아 주세요", 6)
 	return got
 
 
@@ -2979,7 +2980,7 @@ func _expire_offerings() -> void:
 			keep.append(o)
 	altar = keep
 	if back and int(stats.get("offer_back", 0)) == 0:
-		log_line("거인님이 받지 않으신 제물을 사람들이 조용히 창고로 되돌렸다.")
+		log_line("{w:이/가} 받지 않으신 제물을 사람들이 조용히 창고로 되돌렸다.")
 	if back:
 		stats["offer_back"] = int(stats.get("offer_back", 0)) + 1
 
@@ -3023,12 +3024,12 @@ func take_offering(item: String) -> float:
 				seen = p
 	_update_belief(0.0)
 	if seen != null:
-		speak(seen, "거인님이 받으셨다!", 6)
+		speak(seen, "{w:이/가} 받으셨다!", 6)
 	if int(stats.get("taken", 0)) == 0:
-		log_line("제단의 %s%s 하늘로 사라졌다. 사람들은 \"거인님이 받으셨다!\" 하고 외쳤다." % [item, josa(item, "이", "가")])
+		log_line("제단의 %s%s 하늘로 사라졌다. 사람들은 \"{w:이/가} 받으셨다!\" 하고 외쳤다." % [item, josa(item, "이", "가")])
 	stats["taken"] = int(stats.get("taken", 0)) + 1
 	if not was and is_favourite(item):
-		log_line("사람들은 거인님이 %s%s 좋아하신다고 믿게 되었다." % [item, josa(item, "을", "를")])
+		log_line("사람들은 {w:이/가} %s%s 좋아하신다고 믿게 되었다." % [item, josa(item, "을", "를")])
 	giant_acted()
 	Notebook.on(self, "take")             # [거인의 수첩]
 	return got
@@ -3092,10 +3093,10 @@ func force_take(item: String, amt: int) -> float:
 		on_food_taken()                 # HEALTH.md 4: 굶주릴 때 식량을 거두면 모두 +0.1
 	_update_belief(0.0)
 	stats["forced"] = int(stats.get("forced", 0)) + 1
-	log_line("창고의 %s%s 하늘로 사라졌다. 사람들은 \"거인님이 노하셨나…\" 하고 수군거렸다." % [item, josa(item, "이", "가")])
+	log_line("창고의 %s%s 하늘로 사라졌다. 사람들은 \"{w:이/가} 노하셨나…\" 하고 수군거렸다." % [item, josa(item, "이", "가")])
 	var awake := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	if not awake.is_empty():
-		speak(awake[econ_rng.randi() % awake.size()], "거인님이 노하셨나…", 6)
+		speak(awake[econ_rng.randi() % awake.size()], "{w:이/가} 노하셨나…", 6)
 	giant_acted()
 	return worth
 
@@ -3396,7 +3397,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		_arrive_fed()
 		Awakening.start(self)
 		if aware:
-			log_line("어느 아침, 거인의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+			log_line("어느 아침, {w}의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
 		else:                             # 아직 거인을 모른다 (6.5) — 어떻게 왔는지 아무도 모른다
 			log_line("어느 아침, 우리 조상 %d명이 오두막 두 채 곁에서 눈을 떴다. 어떻게 이 땅에 왔는지 기억하는 사람은 없었다." % people.size())
 		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
@@ -3468,7 +3469,7 @@ func _meet(other_sid: int, who: Resident) -> void:
 	o.met[sid] = t
 	var nm := who.name if who != null else "누군가"
 	log_line("%s%s 안개 너머에서 낯선 사람들의 연기를 보았다. 이 세상에 우리 말고도 사람이 있었다!" % [nm, josa(nm, "이", "가")])
-	o.log_line("우리 땅 가장자리에 낯선 이가 나타났다. 그들도 거인의 손이 내려놓은 사람들이라고 했다.")
+	o.log_line("우리 땅 가장자리에 낯선 이가 나타났다. 그들도 {w}의 손이 내려놓은 사람들이라고 했다.")
 	if who != null:
 		speak(who, "저 너머에 사람이 있어요!", 8)
 
@@ -3751,6 +3752,8 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 		if by_id.has(int(id)):
 			v._singers.append(by_id[int(id)])
 	v.book = SaveCodec.dec(d.get("book", []))
+	if v.aware and v.watcher == "":
+		v.watcher = WatcherName.pick(WatcherName.key_of(v))     # N2: 옛 저장(부르는 말 칸 없음) — 마을 씨앗으로 정함
 	if v.altar_built and Awakening.altar_site(v) == null and not v.altar_spot_ok(v.altar_pos):
 		v.altar_pos = v.pick_altar_pos()      # 옛 저장: 제단이 창고에 묻혀 있던 자리 → 모닥불 곁 빈자리로 (A4b — 보이게)
 	return v

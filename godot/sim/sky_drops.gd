@@ -59,7 +59,7 @@ const SAY := {
 	"나무젓가락": ["하늘에서 거대한 통나무가 내려왔다!", "하늘에서 통나무가 떨어졌어!"],
 	"주운 통나무": ["하늘에서 통나무가 내려왔다!", "하늘에서 통나무가 떨어졌어!"],
 	"자갈 한 알": ["하룻밤 새 바위산이 생겼다!", "하늘에서 바위산이 떨어졌어!"],
-	"알약 부스러기": ["거인님의 약이다!", "하늘에서 하얀 돌이 내려왔어!"],
+	"알약 부스러기": ["{w}의 약이다!", "하늘에서 하얀 돌이 내려왔어!"],
 	"반창고 조각": ["하늘에서 하얀 천이 내려왔다!", "하늘에서 하얀 천이 떨어졌어!"],
 	"마른 약초 한 잎": ["하늘에서 숲만 한 잎이 내려왔다!", "하늘에서 커다란 잎이 떨어졌어!"],
 	"소금 한 꼬집": ["하늘에서 하얀 모래가 쏟아졌다!", "하늘에서 하얀 모래가 쏟아졌어!"],
@@ -95,8 +95,8 @@ const BOOK := {
 	"작은 토끼 한 쌍": "어디선가 토끼 한 쌍이 나타나 들판으로 깡충깡충 뛰어갔다.",
 	"작은 물고기 한 줌": "어디선가 작은 물고기들이 호수로 쏟아져 내려왔다. 물 위로 은빛이 반짝였다.",
 }
-const TOWER_LINES := ["하늘의 탑 아래 땅이 푸르러진다", "탑이 밤에도 빛나요", "하늘의 분이 내려 주신 탑이다", "탑 둘레의 밀이 참 잘 자라"]
-const TOWER_DOUBT := "거인의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
+const TOWER_LINES := ["하늘의 탑 아래 땅이 푸르러진다", "탑이 밤에도 빛나요", "{w:이/가} 내려 주신 탑이다", "탑 둘레의 밀이 참 잘 자라"]
+const TOWER_DOUBT := "{w}의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
 const TOWER_DOUBT_UNAWARE := "하늘의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
 
 
@@ -566,7 +566,7 @@ static func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 			r.hunger = 0.0
 			r.happiness = minf(1.0, r.happiness + 0.08)
 			v.stats["snacks"] = int(v.stats.get("snacks", 0)) + 1
-			var lines := ["맛있다!", "하늘이 준 낟알이야!", "배가 든든해!"] if not v.aware else ["거인님의 낟알, 맛있다!", "배가 든든해!", "맛있다!"]
+			var lines := ["맛있다!", "하늘이 준 낟알이야!", "배가 든든해!"] if not v.aware else ["{w}의 낟알, 맛있다!", "배가 든든해!", "맛있다!"]
 			v.speak(r, lines[r.id % lines.size()], 6)
 		"sky_unres":
 			var d: Dictionary = o["d"]
@@ -674,9 +674,9 @@ static func _grain(v: Village, p: Vector2) -> int:
 		r.steps.append(ResidentAI.act(10.0, "eat", ResidentAI.op("sky_snack", {"x": p.x, "y": p.y})))
 		n += 1
 	if n > 0:
-		v.speak(ws[0], "하늘에서 낟알이 내렸어!" if not v.aware else "거인님의 낟알이다!", 7)
+		v.speak(ws[0], "하늘에서 낟알이 내렸어!" if not v.aware else "{w}의 낟알이다!", 7)
 	v.log_line("하늘에서 금빛 낟알 한 줌이 내렸다. 배고픈 사람들이 달려와 주워 먹고 웃었다." if not v.aware
-		else "거인님이 금빛 낟알 한 줌을 내려 주셨다. 배고픈 사람들이 달려와 주워 먹고 웃었다.")
+		else "{w:이/가} 금빛 낟알 한 줌을 내려 주셨다. 배고픈 사람들이 달려와 주워 먹고 웃었다.")
 	v.stats["sky_drops"] = int(v.stats.get("sky_drops", 0)) + 1
 	return n
 

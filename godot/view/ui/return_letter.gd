@@ -180,14 +180,15 @@ func _fill_letter() -> void:
 	chron_btn.text = "연대기에서 자세히"
 	var head := _label("자리를 비운 동안", "Title")
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_label("거인님이 %s 비우신 사이" % CatchUp.away_words(float(data.get("away", 0.0))), "Small").horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_label("별지기님이 %s 비우신 사이" % CatchUp.away_words(float(data.get("away", 0.0))), "Small").horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	if float(data.get("slept", 0.0)) > 0.0:
 		var lamp := _label("등불이 %d시간 타고 꺼져 있었어요" % int(data.get("lamp_h", 12)), "Small")
 		lamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lamp.modulate.a = 0.0
 		create_tween().tween_property(lamp, "modulate:a", 1.0, 0.8)
 	_rule()
-	_label("거인님께,", "Hand")                      # 촌장이 쓴 편지 = 손글씨
+	if village != null and village.aware:          # 촌장이 쓴 편지 = 손글씨 — 마을이 부르는 말로 (깨닫기 전엔 부름 없이, STORY 4)
+		_label(WatcherName.fill(village, "{w}께,"), "Hand")
 	_label("자리를 비우신 동안 이런 일이 있었어요.", "Hand")
 	for e: String in data.get("events", []):
 		_label("· " + e, "Hand")
@@ -220,9 +221,9 @@ func _fill_letter() -> void:
 		for w: String in waiting:
 			_label("· " + w, "Hand")
 	if data.get("long", false):
-		_label("오래 비우셔서, 거인님 이야기를 옛날이야기로 여기는 아이들도 생겼어요.", "Hand")
+		_label(WatcherName.fill(village, "오래 비우셔서, {w} 이야기를 옛날이야기로 여기는 아이들도 생겼어요."), "Hand")
 	elif data.get("festival", false):
-		_label("모두 광장에 모여 거인님을 기다리고 있어요!", "Hand")
+		_label(WatcherName.fill(village, "모두 광장에 모여 {w:을/를} 기다리고 있어요!"), "Hand")
 	var sign := _label("— 촌장 %s 올림" % String(data.get("chief", "")), "Hand")
 	sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 

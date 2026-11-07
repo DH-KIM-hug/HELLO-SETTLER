@@ -44,12 +44,12 @@ static func myth(v: Village) -> PackedStringArray:
 	if v == null:
 		return out
 	for l: Variant in v.myth:
-		out.append(String(l))
+		out.append(WatcherName.myth_line(v, String(l)))
 	if out.is_empty() and v.water is WorldWater:      # 창조 오프닝이 남긴 신화 (OPENING 9 — CreationPlan.myth_of → WorldWater.creation)
 		var cr: Variant = (v.water as WorldWater).creation
 		if cr is Dictionary:
 			for l: Variant in (cr as Dictionary).get("myth", []):
-				out.append(String(l))
+				out.append(WatcherName.myth_line(v, String(l)))     # {c} = 깨달은 뒤 부르는 말, 그 전 '어떤 분' (N2)
 	if not out.is_empty():
 		return out
 	for e: Dictionary in v.book:
