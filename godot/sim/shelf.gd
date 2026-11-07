@@ -65,12 +65,12 @@ static func unlocked(giant: Dictionary, name: String) -> bool:
 	return not UNLOCK_BY.has(name) or built_ever(giant, String(UNLOCK_BY[name]))
 
 
-## 잠긴 까닭 한 줄 ("농장을 한 번 지어 보면 열려요")
+## 잠긴 까닭 한 줄 ("밀밭을 한 번 지어 보면 열려요" — 건물 이름은 Balance.label)
 static func unlock_hint(name: String) -> String:
 	if not UNLOCK_BY.has(name):
 		return ""
 	var b := String(UNLOCK_BY[name])
-	var shown := "목조 주택" if b == "목조주택" else b
+	var shown := "목조 주택" if b == "목조주택" else Balance.label(b)
 	return "%s%s 한 번 지어 보면 열려요" % [shown, Village.josa(shown, "을", "를")]
 
 

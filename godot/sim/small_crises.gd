@@ -587,7 +587,7 @@ func tweeze(v: Village, p: Vector2) -> Dictionary:
 				hd = d2
 				hit = b
 		if hit != null:
-			crushed = hit.type
+			crushed = hit.label()
 			SkyDrops.remove_building(v, hit)
 			stats["crushed"] += 1
 			v.log_line("하늘에서 내려온 집게가 빗나가 %s%s 짓눌렸다. 다친 사람은 없었다." % [crushed, Village.josa(crushed, "이", "가")])

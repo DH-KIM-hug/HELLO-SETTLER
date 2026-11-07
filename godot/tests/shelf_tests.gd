@@ -132,7 +132,7 @@ func test_kit_upgrades() -> void:
 	var g := {}
 	Market.notes = 100000.0
 	check(not Shelf.unlocked(g, "밀밭") and not Shelf.buy_upgrade(g, "밀밭") and Market.notes == 100000.0, "밀밭: 농장을 지어 보기 전엔 잠김 (살 수 없음)")
-	check(Shelf.unlock_hint("밀밭") == "농장을 한 번 지어 보면 열려요" and Shelf.unlock_hint("목조 주택").begins_with("목조 주택을"), "잠긴 까닭 한 줄")
+	check(Shelf.unlock_hint("밀밭") == "밀밭을 한 번 지어 보면 열려요" and Shelf.unlock_hint("목조 주택").begins_with("목조 주택을"), "잠긴 까닭 한 줄")
 	check(Shelf.unlocked(g, "가족 하나 더") and Shelf.unlocked(g, "암반 컵 하나 더"), "가족·암반 컵은 건물이 없어 언제나 열림")
 	var v := Village.new_prototype(7)
 	var farm := v.add_building("농장", v.center.x + 6.0, v.center.y + 6.0, true)

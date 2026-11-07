@@ -70,7 +70,7 @@ const ENTRIES := [
 		"line": "", "say": "", "likes": {"child": true}, "live": false},
 	{"id": "herb", "doc": "F2", "cat": "숲과 생물", "size": "보통", "pts": 10.0, "name": "약초", "icon": "약초", "art": "",
 		"hint": "아픈 사람이 숲가의 쓴 풀을 씹으면", "found": "숲가의 쓴 풀을 씹으면 열이 내린다.",
-		"cond": "앓는 사람이 습한 숲가 곁에 있음", "effect": "약초꾼을 개척기에도 · 그 사람의 앓는 날 반으로",
+		"cond": "앓는 사람이 습한 숲가 곁에 있음", "effect": "약초원을 개척기에도 · 그 사람의 앓는 날 반으로",
 		"line": "", "say": "", "likes": {}, "live": true},
 	{"id": "planting", "doc": "F3", "cat": "숲과 생물", "size": "작은", "pts": 5.0, "name": "씨앗을 심다", "icon": "", "art": "disc_sapling",
 		"hint": "숲이 많이 줄어들면, 아이들이…", "found": "그루터기 옆에 묻은 도토리에서 싹이 났다. 나무도 심으면 자란다.",
