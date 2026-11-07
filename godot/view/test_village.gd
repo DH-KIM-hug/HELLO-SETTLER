@@ -5,7 +5,7 @@
 ## 시간은 병의 시계(sim/jar_clock.gd JarClock): 창조 뒤 아침 7시에 시작, 속도 ×1·×2·×4·×8,
 ## 밤 건너뛰기(모두 잠든 밤 → 다음 06:00까지 현실 약 3초 타임랩스, 화면은 남색에서 밝아짐).
 ## 조작 (UI 01 · A9): 위 띠 = 지구 이름 · 시대 · 인구 · 지폐 + 톱니(설정·문의, 길게 누르면 개발 모드), 그 아래 왼쪽 시각·배속 칩 /
-##   아래 띠 = 거인의 도구 5개: 제단 · 상점 · 손 · 연대기 · 선반. [손] = 뚜껑·불기·등불 + 손에 든 물건 떨어뜨리기 (view/giant_hand_ctl.gd).
+##   아래 띠 = 거인의 도구 5개: 제단 · 상점 · 손 · 연대기 · 선반. [손] = 열린 도구(물 뿌리기·핀셋 — 끌어 겨누기, 유리 닦기·등불) + 손에 든 물건 떨어뜨리기 (view/giant_hand_ctl.gd).
 ## 개발 모드(휴대폰 기본 꺼짐 · F3): 상태 글 + +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델 · 곰팡이 · 버섯 숲. 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 ## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
 ## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
@@ -38,8 +38,6 @@ var _drag := false
 var detail: ResidentDetail
 var altar_sheet: AltarSheet          # 제단 시트 (UI 02 — 제물 받기·소원 들어주기·건물 사 주기·강제로 거두기)
 var air_overlay: JarAirOverlay       # [곰팡이·뚜껑] 서린 김·누런 하늘·열린 뚜껑의 빛 (view/jar_air_overlay.gd)
-var lid_btn: Button                  # [곰팡이·뚜껑] 뚜껑 열기/닫기 (WORLD_EVENTS 3)
-var blow_btn: Button                 # [하늘의 것] 불기 — 뚜껑이 열린 동안만 (WORLD_EVENTS 2.7)
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
 var _tap_ok := false
@@ -81,7 +79,7 @@ var _letter_layer: CanvasLayer
 var altar_btn: Button
 var chron_btn: Button
 var shop_btn: Button                 # [상점] (UI 06 — view/ui/shop_sheet.gd) — 새 탭이 열리면 옆에 작은 반짝임
-var hand_btn: Button                 # [손] — 뚜껑·불기·등불 + 손에 든 것 (view/giant_hand_ctl.gd)
+var hand_btn: Button                 # [손] — 열린 도구 + 손에 든 것 (view/giant_hand_ctl.gd)
 var shelf_btn: Button                # [선반] (UI 05 — 지금은 '곧 열려요' + 등불 올리기)
 var tool_btns: Array[Button] = []
 var shop_sheet: ShopSheet
@@ -117,7 +115,9 @@ var _lid_was := false
 var _sprout_seen := -1.0
 var _baby_asked := -1
 var _site_seen := {}                 # 짓는 터 id → 본 단계 (단계가 바뀌면 망치 소리 — 첫 병 첫날)
-const LID_AFTER := 2.0               # 손짓이 끝나고 뚜껑이 저절로 닫히기까지 (현실 초)
+const LID_AFTER := 2.0               # 손짓이 끝나고 뚜껑이 저절로 닫히기까지 (현실 초 — 화면이 close_lid 입력을 냄)
+const LID_IDLE := 20.0               # 손짓 없이 열린 채 (거절·그만) 이만큼이면 닫음 — 겨누는 동안은 세지 않음
+var _lid_close_in := -1.0            # 뚜껑을 닫을 때까지 남은 현실 초 (−1 = 없음). (jar-time E7) 시뮬의 현실 시간 자동 닫힘 대신
 var store_strip: StoreStrip            # [창고] 위 띠 아래 창고 띠 (view/ui/store_strip.gd)
 var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_sheet.gd)
 
@@ -435,6 +435,7 @@ func _process(dt: float) -> void:
 	_speed_hold(dt)
 	if hand_ctl != null:
 		hand_ctl.process(dt)
+		_lid_close_tick(dt)
 	if lamp_ctl != null:
 		lamp_ctl.process(dt)
 	_bells()
@@ -689,12 +690,10 @@ func _setup_ui() -> void:
 	store_strip = StoreStrip.new()          # [창고] 창고 띠 — 배속 칩 아래 (누르면 창고 시트)
 	store_strip.setup(self)
 	root.add_child(store_strip)
-	# 거인의 손 칸 (뚜껑 · 불기 · 등불 + 손에 든 것) · 떨어뜨릴 자리 띠
+	# 거인의 손 칸 (물 뿌리기 · 핀셋 · 유리 닦기 · 등불 + 손에 든 것) · 끌어 겨누는 자리 띠
 	hand_ctl = GiantHandCtl.new(self)
 	add_child(hand_ctl)
 	hand_ctl.build(root)
-	lid_btn = hand_ctl.lid_btn
-	blow_btn = hand_ctl.blow_btn
 	lamp_btn = hand_ctl.lamp_btn
 	lamp_ctl = LampCtl.new(self)
 	add_child(lamp_ctl)
@@ -1338,66 +1337,50 @@ func toggle_lid() -> void:
 		village.close_lid()
 	else:
 		village.open_lid()
-		clock.lid_real = 0.0
 
 
-## [하늘의 것] 거인이 분다 — 카메라가 보는 쪽(땅 위)으로. 뚜껑이 닫혀 있으면 아무 일 없음
-func blow() -> void:
-	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
-	lid_soon()
-	var f := cam.camera.global_transform.basis.z
-	var n := focus_village().blow_seeds(Vector2(-f.x, -f.z))
-	if n >= 0:
-		GuideCaption.done(focus_village(), "blow")
-	if n >= 0:
-		GameAudio.fx("blow")
-	if n > 0:                         # 꽃씨가 날림 (반짝이는 바람) + "눈이 온다!"
-		GameAudio.fx("seeds_wind", "Village")
-		GameAudio.say("seeds")
-
-
-## [거인의 손] 핀셋 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데에 가장 가까운 것 (날벌레 → 먼지 뭉치 → 떨어진 물건 → 바위)을 집는다.
-## 가운데에서 멀수록 손끝이 서툴러 곁의 집을 짓누를 수 있다 (가운데에 맞추고 집으면 깔끔)
+## [거인의 손] 핀셋 (giant-touch R1 · 사용자 결정 ④): 내려 주기와 같은 끌어 겨누기 — 땅 그림자를 끌어 [집기] (view/giant_hand_ctl.gd)
 func tweeze() -> void:
-	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
+	hand_ctl.start_tool("tweeze")
+
+
+## 겨눈 땅 자리 p에서 집는다 (놓는 순간 다시 찾음 — 없으면 거절, E6). 성공하면 true
+func tweeze_at(p: Vector2) -> bool:
+	auto_lid()                        # 뚜껑이 저절로 열리고 곧 닫힘 (R7)
 	lid_soon()
-	var fv := focus_village()
-	var vs := get_viewport().get_visible_rect().size
-	var c := screen_to_ground(vs * 0.5)
-	var tg := GiantHand.pick_target(fv, c, 9.0)
-	if tg.is_empty():
-		hand_ctl.say("집을 것이 없어요")
-		return
-	var at: Vector2 = tg["pos"]
-	var bd := at.distance_to(c)
-	var aim := at + (c - at).limit_length(minf(bd * 0.35, GiantHand.TWEEZE_R - 0.2))
-	var r := fv.tweeze(aim)
+	var fv := village_at(p)
+	var r := fv.tweeze(p)
 	if not bool(r.get("ok", false)) and not bool(r.get("picked", false)):
 		hand_ctl.say(String(r.get("why", "")))
-		return
-	HandFx.tweezers(jar, Vector3(at.x, terrain.ground_y(at.x, at.y), at.y))
+		return false
+	HandFx.tweezers(jar, Vector3(p.x, terrain.ground_y(p.x, p.y), p.y))
 	GameAudio.fx("tweezers")
 	GameAudio.buzz()
+	return true
 
 
-## [거인의 손] 물 뿌리기 (뚜껑이 열린 동안 — WORLD_EVENTS 4.3): 화면 가운데 땅에
+## [거인의 손] 물 뿌리기 (giant-touch R1 · 사용자 결정 ④): 끌어 겨눈 땅 그림자 자리에 [뿌리기]
 func spray() -> void:
-	auto_lid()                        # (v3.3) 뚜껑이 저절로 열리고 곧 닫힘
+	hand_ctl.start_tool("spray")
+
+
+## 겨눈 땅 자리 p에 물을 뿌린다. 성공하면 true
+func spray_at(p: Vector2) -> bool:
+	auto_lid()                        # 뚜껑이 저절로 열리고 곧 닫힘 (R7)
 	lid_soon()
-	var fv := focus_village()
-	var vs := get_viewport().get_visible_rect().size
-	var p := screen_to_ground(vs * 0.5)
+	var fv := village_at(p)
 	var r := fv.spray_water(p)
 	if not bool(r["ok"]):
 		hand_ctl.say(String(r["why"]))
-		return
+		return false
 	HandFx.spray(jar, Vector3(p.x, terrain.ground_y(p.x, p.y), p.y), GiantHand.SPRAY_R, bool(r["flood"]))
 	GameAudio.fx("water_spray")
 	if bool(r["flood"]):
 		GameAudio.fx("water_lap", "Village")
+	return true
 
 
-## (EVENTS_STAGING 6c-1) 손으로 감싸기·커튼은 없앴다 — 추위는 등불을 가까이, 더위·가뭄은 물 뿌리기 (시뮬레이션의 cup_hands·set_curtain은 쓰지 않음)
+## [거인의 손] 유리 닦기 (병 밖 — 화면 어디서 문질러도 유리 전체). 감싸기·커튼은 없앴다 (6c-1 · giant-touch)
 func wipe() -> void:
 	var r := focus_village().wipe_glass()
 	if not bool(r["ok"]):
@@ -1468,7 +1451,7 @@ func _update_ui() -> void:
 	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > JarClock.normal_speed() + 1e-6 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
 	_layout_store()                         # [창고] 배속 목록·띠 숨김을 따라
-	hand_ctl.refresh()                   # [손] 뚜껑 (저절로 닫힐 때까지 남은 현실 초) · 불기 (뚜껑이 열린 동안만) · 손에 든 것
+	hand_ctl.refresh()                   # [손] 열린 도구 · 쿨타임 · 손에 든 것
 	hand_btn.text = "손 %d" % Market.hand.size() if not Market.hand.is_empty() else "손"
 	_btn_glow_t += get_process_delta_time()
 	_hand_glow_t = maxf(0.0, _hand_glow_t - get_process_delta_time())
@@ -1792,8 +1775,10 @@ func open_altar_of(q: Village) -> void:
 	altar_sheet.open()
 
 
-## 유리 톡: 소리 + 진동 + 주민 "뭐지?" (크게 치면 "숨어!") — 넓은 세상은 카메라가 보는 무리가 듣는다
-func tap_glass(hard: bool, at: Variant = null) -> void:
+## 유리 톡: 소리 + 진동 + 주민 "뭐지?" — 넓은 세상은 카메라가 보는 무리가 듣는다.
+## hard(크게 친 톡 = 지진)는 개발 키 KEY_T만 부른다 — 화면 손짓(_on_tap·끌기·길게 누름)은 늘 hard = false (giant-touch 사용자 결정 ③).
+## sound = false: 소리는 이미 냄 (병 밖 첫 누름을 미뤄 확정할 때 — world_village._room_tap_flush)
+func tap_glass(hard: bool, at: Variant = null, sound := true) -> void:
 	var fv := focus_village()
 	var hanging := fv.smalls != null and fv.smalls.drop_phase == "hang"
 	fv.tap_glass(hard, at)
@@ -1801,8 +1786,9 @@ func tap_glass(hard: bool, at: Variant = null) -> void:
 		GameAudio.fx("glass_tap_hard")          # 물덩이가 떨어짐
 	if not hard:
 		GuideCaption.done(focus_village(), "tap")
-	GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")
-	GameAudio.buzz()
+	if sound:
+		GameAudio.fx("glass_tap_hard" if hard else "glass_tap_light")
+		GameAudio.buzz()
 	GameAudio.say("tap_hard" if hard else "tap")
 
 
@@ -1925,7 +1911,7 @@ func auto_lid() -> void:
 			cork_pop.play(true)
 		_lid_was = true
 		_lid_breeze()
-	clock.lid_real = 0.0
+	_lid_close_in = LID_IDLE
 
 
 ## (EVENTS_STAGING 6c-1) 불기 도구 대신: 손이 들어가 뚜껑이 열리면 들어온 바람에 다 핀 민들레 솜털이 저절로 날아오른다
@@ -1940,15 +1926,30 @@ func _lid_breeze() -> void:
 	if puffs == 0:
 		return
 	var f := cam.camera.global_transform.basis.z
-	var n := fv.blow_seeds(Vector2(-f.x, -f.z))
+	var n := fv.lid_breeze(Vector2(-f.x, -f.z))
 	if n > 0:
 		GameAudio.fx("seeds_wind", "Village")
 		GameAudio.say("seeds")
 
 
-## 손짓이 끝났다 — 뚜껑이 곧 저절로 닫힌다 (JarClock의 자동 닫힘을 당김)
+## 손짓이 끝났다 — 뚜껑이 곧 저절로 닫힌다 (화면이 LID_AFTER 뒤 close_lid 입력을 냄)
 func lid_soon() -> void:
-	clock.lid_real = maxf(clock.lid_real, Balance.LID_AUTO_CLOSE_REAL - LID_AFTER)
+	_lid_close_in = LID_AFTER if _lid_close_in < 0.0 else minf(_lid_close_in, LID_AFTER)
+
+
+## 뚜껑 닫기 차례 (현실 초 — 시뮬은 현실 시간을 읽지 않고, 닫기는 거인의 입력: jar-time E7). 겨누는 동안은 열어 둠
+func _lid_close_tick(dt: float) -> void:
+	if _lid_close_in < 0.0 or village == null or village.air == null:
+		return
+	if not village.air.lid_open:
+		_lid_close_in = -1.0
+		return
+	if hand_ctl != null and hand_ctl.aiming():
+		return
+	_lid_close_in -= dt
+	if _lid_close_in <= 0.0:
+		_lid_close_in = -1.0
+		toggle_lid()
 
 
 ## 지금 쪽지가 가리킬 단추 (없으면 null) — [손] 칸 안의 것은 칸이 닫혀 있으면 먼저 [손]

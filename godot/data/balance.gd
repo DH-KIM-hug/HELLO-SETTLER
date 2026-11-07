@@ -325,8 +325,9 @@ const INJURY_SLOW := 0.5                # 걸음·일 속도 ×0.5
 # 두려움 (HEALTH.md 4)
 const FEAR_TAP := 0.05                  # 유리 톡 (그날 4번째부터)
 const FEAR_TAP_HARD := 0.2              # 크게 친 톡 (지진)
-const FEAR_ROTATE := 0.1                # 병 돌리기 (그날 4번째부터)
-const FEAR_FREE_PER_DAY := 3            # 그날 3번까지는 괜찮다
+const FEAR_ROTATE := 0.1                # 등불 옮기기 (그날 2번째부터 — LAMP_FREE_PER_DAY)
+const FEAR_FREE_PER_DAY := 3            # 유리 톡은 그날 3번까지 괜찮다 (design/gdd/giant-touch.md R4 · F1)
+const LAMP_FREE_PER_DAY := 1            # 등불 옮기기는 그날 1번만 괜찮다 — 톡과 따로 셈 (giant-touch R4 · F2, 사용자 결정 2026-11-08)
 const FEAR_TAKE_FOOD := 0.1             # 굶주릴 때 식량을 거둠
 const FEAR_FAMILY_DEATH := 0.2
 const FEAR_SAW_DEATH := 0.05
@@ -590,7 +591,6 @@ const HUMID_TAU := 6.0 * HOUR           # (정함) 김이 목표로 다가가는
 const SMOKE_TAU := 3.0 * HOUR
 const STALE_TAU := 8.0 * HOUR
 # 뚜껑 (WORLD_EVENTS 3): 열린 동안 김·연기·탁한 공기 → 바깥 값, 거인의 방 온기가 섞여 들어옴, 물이 조금 빠져나감
-const LID_AUTO_CLOSE_REAL := 60.0       # 안 닫으면 현실 1분 뒤 저절로 닫힘 (JarClock)
 const LID_SAFETY_CLOSE := 8.0 * 60.0    # (정함) 병 시계로 8분 넘게 열려 있으면 닫힘 (오프라인·몰아서 계산 안전장치)
 const LID_DRAIN_TAU := 120.0            # (정함) 열린 동안 공기가 바깥 값으로 다가가는 빠르기 (병 시계 초)
 const OUTSIDE_HUMID := 0.35             # 거인의 방 공기

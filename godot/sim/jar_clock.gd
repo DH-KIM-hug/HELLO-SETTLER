@@ -50,7 +50,6 @@ var stop_count := {}                  # 갈래 → 지금까지 그 일로 멈�
 var stop_last_t := {}                 # 갈래 → 마지막으로 멈춘 병 시각 (편지가 잇달아 오면 알림만 — LETTER_GAP)
 var _step_ms := 0.0                   # 빠른 걸음 하나의 평균 계산 시간 (예산 맞추기)
 var stage_rate := -1.0                # (E1-0) 사건 연출 중: 병 시간이 이보다 빨리 흐르지 않는다 (현실 1초 = 병 n초 — StageDirector가 정함, 저장 안 함). <0 = 없음
-var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
 # 창세의 날 (OPENING 3.0 v3.3): 첫 병의 첫날(7시 → 다음 6시)은 현실 약 12분 — 빠르기는 Notebook.day_speed (보통에 대한 몫,
 # 수첩 쪽지·장면 앞에서 느리게, 수첩 뒤 빠르게) × 거인이 고른 배속 ÷ 보통. 첫 저녁 기도 뒤 모두 잠들면 밤을 저절로 건너뛰고, 아침이 되면 끝 →
 # 보통으로 돌아오고 배속 단추를 한 줄로 알려 준다. 저장된다 (다시 켜도 되풀이하지 않음)
@@ -277,7 +276,6 @@ func _tick_skip(real_dt: float) -> int:
 func tick(real_dt: float) -> int:
 	if notice_t > 0.0:
 		notice_t = maxf(0.0, notice_t - real_dt)
-	_lid_auto_close(real_dt)
 	if skipping:
 		rate = speed()
 		return _tick_skip(real_dt)
@@ -548,17 +546,6 @@ func _after_step() -> bool:
 		notice_t = 8.0
 		changed = was_fast
 	return changed
-
-
-## [곰팡이·뚜껑] 안 닫으면 현실 1분 뒤 저절로 닫힘 (배속과 상관없이 현실 시간 — 병 시계 안전장치는 JarAir)
-func _lid_auto_close(real_dt: float) -> void:
-	if v.air == null or not v.air.lid_open:
-		lid_real = 0.0
-		return
-	lid_real += real_dt
-	if lid_real >= Balance.LID_AUTO_CLOSE_REAL:
-		v.close_lid()
-		lid_real = 0.0                # (v3.3) 뚜껑은 손짓마다 저절로 열고 닫힌다 — 닫힘 알림은 없음 (화면은 CorkPop)
 
 
 # ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────

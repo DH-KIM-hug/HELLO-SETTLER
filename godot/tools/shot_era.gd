@@ -129,10 +129,10 @@ func _s_after_tap() -> int:
 
 
 func _s_blow_and_wait() -> int:
-	scene.toggle_lid()
-	scene.blow()
+	scene.auto_lid()                  # (giant-touch) 불기 손짓은 없음 — 뚜껑이 열린 바람에 솜털이 날림
 	_run(30.0)
-	scene.toggle_lid()
+	if v().air.lid_open:
+		scene.toggle_lid()
 	var guard := 0
 	while not v().aware and guard < 400:
 		_run(10.0)

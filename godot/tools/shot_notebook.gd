@@ -156,7 +156,7 @@ func _s_water() -> int:
 	scene.cam.ppu_goal = 26.0
 	scene.cam._apply()
 	_settle()
-	scene.spray()
+	scene.spray_at(scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5))          # (giant-touch) 끌어 겨누기 — 캡처는 화면 가운데 땅에 바로
 	return 4
 
 

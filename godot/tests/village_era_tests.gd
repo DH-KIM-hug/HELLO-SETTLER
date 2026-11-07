@@ -515,19 +515,16 @@ func test_lamp_rules() -> void:
 	check(v.move_lamp(2) and Lamp.spot(v.water) == 2, "뒤 → 앞 (두 칸을 한 번에)")
 	check(v.book.size() > n0 and has_line(v, "옮겨 갔다"), "연대기: \"%s\"" % String(v.book[v.book.size() - 1]["text"]))
 	check(v.people.any(func(r: Resident) -> bool: return r.say == Balance.LINE_LAMP_MOVED), "주민: \"해가 옮겨갔다!\"")
+	check(is_equal_approx(v.fear, f0), "그날 첫 옮기기는 두려움 없음 (LAMP_FREE_PER_DAY 1 — giant-touch F2, %.2f)" % v.fear)
 	v.move_lamp(3)
+	check(v.fear > f0 + 1.0, "두 번째부터 두려움↑ (%.1f → %.1f)" % [f0, v.fear])
 	v.rotate_jar()                               # 옛 이름 = 한 칸
 	check(Lamp.spot(v.water) == 0, "옛 이름 rotate_jar = 다음 자리로 한 칸")
-	check(is_equal_approx(v.fear, f0), "하루 세 번까지는 두려움 없음 (%.2f)" % v.fear)
-	v.move_lamp(2)
-	check(v.fear > f0 + 1.0, "네 번째부터 두려움↑ (%.1f → %.1f)" % [f0, v.fear])
 	check(v.people.any(func(r: Resident) -> bool: return r.say == Balance.LINE_LAMP_FEAR), "주민: \"해가 또 자리를 바꿨어… 무서워\"")
 	v.advance(Balance.DAY)
 	var f1 := v.fear
 	v.move_lamp(1)
-	v.move_lamp(2)
-	v.move_lamp(3)
-	check(is_equal_approx(v.fear, f1), "다음 날엔 다시 세 번까지 괜찮다 (%.2f → %.2f)" % [f1, v.fear])
+	check(is_equal_approx(v.fear, f1), "다음 날엔 다시 한 번은 괜찮다 (%.2f → %.2f)" % [f1, v.fear])
 	# 깨닫기 전: 목격 (경이)
 	Village.start_aware = false
 	var u := proto(62)

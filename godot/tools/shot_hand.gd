@@ -38,7 +38,7 @@ func _save(name: String, at: Variant) -> void:
 		img = img.get_region(Rect2i(x0, y0, cw, chh))
 	img.save_png(out_dir.path_join(name + ".png"))
 	var v: Village = scene.village
-	print("saved %s · %s · 커튼 %d · 온기 %.0f초 · 먼지막 %.2f · 김 %.2f" % [name, v.fmt_time(v.t), v.water.curtain, v.water.cup_left, v.water.glass_dust, GiantHand.fog_shown(v)])
+	print("saved %s · %s · 먼지막 %.2f · 김 %.2f" % [name, v.fmt_time(v.t), v.water.glass_dust, GiantHand.fog_shown(v)])
 
 
 func _phone_zoom(mul := 1.0) -> void:
@@ -109,7 +109,7 @@ func _process(_d: float) -> bool:
 			step = 1
 		1:
 			scene.toggle_lid()
-			scene.spray()
+			scene.spray_at(scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5))          # (giant-touch) 끌어 겨누기 — 캡처는 화면 가운데 땅에 바로
 			_wait = 75
 			step = 2
 		2:
@@ -121,7 +121,6 @@ func _process(_d: float) -> bool:
 			step = 3
 		3:
 			pass
-			v.water.cup_left = 0.0
 			scene.hand_ctl.open()
 			_quiet(v)
 			_wait = 90
@@ -157,7 +156,7 @@ func _process(_d: float) -> bool:
 			_show(dp, 60)
 			step = 7
 		7:
-			scene.tweeze()
+			scene.tweeze_at(GiantHand.pick_target(scene.focus_village(), scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5), 9.0).get("pos", scene.screen_to_ground(scene.get_viewport().get_visible_rect().size * 0.5)))
 			_wait = 42
 			step = 8
 		8:

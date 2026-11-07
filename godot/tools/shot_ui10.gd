@@ -258,7 +258,7 @@ func _process(_dt: float) -> bool:
 			_wait = 6
 		30:
 			_save("ui10_phone_9x20")
-			print("9:20 (1080×2400 비율) → UI %s · 아래 띠 버튼: %s" % [str(vs), ", ".join(PackedStringArray([scene.lid_btn.text, scene.blow_btn.text, scene.speed_btn.text]))])
+			print("9:20 (1080×2400 비율) → UI %s · 아래 띠 버튼: %s" % [str(vs), ", ".join(PackedStringArray([scene.hand_btn.text, scene.speed_btn.text]))])
 			var small: PackedStringArray = shots.slice(0, shots.size() - 1)
 			Sheet.make(small, out_dir.path_join("ui10_sheet.png"), 1.0)
 			print("saved ui10_sheet")

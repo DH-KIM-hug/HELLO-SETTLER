@@ -30,7 +30,7 @@ signal zoom_beyond_world(amount: float)   # 거인의 방보다 더 오므림 (l
 
 var room_zoom: RoomZoom
 var out_btn: Button                  # [병 밖으로] (UI 09 — 방까지 지름길)
-var _tap_t := -1.0                   # 병 밖에서 병 두 번 톡 = 들어가기
+var _tap_gate := DoubleTapGate.new(DOUBLE_TAP)   # 병 밖에서 병 두 번 톡 = 들어가기 — 첫 누름은 미뤄 둠 (giant-touch E5)
 var _proc_ms := 0.0                  # 이 장면 _process 시간 (시뮬레이션 + 화면 갱신, 평균 — 성능 측정용)
 var _enter_fly := false              # 타이틀 [이어하기] → 방에서 마을로 날아 들어오는 중 (따라잡기가 끝나면)
 var _last_letter: Dictionary = {}     # 마지막 '자리를 비운 동안' 편지 (유리에 붙은 편지로 다시 읽기)
@@ -824,6 +824,7 @@ func _process(dt: float) -> void:
 	far_outline_check()
 	_rim_check()
 	_lid_follow()
+	_room_tap_flush(Time.get_ticks_msec() / 1000.0)
 	if room_zoom != null:
 		room_zoom.update(dt)
 		_shelf_process(dt)
@@ -1028,7 +1029,7 @@ func lamp_preview_end() -> void:
 		_lamp_cam = {}
 
 
-## 뚜껑은 병에 하나 — 모든 무리가 함께 열리고 닫힌다 (첫 무리의 뚜껑이 기준: JarClock의 1분 자동 닫힘)
+## 뚜껑은 병에 하나 — 모든 무리가 함께 열리고 닫힌다 (첫 무리의 뚜껑이 기준: 화면의 닫기 차례 — TestVillage._lid_close_tick)
 func toggle_lid() -> void:
 	var open := not village.air.lid_open
 	_lid_sync = true
@@ -1038,8 +1039,6 @@ func toggle_lid() -> void:
 		else:
 			q.close_lid()
 	_lid_sync = false
-	if open:
-		clock.lid_real = 0.0
 
 
 func _on_return_all(away: float) -> Array:
@@ -1233,7 +1232,8 @@ func go_outside() -> void:
 	cam.zoom_to_ext(cam.ext_min())
 
 
-## 병 밖(④⑤)에서 누름: 유리에 붙은 편지 = 그 편지 · 병을 두 번 톡 = 들어가기 (마을로 날아감) · 한 번 = 유리 톡
+## 병 밖(④⑤)에서 누름: 유리에 붙은 편지 = 그 편지 · 병을 두 번 톡 = 들어가기 (마을로 날아감, 톡 0번) ·
+## 한 번 = 유리 톡 — DOUBLE_TAP이 지나 두 번째가 안 왔을 때 확정 (_room_tap_flush, giant-touch R4 · E5). 소리는 바로
 func _room_tap(sp: Vector2) -> void:
 	var note := room_zoom.notes.pick(cam.camera, sp)
 	if not note.is_empty():
@@ -1248,18 +1248,25 @@ func _room_tap(sp: Vector2) -> void:
 	var on_jar := absf(sp.x - cp.x) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.05 and absf(sp.y - cp.y) < absf(cam.camera.unproject_position(e).x - cp.x) * 1.4
 	if not on_jar:
 		return
-	if _tap_t > 0.0 and now - _tap_t < DOUBLE_TAP:
-		_tap_t = -1.0
+	if _tap_gate.press(now, fx) == "double":
 		if fx != 0.0:
 			_enter_focused()
 		else:
 			fly_to_settlement(focus_village())
 		return
-	_tap_t = now
 	if fx != 0.0:
 		GameAudio.fx("glass_tap_light", "Room", -6.0)     # 옆 병 유리 톡 (그 병의 주민은 지금 자는 중 — 들어가면 깨어남)
 	else:
-		tap_glass(false)
+		GameAudio.fx("glass_tap_light")                  # 소리는 바로 (시뮬 입력은 미룸)
+		GameAudio.buzz()
+
+
+## 미뤄 둔 첫 누름 확정 (매 화면) — 두 번째가 오지 않았으면 그때 유리 톡 1번 (이 병만 — 옆 병은 소리뿐)
+func _room_tap_flush(now: float) -> void:
+	if not _tap_gate.poll(now):
+		return
+	if _tap_gate.data == null or float(_tap_gate.data) == 0.0:
+		tap_glass(false, null, false)
 
 
 ## 유리에 붙은 편지 (GIANT_ROOM 3 — 빨간 점 대신): 안 읽은 '자리를 비운 동안' 편지 · 계시를 기다리는 무리 · 소원 편지가 있는 무리

@@ -111,8 +111,6 @@ static func do_task(v: Village, id: String) -> String:
 			Notebook.followed(v, v.people[3])
 		"wipe":
 			v.wipe_glass()
-		"cup":
-			v.cup_hands()
 		"chron":
 			Notebook.on(v, "chronicle")
 		"child":
@@ -462,16 +460,27 @@ func test_scene() -> void:
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
 	hc.refresh()
-	check(not hc.lid_btn.is_visible_in_tree() and not hc.spray_btn.is_visible_in_tree() and hc.slot_row.is_visible_in_tree(),
+	check(hc.get("lid_btn") == null and not hc.spray_btn.is_visible_in_tree() and hc.slot_row.is_visible_in_tree(),
 		"[손] 칸: 뚜껑 단추 없음 · 처음엔 손에 든 것만 (물 뿌리기는 밭이 마를 때 열림 — 6c)")
 	Firsts.unlock("spray")
 	hc.refresh()
 	check(hc.spray_btn.is_visible_in_tree(), "밭이 마른 뒤: [물 뿌리기]가 보임")
 	check(not v.air.lid_open, "처음엔 뚜껑 닫힘")
 	scene.call("spray")
-	check(v.air.lid_open, "물 뿌리기 → 뚜껑이 저절로 열림")
+	check(bool(scene.call("aiming")) and hc.aim_tool() == "spray" and not v.air.lid_open, "물 뿌리기 → 끌어 겨누기 (땅 그림자 — 뚜껑은 놓을 때 열림, giant-touch ④)")
+	var vs0: Vector2 = scene.get_viewport().get_visible_rect().size
+	hc.aim_at(Vector2(vs0.x * 0.3, vs0.y * 0.6), false)      # 화면 가운데가 아닌 자리로 끌어 옮김 (AC18)
+	var aimed := hc.aim_point()
+	var soaks0: int = v.hand.soaks.size()
+	if not bool((hc.get("_aim") as Dictionary)["pv"].get("ok", false)):
+		hc.aim_at(Vector2(vs0.x * 0.5, vs0.y * 0.45), false)
+		aimed = hc.aim_point()
+	hc.confirm_drop()
+	var landed: Vector2 = Vector2(float(v.hand.soaks[-1][0]), float(v.hand.soaks[-1][1])) if v.hand.soaks.size() > soaks0 else Vector2(INF, INF)
+	check(v.air.lid_open and not bool(scene.call("aiming")) and landed.distance_to(aimed) < 0.5, "[뿌리기] → 뚜껑이 저절로 열리고 겨눈 땅 자리에 물 (%.2f칸 차이)" % landed.distance_to(aimed))
 	for k in 16:
 		clock.tick(DT)
+		scene.call("_lid_close_tick", DT)
 	check(not v.air.lid_open, "손짓이 끝나면 곧 저절로 닫힘 (%.0f초 안)" % (16 * DT))
 	Market.hand.append({"id": 991, "item": Notebook.GRAIN, "paid": 0.0, "free": true})
 	scene.call("start_drop", 991)
@@ -480,6 +489,7 @@ func test_scene() -> void:
 	check(not Shop.hand_item(991).size() > 0, "낟알을 떨어뜨림")
 	for k in 16:
 		clock.tick(DT)
+		scene.call("_lid_close_tick", DT)
 	check(not v.air.lid_open, "떨어뜨린 뒤 곧 닫힘")
 	# 휴대폰 크기 (360×640 · 세로로 긴 360×780): 손 칸 단추가 쪽지·화면 밖에 가리지 않음 (도구가 모두 열린 손)
 	Firsts.open_all()

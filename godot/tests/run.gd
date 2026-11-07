@@ -5,7 +5,7 @@
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
 ##         era 깨달음·계시·연대기 (A4b · A5 · A10) · shop 상점·손·떨어뜨리기·아래 띠 (A7 · A9) ·
 ##         village 마을 시대 건물·등불 옮기기 (A6 · A11) ·
-##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초) · touch 거인의 손길 (giant-touch, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
@@ -48,7 +48,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd",
 	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
 	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd", "social": "res://tests/social_tests.gd",
-	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd"}
+	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd", "touch": "res://tests/touch_tests.gd"}
 
 
 func _initialize() -> void:
@@ -79,7 +79,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()

@@ -121,7 +121,7 @@ static func text(v: Village) -> String:
 
 
 ## 빛낼 단추 ("glass" · "slot"(손에 든 것) · "spray" · "wipe" · "people" · "chronicle" · "shop" · "altar" · "baby" · "")
-## 손 칸 안의 단추는 뚜껑이 닫혀 있으면 먼저 "lid"
+## (뚜껑 단추는 없다 — 손짓마다 저절로 열림, giant-touch)
 static func highlight(v: Village) -> String:
 	var tk := shown(v)
 	return String(tk.get("hl", ""))

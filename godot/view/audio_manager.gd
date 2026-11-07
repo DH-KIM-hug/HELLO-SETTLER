@@ -55,7 +55,7 @@ const LINES := {
 	"seeds": {"boy": 3, "girl": 3, "woman": 3},
 	"sick": {"man": 2, "old_man": 2, "woman": 2},
 	"tap": {"boy": 3, "old_man": 3, "woman": 3},
-	"tap_hard": {"girl": 2, "woman": 2},
+	"tap_hard": {"girl": 2, "woman": 2},     # 크게 친 톡 (지진) — 개발 키(KEY_T)만 닿음, 화면 손짓 아님 (giant-touch 사용자 결정 ③)
 	"wedding": {"man": 2, "old_woman": 2, "woman": 2},
 	"wish_granted": {"boy": 2, "girl": 2, "man": 2},
 	"work": {"man": 2, "woman": 2},

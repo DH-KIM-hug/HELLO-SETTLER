@@ -602,7 +602,7 @@ func test_fear() -> void:
 	check(after3 == 0.0 and is_equal_approx(n.fear, Balance.FEAR_TAP), "유리 톡: 그날 3번까지는 괜찮고 4번째부터 +0.05")
 	for i in 4:
 		v.rotate_jar()
-	check(is_equal_approx(n.fear, Balance.FEAR_TAP + Balance.FEAR_ROTATE), "병 돌리기: 4번째부터 +0.1 (%.2f)" % n.fear)
+	check(is_equal_approx(n.fear, Balance.FEAR_TAP + Balance.FEAR_ROTATE * (4 - Balance.LAMP_FREE_PER_DAY)), "등불 옮기기: 2번째부터 +0.1 — 톡과 따로 셈 (giant-touch F2, %.2f)" % n.fear)
 	# 반감기 12시간 (기도·축제 중엔 두 배)
 	bold = v.people[1]
 	bold.set_blood(PackedStringArray(["bold"]))
