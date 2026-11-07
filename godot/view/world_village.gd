@@ -394,6 +394,7 @@ var _arrival_wait := false
 
 func _begin_arrival() -> void:
 	_set_hud(false)
+	paused = true                        # 지구 이름을 짓기 전엔 병 시간이 흐르지 않는다 (2026-11-07 사용자)
 	var layer := CanvasLayer.new()
 	layer.layer = 15
 	add_child(layer)
@@ -425,6 +426,7 @@ func _set_hud(on: bool) -> void:
 func _on_named(nm: String) -> void:
 	entry["name"] = nm
 	_named = true
+	paused = false                       # 이름을 지은 뒤에야 세상이 움직이기 시작
 	_defer_save = false
 	_start_save()
 	CreationPlan.clear(StartFlow.save_dir())
