@@ -70,6 +70,7 @@ const FAST_EVERY := 0.1
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
+var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -242,11 +243,23 @@ func _sync_residents(dt: float) -> void:
 		m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
 		if r.action == "social" and r.anim != "walk" and not fast:
 			_face_partner(r, m)
+		var po: Dictionary = pose_over.get(r.id, {})
+		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함
+			if po.has("face"):
+				m.set_face(String(po["face"]))
+			if po.has("anim") and r.anim != "walk":
+				m.set_anim(String(po["anim"]), r.action)
 		m.set_lod(lod_close and not fast)
 		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다
 			m.tick(dt)
 		elif fresh:
 			m.tick(0.0)
+		if not po.is_empty():
+			if float(po.get("up", 0.0)) != 0.0 or float(po.get("side", 0.0)) != 0.0:
+				m.tilt_head(float(po.get("up", 0.0)), float(po.get("side", 0.0)))
+			if po.has("arm"):
+				var ar: Vector2 = po["arm"]
+				m.aim_arm_r(ar.x, ar.y)
 		_torch(r, m)
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):

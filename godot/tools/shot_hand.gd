@@ -2,8 +2,6 @@
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_hand.gd
 ## 결과 (godot_shots/):
 ##   hand_water.png    — 뚜껑을 열고 마른 밭 위에 물 뿌리기 (쏟아지는 물방울 + 젖은 자국, 장면 둘레 540×640)
-##   hand_cup.png      — 손으로 감싸기: 화면 가장자리에 거인의 손가락 + 따뜻한 빛 (화면 전체)
-##   hand_curtain.png  — 커튼 '닫힘' (낮이 어둑) + 손 칸의 [커튼 닫힘] (화면 전체)
 ##   hand_wipe.png     — 김·먼지막이 서린 유리를 닦는 순간 (지나가는 반짝임, 화면 전체)
 ##   hand_tweezers.png — 핀셋 집게가 내려와 먼지 뭉치를 집음 (장면 둘레 540×640)
 extends SceneTree
@@ -118,21 +116,18 @@ func _process(_d: float) -> bool:
 			_save("hand_water", focus)
 			scene.toggle_lid()
 			_quiet(v)
-			scene.cup()
+			pass                          # (6c-1) 감싸기는 없앰
 			_wait = 70
 			step = 3
 		3:
-			_save("hand_cup", null)
+			pass
 			v.water.cup_left = 0.0
-			v.set_curtain(2)
 			scene.hand_ctl.open()
 			_quiet(v)
 			_wait = 90
 			step = 4
 		4:
-			_save("hand_curtain", null)
 			scene.hand_ctl.close()
-			v.set_curtain(0)
 			v.water.glass_dust = 0.85
 			v.air.humid = 0.97
 			_quiet(v)

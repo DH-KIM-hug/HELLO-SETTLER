@@ -20,11 +20,12 @@ var lid_btn: Button
 var blow_btn: Button
 var tweeze_btn: Button                 # [거인의 손] 핀셋 — 뚜껑이 열린 동안 (날벌레·먼지 뭉치·떨어진 것 — WORLD_EVENTS 4.3)
 var spray_btn: Button                  # [거인의 손 B6] 물 뿌리기 — 뚜껑이 열린 동안
-var cup_btn: Button                    # 감싸기 (병 밖 — 온기가 남은 동안은 못 함)
-var curtain_btn: Button                # 커튼 3단
 var wipe_btn: Button                   # 유리 닦기
 var _say_t := 0.0                      # 손짓이 안 될 때 잠깐 보이는 말 (hint)
 var lamp_btn: Button
+var tool_rows: Array[HBoxContainer] = []   # 도구 두 줄 (열린 도구가 없으면 줄째 숨김)
+var tool_sep: HSeparator
+var _tools_sig := ""
 var hand_title: Label
 var hint: Label
 var slot_row: HBoxContainer
@@ -65,19 +66,25 @@ func build(root: Control) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.GAP)
 	col.add_child(row)
-	lid_btn = _btn(row, "뚜껑 열기", "뚜껑", Callable(sc, "toggle_lid"))
-	lid_btn.visible = false                            # (v3.3) 뚜껑은 손짓마다 저절로 열리고 닫힌다 — 따로 누르는 단추 없음 (시험·옛 캡처 도구가 읽는 자리만 남김)
-	blow_btn = _btn(row, "불기", "불기", Callable(sc, "blow"))
-	spray_btn = _btn(row, "물 뿌리기", "물 뿌리기", Callable(sc, "spray"))
+	tool_rows.append(row)
+	lid_btn = Button.new()                             # (6c-1) 뚜껑 단추는 손 칸에 없다 — 손짓마다 저절로 열리고 닫힘. 옛 시험·캡처가 읽는 자리만 (트리 밖에 숨김)
+	lid_btn.text = "뚜껑 열기"
+	lid_btn.visible = false
+	add_child(lid_btn)
+	blow_btn = Button.new()                            # (6c-1) 불기 단추 없음 — 손이 들어가 뚜껑이 열릴 때 민들레 솜털이 저절로 날림
+	blow_btn.text = "불기"
+	blow_btn.visible = false
+	add_child(blow_btn)
+	spray_btn = _btn(row, "물 뿌리기", "물뿌리개", Callable(sc, "spray"))
 	tweeze_btn = _btn(row, "핀셋", "핀셋", Callable(sc, "tweeze"))
 	var row2 := HBoxContainer.new()                   # 병 밖의 손짓 (뚜껑을 열지 않음 — WORLD_EVENTS 4.2)
 	row2.add_theme_constant_override("separation", UiTheme.GAP)
 	col.add_child(row2)
-	cup_btn = _btn(row2, "감싸기", "감싸기", Callable(sc, "cup"))
-	curtain_btn = _btn(row2, "커튼", "", Callable(sc, "curtain_next"))      # 글자가 단을 말함 (좁은 칸 — 아이콘 없이)
+	tool_rows.append(row2)
 	wipe_btn = _btn(row2, "유리 닦기", "유리 닦기", Callable(sc, "wipe"))
 	lamp_btn = _btn(row2, "등불 옮기기", "등불", Callable(sc, "move_lamp"))
-	col.add_child(HSeparator.new())
+	tool_sep = HSeparator.new()
+	col.add_child(tool_sep)
 	var head := HBoxContainer.new()
 	head.add_theme_constant_override("separation", 4)
 	col.add_child(head)
@@ -202,15 +209,38 @@ func layout(bottom_h: float) -> void:
 		p.offset_top = p.offset_bottom - p.get_combined_minimum_size().y
 
 
+## 도구 단추 ↔ 도구 이름 (Firsts.TOOLS)
+func tool_buttons() -> Dictionary:
+	return {"spray": spray_btn, "tweeze": tweeze_btn, "wipe": wipe_btn, "lamp": lamp_btn}
+
+
+## (EVENTS_STAGING 6c) 열린 도구만 보인다 — 잠긴 도구는 자리도 없다. 열린 것이 없는 줄은 줄째 숨김
+func _sync_tools() -> void:
+	var sig := str(Firsts.tools.keys())
+	if sig == _tools_sig:
+		return
+	_tools_sig = sig
+	var bs := tool_buttons()
+	for k: String in bs:
+		(bs[k] as Button).visible = Firsts.has_tool(k)
+	var any := false
+	for r in tool_rows:
+		var on := false
+		for c in r.get_children():
+			if c != lid_btn and (c as Control).visible:
+				on = true
+		r.visible = on
+		any = any or on
+	tool_sep.visible = any
+
+
 ## 매 화면: 뚜껑 글자·불기·손에 든 것
 func refresh() -> void:
 	var v: Village = sc.focus_village()
 	lid_btn.visible = false               # (v3.3) 뚜껑 단추 없음 — 불기·물 뿌리기·핀셋·떨어뜨리기가 저절로 열고 곧 닫는다 (CorkPop)
+	_sync_tools()
 	spray_btn.disabled = v.hand.spray_cd > 0.0
 	var w := v.water
-	cup_btn.disabled = w.cup_left > 0.0
-	cup_btn.text = "감싸는 중" if w.cup_left > 0.0 else "감싸기"
-	curtain_btn.text = "커튼 %s" % GiantHand.CURTAIN_NAMES[clampi(w.curtain, 0, 2)]
 	wipe_btn.disabled = v.hand.wipe_cd > 0.0
 	if _say_t > 0.0:
 		return

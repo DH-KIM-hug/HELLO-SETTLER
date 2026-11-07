@@ -2,7 +2,7 @@
 ## 첫 병에서만 (GameSave.should_start_creation) 화면 구석의 작은 쪽지로 거인이 할 일을 하나씩 — 거인 자신의 메모 말투.
 ## 주민의 부탁이 아니다 (주민은 아직 거인을 모른다). 쪽지마다 작은 지폐(30~80)와 경이(깨닫기 전)·믿음(깨달은 뒤).
 ## 무시해도 이야기는 흐른다: 쪽지는 기다리기만 하고, 깨달음은 하늘 낟알·물방울로 늦게라도 온다.
-## 쪽지는 '실제' 행동이 끝낸다 — Village.tap_glass · spray_water · cup_hands · wipe_glass · grant_wish · take_offering ·
+## 쪽지는 '실제' 행동이 끝낸다 — Village.tap_glass · spray_water · wipe_glass · grant_wish · take_offering ·
 ##   SkyDrops.drop (주운 통나무 · 하늘 낟알 한 줌) · Shop.buy가 Notebook.on(v, 행동)을 부르고, 화면은 따라가 보기 · 주민 상세 · 연대기 · 상점 열기를 알린다.
 ## 쪽지 사이 기다림: 앞 쪽지를 끝낸 뒤 GAP_MIN~GAP_MAX 현실 초 (계획한 때 at 쪽으로) — 현실 시간은 JarClock.tick이 tick()으로 준다.
 ## 창세의 날 (첫 병 첫날 7시 → 다음 6시, 현실 약 10~12분): 쪽지·장면 동안 PACE, 장면(깨달음·제단 짓기·첫 기도·방금 끝낸 쪽지) 앞에서는 느리게,
@@ -39,21 +39,16 @@ const NAP_FROM := 19.2           # 이 시각 뒤 모두 잠들면 밤 건너뛰
 
 ## 쪽지 (차례대로). at = 계획한 현실 초 (도착부터) · act = 끝내는 행동 · hl = 빛낼 단추 · area = 쪽지를 누르면 카메라가 갈 곳 ·
 ## gift = 쪽지가 뜰 때 손에 쥐여 주는 것 (무료) · watch = 지켜보기 쪽지 (사건이 끝냄) · need = 뜨기 전 조건
+## (EVENTS_STAGING 6c · OPENING 3.1 v3.4) 첫 10분 쪽지는 직관적인 일만 — 물 뿌리기·유리 닦기는 그 도구가 (감싸기는 없앰 — 6c-1) 필요한 사건 때 (Firsts)
 const TASKS := [
 	{"id": "logs", "at": 8.0, "act": "logs", "hl": "slot", "area": "site", "reward": 50, "gift": {LOGS: 3}, "need": "site", "beat": false,
 		"text": "사람들이 첫 터를 짓기 시작했어.\n[손]의 통나무를 터 곁에 내려 주면 빨리 짓겠지?"},
 	{"id": "tap", "at": 30.0, "act": "tap", "hl": "glass", "reward": 30,
-		"text": "다들 하늘이 있는 줄도 모르네.\n유리를 톡톡 두드려 볼까?"},
-	{"id": "water", "at": 70.0, "act": "water_field", "hl": "spray", "area": "farm", "reward": 50, "need": "farm", "lid": true,
-		"text": "첫 밭이 바싹 말랐네.\n밭을 화면 가운데에 두고 [손] → [물 뿌리기]."},
+		"text": "다들 하늘이 있는 줄도 모르네.\n유리를 톡 쳐 보세요. (가장자리 유리나 빈 곳을 톡)"},
 	{"id": "grain", "at": 100.0, "act": "grain", "hl": "slot", "area": "people", "reward": 40, "gift": {GRAIN: 1}, "lid": true,
 		"text": "일하느라 다들 배가 고프겠다.\n하늘 낟알 한 줌을 사람들 곁에 떨어뜨려 주자."},
 	{"id": "follow", "at": 128.0, "act": "follow", "hl": "people", "area": "people", "reward": 40,
 		"text": "저 사람은 이름이 뭘까?\n하나를 눌러 [따라가 보기]."},
-	{"id": "wipe", "at": 156.0, "act": "wipe", "hl": "wipe", "reward": 30, "need": "glass",
-		"text": "유리가 뿌예서 밭에 햇살이 덜 들어.\n[손] → [유리 닦기]."},
-	{"id": "cup", "at": 184.0, "act": "cup", "hl": "cup", "reward": 30,
-		"text": "아침 바람에 아이들이 떨고 있어.\n[손] → [감싸기]로 따뜻하게."},
 	{"id": "logs2", "at": 210.0, "act": "logs_any", "hl": "slot", "area": "store", "reward": 40, "need": "logs_left",
 		"text": "남은 통나무는 창고 곁에 내려 두자.\n다음 집 지을 때 쓰겠지."},
 	{"id": "carrier", "at": 228.0, "act": "carrier", "hl": "people", "area": "busy", "reward": 30, "need": "carrier",
@@ -125,7 +120,7 @@ static func text(v: Village) -> String:
 	return String(shown(v).get("text", ""))
 
 
-## 빛낼 단추 ("glass" · "slot"(손에 든 것) · "spray" · "wipe" · "cup" · "people" · "chronicle" · "shop" · "altar" · "baby" · "")
+## 빛낼 단추 ("glass" · "slot"(손에 든 것) · "spray" · "wipe" · "people" · "chronicle" · "shop" · "altar" · "baby" · "")
 ## 손 칸 안의 단추는 뚜껑이 닫혀 있으면 먼저 "lid"
 static func highlight(v: Village) -> String:
 	var tk := shown(v)

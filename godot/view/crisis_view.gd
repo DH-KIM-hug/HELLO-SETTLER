@@ -10,7 +10,7 @@ extends Node3D
 const GNAT_SCALE := 1.5                # 집채만 한 날벌레 (주민 키의 두 배 남짓)
 const DUST_SCALE := 1.0
 const HANG_Y := 6.5                   # 매달린 물방울 높이 (땅 위 칸)
-const DROP_SCALE := 2.2               # 하늘에 매달린 거대한 물 덩어리
+const DROP_SCALE := 3.0               # 하늘에 매달린 거대한 물 덩어리 (6c-1 — 뚜껑 돌기의 작은 이슬보다 훨씬 크게)
 const TRAIL_MAX := 40
 
 var v: Village

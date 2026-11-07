@@ -439,7 +439,7 @@ func _busy(v: Village) -> void:
 	v.open_lid()
 	v.spray_water(dry_spot(v))
 	v.cup_hands()
-	v.set_curtain(1)
+	# (6c-1) 커튼은 도구에서 없앰 — 불러오면 열림으로 돌아가므로 쳐 두지 않는다
 	v.water.glass_dust = 0.5
 	v.wipe_glass()
 	CT.farm_near(v, dry_spot(v) + Vector2(0, 1))
@@ -453,7 +453,7 @@ func test_save_and_determinism() -> void:
 	var d := v.to_dict()
 	check(SaveCodec.errors == 0, "저장할 수 없는 값 없음")
 	var w := Village.from_dict(bytes_to_var(var_to_bytes(d)))
-	check(_sig(w) == _sig(v), "저장 → 불러오기: 손의 상태가 그대로 (커튼·온기·먼지막·쿨타임·적신 자리)")
+	check(_sig(w) == _sig(v), "저장 → 불러오기: 손의 상태가 그대로 (온기·먼지막·쿨타임·적신 자리)")
 	v.advance(6.0 * H)
 	w.advance(6.0 * H)
 	check(_sig(w) == _sig(v), "불러온 뒤 6시간: 같은 결과")

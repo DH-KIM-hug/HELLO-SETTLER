@@ -298,6 +298,7 @@ func reset_all() -> void:
 	_auto_t = 0.0
 	_wipe_dir(ProjectSettings.globalize_path(dir))
 	Market.reset(0.0)
+	Firsts.reset()
 	Market.first_paid = false
 	Market.lamp_level = 0
 
@@ -352,7 +353,7 @@ func giant_payload() -> Dictionary:
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
 		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
-		"climates": giant.get("climates", []).duplicate(), "last_save_unix": Time.get_unix_time_from_system()}
+		"climates": giant.get("climates", []).duplicate(), "firsts": Firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system()}
 
 
 ## 병의 시대 (타이틀 병 안의 작은 마을 모습 — B1. 넓은 세상은 무리 중 가장 앞선 시대)
@@ -640,6 +641,7 @@ func load_all(with_jar := true) -> bool:
 	Market.hand = (gp.get("hand", []) as Array).duplicate(true)       # 거인의 손에 든 물건 (SHOP 3 — 옛 저장엔 없음 → 빈손)
 	Market.hand_serial = int(gp.get("hand_serial", Market.hand.size()))
 	Market.set_draws(gp.get("draws", {}) as Dictionary)                # 이주민 뽑기 — 그날 횟수 · seed (옛 저장엔 없음 → 0번)
+	Firsts.from_dict(gp.get("firsts", null))                         # 처음 겪는 일의 안내 창 · 열린 손 도구 (EVENTS_STAGING 6b·6c — 옛 저장엔 없음 → 모두 본 것·모두 열림)
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
 		"upgrades_off": gp.get("upgrades_off", []), "built": gp.get("built", []), "climates": gp.get("climates", [])}
 	if gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty():
