@@ -2,7 +2,7 @@
 ## 칸 (아래 띠 위에 펼쳐짐): 뚜껑 열기/닫기 (닫힐 때까지 남은 초) · 불기 · 물 뿌리기 · 핀셋 (뚜껑이 열린 동안) /
 ##   감싸기 · 커튼 (열림·반쯤·닫힘 — 누를 때마다 다음 단) · 유리 닦기 · 등불 옮기기 (병 밖 — ROADMAP B6, sim/giant_hand.gd) /
 ##   손에 든 것 (Market.hand — 5칸). 물건을 누르면 → 뚜껑이 열리고 (한 번 열고 여러 개 — 병의 법칙) 떨어뜨릴 자리 고르기:
-##   땅 위 그림자 + 그 위에 거인의 손이 물건을 들고 기다림. 손가락으로 끌면 그림자가 따라옴, [떨어뜨리기]로 놓음.
+##   땅 위 그림자 + 그 위에 물건이 옅은 반짝임 속에 떠서 기다림 (A24 2026-11-08: 거인의 손은 그리지 않는다 — view/sky_descent.gd). 손가락으로 끌면 그림자가 따라옴, [떨어뜨리기]로 놓음.
 ##   물건 칸에서 바로 땅으로 끌어 놓으면 곧바로 떨어진다 (경고가 있으면 멈추고 묻는다).
 ##   집·사람 위면 붉게 ("여기 떨어뜨리면 집이 부서져요") — 그래도 놓을 수 있다. 건물은 빈 땅만 + 자리 말 (농사 잘 되는 땅 …).
 ## 장면(view/test_village.gd · world_village.gd)이 가진다: 손가락 끌기·톡을 aiming() 동안 aim_at으로 돌려준다.
@@ -10,7 +10,7 @@ class_name GiantHandCtl
 extends Node
 
 const AIM_LIFT := 46.0                 # 손가락 위로 띄워 그림자가 손가락에 가리지 않게 (화면 px)
-const HOLD_H := 5.5                    # 거인의 손이 물건을 들고 기다리는 높이 (칸)
+const HOLD_H := 5.5                    # 떨어뜨릴 물건이 떠서 기다리는 높이 (칸)
 const DRAG_START := 14.0
 const SLOT_PX := 54.0
 
@@ -351,9 +351,9 @@ func start_drop(id: int, sp: Variant = null) -> void:
 		thing = SkyDropView.make_item(item)
 	held.add_child(thing)
 	var size := float(Balance.B[item]["size"]) if Shop.is_building(item) else float(Shop.ITEMS[item].get("size", 1.5))
-	var hand := SkyDropView.giant_hand(maxf(1.2, size * 0.9))
-	hand.position = Vector3(0, (2.4 if Shop.is_building(item) else 1.6) * maxf(1.0, size * 0.6), 0)
-	held.add_child(hand)
+	var glint := SkyDescent.shimmer(maxf(0.8, size * 0.75), 0.7)     # (A24) 손 없이 — 물건이 옅은 반짝임 속에 떠 있음
+	glint.position.y = size * 0.4
+	held.add_child(glint)
 	_aim = {"id": id, "item": item, "root": root, "shadow": shadow, "ring": ring, "held": held, "size": size, "pv": {}, "p": Vector2.ZERO}
 	b_icon.texture = GameIcons.tex(item) if not Shop.is_building(item) else GameIcons.tex("마을로 가기")
 	b_name.text = Balance.label(item)
@@ -459,14 +459,8 @@ func confirm_drop() -> void:
 	var held: Node3D = _aim["held"]
 	_aim = {}
 	banner.visible = false
-	# 손은 물건을 놓고 올라간다 (물건은 SkyDropView가 떨어뜨림)
-	var thing := held.get_child(0) as Node3D
-	if thing != null:
-		thing.visible = false
-	(root.get_child(0) as Node3D).visible = false
-	var tw := sc.create_tween()
-	tw.tween_property(held, "position:y", held.position.y + 30.0, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.tween_callback(root.queue_free)
+	# (A24) 떠 있던 물건은 SkyDropView가 그 자리에서 떨어뜨림 (그림자가 자라고 반짝임이 따라옴) — 고르던 표시는 바로 걷음
+	root.queue_free()
 	if r.has("building"):
 		sc.drop_building_fx(v, r["building"])
 		GameAudio.say("miracle")

@@ -1,7 +1,8 @@
 ## 하늘에서 내려온 것의 화면 — sim/sky_drops.gd (Village.drops · towers · algae). VillageView의 아이 (병 데이터 좌표).
 ## 바깥 크기 물건: 각설탕·밀 이삭·앰플 탑은 art/models 모델, 나머지는 단순한 모양 (같은 툰 빛). 깎일수록 작아진다 (SkyDrops.shrink).
 ## 새로 내려온 것 (병 시각 30초 안)은 하늘에서 떨어져 쿵 — 먼지 고리. 앰플 탑 둘레는 비옥한 만큼 푸른 빛 (데칼), 녹조 호수는 초록.
-## 거인의 손 (giant_hand)·물건 모양 (make_item)은 떨어뜨릴 자리를 고를 때 (view/giant_hand_ctl.gd)도 쓴다.
+## 물건 모양 (make_item)은 떨어뜨릴 자리를 고를 때 (view/giant_hand_ctl.gd)도 쓴다.
+## (A24 2026-11-08) 거인의 손은 그리지 않는다 — 떨어지는 동안 땅에 그림자가 자라고 옅은 반짝임이 따라옴 (view/sky_descent.gd).
 class_name SkyDropView
 extends Node3D
 
@@ -112,21 +113,45 @@ func _falling(n: Node3D) -> bool:
 	return false
 
 
-## 하늘에서 떨어지는 모습 (병 노드 아래 — 이미 땅 자리에 놓인 노드를 위에서부터)
+## 하늘에서 떨어지는 모습 (병 노드 아래 — 이미 땅 자리에 놓인 노드를 위에서부터).
+## (A24) 손 없이: 땅에 그림자가 먼저 생겨 가까워질수록 커지고 짙어지며, 물건 둘레의 옅은 반짝임이 내려온 길에 흩날림
 func fall(n: Node3D, ground_y: float) -> void:
+	var r := SkyDescent.footprint(n, 1.0)
 	n.position.y = ground_y + FALL_H
-	_falls.append({"node": n, "y0": ground_y, "t": 0.0, "s": n.scale})
+	var sh := SkyDescent.ground_shadow(r)
+	add_child(sh)
+	sh.position = Vector3(n.position.x, ground_y + 0.06, n.position.z)
+	var gl := SkyDescent.shimmer(r * 0.8)
+	n.add_child(gl)
+	_falls.append({"node": n, "y0": ground_y, "t": 0.0, "s": n.scale, "shadow": sh, "glint": gl})
+
+
+func _end_fall(f: Dictionary) -> void:
+	if f.has("glint"):
+		SkyDescent.fade_out(f["glint"])
+		f.erase("glint")
+	if f.has("shadow"):
+		var sh: MeshInstance3D = f["shadow"]
+		f.erase("shadow")
+		if is_instance_valid(sh):
+			var tw := sh.create_tween()
+			tw.tween_method(func(a: float) -> void: SkyDescent.set_shadow(sh, 1.0, a), 1.0, 0.0, 0.4)
+			tw.tween_callback(sh.queue_free)
 
 
 func _animate(dt: float) -> void:
 	var keep: Array = []
 	for f: Dictionary in _falls:
 		if not is_instance_valid(f["node"]):     # 떨어지는 중에 다 깎여 사라짐 (작은 물건 — 주운 통나무)
+			if f.has("shadow") and is_instance_valid(f["shadow"]):
+				(f["shadow"] as Node).queue_free()
 			continue
 		var n: Node3D = f["node"]
 		f["t"] = float(f["t"]) + dt
 		var u := clampf(float(f["t"]) / FALL_SECS, 0.0, 1.0)
 		n.position.y = float(f["y0"]) + FALL_H * (1.0 - u * u)
+		if f.has("shadow"):
+			SkyDescent.set_shadow(f["shadow"], u * u)
 		if u >= 1.0:
 			var sq := float(f["t"]) - FALL_SECS          # 쿵 — 살짝 눌렸다 펴짐
 			var base: Vector3 = f["s"]
@@ -134,6 +159,7 @@ func _animate(dt: float) -> void:
 			n.scale = Vector3(base.x * (2.0 - k), base.y * k, base.z * (2.0 - k))
 			if not f.has("thud"):
 				f["thud"] = true
+				_end_fall(f)
 				_puff(n.position, 2.2)
 				GameAudio.fx("drop_thud")
 				GameAudio.buzz()
@@ -380,46 +406,3 @@ static func make_item(item: String) -> Node3D:
 		_:
 			_mesh(n, _sphere(1.0), Color("c9a77a"), Vector3(0, 0.6, 0))
 	return n
-
-
-## 거인의 손 (낮은 폴리곤: 손바닥 + 손가락 넷 + 엄지 + 소매) — 물건을 집어 들고 병 위에서 기다림. u = 손가락 굵기 단위
-static func giant_hand(u: float) -> Node3D:
-	var h := Node3D.new()
-	var skin := Toon.mat(Color("f2c4a0"))
-	var palm := MeshInstance3D.new()
-	var pm := BoxMesh.new()
-	pm.size = Vector3(u * 1.1, u * 0.35, u * 1.0)
-	palm.mesh = pm
-	palm.material_override = skin
-	palm.position = Vector3(0, u * 0.35, -u * 0.2)
-	h.add_child(palm)
-	for i in 4:
-		var f := MeshInstance3D.new()
-		var cm := CapsuleMesh.new()
-		cm.radius = u * 0.12
-		cm.height = u * 0.75
-		f.mesh = cm
-		f.material_override = skin
-		f.rotation.x = PI * 0.5 + 0.5
-		f.position = Vector3(-u * 0.39 + i * u * 0.26, u * 0.12, u * 0.45)
-		h.add_child(f)
-	var th := MeshInstance3D.new()
-	var tm := CapsuleMesh.new()
-	tm.radius = u * 0.13
-	tm.height = u * 0.6
-	th.mesh = tm
-	th.material_override = skin
-	th.rotation = Vector3(0.4, 0, 1.1)
-	th.position = Vector3(-u * 0.62, u * 0.2, -u * 0.05)
-	h.add_child(th)
-	var arm := MeshInstance3D.new()
-	var am := CylinderMesh.new()
-	am.top_radius = u * 0.42
-	am.bottom_radius = u * 0.48
-	am.height = u * 6.0
-	arm.mesh = am
-	arm.material_override = Toon.mat(Color("8fb3c9"))      # 거인의 소매
-	arm.rotation.x = -0.9
-	arm.position = Vector3(0, u * 2.6, -u * 2.6)
-	h.add_child(arm)
-	return h
