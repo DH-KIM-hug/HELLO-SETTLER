@@ -547,7 +547,7 @@ func _node(q: Variant, w: int, is_self := false) -> Button:
 	var b := Button.new()
 	b.focus_mode = Control.FOCUS_NONE
 	b.mouse_filter = Control.MOUSE_FILTER_PASS        # 가계도 위에서 끌어도 스크롤 (390×844에서 가계도가 시트보다 길다)
-	b.custom_minimum_size = Vector2(w, 56)
+	b.custom_minimum_size = Vector2(w, 64)
 	b.theme_type_variation = "TreeSelf" if is_self else "TreeNode"
 	var p: Resident = q
 	b.disabled = p == null or is_self
@@ -560,6 +560,7 @@ func _node(q: Variant, w: int, is_self := false) -> Button:
 	box.alignment = BoxContainer.ALIGNMENT_CENTER
 	b.add_child(box)
 	var face := FaceIcon.new()
+	face.custom_minimum_size = Vector2(UiTheme.FACE_PX, UiTheme.FACE_PX) * 1.4     # 그림 초상 머리가 보이게 조금 크게
 	face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	face.set_resident(p)
 	box.add_child(face)

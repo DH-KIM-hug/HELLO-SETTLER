@@ -34,6 +34,11 @@ var spot_y := 0.0
 var spot_t := -1.0e9
 
 
+## 플레이어에게 보이는 이름 (Balance.label — 개축 중이면 지금 서 있는 종류)
+func label() -> String:
+	return Balance.label(type)
+
+
 func def() -> Dictionary:
 	return Balance.B[type]
 

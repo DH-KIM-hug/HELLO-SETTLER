@@ -14,6 +14,8 @@ signal drop_landed(pos: Vector3)      # 물방울이 수면에 닿음 (세계 �
 const R := JarWater.R
 const N := JarWater.N
 const CELL := JarWater.CELL
+## (물 다듬기) 화면 수면은 시뮬레이션 수면보다 이만큼 낮게 (호수로 보는 깊이의 절반 — 좁은 물길도 보이게) → 물가가 땅 높이선을 따라 둥글게 (_build_water)
+const WATER_SINK := JarWater.LAKE_DEPTH * 6.0 * 0.5
 const HS := 6.0                 # 높이 배율: 시뮬레이션 높이 1 = 세계 6칸 (프로토타입 높이는 평면 그림용이라 작다)
 const R_EDGE := R - 0.25        # 땅 원반 가장자리
 const BOTTOM := -5.0            # 땅 옆면 바닥
@@ -83,7 +85,7 @@ func _setup_falls() -> void:
 	_falls_key = key
 	waterfalls.surface_fn = func(x: float, z: float) -> float:
 		var k := JarWater.cell_idx(x, z)
-		return (sim.h[k] + sim.w[k]) * HS if sim.is_lake(k) else -1.0e9
+		return (sim.h[k] + sim.w[k]) * HS - WATER_SINK if sim.is_lake(k) else -1.0e9
 	waterfalls.setup(sim.grooves, PackedFloat32Array(), R_EDGE + 0.1, WALL_TOP, 0.0, ground_y,
 		func(x: float, z: float) -> float: return JarWater.sunward(x, z))
 
@@ -448,7 +450,7 @@ func _update_paths() -> void:
 	else:
 		_path_tex.update(img)
 	_mat.set_shader_parameter("path_tex0", _path_tex)
-	var stone := 1.0 if village != null and village.era >= GroundLook.STONE_ERA else 0.0
+	var stone := 1.0 if GroundLook.stone_roads(village) else 0.0
 	_mat.set_shader_parameter("path_rect0", Vector4(-R, -R, 2.0 * R, stone))
 
 
@@ -577,7 +579,7 @@ func _cover_jar(GA: PackedVector4Array, GB: PackedVector4Array, SR: PackedVector
 	if cover == null:
 		return
 	var groups := {}
-	var stone := village != null and village.era >= GroundLook.STONE_ERA
+	var stone := GroundLook.stone_roads(village)
 	var leaves := float(season.get("leaves", 0.0))
 	for k in N * N:
 		if _inside[k] != 1 or GroundLook.hash01(k % N, k / N, 11) > 0.25:     # 덮개 확률은 0.25 아래 — 대부분 칸을 일찍 건너뜀
@@ -618,7 +620,7 @@ func _build_water() -> ArrayMesh:
 						n += 1
 			var p := _corner_pos(ci, cj)
 			if n > 0:
-				p.y = s / n * HS
+				p.y = s / n * HS - WATER_SINK
 				wet[cj * n1 + ci] = 1
 			cp[cj * n1 + ci] = p
 	# 마른 꼭짓점: 이웃 젖은 꼭짓점의 수면 높이를 그대로 이어 평평한 수면을 땅속까지 연장
@@ -639,7 +641,8 @@ func _build_water() -> ArrayMesh:
 						n += 1
 			if n > 0:
 				# 땅이 수면보다 낮은 마른 꼭짓점(시뮬레이션상 물이 없는 곳)은 땅 바로 아래로 → 물이 넘쳐 보이지 않게
-				cp[vi].y = minf(s / n, _corner[vi] - 0.15)  if _corner[vi] < s / n else s / n
+				# (물 다듬기) 수면은 WATER_SINK만큼 내려 둬서, 이어 붙인 평평한 수면이 땅과 만나는 곳 = 호수 문턱 높이선 (칸 모양 톱니 없음)
+				cp[vi].y = minf(s / n, _corner[vi] - 0.01)
 	for vi in n1 * n1:
 		dep[vi] = cp[vi].y - _corner[vi]
 	var st := SurfaceTool.new()

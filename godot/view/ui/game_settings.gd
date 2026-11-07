@@ -16,6 +16,7 @@ var voice := true                       # 주민 목소리 (AUDIO.md 7)
 var vibration := true
 var language := "ko"
 var notify := true
+var away_speed := Balance.AWAY_DEFAULT_I   # 자리를 비운 동안 시간 (v4.3): 0 느리게 · 1 보통 · 2 빠르게 → Balance.AWAY_RATES
 
 
 static func get_current() -> GameSettings:
@@ -34,6 +35,7 @@ static func load_from(p: String) -> GameSettings:
 	s.voice = bool(cf.get_value("sound", "voice", s.voice))
 	s.vibration = bool(cf.get_value("device", "vibration", s.vibration))
 	s.notify = bool(cf.get_value("device", "notify", s.notify))
+	s.away_speed = clampi(int(cf.get_value("time", "away", s.away_speed)), 0, Balance.AWAY_RATES.size() - 1)
 	var lang := str(cf.get_value("general", "language", s.language))
 	s.language = lang if LANGS.has(lang) else "ko"
 	return s
@@ -47,6 +49,7 @@ func save(p := "") -> Error:
 	cf.set_value("device", "vibration", vibration)
 	cf.set_value("device", "notify", notify)
 	cf.set_value("general", "language", language)
+	cf.set_value("time", "away", away_speed)
 	return cf.save(p if p != "" else path)
 
 
@@ -62,3 +65,11 @@ func apply() -> void:
 static func buzz(ms := 30) -> void:
 	if get_current().vibration and OS.has_feature("mobile"):
 		Input.vibrate_handheld(ms)
+
+
+## 자리를 비운 동안 시간 한 줄: "보통 (12시간 → 3일)"
+static func away_words(i: int) -> String:
+	var k := clampi(i, 0, Balance.AWAY_RATES.size() - 1)
+	var days := 12.0 * float(Balance.AWAY_RATES[k]) / 24.0
+	var d := str(int(days)) if is_equal_approx(days, roundf(days)) else str(snappedf(days, 0.1))
+	return "%s (12시간 → %s일)" % [Balance.AWAY_NAMES[k], d]

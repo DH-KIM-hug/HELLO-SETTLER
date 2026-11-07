@@ -23,7 +23,9 @@ const MOSS_SHADE := 0.15        # 볕 값(sun_at, −1 그늘 ~ 1 창가)이 −
 const MOSS_WET := 0.45          # 습기가 이보다 많으면 이끼
 const FOREST_FROM := 0.28       # 숲 짙기(VillageView 숲과 같은 식) 이 값부터 숲 바닥
 const FOREST_FULL := 0.55
-const STONE_ERA := 1            # 이 시대(마을)부터 오솔길이 돌길
+const STONE_ERA := 1            # 이 시대(마을)부터 많이 밟은 큰길이 돌길 — 단 광장이 서야 (읍내부터는 광장 없이도). stone_roads()
+const STONE_TOWN_ERA := 2       # 읍내: 광장이 없어도 큰길은 돌길
+const STONE_V := 0.92           # 오솔길 값(path_value)이 이보다 높은 곳(발길 ≈40 — 큰길·광장 둘레)만 돌. 셰이더 STONE_V와 같게
 const POOL_R := 3.5             # 폭포 웅덩이 둘레 이끼·젖은 땅
 
 ## 캡처·시험용: 날짜를 덮어씀 (0 = 병 날짜). 예) month_override = 10 → 가을
@@ -85,7 +87,7 @@ static func type_at(a: Vector4, b: Vector4, path: float, stone: bool, salt: bool
 	if b.y > 0.5:
 		t = ROCK
 	if path > 0.5:
-		t = STONE_PATH if stone else PATH
+		t = STONE_PATH if stone and path >= STONE_V else PATH
 	if salt:
 		t = SALT
 	if float(sp.get("snow", 0.0)) > 0.0 and b.w + float(sp["snow"]) > 1.0:
@@ -195,12 +197,28 @@ static func apply_season(m: ShaderMaterial, sp: Dictionary) -> void:
 # ───────────────────────── 오솔길 텍스처 ─────────────────────────
 ## 오솔길 값 0~1 (셰이더가 0.5에서 끊음): 발길(Village.paths)이 PATH_LO + PATH_SPAN/2부터 길.
 ## (A18) 예전 (발길 − 4)/10 은 발길 9부터라 넓은 세상에선 길이 거의 안 보였다 (4일째 9 넘는 격자 33칸뿐) → 5부터
+## 0.5 위는 로그 눈금으로 PATH_MAX(60)까지 — 흙길 안에서 큰길(발길 ≈40 → STONE_V)을 가려낸다 (예전엔 8에서 1로 차서
+## 마을 시대가 되면 집 둘레 밟힌 땅 전체가 한꺼번에 돌바닥이 됐다)
 const PATH_LO := 2.0
 const PATH_SPAN := 6.0
+const PATH_MAX := 60.0
 
 
 static func path_value(v: float) -> float:
-	return clampf((v - PATH_LO) / PATH_SPAN, 0.0, 1.0)
+	var mid := PATH_LO + PATH_SPAN * 0.5
+	if v <= mid:
+		return clampf((v - PATH_LO) / PATH_SPAN, 0.0, 1.0)
+	return clampf(0.5 + 0.5 * log(v / mid) / log(PATH_MAX / mid), 0.5, 1.0)
+
+
+## 마을에 돌길(큰길)이 있나: 마을 시대 + 광장, 또는 읍내부터 (기획서 6.7 '많이 밟은 흙길은 마을 시대부터 돌길로' —
+## 개척기·갓 마을이 된 무리의 오솔길은 흙길. 광장이 서서 길이 모이는 한가운데가 생겨야 돌을 깐다)
+static func stone_roads(v: Village) -> bool:
+	if v == null:
+		return false
+	if v.era >= STONE_TOWN_ERA:
+		return true
+	return v.era >= STONE_ERA and VillageEra.first_built(v, "광장") != null
 
 
 ## 무리의 오솔길 지도(path_n²) → 0~1 값 이미지 (L8, path_value(발길 × s)).
@@ -208,16 +226,15 @@ static func path_value(v: float) -> float:
 static func path_image(paths: PackedFloat32Array, n: int, s: float) -> Image:
 	var data := PackedByteArray()
 	data.resize(n * n)
-	var k := 255.0 / PATH_SPAN
 	for i in mini(paths.size(), n * n):
-		data[i] = clampi(int((paths[i] * s - PATH_LO) * k), 0, 255)
+		data[i] = clampi(int(path_value(paths[i] * s) * 255.0), 0, 255)
 	return Image.create_from_data(n, n, false, Image.FORMAT_L8, data)
 
 
 # ───────────────────────── 땅 덮개 (메시 흩뿌리기) ─────────────────────────
 ## 겉흙 → 땅 덮개 모델 무리 (Art.GROUND_COVER) · 칸 하나에 놓일 확률 (낮게 — 사이사이 빈 땅)
 const COVER := {SHORE: ["모래·자갈 물가", 0.16], MUD: ["진흙", 0.015], MOSS: ["이끼", 0.1], FOREST: ["낙엽", 0.07],
-	STONE_PATH: ["오솔길 디딤돌", 0.22], PATH: ["오솔길 디딤돌", 0.025]}
+	STONE_PATH: ["오솔길 디딤돌", 0.03], PATH: ["오솔길 디딤돌", 0.025]}
 
 
 ## 칸 (i, j)에 덮개를 놓을까 → 모델 이름 또는 "" (해시로 늘 같은 자리·같은 모양). leaves = 계절 낙엽 (가을이면 숲 바닥에 더)

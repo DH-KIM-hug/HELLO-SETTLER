@@ -1,8 +1,13 @@
 ## 주민 초상 — 그 주민의 모델(ResidentModel)을 정면 가까이, 천천히 숨 쉬게. 따로 쓰는 작은 3D 세상(SubViewport)에 그린다.
 ## 겉모습 단계(ResidentModel.look_key)가 바뀌면 다시 만든다. 잠든(죽은) 사람은 회색으로.
 ## A20 v4: 늘 가까이 LOD + 직업 옷(일터 종류 · 촌장 띠)을 입고, 시트처럼 앞쪽 왼편 위에서 비추는 3/4 빛 (얼굴·옷 결이 보이게).
+## 그림 초상 (plan ②): 그림 층(PortraitComposer · art/portrait)이 다 있으면 3D 대신 콘셉트 시트풍 그림을 겹쳐 그린다.
+## 그림이 하나라도 없으면 예전처럼 3D 모델.
 class_name ResidentPortrait
 extends SubViewportContainer
+
+var illustrated := true                  # false = 늘 3D (비교·캡처용)
+var paper: PortraitView                  # 그림 초상 (보일 때만)
 
 var vp: SubViewport
 var cam: Camera3D
@@ -58,6 +63,13 @@ func show_resident(r: Resident, job := "", chief := false) -> void:
 	var key := ResidentModel.look_key(r)
 	_dead = r.dead
 	modulate = UiTheme.DEAD_TINT if _dead else Color.WHITE
+	var ls: Array = PortraitComposer.layers_for(r, job, chief, ResidentModel.face_of(r)) if illustrated else []
+	_use_paper(not ls.is_empty())
+	if not ls.is_empty():
+		paper.set_layers(ls)
+		_rid = r.id
+		_key = -999999                   # 3D로 돌아가면 다시 만들게
+		return
 	if model != null and key == _key and r.id == _rid:
 		model.set_face(ResidentModel.face_of(r))
 		set_job(job, chief)
@@ -78,6 +90,25 @@ func show_resident(r: Resident, job := "", chief := false) -> void:
 	model.set_anim("idle")
 	model.tick(0.0)
 	_frame()
+
+
+## 그림 초상 ↔ 3D 바꾸기 (그림이면 3D 화면은 그리지 않음)
+func is_paper() -> bool:
+	return paper != null and paper.visible
+
+
+func _use_paper(on: bool) -> void:
+	if on and paper == null:
+		paper = PortraitView.new()
+		paper.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		add_child(paper)
+	if paper != null:
+		paper.visible = on
+	self_modulate.a = 0.0 if on else 1.0
+	vp.render_target_update_mode = SubViewport.UPDATE_DISABLED if on else SubViewport.UPDATE_WHEN_VISIBLE
+	if on and model != null:
+		model.queue_free()
+		model = null
 
 
 ## 직업 옷 갈아입기 (바뀔 때만)
@@ -114,6 +145,12 @@ static func _meshes(n: Node) -> Array[MeshInstance3D]:
 
 
 func _process(dt: float) -> void:
+	if is_paper() and is_visible_in_tree():
+		if not _dead:
+			_t += dt
+			paper.pivot_offset = Vector2(paper.size.x * 0.5, paper.size.y)
+			paper.scale = Vector2(1.0, 1.0 + sin(_t * 1.7) * 0.008)      # 천천히 숨 쉼
+		return
 	if model == null or not is_visible_in_tree():
 		return
 	_t += dt

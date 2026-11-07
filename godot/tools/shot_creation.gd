@@ -1,7 +1,7 @@
-## 창조 오프닝 캡처 (OPENING 2 — 첫 병 줄임판). 창이 필요: godot --path godot -s res://tools/shot_creation.gd
-## 390×844, 가짜 안전 영역. 저장은 user://shot_creation_save. 결과 godot_shots/create_*.png:
-##   create_0_intro · create_1_core_small · create_1_core_big · create_1_rock · create_3_soil · create_3_sculpt · create_4_water ·
-##   create_6_nubs · create_6_twist · create_6_lapse · create_6_done · create_7_sow · create_7_grown · create_7b_kit · create_7b_release · create_7b_done
+## 창조 오프닝 캡처 (OPENING 2 — 첫 병, 단계마다 큰 단추). 창이 필요: godot --path godot -s res://tools/shot_creation.gd
+## 390×844, 가짜 안전 영역. 저장은 user://shot_creation_save. 결과 godot_shots/creation_buttons_*.png:
+##   core (핵 단추) · land (땅 단추) · water (물 단추) · seeds (씨앗 단추) · wild ([풀어 주기])
+## 단계의 단추가 나타나면 찍고, 단추를 눌러 연출을 끝까지 본 뒤 다음 단계로.
 extends SceneTree
 
 const SAVE_DIR := "user://shot_creation_save"
@@ -9,7 +9,19 @@ var c: Node
 var out_dir := ""
 var step := 0
 var t := 0.0
+var wait := 0.0
 var plan_seed := 20261107
+## [기다릴 안쪽 단계, 찍을 이름, 누를 단추 (-1 = [다음])]
+var plan_steps := [
+	["core", "creation_buttons_core", 1],
+	["soil", "creation_buttons_land", 2],
+	["water", "creation_buttons_water", 1],
+	["lapse", "", -1],
+	["sow", "creation_buttons_seeds", 0],
+	["grow", "", -1],
+	["release", "creation_buttons_wild", 0],
+	["settle", "", -2],
+]
 
 
 func _initialize() -> void:
@@ -27,105 +39,40 @@ func _save(name: String) -> void:
 	print("saved ", name)
 
 
-func _open() -> void:
-	if c != null:
-		root.remove_child(c)
-		c.free()
-	var p := CreationPlan.make(plan_seed, 512)
-	CreationPlan.clear(SAVE_DIR)
-	StartFlow.plan = p
-	c = load(StartFlow.CREATION_SCENE).instantiate()
-	root.add_child(c)
-	t = 0.0
-
-
-func _at(sec: float, dt: float) -> bool:
-	return t >= sec and t - dt < sec
-
-
 func _process(dt: float) -> bool:
 	t += dt
-	var jar: CreationJar = c.get("jar") if c != null else null
-	match step:
-		0:
-			root.size = Vector2i(390, 844)
-			_open()
-			step = 1
-		1:
-			if _at(1.2, dt):
-				_save("create_0_intro")
-			if _at(3.6, dt):
-				c.call("set_core", 0)
-			if _at(4.4, dt):
-				_save("create_1_core_small")
-				c.call("set_core", 2)
-			if _at(5.2, dt):
-				_save("create_1_core_big")
-				c.call("set_core", 1)
-				c.call("drop_core")
-			if _at(7.8, dt):
-				_save("create_1_rock")
-			if _at(10.4, dt):
-				_save("create_3_soil")
-				var pl: CreationPlan = c.get("plan")
-				for i in 14:
-					pl.brush(0.35 + i * 0.01, -0.3 + i * 0.03, 0.22, 0.12)
-					pl.brush(-0.4, 0.2 + i * 0.01, 0.2, -0.1)
-					pl.brush(-0.1, -0.55, 0.25, 0.09)
-				jar.mark_dirty()
-			if _at(11.2, dt):
-				_save("create_3_sculpt")
-				c.call("next")
-			if _at(12.6, dt):
-				c.call("pour_water", 0.5)
-				c.set("touches", {0: Vector2(200, 400)})
-			if _at(13.2, dt):
-				_save("create_4_water")
-				c.set("touches", {})
-				c.call("next")
-			if _at(14.6, dt):
-				c.call("tap_nub", -0.4, 0.3)
-				c.call("tap_nub", 0.45, -0.1)
-			if _at(15.0, dt):
-				_save("create_6_nubs")
-				c.call("next")
-			if _at(15.9, dt):
-				c.call("twist", 0.8)
-				_save("create_6_twist")
-			if _at(16.3, dt):
-				c.call("twist", 1.5)
-			if _at(21.5, dt):
-				_save("create_6_lapse")
-			if _at(28.0, dt):
-				_save("create_6_done")
-				c.call("next")
-			if _at(29.4, dt):
-				for i in 12:
-					c.call("sow", "tree", -0.3 + i * 0.02, 0.35)
-					c.call("sow", "grass", 0.2, -0.4 + i * 0.03)
-					c.call("sow", "moss", 0.5 - i * 0.02, 0.4)
-				c.set("touches", {0: jar.screen_of(jar.uv_point(-0.1, 0.35))})
-			if _at(30.0, dt):
-				_save("create_7_sow")
-				c.set("touches", {})
-				c.call("next")
-			if _at(37.8, dt):
-				_save("create_7_grown")
-				c.call("next")
-			if _at(39.4, dt):
-				_save("create_7b_kit")
-				var uv: Vector2 = c.call("_default_box_uv")
-				c.call("release_box", uv)
-			if _at(41.4, dt):
-				_save("create_7b_release")
-				var an: Array = jar.get("_animals")
-				print("animals ", an.size(), " ", (an[0]["node"] as Node3D).position if an.size() > 0 else null, " vis ", (an[0]["node"] as Node3D).visible if an.size() > 0 else null)
-				var f: Variant = c.call("_default_fish_uv")
-				if f != null:
-					c.call("release_fish", f)
-			if _at(42.8, dt):
-				c.call("next")
-			if _at(48.0, dt):
-				_save("create_7b_done")
-				quit(0)
+	if step == 0:
+		root.size = Vector2i(390, 844)
+		CreationPlan.clear(SAVE_DIR)
+		StartFlow.plan = CreationPlan.make(plan_seed, 512)
+		c = load(StartFlow.CREATION_SCENE).instantiate()
+		root.add_child(c)
+		step = 1
+		return false
+	if t > 180.0:
+		print("timeout at ", c.get("step"))
+		quit(1)
+		return true
+	var i := step - 1
+	if i >= plan_steps.size():
+		quit(0)
+		return true
+	var ps: Array = plan_steps[i]
+	var ready := String(c.get("step")) == String(ps[0])
+	if ps[0] in ["lapse", "grow", "settle"]:
+		ready = ready and (c.get("next_btn") as Button).visible
+	if not ready:
+		wait = 0.0
+		return false
+	wait += dt
+	if wait < 1.0:                       # 카메라·자막이 자리를 잡게
+		return false
+	if String(ps[1]) != "":
+		_save(ps[1])
+	if int(ps[2]) >= 0:
+		c.call("pick", int(ps[2]))
+	elif int(ps[2]) == -1:
+		c.call("next")
+	step += 1
+	wait = 0.0
 	return false

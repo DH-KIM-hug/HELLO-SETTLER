@@ -227,7 +227,7 @@ func refresh() -> void:
 		if i < Market.hand.size():
 			var item := String(Market.hand[i]["item"])
 			s.disabled = false
-			s.tooltip_text = item
+			s.tooltip_text = Balance.label(item)
 			if Shop.is_building(item):
 				s.icon = null
 				var cc := CenterContainer.new()
@@ -326,7 +326,7 @@ func start_drop(id: int, sp: Variant = null) -> void:
 	held.add_child(hand)
 	_aim = {"id": id, "item": item, "root": root, "shadow": shadow, "ring": ring, "held": held, "size": size, "pv": {}, "p": Vector2.ZERO}
 	b_icon.texture = GameIcons.tex(item) if not Shop.is_building(item) else GameIcons.tex("마을로 가기")
-	b_name.text = item
+	b_name.text = Balance.label(item)
 	banner.visible = true
 	if sp == null:
 		var vs: Vector2 = sc.get_viewport().get_visible_rect().size

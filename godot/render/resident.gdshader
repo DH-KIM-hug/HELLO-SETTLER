@@ -19,6 +19,8 @@
 //   칸 번호 ((칸 + 0.5) / 32, 1 = 결 없음, 0~15 머리카락 · 16~31 옷감), UV2 = 칸 안의 무늬 자리 (되풀이). 색 = 물들인 색 × 결.
 //   화면에서 아주 작아지면(멀리) 결을 줄여 반짝이지 않게. 피부(얼굴)에는 결 없음.
 //   머리카락의 그늘 색은 따뜻한 회색 (공용 청록 그늘이면 흰머리·은발이 파랗게 됨) — 그래서 빛 함수를 여기 둔다 (toon_light와 같은 규칙).
+// A20 v5: 옷·피부 그늘도 따뜻한 쪽으로 (하얀 앞치마가 그늘에서 파랗게 되지 않게: cloth_warm · skin_warm = 머리카락 그늘 색과 섞는 비율),
+//   가장자리 빛(rim): 카메라에서 비스듬한 면을 조금 밝게 — 풀밭 위에서 둥근 머리·어깨 윤곽이 읽히게 (부드럽게, 얼굴은 제외).
 shader_type spatial;
 render_mode ambient_light_disabled, specular_disabled, cull_back;
 
@@ -30,7 +32,12 @@ uniform vec3 hair_shade : source_color = vec3(0.74, 0.69, 0.68);   // 머리카�
 uniform sampler2D hair_tex : hint_default_white, filter_linear_mipmap, repeat_disable;
 uniform sampler2D cloth_tex : hint_default_white, filter_linear_mipmap, repeat_disable;
 uniform float detail = 1.0;            // 결 세기 (0 = 예전처럼 평평한 색)
+uniform float cloth_warm = 0.8;        // 옷 그늘: 공용 청록 그늘 → 따뜻한 회색 쪽으로 섞는 비율
+uniform float skin_warm = 0.6;
+uniform float rim = 0.22;              // 가장자리 빛 세기 (0 = 없음)
+uniform vec3 rim_tint : source_color = vec3(1.0, 0.97, 0.9);
 varying float warm_shade;              // 1 = 머리카락 (그늘 색을 따뜻하게)
+varying float rim_k;                   // 이 부분의 가장자리 빛 (얼굴 피부 0)
 
 void light() {
 	float ndl = dot(NORMAL, LIGHT);
@@ -38,6 +45,8 @@ void light() {
 	float shadow = (view_fill > 0.0 && ndl <= 0.3) ? 1.0 : step(0.5, ATTENUATION);
 	float lit = step(lit_threshold, ndl_f) * shadow;
 	DIFFUSE_LIGHT += mix(mix(shade_tint, hair_shade, warm_shade), lit_tint, lit);
+	float edge = smoothstep(0.5, 0.9, 1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0));
+	DIFFUSE_LIGHT += rim_tint * (rim * rim_k * edge * (0.6 + 0.4 * lit));
 }
 
 uniform vec3 cloth : source_color = vec3(0.27, 0.46, 0.62);
@@ -147,7 +156,8 @@ void fragment() {
 	vec2 duv_x = dFdx(UV2);
 	vec2 duv_y = dFdy(UV2);
 	float dk = detail_k(COLOR.a, UV2, duv_x, duv_y);
-	warm_shade = 0.0;
+	warm_shade = cloth_warm;
+	rim_k = 1.0;
 	// 점박이 무늬 (부품 좌표 + 사람마다 다른 자리·크기)
 	float pb = 0.0;
 	if (piebald > 0.5) {
@@ -175,7 +185,9 @@ void fragment() {
 		if (head) {
 			// 시트처럼 얼굴은 늘 밝게: 머리 피부의 노멀을 카메라 쪽으로 기울여 그늘 경계가 얼굴을 가로지르지 않게
 			NORMAL = normalize(mix(NORMAL, VIEW, 0.7));
+			rim_k = 0.0;
 		}
+		warm_shade = skin_warm;
 		c = s;
 	} else if (k.r < 0.03 && k.g > 0.97) {
 		if (head && bald > 0) {

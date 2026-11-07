@@ -236,7 +236,7 @@ static func on_built(v: Village, b: Building) -> void:
 		"묘지":                                # 이미 홀로 묻힌 사람은 그 자리에 둔다 (옮기지 않음)
 			v.log_line("마을 끝에 묘지를 일구었다. 이제 떠난 이들을 한곳에 묻고 기릴 수 있다.")
 		"교회":
-			v.log_line("교회가 다 지어졌다. 사람들은 이제 큰 제단 앞에 모여 기도한다.")
+			v.log_line("예배당이 다 지어졌다. 사람들은 이제 큰 제단 앞에 모여 기도한다.")
 		"광장":
 			v.log_line("마을 한가운데에 돌을 깔아 광장을 만들었다. 저녁마다 사람들이 모여 이야기를 나눈다.")
 		"나루터":
@@ -413,7 +413,7 @@ static func evening_bell(v: Village) -> void:
 	v.bell_t = v.t
 	v.stats["bells"] = int(v.stats.get("bells", 0)) + 1
 	if int(v.stats["bells"]) == 1:
-		v.log_line("저녁 기도 때 처음으로 교회 종이 울렸다. 들에 있던 사람들도 일손을 놓고 교회 앞으로 모였다.")
+		v.log_line("저녁 기도 때 처음으로 예배당 종이 울렸다. 들에 있던 사람들도 일손을 놓고 예배당 앞으로 모였다.")
 
 
 ## 혼례: 교회가 있으면 교회에서 (잔치 — 반나절 행복), 없으면 예전처럼 모닥불 앞
@@ -424,7 +424,7 @@ static func wedding(v: Village, a: Resident, b: Resident) -> bool:
 	v.wedding_t = v.t
 	v.stats["weddings"] = int(v.stats.get("weddings", 0)) + 1
 	v.bell_t = v.t
-	v.log_line("%s%s %s%s 교회에서 혼례를 올렸다. 종이 울리고 온 마을이 잔치를 벌였다." % [a.name, Village.josa(a.name, "과", "와"), b.name, Village.josa(b.name, "이", "가")])
+	v.log_line("%s%s %s%s 예배당에서 혼례를 올렸다. 종이 울리고 온 마을이 잔치를 벌였다." % [a.name, Village.josa(a.name, "과", "와"), b.name, Village.josa(b.name, "이", "가")])
 	if not a.sleeping:
 		var p := local_to_world(ch, -0.3, ch.size() + 0.9)
 		ResidentAI.cancel(v, a)

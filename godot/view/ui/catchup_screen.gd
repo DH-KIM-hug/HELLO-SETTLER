@@ -1,4 +1,4 @@
-## 따라잡기 로딩 화면 — docs/SAVE.md 3 · 4.1: "병 안의 시간이 흐르는 중…" + 진행 막대 (10분 넘게 비웠을 때만).
+## 따라잡기 로딩 화면 — docs/SAVE.md 3 · 4.1: "자리를 비운 동안의 일을 펼쳐 보는 중…" + 진행 막대 (10분 넘게 비웠을 때만).
 ## 등불보다 오래 비웠으면 "등불이 n시간 타고 꺼져 있었어요" 한 줄이 천천히 떠오른다 (SAVE.md 3 — 꺼진 등불에 다시 불을 붙이는 짧은 연출).
 ## 화면 전체를 종이색으로 덮고, 화면마다 CatchUp.run(예산 ms)로 최대한 빨리 흘린다 → 끝나면 finished(편지 내용).
 ## 쓰는 법: var s := CatchUpScreen.new(); add_child(s); s.start(catch_up_목록, 비운 초)
@@ -37,7 +37,7 @@ func _init() -> void:
 	box.add_theme_constant_override("separation", 10)
 	add_child(box)
 	title = Label.new()
-	title.text = "병 안의 시간이 흐르는 중…"
+	title.text = "자리를 비운 동안의 일을 펼쳐 보는 중…"
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	title.add_theme_color_override("font_color", UiTheme.INK)
 	box.add_child(title)

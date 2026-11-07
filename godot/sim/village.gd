@@ -62,6 +62,8 @@ var auto_reveal := false             # 시대 점수가 차면 지켜보는 때�
 
 var era := 0
 var era_pts := 0.0
+var era_watch_day := -1               # 시대 점수 '지켜봄' 몫을 센 달력 날 (era_watch_k)
+var era_watch_secs := 0.0             # 그날 지켜봄 100%로 센 병 초 (Balance.ERA_WATCH_HOURS까지)
 # A4b 깨달음 (기획서 6.5 · 11.1 — sim/awakening.gd). 기본값 true = 옛 저장(제단이 있던 병)은 그대로 안다. 새 병은 Awakening.start가 끈다
 var aware := true                     # 주민이 하늘 너머의 거인을 안다 (깨달음 뒤)
 var altar_built := true               # 제단이 있다 — 그 전엔 기도·제물·소원 편지가 없다
@@ -261,7 +263,7 @@ func _arrive_fed() -> void:
 func thanksgiving(b: Building) -> void:
 	stats["thanks"] = 1
 	if not altar_built:                   # 아직 제단이 없다 (A4b) — 기도 대신 모닥불 곁에 모여 첫 집을 기뻐함 (짧게)
-		log_line("%s%s 다 지어지자 모두 모닥불 곁에 모여 손뼉을 쳤다. %s" % [b.type, josa(b.type, "이", "가"),
+		log_line("%s%s 다 지어지자 모두 모닥불 곁에 모여 손뼉을 쳤다. %s" % [b.label(), josa(b.label(), "이", "가"),
 			"우리 손으로 지은 첫 지붕이었다." if b.is_house() else "우리 손으로 일군 첫 터였다."])
 		var cc := chief()
 		for p in people:
@@ -283,7 +285,7 @@ func thanksgiving(b: Building) -> void:
 				speak(p, cheer[k], 7)
 				k += 1
 		return
-	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.type, josa(b.type, "이", "가")])
+	log_line("%s%s 다 지어지자 모두 모닥불 곁 돌 제단에 모여 거인님께 감사 기도를 드렸다." % [b.label(), josa(b.label(), "이", "가")])
 	var c := chief()
 	for p in people:
 		if p.is_baby() or p.sleeping or p.sick_left > 0.0:
@@ -940,8 +942,7 @@ func _update_era(dt: float) -> void:
 		if b.built:
 			built_n += 1
 	var rate: float = (people.size() * Balance.ERA_POP + built_n * Balance.ERA_BUILDING) * Balance.ERA_MULT[era]
-	if not is_watching():
-		rate *= Balance.OFFLINE_ERA
+	rate *= era_watch_k(dt)
 	era_pts = minf(Balance.ERA_NEED[era], era_pts + rate * dt / HOUR)
 	if era_pts < Balance.ERA_NEED[era]:
 		return
@@ -952,6 +953,25 @@ func _update_era(dt: float) -> void:
 		_revelation_notice()
 	elif is_watching() and t >= _rev_say_t:
 		_revelation_murmur()
+
+
+## 시대 점수의 지켜봄 배율 (BALANCE v2: 지켜봄 1 / 0.3). 100%는 병의 하루에 Balance.ERA_WATCH_HOURS 병 시간까지만 —
+## 밸런스 모델(sim_life.py)은 거인이 하루 2시간 지켜본다고 보고 '마을 1.8일'을 냈다. 빨리 돌리며 내내 지켜보면
+## (창세의 날 ×12 · 배속) 하루 24시간이 다 100%가 되어 반나절 만에 마을이 됐다 → 지켜봄 몫을 병 시간으로 하루 2시간까지.
+## dt만큼을 쓴다 (호출할 때마다 그날 몫이 준다). 반환 = 이 dt의 평균 배율
+func era_watch_k(dt: float) -> float:
+	if not is_watching():
+		return Balance.OFFLINE_ERA
+	var day_i := floori((start_clock + t) / DAY)
+	if day_i != era_watch_day:
+		era_watch_day = day_i
+		era_watch_secs = 0.0
+	var left := maxf(0.0, Balance.ERA_WATCH_HOURS * HOUR - era_watch_secs)
+	if dt <= 0.0:
+		return 1.0 if left > 0.0 else Balance.OFFLINE_ERA
+	var full := minf(dt, left)
+	era_watch_secs += full
+	return (full + (dt - full) * Balance.OFFLINE_ERA) / dt
 
 
 ## 시대 점수가 다 찼다 (계시를 기다림)
@@ -1044,7 +1064,7 @@ func giant_reveal() -> bool:
 			spoke += 1
 	var un := era_unlocks(era)
 	if not un.is_empty():
-		log_line("이제 %s%s 지을 수 있게 되었다." % ["·".join(un.slice(0, 6)), josa(un[mini(5, un.size() - 1)], "을", "를")])
+		log_line("이제 %s%s 지을 수 있게 되었다." % ["·".join(Array(un.slice(0, 6)).map(Balance.label)), josa(Balance.label(un[mini(5, un.size() - 1)]), "을", "를")])
 	end_giant()
 	return true
 
@@ -1259,7 +1279,7 @@ func on_built(b: Building) -> void:
 		b.type = b.upgrade_to
 		b.upgrade_to = ""
 		stats["upgrades"] += 1
-		log_line("작은 옛 집을 %s%s 넓혀 지었다." % [b.type, josa(b.type, "으로", "로")])
+		log_line("작은 옛 집을 %s%s 넓혀 지었다." % [b.label(), josa(b.label(), "으로", "로")])
 		return
 	b.built = true
 	if b.type == Awakening.ALTAR:          # 깨달음 뒤 주민이 지은 제단 → 첫 기도 (A4b)
@@ -1269,11 +1289,11 @@ func on_built(b: Building) -> void:
 		b.ready_at = t + Balance.GROW_FIRST
 		log_line("밭을 갈았다. 첫 곡식이 여물려면 반나절은 걸리겠지.")
 	elif b.is_house():
-		log_line("%s 한 채가 다 지어졌다. 이제 한 가족이 지붕 아래에서 잔다." % b.type)
+		log_line("%s 한 채가 다 지어졌다. 이제 한 가족이 지붕 아래에서 잔다." % b.label())
 	elif b.wished:
-		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.type, josa(b.type, "이", "가")])
+		log_line("소원을 빌었던 %s%s 다 지어졌다. 사람들은 거인님이 들어주셨다며 기뻐했다." % [b.label(), josa(b.label(), "이", "가")])
 	else:
-		log_line("%s%s 다 지어졌다." % [b.type, josa(b.type, "이", "가")])
+		log_line("%s%s 다 지어졌다." % [b.label(), josa(b.label(), "이", "가")])
 	VillageEra.on_built(self, b)          # 망루 안개·세상 끝 · 묘지·교회·광장·나루터 한 줄 (A6)
 	if in_opening():
 		thanksgiving(b)
@@ -1314,7 +1334,7 @@ func assign_jobs() -> void:
 		best.job = b.id
 		b.worker = best.id
 		stock["도구"] = float(stock["도구"]) - 1.0
-		speak(best, "오늘부터 %s 일을 해요" % b.type, 5)
+		speak(best, "오늘부터 %s에서 일해요" % b.label(), 5)
 
 
 func household_of(p: Resident) -> Array[Resident]:
@@ -1801,7 +1821,7 @@ func chief_build() -> void:
 		upgrade.prog = 0.0
 		upgrade.delivered = {"판자": 0, "돌": 0}
 		upgrade.incoming = {"판자": 0, "돌": 0}
-		log_line("촌장 %s%s 작은 옛 집을 %s%s 넓히기로 했다." % [cn, josa(cn, "이", "가"), want, josa(want, "으로", "로")])
+		log_line("촌장 %s%s 작은 옛 집을 %s%s 넓히기로 했다." % [cn, josa(cn, "이", "가"), Balance.label(want), josa(Balance.label(want), "으로", "로")])
 		return
 	var spot: Variant = find_spot(want)
 	if spot == null:
@@ -1811,9 +1831,9 @@ func chief_build() -> void:
 	if want == wish:
 		nb.wished = true
 		wishes.erase(wish)
-		log_line("촌장 %s%s 거인님이 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), want])
+		log_line("촌장 %s%s 거인님이 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 		return
-	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), want])
+	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 
 
 ## [하늘의 것] 버섯꾼을 둘 만한가: 하늘의 것에 익숙해졌고 다 자란 먹는 버섯이 둘 넘게 서 있다
@@ -2295,7 +2315,7 @@ func write_wish(type := "") -> Dictionary:
 		return {}
 	var who: Resident = adults[econ_rng.randi() % adults.size()]
 	_letter_id += 1
-	var text: String = WISH_REASON.get(ty, "%s%s 짓고 싶어요." % [ty, josa(ty, "을", "를")])
+	var text: String = WISH_REASON.get(ty, "%s%s 짓고 싶어요." % [Balance.label(ty), josa(Balance.label(ty), "을", "를")])
 	var l := {"id": _letter_id, "kind": "wish", "t": t, "from": who.id, "name": who.name, "type": ty, "text": text, "state": "open"}
 	letters.append(l)
 	speak(who, "거인님, 소원이 있어요", 6)
@@ -2323,7 +2343,7 @@ func grant_wish(id: int) -> bool:
 		var who := person(int(l["from"]))
 		if who != null:
 			speak(who, "거인님이 들어주셨다!", 7)
-		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], ty])
+		log_line("거인님이 %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], Balance.label(ty)])
 		giant_acted()
 		Notebook.on(self, "wish")          # [거인의 수첩]
 		return true
@@ -2609,12 +2629,12 @@ func buy_building(type: String, spot: Variant = null, paid := false) -> Building
 	for l: Dictionary in letters:
 		if l["kind"] == "wish" and l["type"] == type and l["state"] != "done":
 			l["state"] = "done"
-	log_line("하늘에서 %s%s 통째로 내려왔다! 사람들은 기적이라며 무릎을 꿇었다." % [type, josa(type, "이", "가")])
+	log_line("하늘에서 %s%s 통째로 내려왔다! 사람들은 기적이라며 무릎을 꿇었다." % [Balance.label(type), josa(Balance.label(type), "이", "가")])
 	Awakening.witness(self, "drop")
 	var near := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	near.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
 	for i in mini(2, near.size()):
-		speak(near[i], "기적이다!" if i == 0 else "하늘에서 %s%s 내려왔어!" % [type, josa(type, "이", "가")], 7)
+		speak(near[i], "기적이다!" if i == 0 else "하늘에서 %s%s 내려왔어!" % [Balance.label(type), josa(Balance.label(type), "이", "가")], 7)
 	giant_acted()
 	return b
 

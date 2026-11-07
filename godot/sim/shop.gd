@@ -195,12 +195,12 @@ static func card(v: Village, item: String) -> Dictionary:
 		elif int(BUILDING_ERA.get(item, 0)) > v.era:
 			lock = "%s 시대에" % Balance.ERAS[mini(int(BUILDING_ERA[item]), Balance.ERAS.size() - 1)]
 		var n := int(v.shop_bought.get(item, 0))
-		var inside := "완성된 %s — %s" % [item, BUILDING_LINE.get(item, "")]
+		var inside := "완성된 %s — %s" % [Balance.label(item), BUILDING_LINE.get(item, "")]
 		if Balance.B_LOCKED.has(item):
 			inside += " (아직은 %s)" % Balance.B_LOCKED[item]
 		if n > 0:
 			inside += " (또 사면 값이 올라요)"
-		return {"name": item, "icon": item, "giant": "손톱만 한 %s" % item, "inside": inside,
+		return {"name": Balance.label(item), "icon": item, "giant": "손톱만 한 %s" % Balance.label(item), "inside": inside,
 			"price": price(v, item), "lock": lock, "building": true}
 	var d: Dictionary = ITEMS[item]
 	var lock2 := String(d.get("lock", ""))

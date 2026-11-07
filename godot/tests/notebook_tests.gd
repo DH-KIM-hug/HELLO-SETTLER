@@ -258,7 +258,7 @@ func test_first_ten_minutes() -> void:
 	check(float(a["night_skip"]) > 0.0 and float(a["skip_hour"]) >= Notebook.NAP_FROM, "첫 저녁 기도 뒤 밤을 저절로 건너뜀 (현실 %.0f초, 병 %.1f시)" % [float(a["night_skip"]), float(a.get("skip_hour", 0.0))])
 	check(bool(a["evening_slow"]), "첫 저녁 기도 장면은 느리게 (×%d)" % int(Notebook.SLOW * Notebook.NORMAL_BASE))
 	var c: JarClock = a["clock"]
-	check(not c.creation and c.creation_done and c.speed() == 1.0, "둘째 날부터 ×1")
+	check(not c.creation and c.creation_done and absf(c.speed() - JarClock.normal_speed()) < 0.01, "둘째 날부터 보통 (1일=5분)")
 	check(has_line(v, Notebook.LINE_DONE), "연대기: \"%s\"" % Notebook.LINE_DONE)
 	# 바로 보이는 결과
 	var bf: Dictionary = a["before"]
@@ -361,7 +361,7 @@ func test_ignored() -> void:
 	while v.t < t_end and not v.aware:
 		v.advance(600.0)
 	check(v.aware, "그 뒤 며칠 안에 저절로 깨닫는다 (%.1f일째)" % (v.awakened_t / Balance.DAY))
-	check(c.speed() == 1.0, "둘째 날부터 ×1")
+	check(absf(c.speed() - JarClock.normal_speed()) < 0.01, "둘째 날부터 보통 (1일=5분)")
 
 
 ## 저장/이어하기 — 수첩 중간에서 앱을 껐다 켜도 그 쪽지부터 (거인 묶음의 손·지폐는 GameSave가 저장)
@@ -395,6 +395,7 @@ func test_second_jar() -> void:
 		c.tick(DT)
 	check(Notebook.shown(v).is_empty(), "시간이 흘러도 쪽지 없음")
 	Market.reset()
+	v = proto(7)
 	Notebook.begin(v, true)
 	v.advance(4.0 * 60.0)
 	for k in 100:

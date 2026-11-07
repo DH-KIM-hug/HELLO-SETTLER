@@ -631,7 +631,7 @@ func _make_med(v: Village, r: Resident) -> bool:
 	var undo := ResidentAI.op("mold_med_undo", {"rid": r.id})
 	var hut := v.bld(r.job)
 	if hut != null and hut.type == "약초꾼" and hut.built:      # 약초꾼은 자기 오두막에서 (A6)
-		r.doing = "약초꾼 오두막에서 푸른 가루로 약을 만드는 중"
+		r.doing = "약초원에서 푸른 가루로 약을 만드는 중"
 		r.steps.append(ResidentAI.walk(hut.x + 0.9, hut.y + 0.7))
 		r.steps.append(ResidentAI.act(Balance.MOLD_MED_MAKE_TIME, "work", done, false, undo))
 		return true

@@ -1,4 +1,8 @@
-"""Resident kit v3 (A20 v3, design/characters/*.png): soft, round storybook villagers (~3.2 heads tall, jobs_a / expressions_a).
+"""Resident kit v5 (A20, design/characters/*.png): soft, round storybook villagers (~3.1 heads tall, between jobs_a and base_c).
+v5: hair shells with a rolled soft edge, parting furrow, fringe tufts, side locks framing the face, soft clustered curls
+(hair_surface / fringe / curls); hands with a thumb and a finger mass (hand); apron bow + tails, wavy skirt hem, bigger belt
+pouch, cuff shadow; legs 0.06 longer. Close LOD ~4.4k tris avg (max 6k), far LOD ~0.6k. Render check: tools/shot_residents_v5.gd
++ compare_residents_v5.py (godot_shots/residents_v5_compare_N.png).
 
 Two glbs:
   resident.glb        one armature ("rig") + every body part as a smooth SKINNED mesh, each in two LODs
@@ -29,13 +33,13 @@ from lowpoly import Model, PartSet, PALETTE, shade, mix, srgb, out_dir_from_argv
 
 OUT = out_dir_from_argv()
 
-# ───────── proportions (chibi storybook, jobs_a: head ~1/3 of the height) ─────────
-HIP = 0.56
-WAIST = 0.66
-SHOULDER = 1.1
-NECK = 1.17
+# ───────── proportions (chibi storybook, jobs_a: head ~1/3 of the height; v5: legs 0.06 longer, between jobs_a and base_c) ─────────
+HIP = 0.62
+WAIST = 0.72
+SHOULDER = 1.16
+NECK = 1.23                   # = view/resident_model.gd NECK (head part origin for the shader)
 HEAD_R = 0.315
-HEAD_C = 1.49
+HEAD_C = 1.55
 HEAD_S = (1.04, 0.97, 0.97)
 ARM_X = 0.285
 LEG_X = 0.105
@@ -345,7 +349,7 @@ def w_arm(side):
     return fn
 
 
-KNEE = 0.3
+KNEE = 0.33
 ANKLE = 0.09
 
 
@@ -392,15 +396,20 @@ def build_head(parts):
     parts.append(p)
 
 
-def dress_torso(name, prof, sy, colfn, thigh, extra=None, seg=(14, 7), folds=0.0):
+def dress_torso(name, prof, sy, colfn, thigh, extra=None, seg=(14, 7), folds=0.0, hemwave=0.0):
     p = Part(name, w_torso(thigh))
-    n = Q(len(prof) + 4, max(5, len(prof) - 2))
+    n = Q(len(prof) + 4, max(5, len(prof) - 3))
     pr = catmull(prof, n)
     hem = prof[0][1]
 
     def wob(a, z):
         return 1.0 + folds * sm(WAIST - 0.05, hem, z) * math.sin(a * 7.0) if folds else 1.0
     rows = lathe_rows(pr, Q(*seg), sy=sy, wob=wob)
+    if hemwave and LOD == 0:                            # soft wavy hem (the cloth swings a little between the folds)
+        for r in rows[:2]:
+            for i, v in enumerate(r):
+                a = -math.pi / 2 + i / len(r) * 2 * math.pi
+                v.z += hemwave * (0.5 + 0.5 * math.sin(a * 7.0 + 1.5)) * (1.0 if r is rows[0] else 0.4)
     fs = p.grid(rows, colfn=colfn, cap0=True)
     p.detail(fs, lambda f: C_FOLDS if f.calc_center_median().z < WAIST - 0.03 else C_LINEN, m_cyl(tiles=3.0, vs=0.55, z0=SHOULDER))
     if extra:
@@ -460,13 +469,38 @@ def pouch(p, c, yaw, color="LOOK_BELT"):
         x, y, z = v
         y *= 1.0 - 0.35 * max(0.0, z / 0.07)            # flatter toward the top (hangs from the belt)
         return rot @ Vector((x * (1.0 + 0.15 * max(0.0, -z / 0.07)), y, z))
-    fs = p.sphere(c, (0.062, 0.038, 0.07), 9, 5, color=shade(color, 1.3), deform=bag)
-    o = c - right * 0.068 + Vector((0, 0, 0.075))
-    p.detail(fs, C_POUCH, m_plane(o, right, (0, 0, -1), 0.136, 0.15))
-    if LOD == 0:                                        # flap over the top half
-        fl = p.sphere(c + fwd * 0.008 + Vector((0, 0, 0.03)), (0.066, 0.042, 0.042), 7, 3, color=shade("LOOK_BELT", 0.85),
-                      deform=lambda v: rot @ Vector((v.x, v.y, max(v.z, -0.012))))
-        p.detail(fl, C_LEATHER, m_plane(o, right, (0, 0, -1), 0.14, 0.14))
+    fs = p.sphere(c, (0.072, 0.044, 0.08), 10, 6, color=shade(color, 1.45), deform=bag)
+    o = c - right * 0.078 + Vector((0, 0, 0.085))
+    p.detail(fs, C_POUCH, m_plane(o, right, (0, 0, -1), 0.156, 0.17))
+    if LOD == 0:                                        # flap over the top half + a strap up to the belt
+        fl = p.sphere(c + fwd * 0.009 + Vector((0, 0, 0.034)), (0.076, 0.048, 0.048), 8, 3, color=shade("LOOK_BELT", 0.85),
+                      deform=lambda v: rot @ Vector((v.x, v.y, max(v.z, -0.014))))
+        p.detail(fl, C_LEATHER, m_plane(o, right, (0, 0, -1), 0.16, 0.16))
+        p.sphere(c + Vector((0, 0, 0.09)), (0.022, 0.022, 0.05), 6, 3, color=shade("LOOK_BELT", 0.85), deform=lambda v: rot @ v)
+
+
+def apron_bow(p):
+    """Apron strings tied in a bow at the back of the waist (base_c back view): knot, two loops, two tails that flare out."""
+    yb = 0.245                                           # back surface of the skirt at the waist
+    if LOD == 1:
+        return
+    p.sphere((0, yb + 0.01, WAIST), (0.028, 0.025, 0.022), 7, 4, color=shade("LOOK_APRON", 0.9))
+    for sx in (-1, 1):
+        rot = Matrix.Rotation(sx * 0.35, 3, "Y") @ Matrix.Rotation(sx * 0.25, 3, "Z")
+        p.sphere((sx * 0.065, yb, WAIST + 0.012), (0.062, 0.022, 0.036), 9, 5, color="LOOK_APRON",
+                 deform=lambda v, rot=rot: rot @ Vector((v.x, v.y, v.z * (1.0 - 0.3 * abs(v.x) / 0.062))))
+        # tail: a thin strip hanging from the knot, swinging out and widening toward the end
+        rows = []
+        for j in range(6):
+            t = j / 5
+            z = WAIST - 0.01 - t * 0.3
+            cx = sx * (0.02 + 0.07 * t - 0.03 * t * t) + 0.012 * math.sin(t * math.pi * 2 + sx)
+            w = 0.018 + 0.02 * t
+            y = yb + 0.012 + 0.012 * math.sin(t * math.pi)
+            rows.append([Vector((cx - w, y, z)), Vector((cx, y + 0.008, z)), Vector((cx + w, y, z))])
+        fs = p.grid(rows, closed=False, color="LOOK_APRON", out=lambda c: Vector((0, 1, 0)))
+        p.detail(fs, C_LINEN, m_plane((0, 0, WAIST), (1, 0, 0), (0, 0, -1), 0.2, 0.2))
+        p.grid(rows, closed=False, color=shade("LOOK_APRON", 0.9), flip=True, out=lambda c: Vector((0, 1, 0)))
 
 
 def build_torsos(parts):
@@ -516,18 +550,16 @@ def build_torsos(parts):
         fs = p.grid(lathe_rows([(0.282, WAIST - 0.03), (0.282, WAIST + 0.03)], Q(18, 6), sy=0.86), color="LOOK_APRON")
         p.detail(fs, C_LINEN, m_cyl(tiles=6.0, vs=0.3, z0=WAIST))
         pouch(p, Vector((-0.19, -0.2, WAIST - 0.11)), 0.6)
-        for sx in ((-1, 1) if LOD == 0 else ()):
-            p.sphere((sx * 0.06, 0.25, WAIST), (0.06, 0.03, 0.04), Q(8, 4), Q(4, 2), color="LOOK_APRON")
-        p.sphere((0.04, 0.25, WAIST - 0.12), (0.025, 0.02, 0.09), Q(6, 3), Q(4, 2), color="LOOK_APRON")
+        apron_bow(p)
 
-    skirt = [(0.43, 0.2), (0.41, 0.3), (0.37, HIP - 0.04), (0.31, WAIST - 0.06), (0.275, WAIST), (0.285, WAIST + 0.16),
+    skirt = [(0.455, 0.2), (0.43, 0.24), (0.405, 0.32), (0.37, HIP - 0.04), (0.31, WAIST - 0.06), (0.275, WAIST), (0.285, WAIST + 0.16),
              (0.28, SHOULDER - 0.12), (0.22, SHOULDER - 0.02), (0.1, NECK - 0.02)]
     sk_pr = catmull(skirt, 40)
 
     def skirt_r(z):
         best = min(sk_pr, key=lambda rz: abs(rz[1] - z))
         return best[0]
-    parts.append(dress_torso("torso_dress", skirt, 0.86, dress_col, 0.3, apron, folds=0.03))
+    parts.append(dress_torso("torso_dress", skirt, 0.86, dress_col, 0.3, apron, folds=0.03, hemwave=0.014))
 
     # robe: to the ground, rope belt (chapel keeper)
     def robe_col(f):
@@ -574,21 +606,36 @@ def arm_rows(prof, side, seg):
 
 
 def hand(p, side, color=SKIN):
-    """Soft paddle hand (fingers together, slightly cupped) + a separate thumb at close LOD (jobs_a)."""
+    """Hand hanging at the side, palm toward the body (sheets). Close LOD: palm -> knuckle pinch -> finger mass with four
+    soft finger ridges, fingers curled a little toward the palm, a separate thumb lying on the front. Far LOD: soft paddle."""
     s = 1 if side == "L" else -1
     c = Vector((HAND.x * s, HAND.y, HAND.z))
-
-    def palm(v):
-        x, y, z = v
-        if z < 0:                                       # fingers taper a little and curl inward
-            x *= 1.0 - 0.18 * (-z / 0.085)
-            y += 0.012 * (-z / 0.085) ** 2
-        return Vector((x, y, z))
-    p.sphere(c, (0.05, Q(0.064, 0.06), 0.085), Q(10, 5), Q(7, 3), color=color, deform=palm)
-    if LOD == 0:                                        # thumb: a small capsule pointing forward-down, inner side
-        rot = Matrix.Rotation(-0.55, 3, "X") @ Matrix.Rotation(0.35 * s, 3, "Y")
-        p.sphere(c + Vector((-0.032 * s, -0.05, 0.012)), (0.021, 0.021, 0.042), 7, 4, color=color,
-                 deform=lambda v: rot @ v)
+    if LOD == 1:
+        def palm(v):
+            x, y, z = v
+            if z < 0:
+                x *= 1.0 - 0.18 * (-z / 0.085)
+                y += 0.012 * (-z / 0.085) ** 2
+            return Vector((x, y, z))
+        p.sphere(c, (0.05, 0.06, 0.085), 5, 3, color=color, deform=palm)
+        return
+    # rows from the wrist down: (dz, half width (front-back, y), half thickness (x), curl toward the palm, finger ridges)
+    prof = [(0.045, 0.040, 0.032, 0.0, 0.0), (0.012, 0.054, 0.040, 0.0, 0.0),
+            (-0.034, 0.05, 0.034, 0.008, 0.3), (-0.052, 0.054, 0.034, 0.016, 1.0), (-0.08, 0.05, 0.031, 0.03, 1.0),
+            (-0.104, 0.04, 0.024, 0.046, 0.8), (-0.12, 0.024, 0.013, 0.056, 0.3)]
+    seg = 12
+    rows = []
+    for dz, w, th, curl, ridge in prof:
+        ring = []
+        for i in range(seg):
+            a = i / seg * 2 * math.pi
+            k = 1.0 + 0.09 * ridge * math.cos(math.sin(a) * math.pi * 2.0) * (1.0 - 0.5 * abs(math.cos(a)))   # 4 finger ridges across the width
+            ring.append(Vector((c.x + (math.cos(a) * th * k - curl) * s, c.y + math.sin(a) * w * k, c.z + dz)))
+        rows.append(ring)
+    p.grid(rows, color=color, cap0=True, cap1=True)
+    # thumb: a soft capsule on the front of the palm, pointing forward-down, slightly out
+    rot = Matrix.Rotation(-0.6, 3, "X") @ Matrix.Rotation(0.3 * s, 3, "Y")
+    p.sphere(c + Vector((-0.024 * s, -0.052, 0.0)), (0.021, 0.022, 0.046), 8, 5, color=color, deform=lambda v: rot @ v)
 
 
 def build_arms(parts):
@@ -603,7 +650,9 @@ def build_arms(parts):
                            (catmull(fore, Q(3, 2)), SKIN, None)):
             p.grid(arm_rows(pr, side, Q(9, 4)), color=c, cap0=True if pr is not fore and pr[0][0] == 0.0 else None, det=det)
         hand(p, side)
-        p.shade = lambda co, n: 1.0 - 0.1 * sm(-0.3, -0.9, n.z)
+        zc = arm_rows([(0.7, 0.06)], side, 4)[0][0].z                       # cuff bottom: a shadow line on the forearm under the roll
+        p.shade = lambda co, n, zc=zc: (1.0 - 0.1 * sm(-0.3, -0.9, n.z)) * (1.0 - 0.14 * math.exp(-((co.z - zc + 0.012) / 0.016) ** 2)) \
+            * (1.0 - 0.08 * math.exp(-((co.z - HAND.z + 0.036) / 0.012) ** 2))
         parts.append(p)
         # robe: wide bell sleeve to the wrist
         p = Part("arm_robe_" + side, w_arm(side))
@@ -635,48 +684,81 @@ def build_legs(parts):
             parts.append(p)
 
 
-# ───────── hair: a shell from the crown to a hairline that can fall on as a curtain ─────────
-def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(30, 8), rows=(10, 4), color=HAIR, r0=1.06,
-                 tuck=0.09, inner=False, locks=12.0, cell=H_STRAIGHT, tiles=6.0, vs=0.24, wave=0.0):
+# ───────── hair: a shell from the crown to a hairline that can fall on as a curtain (v5: rolled soft edge, parting, tufts) ─────────
+def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(36, 8), rows=(12, 4), color=HAIR, r0=1.06,
+                 tuck=0.05, inner=False, locks=12.0, cell=H_STRAIGHT, tiles=6.0, vs=0.24, wave=0.0,
+                 tufts=0.0, tuft_n=3.9, tuft_part=0.0, groove=None, lip=0.02):
     """edge(theta) = polar angle (from the top) of the hairline, theta 0 = front, + = toward the character's left.
     drop(theta) = extra length falling straight down from the hairline (long hair). vol(theta, phi) = radius multiplier.
-    bumps(Vector) = outward bump (curls)."""
+    bumps(Vector) = outward bump (curls). tufts = fringe lock ridges (peaks at the scallop tips of fringe(n=tuft_n, part=tuft_part)).
+    groove = (theta, depth) = a parting: a shallow furrow from the crown to the hairline. lip = radius of the rolled edge
+    (close LOD): the hairline / hanging ends curl under instead of ending in a sharp sheet edge."""
     ns = Q(*seg)
     nr = Q(*rows)
     R = HEAD_R
     ctr = Vector((0, 0.015, HEAD_C))
+    lip = lip if LOD == 0 else 0.0
+
+    def signed(th):
+        return (th + math.pi) % (2 * math.pi) - math.pi
+
+    def radius_k(th, ph):
+        v = vol(th, ph) if vol else 1.0
+        if groove:
+            d = ang_d(th, groove[0])
+            v -= groove[1] * math.exp(-(d / 0.11) ** 2) * sm(0.12, 0.35, ph)
+        if tufts:
+            f = ang_d(th, FRONT) / math.pi
+            ridge = 0.5 - 0.5 * math.cos(2 * tuft_n * (signed(th) + tuft_part))
+            v += tufts * ridge * sm(0.3, 0.6, ph) * sm(0.24, 0.1, f)
+        return v
+
+    def point(th, t, bump_k=1.0):
+        """Surface point at polar fraction t (0 crown .. 1 edge / hanging end) -> (pt, outward normal, along-surface tangent)."""
+        pe = edge(th)
+        L = drop(th) if drop else 0.0
+        tot = R * pe + L
+        d = t * tot
+        v = radius_k(th, min(d / R, pe))
+        rr = R * r0 * v
+        if d <= R * pe:
+            ph = d / R
+            if L <= 0.0:                     # tuck the edge in toward the head a little
+                rr -= R * max(0.0, r0 * v - 0.985) * sm(0.8, 1.0, t) * (tuck / 0.09)
+            dirv = Vector((-math.sin(th) * math.sin(ph), -math.cos(th) * math.sin(ph), math.cos(ph)))
+            pt = ctr + Vector((dirv.x * rr * HEAD_S[0], dirv.y * rr * HEAD_S[1], dirv.z * rr * HEAD_S[2]))
+            nrm = (pt - ctr).normalized()
+            tan = Vector((-math.sin(th) * math.cos(ph), -math.cos(th) * math.cos(ph), -math.sin(ph)))
+        else:
+            ph = pe
+            dirv = Vector((-math.sin(th) * math.sin(ph), -math.cos(th) * math.sin(ph), math.cos(ph)))
+            base = ctr + Vector((dirv.x * rr * HEAD_S[0], dirv.y * rr * HEAD_S[1], dirv.z * rr * HEAD_S[2]))
+            k = (d - R * pe) / max(L, 1e-4)
+            out = Vector((dirv.x, dirv.y, 0)).normalized()
+            flare = 0.06 * math.sin(k * math.pi) - 0.05 * k * k + wave * math.sin(k * math.pi * 2.5 + th * 3.0) * k
+            pt = base + Vector((0, 0, -(d - R * pe))) + out * flare
+            nrm = out
+            tan = Vector((0, 0, -1))
+        if bumps:
+            pt = pt + nrm * (bumps(pt) * bump_k)
+        return pt, nrm, tan
+
     rings = []
     for j in range(1, nr + 1):
         t = j / nr
-        ring = []
-        for i in range(ns):
-            th = i / ns * 2 * math.pi
-            pe = edge(th)
-            L = drop(th) if drop else 0.0
-            tot = R * pe + L
-            d = t * tot
-            v = vol(th, min(d / R, pe)) if vol else 1.0
-            rr = R * r0 * v
-            if d <= R * pe:
-                ph = d / R
-                if L <= 0.0:                     # tuck the edge in toward the head (soft thick edge)
-                    rr -= R * max(0.0, r0 * v - 0.985) * sm(0.8, 1.0, t) * (tuck / 0.09)
-                dirv = Vector((-math.sin(th) * math.sin(ph), -math.cos(th) * math.sin(ph), math.cos(ph)))
-                pt = ctr + Vector((dirv.x * rr * HEAD_S[0], dirv.y * rr * HEAD_S[1], dirv.z * rr * HEAD_S[2]))
-            else:
-                ph = pe
-                dirv = Vector((-math.sin(th) * math.sin(ph), -math.cos(th) * math.sin(ph), math.cos(ph)))
-                base = ctr + Vector((dirv.x * rr * HEAD_S[0], dirv.y * rr * HEAD_S[1], dirv.z * rr * HEAD_S[2]))
-                k = (d - R * pe) / max(L, 1e-4)
-                out = Vector((dirv.x, dirv.y, 0))
-                flare = 0.06 * math.sin(k * math.pi) - 0.05 * k * k + wave * math.sin(k * math.pi * 2.5 + th * 3.0) * k
-                pt = base + Vector((0, 0, -(d - R * pe))) + out * flare
-            if bumps:
-                nrm = (pt - ctr).normalized()
-                pt = pt + nrm * bumps(pt)
-            ring.append(pt)
-        rings.append(ring)
-    top = ctr + Vector((0, 0, R * r0 * HEAD_S[2] * (vol(0, 0) if vol else 1.0)))
+        rings.append([point(i / ns * 2 * math.pi, t)[0] for i in range(ns)])
+    n_body = len(rings)
+    if lip > 0.0:
+        # rolled edge: three more rings curling under the hairline (and the hanging ends) toward the head
+        for a, bk in ((80, 0.5), (175, 0.0)):
+            ra = math.radians(a)
+            ring = []
+            for i in range(ns):
+                th = i / ns * 2 * math.pi
+                pt, nrm, tan = point(th, 1.0, bk)
+                ring.append(pt + tan * (lip * math.sin(ra)) - nrm * (lip * (1.0 - math.cos(ra))))
+            rings.append(ring)
+    top = ctr + Vector((0, 0, R * r0 * HEAD_S[2] * radius_k(0, 0)))
     if bumps:
         top = top + Vector((0, 0, bumps(top)))
     bm = p.bm
@@ -696,15 +778,22 @@ def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(30, 8), rows=(10
     faces = []
     for i in range(ns):
         face((pole, vr[0][(i + 1) % ns], vr[0][i]))
-    for a, b in zip(vr[:-1], vr[1:]):
+    flip = None
+    for k, (a, b) in enumerate(zip(vr[:-1], vr[1:])):
         for i in range(ns):
             j = (i + 1) % ns
-            face((a[i], a[j], b[j], b[i]))
+            f = bm.faces.new((a[i], a[j], b[j], b[i]))
+            f.normal_update()
+            if flip is None:                  # one winding for the whole shell (the rolled lip folds under: the centre test would fail there)
+                flip = f.normal.dot(f.calc_center_median() - ctr) < 0
+            if flip:
+                f.normal_flip()
+            faces.append(f)
     if inner:
         # inside of the hanging part, so looking past the cheek / from below shows hair, not a hole
         start = max(1, int(nr * 0.45)) if LOD == 0 else nr - 1
         iv = []
-        for r in rings[start:]:
+        for r in rings[start:n_body:(2 if LOD == 0 else 1)]:
             iv.append([bm.verts.new(Vector((q.x * 0.9, q.y * 0.9 + 0.01, q.z))) for q in r])
         for a, b in zip(iv[:-1], iv[1:]):
             for i in range(ns):
@@ -729,6 +818,11 @@ def hair_surface(p, edge, drop=None, vol=None, bumps=None, seg=(30, 8), rows=(10
         k = 1.0 - 0.05 * (0.5 + 0.5 * math.sin(th * locks + d.z * 6.0))      # painted locks (the atlas carries the strands)
         k *= 1.0 - 0.18 * sm(HEAD_C + 0.05, HEAD_C - 0.45, co.z)             # darker toward the ends / under
         k *= 1.0 + 0.08 * sm(0.4, 0.95, n.z)                                 # sheen on top
+        if groove and co.z > HEAD_C - 0.05:
+            k *= 1.0 - 0.24 * math.exp(-(ang_d(th, groove[0]) / 0.12) ** 2)  # the parting furrow is in shadow
+        if tufts:
+            ridge = 0.5 - 0.5 * math.cos(2 * tuft_n * (signed(th) + tuft_part))
+            k *= 1.0 - 0.07 * (1 - ridge) * sm(0.24, 0.1, ang_d(th, FRONT) / math.pi) * sm(HEAD_C + 0.3, HEAD_C + 0.1, co.z)
         return k
     p.shade = sh
     return faces
@@ -742,18 +836,31 @@ def ang_d(th, c):
     return abs((th - c + math.pi) % (2 * math.pi) - math.pi)
 
 
-def fringe(base, side, back, scallop=0.12, n=5, part=0.0):
-    """Hairline polar angle: base at the forehead, side at the ears, back at the nape; scalloped fringe locks."""
+def fringe(base, side, back, scallop=0.12, n=5, part=0.0, parting=0.0, lock=0.0, lock_at=0.95, lock_w=0.22, nape=0.035):
+    """Hairline polar angle: base at the forehead, side at the ears, back at the nape; scalloped fringe locks (tips at
+    theta = ±pi/(2n) - part). parting > 0: the hairline rises in a soft V at theta = -part (the parting) — the forehead shows,
+    the fringe locks sweep down to either side. lock > 0: a side lock in front of each ear (theta = ±lock_at) hangs lower,
+    framing the face (base_c woman / variety_c)."""
     def fn(th):
-        f = ang_d(th, FRONT) / math.pi                 # 0 front .. 1 back
+        ts = (th + math.pi) % (2 * math.pi) - math.pi
+        f = abs(ts) / math.pi                          # 0 front .. 1 back
         e = base + (side - base) * sm(0.06, 0.3, f) + (back - side) * sm(0.5, 0.9, f)
-        if f < 0.18:
-            e += scallop * (abs(math.sin((th + part) * n)) - 0.5) * (1 - f / 0.18)
+        if f < 0.2:
+            e += scallop * (abs(math.sin((ts + part) * n)) - 0.5) * (1 - f / 0.2)
+        if nape:                                       # soft tufts along the nape / behind the ears instead of a straight cut
+            e += nape * math.sin(ts * 5.5 + 0.4) * sm(0.35, 0.6, f)
+        if parting:
+            e -= parting * math.exp(-(ang_d(th, -part) / 0.13) ** 2)
+        if lock:
+            for s in (-1, 1):
+                e += lock * math.exp(-(ang_d(th, s * lock_at) / lock_w) ** 2)
         return e
     return fn
 
 
 def curls(seed, n, amp, sigma, zmin=None, gap=0.0):
+    """Soft clustered curl bumps: gaussian lobes spread over the crown (golden spiral), summed softly so neighbouring
+    curls merge into rounded clusters, with dips (gap) between them."""
     pts = []
     rnd = __import__("random").Random(seed)
     golden = math.pi * (3 - math.sqrt(5))
@@ -761,14 +868,16 @@ def curls(seed, n, amp, sigma, zmin=None, gap=0.0):
         z = 1 - (i + 0.5) / n * 1.6
         r = math.sqrt(max(0.0, 1 - z * z))
         th = golden * i + rnd.random() * 0.3
-        pts.append(Vector((HEAD_R * 1.12 * r * math.cos(th), HEAD_R * 1.12 * r * math.sin(th), HEAD_C + HEAD_R * 1.12 * z)))
+        sz = 0.85 + 0.3 * rnd.random()
+        pts.append((Vector((HEAD_R * 1.12 * r * math.cos(th), HEAD_R * 1.12 * r * math.sin(th), HEAD_C + HEAD_R * 1.12 * z)), sz))
 
     def fn(p):
         b = 0.0
-        for c in pts:
+        for c, sz in pts:
             d2 = (p - c).length_squared
-            b = max(b, math.exp(-d2 / (sigma * sigma)))
-        return amp * (b - gap)                      # gap > 0: dips between the curls
+            b += math.exp(-d2 / (sigma * sigma * sz)) ** 3
+        b = min(1.0, b ** (1.0 / 3.0))               # soft max: each lobe keeps its round top, neighbours blend at the joins
+        return amp * (b - gap)
     return fn
 
 
@@ -788,6 +897,9 @@ def w_braid(co):
     return W(skull=1 - t + 1e-3, chest=t)
 
 
+SCARF_EDGE = fringe(0.45, 1.62, 2.0, scallop=0.0, nape=0.0)      # headscarf hem (hat_scarf; curls under it are flattened inside)
+
+
 def build_hair(parts):
     def H(name, **kw):
         p = Part(name, kw.pop("weights", w_fixed("skull")), head=False)
@@ -798,9 +910,13 @@ def build_hair(parts):
         parts.append(p)
 
     side_vol = lambda th, ph: 1.0 + 0.04 * sm(0.6, 1.6, ph)
-    H("hair_short", edge=fringe(0.64, 1.72, 2.15, scallop=0.16, n=4, part=0.3), vol=side_vol)
-    H("hair_long", edge=fringe(0.7, 1.65, 2.05, scallop=0.12, n=4), inner=True,
-      drop=lambda th: 0.4 * sm(0.25, 0.6, ang_d(th, FRONT) / math.pi), vol=side_vol, rows=(9, 4))
+    # straight short (men): side parting, fringe locks swept to one side, soft tufts (base_c / variety_c)
+    H("hair_short", edge=fringe(0.6, 1.72, 2.15, scallop=0.2, n=3.5, part=0.35, parting=0.12), vol=side_vol,
+      tufts=0.016, tuft_n=3.5, tuft_part=0.35, groove=(-0.35, 0.03))
+    # straight long (women): centre parting, locks framing the face in front of the ears, curtain down the back
+    H("hair_long", edge=fringe(0.68, 1.65, 2.05, scallop=0.1, n=3.9, parting=0.16, lock=0.25), inner=True,
+      drop=lambda th: 0.4 * sm(0.25, 0.6, ang_d(th, FRONT) / math.pi) + 0.08 * math.exp(-(min(ang_d(th, 0.95), ang_d(th, -0.95)) / 0.25) ** 2),
+      vol=side_vol, rows=(13, 4), tufts=0.01, groove=(0.0, 0.03))
 
     def braids(p):
         # two plaits hanging over the shoulders to the chest (variety_c): a lumpy tapered tube, braid weave painted
@@ -829,8 +945,8 @@ def build_hair(parts):
                 tf = p.sphere(end + Vector((0, 0, -0.07)), (0.04, 0.035, 0.06), 7, 4, color=HAIR,
                               deform=lambda v: Vector((v.x * (1 + max(0.0, -v.z) * 4), v.y, v.z)))
                 p.detail(tf, H_STRAIGHT, m_cyl(cx=end.x, cy=end.y, tiles=2.0, vs=0.15, z0=end.z))
-    H("hair_braids", edge=fringe(0.68, 1.75, 2.15, scallop=0.05, n=2), vol=side_vol, extra=braids, rows=(9, 4), seg=(30, 7),
-      weights=w_braid)
+    H("hair_braids", edge=fringe(0.66, 1.75, 2.15, scallop=0.06, n=3.9, parting=0.16), vol=side_vol, extra=braids, rows=(10, 4),
+      seg=(36, 7), weights=w_braid, groove=(0.0, 0.035))
 
     def bun(p):
         c = Vector((0, 0.07, HEAD_C + 0.33))
@@ -841,29 +957,41 @@ def build_hair(parts):
         if down.z > 0:
             down = -down
         p.detail(fs, H_BUN, m_plane(c - right * 0.14 - down * 0.14, right, down, 0.28, 0.28))
-    H("hair_bun", edge=fringe(0.62, 1.75, 2.15, scallop=0.04, n=2), vol=side_vol, extra=bun, locks=16.0)
+    H("hair_bun", edge=fringe(0.62, 1.75, 2.15, scallop=0.05, n=3.9, parting=0.16), vol=side_vol, extra=bun, locks=16.0,
+      groove=(0.0, 0.035))
 
-    def under(fn):                    # curls only below a cap / scarf
-        return lambda q: fn(q) * sm(HEAD_C - 0.02, HEAD_C - 0.14, q.z)
+    def under(fn):                    # curls only where they show below a cap / the headscarf (no lumps poking through the cloth)
+        ctr = Vector((0, 0.015, HEAD_C))
+
+        def g(q):
+            d = q - ctr
+            ph = math.atan2(math.hypot(d.x, d.y), d.z)
+            th = math.atan2(-d.x, -d.y)
+            e = SCARF_EDGE(th)
+            return fn(q) * sm(HEAD_C - 0.02, HEAD_C - 0.14, q.z) * sm(e + 0.02, e + 0.22, ph)
+        return g
     # curly: separate curl clusters with gaps between them (base_c / variety_c), not a smooth helmet
-    cu = curls(7, Q(30, 14), Q(0.065, 0.05), Q(0.075, 0.08), gap=Q(0.12, 0.05))
-    H("hair_curly", edge=fringe(0.66, 1.9, 2.25, scallop=0.12, n=7), vol=lambda th, ph: 1.05, bumps=cu,
-      seg=(32, 8), rows=(11, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
-    H("hair_curly_under", edge=fringe(1.05, 1.9, 2.25, scallop=0.03, n=7), vol=lambda th, ph: 0.99, bumps=under(cu),
-      seg=(32, 8), rows=(9, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
-    cl = curls(11, Q(34, 16), Q(0.065, 0.05), Q(0.08, 0.08), gap=Q(0.12, 0.05))
+    # curly: fewer, larger curl lobes merged into soft clusters (base_c woman / child / elder), dense mesh so the outline is round
+    cu = curls(7, Q(20, 12), Q(0.072, 0.05), Q(0.105, 0.09), gap=Q(0.22, 0.05))
+    H("hair_curly", edge=fringe(0.66, 1.9, 2.25, scallop=0.1, n=5), vol=lambda th, ph: 1.05, bumps=cu,
+      seg=(44, 8), rows=(14, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.024)
+    H("hair_curly_under", edge=fringe(1.05, 1.9, 2.25, scallop=0.04, n=5), vol=lambda th, ph: 0.99, bumps=under(cu),
+      seg=(44, 8), rows=(11, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.024)
+    cl = curls(11, Q(22, 14), Q(0.072, 0.05), Q(0.11, 0.09), gap=Q(0.22, 0.05))
     long_drop = lambda th: 0.36 * sm(0.22, 0.55, ang_d(th, FRONT) / math.pi)
-    H("hair_curly_long", edge=fringe(0.75, 1.62, 2.0, scallop=0.12, n=7), drop=long_drop,
-      vol=lambda th, ph: 1.06 + 0.06 * sm(0.8, 1.6, ph), bumps=cl, seg=(28, 8), rows=(10, 3), inner=True, locks=0,
-      cell=H_CURLS, tiles=8.0, vs=0.13)
-    H("hair_curly_long_under", edge=fringe(1.1, 1.62, 2.0, scallop=0.03, n=7), drop=long_drop,
-      vol=lambda th, ph: 1.0 + 0.06 * sm(0.8, 1.6, ph), bumps=under(cl), seg=(28, 8), rows=(10, 3), inner=True, locks=0,
-      cell=H_CURLS, tiles=8.0, vs=0.13)
+    H("hair_curly_long", edge=fringe(0.75, 1.62, 2.0, scallop=0.1, n=5, lock=0.2), drop=long_drop,
+      vol=lambda th, ph: 1.06 + 0.06 * sm(0.8, 1.6, ph), bumps=cl, seg=(44, 8), rows=(13, 3), inner=True, locks=0,
+      cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.024)
+    H("hair_curly_long_under", edge=fringe(1.1, 1.62, 2.0, scallop=0.04, n=5, lock=0.2), drop=long_drop,
+      vol=lambda th, ph: 1.0 + 0.06 * sm(0.8, 1.6, ph), bumps=under(cl), seg=(44, 8), rows=(13, 3), inner=True, locks=0,
+      cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.024)
+    # wavy: side parting with layered fringe tufts (base_c man), long = soft waves down the back (jobs_a herbalist)
     wv = lambda p: 0.012 * math.sin(p.z * 18.0 + math.atan2(p.x, p.y) * 2)
-    H("hair_wave", edge=fringe(0.64, 1.75, 2.2, scallop=0.18, n=3, part=0.5), vol=lambda th, ph: 1.04, bumps=wv, cell=H_WAVY)
-    H("hair_wave_long", edge=fringe(0.7, 1.62, 2.0, scallop=0.14, n=3, part=0.5),
+    H("hair_wave", edge=fringe(0.6, 1.75, 2.2, scallop=0.24, n=3.5, part=0.3, parting=0.1), vol=lambda th, ph: 1.04, bumps=wv,
+      cell=H_WAVY, tufts=0.02, tuft_n=3.5, tuft_part=0.3, groove=(-0.3, 0.025))
+    H("hair_wave_long", edge=fringe(0.68, 1.62, 2.0, scallop=0.13, n=3.9, parting=0.14, lock=0.22),
       drop=lambda th: 0.46 * sm(0.22, 0.55, ang_d(th, FRONT) / math.pi), vol=lambda th, ph: 1.05 + 0.06 * sm(0.8, 1.6, ph),
-      bumps=wv, rows=(11, 4), inner=True, cell=H_WAVY, wave=0.035)
+      bumps=wv, rows=(13, 4), inner=True, cell=H_WAVY, wave=0.035, tufts=0.012, groove=(0.0, 0.03))
 
     # beard: a full soft beard around the jaw with a tufted lower edge + moustache, beard hair painted (jobs_a woodcutter)
     p = Part("beard", w_fixed("skull"))
@@ -921,8 +1049,8 @@ def build_hats(parts):
     p.shade = lambda co, n: 1.0
     # headscarf (expressions_a): covers the crown, knot + two tails at the nape
     p = Part("hat_scarf", w_fixed("skull"))
-    hair_surface(p, edge=fringe(0.52, 1.72, 2.0, scallop=0.0), vol=lambda th, ph: 1.15, r0=1.04, color=ACCENT, locks=0, seg=(24, 7),
-                 rows=(8, 4), tuck=0.0, cell=C_LINEN, tiles=4.0, vs=0.3)
+    hair_surface(p, edge=SCARF_EDGE, vol=lambda th, ph: 1.15, r0=1.04, color=ACCENT, locks=0,
+                 seg=(28, 7), rows=(8, 4), tuck=0.0, cell=C_LINEN, tiles=4.0, vs=0.3, lip=0.015)
     # knot at the nape + two flared tails (base_c back view)
     lin = m_plane((-0.2, 0.4, HEAD_C), (1, 0, 0), (0, 0, -1), 0.2, 0.2)
     p.detail(p.sphere(Vector((0, 0.36, HEAD_C - 0.11)), (0.08, 0.065, 0.065), Q(10, 5), Q(5, 3), color=ACCENT_D), C_FOLDS, lin)
@@ -1328,6 +1456,113 @@ def build_anims(rig):
         p["hips"] = (0, S(t, 0.5) * 0.08, 0)
         return p, (0, 0, 0)
     anim(rig, "fly", 60, fly)
+
+    # ── idle variety + social (v5: residents read differently from the top camera, not all the same sway) ──
+    def env(t, a=0.15, b=0.4, c=0.62, d=0.88):     # 0 → 1 → 0 hold envelope (one gesture per loop)
+        return sm(a, b, t) * (1.0 - sm(c, d, t))
+
+    def look(t):                     # look around: head + chest turn left, then right
+        turn = S(t) * 0.6
+        p = arms(0.02, -0.02, lf=-0.12, rf=-0.12)
+        p["spine"] = (0.0, 0, turn * 0.25)
+        p["skull"] = (-0.06, 0, turn)
+        return p, (0, 0, 0)
+    anim(rig, "look", 90, look)
+
+    def stretch(t):                  # arms up over the head, lean back, then relax
+        e = env(t, 0.1, 0.38, 0.6, 0.9)
+        p = arms(-0.15 - 2.65 * e, -0.15 - 2.65 * e, lz=-0.1 * e, rz=-0.1 * e, lf=-0.5 * e, rf=-0.5 * e)
+        p["spine"] = (-0.2 * e, 0, 0)
+        p["skull"] = (-0.25 * e, 0, 0)
+        return p, (0, 0, 0.02 * e)
+    anim(rig, "stretch", 75, stretch)
+
+    def scratch(t):                  # right hand scratches the back of the head, head tilted
+        e = env(t, 0.1, 0.3, 0.72, 0.92)
+        p = arms(0.02, -0.1 - 1.9 * e, rz=0.55 * e, lf=-0.12, rf=-0.2 - (1.7 + S(t, 6) * 0.2) * e)
+        p["skull"] = (0.08 * e, 0.18 * e, -0.1 * e)
+        p["spine"] = (0, 0.04 * e, 0)
+        return p, (0, 0, 0)
+    anim(rig, "scratch", 60, scratch)
+
+    def shift(t):                    # weight shift from foot to foot, hand on the hip
+        s = S(t)
+        p = arms(0.05, -0.05, lz=0.55, lf=-1.6, rf=-0.15)
+        p["hips"] = (0, s * 0.06, 0)
+        p["spine"] = (0, -s * 0.08, 0)
+        p["skull"] = (0, s * 0.05, S(t, 0.5) * 0.15)
+        p["thigh.L"] = (-0.05, 0, -0.04 * max(0.0, s))
+        p["thigh.R"] = (-0.05, 0, 0.04 * max(0.0, -s))
+        p["shin.L"] = (0.15 * max(0.0, -s), 0, 0)
+        p["shin.R"] = (0.15 * max(0.0, s), 0, 0)
+        return p, (s * 0.035, 0, -0.01)
+    anim(rig, "shift", 80, shift)
+
+    def chat(t):                     # standing talk: right hand gestures, head nods, body leans in
+        g = S(t, 2)
+        p = arms(-0.25 + S(t) * 0.1, -0.75 + g * 0.3, lz=0.05, rz=0.25 + S(t, 1, 0.3) * 0.15, lf=-0.5, rf=-1.2 + g * 0.35)
+        p["spine"] = (0.06, 0, S(t) * 0.08)
+        p["skull"] = (0.06 + S(t, 3) * 0.08, 0, S(t) * 0.12)
+        return p, (0, 0, 0)
+    anim(rig, "chat", 48, chat)
+
+    def sit_talk(t):                 # sitting by the fire, talking with both hands, turning to neighbours
+        p = {"thigh.L": (-1.45, -0.1, 0), "thigh.R": (-1.45, 0.1, 0), "shin.L": (0.25, 0, 0), "shin.R": (0.25, 0, 0)}
+        g = S(t, 2)
+        p.update(arms(-0.6 - S(t, 2, 0.25) * 0.2, -0.8 + g * 0.3, lz=0.1, rz=0.25, lf=-0.9, rf=-1.2 + g * 0.4))
+        p["spine"] = (0.04, 0, S(t) * 0.15)
+        p["skull"] = (S(t, 3) * 0.07, 0, S(t) * 0.35)
+        return p, (0, 0.05, -(HIP - 0.13))
+    anim(rig, "sit_talk", 60, sit_talk)
+
+    def fish(t):                     # holding the rod out over the water, small bobs and a tug
+        tug = env(t, 0.72, 0.8, 0.84, 0.96)
+        p = arms(-0.85, -0.95 + tug * 0.55 + S(t, 2) * 0.04, lz=-0.3, rz=-0.1, lf=-0.5, rf=-0.45)
+        p["spine"] = (0.1 - tug * 0.15, 0, 0)
+        p["skull"] = (0.15, 0, 0)
+        p["thigh.L"] = (-0.2, 0, 0)
+        p["thigh.R"] = (0.12, 0, 0)
+        return p, (0, 0, 0)
+    anim(rig, "fish", 60, fish)
+
+    def crouch(t):                   # hunter stalking: low crouch, peering left / right
+        p = {"thigh.L": (-1.0, 0, 0), "thigh.R": (-0.7, 0, 0), "shin.L": (1.4, 0, 0), "shin.R": (1.5, 0, 0),
+             "foot.L": (-0.4, 0, 0), "foot.R": (-0.3, 0, 0)}
+        p.update(arms(-0.7, -0.9, lz=-0.1, lf=-0.6, rf=-0.9))
+        p["spine"] = (0.45, 0, S(t) * 0.1)
+        p["skull"] = (-0.35, 0, S(t) * 0.45)
+        return p, (0, -0.04, -0.22)
+    anim(rig, "crouch", 60, crouch)
+
+    def clap(t):                     # child: bouncing and clapping
+        k = abs(S(t, 2))
+        p = arms(-1.15, -1.15, lz=-0.55 + 0.45 * k, rz=-0.55 + 0.45 * k, lf=-0.7, rf=-0.7)
+        b = abs(S(t))
+        p["thigh.L"] = (-0.3 * (1 - b), 0, 0)
+        p["thigh.R"] = (-0.3 * (1 - b), 0, 0)
+        p["shin.L"] = (0.55 * (1 - b), 0, 0)
+        p["shin.R"] = (0.55 * (1 - b), 0, 0)
+        p["skull"] = (-0.1, 0, S(t) * 0.2)
+        return p, (0, 0, b * 0.1 - (1 - b) * 0.05)
+    anim(rig, "clap", 32, clap)
+
+    def pray_stand(t):               # standing prayer: hands together at the chest, head bowed, gentle sway
+        p = arms(-0.45, -0.45, lz=-0.45, rz=-0.45, lf=-1.55, rf=-1.55)
+        p["spine"] = (0.1 + S(t) * 0.03, 0, 0)
+        p["skull"] = (0.35 + S(t, 1, 0.2) * 0.06, 0, 0)
+        p["hips"] = (0, S(t, 0.5) * 0.03, 0)
+        return p, (0, 0, 0)
+    anim(rig, "pray_stand", 60, pray_stand)
+
+    def bow(t):                      # deep bow towards the altar, hands together
+        e = env(t, 0.1, 0.4, 0.6, 0.9)
+        p = arms(-0.45 - 0.3 * e, -0.45 - 0.3 * e, lz=-0.45, rz=-0.45, lf=-1.55, rf=-1.55)
+        p["spine"] = (0.15 + 0.55 * e, 0, 0)
+        p["skull"] = (0.3 + 0.2 * e, 0, 0)
+        p["thigh.L"] = (0.25 * e, 0, 0)
+        p["thigh.R"] = (0.25 * e, 0, 0)
+        return p, (0, 0.05 * e, 0)
+    anim(rig, "bow", 60, bow)
 
 
 # ───────── whole kit ─────────

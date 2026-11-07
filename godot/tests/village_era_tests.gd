@@ -24,7 +24,7 @@ func all() -> void:
 	print("== 마을 시대 건물 (A6) · 등불 옮기기 (A11)")
 	run.timed(self, ["test_locked", "test_chief_priorities", "test_chief_builds", "test_herbalist", "test_clinic", "test_chapel",
 		"test_plaza", "test_funeral", "test_watchtower", "test_ferry", "test_era_save",
-		"test_lamp_rules", "test_lamp_preview_world", "test_lamp_preview_jar", "test_lamp_save", "test_lamp_ui"])
+		"test_lamp_rules", "test_lamp_preview_world", "test_lamp_preview_jar", "test_lamp_save", "test_lamp_ui", "test_fast_view"])
 
 
 func proto(seed_v := 20261105) -> Village:
@@ -278,7 +278,7 @@ func test_chapel() -> void:
 	for k: String in b:
 		sb += int(b[k])
 	check(sa > 0 and sb >= floori(sa * 1.2), "교회 = 큰 제단: 저녁 제물 ×1.3 (%d → %d)" % [sa, sb])
-	check(c.bell_t == c.t and has_line(c, "교회 종"), "저녁 기도 때 교회 종 (소리 고리 bell_t)")
+	check(c.bell_t == c.t and has_line(c, "예배당 종"), "저녁 기도 때 교회 종 (소리 고리 bell_t)")
 	var near := 0
 	for r in c.people:
 		if r.action == "pray" and not r.steps.is_empty():
@@ -289,7 +289,7 @@ func test_chapel() -> void:
 	var pr := c.people[0]
 	ResidentAI.cancel(c, pr)
 	ResidentAI._pray(c, pr)
-	check(pr.doing.contains("교회"), "혼자 기도도 교회 앞에서 (%s)" % pr.doing)
+	check(pr.doing.contains("예배당"), "혼자 기도도 교회 앞에서 (%s)" % pr.doing)
 	check(c.altar_built and not c.altar.is_empty(), "작은 제단은 그대로 (제물은 제단에)")
 	# 혼례
 	var m: Resident = null
@@ -304,7 +304,7 @@ func test_chapel() -> void:
 		m = c.add_person("요한", "m", 6.0, "", c.center.x, c.center.y, null, null)
 		f = c.add_person("마리", "f", 6.0, "", c.center.x, c.center.y, null, null)
 	c.marry(m, f)
-	check(VillageEra.wedding(c, m, f) and VillageEra.wedding_on(c) and has_line(c, "교회에서 혼례"), "혼례는 교회에서 (잔치)")
+	check(VillageEra.wedding(c, m, f) and VillageEra.wedding_on(c) and has_line(c, "예배당에서 혼례"), "혼례는 교회에서 (잔치)")
 	c._update_happiness()
 	var h_w := m.happiness
 	c.wedding_t = -1.0e9
@@ -668,5 +668,36 @@ func test_lamp_ui() -> void:
 	check(lc.previewing() and not lc.hint_box.visible, "두 번째부터는 귀띔 없이 바로 미리보기")
 	lc.confirm()
 	check(not lc.is_open() and v.water.rot == posmod(r0 + 1, 4), "[옮기기] → 등불이 옮겨 감")
+	run.root.remove_child(scene)
+	scene.free()
+
+
+# ───────────────────────── 빠른 흐름 화면 (기획서 6.6 — 1초=5분 ~ 1초=12시간) ─────────────────────────
+func test_fast_view() -> void:
+	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
+	run.root.add_child(scene)
+	var clock: JarClock = scene.get("clock")
+	var view: VillageView = scene.get("view")
+	var items: Array = scene.get("speed_items")
+	check(items.size() == Balance.SPEEDS.size() and (items[9] as Button).text == "1초=12시간" and (items[5] as Button).text == "1초=5분" and (items[2] as Button).text.begins_with("보통"),
+		"배속 목록: 윗줄 %s … · 아랫줄 %s ~ %s" % [(items[2] as Button).text.replace("\n", " "), (items[5] as Button).text, (items[9] as Button).text])
+	(items[9] as Button).pressed.emit()
+	check(clock.speed_i == 9 and clock.fast, "목록에서 1초=12시간을 누르면 빠른 흐름")
+	clock.auto_slow = false
+	var v: Village = scene.get("village")
+	var t0 := v.t
+	var worst := 0.0
+	for i in 30:
+		var tf := Time.get_ticks_usec()
+		scene.call("_process", 1.0 / 60.0)
+		worst = maxf(worst, (Time.get_ticks_usec() - tf) / 1000.0)
+	var btn: Button = scene.get("speed_btn")
+	var bubbles: Control = scene.get("bubbles")
+	check(view.fast and view.alpha == 1.0 and bubbles.get_children().all(func(c: Node) -> bool: return c.is_queued_for_deletion()) and btn.text.contains("1초=12시간"),
+		"빠른 흐름 화면: 주민은 순간이동(보간 없음) · 말풍선 없음 · 칩 '%s'" % btn.text)
+	check(v.t - t0 > 600.0, "30화면 동안 병 %.1f시간 (가장 긴 화면 %.1f ms)" % [(v.t - t0) / 3600.0, worst])
+	clock.set_speed(Balance.SPEED_DEFAULT_I)
+	scene.call("_process", 1.0 / 60.0)
+	check(not view.fast and not clock.view_fast() and btn.text.contains("보통"), "보통으로 돌아오면 화면도 보통으로 ('%s')" % btn.text)
 	run.root.remove_child(scene)
 	scene.free()

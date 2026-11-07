@@ -394,6 +394,7 @@ var _arrival_wait := false
 
 func _begin_arrival() -> void:
 	_set_hud(false)
+	paused = true                        # 지구 이름을 짓기 전엔 병 시간이 흐르지 않는다 (2026-11-07 사용자)
 	var layer := CanvasLayer.new()
 	layer.layer = 15
 	add_child(layer)
@@ -425,6 +426,7 @@ func _set_hud(on: bool) -> void:
 func _on_named(nm: String) -> void:
 	entry["name"] = nm
 	_named = true
+	paused = false                       # 이름을 지은 뒤에야 세상이 움직이기 시작
 	_defer_save = false
 	_start_save()
 	CreationPlan.clear(StartFlow.save_dir())
@@ -557,7 +559,8 @@ func refresh_shelf() -> void:
 		lo = minf(lo, float(s["x"]))
 		hi = maxf(hi, float(s["x"]))
 		if float(s["x"]) != 0.0:
-			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0))})
+			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0)),
+				"preview": (s["info"] as Dictionary).get("preview", {})})
 	if room_zoom != null:
 		room_zoom.room.set_shelf_jars(others)
 	cam.shelf_range = Vector2(lo, hi) if others.size() > 0 else Vector2.ZERO
@@ -713,6 +716,8 @@ func _process(dt: float) -> void:
 	if arrival != null:
 		_arrival_process()
 	var t0 := Time.get_ticks_usec()
+	if clock != null and clock.world != world:
+		clock.world = world               # 빠른 흐름(1초=5분~)이 따라잡기처럼 세상 정리(분가·고운 물 범위)도 함께
 	super(dt)
 	if catching:
 		return
@@ -1043,6 +1048,11 @@ func _setup_world_ui() -> void:
 func layout_bars() -> void:
 	super()
 	_layout_world_ui()
+
+
+## [창고] 창고 띠는 둥근 지도 왼쪽까지
+func store_right() -> float:
+	return WorldMinimap.SIZE + 16.0
 
 
 func _layout_world_ui() -> void:

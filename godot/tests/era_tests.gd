@@ -32,7 +32,7 @@ func all() -> void:
 	Village.start_aware = false
 	run.timed(self, ["test_unaware_start", "test_witness_wonder", "test_awakening_and_altar", "test_guided_path", "test_unguided",
 		"test_save_midway", "test_world_first", "test_old_save_aware",
-		"test_revelation_flow", "test_offline_no_auto_reveal", "test_revelation_world",
+		"test_revelation_flow", "test_era_pace", "test_offline_no_auto_reveal", "test_revelation_world",
 		"test_chronicle_recent_myth", "test_chronicle_people", "test_codex", "test_sheets"])
 	Village.start_aware = _old_aware
 	Market.notes = _old_notes
@@ -314,6 +314,31 @@ func test_revelation_flow() -> void:
 			if bd.site_type() in ["목조주택", "방앗간", "빵집"]:
 				built = true
 	check(built, "촌장이 새 시대 건물(목조주택·방앗간·빵집)을 짓기 시작함")
+
+
+## 시대 속도 (BALANCE v2 '마을 1.8일' · PROGRESSION '~2일'): 새 넓은 세상 + 기본 키트, 거인이 내내 지켜봐도 (창세의 날 ×12 · 배속)
+## 첫날이 끝날 때는 아직 개척기 — 지켜봄 100%는 하루 ERA_WATCH_HOURS까지 (예전엔 1일차 저녁에 마을이 됐다)
+func test_era_pace() -> void:
+	var jw := JarWorld.create(7, WorldCfg.SMALL_SIZE)
+	var sp: Array[Vector2] = jw.recommended_kit_spots()
+	var v := jw.place_kit(sp[0].x, sp[0].y, Kits.make())
+	v.watching = true
+	var k1 := v.era_watch_k(Balance.HOUR)
+	var k2 := v.era_watch_k(Balance.HOUR)
+	var k3 := v.era_watch_k(Balance.HOUR)
+	check(is_equal_approx(k1, 1.0) and is_equal_approx(k2, 1.0) and is_equal_approx(k3, Balance.OFFLINE_ERA),
+		"지켜봄 100%%는 하루 %.0f시간까지 (%.2f · %.2f · %.2f)" % [Balance.ERA_WATCH_HOURS, k1, k2, k3])
+	v.era_watch_day = -1
+	v.era_watch_secs = 0.0
+	var end_day1 := Balance.DAY - v.start_clock          # 2일차 00:00
+	while v.t < end_day1 - 0.5:
+		v.advance(minf(Balance.HOUR, end_day1 - v.t))
+	check(v.era == 0 and not v.era_full() and v.era_pts < Balance.ERA_NEED[0] * 0.8,
+		"내내 지켜봐도 1일차가 끝날 때 아직 개척기 (점수 %.0f / %.0f)" % [v.era_pts, Balance.ERA_NEED[0]])
+	while not v.era_full() and v.t < 3.0 * Balance.DAY:
+		v.advance(Balance.HOUR)
+	var d := v.t / Balance.DAY
+	check(v.era_full() and d >= 1.0 and d <= 2.0, "마을 시대 점수가 차는 때: 시작에서 %.2f일 (1~2일 — 모델 1.8일은 저녁 계시까지 기다린 값)" % d)
 
 
 func test_offline_no_auto_reveal() -> void:

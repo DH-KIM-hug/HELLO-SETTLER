@@ -422,7 +422,7 @@ func _card(item: String) -> void:
 	if lock != "":
 		ic.modulate = Color(1, 1, 1, 0.5)
 	col.add_child(ic)
-	var nm := _label(col, item)
+	var nm := _label(col, String(c["name"]))
 	nm.add_theme_font_override("font", UiTheme.font(true))
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -481,7 +481,7 @@ func press(item: String) -> void:
 	var r := Shop.buy(village, item)
 	if bool(r["ok"]):
 		GameAudio.fx("coins")
-		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % item)
+		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % Balance.label(item))
 		bought.emit(item)
 	else:
 		GameAudio.fx("glass_tap_light", "Room", -8.0)

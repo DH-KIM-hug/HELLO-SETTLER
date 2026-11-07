@@ -118,7 +118,7 @@ func test_lid_auto_close() -> void:
 		while v.air.lid_open and real < 120.0:
 			c.tick(0.25)
 			real += 0.25
-		check(not v.air.lid_open and real <= 60.5 and real >= 59.5 - (52.0 if sp == 3 else 0.0), "×%d: 현실 1분이면 저절로 닫힘 (%.1f초, 병 시계 %.0f초 열림)" % [int(c.speed()), real, v.air.lid_total])
+		check(not v.air.lid_open and real <= 60.5 and (real >= 59.5 or v.air.lid_total >= Balance.LID_SAFETY_CLOSE - Balance.STEP - 1e-6), "%s: 현실 1분 또는 병 시계 안전장치 중 먼저 저절로 닫힘 (%.1f초, 병 시계 %.0f초 열림)" % [c.speed_text(), real, v.air.lid_total])
 
 
 func test_gnats() -> void:
@@ -437,9 +437,9 @@ func test_determinism() -> void:
 		v.mold._name_chaser(v)
 		var c := JarClock.new(v)
 		c.set_speed(sp)
-		var steps := int(1.5 * H)
+		var steps := int(1.5 * H / Balance.STEP)
 		var dt := 1.0 / 30.0 if sp == 0 else 0.25
 		while c.steps_done < steps:
-			c.tick(dt)
+			c.tick(c.dt_for_steps(steps - c.steps_done, dt))
 		sigs.append(_blob_sig(v) + "|%d|%s" % [v.rng.state, str(v.food_total())])
 	check(sigs[0] == sigs[1], "무리가 있는 병: ×1과 ×8 결과가 같다 (털뭉치 자리·크기·난수)")

@@ -31,6 +31,8 @@ const VMAP_EVERY := 2.0             # 무리의 밭·바위·나무 지도를 �
 const THIN_PPU := 7.0               # 이보다 멀면 안개가 엷어지기 시작
 const THIN_FULL_PPU := 3.5          # 이보다 멀면 다 엷음
 const UNDER_SINK := 0.0
+const RIVER_VIS := 0.05             # 강 수면이 땅보다 높은 정도 (세계 단위 — 수면 메시로 그리는 물길)
+const RIVER_CELLS := 10             # 거친 칸 강: 그 칸에서 가장 낮은 이만큼의 칸이 물길
 
 var ww: WorldWater
 var villages: Array = []            # 오솔길을 읽을 무리들 (Village)
@@ -102,7 +104,7 @@ func _ready() -> void:
 	_build_fmap()
 	waterfalls.surface_fn = func(x: float, z: float) -> float:
 		var k := ww.idx(x, z)
-		return (ww.h[k] + _depth_w(k)) * HS if _depth_w(k) > JarWater.LAKE_DEPTH else -1.0e9
+		return (ww.h[k] + _depth_w(k)) * HS - WATER_SINK if _depth_w(k) > JarWater.LAKE_DEPTH else -1.0e9
 	waterfalls.setup(ww.grooves, ww.groove_mult, ww.rr - 0.15, WALL_TOP + 4.0 - 0.15, WorldWater.GROOVE_BASE, ground_y,
 		func(x: float, z: float) -> float: return shown_light().dot(Vector2(x, z)) / ww.rr)
 	for b in (ww.fn / WorldWater.FOG_BLOCK) * (ww.fn / WorldWater.FOG_BLOCK):
@@ -189,6 +191,7 @@ func _upload_holes() -> void:
 func _process(dt: float) -> void:
 	_clock += dt
 	var t0 := Time.get_ticks_usec()
+	_fine_lvl.clear()
 	# 안개가 걷힌 묶음
 	if ww.fog_version != _fog_seen_version:
 		_fog_seen_version = ww.fog_version
@@ -337,7 +340,7 @@ func _plan() -> void:
 		if not _job.is_empty() and int(_job["ch"]) == ch:
 			continue
 		var fogged := _chunk_fogged(ch)
-		var lod := _lod_for(d)
+		var lod := _lod_for(_chunk_gap(ch))
 		var cur: Dictionary = _chunks.get(ch, {})
 		var need := cur.is_empty() or int(cur["lod"]) != lod or bool(cur["fogged"]) != fogged
 		if not need and not fogged and _clock - float(cur["built_t"]) > REFRESH_S:
@@ -348,7 +351,17 @@ func _plan() -> void:
 	_queue = cand
 
 
-## 멀수록 칸을 건너뛴다. 확대가 작을수록(view_r 큼) 가까운 것도 거칠게
+## 초점에서 조각 사각형까지 가장 가까운 거리 (가운데까지 거리로 고르면 화면 안에 걸친 조각이 거칠게(LOD 2) 만들어져
+## 물가·강이 2칸 계단 덩어리로 보였다 — 사용자 화면의 곧은 대각선 물 띠·육각형 웅덩이)
+func _chunk_gap(ch: int) -> float:
+	var x0 := -ww.rr + (ch % nrc) * RC
+	var z0 := -ww.rr + (ch / nrc) * RC
+	var dx := maxf(maxf(x0 - focus.x, focus.x - (x0 + RC)), 0.0)
+	var dz := maxf(maxf(z0 - focus.y, focus.y - (z0 + RC)), 0.0)
+	return Vector2(dx, dz).length()
+
+
+## 멀수록 칸을 건너뛴다 (d = 조각까지 가장 가까운 거리 — 화면 반지름 밖에 있는 조각만 한 단계 거칠게)
 func _lod_for(d: float) -> int:
 	var base := 1
 	if view_r > 260.0:
@@ -358,7 +371,7 @@ func _lod_for(d: float) -> int:
 	elif view_r > 70.0:
 		base = 2
 	var lod := base
-	if d > view_r * 0.7:
+	if d > view_r:
 		lod *= 2
 	return mini(lod, 8)
 
@@ -500,7 +513,7 @@ func _stone_at(k: int) -> bool:
 	var p := Vector2(ww.cx(k), ww.cy(k))
 	for v: Village in villages:
 		if absf(p.x - v.center.x) < v.path_r and absf(p.y - v.center.y) < v.path_r:
-			return v.era >= GroundLook.STONE_ERA
+			return GroundLook.stone_roads(v)
 	return false
 
 
@@ -542,8 +555,9 @@ func _water_w(k: int) -> Vector3:
 		if ww.is_fine_k(k):
 			river = 1.0 if ww.is_river(k) else 0.0
 		else:
+			# 거친 칸 강은 그 칸(8×8)에서 낮은 쪽 칸만 (물길) — 칸 전체를 칠하면 8칸 폭 곧은 띠가 된다
 			var c := ww.coarse_of(k)
-			river = 1.0 if ww.cFL[c] > JarWater.RIVER_FLUX * ww.cscale * WorldWater.F else 0.0
+			river = 1.0 if ww.cFL[c] > JarWater.RIVER_FLUX * ww.cscale * WorldWater.F and ww.h[k] <= ww.hs[c * 64 + mini(RIVER_CELLS, ww.cA[c] - 1)] else 0.0
 	if river > 0.0:
 		var n := ww.n
 		for dd: int in [1, -1, n, -n]:
@@ -553,36 +567,71 @@ func _water_w(k: int) -> Vector3:
 	return Vector3(salt, river, 0)
 
 
-## 화면용 물 깊이 — 고운 칸은 그대로, 거친 칸은 이웃 거친 칸 수면 높이를 쌍선형으로 섞어 (마른 거친 칸 = 가장 낮은 땅 바로 아래)
+## 화면용 물 깊이 — 고운 칸은 그대로, 거친 칸은 이웃 거친 칸 수면 높이를 쌍선형으로 섞어
 ## 거친 칸 하나(8×8)마다 수면이 하나라 그대로 그리면 물가가 8칸 계단 모양이 된다 (세상 끝 골 아래 웅덩이·먼 강).
+## (물 다듬기) 섞을 때 젖은 거친 칸만 쓴다 — 마른 칸 높이(가장 낮은 땅)까지 섞으면 수면이 비스듬한 평면이 되어 물가가
+## 땅 모양 대신 곧은 육각형 줄이 됐다. 마른 칸 쪽으로는 수면을 조금씩 낮춰(DRY_FALL) 물가가 땅 높이선을 따라 물러난다.
+## 고운 조각 칸(마을 둘레)은 그 칸의 고운 호수 수면 평균 → 고운·거친 경계에서 수면 높이가 끊기지 않는다 (겹친 두 수면 방지).
 ## 시뮬레이션 값은 바꾸지 않는다 (그리기만).
+const DRY_FALL := 0.015
+var _fine_lvl := {}                 # 고운 조각 거친 칸 → 고운 호수 수면 평균 (없으면 −1e9) — 화면마다 비움
+
+
 func _depth_w(k: int) -> float:
 	if ww.is_fine_k(k):
 		return ww.depth(k)
 	var m := ww.m
-	var c := ww.coarse_of(k)
-	var own := _coarse_level(c, c)
 	var gx := float(k % ww.n) / WorldWater.F - 0.5 + 0.5 / WorldWater.F
 	var gy := float(k / ww.n) / WorldWater.F - 0.5 + 0.5 / WorldWater.F
 	var i := clampi(floori(gx), 0, m - 2)
 	var j := clampi(floori(gy), 0, m - 2)
 	var u := clampf(gx - i, 0.0, 1.0)
 	var v := clampf(gy - j, 0.0, 1.0)
-	var l00 := _coarse_level(j * m + i, c, own)
-	var l10 := _coarse_level(j * m + i + 1, c, own)
-	var l01 := _coarse_level((j + 1) * m + i, c, own)
-	var l11 := _coarse_level((j + 1) * m + i + 1, c, own)
-	var lv := lerpf(lerpf(l00, l10, u), lerpf(l01, l11, u), v)
+	var q := j * m + i
+	var ws := 0.0
+	var ls := 0.0
+	var l := _wet_level(q)
+	if l > -1.0e8:
+		ws += (1.0 - u) * (1.0 - v)
+		ls += (1.0 - u) * (1.0 - v) * l
+	l = _wet_level(q + 1)
+	if l > -1.0e8:
+		ws += u * (1.0 - v)
+		ls += u * (1.0 - v) * l
+	l = _wet_level(q + m)
+	if l > -1.0e8:
+		ws += (1.0 - u) * v
+		ls += (1.0 - u) * v * l
+	l = _wet_level(q + m + 1)
+	if l > -1.0e8:
+		ws += u * v
+		ls += u * v * l
+	if ws < 1.0e-4:
+		return 0.0
+	var lv := ls / ws - (1.0 - ws) * DRY_FALL
 	return maxf(0.0, lv - ww.h[k])
 
 
-## 거친 칸 c의 화면용 수면 높이 (마른 칸 = 가장 낮은 땅 − 0.01, 고운 조각·원 밖 칸은 기준 칸 값)
-func _coarse_level(c: int, from: int, own := -1.0e9) -> float:
-	if ww.cA[c] == 0 or ww.bmode[c] == 1:
-		return own if own > -1.0e8 else ww.hs[from * 64] - 0.01
+## 거친 칸 c의 화면용 수면 높이 — 젖은 칸만 (마른 칸·원 밖 = −1e9)
+func _wet_level(c: int) -> float:
+	if ww.cA[c] == 0:
+		return -1.0e9
+	if ww.bmode[c] == 1:
+		if _fine_lvl.has(c):
+			return _fine_lvl[c]
+		var s := 0.0
+		var cnt := 0
+		for k: int in ww._coarse_fine_cells(c):
+			var d := ww.depth(k)
+			if d > JarWater.LAKE_DEPTH:
+				s += ww.h[k] + d
+				cnt += 1
+		var r := s / cnt if cnt > 0 else -1.0e9
+		_fine_lvl[c] = r
+		return r
 	if ww.cK[c] > 0:
 		return ww.cL[c]
-	return ww.hs[c * 64] - 0.01
+	return -1.0e9
 
 
 # ───────────────────────── 숲 지도 · 무리 지도 ─────────────────────────
@@ -687,7 +736,7 @@ func _update_path(i: int) -> void:
 		_path_texs[i] = tex
 	else:
 		tex.update(img)
-	var stone := 1.0 if v.era >= GroundLook.STONE_ERA else 0.0
+	var stone := 1.0 if GroundLook.stone_roads(v) else 0.0
 	for m: ShaderMaterial in _ground_mats():
 		m.set_shader_parameter("path_tex%d" % i, tex)
 		m.set_shader_parameter("path_rect%d" % i, Vector4(v.center.x - v.path_r, v.center.y - v.path_r, 2.0 * v.path_r, stone))
@@ -829,6 +878,10 @@ func _region_job(i0: int, j0: int, span: int, s: int, tmi: MeshInstance3D, wmi: 
 	sl.resize(ne)
 	sl.fill(-1.0e9)
 	job["slake"] = sl
+	var srv := PackedFloat32Array()         # 강이면 물길 수면 높이(세계), 아니면 −1e9
+	srv.resize(ne)
+	srv.fill(-1.0e9)
+	job["sriver"] = srv
 	var ga := PackedVector4Array()
 	ga.resize(ne)
 	job["ga"] = ga
@@ -896,6 +949,7 @@ func _job_samples(job: Dictionary) -> void:
 	var sb: PackedColorArray = job["base"]
 	var sw: PackedVector3Array = job["sw"]
 	var sl: PackedFloat32Array = job["slake"]
+	var sr: PackedFloat32Array = job["sriver"]
 	var ground: bool = job["ground"]
 	var inner := b >= M and b < qe - M
 	for a in qe:
@@ -914,11 +968,16 @@ func _job_samples(job: Dictionary) -> void:
 		sw[si] = wv
 		if wv.z > 0.5 or wv.y > 0.5:
 			wat[si] = 1
+		# 수면 높이는 한 줄 더 바깥까지 (조각 가장자리의 마른 꼭짓점도 이웃 조각과 같은 표본으로 수면을 이어 붙이게)
+		if b >= M - 1 and b <= qe - M and a >= M - 1 and a <= qe - M:
+			if wv.z > 0.5:
+				sl[si] = (ww.h[k] + _depth_w(k)) * HS
+			elif wv.y > 0.5:
+				# (물 다듬기) 강도 수면 메시로 (땅에 칠한 강은 칸 모양 덩어리 + 따로 노는 색이었다) — 얕은 물길 수면 = 땅 + RIVER_VIS
+				sr[si] = ww.h[k] * HS + WATER_SINK + RIVER_VIS * (1.0 if s == 1 else s * 1.5)   # 거친 조각은 꼭짓점 땅이 물길보다 높아 더 띄움
 		if not (inner and a >= M and a < qe - M):
 			continue
 		sb[si] = _cell_base_w(k)
-		if wv.z > 0.5:
-			sl[si] = (ww.h[k] + _depth_w(k)) * HS
 	job["row"] = b + 1
 	if b + 1 >= qe:
 		job["row"] = M
@@ -1002,6 +1061,9 @@ func _alloc_verts(job: Dictionary, n1: int) -> void:
 	var sf := PackedFloat32Array()
 	sf.resize(n1)
 	job["surf"] = sf
+	var rf := PackedFloat32Array()          # 강 몫 (수면 셰이더가 물길 색으로)
+	rf.resize(n1)
+	job["rvf"] = rf
 
 
 ## 2단계 (한 줄): 꼭짓점 = 둘레 표본 넷의 평균 (강은 최댓값)
@@ -1029,9 +1091,12 @@ func _job_verts(job: Dictionary) -> void:
 	var sb: PackedColorArray = job["base"]
 	var sw: PackedVector3Array = job["sw"]
 	var sl: PackedFloat32Array = job["slake"]
+	var sr: PackedFloat32Array = job["sriver"]
 	var ga: PackedVector4Array = job["ga"]
 	var gb: PackedVector4Array = job["gb"]
 	var pl: PackedFloat32Array = job["pool"]
+	var rvf: PackedFloat32Array = job["rvf"]
+	var wmi_on: bool = job["wmi"] != null
 	for vi in q1:
 		var ci := i0 + vi * s
 		var cj := j0 + vj * s
@@ -1054,6 +1119,7 @@ func _job_verts(job: Dictionary) -> void:
 		var cnt := 0
 		var ws := 0.0
 		var wn := 0
+		var rv := 0.0
 		# 꼭짓점 vi는 표본 (vi + M, vi + M + 1) 사이 (표본 a = 칸 i0 + (a − 1 − M)·s)
 		var sa := vj + M
 		var sbx := vi + M
@@ -1070,6 +1136,10 @@ func _job_verts(job: Dictionary) -> void:
 			if sl[si] > -1.0e8:
 				ws += sl[si]
 				wn += 1
+			elif sr[si] > -1.0e8:          # 강 수면
+				ws += sr[si]
+				wn += 1
+				rv += 1.0
 		if cnt > 0:
 			var inv := 1.0 / cnt
 			c *= inv
@@ -1080,7 +1150,7 @@ func _job_verts(job: Dictionary) -> void:
 			c = Style.GRASS
 		cols[vidx] = Color(c.r, c.g, c.b, bg.w)
 		uv[vidx] = Vector2(bg.z, salt)
-		uv2[vidx] = Vector2(river, bg.y)
+		uv2[vidx] = Vector2(0.0 if wmi_on else river, bg.y)   # 조각은 강을 수면 메시로 그림 (땅에는 안 칠함)
 		cu0[vidx * 4] = ag.x
 		cu0[vidx * 4 + 1] = ag.y
 		cu0[vidx * 4 + 2] = ag.z
@@ -1090,6 +1160,21 @@ func _job_verts(job: Dictionary) -> void:
 		if wn > 0:
 			lake[vidx] = 1
 			surf[vidx] = ws / wn
+			rvf[vidx] = rv / wn
+		elif wmi_on:
+			# 마른 꼭짓점: 둘레 4×4 표본의 물 수면 평균 (표본으로 정하므로 조각 경계 양쪽이 같은 값)
+			var ns := 0.0
+			var nn := 0
+			for dj in range(-1, 3):
+				for di in range(-1, 3):
+					var sj := (sa + dj) * qe + sbx + di
+					if sl[sj] > -1.0e8:
+						ns += sl[sj]
+						nn += 1
+					elif sr[sj] > -1.0e8:
+						ns += sr[sj]
+						nn += 1
+			surf[vidx] = ns / nn if nn > 0 else -1.0e9
 	job["row"] = vj + 1
 	if vj + 1 >= q1:
 		job["stage"] = 3
@@ -1175,8 +1260,11 @@ func _job_water(job: Dictionary) -> void:
 	var hy: PackedFloat32Array = job["hy"]
 	var lake: PackedByteArray = job["lake"]
 	var surf: PackedFloat32Array = job["surf"]
+	var rvf: PackedFloat32Array = job["rvf"]
 	var inside: PackedByteArray = job["inside"]
 	# 수면: 호수 꼭짓점의 수면 높이, 마른 꼭짓점은 이웃 젖은 꼭짓점 수면을 이어 땅속까지 (물가 = 곡선)
+	# (물 다듬기) 수면을 WATER_SINK(호수로 보는 깊이)만큼 내려 둔다 → 물가 = '깊이가 호수 문턱인 땅 높이선'이 칸 안에서 곧게 이어져
+	# 둥근 곡선. 전에는 문턱보다 얕은 꼭짓점을 땅 밑으로 끌어내려 물가가 늘 칸 사이 같은 자리 → 칸 모양 톱니·곧은 다각형이었다.
 	var any := false
 	for vidx in q1 * q1:
 		if lake[vidx] == 1:
@@ -1197,22 +1285,11 @@ func _job_water(job: Dictionary) -> void:
 			var p := verts[vidx]
 			var y := p.y - 0.3
 			if lake[vidx] == 1:
-				y = surf[vidx]
-			else:
-				var sm := 0.0
-				var sn := 0
-				for dj in [-1, 0, 1]:
-					for di in [-1, 0, 1]:
-						var a: int = vi + di
-						var b: int = vj + dj
-						if a >= 0 and b >= 0 and a <= q and b <= q and lake[b * q1 + a] == 1:
-							sm += surf[b * q1 + a]
-							sn += 1
-				if sn > 0:
-					var lv := sm / sn
-					y = minf(lv, hy[vidx] - 0.15) if hy[vidx] < lv else lv
+				y = surf[vidx] - WATER_SINK
+			elif surf[vidx] > -1.0e8:
+				y = minf(surf[vidx] - WATER_SINK, hy[vidx] - 0.01)
 			wv[vidx] = Vector3(p.x, y, p.z)
-			wuv[vidx] = Vector2(y - hy[vidx], 0.0)
+			wuv[vidx] = Vector2(y - hy[vidx], rvf[vidx])
 			wnorm[vidx] = Vector3.UP
 	var widx := PackedInt32Array()
 	for j in q:
@@ -1341,7 +1418,14 @@ func _build_fog_block(b: int) -> void:
 			if r > lim:
 				x *= lim / r
 				z *= lim / r
-			verts[vj * q1 + vi] = Vector3(x, ground_y(x, z) + FOG_Y + 1.2 * a, z)
+			# 물 위에서는 수면 위로 (깊은 호수 바닥 기준이면 안개 층이 수면을 뚫고 들어가 물 위에 잘린 회색 조각이 됨)
+			var gy := ground_y(x, z)
+			var wk := ww.idx(x, z)
+			if wk >= 0 and wk < ww.n * ww.n:
+				var wd := _depth_w(wk)
+				if wd > 0.0:
+					gy = maxf(gy, (ww.h[wk] + wd) * HS - WATER_SINK)
+			verts[vj * q1 + vi] = Vector3(x, gy + FOG_Y + 1.2 * a, z)
 			cols[vj * q1 + vi] = Color(1, 1, 1, a)
 			if a > 0.0:
 				any = true
@@ -1398,7 +1482,7 @@ func _build_marks() -> void:
 		fall.height = 0.5
 		var fn := _add(fall, drop_mat, Vector3(x, LID_Y, z))
 		var k := ww.idx(x, z)
-		var surf := (ww.h[k] + ww.depth(k)) * HS
+		var surf := (ww.h[k] + ww.depth(k)) * HS - WATER_SINK
 		var phase := randf()
 		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "big": true})
 		for r in 2:

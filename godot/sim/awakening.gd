@@ -196,7 +196,7 @@ static func gather_ring(v: Village, secs: float, doing: String, only_free := fal
 		var fc: Vector2 = pl["face"]
 		p.action = "pray"
 		p.last_action = "pray"
-		p.doing = doing if fc == v.altar_pos else doing.replace("기도하는", "교회 앞에서 기도하는")
+		p.doing = doing if fc == v.altar_pos else doing.replace("기도하는", "예배당 앞에서 기도하는")
 		p.steps.append(ResidentAI.walk(q.x, q.y))
 		var dd := fc - q
 		var fq := q + (dd.normalized() * 0.03 if dd.length() > 0.05 else Vector2(0.0, 0.03))

@@ -23,12 +23,15 @@ var _rocks: Node3D
 var _rock_key := ""
 var _manna: Node3D
 var _manna_key := ""
-var _fire: Node3D
-var _flames: Array[MeshInstance3D] = []
+var _fire: Campfire             # [모닥불] view/campfire.gd — 돌 고리·장작·의자 + 불꽃 셰이더·불티·연기·불빛
 var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.5 — view/altar_view.gd): 둥근 돌 단 · 짓는 모습 · 제물 더미 + 빛
 var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
 var _props: Node3D
 var _prop_key := ""
+var _lily_node: Node3D          # 수련·연꽃 (따로 — 수면이 오르내리면 높이만 다시)
+var _lilies: Array = []         # [모델, 칸, x, z, 돌림, 크기]
+var _lily_y := PackedFloat32Array()   # 마지막으로 놓은 높이 (−1e9 = 숨김)
+var _lily_t := 0.0
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
 var _far_key := -1
 var _far_t := -1.0e9
@@ -52,6 +55,12 @@ var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Vi
 var _grave_key := ""
 var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
+var lerp_max := 3.0             # 걸음 사이 이만큼(칸) 넘게 옮겼으면 순간이동 (보간 안 함) — 10초 걸음이면 화면이 키운다
+var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주민은 멀리 LOD로 FAST_EVERY초마다 제자리에 순간이동 (걷기·몸짓 멈춤),
+                                # 곰팡이·위기·하늘의 것·상점·들짐승 화면도 그 간격으로만 (효과가 쏟아지지 않게)
+var _fast_t := 0.0
+var _fast_dt := 0.0
+const FAST_EVERY := 0.1
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -60,10 +69,11 @@ func _init(village: Village, t: JarTerrain) -> void:
 
 
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
-const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
+const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
 	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
-	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar"]
+	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar",
+	"campfire", "campfire_extra", "campfire_seat"]
 
 
 func _ready() -> void:
@@ -75,6 +85,7 @@ func _ready() -> void:
 	_rocks = _node(self)
 	_manna = _node(self)
 	_props = _node(self)
+	_lily_node = _node(self)
 	_far = _node(self)
 	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
 	add_child(mold_view)
@@ -103,17 +114,16 @@ func gy(x: float, z: float) -> float:
 # ───────────────────────── 매 화면 ─────────────────────────
 func sync(dt: float, force := false) -> void:
 	_anim_t += dt
-	_sync_residents(dt)
-	mold_view.alpha = alpha         # [곰팡이·뚜껑]
-	mold_view.sync(dt)
-	crisis_view.alpha = alpha       # [작은 위기]
-	crisis_view.sync(dt)
-	flora_view.alpha = alpha        # [하늘의 것]
-	flora_view.sync(dt)
-	if drop_view != null:
-		drop_view.sync(dt)          # [상점]
-	if animal_view != null:
-		animal_view.sync(dt)        # [들짐승]
+	if fast and not force:          # 빠른 흐름: 움직이는 것들은 FAST_EVERY초마다 한 번 (그동안 쌓인 dt로)
+		_fast_t += dt
+		_fast_dt += dt
+		if _fast_t >= FAST_EVERY:
+			_fast_t = 0.0
+			_sync_moving(_fast_dt)
+			_fast_dt = 0.0
+	else:
+		_fast_dt = 0.0
+		_sync_moving(dt)
 	_check_t += dt
 	if force or _check_t >= 0.25:
 		_check_t = 0.0
@@ -125,10 +135,29 @@ func sync(dt: float, force := false) -> void:
 		_sync_rocks()
 		_sync_manna()
 		_sync_props()
+		_lily_t += 0.25
+		if force or _lily_t >= 1.0:
+			_lily_t = 0.0
+			_sync_lilies(false)
 	_animate_fire()
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
+
+
+## 주민 · 곰팡이 · 작은 위기 · 하늘의 것 · 상점 · 들짐승 (보통은 매 화면)
+func _sync_moving(dt: float) -> void:
+	_sync_residents(dt)
+	mold_view.alpha = alpha         # [곰팡이·뚜껑]
+	mold_view.sync(dt)
+	crisis_view.alpha = alpha       # [작은 위기]
+	crisis_view.sync(dt)
+	flora_view.alpha = alpha        # [하늘의 것]
+	flora_view.sync(dt)
+	if drop_view != null:
+		drop_view.sync(dt)          # [상점]
+	if animal_view != null:
+		animal_view.sync(dt)        # [들짐승]
 
 
 static func age_stage(r: Resident) -> int:
@@ -155,7 +184,8 @@ func _sync_residents(dt: float) -> void:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
 		var key := ResidentModel.look_key(r)      # 나이·대머리·흰머리 단계가 바뀌면 다시 만든다 (7단계)
-		if m == null or _res_key.get(r.id, -1) != key:
+		var fresh: bool = m == null or _res_key.get(r.id, -1) != key
+		if fresh:
 			if m != null:
 				m.queue_free()
 			m = ResidentModel.new()
@@ -171,7 +201,7 @@ func _sync_residents(dt: float) -> void:
 			continue
 		var x := r.x
 		var z := r.y
-		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < 3.0:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
+		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
 		m.position = Vector3(x, gy(x, z), z)
@@ -186,9 +216,14 @@ func _sync_residents(dt: float) -> void:
 		if r.anim == "work":
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
-		m.set_anim("work" if r.anim == "torch" else r.anim)
-		m.set_lod(lod_close)
-		m.tick(dt)
+		m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
+		if r.action == "social" and r.anim != "walk" and not fast:
+			_face_partner(r, m)
+		m.set_lod(lod_close and not fast)
+		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다
+			m.tick(dt)
+		elif fresh:
+			m.tick(0.0)
 		_torch(r, m)
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):
@@ -206,6 +241,21 @@ func _sync_residents(dt: float) -> void:
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()
 			_rafts.erase(id)
+
+
+## 어울리는 사람: 가까이 있는 다른 어울리는 사람 쪽으로 몸을 돌림 (둘씩 마주 보고 이야기) — 화면만, 시뮬레이션은 그대로
+func _face_partner(r: Resident, m: ResidentModel) -> void:
+	var best: Resident = null
+	var bd := 2.4 * 2.4
+	for q in v.people:
+		if q == r or q.action != "social" or q.anim == "walk":
+			continue
+		var d := Vector2(q.x - r.x, q.y - r.y).length_squared()
+		if d < bd and d > 0.0001:
+			bd = d
+			best = q
+	if best != null:
+		m.rotation.y = lerp_angle(r.facing, atan2(best.x - r.x, best.y - r.y), 0.85)
 
 
 ## (A6) 무덤: 흙 둔덕 + 작은 비석 (묘지 안이면 줄지어, 묘지가 없을 땐 마을 끝에 홀로)
@@ -258,7 +308,7 @@ func _raft(r: Resident, m: ResidentModel) -> void:
 		rf.rotation.y = r.facing
 		return
 	var k := v.water.idx(m.position.x, m.position.z)
-	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS
+	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS - JarTerrain.WATER_SINK
 	var y := maxf(m.position.y, wy) + 0.05
 	rf.position = Vector3(m.position.x, y, m.position.z)
 	rf.rotation.y = r.facing
@@ -412,8 +462,9 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 
 
 ## 건물 모양 → art/models의 모델 (art/src/build_buildings.py · build_village.py). 종류마다 하나, 오두막은 네 가지를 번갈아.
-## 일터는 모델 + 마당 소품 (나무꾼 = 오두막 + 장작 헛간 + 도끼 박힌 그루터기, 산림관 = 집 + 묘목 상자).
-const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber"], "석조주택": ["house_stone"],
+## 일터는 모델 + 마당 소품 (벌목장 = 통나무집 + 장작 헛간 + 도끼 박힌 그루터기). 묘목원은 묘목 줄이 모델 안에 있다.
+## v3 (2026-11): 종류마다 실루엣·지붕 재료가 다르게 — 둥근 초가 · 너와 · 슬레이트 · 붉은 기와 · 잔디 지붕. 집은 색 변형을 번갈아.
+const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber", "house_timber_b"], "석조주택": ["house_stone", "house_stone_b"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
 	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
 	"버섯꾼": ["mushroom_hut"],
@@ -425,8 +476,7 @@ const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "
 	"대장간": ["smithy"], "교회": ["chapel"], "광장": ["plaza"], "묘지": ["graveyard"], "목장": ["pasture"],
 	"망루": ["watchtower"], "나루터": ["ferry"]}
 ## 마당 소품: [모델, 건물 기준 자리(x, z — 건물 앞 = +z), 방위(라디안)]
-const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]],
-	"산림관": [["planter", Vector3(-0.2, 0, 1.35), 0.0]]}
+const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]]}
 
 
 func _build_shape(n: Node3D, b: Building) -> void:
@@ -738,10 +788,12 @@ func _sync_props() -> void:
 		sim_pts.append(Vector2(r["x"], r["y"]))
 	_decor_forest(groups, sim_pts)
 	_decor_clusters(groups)
+	_lilies.clear()
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
 	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b"])
+	_sync_lilies(true)
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 
@@ -846,8 +898,37 @@ func _decor_water(groups: Dictionary) -> void:
 			elif hh < 0.3:
 				_put(groups, "reeds", p.x, p.y, 0.9 + hh, hh * 50.0)
 		elif w.depth(k) > 0.03 and hh > 0.9:
-			var lvl := (w.ground(k) + w.depth(k)) * JarTerrain.HS + 0.02
-			_add(groups, "lotus" if hh > 0.975 else "lily", Transform3D(Basis(Vector3.UP, hh * 50.0), Vector3(x, lvl, z)))
+			_lilies.append(["lotus" if hh > 0.975 else "lily", k, x, z, hh * 50.0, LILY_SCALE * (0.85 + 1.5 * (hh - 0.9))])
+
+
+## 수련·연꽃을 지금 수면에 띄운다 (장식은 6시간마다 다시 놓지만 ×60에선 그 사이 수면이 오르내려 잎이 물에 잠겨
+## 테두리만 점선처럼 보였다 — 1초마다 높이를 보고 달라졌으면 이것만 다시). 물이 빠진 칸은 숨김.
+const LILY_SCALE := 0.8
+const LILY_LIFT := 0.035
+
+
+func _sync_lilies(force: bool) -> void:
+	var w := v.water
+	var ys := PackedFloat32Array()
+	ys.resize(_lilies.size())
+	var changed := force or _lily_y.size() != _lilies.size()
+	for i in _lilies.size():
+		var k: int = _lilies[i][1]
+		var d := w.depth(k)
+		var y := (w.ground(k) + d) * JarTerrain.HS - JarTerrain.WATER_SINK + LILY_LIFT if d > JarWater.LAKE_DEPTH else -1.0e9
+		ys[i] = y
+		if not changed and absf(y - _lily_y[i]) > 0.004:
+			changed = true
+	if not changed:
+		return
+	_lily_y = ys
+	var groups := {}
+	for i in _lilies.size():
+		if ys[i] < -1.0e8:
+			continue
+		var it: Array = _lilies[i]
+		_add(groups, it[0], Transform3D(Basis(Vector3.UP, it[4]).scaled(Vector3.ONE * float(it[5])), Vector3(it[2], ys[i], it[3])))
+	_flush(_lily_node, groups, ["lily", "lotus"])
 
 
 ## 집 둘레 덤불 (앞쪽 양옆)
@@ -907,7 +988,7 @@ func _decor_crossings(groups: Dictionary) -> void:
 			continue
 		var d: Vector2i = c[3]
 		var kw := w.idx(p.x + d.x, p.y + d.y)
-		var lvl := (w.ground(kw) + w.depth(kw)) * JarTerrain.HS
+		var lvl := (w.ground(kw) + w.depth(kw)) * JarTerrain.HS - JarTerrain.WATER_SINK
 		var y := maxf(lvl + 0.04, gy(p.x, p.y) - 0.2)
 		var dir := Vector3(d.x, 0, d.y)
 		var origin := Vector3(p.x, y, p.y) - dir * 0.35
@@ -1025,15 +1106,10 @@ func _sync_manna() -> void:
 
 
 func _build_fire() -> void:
-	_fire = _node(self)
-	var p := Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
-	_fire.position = p
-	_box(_fire, Vector3(0.9, 0.15, 0.18), Vector3(0, 0.08, 0), Style.WOOD_DARK, 0.5)
-	_box(_fire, Vector3(0.9, 0.15, 0.18), Vector3(0, 0.08, 0), Style.WOOD_DARK, -0.6)
-	_flames.append(_box(_fire, Vector3(0.36, 0.5, 0.36), Vector3(0, 0.4, 0), Style.FLAME, 0.3))
-	_flames.append(_box(_fire, Vector3(0.18, 0.3, 0.18), Vector3(0, 0.5, 0.0), Style.FLAME2, 0.8))
-	for a in 6:
-		_box(_fire, Vector3(0.2, 0.14, 0.2), Vector3(cos(a) * 0.55, 0.07, sin(a) * 0.55), Style.STONE_DARK)
+	_fire = Campfire.new()           # [모닥불] view/campfire.gd
+	_fire.terrain = terrain
+	add_child(_fire)
+	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
 	# 제단 (깨달음 뒤 주민이 짓는다 — 그 전엔 비어 있음) · 하늘 낟알 연출
 	altar_view = AltarView.new(v, terrain)
 	add_child(altar_view)
@@ -1042,12 +1118,7 @@ func _build_fire() -> void:
 
 
 func _animate_fire() -> void:
-	if _fire == null or _flames.is_empty():
+	if _fire == null:
 		return
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
-	var f := int(_anim_t * 8.0) % 3
-	var hs := [1.0, 1.25, 0.85]
-	_flames[0].scale.y = hs[f]
-	_flames[0].position.y = 0.25 * hs[f] + 0.12
-	_flames[1].scale.y = hs[(f + 1) % 3]
-	_flames[1].position.y = 0.15 * hs[(f + 1) % 3] + 0.35
+	_fire.tick(get_process_delta_time() if is_inside_tree() else 0.0, v)   # [모닥불] 상태·일렁임·LOD (view/campfire.gd)

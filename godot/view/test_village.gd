@@ -89,13 +89,15 @@ var lamp_ctl: LampCtl                 # [등불 옮기기] 나침반 · 미리�
 var _bell_seen := {}                  # 무리 → 들은 교회 종 (Village.bell_t)
 var lamp_btn: Button
 var notes_label: Label
-var speed_list: HBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6)
+var speed_list: VBoxContainer        # 배속 칩을 길게 누르면 배속 목록 (기획서 6.6 v4.3) — 윗줄 느리게~아주 빠르게 (1일=…) · 아랫줄 1초=5분~12시간
+var speed_items: Array = []          # 목록의 단추 (SPEEDS 번호 순서)
 var _speed_down_t := -1.0
 var _speed_long := false
 var _sparkle: Control
 var _hand_glow_t := 0.0
 var _tray_h := 0.0
 var chronicle: ChronicleSheet
+var people_sheet: PeopleSheet          # [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] (view/ui/people_sheet.gd)
 var rev_show: RevelationShow
 var guide_cap: GuideCaption
 var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
@@ -109,6 +111,8 @@ var _sprout_seen := -1.0
 var _baby_asked := -1
 var _site_seen := {}                 # 짓는 터 id → 본 단계 (단계가 바뀌면 망치 소리 — 첫 병 첫날)
 const LID_AFTER := 2.0               # 손짓이 끝나고 뚜껑이 저절로 닫히기까지 (현실 초)
+var store_strip: StoreStrip            # [창고] 위 띠 아래 창고 띠 (view/ui/store_strip.gd)
+var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_sheet.gd)
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -119,6 +123,8 @@ func _ready() -> void:
 	get_window().content_scale_aspect = Window.CONTENT_SCALE_ASPECT_EXPAND
 	village = _load_or_make_village()
 	clock = _loaded_clock if _loaded_clock != null else JarClock.new(village)
+	if clock.speed_i > JarClock.top_speed_i():     # 빠른 기기에서 저장한 배속을 느린 기기에서 열면 그 기기의 맨 위로
+		clock.set_speed(JarClock.top_speed_i())
 	sun = JarTerrain.make_world(self)
 	jar = Node3D.new()
 	add_child(jar)
@@ -177,7 +183,7 @@ func on_back() -> void:
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -385,9 +391,13 @@ func _process(dt: float) -> void:
 		var was_skipping := clock.skipping
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
-		var al := 1.0 if clock.skipping else clampf(clock.acc / clock.step, 0.0, 1.0)
+		var vfast := clock.view_fast()
+		var sdt := village.step_dt if clock.fast else clock.step
+		var al := 1.0 if clock.skipping or vfast else clampf(clock.acc / sdt, 0.0, 1.0)
 		for vv: Array in village_views():
 			(vv[1] as VillageView).alpha = al
+			(vv[1] as VillageView).lerp_max = 3.0 * sdt / Balance.WATCH_STEP * 0.7 if clock.fast else 3.0   # 10초 걸음 사이도 걸어가는 것으로 (순간이동만 건너뜀)
+			(vv[1] as VillageView).fast = vfast           # 1초=5분~: 주민은 멀리 LOD 점처럼 순간이동, 움직임·효과는 띄엄띄엄
 		_terrain_t += dt
 		# 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림 (밤 건너뛰기 중엔 1초마다, 끝나면 바로)
 		if _terrain_t > (1.0 if clock.skipping else 4.0) or (was_skipping and not clock.skipping):
@@ -422,6 +432,7 @@ func update_night() -> void:
 	if clock.skipping:
 		night = minf(night, 1.0 - smoothstep(0.45, 1.0, clock.skip_progress))
 	post_mat.set_shader_parameter("night_amount", night)
+	Campfire.apply_glow(post_mat, night)   # [모닥불] 불빛 웅덩이 (view/campfire.gd)
 	glass.set_night(night)
 	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
 
@@ -532,7 +543,11 @@ func _setup_ui() -> void:
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	info_label.clip_text = true
-	info_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	info_label.mouse_filter = Control.MOUSE_FILTER_STOP       # [사람들 목록] 누르면 사람들 목록
+	info_label.gui_input.connect(func(ev: InputEvent) -> void:
+		if ev is InputEventMouseButton and not (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			GameAudio.ui_click()
+			open_people())
 	trow.add_child(info_label)
 	var bn := GameIcons.rect("지폐", 24)
 	bn.size_flags_vertical = Control.SIZE_SHRINK_CENTER
@@ -630,16 +645,30 @@ func _setup_ui() -> void:
 		speed_list.visible = false
 		clock.cycle_speed())
 	root.add_child(speed_btn)
-	speed_list = HBoxContainer.new()
+	speed_list = VBoxContainer.new()
 	speed_list.add_theme_constant_override("separation", 3)
 	speed_list.visible = false
 	root.add_child(speed_list)
+	var rows: Array = []
+	for k in 2:
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 3)
+		speed_list.add_child(row)
+		rows.append(row)
+	speed_items.clear()
 	for i in Balance.SPEEDS.size():
-		var sb := _bar_button(speed_list, "×%d" % int(Balance.SPEEDS[i]), func() -> void:
+		var second := i >= Balance.SPEED_TAP_N
+		var nt := JarClock.note_of(i)
+		var sb := _bar_button(rows[1 if second else 0], JarClock.label_of(i) + ("\n" + nt if nt != "" else ""), func() -> void:
 			clock.set_speed(i)
 			speed_list.visible = false)
 		sb.custom_minimum_size = Vector2(40, UiTheme.TOUCH)
-		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
+		sb.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)
+		sb.visible = i <= JarClock.top_speed_i() and not (i in Balance.SPEED_HIDDEN)      # 느린 기기는 따라가지 못하는 맨 위 배속을 뺀다 · 겹치는 단계는 숨김
+		speed_items.append(sb)
+	store_strip = StoreStrip.new()          # [창고] 창고 띠 — 배속 칩 아래 (누르면 창고 시트)
+	store_strip.setup(self)
+	root.add_child(store_strip)
 	# 거인의 손 칸 (뚜껑 · 불기 · 등불 + 손에 든 것) · 떨어뜨릴 자리 띠
 	hand_ctl = GiantHandCtl.new(self)
 	add_child(hand_ctl)
@@ -679,6 +708,17 @@ func _setup_ui() -> void:
 	chronicle.setup(village, jar_world())
 	dlayer.add_child(chronicle)
 	chronicle.resident_pressed.connect(_on_chronicle_person)
+	people_sheet = PeopleSheet.new()      # [사람들 목록]
+	dlayer.add_child(people_sheet)
+	people_sheet.resident_pressed.connect(_on_people_person.bind(false))
+	people_sheet.follow_requested.connect(_on_people_person.bind(true))
+	chronicle.people_requested.connect(open_people)
+	store_sheet = StoreSheet.new()          # [창고]
+	store_sheet.setup(store_strip.book, self)
+	dlayer.add_child(store_sheet)
+	store_strip.pressed.connect(func() -> void:
+		close_sheets(store_sheet)
+		store_sheet.open(focus_village()))
 	altar_sheet.reveal_requested.connect(start_revelation)
 	var rlayer := CanvasLayer.new()       # 계시·깨달음 연출 — 띠 위, 시트 아래
 	rlayer.layer = 3
@@ -702,7 +742,7 @@ func _setup_ui() -> void:
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
 func close_sheets(keep: Control = null) -> void:
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
 		if sh != null and sh != keep and sh.visible:
 			sh.call("close")
 	if hand_ctl != null:
@@ -926,6 +966,25 @@ func _on_chronicle_person(v: Village, r: Resident) -> void:
 	detail.open(r)
 
 
+## [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] → 살아 있는 사람 모두 (넓은 세상은 모든 무리, 무리마다 묶음). 다시 누르면 닫힘
+func open_people() -> void:
+	if people_sheet.visible:
+		people_sheet.close()
+		return
+	close_sheets(people_sheet)
+	var w := jar_world()
+	people_sheet.setup(w.settlements if w != null and not w.settlements.is_empty() else [village])
+	people_sheet.open()
+
+
+## [사람들 목록] 줄을 누름 → 주민 상세 (follow = [따라가기] → 상세 + 카메라가 따라감)
+func _on_people_person(v: Village, r: Resident, follow: bool) -> void:
+	people_sheet.close()
+	_on_chronicle_person(v, r)
+	if follow and not r.dead:
+		detail.set_following(true)
+
+
 ## [계시] (A5): 제단 시트를 닫고 그 무리의 광장으로 → 빛 한 줄기 + 연출 → (0.9초) 시대가 오른다 · 연대기 · 축제 음악
 func start_revelation(v: Village) -> void:
 	if rev_show.playing() or not v.revelation_pending():
@@ -1106,6 +1165,7 @@ func layout_bars() -> void:
 	speed_btn.size = Vector2(0, UiTheme.TOUCH)
 	speed_list.position = Vector2(6, top_h + 6.0 + UiTheme.TOUCH + 4.0)
 	ui_label.position = Vector2(8, top_h + UiTheme.TOUCH + 12.0)
+	_layout_store()                         # [창고]
 	if hand_ctl != null:
 		hand_ctl.layout(bottom_h)
 	if lamp_ctl != null:
@@ -1119,6 +1179,26 @@ func layout_bars() -> void:
 	var tray_h := maxf(hand_ctl.height() if hand_ctl != null else 0.0, lamp_ctl.height() if lamp_ctl != null else 0.0)
 	stack.offset_bottom = -bottom_h - 6.0 - (tray_h + 4.0 if tray_h > 0.0 else 0.0)
 	stack.offset_top = stack.offset_bottom
+
+
+## [창고] 창고 띠 자리: 배속 칩 · 구석의 작은 해 아래 (배속 목록이 열리면 그 아래) · 오른쪽은 store_right() 만큼 비움 · 개발 글은 그 밑으로
+func _layout_store() -> void:
+	if store_strip == null:
+		return
+	var y := top_h + 6.0 + UiTheme.TOUCH + 6.0
+	if lamp_ctl != null and lamp_ctl.badge != null and lamp_ctl.badge.visible:     # 구석의 작은 해 아래
+		y = maxf(y, lamp_ctl.badge.position.y + lamp_ctl.badge.size.y + 6.0)
+	if speed_list.visible:
+		y = maxf(y, speed_list.position.y + UiTheme.TOUCH + 6.0)
+	store_strip.position = Vector2(6, y)
+	store_strip.max_width = get_viewport().get_visible_rect().size.x - 6.0 - store_right()
+	store_strip.visible = speed_btn.visible
+	ui_label.position.y = y + store_strip.size.y + 6.0
+
+
+## [창고] 창고 띠 오른쪽에 비울 폭 (넓은 세상은 둥근 지도)
+func store_right() -> float:
+	return 6.0
 
 
 func _bar_style(p: PanelContainer, variation: String, extra_top: float, extra_bottom: float) -> void:
@@ -1236,7 +1316,7 @@ func status_text() -> String:
 		elif p.is_elder():
 			elders += 1
 	var c := v.chief()
-	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "×%d" % int(clock.speed())
+	var spd := "밤 건너뛰는 중 %d%%" % int(clock.skip_progress * 100.0) if clock.skipping else "%s · 실제 %s" % [clock.speed_text(), JarClock.rate_label(clock.rate)]
 	return "%s · %s%s\n인구 %d (아이 %d · 노인 %d) · 집 %d채 %d자리 · 지폐 %d\n식량 %d · 판자 %d · 돌 %d · 통나무 %d\n%s 시대 · 신앙 %d · 촌장 %s · %d fps · 계산 %.1f ms" % [
 		v.fmt_time(v.t), spd, " (멈춤)" if paused else "",
 		v.people.size(), kids, elders, v.houses().size(), v.house_capacity(), roundi(Market.notes),
@@ -1278,9 +1358,10 @@ func _update_ui() -> void:
 		if SafeArea.insets(get_viewport()) != _insets:
 			layout_bars()
 	var fv := focus_village()
-	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  ×%d" % [fv.fmt_time(fv.t), int(clock.speed())]
-	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > 1.0 else Color.WHITE
+	speed_btn.text = "%s  새벽으로…" % fv.fmt_time(fv.t) if clock.skipping else "%s  %s" % [fv.fmt_time(fv.t), clock.speed_text()]
+	speed_btn.modulate = Color(1, 0.85, 0.5) if clock.speed() > JarClock.normal_speed() + 1e-6 else Color.WHITE
 	skip_btn.visible = clock.can_skip_night()
+	_layout_store()                         # [창고] 배속 목록·띠 숨김을 따라
 	hand_ctl.refresh()                   # [손] 뚜껑 (저절로 닫힐 때까지 남은 현실 초) · 불기 (뚜껑이 열린 동안만) · 손에 든 것
 	hand_btn.text = "손 %d" % Market.hand.size() if not Market.hand.is_empty() else "손"
 	_btn_glow_t += get_process_delta_time()
@@ -1300,9 +1381,11 @@ func _update_ui() -> void:
 			clock.notice_t = 6.0
 	notice_label.visible = clock.notice_t > 0.0
 	notice_label.text = clock.notice
-	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명
+	# 말풍선: 화면 안(위·아래 띠 사이)에서 말하고 있는 주민 몇 명 — 1초=5분~에선 띄우지 않는다 (말은 그대로 기록됨, 0.1초마다 바뀌어 못 읽음)
 	for c in bubbles.get_children():
 		c.queue_free()
+	if clock.view_fast():
+		return
 	var shown := 0
 	var vs := get_viewport().get_visible_rect().size
 	for vv: Array in village_views():
@@ -1606,7 +1689,7 @@ func _update_audio() -> void:
 		return
 	if a.village != focus_village() and not leaving:     # 넓은 세상: 카메라가 보는 무리의 소리 (불·일터·말소리)
 		a.attach(focus_village())
-	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed())
+	a.speed = 1000.0 if clock.skipping else (0.0 if paused else clock.speed() / JarClock.normal_speed())   # 소리는 '보통'을 1로 본다 (v4.3)
 	a.outside = GameAudio.outside_from_ppu(cam.ppu)
 	a.listener = Vector2(cam.target.x, cam.target.z)
 
@@ -1749,7 +1832,10 @@ func _update_notebook() -> void:
 		return
 	var fv := focus_village()
 	notebook_note.setup(fv)
-	notebook_note.position = Vector2(6.0, top_h + 6.0 + UiTheme.TOUCH + 6.0)
+	var ny := top_h + 6.0 + UiTheme.TOUCH + 6.0
+	if store_strip != null and store_strip.visible:          # 창고 띠 아래
+		ny = maxf(ny, store_strip.position.y + store_strip.size.y + 6.0)
+	notebook_note.position = Vector2(6.0, ny)
 	var big := false                      # 큰 시트가 열린 동안 쪽지는 비켜 줌 (주민 상세는 [따라가 보기]를 가리키므로 그대로)
 	for sh: Control in [altar_sheet, shop_sheet, chronicle, settings_sheet, shelf_sheet, baby_sheet, return_letter]:
 		if sh != null and sh.visible:

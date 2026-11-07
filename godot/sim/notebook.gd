@@ -511,7 +511,7 @@ static func awaken_ok(v: Village) -> bool:
 
 ## 창세의 날의 빠르기 (현실 1초 = 병 n초 — 거인 배속은 JarClock이 곱함). real = 창세의 날이 흐른 현실 초
 static func day_speed(v: Village, real_s: float) -> float:
-	return day_scale(v, real_s) * NORMAL_BASE
+	return day_scale(v, real_s) * float(Balance.SPEEDS[Balance.SPEED_DEFAULT_I])     # 보통에 대한 몫 × 보통 (보통 값이 바뀌어도 맞게)
 
 
 ## 창세의 날 빠르기 — 보통 하루 빠르기(NORMAL_BASE)에 대한 몫
