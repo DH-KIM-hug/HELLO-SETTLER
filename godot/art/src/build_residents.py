@@ -1329,6 +1329,113 @@ def build_anims(rig):
         return p, (0, 0, 0)
     anim(rig, "fly", 60, fly)
 
+    # ── idle variety + social (v5: residents read differently from the top camera, not all the same sway) ──
+    def env(t, a=0.15, b=0.4, c=0.62, d=0.88):     # 0 → 1 → 0 hold envelope (one gesture per loop)
+        return sm(a, b, t) * (1.0 - sm(c, d, t))
+
+    def look(t):                     # look around: head + chest turn left, then right
+        turn = S(t) * 0.6
+        p = arms(0.02, -0.02, lf=-0.12, rf=-0.12)
+        p["spine"] = (0.0, 0, turn * 0.25)
+        p["skull"] = (-0.06, 0, turn)
+        return p, (0, 0, 0)
+    anim(rig, "look", 90, look)
+
+    def stretch(t):                  # arms up over the head, lean back, then relax
+        e = env(t, 0.1, 0.38, 0.6, 0.9)
+        p = arms(-0.15 - 2.65 * e, -0.15 - 2.65 * e, lz=-0.1 * e, rz=-0.1 * e, lf=-0.5 * e, rf=-0.5 * e)
+        p["spine"] = (-0.2 * e, 0, 0)
+        p["skull"] = (-0.25 * e, 0, 0)
+        return p, (0, 0, 0.02 * e)
+    anim(rig, "stretch", 75, stretch)
+
+    def scratch(t):                  # right hand scratches the back of the head, head tilted
+        e = env(t, 0.1, 0.3, 0.72, 0.92)
+        p = arms(0.02, -0.1 - 1.9 * e, rz=0.55 * e, lf=-0.12, rf=-0.2 - (1.7 + S(t, 6) * 0.2) * e)
+        p["skull"] = (0.08 * e, 0.18 * e, -0.1 * e)
+        p["spine"] = (0, 0.04 * e, 0)
+        return p, (0, 0, 0)
+    anim(rig, "scratch", 60, scratch)
+
+    def shift(t):                    # weight shift from foot to foot, hand on the hip
+        s = S(t)
+        p = arms(0.05, -0.05, lz=0.55, lf=-1.6, rf=-0.15)
+        p["hips"] = (0, s * 0.06, 0)
+        p["spine"] = (0, -s * 0.08, 0)
+        p["skull"] = (0, s * 0.05, S(t, 0.5) * 0.15)
+        p["thigh.L"] = (-0.05, 0, -0.04 * max(0.0, s))
+        p["thigh.R"] = (-0.05, 0, 0.04 * max(0.0, -s))
+        p["shin.L"] = (0.15 * max(0.0, -s), 0, 0)
+        p["shin.R"] = (0.15 * max(0.0, s), 0, 0)
+        return p, (s * 0.035, 0, -0.01)
+    anim(rig, "shift", 80, shift)
+
+    def chat(t):                     # standing talk: right hand gestures, head nods, body leans in
+        g = S(t, 2)
+        p = arms(-0.25 + S(t) * 0.1, -0.75 + g * 0.3, lz=0.05, rz=0.25 + S(t, 1, 0.3) * 0.15, lf=-0.5, rf=-1.2 + g * 0.35)
+        p["spine"] = (0.06, 0, S(t) * 0.08)
+        p["skull"] = (0.06 + S(t, 3) * 0.08, 0, S(t) * 0.12)
+        return p, (0, 0, 0)
+    anim(rig, "chat", 48, chat)
+
+    def sit_talk(t):                 # sitting by the fire, talking with both hands, turning to neighbours
+        p = {"thigh.L": (-1.45, -0.1, 0), "thigh.R": (-1.45, 0.1, 0), "shin.L": (0.25, 0, 0), "shin.R": (0.25, 0, 0)}
+        g = S(t, 2)
+        p.update(arms(-0.6 - S(t, 2, 0.25) * 0.2, -0.8 + g * 0.3, lz=0.1, rz=0.25, lf=-0.9, rf=-1.2 + g * 0.4))
+        p["spine"] = (0.04, 0, S(t) * 0.15)
+        p["skull"] = (S(t, 3) * 0.07, 0, S(t) * 0.35)
+        return p, (0, 0.05, -(HIP - 0.13))
+    anim(rig, "sit_talk", 60, sit_talk)
+
+    def fish(t):                     # holding the rod out over the water, small bobs and a tug
+        tug = env(t, 0.72, 0.8, 0.84, 0.96)
+        p = arms(-0.85, -0.95 + tug * 0.55 + S(t, 2) * 0.04, lz=-0.3, rz=-0.1, lf=-0.5, rf=-0.45)
+        p["spine"] = (0.1 - tug * 0.15, 0, 0)
+        p["skull"] = (0.15, 0, 0)
+        p["thigh.L"] = (-0.2, 0, 0)
+        p["thigh.R"] = (0.12, 0, 0)
+        return p, (0, 0, 0)
+    anim(rig, "fish", 60, fish)
+
+    def crouch(t):                   # hunter stalking: low crouch, peering left / right
+        p = {"thigh.L": (-1.0, 0, 0), "thigh.R": (-0.7, 0, 0), "shin.L": (1.4, 0, 0), "shin.R": (1.5, 0, 0),
+             "foot.L": (-0.4, 0, 0), "foot.R": (-0.3, 0, 0)}
+        p.update(arms(-0.7, -0.9, lz=-0.1, lf=-0.6, rf=-0.9))
+        p["spine"] = (0.45, 0, S(t) * 0.1)
+        p["skull"] = (-0.35, 0, S(t) * 0.45)
+        return p, (0, -0.04, -0.22)
+    anim(rig, "crouch", 60, crouch)
+
+    def clap(t):                     # child: bouncing and clapping
+        k = abs(S(t, 2))
+        p = arms(-1.15, -1.15, lz=-0.55 + 0.45 * k, rz=-0.55 + 0.45 * k, lf=-0.7, rf=-0.7)
+        b = abs(S(t))
+        p["thigh.L"] = (-0.3 * (1 - b), 0, 0)
+        p["thigh.R"] = (-0.3 * (1 - b), 0, 0)
+        p["shin.L"] = (0.55 * (1 - b), 0, 0)
+        p["shin.R"] = (0.55 * (1 - b), 0, 0)
+        p["skull"] = (-0.1, 0, S(t) * 0.2)
+        return p, (0, 0, b * 0.1 - (1 - b) * 0.05)
+    anim(rig, "clap", 32, clap)
+
+    def pray_stand(t):               # standing prayer: hands together at the chest, head bowed, gentle sway
+        p = arms(-0.45, -0.45, lz=-0.45, rz=-0.45, lf=-1.55, rf=-1.55)
+        p["spine"] = (0.1 + S(t) * 0.03, 0, 0)
+        p["skull"] = (0.35 + S(t, 1, 0.2) * 0.06, 0, 0)
+        p["hips"] = (0, S(t, 0.5) * 0.03, 0)
+        return p, (0, 0, 0)
+    anim(rig, "pray_stand", 60, pray_stand)
+
+    def bow(t):                      # deep bow towards the altar, hands together
+        e = env(t, 0.1, 0.4, 0.6, 0.9)
+        p = arms(-0.45 - 0.3 * e, -0.45 - 0.3 * e, lz=-0.45, rz=-0.45, lf=-1.55, rf=-1.55)
+        p["spine"] = (0.15 + 0.55 * e, 0, 0)
+        p["skull"] = (0.3 + 0.2 * e, 0, 0)
+        p["thigh.L"] = (0.25 * e, 0, 0)
+        p["thigh.R"] = (0.25 * e, 0, 0)
+        return p, (0, 0.05 * e, 0)
+    anim(rig, "bow", 60, bow)
+
 
 # ───────── whole kit ─────────
 def build_parts():

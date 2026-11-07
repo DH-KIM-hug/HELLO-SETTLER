@@ -9,6 +9,8 @@
 ## 직업 옷(set_job)은 일터 종류에서, 표정(set_face)은 지금 상태(잠·앓음·기분·말)에서.
 ## 색: 부품의 열쇠 색을 render/resident.gdshader가 이 주민의 옷·피부·머리·수건·숄 색으로 바꿈. 주민 한 명 = 재질 하나.
 ## 외곽선: 뒤집은 껍데기(짙은 갈색) + 화면 깊이 외곽선. 크기: 모델 키 약 1.9 × Style.RESIDENT_SCALE.
+## v5 동작: 시뮬레이션 동작(r.anim) + 행동(r.action)으로 기본 클립을 고르고 (_clip), 사람마다 버릇(_style)·시작 자리·빠르기를 달리,
+##   가끔 사이 동작(둘러보기·기지개·머리 긁기·짝다리·이야기·절)을 끼운다 (VARIETY). 손 흔들기는 인사(greet)·신호 때만.
 ## LOD: 마을 확대가 LOD_PPU(칸당 화면 점) 이상이면 가까이 LOD (village_view가 set_lod) — 초상화·따라가기는 늘 가까이.
 class_name ResidentModel
 extends Node3D
@@ -65,10 +67,28 @@ const DEFAULT_TOOL := "tool_hammer"
 const FACE_CELL := {"": 0, "happy": 1, "sad": 2, "sick": 3, "sleep": 4, "surprised": 5, "talking": 6}
 ## 동작 (resident.glb의 애니메이션 이름) — set_anim의 이름 + 나이·연장에 따라 고름 (_clip)
 const ANIMS := ["idle", "walk", "walk_elder", "run", "carry", "hold", "work_axe", "work_hoe", "work_hammer", "work_hands",
-	"pray", "sit", "eat", "sleep", "wave", "play", "fly"]
+	"pray", "sit", "eat", "sleep", "wave", "play", "fly",
+	"look", "stretch", "scratch", "shift", "chat", "sit_talk", "fish", "crouch", "clap", "pray_stand", "bow"]
+## 시뮬레이션 동작(r.anim) → 기본 클립 — 그 밖의 이름은 클립 이름 그대로 (ANIMS에 있으면)
+const SIM_ANIMS := ["idle", "walk", "carry", "work", "torch", "pray", "sit", "eat", "sleep", "play", "fly", "wave"]
+## (v5) 사이사이 끼는 짧은 동작 — 기본 클립 → [[클립, 무게]]. 한 번 돌고 기본으로 돌아온다 (사람마다 다른 때에)
+const VARIETY := {
+	"idle": [["look", 3.0], ["shift", 3.0], ["scratch", 2.0], ["stretch", 1.0]],
+	"chat": [["look", 1.0], ["shift", 1.0]],
+	"sit": [["sit_talk", 1.0]],
+	"sit_talk": [["sit", 1.0]],
+	"play": [["clap", 1.0]],
+	"clap": [["play", 1.0]],
+	"hold": [["look", 1.0]],
+	"pray_stand": [["bow", 1.0]],
+}
+const VARIETY_GAP := Vector2(3.0, 9.0)   # 기본 클립을 이만큼 (초) 튼 뒤 하나 끼움
+const RATE_SPREAD := 0.08                # 사람마다 동작 빠르기 ±8%
 ## 연장 → 일하는 동작
 const TOOL_ANIM := {"tool_axe": "work_axe", "tool_pick": "work_axe", "tool_hammer": "work_hammer", "tool_hoe": "work_hoe",
-	"tool_sickle": "work_hoe", "tool_peel": "work_hands", "tool_herbs": "work_hands", "tool_rod": "hold", "-": "work_hands"}
+	"tool_sickle": "work_hoe", "tool_peel": "work_hands", "tool_herbs": "work_hands", "tool_rod": "fish", "-": "work_hands"}
+## 연장과 상관없이 일터가 정하는 일 동작 (사냥꾼: 웅크려 살핌)
+const JOB_ANIM := {"사냥꾼": "crouch"}
 ## 머리 부품 (셰이더: 대머리·주근깨·얼굴 그림은 이 부품에만)
 const HEAD_PREFIX := ["head", "hair_", "hat_", "beard", "baby_basket"]
 ## 몸 부품 이름 — 팔·다리는 _L/_R 두 짝
@@ -111,6 +131,16 @@ var _close_mi: MeshInstance3D
 var _far_mi: MeshInstance3D
 var _player: AnimationPlayer
 var _clip_now := ""
+var _action := ""               # 시뮬레이션 행동 (r.action: social · rest · play …) — 같은 동작이라도 클립을 달리 고름
+var _job_name := ""
+var _rng := RandomNumberGenerator.new()
+var _rate := 1.0                # 사람마다 조금 다른 동작 빠르기
+var _base := ""                 # 지금 기본 클립 (사이 동작이 끝나면 돌아올 것)
+var _var_clip := ""             # 지금 끼어 튼 사이 동작 ("" = 없음)
+var _var_left := 0.0            # 사이 동작 남은 시간 (초)
+var _var_next := 0.0            # 다음 사이 동작까지 (초)
+var _style := 0                 # 사람마다 정해진 버릇 (어울릴 때 말하는 쪽/듣는 쪽 · 무릎 꿇기/서서 기도 · 깡충/손뼉)
+var seed_id := -1               # 주민 번호 (setup_from) — 동작 엇갈림 씨앗
 var _cane: Node3D
 var _post := {}                 # 동작 뒤에 덧입히는 뼈 자세 (체형 배율 · 머리 크기 · 숙임)
 var _arm_aim := Vector2.INF     # 오른팔 직접 겨눔 (횃불) — 이번 화면만
@@ -295,6 +325,7 @@ static func tris_of(names: Array, far: bool) -> int:
 # ───────────────────────── 겉모습 고르기 (데이터) ─────────────────────────
 ## 주민 데이터에서 — 7단계: 머리색·피부·눈·머리결·주근깨·대머리·점박이는 겉모습 유전자(Genetics), 체형·소품은 혈통 표시(Bloodlines)
 func setup_from(r: Resident) -> void:
+	seed_id = r.id
 	build_look(look_of(r))
 
 
@@ -527,6 +558,12 @@ func build_look(lk: Dictionary) -> void:
 	_job = {"hat": "", "over": [], "robe": false}
 	_job_tool = ""
 	_clip_now = ""
+	_base = ""
+	_var_clip = ""
+	_rng.seed = hash([seed_id if seed_id >= 0 else get_instance_id(), lk.get("hair_i", 0), lk.get("cloth", 0)])
+	_rate = 1.0 + _rng.randf_range(-RATE_SPREAD, RATE_SPREAD)
+	_style = _rng.randi() % 6
+	_var_next = _rng.randf_range(0.5, VARIETY_GAP.y)
 	_post = {}
 	var hair_i: int = lk.get("hair_i", 0)
 	var skin_i: int = lk.get("skin_i", 0)
@@ -743,6 +780,7 @@ func set_job(job: String, chief := false) -> void:
 	if mat != null:
 		mat.set_shader_parameter("accent", ac)
 	_job_tool = jl["tool"]
+	_job_name = job
 	_tool_kind = "?"
 	_refresh_body()
 
@@ -798,8 +836,21 @@ func set_tool(workplace: String) -> void:
 		_mesh(tool, kind)
 
 
-func set_anim(a: String) -> void:
+## a = 시뮬레이션 동작 (r.anim), action = 시뮬레이션 행동 (r.action: social · rest …)
+func set_anim(a: String, action := "") -> void:
+	if a == anim and action == _action:
+		return
+	var was := anim
 	anim = a
+	_action = action
+	# 인사: 어울리러 와서 멈춰 서면 (반쯤) 손을 한 번 흔든다 — 손 흔들기는 이런 때만
+	if was == "walk" and action == "social" and (a == "idle" or a == "sit") and _rng.randf() < 0.5:
+		greet()
+
+
+## 손 한 번 흔들기 (인사 · 거인에게 보내는 신호) — 사이 동작으로 한 번 돌고 하던 동작으로
+func greet() -> void:
+	_start_variety("wave", 2.0)
 
 
 ## 횃불처럼 오른팔을 직접 겨눔 (이번 화면만 — tick 뒤에 부름). rx = 앞으로 듦(-), rz = 옆으로 벌림
@@ -808,7 +859,7 @@ func aim_arm_r(rx: float, rz := 0.0) -> void:
 	_apply_aim()
 
 
-## 동작 이름 → 애니메이션 (나이·연장·짐에 따라)
+## 동작 이름 → 기본 애니메이션 (나이·연장·짐·행동에 따라 — 사이 동작 없이, 정해진 값)
 func _clip(a: String) -> String:
 	match a:
 		"walk":
@@ -820,15 +871,70 @@ func _clip(a: String) -> String:
 		"work", "torch":
 			if _tool_kind == "?":
 				set_tool("")
+			if a == "work" and JOB_ANIM.has(_job_name):
+				return JOB_ANIM[_job_name]
 			return TOOL_ANIM.get(_tool_kind, "work_hammer")
 		"idle":
-			return "hold" if _item_kind != "" else "idle"
-		"sleep", "sit", "eat", "pray", "fly", "play", "wave", "run", "hold":
+			if _item_kind != "":
+				return "hold"
+			return "chat" if _action == "social" else "idle"
+		"sit":
+			# 어울림 = 앉아 이야기 (사람마다 반은 듣는 쪽) · 쉼 = 그냥 앉아 불 쬐기
+			if _action == "social" or _action == "festival":
+				return "sit_talk" if _style % 3 != 0 else "sit"
+			return "sit"
+		"play":
+			return "clap" if _style % 3 == 1 else "play"
+		"pray":
+			# 제단 앞: 반은 무릎 꿇고, 반은 서서 손 모으고 (가끔 깊이 절함)
+			return "pray_stand" if _style % 2 == 1 else "pray"
+		"sleep", "eat", "fly", "wave", "run", "hold":
 			return a
-	return "idle"
+	return a if a in ANIMS else "idle"
+
+
+## 사이 동작 시작 (loops = 몇 번 돌지)
+func _start_variety(c: String, loops := 1.0) -> void:
+	if _player == null or not _player.has_animation(c):
+		return
+	_var_clip = c
+	_var_left = _player.get_animation(c).length * loops / maxf(0.1, _speed(c))
+	_var_next = _rng.randf_range(VARIETY_GAP.x, VARIETY_GAP.y)
+
+
+## 지금 틀 클립: 기본 클립 + 가끔 끼는 사이 동작 (기본 클립 VARIETY 표)
+func _pick(dt: float) -> String:
+	var b := _clip(anim)
+	if b != _base:
+		var first := _base == ""
+		_base = b
+		if not first and _var_clip != "wave":       # 하던 일이 바뀌면 사이 동작은 그만 (인사는 마저)
+			_var_clip = ""
+		_var_next = minf(_var_next, _rng.randf_range(VARIETY_GAP.x, VARIETY_GAP.y))
+	if _var_clip != "":
+		_var_left -= dt
+		if _var_left > 0.0:
+			return _var_clip
+		_var_clip = ""
+	var pool: Array = VARIETY.get(b, [])
+	if pool.is_empty():
+		return b
+	_var_next -= dt
+	if _var_next <= 0.0:
+		var tot := 0.0
+		for e: Array in pool:
+			tot += float(e[1])
+		var x := _rng.randf() * tot
+		for e: Array in pool:
+			x -= float(e[1])
+			if x <= 0.0:
+				_start_variety(e[0], 1.0 if _rng.randf() < 0.7 else 2.0)
+				return _var_clip if _var_clip != "" else b
+	return b
 
 
 ## 화면 시간으로 돌린다 (매 화면, 부드럽게 — 바뀌면 BLEND초 섞음)
+## (v5) 기본 클립을 새로 틀 땐 사람마다 다른 자리에서 시작 + 조금 다른 빠르기 → 모두가 같은 박자로 움직이지 않음
 func tick(dt: float) -> void:
 	_t += dt * Style.ANIM_SPEED
 	if pose == null:
@@ -836,13 +942,15 @@ func tick(dt: float) -> void:
 	if _baby:
 		apply_pose(anim, _t)
 		return
-	var c := _clip(anim)
+	var c := _pick(dt * Style.ANIM_SPEED)
 	if _player == null or not _player.has_animation(c):
 		return
 	if c != _clip_now:
 		_player.play(c, BLEND if _clip_now != "" else 0.0)
+		if c != _var_clip:                 # 기본 클립: 엇갈린 자리에서 (사이 동작은 처음부터 — 몸짓 하나)
+			_player.seek(_rng.randf() * _player.get_animation(c).length, false)
 		_clip_now = c
-	_player.speed_scale = _speed(c)
+	_player.speed_scale = _speed(c) * _rate
 	_skip_dt += dt
 	if not lod_close and not _skip:         # 멀리 LOD: 동작은 두 화면에 한 번 (작게 보여 티 안 남, CPU 절반)
 		_skip = true

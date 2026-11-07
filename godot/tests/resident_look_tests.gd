@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== A20 주민 모델 v3: 겉모습 부품 · 뼈대 동작 · LOD")
 	run.timed(self, ["test_look_deterministic", "test_look_ignores_stats", "test_parts_exist", "test_job_outfit", "test_face", "test_baby_basket",
-		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood"])
+		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood", "test_action_map", "test_action_village", "test_action_desync"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -335,3 +335,156 @@ func test_hood() -> void:
 			wrong += 1
 	check(wrong == 0, "두건: 여자·아이·노인·교회 옷에는 없음 (%d)" % wrong)
 	check(hooded > men / 6 and hooded < men * 2 / 3, "두건: 남자 어른 일부 (%d / %d)" % [hooded, men])
+
+
+# ───────────────────────── 동작 (v5: 다 똑같이 손 흔드는 것처럼 보이지 않게) ─────────────────────────
+## 시뮬레이션이 쓰는 동작 이름(act(…, "이름") · r.anim = "이름")이 모두 SIM_ANIMS에 있고, 어떤 행동·나이·연장·짐이든 있는 클립으로 간다
+func test_action_map() -> void:
+	var lib: AnimationLibrary = ResidentModel.kit().get("lib")
+	var re := RegEx.create_from_string("(?:act\\([^,()]+,\\s*|\\.anim = )\"([a-z_]+)\"")
+	var used := {}
+	for f: String in DirAccess.get_files_at("res://sim"):
+		if not f.ends_with(".gd"):
+			continue
+		var src := FileAccess.get_file_as_string("res://sim/" + f)
+		for m in re.search_all(src):
+			used[m.get_string(1)] = f
+	var unknown := used.keys().filter(func(a: String) -> bool: return not a in ResidentModel.SIM_ANIMS)
+	check(used.size() >= 8 and unknown.is_empty(), "동작: 시뮬레이션 동작 이름 %d개가 모두 표에 있음 %s" % [used.size(), unknown])
+	var bad: Array = []
+	var seen := {}
+	for age: float in [3.0, 10.0, 27.0]:
+		for id in 6:
+			var r := Resident.new()
+			r.id = id
+			r.age = age
+			var m := ResidentModel.new()
+			m.setup_from(r)
+			for job: String in ResidentModel.JOB_LOOK.keys() + ["사냥꾼"]:
+				m.set_job(job)
+				for item: String in ["", "통나무"]:
+					m.set_item(item)
+					for action: String in ["", "social", "rest", "festival", "work", "pray", "play", "sick"]:
+						for a: String in ResidentModel.SIM_ANIMS:
+							m.set_anim(a, action)
+							var c := m._clip(a)
+							seen[c] = true
+							if not lib.has_animation(c):
+								bad.append("%s/%s/%s→%s" % [a, action, job, c])
+			m.free()
+	for b: String in ResidentModel.VARIETY:
+		for e: Array in ResidentModel.VARIETY[b]:
+			if not lib.has_animation(e[0]):
+				bad.append("사이 동작 " + e[0])
+	check(bad.is_empty(), "동작: 모든 동작·행동·직업이 있는 클립으로 (%d가지 클립) %s" % [seen.size(), bad.slice(0, 5)])
+	var kid := Resident.new()
+	kid.id = 1
+	kid.age = 3.0
+	var mk := ResidentModel.new()
+	mk.setup_from(kid)
+	var old := Resident.new()
+	old.age = 27.0
+	var mo := ResidentModel.new()
+	mo.setup_from(old)
+	var ad := Resident.new()
+	ad.age = 10.0
+	var ma := ResidentModel.new()
+	ma.setup_from(ad)
+	ma.set_anim("idle", "social")
+	var chat := ma._clip("idle")
+	ma.set_anim("idle", "")
+	var idle := ma._clip("idle")
+	ma.set_job("어부")
+	ma.set_tool("어부")
+	var fish := ma._clip("work")
+	ma.set_job("사냥꾼")
+	var hunt := ma._clip("work")
+	ma.set_job("")
+	ma.set_item("통나무")
+	var carry := ma._clip("carry")
+	check(mk._clip("walk") == "run" and mo._clip("walk") == "walk_elder" and chat == "chat" and idle == "idle" and fish == "fish"
+		and hunt == "crouch" and carry == "carry", "동작: 아이 뜀 · 노인 걸음 · 어울림=이야기 · 어부=낚시 · 사냥꾼=웅크림 · 나르기 (%s %s %s %s)" % [chat, idle, fish, hunt])
+	# 손 흔들기는 정해진 때만: 시뮬레이션 동작 어느 것도 기본 클립이 wave가 아님 (wave 자신 빼고)
+	var waves := ResidentModel.SIM_ANIMS.filter(func(a: String) -> bool: return a != "wave" and ma._clip(a) == "wave")
+	check(waves.is_empty(), "동작: 손 흔들기는 인사·신호 때만 %s" % [waves])
+	mk.free()
+	mo.free()
+	ma.free()
+
+
+## 마을 하나를 병 2시간 흘리며 주민마다 모델을 돌려 본다 — 클립이 여러 가지이고, 잠 말고 한 클립이 절반을 넘지 않음
+func test_action_village() -> void:
+	var v := Village.new_prototype(7)
+	v.water.offline = true
+	v.advance(Balance.DAY * 2.0)
+	v.advance(fposmod(9.0 * Balance.HOUR - v.hour_now() * Balance.HOUR, Balance.DAY))
+	var models := {}
+	var hist := {}
+	var n := 0
+	for k in (360 if quick else 720):            # 10초씩 — 1시간 (quick) · 2시간
+		v.advance(10.0)
+		for r in v.people:
+			var m: ResidentModel = models.get(r.id)
+			if m == null:
+				m = ResidentModel.new()
+				m.setup_from(r)
+				models[r.id] = m
+			var jb := v.bld(r.job)
+			m.set_job(jb.type if jb != null else "")
+			m.set_item(r.carry)
+			m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
+			for i in 5:
+				m.tick(2.0)
+			if r.anim != "sleep" and m._clip_now != "":
+				hist[m._clip_now] = int(hist.get(m._clip_now, 0)) + 1
+				n += 1
+	var top := ""
+	var top_n := 0
+	for c: String in hist:
+		if int(hist[c]) > top_n:
+			top_n = hist[c]
+			top = c
+	check(hist.size() >= 8, "동작: 마을 2시간에 여러 클립 (%d가지) %s" % [hist.size(), hist])
+	check(top_n <= n / 2, "동작: 잠 말고 한 클립이 절반을 넘지 않음 (%s %.0f%%)" % [top, 100.0 * top_n / maxf(1, n)])
+	for m: ResidentModel in models.values():
+		m.free()
+
+
+## 같은 동작을 시작한 사람들이 같은 박자로 움직이지 않음 (시작 자리 · 빠르기가 사람마다 다름)
+func test_action_desync() -> void:
+	var ms: Array = []
+	var pos: Array = []
+	var rates := {}
+	for i in 12:
+		var r := Resident.new()
+		r.id = 100 + i
+		r.age = 10.0
+		var m := ResidentModel.new()
+		m.setup_from(r)
+		m.set_anim("walk")
+		m.tick(0.0)
+		ms.append(m)
+		pos.append(m._player.current_animation_position / m._player.current_animation_length)
+		rates[snappedf(m._player.speed_scale, 0.001)] = true
+	var close := 0
+	var pairs := 0
+	for i in pos.size():
+		for j in range(i + 1, pos.size()):
+			var d := absf(float(pos[i]) - float(pos[j]))
+			pairs += 1
+			if minf(d, 1.0 - d) < 0.03:
+				close += 1
+	check(close * 4 < pairs, "동작: 같이 걷기 시작해도 박자가 엇갈림 (같은 박자 짝 %d / %d)" % [close, pairs])
+	check(rates.size() >= 6, "동작: 사람마다 빠르기가 조금씩 다름 (%d가지)" % rates.size())
+	# 같은 사람은 늘 같게 (난수 씨앗 = 주민 번호)
+	var r2 := Resident.new()
+	r2.id = 100
+	r2.age = 10.0
+	var m2 := ResidentModel.new()
+	m2.setup_from(r2)
+	m2.set_anim("walk")
+	m2.tick(0.0)
+	check(is_equal_approx(m2._player.current_animation_position, (ms[0] as ResidentModel)._player.current_animation_position), "동작: 같은 주민이면 같은 시작 자리")
+	m2.free()
+	for m: ResidentModel in ms:
+		m.free()
