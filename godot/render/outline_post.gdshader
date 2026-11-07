@@ -7,6 +7,9 @@
 //   4) (B1 거인의 방, room_mask) 깊이로 화소의 세계 자리를 되살려 병 안(원기둥 안)과 방을 나눈다:
 //      병 안 = 밤 색 조정 · 외곽선(use_outline) · 유리 굴절(refract — 가운데 쪽으로 조금 당김) / 방 = 창밖 시각 색(room_mul) · 외곽선(room_outline).
 //      sweep = 유리를 지나는 순간 화면을 쓰는 반사광 (0~1, 음수 = 없음)
+//   5) 모닥불 빛 (view/campfire.gd — Campfire.apply_glow): 깊이로 세계 자리를 되살려 불 둘레(fire_glow: xyz 자리, w 반지름)를
+//      따뜻하게 — 낮엔 아주 살짝, 밤엔 밤 색 조정을 걷어 내고 주황빛 웅덩이 (땅·주민·집 벽 모두). 빛(OmniLight) 대신:
+//      툰 셰이더는 빛마다 한 단계 그늘을 더해 점광이 딱딱한 원판이 되고, 밤은 이 셰이더가 어둡게 하므로 여기서 한 번에.
 // 반투명 물체(유리벽)는 render_priority가 더 높아 이 사각형 뒤에 그려진다.
 shader_type spatial;
 render_mode unshaded, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled, shadows_disabled;
@@ -35,6 +38,10 @@ uniform float room_gap = 0.22;        // 방 화소의 외곽선 깊이 차이 (
 uniform float refract = 0.0;          // 0 = 없음. 병 안 화소를 병 가운데 쪽으로 당기는 정도 (화면 폭 비율)
 uniform vec2 jar_screen = vec2(0.5, 0.25);   // 병의 화면 가운데 x (UV) · 화면 반폭 (UV)
 uniform float sweep = -1.0;
+uniform int fire_count = 0;                 // 모닥불 빛 (0 = 없음 — 계산을 건너뜀)
+uniform vec4 fire_glow[4];                  // xyz = 세계 자리 (불꽃 밑동 조금 위), w = 반지름
+uniform float fire_k[4];                    // 세기 (일렁임 포함, 0~1.4)
+uniform vec3 fire_tint : source_color = vec3(1.0, 0.62, 0.3);
 
 void vertex() {
 	// 카메라 바로 앞 화면 전체 (역방향 깊이: 1.0 = 가장 가까움)
@@ -84,8 +91,22 @@ void fragment() {
 		col = mix(col, col * line_mul, e);
 	}
 
+	float fire_g = 0.0;
+	if (inside && fire_count > 0) {
+		float d0 = texture(depth_tex, uv).r;
+		vec4 vp = INV_PROJECTION_MATRIX * vec4(uv * 2.0 - 1.0, d0, 1.0);
+		vec3 wp = (INV_VIEW_MATRIX * vec4(vp.xyz / vp.w, 1.0)).xyz;
+		for (int i = 0; i < 4; i++) {
+			if (i >= fire_count) break;
+			float q = clamp(1.0 - length(wp - fire_glow[i].xyz) / fire_glow[i].w, 0.0, 1.0);
+			fire_g += fire_k[i] * q * (2.0 - q) * (0.55 + 0.45 * q);
+		}
+		fire_g = clamp(fire_g, 0.0, 1.0);
+	}
 	if (inside) {
-		col = mix(col, col * night_mul + night_add, night_amount);
+		col = mix(col, col * night_mul + night_add, night_amount * (1.0 - fire_g * 0.82));
+		vec3 warm = col * (vec3(1.0) + fire_tint * 0.55) + fire_tint * 0.05;
+		col = mix(col, warm, fire_g * (0.18 + 0.82 * night_amount));
 	} else {
 		col *= room_mul;
 	}

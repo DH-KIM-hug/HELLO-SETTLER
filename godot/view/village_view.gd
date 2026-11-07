@@ -23,8 +23,7 @@ var _rocks: Node3D
 var _rock_key := ""
 var _manna: Node3D
 var _manna_key := ""
-var _fire: Node3D
-var _flames: Array[MeshInstance3D] = []
+var _fire: Campfire             # [모닥불] view/campfire.gd — 돌 고리·장작·의자 + 불꽃 셰이더·불티·연기·불빛
 var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.5 — view/altar_view.gd): 둥근 돌 단 · 짓는 모습 · 제물 더미 + 빛
 var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
 var _props: Node3D
@@ -63,7 +62,8 @@ func _init(village: Village, t: JarTerrain) -> void:
 const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
 	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
-	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar"]
+	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar",
+	"campfire", "campfire_extra", "campfire_seat"]
 
 
 func _ready() -> void:
@@ -977,15 +977,10 @@ func _sync_manna() -> void:
 
 
 func _build_fire() -> void:
-	_fire = _node(self)
-	var p := Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
-	_fire.position = p
-	_box(_fire, Vector3(0.9, 0.15, 0.18), Vector3(0, 0.08, 0), Style.WOOD_DARK, 0.5)
-	_box(_fire, Vector3(0.9, 0.15, 0.18), Vector3(0, 0.08, 0), Style.WOOD_DARK, -0.6)
-	_flames.append(_box(_fire, Vector3(0.36, 0.5, 0.36), Vector3(0, 0.4, 0), Style.FLAME, 0.3))
-	_flames.append(_box(_fire, Vector3(0.18, 0.3, 0.18), Vector3(0, 0.5, 0.0), Style.FLAME2, 0.8))
-	for a in 6:
-		_box(_fire, Vector3(0.2, 0.14, 0.2), Vector3(cos(a) * 0.55, 0.07, sin(a) * 0.55), Style.STONE_DARK)
+	_fire = Campfire.new()           # [모닥불] view/campfire.gd
+	_fire.terrain = terrain
+	add_child(_fire)
+	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
 	# 제단 (깨달음 뒤 주민이 짓는다 — 그 전엔 비어 있음) · 하늘 낟알 연출
 	altar_view = AltarView.new(v, terrain)
 	add_child(altar_view)
@@ -994,12 +989,7 @@ func _build_fire() -> void:
 
 
 func _animate_fire() -> void:
-	if _fire == null or _flames.is_empty():
+	if _fire == null:
 		return
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
-	var f := int(_anim_t * 8.0) % 3
-	var hs := [1.0, 1.25, 0.85]
-	_flames[0].scale.y = hs[f]
-	_flames[0].position.y = 0.25 * hs[f] + 0.12
-	_flames[1].scale.y = hs[(f + 1) % 3]
-	_flames[1].position.y = 0.15 * hs[(f + 1) % 3] + 0.35
+	_fire.tick(get_process_delta_time() if is_inside_tree() else 0.0, v)   # [모닥불] 상태·일렁임·LOD (view/campfire.gd)
