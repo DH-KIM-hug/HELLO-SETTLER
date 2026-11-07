@@ -57,6 +57,7 @@ var mold_view: MoldView        # [곰팡이·뚜껑] 털뭉치 (view/mold_view.g
 var crisis_view: CrisisView    # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (view/crisis_view.gd)
 var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
 var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
+var fauna_view: FaunaView      # [강아지·작은 생물] 집 강아지·마을 강아지·꿀떡이 + 무당벌레·나비… (view/fauna_view.gd — E3-12 · E3-13)
 var animal_view: AnimalView    # [들짐승] 카메라 곁 무리의 대표·물고기·메고 오는 사슴·올무·울타리 (view/animal_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
@@ -121,6 +122,8 @@ func _ready() -> void:
 	add_child(drop_view)
 	animal_view = AnimalView.new(v, self)   # [들짐승]
 	add_child(animal_view)
+	fauna_view = FaunaView.new(v, self)     # [강아지·작은 생물]
+	add_child(fauna_view)
 	social = SocialStage.new(v, self)   # [마을의 삶]
 	add_child(social)
 	_build_fire()
@@ -221,6 +224,9 @@ func _sync_moving(dt: float) -> void:
 		drop_view.sync(dt)          # [상점]
 	if animal_view != null:
 		animal_view.sync(dt)        # [들짐승]
+	if fauna_view != null:
+		fauna_view.alpha = alpha    # [강아지·작은 생물]
+		fauna_view.sync(dt, fast)
 
 
 static func age_stage(r: Resident) -> int:

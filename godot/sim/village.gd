@@ -134,7 +134,8 @@ var mold: Mold
 var hand: GiantHand                   # [거인의 손] 물 뿌리기·감싸기·커튼·유리 닦기·핀셋 (ROADMAP B6 — sim/giant_hand.gd, 난수 없음)
 var smalls: SmallCrises                # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2 — sim/small_crises.gd, 난수도 따로)
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
-var wild: Wildlife                    # [들짐승] 물고기·사슴·토끼·늑대… 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
+var dogs: Dogs                        # [강아지] 집 강아지·마을 강아지·꿀떡이 — 무리마다 (GD 3.0 · E3-13 — sim/dogs.gd, 난수도 따로)
+var wild: Wildlife                    # [들짐승] 물고기·애벌레 자리 (E3-12 — 큰 짐승 없음) 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array, away?: 거인이 비운 동안(등불 시간) 바친 것}
 var tick_mult := 1.0                  # 따라잡기 빠른 길 (CatchUp.fast): 건강·공기·버섯·혼인출산 계산 간격 배율 (저장하지 않음 — 거인이 보면 1)
@@ -263,6 +264,7 @@ func _init_health(seed_v: int) -> void:
 	smalls = SmallCrises.new(seed_v)     # [작은 위기]
 	hand = GiantHand.new()                # [거인의 손]
 	flora = Flora.new(seed_v)             # [하늘의 것]
+	dogs = Dogs.new(seed_v)               # [강아지] 처음 걸음에 마을 강아지 둘 (첫 병이면 꿀떡이도)
 	wild = Wildlife.new(seed_v)           # [들짐승] (넓은 세상의 다른 무리는 JarWorld.place_kit이 첫 무리 것으로 바꿈)
 	if not default_created.is_empty():
 		created_date = {"year": int(default_created["year"]), "month": int(default_created["month"]), "day": int(default_created["day"])}
@@ -859,7 +861,7 @@ func step(dt: float) -> void:
 				m["amt"] = 0.0
 		manna_batches = manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	# 식량 소비 (집계 — 1명당 15분에 1개)
-	var fp := _food_people()
+	var fp := _food_people() + Dogs.food_people(self)     # [강아지] 사람 몫의 일부 (GD 3.0)
 	_fp_val = fp                          # 이 걸음 동안 enough("밀")이 다시 세지 않게 (사람 수가 그대로일 때만)
 	_fp_n = people.size()
 	_fp_t = t
@@ -905,6 +907,8 @@ func step(dt: float) -> void:
 	if owns_water:
 		Wildlife.step(self, dt)       # [들짐승] 무리 수·늑대·토끼 밭 피해·상함·늑대 울음 (WILDLIFE 1~4 — 병 하나에 한 번)
 	SimProf.mark("wildlife")
+	Dogs.step(self, dt)               # [강아지] 따라다님·집 앞 잠·새끼·분양·짖음 (E3-13)
+	SimProf.mark("dogs")
 	SkyDrops.step(self, dt)           # [상점] 하늘에서 내려온 것·돌봄·앰플 탑·녹조·진열 (SHOP · WORLD_EVENTS 4)
 	SimProf.mark("skydrops")
 	for b in buildings:
@@ -3670,7 +3674,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
@@ -3684,6 +3688,8 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 	d["smalls"] = smalls.to_dict()
 	d["hand"] = hand.to_dict()
 	d["flora"] = flora.to_dict()
+	if dogs != null:
+		d["dogs"] = dogs.to_dict()    # [강아지]
 	if owns_water and wild != null:
 		d["wild"] = wild.to_dict()    # [들짐승] 병 하나에 한 번 (다른 무리는 첫 무리 것을 함께 — JarWorld.from_dict)
 	var bl := []
@@ -3727,6 +3733,7 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	v.smalls = SmallCrises.from_dict(d["smalls"]) if d.has("smalls") else SmallCrises.new(int(v.rng.seed % 100000))   # 옛 저장: 작은 위기 없이
 	v.hand = GiantHand.from_dict(d["hand"]) if d.has("hand") else GiantHand.new()     # 옛 저장: 손을 쓴 기록 없이
 	v.flora = Flora.from_dict(d["flora"])
+	v.dogs = Dogs.from_dict(d["dogs"]) if d.has("dogs") else Dogs.new(int(v.rng.seed % 100000))     # 옛 저장: 처음 걸음에서 강아지를 놓는다
 	v.wild = Wildlife.from_dict(d["wild"]) if d.has("wild") else Wildlife.new(int(v.rng.seed % 100000))   # 옛 저장: 처음 걸음에서 무리를 놓는다
 	for bd: Dictionary in d.get("buildings", []):
 		var b := Building.from_dict(bd)

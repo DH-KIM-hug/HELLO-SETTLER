@@ -58,9 +58,8 @@ func _init(village: Village, view: VillageView) -> void:
 func _ready() -> void:
 	_marks = Node3D.new()
 	add_child(_marks)
-	for k: String in Wildlife.MODEL:
+	for k: String in Wildlife.KINDS:          # (E3-12) 물고기만 — 큰 짐승은 없음
 		Art.parts("animals/" + String(Wildlife.MODEL[k]))
-	Art.parts("animals/fawn")
 
 
 func _gy(x: float, z: float) -> float:
@@ -557,11 +556,7 @@ func _make_carried() -> Node3D:
 # ───────────────────────── 올무 · 울타리 ─────────────────────────
 func _sync_marks(w: Wildlife) -> void:
 	var key := ""
-	var huts: Array = []
-	for b in v.buildings:
-		if b.built and b.type == "사냥꾼":
-			huts.append(b)
-			key += "h%d," % b.id
+	var huts: Array = []              # (E3-12) 올무 없음 — 사냥꾼은 열쇠만
 	var fences: Array = []
 	for b in v.buildings:
 		if b.built and b.type == "농장" and w.fenced.has(Wildlife.key(v, b.id)):
@@ -574,7 +569,7 @@ func _sync_marks(w: Wildlife) -> void:
 		c.queue_free()
 	var wood := Toon.mat(Color("8a6040"))
 	for b: Building in huts:
-		for i in Wildlife.SNARES:
+		for i in 2:
 			var a := VillageEra.yaw(b) + 2.2 + i * 0.9
 			var p := Vector2(b.x, b.y) + Vector2(cos(a), sin(a)) * (b.size() + 1.6 + i * 0.8)
 			var y := _gy(p.x, p.y)
