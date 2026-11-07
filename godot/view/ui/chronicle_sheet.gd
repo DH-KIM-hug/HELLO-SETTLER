@@ -10,6 +10,7 @@ extends Control
 
 signal closed
 signal resident_pressed(v: Village, r: Resident)
+signal people_requested               # [사람들 목록] [모두 보기] → view/ui/people_sheet.gd
 
 const TABS := ["최근", "창세 신화", "사람들", "발견"]
 const SHEET_FRAC := 0.9
@@ -410,6 +411,15 @@ func _fill_myth() -> void:
 # ───────────────────────── 사람들 ─────────────────────────
 func _fill_people() -> void:
 	var d := Chronicle.people(village, world)
+	if not village.people.is_empty():     # [사람들 목록] 지금 사람들 명부로
+		var all_b := Button.new()
+		all_b.text = "모두 보기"
+		all_b.focus_mode = Control.FOCUS_NONE
+		all_b.mouse_filter = Control.MOUSE_FILTER_PASS
+		all_b.custom_minimum_size = Vector2(0, UiTheme.TOUCH)
+		all_b.pressed.connect(GameAudio.ui_click)
+		all_b.pressed.connect(func() -> void: people_requested.emit())
+		body.add_child(all_b)
 	_people_section("살아 있음", d["alive"], "alive")
 	_people_section("잠듦", d["dead"], "dead")
 	_people_section("분가로 떠남", d["left"], "left")
