@@ -18,6 +18,18 @@ var _res_key := {}              # id → 나이 단계 (바뀌면 모델을 다�
 var _blds := {}                 # id → Node3D
 var _bld_key := {}
 var _live := {}                 # 건물 id → {"stone": 맷돌 윗돌 · "glow": 화덕 불} (_animate_live)
+## (P1 성능 후속 · buildings GDD 메인 판단 1) 건물 멀리 LOD: 확대가 BLD_FAR_IN 아래면 모델의 "__far" 노드(≤ 600, 선·껍데기 없음),
+## BLD_FAR_OUT 위로 돌아오면 가까이 (가운데 24 — Mobile엔 visibility_range 페이드가 없어 확대로 직접 바꿈, 경계에서 깜빡이지 않게 틈).
+## 멀리에서는 마당 꽃·덤불도 숨김. 건물 노드 아래 "near" · "far" 두 갈래 (_build_shape).
+const BLD_FAR_IN := 22.0
+const BLD_FAR_OUT := 26.0
+var bld_far := false            # 지금 멀리 LOD인가
+var bld_force_lod := -1         # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (캡처·시험)
+## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
+## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
+const WHEAT_MODELS := ["buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_ripe"]
+const WHEAT_SPROUT := 0.33      # 첫 수확까지 시간의 이만큼 지나기 전엔 싹
+static var _fade_mat: ShaderMaterial
 static var _oven_mat: StandardMaterial3D
 var _trees: Node3D
 var _tree_key := ""
@@ -93,7 +105,7 @@ func _init(village: Village, t: JarTerrain) -> void:
 
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
 const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
-	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "bridge_stones", "raft_reed", "boat_leaf", "mushroom_hut",
+	"well", "windmill", "bakery", "saltpan", "buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_green_top", "buildings/wheat_forest_ripe", "buildings/wheat_forest_ripe_top", "woodpile", "chopblock", "planter", "pier", "bridge", "bridge_stones", "raft_reed", "boat_leaf", "mushroom_hut",
 	"bush", "bush_b", "bush_flower", "bush_berry",
 	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
 	"campfire", "campfire_extra", "campfire_seat"]
@@ -191,6 +203,46 @@ func _flora_lod() -> void:
 	for b: FloraBatch in _batches.values():
 		b.cull = flora_cull
 		b.update(1.0e9 if flora_force_near else ppu, vr)
+
+
+## 건물 LOD는 sync와 따로 매 화면 (병 밖 보기처럼 sync가 멈춘 동안에도 축소를 따라가게)
+func _process(_dt: float) -> void:
+	_bld_lod()
+
+
+## 건물 멀리 LOD 고르기 (매 화면 — 바뀔 때만 노드를 건드림)
+func _bld_lod(force := false) -> void:
+	var want := bld_far
+	if bld_force_lod >= 0:
+		want = bld_force_lod == 1
+	else:
+		var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+		if cam == null:
+			return
+		var ppu := 16.0
+		var h := float(get_viewport().get_visible_rect().size.y)
+		if cam.projection == Camera3D.PROJECTION_ORTHOGONAL:
+			if cam.size <= 0.0:
+				return
+			ppu = h / cam.size
+		else:                                    # 원근 카메라 (거인의 방 · 병 밖 보기): 마을 가운데까지 거리로 어림
+			var d := cam.global_position.distance_to(to_global(Vector3(v.center.x, 0.0, v.center.y)))
+			ppu = h / maxf(0.01, 2.0 * d * tan(deg_to_rad(cam.fov) * 0.5))
+		want = ppu < (BLD_FAR_OUT if bld_far else BLD_FAR_IN)
+	if want == bld_far and not force:
+		return
+	bld_far = want
+	for id in _blds:
+		_apply_bld_lod(_blds[id])
+
+
+func _apply_bld_lod(n: Node3D) -> void:
+	var near := n.get_node_or_null("near") as Node3D
+	var far := n.get_node_or_null("far") as Node3D
+	if near == null or far == null:
+		return
+	near.visible = not bld_far or far.get_child_count() == 0       # 멀리 모양이 없는 모델은 가까이 그대로
+	far.visible = bld_far and far.get_child_count() > 0
 
 
 ## 꽃숲 묶음 수 (시험·측정): {"total": 놓은 수, "drawn": 지금 그리는 수, "far": 멀리 덩이인가}
@@ -598,10 +650,10 @@ func _bld_state(b: Building) -> String:
 	var stage := SITE_STAGES
 	if b.is_site():
 		stage = site_stage(b)
-	var ripe := b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at
+	var ripe := wheat_stage(b, v.t) if b.type == "농장" else 0
 	# 자리·병 방향도 키에 (병을 돌리면 건물 자리가 돈다)
 	var era := v.era if b.type == "나루터" else 0      # (E3-6) 나루터: 개척 시대는 갈대 뗏목, 그 뒤 잎 배
-	return "%s|%s|%s|%d|%d,%d|%s|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot, era]
+	return "%s|%s|%s|%d|%d,%d|%d|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot, era]
 
 
 func _sync_buildings() -> void:
@@ -663,7 +715,7 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 ## v3 (2026-11): 종류마다 실루엣·지붕 재료가 다르게 — 둥근 초가 · 너와 · 슬레이트 · 붉은 기와 · 잔디 지붕. 집은 색 변형을 번갈아.
 const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber", "house_timber_b"], "석조주택": ["house_stone", "house_stone_b"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
-	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
+	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["buildings/wheat_forest_green"],      # 농장은 _build_wheat (자람 단계)
 	"맷돌간": ["quern_house"], "화덕": ["oven"],     # v5 빵 사슬 (art/src/build_pioneer.py): 맷돌 윗돌·화덕 불은 따로 (QUERN_STONE · OVEN_GLOW)
 	"버섯꾼": ["mushroom_hut"],
 	# 마을 시대 (A6, art/src/build_village.py) — 시뮬레이션 종류 이름이 정해지면 여기 이름을 맞춘다. 모델 바닥 크기(칸):
@@ -687,24 +739,84 @@ const TWIG_PILE_GOODS := ["통나무", "판자"]   # 쌓인 짐이 이것이면 
 
 
 func _build_shape(n: Node3D, b: Building) -> void:
+	var near := Node3D.new()
+	near.name = "near"
+	n.add_child(near)
+	var far := Node3D.new()
+	far.name = "far"
+	n.add_child(far)
+	if b.type == "농장":
+		_build_wheat(near, far, b)
+		_apply_bld_lod(n)
+		return
 	var names: Array = BUILDING_MODELS.get(b.type, ["hut"])
 	var nm: String = names[b.id % names.size()]
-	if b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at:
-		nm = "field_ripe"
 	if nm == "ferry" and v.era == 0 and Art.exists("ferry_raft"):
 		nm = "ferry_raft"
-	Art.instance(n, nm)
+	Art.instance(near, nm)
+	if Art.has_far(nm):
+		Art.instance(far, nm, Transform3D.IDENTITY, true)
 	if nm == "quern_house" and Art.exists(QUERN_STONE):
-		_live[b.id] = {"stone": Art.instance(n, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
+		_live[b.id] = {"stone": Art.instance(near, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
 	elif nm == "oven" and Art.exists(OVEN_GLOW):
 		_live[b.id] = {"glow": _oven_glow(n)}
 	for y: Array in YARD.get(b.type, []):
-		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]).scaled(Vector3.ONE * float(y[3]) if y.size() > 3 else Vector3.ONE), y[1]))
-	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN)
+		Art.instance(near, y[0], Transform3D(Basis(Vector3.UP, y[2]).scaled(Vector3.ONE * float(y[3]) if y.size() > 3 else Vector3.ONE), y[1]))
+	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN) — 멀리에선 숨김
 		var s := b.size()
 		var m := 1.0 if b.id % 2 == 0 else -1.0
-		Art.instance(n, "flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s)))
-		Art.instance(n, "bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s)))
+		Art.instance(near, "flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s)))
+		Art.instance(near, "bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s)))
+	_apply_bld_lod(n)
+
+
+## 밀 숲 자람 단계 (보기만 — 시뮬 숫자는 그대로): 0 싹 · 1 자란 푸른 줄기 · 2 익은 금빛 이삭.
+## 수확 시각(ready_at)이 없으면 1 (예전 field_green), 그 시각부터 2 (예전 field_ripe — 첫 수확 뒤에도 익은 채).
+static func wheat_stage(b: Building, t: float) -> int:
+	if b.ready_at < 0.0:
+		return 1
+	if t >= b.ready_at:
+		return 2
+	var grown := 1.0 - (b.ready_at - t) / Balance.GROW_FIRST
+	return 0 if grown < WHEAT_SPROUT else 1
+
+
+## 밀 숲: 밑동(선·그림자 그대로) + 윗부분(엷어지는 재질, 그림자는 쌍둥이가) — 가까이·멀리 같은 짜임
+func _build_wheat(near: Node3D, far: Node3D, b: Building) -> void:
+	var nm: String = WHEAT_MODELS[wheat_stage(b, v.t)]
+	Art.instance(near, nm)
+	if Art.has_far(nm):
+		Art.instance(far, nm, Transform3D.IDENTITY, true)
+	var top := nm + "_top"
+	if not Art.exists(top):
+		return
+	for pair: Array in [[near, false], [far, true]]:
+		var parent: Node3D = pair[0]
+		var is_far: bool = pair[1]
+		var m: Dictionary = Art.model_far(top) if is_far else Art.model(top)
+		var mesh: Mesh = m["mesh"]
+		if mesh == null:
+			continue
+		var vis := MeshInstance3D.new()             # 보이는 몸: 6칸 위로 엷어짐, 그림자 없음
+		vis.mesh = mesh
+		vis.material_override = wheat_fade_mat()
+		vis.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		parent.add_child(vis)
+		var sh := MeshInstance3D.new()              # 그림자만: 줄기·이삭의 긴 그림자 (사용자 결정 — 해바라기처럼 그림자가 보임)
+		sh.mesh = mesh
+		sh.material_override = Art.flat_mat()
+		sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		parent.add_child(sh)
+
+
+static func wheat_fade_mat() -> ShaderMaterial:
+	if _fade_mat == null:
+		var m := ShaderMaterial.new()
+		m.shader = load("res://render/toon_fade.gdshader")
+		Toon._light(m)
+		m.set_shader_parameter("view_fill", Style.VIEW_FILL)
+		_fade_mat = m
+	return _fade_mat
 
 
 ## 화덕 불: 빛나는(그늘 없는) 재질 + 아궁이 앞 땅의 따뜻한 빛 웅덩이. 처음엔 꺼 둠 (_animate_live가 켬)

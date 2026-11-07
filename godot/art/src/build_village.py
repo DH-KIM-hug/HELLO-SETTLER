@@ -15,6 +15,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, Vector, shade, mix, out_dir_from_argv  # noqa: E402
+from far_kit import add_far  # noqa: E402  (far LOD node "body__far", buildings GDD decision 1)
 from flora_kit import leaf, tube, cup  # noqa: E402
 from tiny_kit import *  # noqa: E402,F401,F403
 import bmesh  # noqa: E402
@@ -228,6 +229,7 @@ def build_fisher():
     fish(m, 1.3, 0.42, 0.1, 1.0, 0.5)
     fish(m, 1.45, 0.55, 0.12, 0.8, 2.2)
     woven_basket(m, 0.55, 0.55, 0, 0.17, 0.18, fill=FISH)
+    add_far(m)
     m.export(OUT)
 
 
@@ -281,6 +283,7 @@ def build_hunter():
     # meat rack
     drying_rail(m, -1.55, -1.05, 0.65, 0.7,
                 lambda x, z, k: m.box((0.06, 0.03, 0.26), pos=(x, 0.65, z - 0.32), color=("b35a48", "9a4a3a")[k % 2]))
+    add_far(m)
     m.export(OUT)
 
 
@@ -316,6 +319,7 @@ def build_herbalist():
     pebble(m, -1.45, 0.75, 0.08, 0.17, 0.15, 0.1, PEBBLE_DARK, 0, 9)                 # mortar
     m.cyl(0.11, 0.11, 0.02, pos=(-1.45, 0.75, 0.17), color="7fb565", seg=8)
     twig(m, (-1.45, 0.75, 0.15), (-1.35, 0.7, 0.4), 0.025)
+    add_far(m)
     m.export(OUT)
 
 
@@ -394,6 +398,7 @@ def build_mushroom_hut():
     for (x, y, s) in ((-0.85, -0.55, 1.0), (-0.72, -0.7, 0.7), (0.75, 0.55, 0.8), (-0.5, 0.75, 0.9)):
         m.cyl(0.03 * s, 0.035 * s, 0.14 * s, pos=(x, y, 0), color="MUSHROOM_STEM", seg=5)
         m.sphere(0.09 * s, pos=(x, y, 0.14 * s), scl=(1, 1, 0.6), color=cap_c, seg=7, rings=4)
+    add_far(m)
     m.export(OUT)
 
 
@@ -436,6 +441,7 @@ def build_healer():
          seg=5, color=LEAF_B)
     m.sphere(0.24, pos=(-1.84, -0.93, 1.2), color=DOWN, seg=10, rings=6, lumps=0.12, group="body_nl")
     acorn_cup(m, 0.45, -1.0, 0, 0.15, fill=WATER)
+    add_far(m)
     m.export(OUT)
 
 
@@ -487,6 +493,7 @@ def build_weaver():
     for k in range(3):
         acorn_cup(m, 1.6 + 0.0 * k, -0.95 + k * 0.28, 0, 0.12, fill=YARN[k])
     grass_pouch(m, 0.0, -1.1, 0, 0.9, top=WOOL)
+    add_far(m)
     m.export(OUT)
 
 
@@ -526,6 +533,7 @@ def build_smithy():
         x = 0.85 + k * 0.32
         twig(m, (x, 0.62, 0.85), (x + 0.03, 0.6, 0.45), 0.02)
         m.sphere(0.05, pos=(x + 0.03, 0.6, 0.43), scl=(1.4, 0.8, 0.8), color=(IRON, SLATE)[k % 2], seg=6, rings=3)
+    add_far(m)
     m.export(OUT)
 
 
@@ -547,6 +555,7 @@ def build_graveyard():
     mossy_tufts(m, ((0.95, 0.85, 1.0), (-1.0, 0.85, 0.8), (1.0, -0.8, 0.7)))
     m.sphere(0.2, pos=(0.95, -0.75, 0.1), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
     petal_flower(m, 0.92, -0.8, 0.27, 0.05, "ffffff")
+    add_far(m)
     m.export(OUT)
 
 
@@ -572,6 +581,7 @@ def build_raft():
     """Standalone reed raft for the ferry crossing (village_view: pioneer era) - origin = deck centre at the waterline."""
     m = Model("raft_reed", 233)
     reed_raft(m, 0, 0, -0.06, 1.3, 0.72)
+    add_far(m)
     m.export(OUT)
 
 
@@ -580,6 +590,7 @@ def build_leaf_boat():
     stands in it). Origin = centre at the waterline."""
     m = Model("boat_leaf", 234)
     leaf_boat(m, 0, 0, -0.14, 1.45, 0.62, 0.0)
+    add_far(m)
     m.export(OUT)
 
 
@@ -620,6 +631,7 @@ def build_ferry(raft=False):
     cord(m, (0.95, 1.12, 0.18), (0.35, Wd / 2 + 0.05, 0.3), sag=0.08, r=0.01, n=3)
     acorn_cup(m, 0.75, -0.25, z, 0.12, fill=WATER)
     grass_pouch(m, 1.05, 0.25, z, 0.7)
+    add_far(m)
     m.export(OUT)
 
 
@@ -680,6 +692,7 @@ def build_chapel():
     for x in (-0.85, 0.85):
         m.sphere(0.2, pos=(x, ty - 0.2, 0.1), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
         petal_flower(m, x, ty - 0.25, 0.27, 0.05, "ffffff")
+    add_far(m)
     m.export(OUT)
 
 
@@ -716,6 +729,7 @@ def build_plaza():
         placed(m, _bench, (x, y, 0), rz)
     for (x, y), col in zip(((1.15, -1.25), (-1.15, -1.25), (1.3, 0.6)), ("e0607a", "f4c84c", "9a7ad0")):
         flower_pot(m, x, y, 0, col, 1.4)
+    add_far(m)
     m.export(OUT)
 
 
@@ -745,6 +759,7 @@ def build_pasture():
     for k in range(8):
         a = k * 2.3
         tuft(m, math.cos(a) * (0.4 + 0.15 * k), math.sin(a) * (0.3 + 0.12 * k), 0.28, 4, seed=k)
+    add_far(m)
     m.export(OUT)
 
 
@@ -773,6 +788,7 @@ def build_watchtower():
     leaf(m, [Vector((0.02, 0, 4.7)), Vector((0.22, -0.03, 4.62)), Vector((0.42, -0.02, 4.58))], [0.08, 0.08, 0.01],
          Vector((0, -1, 0)), thick=0.02, color="e0607a", color_under="b84a62")
     reed_ladder(m, (0, -1.05, 0), (0, -0.62, P + 0.05), 0.3, 9)
+    add_far(m)
     m.export(OUT)
 
 

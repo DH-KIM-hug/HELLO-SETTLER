@@ -11,6 +11,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, Vector, shade, mix, out_dir_from_argv  # noqa: E402
+from far_kit import add_far  # noqa: E402  (far LOD node "body__far", buildings GDD decision 1)
 from flora_kit import leaf, tube  # noqa: E402
 from tiny_kit import *  # noqa: E402,F401,F403
 from tiny_kit import smoke  # noqa: E402,F401  (build_pioneer imports smoke from here)
@@ -35,6 +36,7 @@ def build_cottage_a():
     twig_fence(m, -1.35, -1.05, -1.35, 0.3, seed=1)
     twig_fence(m, -1.35, -1.05, -0.75, -1.05, seed=2)
     flower_pot(m, 0.62, -0.95, 0, "f4c84c")
+    add_far(m)
     m.export(OUT)
 
 
@@ -56,6 +58,7 @@ def build_cottage_b():
     acorn_cup(m, -1.3, -0.05, 0, 0.16)
     flower_pot(m, 0.8, -0.92, 0, "e0607a")
     seed_lantern(m, 0.62, -D / 2 - 0.06, 0.92, 0.12)
+    add_far(m)
     m.export(OUT)
 
 
@@ -73,6 +76,7 @@ def build_cottage_c():
     m.sphere(0.2, pos=(-1.2, -0.8, 0.1), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
     petal_flower(m, -1.15, -0.85, 0.28, 0.05, "ffffff")
     flower_pot(m, 0.85, -0.95, 0, "9a7ad0")
+    add_far(m)
     m.export(OUT)
 
 
@@ -90,6 +94,7 @@ def build_cottage_d():
     twig_fence(m, 1.4, -1.1, 1.4, -0.15, seed=4)
     m.sphere(0.2, pos=(1.05, -0.65, 0.1), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
     petal_flower(m, 1.0, -0.7, 0.28, 0.05, "LOTUS")
+    add_far(m)
     m.export(OUT)
 
 
@@ -124,6 +129,7 @@ def _timber(name, seed, wall, wall_dark, roof, weave, door_x, porch, chim_x):
     acorn_cup(m, 1.25, -1.05, 0, 0.15, fill=WATER)
     m.sphere(0.24, pos=(-1.45, -0.7, 0.12), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
     petal_flower(m, -1.4, -0.78, 0.33, 0.05, "f4c84c")
+    add_far(m)
     m.export(OUT)
 
 
@@ -162,6 +168,7 @@ def _stone(name, seed, roof, alt, chim_x):
     seed_shell(m, 1.5, -0.85, 0, 0.6, 0.3, 0.16, rz=0.4, fill="CROP_RIPE")
     m.sphere(0.22, pos=(-1.5, -0.6, 0.11), scl=(1, 1, 0.8), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
     petal_flower(m, -1.45, -0.68, 0.3, 0.05, "LOTUS")
+    add_far(m)
     m.export(OUT)
 
 
@@ -212,6 +219,7 @@ def build_store():
     seed_shell(m, 1.4, -0.5, 0, 0.75, 0.38, 0.2, rz=0.9, fill="CROP_RIPE")
     m.sphere(0.32, pos=(-1.55, 0.45, 0.12), scl=(1.25, 0.8, 0.55), color="CROP_RIPE", seg=8, rings=4, lumps=0.2,
              group="body_nl")
+    add_far(m)
     m.export(OUT)
 
 
@@ -233,6 +241,7 @@ def build_well():
     acorn_cup(m, 0.55, -0.42, 0, 0.12, fill="WATER")
     for sx in (-1, 1):
         m.sphere(0.12, pos=(sx * 0.62, -0.32, 0.08), color="BUSH", seg=6, rings=3, lumps=0.2, group="body_nl")
+    add_far(m)
     m.export(OUT)
 
 
@@ -247,6 +256,7 @@ def build_woodpile():
         twig(m, (-W / 2 - 0.12, y, h), (W / 2 + 0.12, y, h), 0.035)
     curled_leaf_roof(m, W + 0.7, D + 0.75, 0.42, z0=H - 0.12, col=LEAF_DRY, dark=LEAF_DRY_B, vein="e0b878", K=8, J=8)
     twig_stack(m, 0, 0, 0, W - 0.1, rows=4, per=6, r=0.05, rz=0.0)
+    add_far(m)
     m.export(OUT)
 
 
@@ -261,6 +271,7 @@ def build_chopblock():
     for k, (x, y, rz) in enumerate(((0.45, 0.2, 0.4), (0.5, -0.12, -0.3), (0.62, 0.05, 1.2))):
         twig(m, (x - math.cos(rz) * 0.2, y - math.sin(rz) * 0.2, 0.04), (x + math.cos(rz) * 0.2, y + math.sin(rz) * 0.2, 0.04),
              0.035, TWIG if k % 2 else TWIG_DARK)
+    add_far(m)
     m.export(OUT)
 
 
@@ -270,6 +281,7 @@ def build_planter():
     seed_shell(m, 0, 0, 0, 1.25, 0.5, 0.2, col=REED_GREEN, inner="8a6a4a", fill="8a6a4a")
     for i in range(5):
         placed(m, lambda i=i: sprout(m, 0, 0, 0.2 + 0.04 * (i % 2), 1.2), (-0.44 + i * 0.22, 0, 0.16))
+    add_far(m)
     m.export(OUT)
 
 
@@ -314,6 +326,7 @@ def build_hut():
         lash(m, (0.06, 0.1, 0.2), 0.03)
     placed(m, _chop, (1.0, -0.75, 0), 0.3)
     m.sphere(0.09, pos=(-0.3, -1.0, 0.04), scl=(1, 1, 0.4), color=CORD, seg=7, rings=3)
+    add_far(m)
     m.export(OUT)
 
 
@@ -347,6 +360,7 @@ def build_forester():
         m.sphere(0.2, pos=(x, 0.55, 1.08 + 0.1 * (k % 2)), scl=(1, 1, 0.8), color=("LEAF_YOUNG", "LEAF_TOP")[k % 2],
                  seg=8, rings=4, lumps=0.25, group="body_nl", seed=k)
     seed_shell(m, 1.25, -0.9, 0, 0.45, 0.22, 0.13, rz=0.6, fill="WATER")
+    add_far(m)
     m.export(OUT)
 
 
@@ -384,6 +398,7 @@ def build_quarry():
     cord(m, (0.25, 0.1, 0.08), (0.55, -0.1, 0.02), r=0.014, n=2)
     for i in range(5):
         m.ico(0.08, pos=(r.uniform(-1.3, 1.3), r.uniform(-0.95, -0.75), 0.02), color="ROCK_DARK", subdiv=1)
+    add_far(m)
     m.export(OUT)
 
 
@@ -411,6 +426,7 @@ def build_sawmill():
         reed_bundle(m, (1.15 + k * 0.18, -0.9 + k * 0.05, 0.11), (1.55 + k * 0.1, 0.4 + k * 0.05, 0.11), 0.1, TWIG, TWIG_DARK,
                     ties=2, n=5)
     acorn_cup(m, 1.55, -1.25, 0, 0.14)
+    add_far(m)
     m.export(OUT)
 
 
@@ -442,6 +458,7 @@ def build_windmill():
         leaf(m, pts, [0.06, 0.24, 0.27, 0.14], Vector((0, -1, 0)), thick=0.04, color="f6f1e4", color_under="d8d0bc")
     for (x, y) in ((-0.95, -0.95), (0.95, -0.95)):
         grass_pouch(m, x, y, 0, 0.9)
+    add_far(m)
     m.export(OUT)
 
 
@@ -477,6 +494,7 @@ def build_bakery():
     cord(m, (-1.4, -D / 2 - 0.35, 0.95), (-1.4, -D / 2 - 0.35, 0.75), r=0.01, n=1)
     m.sphere(0.1, pos=(-1.4, -D / 2 - 0.35, 0.68), scl=(1.4, 0.8, 0.8), color="BREAD", seg=8, rings=5)
     twig_stack(m, 1.5, -0.65, 0, 0.6, rows=2, per=4, r=0.045, rz=math.pi / 2)
+    add_far(m)
     m.export(OUT)
 
 
@@ -502,6 +520,7 @@ def build_saltpan():
     # rake: twig handle with a bark blade
     twig(m, (0.75, 0.0, 0.04), (1.45, 0.45, 0.05), 0.025)
     m.box((0.32, 0.05, 0.08), pos=(0.73, -0.02, 0.0), rot=(0, 0, 0.57 + math.pi / 2), color=BARK)
+    add_far(m)
     m.export(OUT)
 
 
@@ -550,7 +569,144 @@ def build_field(name, ripe):
     twig_fence(m, -F, F, F, F, 0.5, 0.42, seed=2)
     twig_fence(m, -F, -F, -F, F, 0.5, 0.42, seed=3)
     twig_fence(m, F, -F, F, F, 0.5, 0.42, seed=4)
+    add_far(m)
     m.export(OUT)
+
+
+# ───────────────────────── wheat forest (A27-c) ─────────────────────────
+# 밀 숲 터 (농장): the sim farm drawn as 5 towering wheat stalks (~20x a resident, 1 unit = adult height) on a ring of
+# tilled soil; sim footprint (Balance size 1.8) and recipe unchanged. Three growth stages = three models:
+#   buildings/wheat_forest_sprout  - grain mounds with young blades (~3 tall), no top
+#   buildings/wheat_forest_green   - full stalks, green ears          + buildings/wheat_forest_green_top
+#   buildings/wheat_forest_ripe    - straw-gold stalks, nodding gold ears + a grass-rope ladder + ..._ripe_top
+# Split at WHEAT_CUT (art bible occlusion layer 1 - "thin stalks, ears above the frame"): the base model (< 6 units,
+# outlined, shadows) and the *_top model (everything above, no outline groups) which godot/view/village_view.gd draws
+# with the dithered fade material (render/toon_fade.gdshader) + a shadow-only twin, so the tall part never hides the
+# residents and paths under it but still throws its long shadow. Both carry a "body__far" node (far LOD, ppu < 24).
+# Budget (buildings GDD Visual): base + top <= 1,500 near, far base + far top <= 600.
+WHEAT_CUT = 6.0
+WHEAT_STALKS = ((-0.95, 0.6, 19.5, 0.3), (0.8, 0.9, 21.0, 1.9), (0.2, -0.2, 20.2, 3.6), (-0.6, -1.0, 18.2, 5.0),
+                (1.1, -0.75, 20.6, 0.9))                       # x, y, height, leaf turn
+WHEAT_COL = {"green": {"stalk": REED_GREEN, "node": REED_GREEN_NODE, "leaf": "8fb85e", "leaf_dark": "6f9a4c",
+                       "ear": "a9c070", "ear_dark": "8aa65a"},
+             "ripe": {"stalk": "d9c27a", "node": "b89a52", "leaf": "cdb468", "leaf_dark": "b39a55",
+                      "ear": "CROP_RIPE", "ear_dark": "d4a536"}}
+
+
+def _wheat_soil(m, sprout):
+    m.cyl(1.72, 1.5, 0.09, pos=(0, 0, 0.0), color=shade("FIELD_SOIL", 0.86), seg=14, cap="FIELD_SOIL")
+    for (x, y, h, _) in WHEAT_STALKS:
+        m.cyl(0.42, 0.18, 0.22, pos=(x, y, 0.05), color=shade("FIELD_SOIL", 0.92), seg=6)
+        if sprout:                                  # the big grain, half-buried (as big as a resident's body)
+            m.sphere(0.32, pos=(x + 0.12, y - 0.1, 0.24), scl=(0.75, 1.0, 0.6), rot=(0, 0.5, 0.3), color="c99a52",
+                     seg=7, rings=4)
+
+
+def _wheat_ladder(m, x, y, top):
+    """Grass-rope ladder hung on the front stalk: two green cords + twig rungs, foot pegged to the soil."""
+    a, b = Vector((x - 0.55, y - 0.85, 0.06)), Vector((x, y - 0.2, top))
+    d = b - a
+    side = d.cross(Vector((0, 0, 1))).normalized() * 0.17
+    for s in (-1, 1):
+        tube(m, [a + side * s, b + side * s], 0.022, seg=4, color=CORD_GREEN, group="body_nl")
+    n = 7
+    for k in range(n):
+        p = a + d * ((k + 0.6) / (n + 0.2))
+        m.box((0.42, 0.05, 0.05), pos=p, rot=(0, 0, math.atan2(side.y, side.x)), color=TWIG)
+
+
+def _wheat_ear(m, top, h, cols, ripe, group):
+    """Ear: a 5-sided spindle of plump spikelets (bumpy rings) + a few awns; ripe ears nod over."""
+    nod = Vector((0.55, -0.3, -0.25)) if ripe else Vector((0.12, -0.05, 0.0))
+    L = 2.3 if ripe else 2.0
+    axis = (Vector((0, 0, 1)) + nod).normalized()
+    pts = [top + axis * L * t for t in (0.0, 0.25, 0.55, 0.85, 1.0)]
+    radii = [0.16, 0.3, 0.32, 0.24, 0.05]
+    tube(m, pts, radii, seg=5, color=cols["ear"], group=group, smooth=False,
+         colfn=lambda f: cols["ear_dark"] if (int(f.calc_center_median().z * 3.0) % 2) else cols["ear"],
+         wobble=lambda i, k: 1.0 + 0.18 * ((i + k) % 2))
+    for k in range(3):                                 # awns: thin spikes out of the top half
+        a = k * math.tau / 3 + 0.3
+        p = pts[2 + k % 2]
+        out = Vector((math.cos(a), math.sin(a), 0)) * 0.3 + axis * 0.9
+        m.blade(p, p + out * 1.1, 0.04, color=cols["ear_dark"], group="ear_nh")
+
+
+def build_wheat_forest(stage):
+    """stage: 'sprout' | 'green' | 'ripe' -> buildings/wheat_forest_<stage> (+ _top for green/ripe)."""
+    base = Model("wheat_forest_" + stage, 125)
+    sprout = stage == "sprout"
+    _wheat_soil(base, sprout)
+    top = None if sprout else Model("wheat_forest_" + stage + "_top", 126)
+    cols = WHEAT_COL["ripe" if stage == "ripe" else "green"]
+    for i, (x, y, h, turn) in enumerate(WHEAT_STALKS):
+        if sprout:                                     # 2-3 young blades out of the grain
+            for k in range(3 if i % 2 else 2):
+                a = turn + k * 2.2
+                d = Vector((math.cos(a), math.sin(a), 0))
+                ln = 2.3 + 0.35 * ((i + k) % 3)
+                pts = [Vector((x, y, 0.2)), Vector((x, y, 0.2)) + d * 0.15 + Vector((0, 0, ln * 0.55)),
+                       Vector((x, y, 0.2)) + d * 0.55 + Vector((0, 0, ln * 0.9)), Vector((x, y, 0.2)) + d * 0.95 + Vector((0, 0, ln))]
+                leaf(base, pts, [0.16, 0.2, 0.14, 0.0], d.cross(Vector((0, 0, 1))), thick=0.05, color=LEAF_C,
+                     color_under=LEAF_A)
+            continue
+        lean = Vector((0.012 * math.cos(turn), 0.012 * math.sin(turn), 0))   # stalks lean a touch, not ruler-straight
+        def at(z, x=x, y=y, lean=lean):
+            return Vector((x, y, z)) + lean * z
+        # base part: thick bottom with two node rings + one long blade leaf arching out and down
+        tube(base, [at(0.1), at(1.8), at(3.9), at(WHEAT_CUT + 0.05)], [0.19, 0.17, 0.16, 0.15], seg=6,
+             color=cols["stalk"], smooth=True)
+        base.cyl(0.19, 0.19, 0.12, pos=at(1.74), color=cols["node"], seg=6)
+        d = Vector((math.cos(turn), math.sin(turn), 0))
+        p0 = at(1.85)
+        pts = [p0, p0 + d * 0.7 + Vector((0, 0, 1.0)), p0 + d * 1.7 + Vector((0, 0, 1.2)), p0 + d * 2.6 + Vector((0, 0, 0.3))]
+        leaf(base, pts, [0.12, 0.26, 0.2, 0.0], Vector((0, 0, 1)), thick=0.05, color=cols["leaf"],
+             color_under=cols["leaf_dark"])
+        # top part: thinner stalk, one node + flag leaf, the ear
+        ear_z = h - (2.0 if stage == "ripe" else 2.2)
+        tube(top, [at(WHEAT_CUT), at(10.5), at(ear_z)], [0.15, 0.13, 0.1], seg=5, color=cols["stalk"],
+             smooth=True, group="body_nl")
+        top.cyl(0.16, 0.16, 0.12, pos=at(10.4), color=cols["node"], seg=5, group="body_nl")
+        d2 = Vector((math.cos(turn + 2.4), math.sin(turn + 2.4), 0))
+        q0 = at(10.5)
+        pts = [q0, q0 + d2 * 0.4 + Vector((0, 0, 1.4)), q0 + d2 * 1.3 + Vector((0, 0, 2.4)), q0 + d2 * 2.2 + Vector((0, 0, 2.2))]
+        leaf(top, pts, [0.1, 0.22, 0.16, 0.0], d2.cross(Vector((0, 0, 1))), thick=0.04, color=cols["leaf"],
+             color_under=cols["leaf_dark"], group="leaf_nh")
+        _wheat_ear(top, at(ear_z), h, cols, stage == "ripe", "ear_nl")
+    if stage != "sprout":
+        sx, sy, _, _ = WHEAT_STALKS[2]
+        _wheat_ladder(base, sx, sy, WHEAT_CUT - 0.6)
+    # far LOD: soil disc + stalk posts (base) / thin posts + ear blobs (top)
+    from far_kit import fcyl, fpost, fblob, add_far
+    def far_base(m):
+        fcyl(m, 0, 0, 0, 1.72, 0.09, "FIELD_SOIL", seg=10)
+        for (x, y, h, turn) in WHEAT_STALKS:
+            if sprout:
+                fblob(m, x, y, 0.2, 0.32, "c99a52")
+                fpost(m, (x, y, 0.2), (x + 0.4 * math.cos(turn), y + 0.4 * math.sin(turn), 2.6), 0.18, LEAF_C)
+            else:
+                fpost(m, (x, y, 0.0), (x, y, WHEAT_CUT + 0.05), 0.18, cols["stalk"])
+    def far_top(m):
+        for (x, y, h, turn) in WHEAT_STALKS:
+            lean = Vector((0.012 * math.cos(turn), 0.012 * math.sin(turn), 0))
+            ez = h - (2.0 if stage == "ripe" else 2.2)
+            a, b = Vector((x, y, WHEAT_CUT)) + lean * WHEAT_CUT, Vector((x, y, ez)) + lean * ez
+            fpost(m, a, b, 0.13, cols["stalk"])
+            nod = Vector((0.55, -0.3, -0.25)) if stage == "ripe" else Vector((0.12, -0.05, 0.0))
+            c = b + (Vector((0, 0, 1)) + nod).normalized() * 1.1
+            fblob(m, c.x, c.y, c.z, 0.3, cols["ear"], scl=(1, 1, 3.2) if stage != "ripe" else (1.6, 1.2, 2.2))
+    nb = add_far(base, far_base)
+    base.export(os.path.join(OUT, "buildings"))
+    nt = 0
+    if top is not None:
+        nt = add_far(top, far_top)
+        top.export(os.path.join(OUT, "buildings"))
+    print("  wheat_forest_%s far total %d" % (stage, nb + nt))
+
+
+def build_wheat():
+    for s in ("sprout", "green", "ripe"):
+        build_wheat_forest(s)
 
 
 # ───────────────────────── water crossings ─────────────────────────
@@ -578,6 +734,7 @@ def build_pier():
     cord(m, (L - 0.05, Wd / 2 + 0.04, 0.3), (L + 0.35, Wd / 2 + 0.25, 0.0), sag=0.06, r=0.012, n=3)
     lily_pad(m, L + 0.45, Wd / 2 + 0.3, -0.02, 0.32, 0.4)
     acorn_cup(m, L - 0.35, 0.2, 0.25, 0.12, fill="WATER")
+    add_far(m)
     m.export(OUT)
 
 
@@ -613,6 +770,7 @@ def build_bridge():
     for x in (-1.5, 0.0, 1.5):
         forked_post(m, x, 0.48, arch(x) + 0.55, 0.03)
     stem(m, (-1.6, 0.48, arch(1.5) + 0.52), (1.6, 0.48, arch(1.5) + 0.52), 0.03, REED_GREEN, REED_GREEN_NODE, 3, 5)
+    add_far(m)
     m.export(OUT)
 
 
@@ -623,6 +781,7 @@ def build_bridge_stones():
         x = -1.8 + k * 0.6
         pebble(m, x, (0.12 if k % 2 else -0.1), 0.0, 0.26, 0.22, 0.25, shade(PEBBLE, 0.92 + 0.06 * (k % 3)), k, k)
         m.sphere(0.12, pos=(x - 0.1, 0.0, 0.2), scl=(1.2, 1, 0.3), color="MOSS", seg=6, rings=3, group="body_nl") if k % 3 == 1 else None
+    add_far(m)
     m.export(OUT)
 
 
@@ -633,6 +792,7 @@ if __name__ == "__main__":
             "chopblock": build_chopblock, "planter": build_planter, "hut": build_hut, "sawmill": build_sawmill,
             "quarry": build_quarry, "windmill": build_windmill, "bakery": build_bakery, "forester": build_forester,
             "saltpan": build_saltpan, "field": lambda: (build_field("field_green", False), build_field("field_ripe", True)),
+            "wheat": build_wheat,
             "pier": build_pier, "bridge": lambda: (build_bridge(), build_bridge_stones())}
     for k, fn in jobs.items():
         if not only or k in only:
