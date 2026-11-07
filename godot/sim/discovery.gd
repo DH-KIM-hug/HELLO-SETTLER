@@ -278,7 +278,7 @@ static func keep_mult(v: Village) -> float:
 
 ## W2 진흙 — 식량을 쌓는 양 (Village.enough)
 static func store_mult(v: Village, k: String) -> float:
-	return CLAY_STORE if k in Balance.FOODS and Codex.knows(v, "clay") else 1.0
+	return CLAY_STORE if k in Balance.STORE_FOODS and Codex.knows(v, "clay") else 1.0
 
 
 ## F5 효모 — 빵집 (Village._update_building)

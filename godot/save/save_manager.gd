@@ -849,17 +849,17 @@ func schedule_local_notifications() -> Dictionary:
 static func altar_full_in(v: Village) -> float:
 	if v.people.is_empty():
 		return INF
-	var days := {}
-	for o: Dictionary in v.altar:
-		days[v.cal_day(float(o["t"]))] = true
-	var need := maxi(0, 2 - days.size())       # 아직 몇 번의 저녁 기도가 더 와야 이틀치인가
+	var need := maxi(0, Altar.slots(v) - Altar.used(v))     # v5: 아직 몇 번의 기도(아침·저녁)가 더 와야 제단이 가득 차나 (sim/altar.gd)
 	if need == 0:
 		return 0.0
 	var c := v.clock()
-	var to_offer := Balance.OFFER_HOUR * Balance.HOUR - c
-	if to_offer <= 0.0 or v.cal_day(v.t) == v._offer_day:
-		to_offer += Balance.DAY
-	return to_offer + (need - 1) * Balance.DAY
+	var nxt := INF
+	for hh: float in Balance.OFFER_HOURS:
+		var d := hh * Balance.HOUR - c
+		if d <= 0.0:
+			d += Balance.DAY
+		nxt = minf(nxt, d)
+	return nxt + (need - 1) * Balance.DAY * 0.5
 
 
 ## 기기를 바꿔도 이어지게 (출시 전 — Google Play 게임즈 저장 게임). 지금은 자리만

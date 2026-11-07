@@ -53,7 +53,7 @@ func built(v: Village, type: String, p: Variant = null) -> Building:
 
 func adult_idle(v: Village) -> Resident:
 	for r in v.people:
-		if r.is_adult() and r.job < 0:
+		if r.is_adult() and r.job < 0 and Production.caring_for(v, r) == null:     # v5: 아기를 돌보는 부모는 일터에 안 감
 			return r
 	return null
 
@@ -62,7 +62,7 @@ func staff(v: Village, b: Building) -> Resident:
 	var r := adult_idle(v)
 	if r == null:
 		for q in v.people:
-			if q.is_adult():
+			if q.is_adult() and Production.caring_for(v, q) == null:
 				r = q
 				break
 	var old := v.bld(r.job)
@@ -161,6 +161,9 @@ func test_chief_builds() -> void:
 	var p := v.people.filter(func(r: Resident) -> bool: return r.is_elder())
 	v.kill(p[0] if not p.is_empty() else v.people[0], "노환")
 	var n0 := v.count_type("묘지")
+	for b in v.buildings.duplicate():     # v5: 걸음이 느려 두 시간 뒤에도 짓는 터가 남아 있다 — 촌장이 새 터를 잡을 수 있게 다 지은 것으로
+		if b.is_site():
+			v.on_built(b)
 	for i in 4:
 		v.chief_build()
 	check(n0 == 0 and v.count_type("묘지") == 1, "첫 죽음 뒤 촌장이 묘지 터를 잡음")
@@ -179,12 +182,13 @@ func test_herbalist() -> void:
 	v.advance(Balance.HOUR)
 	rich(v)
 	v.stock[Balance.HERB] = 0.0
+	v.chief_off = true                    # v5: 걸음이 느려 짓는 터가 오래 남아 약초꾼이 짓기를 도우러 가고, 새 터가 약초 자리를 덮는다 — 약초꾼만 본다
 	var sp: Variant = v.find_spot("약초꾼")
 	check(sp != null, "약초꾼 자리 (습한 숲가 곁)")
 	var b := built(v, "약초꾼", sp)
 	var hb := staff(v, b)
 	var t0 := v.t
-	while v.t - t0 < 10.0 * Balance.HOUR and float(v.stock.get(Balance.HERB, 0.0)) < 3.0:
+	while v.t - t0 < 30.0 * Balance.HOUR and float(v.stock.get(Balance.HERB, 0.0)) < 3.0:     # v5: 걸음이 느려 (예전 10시간)
 		v.advance(300.0)
 	check(b.has_spot and VillageEra.herb_ok(v, Vector2(b.spot_x, b.spot_y)), "약초 자리: 습한 땅 또는 숲 가 (%.1f, %.1f)" % [b.spot_x, b.spot_y])
 	check(float(v.stock.get(Balance.HERB, 0.0)) >= 3.0, "약초꾼이 약초를 캐 창고에 (%.0f개, %.1f시간)" % [float(v.stock.get(Balance.HERB, 0.0)), (v.t - t0) / Balance.HOUR])
@@ -198,9 +202,10 @@ func test_herbalist() -> void:
 		v.advance(60.0)
 		for r in v.people:
 			if r.action == "mold_med":
-				makers[r.id] = true
+				if b.worker >= 0:                     # v5: 약초꾼이 아기를 돌보느라 일터가 비면 일 없는 어른이 만든다 (규칙대로) — 약초꾼이 있을 때만 본다
+					makers[r.id] = bool(makers.get(r.id, true)) and r.id == b.worker
 	check(int(v.mold.stats["med_made"]) >= 2, "곰팡이약을 만듦 (%d)" % int(v.mold.stats["med_made"]))
-	check(makers.size() == 1 and makers.has(hb.id), "곰팡이약은 약초꾼 %s만 만든다 (만든 사람 %d명)" % [hb.name, makers.size()])
+	check(makers.values().all(func(x: bool) -> bool: return x), "약초꾼이 있을 때 곰팡이약은 그때의 약초꾼만 만든다 (약초꾼이 있을 때 만든 사람 %d명)" % makers.size())
 	# F2 약초 발견: 앓는 사람이 습한 숲가 곁에
 	var w := proto(46)
 	w.advance(Balance.HOUR)
@@ -267,6 +272,7 @@ func test_chapel() -> void:
 	v.era = 1
 	v.advance(Balance.HOUR)
 	rich(v)
+	built(v, "나무꾼")                  # v5: 걸음이 현실 걸음이라 첫 한 시간엔 아직 일터가 없다 — 바칠 물건을 만드는 곳
 	var c := through_bytes(v)
 	var a := v.evening_offering()
 	var ch := built(c, "교회")
@@ -456,9 +462,9 @@ func _walk_time(v: Village, r: Resident, to: Vector2) -> float:
 	r.steps.append(ResidentAI.walk(to.x, to.y))
 	r.steps.append(ResidentAI.act(1.0e6, "idle"))
 	var tt := 0.0
-	while tt < 600.0 and Vector2(r.x, r.y).distance_to(to) > 0.05:
-		ResidentAI.update(v, r, 1.0)
-		tt += 1.0
+	while tt < 600.0 * 240.0 and Vector2(r.x, r.y).distance_to(to) > 0.05:     # v5: 현실 사람 걸음 (병 초로 240배 느림)
+		ResidentAI.update(v, r, 10.0)
+		tt += 10.0
 	return tt
 
 
@@ -601,7 +607,7 @@ func test_lamp_preview_jar() -> void:
 		var pv := Lamp.preview([w], w.water, dir)
 		var was := {}
 		for b in w.buildings:
-			if b.type == "농장":
+			if b.type == "농장" and b.built:     # 미리보기는 다 지은 밭만 (v5: 촌장이 먹을 것이 모자라면 밭 터를 먼저 잡아 짓는 중인 밭이 있을 수 있다)
 				was[b.id] = w.farm_mult(b.x, b.y)
 		w.move_lamp(dir)
 		var farms := (pv["places"] as Array).filter(func(p: Dictionary) -> bool: return p["kind"] == "farm")

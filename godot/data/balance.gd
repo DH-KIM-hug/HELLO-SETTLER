@@ -40,26 +40,47 @@ const LAKE_EVERY := 3600.0              # 호수 관찰·소금 발견
 const SPEAK_EVERY := 240.0
 
 # ───────────────────────── 주민 ─────────────────────────
-const AGE_BABY := 1.0                   # 0~1 아기 · 1~4 아이 · 4~20 성인 · 20~ 노인 (일)
+# BALANCE v5 (2026-11-07 — 병 하루 = 현실 5분): 나이는 '일생 날' 단위 그대로 (아래 값·표시 나이 2.4세/일생 날)이고,
+# 일생 날 하나가 병 AGE_K일에 흐른다 → 일생 약 25 × 4 = 병 100일 ≈ 하루 10분씩 세 번 오는 사람의 현실 열흘 (GD 6.6 '일생 현실 1~2주')
+const AGE_K := 4.0                      # 병 하루에 나이는 1/AGE_K 일생 날 (Village.step)
+const AGE_BABY := 1.0                   # 0~1 아기 (병 4일 — 걸음마 약 2.4세) · 1~4 아이 · 4~20 성인 · 20~ 노인 (일생 날)
 const AGE_ADULT := 4.0
 const AGE_ELDER := 20.0
 const YEARS_PER_DAY := 2.4              # 표시 나이 = 일 × 2.4세
-const WALK := 1.25                      # 칸/초
+## 걸음 (GD 6.6 '시계는 빠르게, 사람은 제 걸음으로' — BALANCE v5): 보통(병 하루 = 현실 5분, ×288)에서 현실 1초에 1.5칸 →
+## 병 초로는 1.5 ÷ 288. 빠르게부터는 배속만큼 빨라 보이고, 느리게 쪽은 조금 느려 보인다 (시뮬레이션은 배속과 상관없이 같다 — 결정론)
+const WALK := 1.5 / 288.0               # 칸/병 초 (≈ 병 한 시간에 18.75칸)
+const WALK_OPENING := 1.25              # 첫 한 시간 대본 (OPENING 3.1 — 감사 기도 전): 예전 걸음 그대로 (첫 집 35~50분 · 5분 안에 일터로)
+const PACE_FIRST_DAY := 288.0 / 24.0    # 수첩이 펼쳐진 첫 병 첫날: 병 시계가 현실 1초 = 병 약 24초로 느려 걸음·채집을 그만큼 빠르게 (화면에선 같은 사람 걸음)
 const WALK_ELDER := 0.75
 const WALK_CHILD := 0.9
 const FOOD_IV := 900.0                  # 1명이 15분마다 식량 1
 const HUNGRY_AT := 0.8                  # 굶은 식량 0.8 이상이면 먹을 것을 찾아 나섬
 const STARVING_AT := 3.0                # 3이면 굶주림 → 건강 감소
-const STARVE_HEALTH_TIME := 8.0 * HOUR  # 굶주림에서 건강 1 → 0 (프로토타입)
+const STARVE_HEALTH_TIME := 1.0 * DAY   # 굶주림에서 건강 1 → 0 (v5: 8시간 → 하루 = 현실 5분 — 거인이 손쓸 틈)
 const HEAL_TIME := 12.0 * HOUR
 const CARRY := 2                        # 한 번에 나르는 짐 (특징 '짐을 많이 들 수 있음' 3)
+## 낟알·가루·빵·물은 수레·자루 하나로 나른다 (v5 — 걸음이 느려져 한 번에 많이). 물건 → 한 번에 나르는 양
+const BULK := {"밀": 100.0, "밀가루": 100.0, "빵": 100.0, "물": 100.0, "버섯": 16.0, "생선": 16.0, "고기": 16.0}
+## v5: 일손을 넣는 차례 (작을수록 먼저) — 먹을 것 → 자재 → 나머지. 없는 건물은 50
+const JOB_FIRST := {"농장": 0, "화덕": 1, "빵집": 1, "맷돌간": 2, "방앗간": 2, "나무꾼": 10, "제재소": 11, "채석장": 12,
+	"어부": 5, "사냥꾼": 6, "우물": 40, "산림관": 30}
+const OVEN_PER := 8                     # 공용 화덕 하나가 먹이는 사람 (빵이 남아 제물로도 나가게 — 화덕 하루 1,440개 = 15명분)
+const MILL_PER := 11                    # 맷돌간·화덕 하나가 먹이는 사람 (이보다 많으면 하나 더)
+const IN_BUF_TRIPS := 1.0               # 가공 건물 앞에 재료가 한 자루(BULK) 아래로 떨어지면 짐꾼이 채운다
 const CARRY_BIG := 3
 
 # 혼인·출산·사망 — 밸런스 v2 (BALANCE.md 0장 · 기획서 7.3 · sim_life.py)
 const MARRY_MIN := 4.0
 const MARRY_MAX := 20.0
-const MARRY_RATE := 0.5                 # 미혼 남녀 짝마다 하루 확률
-const BIRTH_RATE := 0.6                 # 부부당 하루 기본 출산 확률
+const MARRY_RATE := 0.3                 # 미혼 남녀 짝마다 병 하루 확률 (v5: 0.5 → 0.3)
+const BIRTH_RATE := 0.1                 # 부부당 병 하루 기본 출산 확률 (v5: 0.6 → 0.1 — 가임 기간이 병 56일로 길어짐)
+const BIRTH_FOOD_DAYS := 2.0            # (v5) 창고 먹을 것이 이만큼 날치 아래면 아이를 미룬다 (성장이 스스로 멈추게)
+const CARE_DAYS := 0.8                  # (v5 · GD 7.3) 아기가 걸음마(약 2세 = 일생 0.8날 = 병 3.2일)를 할 때까지 부모 둘 다 집에서 돌봄
+const CARE_ELDER_DAYS := 0.15           # 같은 집에 노인이 있으면 한 사람은 이만큼 뒤 일터로
+const STROLL_P := 0.25                  # (v5) 돌보는 부모가 낮에 결정할 때 유모차 산책을 나갈 확률
+const STROLL_HAPPY := 0.03              # 산책하는 아기를 들여다본 사람 행복 +
+const STROLL_R := 3.0
 const BIRTH_WIFE_MIN := 4.0
 const BIRTH_WIFE_MAX := 18.0
 const FERT_LO := 0.4                    # 개인 출산 배율 (삼각분포, 평균 1)
@@ -72,7 +93,8 @@ const HAPPY_LOW := 0.4                  # (정함) 마을 평균 행복 이 아�
 const HAPPY_HIGH := 0.75                # (정함) 이 위 = 높음
 const STARVED_RECENT := 1.0 * DAY       # (정함) 최근 하루 안에 식량이 모자랐으면 '굶주림'
 const FIRST_BIRTH_GUARANTEE := true     # OPENING 3장: 첫 출생은 1일차 보장 (확률 보정)
-const DEATH_FROM := 20.0                # 노인 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30일 상한
+const FIRST_BIRTH_AT := 1.0 * HOUR      # v5: 출산이 드물어져(병 하루 0.1) 첫 아기는 첫날 아침(도착 1시간 뒤부터 — 빈자리 있는 집이 생기면) — 수첩 '아기 이름' 쪽지 전에
+const DEATH_FROM := 20.0                # 노인 일생 날 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30 상한 (병 하루엔 ÷ AGE_K)
 const DEATH_BASE := 0.05
 const DEATH_SLOPE := 0.06
 const DEATH_MAX_AGE := 30.0
@@ -89,7 +111,7 @@ const HAPPY_FESTIVAL := 0.1
 const HAPPY_GRIEF := -0.2
 
 # 숙련·판매가 (기획서 11장)
-const SKILL_RATE := 0.6                 # 일한 하루마다 +0.6 × 재주
+const SKILL_RATE := 0.15                # 일한 병 하루마다 +0.15 × 재주 (v5: 일생이 병 날로 4배 — 0.6 ÷ 4)
 const SKILL_MAX := 10.0
 const TALENT_LO := 0.6
 const TALENT_HI := 1.4
@@ -111,8 +133,8 @@ const BELIEF_START := 0.7
 const BELIEF_BABY_WATCHED := 0.55
 const BELIEF_BABY_ALONE := 0.25
 const BELIEF_UP_DAYS := 6.0             # 거인이 지켜볼 때 0 → 1에 6일
-const BELIEF_DOWN_ADULT_DAYS := 4.0
-const BELIEF_DOWN_CHILD_DAYS := 1.5
+const BELIEF_DOWN_ADULT_DAYS := 12.0     # v5: 비운 12시간 = 병 3일 → 4일이면 하룻밤에 믿음이 다 빠졌다
+const BELIEF_DOWN_CHILD_DAYS := 5.0
 const BELIEF_MANNA := 0.06
 const BELIEF_PRAYER := 0.01                # (정함) 기도한 사람의 믿음 (프로토타입은 모두 +0.003 — 기도가 잦으면 하루 만에 가득 참)
 const DOUBT_BELOW := 0.3
@@ -121,7 +143,7 @@ const FEAR_DECAY_TIME := 2.0 * HOUR
 # 시대 점수 (BALANCE 0장): 시간당 (인구 0.4 + 건물 0.6) × 시대 배율 × 지켜봄(1 / 0.3) + 발견
 const ERAS := ["개척기", "마을", "읍내", "영지"]
 const ERA_NEED := [100.0, 200.0, 300.0]
-const ERA_MULT := [1.0, 0.08, 0.03]
+const ERA_MULT := [0.25, 0.025, 0.01]     # v5: 마을 ≈ 병 5~8일 (현실 1일차) · 읍내 ≈ 병 40~60일 (현실 5~7일차)
 const ERA_POP := 0.4
 const ERA_BUILDING := 0.6
 const OFFLINE_ERA := 0.3
@@ -137,6 +159,11 @@ const HOUSE_SLACK := 1.1                # 집 정원 합계는 품을 수 있는
 const ERA_HOUSE := ["오두막", "목조주택", "석조주택", "석조주택"]
 
 # 하늘 낟알 (기획서 8.4)
+## v5 (2026-11-07 사용자): 하늘 낟알은 저절로 내리지 않는다 — 빵을 굽기 전까지는 거인이 손으로 낟알 한 줌을 내려 준다 (상점 무료).
+## 옛 저장(auto_manna가 켜진 마을)만 예전처럼 도착·새벽에 내린다
+const AUTO_MANNA := false
+const GRAIN_DAYS := 0.5                 # 거인이 내려 주는 낟알 한 줌 = 마을 반나절치 (무더기 셋 — 주민이 주워 창고로)
+const HUNGER_HINT_EVERY := 0.5 * DAY    # 배고픈데 빵이 아직 없으면 이만큼마다 안내 ("배고파 보여요. 낟알을 곁에 내려 줘요")
 const MANNA_DELAY := 3.0                # 도착 직후
 const MANNA_PILES := 8
 const MANNA_SPOIL := DAY
@@ -145,19 +172,33 @@ const GROW_FIRST := 4.0 * HOUR          # 새 밭 첫 수확까지
 const SALT_SAVING := 0.85               # 창고에 소금이 있으면 식량 소비 ×0.85
 
 # 시작 (프로토타입 newWorld)
-const START_STOCK := {"건량": 240.0, "빵": 0.0, "밀": 0.0, "통나무": 0.0, "판자": 20.0, "돌": 8.0, "물": 0.0,
-	"밀가루": 0.0, "도구": 22.0, "소금": 0.0,
+const START_STOCK := {"건량": 1000.0,     # v5: 240 → 1,000 (열 명의 약 하루치 — 거인이 한동안 들여다보지 않아도 첫 수확·죽까지 버팀)
+	 "빵": 0.0, "밀": 0.0, "통나무": 0.0, "판자": 20.0, "돌": 12.0, "물": 0.0,
+	"밀가루": 0.0, "도구": 22.0, "소금": 0.0, "설탕": 0.0, "쌀": 0.0, "먼지 실": 0.0,
 	"버섯": 0.0, "말린 버섯": 0.0, "빛버섯": 0.0, "민들레 잎": 0.0, "꽃잎": 0.0, "솜": 0.0, "노란 물감": 0.0, "붉은 물감": 0.0,
 	"생선": 0.0, "고기": 0.0, "가죽": 0.0, "뿔": 0.0, "털": 0.0}   # 들짐승·물고기 (WILDLIFE 2 · 3 — sim/wildlife.gd)   # 하늘의 것 (WORLD_EVENTS 2.6 · 2.7)
 ## 창고 식량 (낟알은 따로) — 먹는 순서. 생버섯은 상하므로 먼저, 말린 버섯은 오래 가므로 뒤, 민들레 잎(쓴 나물)은 굶을 때 마지막
 ## 생선·고기는 빨리 상하므로 생버섯 다음에 먼저 (WILDLIFE 2)
-const FOODS := ["버섯", "생선", "고기", "건량", "빵", "밀", "말린 버섯", "민들레 잎"]
-const ENOUGH := {"통나무": 20.0, "판자": 40.0, "돌": 30.0, "물": 20.0, "밀가루": 20.0, "소금": 40.0, "약초": 16.0,
+## v5: 밀은 날로 먹지 않는다 — 모닥불에서 죽으로 끓여야 먹는다 (PORRIDGE_YIELD, 손실). 빵이 낫다 (밀 1 → 가루 1 → 빵 1.5).
+## 설탕·쌀은 하늘에서 내려온 것 (거인이 준 것 — 제물로 되돌아가지 않는다)
+const FOODS := ["버섯", "생선", "고기", "쌀", "설탕", "빵", "건량", "말린 버섯", "민들레 잎"]
+## 창고의 먹을거리 전부 (날벌레·곰팡이·물난리·진흙 항아리가 보는 것 — 밀·밀가루도 곡식)
+const STORE_FOODS := ["버섯", "생선", "고기", "쌀", "설탕", "빵", "건량", "말린 버섯", "민들레 잎", "밀", "밀가루"]
+const PORRIDGE := "밀"                  # 다른 먹을 것이 모자라면 창고 밀을 죽으로 끓여 먹는다
+const PORRIDGE_YIELD := 0.75            # 밀 1 → 죽 0.75 (끓이며 버림 — 빵은 밀 1 → 1.5)
+const BREAD_YIELD := 1.5                # 가루 1 → 빵 1.5 (화덕 out)
+const HAPPY_BREAD := 0.06               # 지난 하루 빵을 먹었으면 행복 + (죽만 먹으면 없음)
+const HAPPY_PORRIDGE_ONLY := -0.04      # 죽만 먹은 날
+## 창고에서 상함 (하루 몫): 밀은 쥐·눅눅함, 빵은 오래 감 (v5 — 빵의 이점이 보이게)
+const SPOIL_DAY := {"밀": 0.03, "밀가루": 0.01, "빵": 0.004, "생선": 0.15, "고기": 0.12}
+## v5: 넉넉한 양 = 바탕 + 인구 × ENOUGH_PER (마을이 크면 더 쌓고 더 바친다 — 가격 연구 3장 ③)
+const ENOUGH_PER := {"통나무": 1.0, "판자": 1.0, "돌": 0.8, "밀가루": 30.0, "빵": 60.0, "약초": 0.4, "소금": 1.0}
+const ENOUGH := {"통나무": 20.0, "판자": 30.0, "돌": 20.0, "물": 200.0, "밀가루": 200.0, "빵": 400.0, "소금": 40.0, "약초": 16.0, "먼지 실": 40.0,
 	"버섯": 80.0, "말린 버섯": 60.0, "빛버섯": 6.0, "붉은 물감": 10.0,
 	"생선": 60.0, "고기": 60.0, "가죽": 20.0, "뿔": 10.0, "털": 20.0}     # (정함) 들짐승 — 생선·고기는 상하므로 조금만 쌓는다
 ## 밀의 넉넉한 양 (BALANCE v4-4 — 농장도 다른 일터처럼 멈춘다) = 마을이 먹는 양 × 이만큼 날 (밀 + 밭에 쌓인 밀).
 ## 제물로 남기는 식량(OFFER_FOOD_KEEP_DAYS 1.5일)보다 조금 더 → 날마다 바치는 밀이 인구에 맞게 묶인다
-const FARM_ENOUGH_DAYS := 1.6
+const FARM_ENOUGH_DAYS := 3.0          # v5: 1.6 → 3일 (굶주림 멸망 — 밀은 상하므로 넉넉히 쌓되 끝없이는 아니게)
 const FARM_ENOUGH_MIN := 120.0          # (정함) 작은 마을도 이만큼은 쌓는다
 const FARM_FAV_DAYS := 0.15             # (정함) 거인님이 밀을 좋아하신다고 믿으면 이만큼 날을 더 (다른 물건의 ×1.5 대신 — 식량이라 바치는 몫이 너무 커지지 않게)
 const PLANK_RESERVE := 4                # 촌장이 남기는 비상용 판자 (나무꾼·제재소 제외)
@@ -165,6 +206,7 @@ const IDLE_FOR_NEW_JOB := 2             # 직장 없는 성인이 2명 이상일
 const FARM_SAFETY := 1.3                # 농장 생산 < 소비 × 1.3 이면 식량 부족
 const FOREST_MIN := 40                  # 나무가 이만큼 아래면 산림관
 const FORESTER_STOP := 70               # 산림관은 나무가 이만큼 넘으면 쉰다
+const TREE_LOGS := 4                    # (v5) 나무 한 그루 = 통나무 4개 (예전엔 1개 — 숲이 그루터기 밭이 되고 통나무는 0)
 const STUMP_ROT := [2.0 * DAY, 3.0 * DAY]   # (정함) 벤 나무의 그루터기는 다시 자라지 않고 2~3일 뒤 썩어 사라진다
 const SAPLING_GROW := 3.0 * HOUR        # 묘목 → 나무 (산림관이 심은 것 · 저절로 퍼진 것)
 const TREE_SPREAD_PER_DAY := 3.0        # (정함) 숲 곁 빈 땅에 저절로 돋는 묘목 — 마을 하나에 하루 평균 이만큼 (촉촉한 땅일수록 잘 붙음)
@@ -202,10 +244,10 @@ const SHELTER_AT := 0.5                 # 밖의 추위·더위 정도가 이 �
 const SHELTER_SCORE := 12.0             # (정함) 점수 = 12 × 밖의 정도 (일 6 × 1.5 = 9를 정도 0.75에서 넘음)
 const HEAT_REST_HOURS := [12.0, 15.0]   # 더위 0.5↑이면 한낮에 쉬는 점수↑
 # 땔감 (HEALTH.md 1.3 · BUILDINGS 7장)
-const FUEL_EVERY := 600.0               # 추위 정도 > 0인 동안 집 1채당 10분마다 통나무 1개
+const FUEL_EVERY := 4.0 * HOUR               # 추위 정도 > 0인 동안 집 1채당 10분마다 통나무 1개
 const FUEL_STONE := 0.5                 # 석조 주택 ×0.5
-const FUEL_TARGET := 36.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
-const FUEL_STOCK_PER_HOUSE := 24.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
+const FUEL_TARGET := 4.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
+const FUEL_STOCK_PER_HOUSE := 3.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
 const FUEL_SEASON_LOOKAHEAD := 0.5 * DAY   # (정함) 지금부터 이 시간 안에 추위가 오면 '추운 철'
 # ═══════════════ 질병 (HEALTH.md 2 — v1.3: 병마다 전염·기간·치사율·면역·확률 스펙트럼) ═══════════════
 const ILL_DAY := 0.01                   # 한 사람 하루 1% (병 시계 1시간마다 나눠 굴림) → 아래 '몫'으로 나눔
@@ -264,7 +306,7 @@ const DISEASE_ORDER := ["고뿔", "배앓이", "열병", "기침병", "곪은 �
 # 부상 (HEALTH.md 3)
 const INJURY_HOUR := 0.003              # 힘쓰는 일 병 시계 1시간마다 0.3%
 const INJURY_HEALTH := 0.1
-const INJURY_DAYS := 2.0
+const INJURY_DAYS := 1.0               # v5: 2 → 1일 (병 하루 = 현실 5분 — 벌목장이 이틀씩 서지 않게)
 const INJURY_SLOW := 0.5                # 걸음·일 속도 ×0.5
 # 두려움 (HEALTH.md 4)
 const FEAR_TAP := 0.05                  # 유리 톡 (그날 4번째부터)
@@ -291,39 +333,47 @@ const FISH_BLOOD := 1.2                 # (HEALTH.md 5) 물가 사람 어업 +20
 # ───────────────────────── 건물 ─────────────────────────
 # plank/stone/time = 건설 (BUILDINGS.md 3.3 · gen_buildings.py), size = 차지하는 반지름(칸, 프로토타입),
 # cycle = 1회 시간(초), in/out = 레시피 (BUILDINGS.md 4.1)
+## v5: time = 짓는 일(사람 × 병 초). 걸음이 현실 걸음이 되어 (병 초로 240배 느림) 짓는 일·채집 동작도 길게 (BUILD_K · chop 등)
+const BUILD_K := 40.0                   # 짓는 시간 배율 (오두막 60 → 2,400 사람·초 ≈ 둘이서 병 20분 = 현실 4초씩 몇 번)
+const GATHER_K := 20.0                  # 채집 동작 배율 (나무 베기 55 → 1,100 병 초 ≈ 현실 4초)
+const BUILD_CHUNK := 1800.0             # 한 번 짓는 일 (병 초 — 예전 30)
 const B := {
-	"창고": {"plank": 4, "stone": 2, "time": 120, "era": 0, "size": 1.5},
-	"오두막": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 1.0, "cap": 4},
-	"목조주택": {"plank": 4, "stone": 1, "time": 120, "era": 1, "size": 1.2, "cap": 6},
-	"석조주택": {"plank": 2, "stone": 4, "time": 180, "era": 2, "size": 1.2, "cap": 8},
-	"나무꾼": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "chop": 55.0},
-	"산림관": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "plant": 45.0},
-	"채석장": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "dig": 50.0},
-	"제재소": {"plank": 2, "stone": 2, "time": 120, "era": 0, "size": 1.2, "job": true, "in": {"통나무": 1}, "out": {"판자": 1}, "cycle": 30.0},
-	"농장": {"plank": 3, "stone": 1, "time": 120, "era": 0, "size": 1.8, "job": true, "out": {"밀": 1}, "cycle": 60.0},
-	"우물": {"plank": 0, "stone": 2, "time": 60, "era": 0, "size": 0.7, "job": true, "out": {"물": 1}, "cycle": 30.0},
-	"방앗간": {"plank": 3, "stone": 3, "time": 150, "era": 1, "size": 1.2, "job": true, "in": {"밀": 1}, "out": {"밀가루": 1}, "cycle": 30.0},
-	"빵집": {"plank": 2, "stone": 3, "time": 150, "era": 1, "size": 1.2, "job": true, "in": {"밀가루": 1, "물": 1}, "out": {"빵": 1}, "cycle": 30.0},
-	"소금밭": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 90.0, "needs_salt": true},
-	"제단": {"plank": 0, "stone": 0, "time": 9000, "era": 0, "size": 0.9},   # A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
-	"버섯꾼": {"plank": 2, "stone": 0, "time": 60, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
+	"창고": {"plank": 4, "stone": 2, "time": 120 * BUILD_K, "era": 0, "size": 1.5},
+	"오두막": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 1.0, "cap": 4},
+	"목조주택": {"plank": 4, "stone": 1, "time": 120 * BUILD_K, "era": 1, "size": 1.2, "cap": 6},
+	"석조주택": {"plank": 2, "stone": 4, "time": 180 * BUILD_K, "era": 2, "size": 1.2, "cap": 8},
+	"나무꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "chop": 55.0 * GATHER_K},
+	"산림관": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "plant": 45.0 * GATHER_K},
+	"채석장": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "dig": 50.0 * GATHER_K},
+	"제재소": {"plank": 2, "stone": 2, "time": 120 * BUILD_K, "era": 0, "size": 1.2, "job": true, "in": {"통나무": 1}, "out": {"판자": 1}, "cycle": 1800.0},
+	"농장": {"plank": 3, "stone": 1, "time": 120 * BUILD_K, "era": 0, "size": 1.8, "job": true, "out": {"밀": 1}, "cycle": 60.0},
+	"우물": {"plank": 0, "stone": 2, "time": 60 * BUILD_K, "era": 0, "size": 0.7, "job": true, "out": {"물": 1}, "cycle": 120.0},
+	# v5 빵 사슬 (GD 8.1 · ROADMAP A22): 개척기 맷돌간(손 맷돌, 느림) → 마을 시대 방앗간(풍차가 맷돌간을 대신 — 빠름).
+	# 공용 화덕 (개척기부터, 모닥불 곁 흙 화덕 · 어울리는 자리) → 읍내 시대 빵집 (화덕을 넓혀 지음 — 더 빠름)
+	"맷돌간": {"plank": 1, "stone": 2, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "in": {"밀": 1}, "out": {"밀가루": 1}, "cycle": 120.0},
+	"방앗간": {"plank": 3, "stone": 3, "time": 150 * BUILD_K, "era": 1, "size": 1.2, "job": true, "in": {"밀": 1}, "out": {"밀가루": 1}, "cycle": 40.0, "replaces": "맷돌간"},
+	"화덕": {"plank": 1, "stone": 1, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 90.0},
+	"빵집": {"plank": 2, "stone": 3, "time": 150 * BUILD_K, "era": 2, "size": 1.2, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 40.0, "replaces": "화덕"},
+	"소금밭": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 1800.0, "needs_salt": true},
+	"제단": {"plank": 0, "stone": 0, "time": 5000, "era": 0, "size": 0.9},   # v5: 9,000 → 5,000 (아기를 돌보는 부모·짐꾼이 생겨 짓는 손이 줄었다 — 현실 ~7:30에 서게) · A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
+	"버섯꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0 * GATHER_K},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
 	# 마을 시대 건물 1차 (A6 — BUILDINGS 3.1 · 4.1 · 6, buildings_v1.xlsx '건물' 시트의 판자/돌/시간 — sim/village_era.gd)
-	"묘지": {"plank": 0, "stone": 1, "time": 30, "era": 0, "size": 1.3},    # 개척기 — 첫 사망 뒤. 반경 행복 −0.01 · 슬픔이 덜함
-	"약초꾼": {"plank": 2, "stone": 0, "time": 60, "era": 1, "size": 0.9, "job": true, "gather": true, "herb": 90.0},   # 습한 땅·숲에서 약초 (90초) · 곰팡이약도 (DISCOVERIES F2 — 약초를 알면 개척기에도)
-	"치료소": {"plank": 3, "stone": 2, "time": 150, "era": 1, "size": 1.3, "job": true},    # 약초사 — 반경 질병 회복↑ 전염↓ (HEALTH 2.4) · 앓는 사람이 와서 누움
-	"교회": {"plank": 4, "stone": 6, "time": 300, "era": 1, "size": 1.6, "job": true},     # 사제 — 큰 제단 (제물 ×1.3) · 기도 모임 · 저녁 종 · 혼례
-	"광장": {"plank": 0, "stone": 2, "time": 60, "era": 1, "size": 1.9},     # 축제·모임 자리 · 반경 행복 · 장날
-	"망루": {"plank": 2, "stone": 1, "time": 90, "era": 1, "size": 0.8},     # 둘레 안개 걷힘 · 위기 조짐 반나절 먼저 · 국경 +8 (BORDER_D)
-	"나루터": {"plank": 3, "stone": 0, "time": 90, "era": 1, "size": 1.0, "job": true},    # 뱃사공 — 강을 건너는 지름길 (뗏목)
+	"묘지": {"plank": 0, "stone": 1, "time": 30 * BUILD_K, "era": 0, "size": 1.3},    # 개척기 — 첫 사망 뒤. 반경 행복 −0.01 · 슬픔이 덜함
+	"약초꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 1, "size": 0.9, "job": true, "gather": true, "herb": 90.0 * GATHER_K},   # 습한 땅·숲에서 약초 (90초) · 곰팡이약도 (DISCOVERIES F2 — 약초를 알면 개척기에도)
+	"치료소": {"plank": 3, "stone": 2, "time": 150 * BUILD_K, "era": 1, "size": 1.3, "job": true},    # 약초사 — 반경 질병 회복↑ 전염↓ (HEALTH 2.4) · 앓는 사람이 와서 누움
+	"교회": {"plank": 4, "stone": 6, "time": 300 * BUILD_K, "era": 1, "size": 1.6, "job": true},     # 사제 — 큰 제단 (제물 ×1.3) · 기도 모임 · 저녁 종 · 혼례
+	"광장": {"plank": 0, "stone": 2, "time": 60 * BUILD_K, "era": 1, "size": 1.9},     # 축제·모임 자리 · 반경 행복 · 장날
+	"망루": {"plank": 2, "stone": 1, "time": 90 * BUILD_K, "era": 1, "size": 0.8},     # 둘레 안개 걷힘 · 위기 조짐 반나절 먼저 · 국경 +8 (BORDER_D)
+	"나루터": {"plank": 3, "stone": 0, "time": 90 * BUILD_K, "era": 1, "size": 1.0, "job": true},    # 뱃사공 — 강을 건너는 지름길 (뗏목)
 	# 들짐승·낚시·사냥 (B3 — WILDLIFE 2 · 3, sim/wildlife.gd): 어부 = 물가 (호수 물고기의 하루 12%까지) · 사냥꾼 = 숲 가장자리 (사슴 하루 0~1 · 토끼 올무)
-	"어부": {"plank": 2, "stone": 0, "time": 60, "era": 1, "size": 0.9, "job": true, "gather": true},
-	"사냥꾼": {"plank": 2, "stone": 0, "time": 60, "era": 1, "size": 0.9, "job": true, "gather": true},
+	"어부": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 1, "size": 0.9, "job": true, "gather": true},
+	"사냥꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 1, "size": 0.9, "job": true, "gather": true},
 }
 ## 건물을 플레이어에게 보일 때의 이름 (상점 카드 · 연대기 · 말풍선 · 알림 …). 키(Balance.B)는 저장에 쓰여 그대로 두고,
 ## 직업 이름처럼 들리는 종류는 건물 이름으로 바꿔 보인다 (나무꾼 = 사람, 벌목장 = 건물). 없는 키는 그대로 — 이름을 바꿀 땐 여기만.
 const B_LABEL := {
 	"나무꾼": "벌목장", "산림관": "묘목원", "버섯꾼": "버섯 말림터", "약초꾼": "약초원", "어부": "어장", "사냥꾼": "사냥막",
-	"농장": "밀밭", "방직소": "베틀집", "목장": "목장", "교회": "예배당"}
+	"농장": "밀밭", "방직소": "베틀집", "목장": "목장", "교회": "예배당", "화덕": "공용 화덕"}
 
 
 ## 건물 종류 → 보이는 이름 (건물이 아닌 물건 이름은 그대로 돌려준다)
@@ -338,17 +388,26 @@ const B_LOCKED := {
 # ───────────────────────── 행동 점수 (RESIDENT_AI 4장) ─────────────────────────
 # 점수 = 기본 × 긴급도 × 시간대 가중치 × (1 + 특징 보정) × 신앙 상태 보정, 방금 한 행동 ×0.8
 const ACT_BASE := {"eat": 10.0, "sleep": 9.0, "manna": 8.0, "work": 6.0, "haul": 5.0, "build": 5.0,
-	"play": 4.0, "pray": 3.0, "social": 2.0, "rest": 2.5}
+	"play": 4.0, "pray": 3.0, "social": 2.0, "rest": 2.5, "chores": 2.2}
+## v5: 낮의 기도 가중치 (일 없는 어른이 낮의 절반을 기도하던 것 — 집안일·텃밭·아이와 놀기·쉬기로 나눔)
+const W_DAY_PRAY := 0.25
+## v5: 걸음이 현실 걸음이라 앉아서 하는 일도 그만큼 길게 (병 초)
+const PRAY_TIME := 1800.0
+const SOCIAL_TIME := [1200.0, 1800.0]   # 최소 · 더하는 폭
+const REST_TIME := [2400.0, 2400.0]
+const PLAY_TIME := [600.0, 900.0]
+const IDLE_TIME := 1200.0
+const CHORE_TIME := [1500.0, 1500.0]
 const REPEAT_MULT := 0.8
 const W_MEAL := 1.5
 const W_NIGHT_SLEEP := 3.0
 const W_DAY_WORK := 1.5
 const W_NIGHT_WORK := 0.2
 const W_DAWN_MANNA := 2.0
-const W_EVENING_PRAY := 2.0
+const W_EVENING_PRAY := 1.0             # v5: 2 → 1 (저녁 내내 기도만 하지 않게 — 어울리기와 반반)
 const W_EVENING_SOCIAL := 2.0
-const MEALS := [[7.0, 7.5], [12.0, 12.5], [18.5, 19.0]]
-const MEAL_TIME := 900.0
+const MEALS := [[6.5, 7.5], [12.0, 13.0], [18.0, 19.0]]     # v5: 창이 한 시간 (걸어오는 데 병 시간이 더 든다)
+const MEAL_TIME := 1800.0
 # 첫 한 시간 (OPENING 3.1 — 창조 6분 뒤부터의 대본). 첫 감사 기도를 드리면 끝난다
 const OPENING_END := 2.0 * HOUR         # (정함) 첫 감사 기도가 이때까지 없으면 그냥 평소대로
 const OPENING_MANNA_ADULT := 3.0 * 60.0   # (정함) 도착하고 이만큼은 어른도 하늘 낟알을 줍는다 — 그 뒤엔 아이들만 줍고 어른은 일하러
@@ -426,7 +485,7 @@ const SPLIT_AFTER := 1.0 * DAY          # 하루 넘게 이어지면 분가 편�
 const SPLIT_COUPLES := [1, 3]           # 떠나는 젊은 부부 수 (+ 그 아이들)
 const SPLIT_STOCK_SHARE := 0.5          # (정함) 떠나는 사람 수 비율 × 이 값만큼 창고 물자를 나눠 감
 # 소원 편지 (기획서 6.7): 하루 1~2통, 들어주면 믿음↑ · 우선순위 맨 위 · 짓는 속도 ×1.5
-const WISH_EVERY := [0.5 * DAY, 1.0 * DAY]   # 다음 편지까지 (하루 1~2통)
+const WISH_EVERY := [1.5 * DAY, 3.0 * DAY]   # 다음 편지까지 (v5: 병 1.5~3일 — 현실 하루에 편지 3~6통)
 const WISH_FIRST := 0.75 * HOUR         # (정함) 도착 뒤 첫 소원 편지 (OPENING T2)
 const WISH_BELIEF := 0.05               # (정함) 들어주면 모두 믿음 +
 const WISH_SPEED := 1.5
@@ -435,18 +494,26 @@ const BOUGHT_BELIEF := 0.1              # (정함) 하늘에서 완성된 건물
 # 거인님이 좋아하시는 물건 (받은 제물) → 그 물건을 더 만들고 (넉넉함 ×1.5) 그 일터를 먼저 짓는다
 const FAV_ENOUGH := 1.5
 const FAV_MIN := 3.0                    # (정함) 이만큼 넘게 받은 물건부터 '좋아하신다'
-const PRODUCER := {"통나무": "나무꾼", "판자": "제재소", "돌": "채석장", "밀": "농장", "밀가루": "방앗간", "빵": "빵집", "소금": "소금밭",
+## 같은 물건을 만드는 더 큰 건물 (v5 — 방앗간이 맷돌간을, 빵집이 화덕을 대신)
+const PRODUCER_ALSO := {"밀가루": ["방앗간"], "빵": ["빵집"]}
+const OFFER_EXTRA := ["먼지 실"]       # 일터 없이도 마을이 만드는 것 (먼지 뭉치를 뜯어 자은 실) — 남으면 바친다
+const PRODUCER := {"통나무": "나무꾼", "판자": "제재소", "돌": "채석장", "밀": "농장", "밀가루": "맷돌간", "빵": "화덕", "소금": "소금밭",
 	"버섯": "버섯꾼", "말린 버섯": "버섯꾼", "빛버섯": "버섯꾼", "약초": "약초꾼",
 	"생선": "어부", "고기": "사냥꾼", "가죽": "사냥꾼", "뿔": "사냥꾼", "털": "사냥꾼"}   # 들짐승 (B3)
 # 길 (기획서 6.7 '길은 발길이 만든다'): 오솔길 값(그 칸을 걸은 거리, 최대 60)이 이 위면 흙길 — 걸음이 빨라진다
 const PATH_AT := 8.0                    # (정함)
 const PATH_SPEED := 1.15                # (정함) 흙길 위 걸음 ×
 # 제물 (기획서 11.1): 저녁 기도 때 남는 물건 × (0.3 + 0.7 × 믿음) — 제단에는 이틀치까지
-const OFFER_HOUR := 19.0                # (정함) 저녁 기도 무렵 하루 한 번
+const OFFER_HOUR := 19.0                # (정함) 저녁 기도 무렵
+const OFFER_HOURS := [7.0, 19.0]         # v5: 아침·저녁 기도 — 한 번에 반나절치 (제단 1단계 = 반나절치를 담음)
 const OFFER_BASE := 0.3
 const OFFER_FAITH := 0.7
 const OFFER_KEEP := 0.5                 # (정함) 넉넉한 양의 이만큼은 남기고 그 위가 '남는 물건'
-const OFFER_FOOD_KEEP_DAYS := 1.5       # (정함) 식량은 이만큼 날의 먹을 몫을 남긴다
+## (v5) 기도 한 번에 바치는 값의 상한 = 사람 수 × 이만큼 × ½ (반나절) × (0.3 + 0.7 × 믿음) — 마을이 크고 믿음이 깊을수록 많이 (기본가 지폐).
+## 밭 하나가 하루 1,440개를 거두니 남는 밀을 다 바치면 수입이 인구·믿음과 상관없어진다 (가격 연구 1장) → 값의 상한을 사람 수에 묶는다
+const OFFER_VALUE_PER := 8.0
+const OFFER_SHARE := 0.5                # (v5) 기도 한 번에 남는 물건의 이 몫 × (0.3 + 0.7 × 믿음) — 아침·저녁 두 번
+const OFFER_FOOD_KEEP_DAYS := 2.5       # (v5: 1.5 → 2.5) 식량은 이만큼 날의 먹을 몫을 남긴다 (밀은 죽 값으로 셈)
 const OFFER_TOOL_KEEP := 4              # (정함) 도구는 성인 수 + 4개를 남긴다
 const OFFER_DAYS := 2.0 * DAY           # 이보다 오래된 제물은 창고로 돌아감
 const OFFER_BELIEF := 0.02              # (정함) 받으면 바친 사람 믿음 +
@@ -455,12 +522,19 @@ const OFFER_FEAR_FOOD := 50.0           # 두려움이 이만큼 넘으면 굶�
 const OFFER_FEAR_FOOD_SHARE := 0.1      # (정함) 그때 바치는 식량 몫
 # 장터 값 (BALANCE v3-1 표) — 지폐. 물은 거두지 않는다. 건량은 표에 없어 정함 (밀 + 말리기)
 const PRICE := {"밀": 1.0, "돌": 1.2, "건량": 1.2, "생선": 1.3, "약초": 1.5, "밀가루": 1.7, "고기": 1.7, "통나무": 1.8,
+	"먼지 실": 2.0, "설탕": 1.5, "쌀": 1.2,
 	"양털": 2.5, "판자": 2.6, "빵": 3.2, "맥주": 3.2, "철광석": 3.5, "석탄": 3.5, "돼지": 4.0, "소금": 4.5,
 	"옷": 8.5, "철": 10.4, "도구": 16.9,
 	"곰팡이약": 8.0,                         # 곰팡이약 (WORLD_EVENTS 2.1 — 안)
 	"버섯": 1.2, "말린 버섯": 3.0, "빛버섯": 6.0,   # 큰 버섯 (WORLD_EVENTS 2.6 — 안)
 	"가죽": 2.5, "뿔": 4.0, "털": 2.0}               # 들짐승 (WILDLIFE 6 — BALANCE v3 안)
-const MARKET_HALF := 60.0               # 같은 물건 n번째 단가 = 기본가 × 0.5^((n−1)/60), 현실 하루·모든 병 합산
+const MARKET_HALF := 600.0              # 같은 물건 n번째 단가 = 기본가 × 0.5^((n−1)/600), 현실 하루·모든 병 합산 (v5: 60 → 600 — 가격 연구 3장 ②)
+# 제단 크기 = 쌓아 둘 수 있는 기도 수 (SAVE.md 3.1 · v5). 기도 한 번 = 반나절치. 가득 차면 남는 물건은 창고에 그대로
+const ALTAR_NAMES := ["돌무더기 제단", "판석 제단", "꽃 제단", "작은 사당"]
+const ALTAR_SLOTS := [1, 2, 4, 6]        # 반나절 · 하루 · 이틀 · 사흘치
+const ALTAR_COST := [600.0, 2000.0, 5000.0]   # 다음 단계 값 (1→2 · 2→3 · 3→4)
+const ALTAR_ERA := [0, 1, 2]             # 그 단계로 넓힐 수 있는 시대 (작은 사당은 읍내부터)
+const ALTAR_REBUILD := 0.25 * DAY        # 넓히면 주민이 이만큼 동안 다시 짓는다 (그동안 기도는 쌓이지 않는다)
 # 강제로 거두기 (기획서 11.1): 장터 값 100지폐어치마다 모두 믿음 −0.01 · 두려움 +0.02, 굶주릴 때 식량이면 ×3
 const FORCE_PER := 100.0
 const FORCE_BELIEF := 0.01
@@ -471,8 +545,16 @@ const FORCE_FOOD_STARVING := 3.0
 ## 거인이 처음 받는 제물에는 장터가 웃돈을 얹어 '첫 제물 → 우물(600지폐)'이 1~2일차에 되게 한다. 거인에게 한 번 (Market)
 const FIRST_OFFER_BONUS := 600.0
 const FIRST_OFFER_TOKEN := 5            # (정함) 첫 기도에 남는 물건이 없으면 만드는 물건 중 가장 많은 것을 이만큼까지 바친다
-const SHOP := {"우물": 600, "창고": 800, "농장": 1000, "나무꾼": 1000, "채석장": 1000, "제재소": 2500, "방앗간": 4000, "빵집": 4000, "목조주택": 6000,
-	"어부": 1500, "사냥꾼": 1500}   # SHOP.md 2.1 · WILDLIFE 2 (어부 1,500 — 사냥꾼은 표에 '미정'이라 어부와 같게 둠)
+## v5 (2026-11-07 사용자): 상점은 다 지은 건물이 아니라 **설계도**를 판다 — 한 병에 종류마다 한 번, 그 뒤 주민이 자기 자재로 몇 채든 짓는다.
+## 값은 싸게 (옛 건물값의 20~40% — 지폐는 자재·이주민·병·등불·제단에). 맷돌간·공용 화덕은 처음부터 안다 (설계도 없음)
+const SHOP := {"우물": 200, "창고": 200, "농장": 300, "나무꾼": 300, "채석장": 300, "제재소": 500, "방앗간": 800, "빵집": 1200, "목조주택": 1000,
+	"어부": 400, "사냥꾼": 400}
+## 처음부터 아는 건물 (설계도 없이 짓는 것) — 나머지는 시대가 열리면 계시가 가르쳐 주고, 그 전에 설계도로 미리 알 수 있다
+const KNOWN_FROM_START := ["오두막", "창고", "나무꾼", "채석장", "농장", "맷돌간", "화덕", "제재소", "산림관", "묘지", "제단", "소금밭", "버섯꾼"]
+## 처음엔 모르다가 주민이 스스로 깨치는 개척기 건물 → 병 시각 (그 전에 설계도로 알 수 있다)
+const LEARN_LATE := {"우물": 2.0 * DAY}
+## 다 지은 건물이 하늘에서 내려오는 것은 이제 소원 편지의 [하늘에서 내려 주기]뿐 (기적) — 값 = 설계도 × 이만큼
+const WISH_DROP_MULT := 2.5
 
 # ═══════════════ 병의 공기·뚜껑·곰팡이 무리 (WORLD_EVENTS 2.1 · 2.3 · 3 — sim/jar_air.gd · sim/mold.gd) ═══════════════
 # 병의 공기: 김(습기)·연기·탁한 공기 0~1. 병 시계 AIR_TICK마다 목표값으로 천천히 다가감 (닫힌 병 — 저절로는 빠지지 않는다)
@@ -507,7 +589,7 @@ const MOLD_PRESSURE_FULL := 0.6         # 이 위면 '높음' — 사흘에 압�
 const MOLD_PRESSURE_DAYS := 3.0
 const MOLD_PRESSURE_FALL := 2.0         # 낮으면 이틀에 1씩 빠짐
 const MOLD_FIRST_DAY := 3.0             # 첫 3일은 위기 없음 (2.3 오프닝 보호)
-const MOLD_REST := 0.5 * DAY            # 끝나고 최소 반나절 쉼
+const MOLD_REST := 2.0 * DAY             # v5: 반나절 → 이틀 (병 하루 = 현실 5분 — 위기가 몰려오지 않게)            # 끝나고 최소 반나절 쉼
 const MOLD_OMEN := 0.5 * DAY            # 조짐 (유리가 뿌예지고 빵에 털이 남)
 const MOLD_PEAK := [1.0 * DAY, 3.0 * DAY]   # 한창 (병 시계)
 const MOLD_SPAWN := [3, 6]              # 처음 나오는 무리 수
@@ -521,7 +603,7 @@ const MOLD_ROT_FULL := 4                # (정함) 창고에 이만큼 모이면
 const MOLD_ILL_R := 4.0                 # (정함) 이 반경 안 주민은 포자 → 배앓이·기침병 ×2
 const MOLD_ILL_MULT := 2.0
 const MOLD_ILL_KINDS := ["배앓이", "기침병"]
-const MOLD_SPEED := 0.55                # (정함) 칸/초 (주민 걸음의 절반쯤 — 통통 튐)
+const MOLD_SPEED := WALK * 0.44         # (정함) 칸/병 초 — 주민 걸음의 절반쯤 (v5: 주민 걸음을 따라 예전 0.55 ÷ 1.25)
 const MOLD_SUN_SLOW := 0.6              # 볕 드는 쪽 (sun 1)에서 ×(1 − 0.6)
 const MOLD_SIZE_MIN := 0.35             # 이보다 쪼그라들면 사라짐
 const MOLD_TORCH := 0.3                 # (정함) 횃불 한 번에 크기 −0.3
@@ -549,13 +631,13 @@ const MOLD_MED_KEEP := 4.0              # (정함) 약을 이만큼 + 인구 ÷ 
 # ═══════════════ 작은 위기 셋 — 날벌레 · 떠돌이 물방울 · 먼지 뭉치 (WORLD_EVENTS 2.2 · 2.3 — sim/small_crises.gd, ROADMAP B5) ═══════════════
 # 모두 (정함) — 화면에는 숫자가 나오지 않는다. 공통: 첫 3일 없음 (MOLD_FIRST_DAY), 곰팡이까지 합쳐 동시에 둘까지, 끝나고 반나절 쉼, 세 번 겪으면 피해 절반
 const CRISIS_MAX_AT_ONCE := 2
-const CRISIS_REST := 0.5 * DAY
+const CRISIS_REST := 2.0 * DAY          # v5: 반나절 → 이틀
 const CRISIS_ADAPT := 3
 # 날벌레 (뚜껑을 열 때 GNAT_P로 들어옴): 조짐 = 유리 밑을 윙윙 맴돎 → 내려와 밭·창고를 먹음 (하루 10%) → 1~3일 뒤 유리에 붙어 떨어짐
 const GNAT_OMEN := 1.0 * HOUR           # 높이 맴도는 동안 (뚜껑을 다시 열면 그 틈으로 날아 나감)
 const GNAT_PEAK := [1.0 * DAY, 3.0 * DAY]
 const GNAT_MAX := 4                     # 한 병에 이만큼까지 (한 마리가 집채만 하다)
-const GNAT_SPEED := 0.9                 # 칸/초
+const GNAT_SPEED := WALK * 0.72         # 칸/병 초 (v5: 주민 걸음을 따라 — 예전 0.9 ÷ 1.25)
 const GNAT_EAT_DAY := 0.10              # 밭·창고 식량 하루 10%
 const GNAT_EAT_FULL := 2                # 이만큼 먹고 있으면 하루 10% (적으면 비례)
 const GNAT_HIDE_R := 5.0                # 이 반경 안 주민은 숨는다 (일이 멈춤 — 익숙해지면 2.5)
@@ -586,7 +668,7 @@ const DROP_WATER := 0.06                # 물바다 칸마다 더하는 물 깊�
 const DROP_KNOCK_REACH := 10.0          # 유리를 톡 쳐서 떨어뜨릴 때 고를 수 있는 거리
 const DROP_STORE_LOSS := 0.25           # 창고가 잠기면 식량 −25%
 const DROP_EVAC_FROM := 0.5             # 이만큼 부풀면 아래 사람들이 피함 (익숙해진 마을은 조짐부터)
-# 먼지 뭉치: 압력 = 뚜껑이 열린 시간 → 조짐 (방 빛 속에 먼지가 반짝이며 내려옴) → 굴러다니는 회색 덩어리 1~3개 → 주민이 뜯어 실을 잣는다 (양털 대신)
+# 먼지 뭉치: 압력 = 뚜껑이 열린 시간 → 조짐 (방 빛 속에 먼지가 반짝이며 내려옴) → 굴러다니는 회색 덩어리 1~3개 → 주민이 뜯어 실을 잣는다 (먼지 실)
 const DUST_LID_SECS := 6.0 * 60.0       # 뚜껑이 이만큼 열려 있으면 압력 1
 const DUST_FALL_DAY := 0.25
 const DUST_OMEN := 2.0 * HOUR
@@ -596,7 +678,7 @@ const DUST_LIFE := 3.0 * DAY            # 그대로 두면 이만큼 뒤 땅에 
 const DUST_FIELD_R := 1.4               # 밭과 이만큼 겹치면 밭이 덮여 자람이 멈춤
 const DUST_PULL := 0.15                 # 한 번 뜯을 때 크기 −
 const DUST_PULL_TIME := 300.0
-const DUST_YARN := 2.0                  # 한 번 뜯으면 양털(먼지 실) +2
+const DUST_YARN := 2.0                  # 한 번 뜯으면 먼지 실 +2 (v5: 양털이 아니다)
 const DUST_MIN := 0.3
 const DUST_LEARN := 0.5 * DAY           # 아이가 만지지 않아도 이만큼 지나면 노인이 '뜯어 실을 잣던' 옛말을 떠올림
 const DUST_BLOW_PUSH := 6.0             # 거인이 불면 이만큼 밀려나고 ×0.5 (작아지면 열린 뚜껑으로 날아감)
@@ -642,7 +724,7 @@ const SHROOM_GAP := 3.8                 # (정함) 큰 버섯끼리 이만큼은
 const GROVE_HUMID := 0.55               # (정함) 밤(22~6시) 평균 김이 이 위면 '습한 밤'
 const GROVE_P := 0.45                   # (정함) 습한 밤 다음 새벽 확률 (김이 높을수록 ↑)
 const GROVE_FIRST := 3.0 * DAY          # 첫 3일은 없음 (2.3 오프닝 보호)
-const GROVE_REST := 3.0 * DAY           # (정함) 한 번 솟은 뒤 이만큼 쉼
+const GROVE_REST := 6.0 * DAY           # (정함) 한 번 솟은 뒤 이만큼 쉼
 const GROVE_N := [5, 8]
 const GROVE_R := 7.5
 # 버섯꾼 (2.6): 나무꾼처럼 베어 조각내 나름. 독버섯 가려내기 = 숙련 (숙련 낮으면 가끔 얼룩버섯을 섞어 옴 → 배앓이)

@@ -22,7 +22,9 @@ const WAIT_ANIMAL := "짐승이 병 안에 살 수 있어야 해요"
 ## 어부·사냥꾼은 B3 (sim/wildlife.gd — 물고기·들짐승)부터 마을 시대에 1,500.
 ## 목장·방직소·대장간은 아직 못 짓는다 (Balance.B_LOCKED — 양털·철이 오면) → '곧' + 까닭.
 const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소", "어부", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
-const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "제재소": 0, "어부": 1, "방앗간": 1, "빵집": 1, "목조주택": 1,
+## v5 (2026-11-07 사용자): 건물 카드는 **설계도** — 손에 든 그림 종이를 떨어뜨리면 촌장 곁에 내려앉고, 그 병 주민이 그 건물을 지을 줄 알게 된다
+## (자기 자재로 몇 채든). 한 병에 종류마다 한 번 (Village.blueprints). 다 지은 건물이 내려오는 것은 소원의 [하늘에서 내려 주기]뿐 (Village.buy_building)
+const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "제재소": 0, "어부": 1, "방앗간": 1, "빵집": 2, "목조주택": 1,
 	"사냥꾼": 1, "목장": 1, "방직소": 1, "대장간": 1}
 const BUILDING_REPEAT := 1.5
 const BUILDING_LINE := {"우물": "맑은 물을 길어요. 배앓이가 줄어요", "창고": "식량과 자재를 넉넉히 쌓아요", "농장": "밀이 자라는 밭",
@@ -37,11 +39,11 @@ const ITEMS := {
 	"빵 부스러기": {"tab": "먹을 것·재료", "price": 100, "giant": "손톱만 한 부스러기", "inside": "갈색 바위 — 식량 반나절치",
 		"kind": "food", "res": "빵", "days": 0.5, "size": 1.3, "day1": true},
 	"쌀 한 톨": {"tab": "먹을 것·재료", "price": 180, "giant": "쌀 한 톨", "inside": "하얀 통나무만 한 낟알 — 식량 하루치",
-		"kind": "food", "res": "건량", "days": 1.0, "size": 1.4},
+		"kind": "food", "res": "쌀", "days": 1.0, "size": 1.4},
 	"밀 이삭 한 줄기": {"tab": "먹을 것·재료", "price": 600, "giant": "밀 이삭 하나", "inside": "쓰러진 황금 나무 — 식량 나흘치, 밀가루 재료",
 		"kind": "food", "res": "밀", "days": 4.0, "size": 2.2},
-	"각설탕": {"tab": "먹을 것·재료", "price": 950, "giant": "각설탕 한 조각", "inside": "하얀 돌집 — 마을 사람들의 일주일 양식",
-		"kind": "food", "res": "건량", "days": 7.0, "size": 1.7},
+	"각설탕": {"tab": "먹을 것·재료", "price": 950, "giant": "각설탕 한 조각", "inside": "하얀 돌집 — 마을 사람들의 일주일 양식 (설탕)",
+		"kind": "food", "res": "설탕", "days": 7.0, "size": 1.7},
 	"나무젓가락": {"tab": "먹을 것·재료", "price": 450, "giant": "나무젓가락 한 짝", "inside": "거대한 통나무 — 통나무 여든 개",
 		"kind": "stuff", "res": "통나무", "amt": 80, "size": 2.0},
 	"자갈 한 알": {"tab": "먹을 것·재료", "price": 300, "giant": "자갈 한 알", "inside": "바위산 — 돌 마흔 개",
@@ -60,7 +62,7 @@ const ITEMS := {
 	"성냥개비": {"tab": "돌봄", "price": 400, "giant": "성냥개비 하나", "inside": "통나무 산과 붉은 머리", "lock": "곧"},
 	"털실 한 가닥": {"tab": "돌봄", "price": 600, "giant": "털실 한 가닥", "inside": "끝없는 밧줄", "lock": "곧"},
 	"이끼 한 줌": {"tab": "돌봄", "price": 350, "giant": "이끼 한 줌", "inside": "새 숲", "lock": "곧"},
-	"영양제 앰플": {"tab": "땅", "price": 1500, "giant": "손가락만 한 약병", "inside": "하늘에서 꽂힌 유리 탑 — 이레 동안 둘레 땅이 기름져요",
+	"영양제 앰플": {"tab": "땅", "price": 1200, "giant": "손가락만 한 약병", "inside": "하늘에서 꽂힌 유리 탑 — 이레 동안 둘레 땅이 기름져요",
 		"kind": "ampoule", "size": 1.8},
 	# 광맥 돌 (SHOP 2.4 · BALANCE v3-4) — 땅에 눌러 박으면 언덕이 솟고 바위 무리(광맥)가 된다. 종류마다 한 병에 둘까지 (VEIN_MAX).
 	# 색은 어디서나 같다 (기획서 21장): 회색 = 돌 · 하양 = 소금 · 붉은 = 철 · 검정 = 석탄 (· 반짝이 = 금). era = 살 수 있는 시대
@@ -95,8 +97,9 @@ const ITEMS := {
 	# [거인의 수첩] (OPENING 3.1b) 첫 병의 쪽지가 손에 쥐여 주는 무료 물건 — 진열되지 않음 (tab 없음). 터 곁에 떨어뜨린 통나무는 짐꾼이 곧바로 터로 나른다
 	"주운 통나무": {"tab": "", "price": 0, "giant": "주워 둔 잔가지 하나", "inside": "통나무 몇 개 — 짓는 터 곁이면 곧바로 터로",
 		"kind": "stuff", "res": "통나무", "amt": 6, "size": 0.9, "free": true, "site_logs": true},
-	"하늘 낟알 한 줌": {"tab": "", "price": 0, "giant": "빵가루 한 줌", "inside": "금빛 낟알 — 곁의 사람들이 주워 먹어요",
-		"kind": "grain", "size": 1.4, "free": true},
+	# v5 (사용자 2026-11-07): 하늘 낟알은 저절로 내리지 않는다 — 빵을 굽기 전까지 거인이 무료로 한 줌씩 (마을 반나절치)
+	"하늘 낟알 한 줌": {"tab": "먹을 것·재료", "price": 0, "giant": "빵가루 한 줌", "inside": "금빛 낟알 — 마을 반나절치. 곁의 사람들이 주워 먹고 창고로 날라요 (빵을 굽기 전까지 무료)",
+		"kind": "grain", "size": 1.4, "free": true, "day1": true},
 	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
 	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
 }
@@ -190,24 +193,28 @@ static func is_building(item: String) -> bool:
 static func card(v: Village, item: String) -> Dictionary:
 	if is_building(item):
 		var lock := ""
+		var lb := Balance.label(item)
 		if not Balance.SHOP.has(item) or not Balance.B.has(item):
 			lock = "곧"
 		elif int(BUILDING_ERA.get(item, 0)) > v.era:
 			lock = "%s 시대에" % Balance.ERAS[mini(int(BUILDING_ERA[item]), Balance.ERAS.size() - 1)]
-		var n := int(v.shop_bought.get(item, 0))
-		var inside := "완성된 %s — %s" % [Balance.label(item), BUILDING_LINE.get(item, "")]
+		elif v.blueprints.has(item) or hand_count(item) > 0:
+			lock = "이미 받았어요" if v.blueprints.has(item) else "손에 들고 있어요"
+		var inside := "커다란 두루마리 — 주민이 %s%s 지을 줄 알게 돼요 (%s)" % [lb, Village.josa(lb, "을", "를"), BUILDING_LINE.get(item, "")]
 		if Balance.B_LOCKED.has(item):
 			inside += " (아직은 %s)" % Balance.B_LOCKED[item]
-		if n > 0:
-			inside += " (또 사면 값이 올라요)"
-		return {"name": Balance.label(item), "icon": item, "giant": "손톱만 한 %s" % Balance.label(item), "inside": inside,
-			"price": price(v, item), "lock": lock, "building": true}
+		return {"name": "%s 설계도" % lb, "icon": item, "giant": "작은 그림 종이", "inside": inside,
+			"price": price(v, item), "lock": lock, "building": true, "blueprint": true}
 	var d: Dictionary = ITEMS[item]
 	var lock2 := String(d.get("lock", ""))
 	if lock2 == "" and not tab_open(v, String(d["tab"])):
 		lock2 = "곧"
 	if lock2 == "" and String(d["tab"]) == "먹을 것·재료" and not bool(d.get("day1", false)) and not v.shop_open.has(FOOD_FULL):
 		lock2 = "2일차에"
+	if lock2 == "" and String(d.get("kind", "")) == "grain" and Production.bread_made(v):
+		lock2 = "이제 빵을 구워요"
+	if lock2 == "" and String(d.get("kind", "")) == "grain" and hand_count(item) > 0:
+		lock2 = "손에 들고 있어요"
 	if lock2 == "" and item == Immigrants.ITEM and Immigrants.left_today() <= 0:
 		lock2 = "내일 또 와요"                # 하루 5번 (현실 하루)
 	if lock2 == "" and int(d.get("era", 0)) > v.era:
@@ -226,7 +233,7 @@ static func card(v: Village, item: String) -> Dictionary:
 ## 값 (지폐) — 건물은 이 병에서 산 만큼 ×1.5씩
 static func price(v: Village, item: String) -> float:
 	if is_building(item):
-		return float(Balance.SHOP.get(item, 0)) * pow(BUILDING_REPEAT, int(v.shop_bought.get(item, 0)))
+		return float(Balance.SHOP.get(item, 0))      # 설계도 — 한 병에 한 번이라 오르지 않는다
 	if item == Immigrants.ITEM:
 		return Immigrants.price()            # 그날 300 · 450 · 675 · 1,013 · 1,519
 	return float(ITEMS[item]["price"])

@@ -11,7 +11,7 @@
 ##   떨어져 내리막으로 구르며 물자국 → 터져 물바다 (집 잠김 · 밭 쓸림 · 창고 젖음 — 물은 병의 물에서 덜어 온 것: 닫힌 순환).
 ##   주민: 반쯤 부풀면 그 아래에서 비켜 남 (익숙해지면 맺히자마자). 거인: 유리를 톡 쳐서 미리 떨어뜨림 — 누른 곳 쪽으로 (빈 땅이면 새 연못).
 ## 먼지 뭉치: 뚜껑이 오래 열릴수록 거인의 방 먼지가 쌓여 → 조짐 (방 빛 속에 반짝이며 내려옴) → 굴러다니는 회색 덩어리 1~3개 (밭을 덮으면 자람 멈춤).
-##   해롭진 않지만 성가심. 아이가 만져 보고 (아니면 노인이 옛말을 떠올려) 뜯어 실을 잣는다 → 양털 (작은 세계의 자원). 거인: 입으로 불어 날림.
+##   해롭진 않지만 성가심. 아이가 만져 보고 (아니면 노인이 옛말을 떠올려) 뜯어 실을 잣는다 → 먼지 실 (작은 세계의 자원). 거인: 입으로 불어 날림.
 ## 모두: 첫 3일 없음 · 곰팡이까지 합쳐 동시에 둘까지 · 끝나고 반나절 쉼 · 거인이 없을 때는 조짐에서 기다림 · 망루가 있으면 조짐이 먼저 ·
 ##   세 번 겪으면 피해 절반 · 아무도 죽지 않는다 (다치거나 앓을 뿐 — 게임 오버 없음). 깨닫기 전에는 '거인' 이야기를 하지 않는다.
 ## 이 파일 밖의 고리: Village.step (step) · JarAir.open_lid (gnat_in) · Village.tap_glass (knock) · Village.blow_seeds (blow_dust) ·
@@ -441,7 +441,7 @@ func _gnat_eat(v: Village, n_store: int, fields: Dictionary, dt: float) -> void:
 	var adapt := 0.5 if gnat_adapted() else 1.0
 	if n_store > 0:
 		var f := Balance.GNAT_EAT_DAY * minf(1.0, float(n_store) / Balance.GNAT_EAT_FULL) * adapt * dt / Balance.DAY
-		for k: String in Balance.FOODS:
+		for k: String in Balance.STORE_FOODS:
 			var have := float(v.stock.get(k, 0.0))
 			if have > 0.0:
 				v.stock[k] = have * (1.0 - f)
@@ -792,7 +792,7 @@ func _wash_under(v: Village, p: Vector2, rad: float, burst: bool) -> Array:
 			hit.append(b)
 		elif burst and b.is_store:
 			var loss := Balance.DROP_STORE_LOSS * (0.5 if drop_adapted() else 1.0)
-			for k: String in Balance.FOODS:
+			for k: String in Balance.STORE_FOODS:
 				var have := float(v.stock.get(k, 0.0))
 				if have > 0.0:
 					v.stock[k] = have * (1.0 - loss)
@@ -1190,11 +1190,11 @@ func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 			for c in things:
 				if c.id == int(o["id"]) and c.kind == "dust" and c.state != "gone":
 					c.size -= Balance.DUST_PULL
-					v.stock["양털"] = float(v.stock.get("양털", 0.0)) + Balance.DUST_YARN
+					v.stock["먼지 실"] = float(v.stock.get("먼지 실", 0.0)) + Balance.DUST_YARN     # v5: 양 없이 양털이 생기지 않게 — 제 물건 '먼지 실'
 					stats["yarn"] += Balance.DUST_YARN
 					stats["pulled"] += 1
 					if stats["pulled"] == 1:
-						v.log_line("회색 구름을 뜯어 자은 실은 양털처럼 따뜻했다.")
+						v.log_line("회색 구름을 뜯어 자은 먼지 실은 뜻밖에 따뜻했다.")
 					if c.size < Balance.DUST_MIN:
 						c.state = "gone"
 					return

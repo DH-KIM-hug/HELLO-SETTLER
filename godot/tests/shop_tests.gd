@@ -120,12 +120,18 @@ func test_buy_and_hand() -> void:
 		"빵 부스러기 사기 → 100 지폐 줄고 거인의 손에 (%.0f)" % Market.notes)
 	var c := Shop.can_buy(v, "각설탕")
 	check(not bool(c["ok"]) and String(c["why"]) == "2일차에", "아직 안 열린 물건은 못 산다")
-	Market.notes = 650.0
+	# v5 (사용자 2026-11-07): 건물 카드 = 설계도 (싸게 — 우물 200), 한 병에 종류마다 한 번
+	var wp := float(Balance.SHOP["우물"])
+	Market.notes = wp + 50.0
 	var b := Shop.buy(v, "우물")
-	check(bool(b["ok"]) and is_equal_approx(Market.notes, 50.0) and int(v.shop_bought["우물"]) == 1, "우물 600 → 손에 (남은 %.0f)" % Market.notes)
-	check(is_equal_approx(Shop.price(v, "우물"), 900.0), "같은 건물을 또 사면 ×1.5 (900)")
+	check(bool(b["ok"]) and is_equal_approx(Market.notes, 50.0) and int(v.shop_bought["우물"]) == 1, "우물 설계도 %.0f → 손에 (남은 %.0f)" % [wp, Market.notes])
+	check(String(Shop.card(v, "우물")["name"]) == "우물 설계도" and String(Shop.card(v, "우물")["giant"]) == "작은 그림 종이" and is_equal_approx(Shop.price(v, "우물"), wp),
+		"카드: '우물 설계도' · 거인에게는 작은 그림 종이 · 값은 오르지 않음")
 	var nb := Shop.can_buy(v, "우물")
-	check(not bool(nb["ok"]) and String(nb["why"]) == "지폐가 850 모자라요" and is_equal_approx(float(nb["need"]), 850.0), "못 사면 \"%s\"" % nb["why"])
+	check(not bool(nb["ok"]) and String(nb["why"]) == "손에 들고 있어요", "같은 설계도는 한 번 — 못 사면 \"%s\"" % nb["why"])
+	Market.notes = 0.0
+	var nb2 := Shop.can_buy(v, "창고")
+	check(not bool(nb2["ok"]) and String(nb2["why"]) == "지폐가 %.0f 모자라요" % float(Balance.SHOP["창고"]), "지폐가 모자라면 \"%s\"" % nb2["why"])
 	var f := Shop.can_buy(v, "방앗간")
 	check(not bool(f["ok"]) and String(f["why"]).contains("시대"), "마을 시대 건물은 개척기에 못 산다 (%s)" % f["why"])
 	Market.notes = 10000.0
@@ -183,7 +189,7 @@ func test_lid_rule() -> void:
 
 # ───────────────────────── 바깥 크기 물건 → 깎아 나르기 (WE 1.1) ─────────────────────────
 func test_drop_and_haul() -> void:
-	for spec: Array in [["각설탕", "건량", -1.0], ["나무젓가락", "통나무", 80.0], ["자갈 한 알", "돌", 40.0], ["마른 약초 한 잎", "약초", 30.0], ["밀 이삭 한 줄기", "밀", -1.0]]:
+	for spec: Array in [["각설탕", "설탕", -1.0], ["나무젓가락", "통나무", 80.0], ["자갈 한 알", "돌", 40.0], ["마른 약초 한 잎", "약초", 30.0], ["밀 이삭 한 줄기", "밀", -1.0]]:
 		var item: String = spec[0]
 		var res: String = spec[1]
 		var v := lab(40)
@@ -194,7 +200,7 @@ func test_drop_and_haul() -> void:
 		var base := float(v.stock.get(res, 0.0))
 		var r := SkyDrops.drop(v, item, p)
 		var d: Dictionary = r.get("drop", {})
-		var want: float = spec[2] if float(spec[2]) > 0.0 else roundf(v.people.size() * Balance.DAY / Balance.FOOD_IV * float(Shop.ITEMS[item]["days"]))
+		var want: float = spec[2] if float(spec[2]) > 0.0 else roundf(v.people.size() * Balance.DAY / Balance.FOOD_IV * float(Shop.ITEMS[item]["days"]) / (Balance.PORRIDGE_YIELD if res == "밀" else 1.0))     # v5: 밀은 죽으로 끓이면 ×0.75 — 나흘치가 되게 더 큼
 		check(bool(r["ok"]) and not d.is_empty() and is_equal_approx(float(d["total"]), want), "%s → 바깥 크기 물건 (%s %.0f)" % [item, res, float(d.get("total", 0))])
 		# 식량은 먹기도 하므로 '나른 양'으로 센다 (stats.sky_hauled — 넣은 그대로)
 		var t_end := v.t + 9.0 * Balance.DAY
@@ -460,19 +466,21 @@ func test_bought_building() -> void:
 				break
 		if ok:
 			break
-	var bad := SkyDrops.preview(v, "우물", Vector2(v.store().x, v.store().y))
-	check(not bool(bad["ok"]) and String(bad["why"]) != "", "건물 위엔 못 놓음 (%s)" % bad["why"])
-	check(ok and String(SkyDrops.preview(v, "우물", p)["good"]) != "", "자리 고르기: 놓을 수 있는 자리 + 자리 말 (\"%s\")" % SkyDrops.preview(v, "우물", p)["good"])
+	# v5 설계도: 어디에 떨어뜨려도 촌장 곁에 내려앉는다 (자리 고르기 없음) → 주민이 지을 줄 알게 되고 촌장이 곧바로 첫 터
+	check(ok and String(SkyDrops.preview(v, "우물", p)["good"]) == "촌장 곁에 내려앉아요", "설계도: 자리를 고르지 않음 (\"%s\")" % SkyDrops.preview(v, "우물", p)["good"])
 	var notes0 := Market.notes
 	var closed := SkyDrops.drop(v, "우물", p)
-	check(not bool(closed["ok"]), "건물도 뚜껑을 열어야")
+	check(not bool(closed["ok"]), "설계도도 뚜껑을 열어야")
 	v.open_lid()
 	v._update_belief(0.0)
 	var f0 := v.faith
 	var r := SkyDrops.drop(v, "우물", p)
 	var b: Building = r.get("building")
-	check(bool(r["ok"]) and b != null and b.built and b.bought and not b.is_site() and is_equal_approx(Market.notes, notes0), "하늘에서 완성된 채 내려옴 · 지폐는 살 때 이미 냄 (%.0f)" % Market.notes)
-	check(v.faith > f0, "기적 — 믿음↑ (%.1f → %.1f)" % [f0, v.faith])
+	check(bool(r["ok"]) and v.blueprints.has("우물") and b != null and b.is_site() and b.type == "우물" and is_equal_approx(Market.notes, notes0),
+		"설계도가 내려옴 → 우물 짓는 법을 알고 촌장이 첫 터를 잡음 (지폐는 살 때 이미 냄 %.0f)" % Market.notes)
+	check(v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("커다란 그림 종이")), "연대기: 하늘에서 커다란 그림 종이가 내려왔다")
+	check(v.faith > f0, "믿음↑ (%.1f → %.1f)" % [f0, v.faith])
+	check(not bool(SkyDrops.drop(v, "우물", p)["ok"]), "같은 설계도는 한 병에 한 번")
 	Shop.hand_remove(int(h["id"]))
 	check(Market.hand.is_empty(), "놓으면 손에서 빠짐")
 	Market.reset()
@@ -544,11 +552,11 @@ func test_shop_tables() -> void:
 	Shop.update_unlocks(v)
 	# 건물: 그 건물의 시대 (기획서 8.3 · 21장)
 	var pioneer := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소"]
-	var village := ["어부", "방앗간", "빵집", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
+	var village := ["어부", "방앗간", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
 	var era_ok := true
 	for b: String in Shop.BUILDINGS:
-		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else 1)
-	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size(), "건물 시대: 제재소까지 개척기 · 어부·방앗간·빵집·목조주택… 마을")
+		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else (2 if b == "빵집" else 1))
+	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size() + 1, "건물 시대: 제재소까지 개척기 · 어부·방앗간·목조주택… 마을 · 빵집 읍내 (v5 — 개척기엔 공용 화덕)")
 	check(String(Shop.card(v, "제재소")["lock"]) == "" and String(Shop.card(v, "방앗간")["lock"]) == "마을 시대에", "개척기 마을: 제재소는 살 수 있고 방앗간은 \"마을 시대에\"")
 	var waits := true
 	for b: String in ["목장", "방직소", "대장간"]:
@@ -558,8 +566,8 @@ func test_shop_tables() -> void:
 	var fh := true                                   # B3: 어부·사냥꾼은 마을 시대에 (1,500)
 	for b: String in ["어부", "사냥꾼"]:
 		var c := Shop.card(v, b)
-		fh = fh and String(c["lock"]) == "마을 시대에" and not String(c["inside"]).contains("아직은") and int(c["price"]) == 1500
-	check(fh, "어부·사냥꾼: 개척기엔 \"마을 시대에\" · 1,500 (B3 — 들짐승이 산다)")
+		fh = fh and String(c["lock"]) == "마을 시대에" and not String(c["inside"]).contains("아직은") and int(c["price"]) == int(Balance.SHOP[b])
+	check(fh, "어부·사냥꾼 설계도: 개척기엔 \"마을 시대에\" · %d (B3 — 들짐승이 산다)" % int(Balance.SHOP["어부"]))
 	# 광맥 돌 4종 (SHOP 2.4 · BALANCE v3-4)
 	var veins := {"회색 돌멩이": [1200, 0, "돌"], "하얀 돌": [2500, 1, "소금"], "붉은 돌멩이": [3000, 2, "철광석"], "검은 돌": [3000, 2, "석탄"]}
 	var vok := true
@@ -586,12 +594,12 @@ func test_shop_tables() -> void:
 			and String(c["inside"]).contains("아직은") and GameIcons.has(it)
 	check(aok, "생물 탭: 작은 가축 6종 (강아지 600 · 돼지 900 · 양 800 · 소 1,800 · 닭 500 · 당나귀 1,000) — 모두 '곧' + 까닭")
 	# 키트 업그레이드 (BALANCE v3-4 · 기획서 21장 — 스타터킷 안의 것만)
-	var kp := {"밀밭": 1000, "목조 주택": 6000, "가족 하나 더": 8000, "암반 컵 하나 더": 4000}
+	var kp := {"밀밭": 1500, "목조 주택": 7500, "가족 하나 더": 8000, "암반 컵 하나 더": 4000}     # BALANCE v5: 키트 = 상점의 약 2.5배
 	var kok := true
 	for u: String in Kits.UPGRADES:
 		kok = kok and kp.has(u) and Kits.upgrade_price(u) == int(kp[u]) and Kits.UPGRADES[u].has("what")
 	check(kok and Kits.UPGRADES.size() == kp.size() and not Kits.UPGRADES.has("제재소") and not Kits.UPGRADES.has("방앗간"),
-		"키트 업그레이드 값: 밀밭 1,000 · 목조 주택 6,000 · 가족 하나 더 8,000 · 암반 컵 4,000 (건물은 상점에서)")
+		"키트 업그레이드 값: 밀밭 1,500 · 목조 주택 7,500 · 가족 하나 더 8,000 · 암반 컵 4,000 (건물 설계도는 상점에서)")
 	check(Kits.upgrade_price("가족 하나 더", 1) == 12000 and Kits.upgrade_price("가족 하나 더", 2) == -1 and Kits.upgrade_price("목조 주택", 1) == -1,
 		"가족 하나 더: 두 번째 12,000 · 최대 2 / 목조 주택은 한 번")
 	var k := Kits.make(["목조 주택", "가족 하나 더", "가족 하나 더", "밀밭"])

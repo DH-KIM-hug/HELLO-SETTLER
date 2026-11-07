@@ -446,10 +446,10 @@ func test_dust_lifecycle() -> void:
 	v.advance(60.0)
 	check(SmallCrises.farm_mult(v, fb) == 0.0, "밭을 덮은 먼지 뭉치 → 그 밭 자람이 멈춤")
 	# 뜯어 실을 잣는다 (아이가 만지거나 반나절 뒤 노인이 옛말을 떠올림)
-	var yarn0 := float(v.stock.get("양털", 0.0))
+	var yarn0 := float(v.stock.get("먼지 실", 0.0))
 	v.advance(Balance.DUST_LEARN + 6.0 * H)
-	print("  뜯기 %d번 · 양털 %.0f → %.0f · 남은 덩어리 %d" % [s.stats["pulled"], yarn0, float(v.stock.get("양털", 0.0)), s.live("dust").size()])
-	check(s.dust_known and int(s.stats["pulled"]) >= 1 and float(v.stock.get("양털", 0.0)) > yarn0, "주민이 뜯어 실을 잣는다 → 양털 (작은 세계의 자원)")
+	print("  뜯기 %d번 · 먼지 실 %.0f → %.0f · 남은 덩어리 %d" % [s.stats["pulled"], yarn0, float(v.stock.get("먼지 실", 0.0)), s.live("dust").size()])
+	check(s.dust_known and int(s.stats["pulled"]) >= 1 and float(v.stock.get("먼지 실", 0.0)) > yarn0, "주민이 뜯어 실을 잣는다 → 먼지 실 (작은 세계의 자원)")
 	# 거인이 불면 흩어져 날아감
 	if s.live("dust").is_empty():
 		s.force_dust(v)

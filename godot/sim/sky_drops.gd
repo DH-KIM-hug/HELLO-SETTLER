@@ -21,10 +21,11 @@ extends RefCounted
 const UNLOCK_EVERY := 60.0             # 진열 확인 (병 초)
 const CARVERS := 5                     # 물건 하나를 한 번에 깎는 사람 수
 const CARVE_TIME := 90.0               # 한 번 깎는 시간 (병 초)
-const CAP := {"빵": 10.0, "건량": 10.0, "밀": 10.0, "통나무": 2.0, "돌": 2.0, "약초": 3.0, "소금": 4.0, "철": 1.0}
-const CAP_CHILD := 5.0               # 아이는 식량만 조금씩
+## v5: 걸음이 현실 사람 걸음이 되어 한 번에 더 많이 (식량은 바구니·자루 하나, 통나무·돌은 한 아름)
+const CAP := {"빵": 100.0, "건량": 100.0, "설탕": 100.0, "쌀": 100.0, "밀": 100.0, "통나무": 6.0, "돌": 6.0, "약초": 8.0, "소금": 10.0, "철": 3.0}
+const CAP_CHILD := 30.0              # 아이는 식량만 조금씩
 const STUFF_PER_DAY := 40.0            # 재료(통나무·돌·약초·소금)는 하루에 이만큼까지 깎아 나름 (나무젓가락 = 이틀)
-const CARRY := {"빵": "빵", "건량": "낟알", "밀": "밀", "통나무": "통나무", "돌": "돌", "약초": "버섯", "소금": "소금", "철": "돌"}
+const CARRY := {"빵": "빵", "건량": "낟알", "설탕": "낟알", "쌀": "낟알", "밀": "밀", "통나무": "통나무", "돌": "돌", "약초": "버섯", "소금": "소금", "철": "돌"}
 const PILL_SEVERE := 0.3
 const TOWER_DAYS := 7.0
 const TOWER_FADE_DAYS := 14.0
@@ -227,6 +228,13 @@ static func kind_of(item: String) -> String:
 static func preview_building(v: Village, type: String, p: Vector2) -> Dictionary:
 	var size := float(Balance.B[type]["size"])
 	var out := {"ok": true, "why": "", "warn": "", "crush": [], "people": 0, "field": false, "size": size, "good": ""}
+	if Shop.is_building(type):             # v5 설계도: 어디에 떨어뜨려도 촌장 곁에 내려앉는다 (자리는 촌장이 고름)
+		out["size"] = 0.8
+		out["good"] = "촌장 곁에 내려앉아요"
+		if not v.water.inside(p.x, p.y, 1.0):
+			out["ok"] = false
+			out["why"] = "유리벽 가까이엔 떨어뜨릴 수 없어요"
+		return out
 	if not v.is_free(p.x, p.y, size):
 		var why := "여기엔 놓을 수 없어요"
 		if not v.in_territory(p.x, p.y, size):
@@ -299,7 +307,7 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 	var total := 0.0
 	match kind:
 		"food":
-			total = roundf(maxf(1.0, float(v.people.size())) * Balance.DAY / Balance.FOOD_IV * float(d["days"]))
+			total = roundf(maxf(1.0, float(v.people.size())) * Balance.DAY / Balance.FOOD_IV * float(d["days"]) / (Balance.PORRIDGE_YIELD if res == Balance.PORRIDGE else 1.0))     # 밀은 죽으로 끓여 먹으므로 그만큼 더
 		"stuff", "salt":
 			total = float(d["amt"])
 		"pill", "bandage", "migrant":
@@ -366,10 +374,13 @@ static func place_building(v: Village, type: String, p: Vector2) -> Dictionary:
 	var pv := preview_building(v, type, p)
 	if not bool(pv["ok"]):
 		return pv
-	var b := v.buy_building(type, p, true)
-	if b == null:
-		return {"ok": false, "why": "여기엔 놓을 수 없어요"}
-	return {"ok": true, "why": "", "building": b, "crushed": 0, "fled": 0}
+	if v.blueprints.has(type):
+		return {"ok": false, "why": "이미 아는 건물이에요"}
+	v.begin_giant()
+	v.just_blueprint = type                # 화면: 커다란 두루마리가 촌장 곁에 내려앉아 펼쳐짐
+	var b := Production.give_blueprint(v, type)
+	v.end_giant()
+	return {"ok": true, "why": "", "building": b, "blueprint": type, "crushed": 0, "fled": 0}
 
 
 ## 기적: 목격 (깨닫기 전 경이) · 믿음 · 가까운 사람 둘의 말 · 연대기
@@ -498,7 +509,7 @@ static func carve_task(v: Village, r: Resident) -> bool:
 	for d: Dictionary in v.drops:
 		if not _can_carve(v, d):
 			continue
-		if not r.is_adult() and not String(d["res"]) in ["빵", "건량", "밀"]:
+		if not r.is_adult() and not String(d["res"]) in ["빵", "건량", "설탕", "쌀", "밀"]:
 			continue
 		var dd := Vector2(float(d["x"]) - r.x, float(d["y"]) - r.y).length()
 		if dd < bd:
@@ -516,7 +527,7 @@ static func carve_task(v: Village, r: Resident) -> bool:
 	dir = dir.normalized() if dir.length() > 0.05 else Vector2(0, 1)
 	var a := dir.rotated(v.rng.randf_range(-0.8, 0.8))
 	var at := c + a * (float(d["size"]) * _shrink(d) + 0.35)
-	r.doing = "하늘에서 내려온 것을 깎는 중" if k in ["빵", "건량", "밀"] else "하늘에서 내려온 것을 나르는 중"
+	r.doing = "하늘에서 내려온 것을 깎는 중" if k in ["빵", "건량", "설탕", "쌀", "밀"] else "하늘에서 내려온 것을 나르는 중"
 	r.steps.append(ResidentAI.walk(at.x, at.y))
 	r.steps.append(ResidentAI.act(CARVE_TIME, "work", ResidentAI.op("sky_carve", {"d": d, "cap": cap}), false, ResidentAI.op("sky_unres", {"d": d})))
 	r.steps.append(ResidentAI.walk(s.x + 0.7, s.y + 0.6))
@@ -564,6 +575,7 @@ static func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 			if r.carry_amt > 0.0:
 				var k := String(o["k"])
 				v.stock[k] = float(v.stock.get(k, 0.0)) + r.carry_amt
+				Production.gift_add(v, k, r.carry_amt)     # v5: 거인이 준 몫 — 제물로 되돌아가지 않는다 (되팔기 막기)
 				v.stats["sky_hauled"] = float(v.stats.get("sky_hauled", 0.0)) + r.carry_amt
 			r.carry = ""
 			r.carry_amt = 0.0
@@ -642,10 +654,11 @@ static func _haul_to_site(v: Village, d: Dictionary, site: Building) -> void:
 
 ## 하늘 낟알 한 줌: 낟알 무더기 셋이 보이게 내림 (MannaFx — just_manna) + 곁의 사람들이 주워 먹으러 옴 → 먹은 사람 수
 static func _grain(v: Village, p: Vector2) -> int:
+	var pile := maxf(3.0, v.people.size() * Balance.DAY / Balance.FOOD_IV * Balance.GRAIN_DAYS / 3.0)     # v5: 마을 반나절치 (빵 전의 주된 먹을 것)
 	for i in 3:
 		var a := TAU * i / 3.0 + 0.4
 		var q := p + Vector2(cos(a), sin(a)) * 0.7
-		v.manna.append({"x": q.x, "y": q.y, "amt": 3.0, "born": v.t, "res": 0})
+		v.manna.append({"x": q.x, "y": q.y, "amt": pile, "born": v.t, "res": 0})
 	v.just_manna = true
 	Awakening.witness(v, "manna")
 	var ws := _awake_near(v, p, GRAIN_R)

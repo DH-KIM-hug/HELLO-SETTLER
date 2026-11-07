@@ -17,7 +17,32 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	run.timed(self, ["test_world_seeds", "test_world_determinism", "test_world_water", "test_far_lakes", "test_kits_and_fog", "test_two_kits_contact", "test_world_rotation", "test_world_budget",
-		"test_sim_speed"])
+		"test_sim_speed", "test_world_carriers"])
+
+
+## BALANCE v5 · E0 (사용자 2026-11-07: "게임 화면에서 아무도 짐을 들고 있지 않았다"): 넓은 세상 키트 마을에서도 첫 병 하루 안에
+## 짐을 든 사람이 보인다 — 걸음이 현실 사람 걸음이 되어 나르는 동안이 화면에 남는다 (예전엔 병 몇 초 만에 끝나 거의 안 보였다)
+func test_world_carriers() -> void:
+	print("== 넓은 세상: 첫날 짐 나르는 사람이 보인다")
+	var jw := JarWorld.create_with_kit(23, WorldCfg.SIZE, Kits.make([]))
+	var v := jw.primary()
+	var seen := {}
+	var samples := 0
+	var with_carry := 0
+	for i in 24 * 6:
+		jw.advance(600.0)
+		samples += 1
+		var any := false
+		for r in v.people:
+			if r.carry != "":
+				seen[r.carry] = int(seen.get(r.carry, 0)) + 1
+				any = true
+		if any:
+			with_carry += 1
+	print("  10분마다 본 %d번 중 짐을 든 사람이 있던 때 %d번 · 든 것 %s" % [samples, with_carry, seen])
+	check(v.manna_falls == 0 and not v.auto_manna and v.food_total() > 0.0 and int(v.stats["starved"]) == 0,
+		"새 세상: 하늘 낟알은 저절로 내리지 않는다 — 시작 건량·죽으로 첫날을 굶지 않고 넘김 (먹을 것 %.0f)" % v.food_total())
+	check(with_carry >= samples / 5 and seen.size() >= 2, "첫 병 하루 안에 짐을 든 사람이 자주 보인다 (%d / %d번 · %d가지)" % [with_carry, samples, seen.size()])
 
 
 static func h_sig(ww: WorldWater) -> String:
@@ -213,7 +238,7 @@ func test_kits_and_fog() -> void:
 		lines.append(e["text"])
 	var found := lines.filter(func(t: String) -> bool: return t.contains("불렀다") or t.contains("하얀 바위"))
 	print("  탐험 %d번 · 본 안개 칸 %d → %d · 발견 연대기 %d줄" % [int(v.stats.get("explore", 0)), fog0, fog1, found.size()])
-	check(int(v.stats.get("explore", 0)) >= 6 and fog1 > fog0 * 1.5, "주민이 탐험하며 안개가 걷힌다")
+	check(int(v.stats.get("explore", 0)) >= 4 and fog1 > fog0 * 1.5, "주민이 탐험하며 안개가 걷힌다 (탐험 %d번 — v5: 현실 사람 걸음이라 한 번이 길다, 예전 6번 이상)" % int(v.stats.get("explore", 0)))
 	check(found.size() >= 2, "처음 본 호수·강·흰 바위를 연대기에 적는다 (%d줄)" % found.size())
 	var wbad: String = run.words_ok(lines)
 	check(wbad == "", "연대기에 금지어 없음 %s" % wbad)

@@ -7,7 +7,7 @@
 class_name Shelf
 extends RefCounted
 
-const JAR_PRICES := [6000.0, 30000.0, 80000.0]     # 두 번째 · 세 번째 · 네 번째부터
+const JAR_PRICES := [5000.0, 25000.0, 60000.0]     # BALANCE v5 (가격 연구 2장 — 둘째 병 현실 6~8일차)     # 두 번째 · 세 번째 · 네 번째부터
 const MAX_JARS := 5                                 # 선반 슬롯 (안)
 ## 기후대 (기획서 5.2 순서) — ready = 그 기후의 세상이 지금 만들어지는가 (작물·집 양식·위기가 기후마다 다른 것은 아직 → 온대만)
 const CLIMATES := [["온대", true], ["냉대", false], ["아열대", false], ["열대", false], ["툰드라", false], ["사막", false]]

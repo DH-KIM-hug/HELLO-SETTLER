@@ -74,16 +74,16 @@ func add_world(sm: GameSave, id: int, seed_v: int, nm: String, days := 0.3) -> J
 
 
 func test_prices() -> void:
-	check(Shelf.jar_price(1) == 6000.0 and Shelf.jar_price(2) == 30000.0 and Shelf.jar_price(3) == 80000.0 and Shelf.jar_price(4) == 80000.0,
-		"새 병 값: 두 번째 6,000 · 세 번째 30,000 · 네 번째부터 80,000 (BALANCE v4-2)")
+	check(Shelf.jar_price(1) == 5000.0 and Shelf.jar_price(2) == 25000.0 and Shelf.jar_price(3) == 60000.0 and Shelf.jar_price(4) == 60000.0,
+		"새 병 값: 두 번째 5,000 · 세 번째 25,000 · 네 번째부터 60,000 (BALANCE v5 — 가격 연구 2장)")
 	var ready: Array = []
 	for c: Dictionary in Shelf.climate_choices():
 		if bool(c["ready"]):
 			ready.append(c["name"])
 	check(ready == ["온대"] and Shelf.climate_choices().size() == 6, "기후: 지금 만들 수 있는 건 온대뿐 (나머지 5개는 '곧')")
-	check(Kits.upgrade_price("밀밭") == 1000 and Kits.upgrade_price("목조 주택") == 6000 and Kits.upgrade_price("가족 하나 더", 0) == 8000
+	check(Kits.upgrade_price("밀밭") == 1500 and Kits.upgrade_price("목조 주택") == 7500 and Kits.upgrade_price("가족 하나 더", 0) == 8000
 		and Kits.upgrade_price("가족 하나 더", 1) == 12000 and Kits.upgrade_price("가족 하나 더", 2) == -1 and Kits.upgrade_price("암반 컵 하나 더", 3) == 4000,
-		"키트 업그레이드 값 (통합표): 밀밭 1,000 · 목조 주택 6,000 · 가족 8,000/12,000 (최대 2) · 암반 컵 4,000")
+		"키트 업그레이드 값 (BALANCE v5): 밀밭 1,500 · 목조 주택 7,500 · 가족 8,000/12,000 (최대 2) · 암반 컵 4,000")
 
 
 func test_buy_jar() -> void:
@@ -94,9 +94,9 @@ func test_buy_jar() -> void:
 	Market.notes = 500.0
 	check(not sm.buy_jar() and Market.notes == 500.0 and sm.pending_jar().is_empty(), "지폐가 모자라면 새 병을 살 수 없다 (지폐 그대로)")
 	check(not bool(Shelf.can_buy_jar(sm.giant, 1)["ok"]) and String(Shelf.can_buy_jar(sm.giant, 1)["why"]) == "지폐가 모자라요", "까닭: 지폐가 모자라요")
-	Market.notes = 7000.0
-	check(not sm.buy_jar("냉대") and Market.notes == 7000.0, "아직 없는 기후(냉대)로는 살 수 없다")
-	check(sm.buy_jar("온대") and is_equal_approx(Market.notes, 1000.0) and String(sm.pending_jar().get("climate", "")) == "온대", "6,000을 내고 빈 병을 사 둔다 (지폐 7,000 → 1,000)")
+	Market.notes = 6000.0
+	check(not sm.buy_jar("냉대") and Market.notes == 6000.0, "아직 없는 기후(냉대)로는 살 수 없다")
+	check(sm.buy_jar("온대") and is_equal_approx(Market.notes, 1000.0) and String(sm.pending_jar().get("climate", "")) == "온대", "5,000을 내고 빈 병을 사 둔다 (지폐 6,000 → 1,000)")
 	Market.notes = 50000.0
 	check(not sm.buy_jar(), "사 둔 빈 병이 있으면 또 사지 않는다 (먼저 만들기)")
 	var g := SaveFile.read_best(ProjectSettings.globalize_path(TMP_DIR) + "/giant.dat")
@@ -116,13 +116,13 @@ func test_lamp_upgrade() -> void:
 	Market.lamp_level = 0
 	Market.notes = 1000.0
 	check(Market.lamp_hours() == 12 and not sm.buy_lamp_upgrade() and Market.lamp_level == 0, "처음 등불 12시간 · 지폐가 모자라면 올리지 못함")
-	Market.notes = 23000.0
+	Market.notes = 18500.0
 	var steps: Array = []
 	while sm.buy_lamp_upgrade():
 		steps.append([Market.lamp_hours(), Market.notes])
 	check(steps.size() == 3 and steps[0][0] == 16 and steps[1][0] == 20 and steps[2][0] == 24, "등불 12 → 16 → 20 → 24시간 (%s)" % str(steps))
-	check(steps.size() == 3 and is_equal_approx(steps[0][1], 21000.0) and is_equal_approx(steps[1][1], 15000.0) and is_equal_approx(steps[2][1], 0.0),
-		"값 2,000 · 6,000 · 15,000 (모두 23,000)")
+	check(steps.size() == 3 and is_equal_approx(steps[0][1], 17000.0) and is_equal_approx(steps[1][1], 12000.0) and is_equal_approx(steps[2][1], 0.0),
+		"값 1,500 · 5,000 · 12,000 (모두 18,500 — BALANCE v5)")
 	check(Market.next_lamp().is_empty() and is_equal_approx(Market.lamp_seconds(), 24.0 * Balance.HOUR), "다 올리면 더 없음 · 비운 동안 24시간까지")
 	Market.lamp_level = 0
 	drop(sm)
@@ -138,10 +138,10 @@ func test_kit_upgrades() -> void:
 	var farm := v.add_building("농장", v.center.x + 6.0, v.center.y + 6.0, true)
 	check(Shelf.note_built(g, [v]) and Shelf.unlocked(g, "밀밭") and not Shelf.unlocked(g, "목조 주택"), "농장을 한 번 지으면 밀밭이 열림 (목조 주택은 아직)")
 	farm.built = false
-	check(Shelf.buy_upgrade(g, "밀밭") and is_equal_approx(Market.notes, 99000.0) and Shelf.is_on(g, "밀밭"), "밀밭 1,000 — 사면 켜짐")
+	check(Shelf.buy_upgrade(g, "밀밭") and is_equal_approx(Market.notes, 98500.0) and Shelf.is_on(g, "밀밭"), "밀밭 1,500 — 사면 켜짐")
 	check(not Shelf.buy_upgrade(g, "밀밭"), "밀밭은 한 번만")
 	check(Shelf.buy_upgrade(g, "가족 하나 더") and Shelf.buy_upgrade(g, "가족 하나 더") and not Shelf.buy_upgrade(g, "가족 하나 더")
-		and is_equal_approx(Market.notes, 99000.0 - 20000.0), "가족 하나 더: 8,000 → 12,000, 최대 둘")
+		and is_equal_approx(Market.notes, 98500.0 - 20000.0), "가족 하나 더: 8,000 → 12,000, 최대 둘")
 	check(Shelf.active_upgrades(g).count("가족 하나 더") == 2 and "밀밭" in Shelf.active_upgrades(g), "켠 업그레이드 = 산 횟수만큼")
 	Shelf.set_on(g, "밀밭", false)
 	check(not Shelf.is_on(g, "밀밭") and not "밀밭" in Shelf.active_upgrades(g) and Shelf.owned(g, "밀밭") == 1, "끄면 새 세상에 안 놓임 (산 것은 그대로)")
@@ -276,9 +276,9 @@ func test_new_jar_scene() -> void:
 	add_world(sm, 1, 3, "첫 별")
 	sm.giant["first_jar_done"] = true
 	sm.giant["built"] = ["농장"]
-	Market.notes = 8000.0
+	Market.notes = 7500.0                 # 밀밭 1,500 + 새 병 5,000 (BALANCE v5) → 1,000 남음
 	sm.save_all(true)
-	check(sm.buy_upgrade("밀밭") and sm.buy_jar(), "밀밭 1,000 · 새 병 6,000")
+	check(sm.buy_upgrade("밀밭") and sm.buy_jar(), "밀밭 1,500 · 새 병 5,000")
 	sm.unload()
 	check(sm.order.is_empty() and sm.has_save(), "새 병을 만들러 가며 병을 내려놓음")
 	StartFlow.enter_game(null, "new", "둘째 별")
@@ -289,7 +289,7 @@ func test_new_jar_scene() -> void:
 	run.root.add_child(s)
 	var w: JarWorld = s.get("world")
 	check(int(s.get("jar_id")) == 2 and sm.order == [1, 2] and sm.current == 2 and sm.jars.has(2) and not sm.jars.has(1), "새 병 = 2번 (첫 병은 선반에 그대로)")
-	check(sm.pending_jar().is_empty() and is_equal_approx(Market.notes, 1000.0), "사 둔 빈 병이 이제 세상 · 지폐 8,000 → 1,000")
+	check(sm.pending_jar().is_empty() and is_equal_approx(Market.notes, 1000.0), "사 둔 빈 병이 이제 세상 · 지폐 7,500 → 1,000")
 	var farm := false
 	for bb in w.primary().buildings:
 		farm = farm or bb.type == "농장"
@@ -370,7 +370,7 @@ func test_sheet_and_room() -> void:
 	sh.open()
 	check(sh.visible and sh.has_lamp() and sh.jars_box.get_child_count() == 2, "선반 시트: 병 카드 둘 + 등불")
 	var b: Button = sh.buy_box.find_child("BuyJar", true, false)
-	check(b != null and b.text.contains("30,000") and b.disabled, "세 번째 병은 30,000 — 지폐가 모자라 눌리지 않음 (%s)" % [b.text if b != null else "-"])
+	check(b != null and b.text.contains("25,000") and b.disabled, "세 번째 병은 25,000 — 지폐가 모자라 눌리지 않음 (%s)" % [b.text if b != null else "-"])
 	var lines := ShelfSheet.jar_lines(sm.jar_summary(2))
 	check(lines[0].begins_with("둘째 별 · ") and lines[1].contains("명 · 온대"), "카드: '%s' / '%s'" % lines)
 	var kit_rows := sh.kit_box.get_child_count()

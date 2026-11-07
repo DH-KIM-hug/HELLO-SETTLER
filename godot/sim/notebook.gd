@@ -16,7 +16,7 @@ const BEAT := 6.0             # 쪽지를 끝낸 뒤 이만큼은 느리게 (결
 const AWAKEN_REAL := 292.0    # 수첩이 있으면 깨달음은 현실 이 시각(초) 전에는 오지 않는다 (~5:00 — 경이가 일찍 차도)
 const AWAKEN_JAR_MAX := 12.0 * Balance.HOUR   # 이 병 시간이 지나면 위 제한 없음 (자리를 비운 동안 경이가 찼으면 그대로 깨닫게)
 const FIRST_HUT_MULT := 4.8   # 첫 병 첫날 첫 집 짓는 빠르기 배율
-const FIRST_HUTS := 2         # 첫날 처음 지어지는 터 둘까지
+const FIRST_HUTS := 4         # 첫날 처음 지어지는 터 넷까지 (v5: 둘 → 넷 — 걸음이 느려져 첫 아기가 태어날 오두막이 늦게 섬)
 const SITE_R := 7.0           # 통나무를 '터 곁에' 떨어뜨렸다 (칸)
 const FARM_R := 4.5           # 물이 첫 밭에 닿았다 (뿌린 자리에서 밭 가운데까지)
 const SPROUT_HEAD := 2.5 * Balance.HOUR   # 물 맞은 첫 밭은 싹이 먼저 튼다 (첫 수확이 이만큼 당겨짐)
@@ -216,6 +216,8 @@ static func _need(v: Village, tk: Dictionary) -> String:
 				return ""
 			var b := _first_baby(v)
 			if b == null:
+				if int(v.stats.get("born", 0)) == 0 and v.t < Balance.DAY:
+					return "wait"             # v5: 집이 꽉 차 아직 못 낳았으면 새 오두막이 서고 첫 아기가 태어날 때까지 기다림 (출생 보장 — Village._births)
 				return "skip"
 			v.notebook["baby"] = b.id
 			return ""

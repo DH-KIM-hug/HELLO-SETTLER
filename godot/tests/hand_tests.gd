@@ -246,7 +246,8 @@ func test_curtain() -> void:
 	a.advance(2.0 * H)
 	b.advance(2.0 * H)
 	print("  낮 두 시간 밭: 열림 %.1f · 반쯤 %.1f" % [fa.timer + fa.out_total() * 100.0, fb.timer + fb.out_total() * 100.0])
-	check(fb.timer + fb.out_total() * 1000.0 < fa.timer + fa.out_total() * 1000.0, "반쯤이면 밭이 덜 자람")
+	# v5: 밭 앞 밀은 4분의 1 수레(25)가 쌓여야 나르러 가므로 timer + 쌓인 양으로는 비교가 흔들린다 → 자람 배율로 본다
+	check(GiantHand.farm_mult(b, fb) < GiantHand.farm_mult(a, fa), "반쯤이면 밭이 덜 자람 (자람 ×%.2f < ×%.2f)" % [GiantHand.farm_mult(b, fb), GiantHand.farm_mult(a, fa)])
 
 
 func test_curtain_frost_and_river() -> void:
@@ -332,8 +333,12 @@ func test_tweeze() -> void:
 	var dr := SkyDrops.drop(v, "나무젓가락", p)
 	check(bool(dr["ok"]), "하늘에서 통나무 산이 떨어짐")
 	var o: Dictionary = dr["drop"]
-	var to := p + Vector2(20, 0)
-	var rm := v.tweeze(p, to)
+	var rm := {}
+	for i in 8:                           # 비어 있는 쪽으로 (v5: 걸음이 느려 둘레에 짓는 터·사람이 다르게 남아 있을 수 있다)
+		var to := p + Vector2(20, 0).rotated(TAU * i / 8.0)
+		rm = v.tweeze(p, to)
+		if bool(rm["ok"]):
+			break
 	var moved := Vector2(float(o["x"]), float(o["y"])).distance_to(p)
 	check(bool(rm["ok"]) and bool(rm["moved"]) and o in v.drops and absf(moved - GiantHand.MOVE_MAX) < 0.01, "떨어진 물건을 짧은 거리(%.0f칸)만 옮겨 놓음" % GiantHand.MOVE_MAX)
 	var at := Vector2(float(o["x"]), float(o["y"]))

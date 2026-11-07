@@ -466,7 +466,7 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 ## v3 (2026-11): 종류마다 실루엣·지붕 재료가 다르게 — 둥근 초가 · 너와 · 슬레이트 · 붉은 기와 · 잔디 지붕. 집은 색 변형을 번갈아.
 const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber", "house_timber_b"], "석조주택": ["house_stone", "house_stone_b"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
-	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
+	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "맷돌간": ["hut"], "화덕": ["bakery"],     # v5: 맷돌간·공용 화덕은 모델이 생기기 전까지 오두막·빵집 모델 "소금밭": ["saltpan"], "농장": ["field_green"],
 	"버섯꾼": ["mushroom_hut"],
 	# 마을 시대 (A6, art/src/build_village.py) — 시뮬레이션 종류 이름이 정해지면 여기 이름을 맞춘다. 모델 바닥 크기(칸):
 	# 어부 1.6×1.2 · 사냥꾼 1.6×1.2 · 약초꾼 1.7×1.2 · 치료소 2.5×1.5(+오른쪽 툇마루 1칸) · 방직소 2.3×1.5(+왼쪽 처마 0.8)
