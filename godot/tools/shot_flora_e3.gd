@@ -238,7 +238,7 @@ func _bundle_on(m: ResidentModel) -> void:
 	mi.mesh = p["twig_bundle"]["mesh"]
 	mi.material_override = Art.body_mat()
 	m.add_child(mi)
-	mi.position = Vector3(-0.22, 1.18, -0.1)
+	mi.position = ResidentModel.CARRY_SOCKET["shoulder"]
 	mi.rotation = Vector3(0, 0.3, 0.25)
 	mi.scale = Vector3.ONE * 1.12
 	m.set_anim("carry")

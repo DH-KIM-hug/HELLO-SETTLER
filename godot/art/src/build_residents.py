@@ -1,4 +1,7 @@
-"""Resident kit v5 (A20, design/characters/*.png): soft, round storybook villagers (~3.1 heads tall, between jobs_a and base_c).
+"""Units: 1 = 1 cell = adult resident height (A23, art bible 8.13) - parts are drawn in the old design space and warp()ed.
+A23 (art bible 5): ~4 heads (warp(): head x0.42, body narrower, legs longer), cream shoulder cape on every torso (R1),
+mid-value trousers / stockings (R2), day headwear hat_straw (wide brim) / hat_cone (tall cone) / hat_kerchief (draping) (R6).
+Resident kit v5 (A20, design/characters/*.png): soft, round storybook villagers.
 v5: hair shells with a rolled soft edge, parting furrow, fringe tufts, side locks framing the face, soft clustered curls
 (hair_surface / fringe / curls); hands with a thumb and a finger mass (hand); apron bow + tails, wavy skirt hem, bigger belt
 pouch, cuff shadow; legs 0.06 longer. Close LOD ~4.4k tris avg (max 6k), far LOD ~0.6k. Render check: tools/shot_residents_v5.gd
@@ -57,6 +60,65 @@ SHAWL_D = (0, 0.25, 0.84)
 KEYS = (CLOTH, SKIN, HAIR, ACCENT)
 
 LOD = 0          # 0 close, 1 far (set while building)
+
+# ───────── A23 (art bible 5.2 / 8.13): ~4 heads, game units ─────────
+# The parts below are still modelled in the old design space (adult ~1.86 tall, head ~1/3 of the height). warp() then maps
+# every vertex (by its skin weights), every joint and every prop into GAME UNITS: 1 = 1 cell = adult height (top of the skull),
+# head ~1/4 of the height (~4 heads): the head shrinks uniformly (HS), the body gets narrower (WB) and the legs longer (FZ).
+# view/resident_model.gd: Style.RESIDENT_SCALE = 1.0, NECK = NECK_G, CUSTOM1 = (pos - NECK_G) / HS (head) or pos / WB (body)
+# so the shader's head-space numbers (bald / freckles / piebald) keep working.
+HS = 0.42                     # head scale (old head ~0.62 tall -> ~0.26)
+WB = 0.52                     # body width scale (x, y)
+AZ = 0.59                     # arm length scale (z along the hanging arm)
+HK = 0.5                      # hand scale
+FZ = [(0.0, 0.0), (0.09, 0.055), (0.33, 0.225), (0.62, 0.445), (0.72, 0.505), (1.16, 0.705), (1.23, 0.735)]  # old z -> game z
+LOC_XY, LOC_Z = 0.5, 0.72     # hips location keys (old -> game)
+PROP_K = 0.52                 # props keep their old on-screen size (old model x Style.RESIDENT_SCALE 0.52)
+
+
+def fz(z):
+    if z <= FZ[0][0]:
+        return z * (FZ[1][1] / FZ[1][0])
+    for (a, A), (b, B) in zip(FZ[:-1], FZ[1:]):
+        if z <= b:
+            return A + (B - A) * (z - a) / (b - a)
+    return FZ[-1][1] + (z - FZ[-1][0]) * HS
+
+
+def t_body(v):
+    return Vector((v.x * WB, v.y * WB, fz(v.z)))
+
+
+def t_head(v):
+    return Vector((v.x * HS, v.y * HS, fz(NECK) + (v.z - NECK) * HS))
+
+
+def _sv(v, s):
+    return Vector((v.x * s, v.y, v.z))
+
+
+def t_bone(bone, v):
+    """Old design-space point -> game units, moved with this bone."""
+    side = 1 if bone.endswith(".L") else -1
+    if bone.startswith(("upper_arm", "forearm", "hand")):
+        top, elb, wri = _sv(ARM_TOP, side), _sv(ELBOW, side), _sv(WRIST, side)
+        ua = lambda q: t_body(top) + Vector(((q - top).x * WB, (q - top).y * WB, (q - top).z * AZ))
+        if bone.startswith("upper_arm"):
+            return ua(v)
+        fa = lambda q: ua(elb) + Vector(((q - elb).x * WB, (q - elb).y * WB, (q - elb).z * AZ))
+        if bone.startswith("forearm"):
+            return fa(v)
+        return fa(wri) + (v - wri) * HK
+    if bone == "skull":
+        return t_head(v)
+    return t_body(v)
+
+
+def warp(v, ws):
+    out = Vector()
+    for bn, w in ws:
+        out += t_bone(bn, v) * w
+    return out
 
 
 def Q(close, far):
@@ -375,7 +437,7 @@ def ao_body(co, n):
 
 def build_head(parts):
     p = Part("head", w_head, head=True)
-    seg, rings = Q(18, 10), Q(10, 5)
+    seg, rings = Q(18, 8), Q(10, 5)
 
     def deform(v):
         # chubby cheeks + soft chin, flat-ish back of the skull
@@ -414,6 +476,7 @@ def dress_torso(name, prof, sy, colfn, thigh, extra=None, seg=(14, 7), folds=0.0
     p.detail(fs, lambda f: C_FOLDS if f.calc_center_median().z < WAIST - 0.03 else C_LINEN, m_cyl(tiles=3.0, vs=0.55, z0=SHOULDER))
     if extra:
         extra(p)
+    cream_collar(p)
     if LOD == 0:                      # cream shirt v-neck (a little patch lying on the chest)
         vneck_patch(p, pr, sy)
 
@@ -426,6 +489,23 @@ def dress_torso(name, prof, sy, colfn, thigh, extra=None, seg=(14, 7), folds=0.0
         return k
     p.shade = sh
     return p
+
+
+def cream_collar(p):
+    """A23 (art bible 5.3 R1): short cream shoulder cape over every torso - the brightest, widest thing seen from the
+    top camera (>= 25 % of the top-view area), so a resident reads as a cream vertical blob before anything else."""
+    k = Q(1.0, 1.12)                                    # far LOD: a little bigger (it is the whole read at the default zoom)
+    prof = [(0.12, NECK - 0.005), (0.2 * k, SHOULDER + 0.04), (0.3 * k, SHOULDER + 0.005), (0.37 * k, SHOULDER - 0.06),
+            (0.39 * k, SHOULDER - 0.125 * k)]
+    rows = lathe_rows(catmull(prof, Q(5, 3)), Q(14, 7), sy=0.86,
+                      wob=lambda a, z: 1.0 + 0.035 * math.sin(a * 6) * sm(SHOULDER, SHOULDER - 0.125, z))
+    if LOD == 0:                                        # soft scalloped hem
+        for i, v in enumerate(rows[-1]):
+            a = -math.pi / 2 + i / len(rows[-1]) * 2 * math.pi
+            v.z -= 0.02 * (0.5 + 0.5 * math.cos(a * 6))
+    p.grid(rows, color="LOOK_SHIRT", det=(C_LINEN, 3.0, 0.6))
+    if LOD == 0:                                        # underside of the hem only (seen past the arms)
+        p.grid(rows[-2:], color=shade("LOOK_SHIRT", 0.8), flip=True)
 
 
 def surf_r(pr, z):
@@ -980,7 +1060,7 @@ def build_hair(parts):
         golden = math.pi * (3 - math.sqrt(5))
 
         def place(p, c, r, lo=False):
-            fs = p.sphere(c, (r, r, r * 0.92), 8, 4 if lo else 5, color=HAIR)
+            fs = p.sphere(c, (r, r, r * 0.92), 6 if lo else 7, 4, color=HAIR)     # A23: hair part <= 1,500 tris
             p.detail(fs, H_CURLS, m_crown(ctr, 4.0, 0.13))
 
         def fn(p):
@@ -1022,15 +1102,15 @@ def build_hair(parts):
     e_long = fringe(0.75, 1.62, 2.0, scallop=0.1, n=5, lock=0.2)
     e_long_u = fringe(1.1, 1.62, 2.0, scallop=0.04, n=5, lock=0.2)
     if LOD == 0:
-        H("hair_curly", edge=e_short, vol=lambda th, ph: 1.02, seg=(30, 8), rows=(9, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13,
-          lip=0.0, extra=curl_balls(7, 34, 0.105, e_short))
-        H("hair_curly_under", edge=e_short_u, vol=lambda th, ph: 0.99, bumps=under(cu), seg=(52, 8), rows=(11, 4), locks=0,
+        H("hair_curly", edge=e_short, vol=lambda th, ph: 1.02, seg=(24, 8), rows=(7, 4), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13,
+          lip=0.0, extra=curl_balls(7, 27, 0.115, e_short))
+        H("hair_curly_under", edge=e_short_u, vol=lambda th, ph: 0.99, bumps=under(cu), seg=(42, 8), rows=(10, 4), locks=0,
           cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.024)
-        H("hair_curly_long", edge=e_long, drop=long_drop, vol=lambda th, ph: 1.02 + 0.05 * sm(0.8, 1.6, ph), seg=(36, 8), rows=(10, 3),
-          locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.0, extra=curl_balls(11, 22, 0.105, e_long, long_drop, curtain=7))
-        H("hair_curly_long_under", edge=e_long_u, drop=long_drop, vol=lambda th, ph: 1.0 + 0.05 * sm(0.8, 1.6, ph), seg=(36, 8),
-          rows=(10, 3), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.0, bumps=under(cl),
-          extra=curl_balls(11, 1, 0.09, e_long_u, long_drop, curtain=7))
+        H("hair_curly_long", edge=e_long, drop=long_drop, vol=lambda th, ph: 1.02 + 0.05 * sm(0.8, 1.6, ph), seg=(28, 8), rows=(8, 3),
+          locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.0, extra=curl_balls(11, 18, 0.12, e_long, long_drop, curtain=5))
+        H("hair_curly_long_under", edge=e_long_u, drop=long_drop, vol=lambda th, ph: 1.0 + 0.05 * sm(0.8, 1.6, ph), seg=(30, 8),
+          rows=(9, 3), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13, lip=0.0, bumps=under(cl),
+          extra=curl_balls(11, 1, 0.1, e_long_u, long_drop, curtain=5))
     else:
         H("hair_curly", edge=e_short, vol=lambda th, ph: 1.05, bumps=cu, locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
         H("hair_curly_under", edge=e_short_u, vol=lambda th, ph: 0.99, bumps=under(cu), locks=0, cell=H_CURLS, tiles=8.0, vs=0.13)
@@ -1125,11 +1205,11 @@ def build_hats(parts):
     # farmer straw hat: wide soft brim + round crown with a band
     p = P("hat_straw")
     seg = Q(22, 8)
-    rows = lathe_rows([(0.6, HEAD_C + 0.06), (0.5, HEAD_C + 0.14), (0.3, HEAD_C + 0.19)], seg, sy=1.0, y0=0.02)
+    rows = lathe_rows([(0.7, HEAD_C + 0.04), (0.56, HEAD_C + 0.13), (0.3, HEAD_C + 0.19)], seg, sy=1.0, y0=0.02)
     brim = m_radial(cy=0.02, tiles=Q(9.0, 5.0), vs=0.085)
     p.detail(p.grid(rows, color="LOOK_STRAW"), C_STRAW, brim)
     if LOD == 0:
-        p.detail(p.grid(lathe_rows([(0.6, HEAD_C + 0.05), (0.5, HEAD_C + 0.125), (0.3, HEAD_C + 0.17)], seg, sy=1.0, y0=0.02),
+        p.detail(p.grid(lathe_rows([(0.7, HEAD_C + 0.03), (0.56, HEAD_C + 0.115), (0.3, HEAD_C + 0.17)], seg, sy=1.0, y0=0.02),
                         color="LOOK_STRAW_DARK", flip=True), C_STRAW, brim)
     fs = p.grid(lathe_rows(catmull([(0.3, HEAD_C + 0.17), (0.3, HEAD_C + 0.24), (0.27, HEAD_C + 0.36), (0.12, HEAD_C + 0.44)], Q(6, 3)),
                            Q(16, 7), sy=1.0, y0=0.02), cap1=True,
@@ -1165,6 +1245,29 @@ def build_hats(parts):
                   deform=lambda v: v * (1.0 + 0.06 * math.sin(math.atan2(v.y, v.x) * 5)))
     p.detail(fs, C_FOLDS, m_crown(Vector((0, 0.02, HEAD_C + 0.3)), 5.0, 0.3))
     p.shade = lambda co, n: 1.0
+    # A23 day headwear (art bible 5.3 R6): tall woven-grass cone - a big change on top of the silhouette
+    p = P("hat_cone")
+    prof = [(0.36, HEAD_C + 0.07), (0.345, HEAD_C + 0.17), (0.28, HEAD_C + 0.36), (0.18, HEAD_C + 0.56), (0.08, HEAD_C + 0.75),
+            (0.02, HEAD_C + 0.86)]
+    rows = lathe_rows(catmull(prof, Q(9, 5)), Q(16, 8), sy=1.0, y0=0.02)
+    for r in rows:                                      # the tip leans back a little (soft, hand-made)
+        for v in r:
+            t = max(0.0, (v.z - HEAD_C - 0.2) / 0.66)
+            v.y += 0.12 * t * t
+    fs = p.grid(rows, cap1=True, colfn=lambda f: "LOOK_CONE_DARK" if f.calc_center_median().z < HEAD_C + 0.15 else "LOOK_CONE")
+    p.detail(fs, C_STRAW, m_crown(Vector((0, 0.02, HEAD_C + 0.86)), Q(8.0, 4.0), 0.09, R=0.3))
+    if LOD == 0:
+        p.grid(rows[:3], color=shade("LOOK_CONE_DARK", 0.8), flip=True)
+    p.shade = lambda co, n: 1.0
+    # A23 day headwear: cream kerchief tied over the hair, its back draping down to the shoulders
+    p = Part("hat_kerchief", w_fixed("skull"))
+    hair_surface(p, edge=SCARF_EDGE, drop=lambda th: 0.5 * sm(0.3, 0.75, ang_d(th, FRONT) / math.pi),
+                 vol=lambda th, ph: 1.17 + 0.04 * sm(0.8, 1.6, ph), r0=1.05, color="LOOK_KERCHIEF", locks=0, inner=True,
+                 seg=(28, 8), rows=(9, 4), tuck=0.0, cell=C_LINEN, tiles=4.0, vs=0.3, wave=0.03, lip=0.015)
+    p.detail(p.sphere(Vector((0, -0.05, HEAD_C + 0.36)), (0.07, 0.06, 0.05), Q(8, 4), Q(4, 2), color=shade("LOOK_KERCHIEF", 0.92)),
+             C_FOLDS, m_plane((-0.1, 0, HEAD_C + 0.4), (1, 0, 0), (0, 0, -1), 0.2, 0.2))
+    p.shade = lambda co, n: 1.0
+    parts.append(p)
     # fisher knit cap with a rolled band
     p = P("hat_fisher")
     fs = p.sphere(Vector((0, 0.02, HEAD_C + 0.1)), (HEAD_R * 1.14, HEAD_R * 1.14, HEAD_R * 1.05), Q(14, 7), Q(8, 4), color=ACCENT,
@@ -1475,7 +1578,7 @@ def make_armature():
     eb = {}
     for n, h, t, par in mirror_bones():
         b = arm.edit_bones.new(n)
-        b.head, b.tail = Vector(h), Vector(t)
+        b.head, b.tail = t_bone(n, Vector(h)), t_bone(n, Vector(t))
         b.roll = 0.0
         if par:
             b.parent = eb[par]
@@ -1486,6 +1589,15 @@ def make_armature():
 
 def to_object(part, rig, name):
     bm = part.finish()
+    # weights (old design space) -> A23 warp into game units
+    vw = []
+    for v in bm.verts:
+        ws = sorted(part.weights(v.co).items(), key=lambda kv: -kv[1])[:4]
+        s = sum(w for _, w in ws) or 1.0
+        vw.append([(bn, w / s) for bn, w in ws])
+    for v, ws in zip(bm.verts, vw):
+        v.co = warp(v.co.copy(), ws)
+    bm.normal_update()
     me = bpy.data.meshes.new(name)
     bm.to_mesh(me)
     me.color_attributes.active_color_name = "Color"
@@ -1493,15 +1605,12 @@ def to_object(part, rig, name):
     tris = len(me.polygons)
     ob = bpy.data.objects.new(name, me)
     bpy.context.scene.collection.objects.link(ob)
-    # weights
     groups = {}
-    for v in bm.verts:
-        ws = sorted(part.weights(v.co).items(), key=lambda kv: -kv[1])[:4]
-        s = sum(w for _, w in ws) or 1.0
+    for i, ws in enumerate(vw):
         for bn, w in ws:
             if bn not in groups:
                 groups[bn] = ob.vertex_groups.new(name=bn)
-            groups[bn].add([v.index], w / s, "REPLACE")
+            groups[bn].add([i], w, "REPLACE")
     bm.free()
     ob.parent = rig
     mod = ob.modifiers.new("rig", "ARMATURE")
@@ -1529,6 +1638,7 @@ def key(rig, act_frames, frame, pose, loc=None):
         pb.keyframe_insert("rotation_quaternion", frame=frame)
         if pb.name == "hips":
             l = loc or (0, 0, 0)
+            l = (l[0] * LOC_XY, l[1] * LOC_XY, l[2] * LOC_Z)          # A23: old design units -> game units
             # location is in the bone's local rest frame: convert armature-space offset
             pb.location = B.inverted() @ Vector(l)
             pb.keyframe_insert("location", frame=frame)
@@ -1975,10 +2085,22 @@ def build_props():
         m.sphere(0.06, pos=h + Vector((-0.05 + k * 0.05, -0.22 - 0.02 * k, -0.06 + 0.03 * (k % 2))), scl=(0.8, 1.2, 0.5),
                  color=shade("LOOK_HERB", (0.9, 1.1, 1.0)[k]), seg=6, rings=4)
     ps.add("tool_herbs", m, pivot=h)
-    m = part("cane")                   # elder's cane, crook on top (base_c)
-    m.cyl(0.026, 0.026, HAND.z + 0.04, pos=HAND_L + Vector((0, -0.03, -HAND.z)), color="LOOK_CANE", seg=6, smooth=True)
-    m.sphere(0.045, pos=HAND_L + Vector((0, -0.05, 0.06)), scl=(0.8, 1.4, 0.8), color="LOOK_CANE", seg=8, rings=5)
-    ps.add("cane", m, pivot=HAND_L)
+    # A23: every prop above -> game units: pivot moves with its bone (hand / chest), the shape keeps its old on-screen size
+    for i, (pn, mdl, pv) in enumerate(ps.parts):
+        npv = t_bone("hand.R" if pn.startswith("tool_") else "chest", pv)
+        for bm in mdl.groups.values():
+            for v in bm.verts:
+                v.co = npv + (v.co - pv) * PROP_K
+        ps.parts[i] = (pn, mdl, npv)
+    # elder's cane, crook on top (base_c) - built in game units: from the left hand down to the ground
+    hl = t_bone("hand.L", HAND_L)
+    m = part("cane")
+    m.cyl(0.015, 0.015, hl.z + 0.02, pos=hl + Vector((0, -0.016, -hl.z)), color="LOOK_CANE", seg=6, smooth=True)
+    m.sphere(0.024, pos=hl + Vector((0, -0.026, 0.032)), scl=(0.8, 1.4, 0.8), color="LOOK_CANE", seg=8, rings=5)
+    ps.add("cane", m, pivot=hl)
+    print("  A23 joints (Blender x, y, z): hand.R %s hand.L %s chest-item %s neck %.4f shoulder %.4f top %.4f" % (
+        tuple(round(c, 4) for c in t_bone("hand.R", HAND_R)), tuple(round(c, 4) for c in hl), tuple(round(c, 4) for c in t_body(ITEM)),
+        fz(NECK), fz(SHOULDER), t_head(Vector((0, 0, HEAD_C + HEAD_R * HEAD_S[2]))).z))
     ps.export(OUT)
 
 

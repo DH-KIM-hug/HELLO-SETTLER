@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== A20 주민 모델 v3: 겉모습 부품 · 뼈대 동작 · LOD")
 	run.timed(self, ["test_look_deterministic", "test_look_ignores_stats", "test_parts_exist", "test_job_outfit", "test_face", "test_baby_basket",
-		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood", "test_action_map", "test_action_village", "test_action_desync", "test_walk_stride_match"])
+		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood", "test_action_map", "test_action_village", "test_action_desync", "test_walk_stride_match", "test_a23_four_heads"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -272,7 +272,7 @@ func test_lod_budget() -> void:
 	print("    삼각형: 가까이 평균 %d 최대 %d · 멀리 평균 %d 최대 %d (%d명)" % [ca, close_max, fa, far_max, n])
 	# v5: 머리카락 실루엣(둥근 곱슬·말린 가장자리·가르마)·손가락·앞치마 리본에 삼각형을 더 씀 — 가까이 LOD는 확대·초상화에서만 보이므로 평균 ~4500 · 최대 6000까지
 	check(ca >= 2000 and ca <= 4500 and close_max <= 6000, "가까이 LOD 예산 (평균 2000~4500, 최대 6000): 평균 %d 최대 %d" % [ca, close_max])
-	check(fa >= 400 and fa <= 700 and far_max <= 760, "멀리 LOD 예산 (평균 ~600, 최대 760): 평균 %d 최대 %d" % [fa, far_max])
+	check(fa >= 400 and fa <= 600 and far_max <= 760, "멀리 LOD 예산 (평균 ≤ 600, 최대 760 — 아트 바이블 8.7): 평균 %d 최대 %d" % [fa, far_max])
 	var m := ResidentModel.new()
 	m.setup_from(Resident.new())
 	check(m._close_mi.visible and not m._far_mi.visible, "처음엔 가까이 LOD")
@@ -540,3 +540,84 @@ func test_walk_stride_match() -> void:
 			var foot := m._player.speed_scale * k        # 동작이 미는 땅 빠르기
 			check(absf(foot - g) < 0.05 * g + 0.01, "걸음 맞춤 %s (나이 %.1f) 땅 %.1f칸/초 → 발 %.2f칸/초 (동작 ×%.2f)" % [clip, cfg[0], g, foot, m._player.speed_scale])
 		m.free()
+
+
+static func _top_of(m: ResidentModel) -> float:
+	var top := 0.0
+	for mi: MeshInstance3D in m.find_children("*", "MeshInstance3D", true, false):
+		if mi.visible and mi.mesh != null:
+			top = maxf(top, (m.transform.affine_inverse() * mi.global_transform * mi.get_aabb()).end.y)
+	return top
+
+
+## A23 (아트 바이블 5.2·5.3·5.7·8.13): 1칸 = 어른 키 (모델 배율 1) · 아이 약 0.7 · 노인 0.95 · 낮 머리쓰개는 낮에만 ·
+## 피부·머리는 8단계 표 안 · 점 눈 하나 · 옷 물감 상한
+func test_a23_four_heads() -> void:
+	var holder := Node3D.new()
+	run.root.add_child(holder)
+	check(is_equal_approx(Style.RESIDENT_SCALE, 1.0), "주민 모델 단위 = 칸 (RESIDENT_SCALE 1)")
+	var hs := {}
+	for cfg: Array in [["adult", 10.0], ["child", 3.0], ["elder", 30.0]]:
+		var m := ResidentModel.new()
+		holder.add_child(m)
+		m.build(0, 0, 0, 0, 0, 0, cfg[1], "m")
+		m.set_anim("idle")
+		m.tick(0.0)
+		check(is_equal_approx(m.scale.x, m._base_scale), "%s 모델 배율 = 몸 배율 (%.2f)" % [cfg[0], m.scale.x])
+		var sk := m.skel
+		var head := sk.get_bone_global_rest(sk.find_bone("skull")).origin.y * m.scale.y
+		hs[cfg[0]] = [m._base_scale, head]
+	check(absf(hs["adult"][0] - 1.0) < 0.001 and absf(hs["child"][0] - 0.7) < 0.08 and absf(hs["elder"][0] - 0.95) < 0.001,
+		"키 배율: 어른 1 · 아이 약 0.7 · 노인 0.95 (%s)" % [hs])
+	check(absf(hs["adult"][1] - 0.72) < 0.05, "어른 목(머리 뼈) 높이 약 0.72칸 — 머리 약 1/4 (%.3f)" % hs["adult"][1])
+	var kit: Dictionary = ResidentModel.kit()
+	var hv: PackedVector3Array = kit["parts"]["head"]["v"]
+	var lo := 9.0
+	var hi := -9.0
+	for v in hv:
+		lo = minf(lo, v.y)
+		hi = maxf(hi, v.y)
+	check(hi > 0.95 and hi < 1.05, "머리 꼭대기 = 어른 키 약 1칸 (%.3f)" % hi)
+	var heads := 1.0 / maxf(hi - 0.745, 0.01)
+	check(heads > 3.6 and heads < 4.4, "약 4등신 (%.2f)" % heads)
+	# 낮 머리쓰개: 낮엔 쓰고 저녁엔 벗음 (모자 없는 사람 중 몫)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	var worn := 0
+	var off_ok := true
+	for i in 40:
+		var r := _resident(rng, 600 + i)
+		r.age = 10.0
+		var lk := ResidentModel.look_of(r)
+		var p := ResidentModel.parts_for(lk)
+		var jl := ResidentModel.job_look("", false)
+		var day := ResidentModel.body_list(p, jl, PackedStringArray(), true)
+		var eve := ResidentModel.body_list(p, jl, PackedStringArray(), false)
+		if p["day_hat"] != "":
+			check(p["day_hat"] in ResidentModel.DAY_HATS, "낮 쓰개는 표에서 (%s)" % p["day_hat"])
+			if p["day_hat"] in day:
+				worn += 1
+			if p["day_hat"] in eve and p["day_hat"] != p["hat"]:
+				off_ok = false
+	check(worn >= 8, "낮엔 많은 주민이 머리쓰개를 씀 (40명 중 %d)" % worn)
+	check(off_ok, "저녁엔 낮 쓰개를 벗음")
+	check(ResidentModel.is_hat_time(10.0) and not ResidentModel.is_hat_time(19.0) and not ResidentModel.is_hat_time(3.0), "낮 = 쓰개 시각")
+	for part: String in ResidentModel.DAY_HATS:
+		check(kit["parts"].has(part) and kit["parts"].has(part + "__far"), "낮 쓰개 부품 %s (두 LOD)" % part)
+	# 색: 피부·머리 8단계 · 점 눈 · 옷 물감 상한
+	var ramp_ok := true
+	for i in 60:
+		var r := _resident(rng, 700 + i)
+		var t := ResidentModel.tones_of(ResidentModel.look_of(r))
+		if not (t["skin"] as Color).to_html(false) in Style.SKIN_RAMP:
+			ramp_ok = false
+		if i < 8:
+			var c := ResidentModel.dye(Color(ResidentModel.ERA_CLOTH[i % 3][i % 8]))
+			check(c.s <= Style.DYE_SAT_MAX + 0.01 and c.v >= Style.DYE_VAL.x - 0.01 and c.v <= Style.DYE_VAL.y + 0.01, "옷 물감 상한 (%s)" % c.to_html(false))
+	check(ramp_ok, "피부는 S1~S8 표에서만")
+	var m2 := ResidentModel.new()
+	holder.add_child(m2)
+	var rr := _resident(rng, 999)
+	m2.setup_from(rr)
+	check((m2.mat.get_shader_parameter("eye_l") as Color).is_equal_approx(Style.EYE_DOT), "점 눈 = #1E1612")
+	holder.queue_free()

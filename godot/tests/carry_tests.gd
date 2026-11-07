@@ -92,7 +92,7 @@ func test_props_load() -> void:
 		var nf := _tris(d["far"])
 		tris[p] = n
 		var sz: Vector3 = (d["mesh"] as Mesh).get_aabb().size
-		if n < 60 or n > 520 or nf > 80 or sz.length() < 0.25:
+		if n < 60 or n > 520 or nf > 80 or sz.length() < 0.13:          # 칸 (A23: 옛 모델 단위 0.25 × 0.52)
 			bad.append("%s %d/%d %s" % [p, n, nf, sz])
 	check(bad.is_empty(), "소품 %d개: 가까이 60~520 삼각형 · 멀리 덩어리 ≤80 · 기본 확대에서 읽힐 크기 %s %s" % [tris.size(), tris, bad])
 

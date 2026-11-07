@@ -349,7 +349,7 @@ static func make_item(item: String) -> Node3D:
 			var k := 3 if mdl == "fish_a" else 2
 			for i in k:
 				var a := Art.instance(n, "animals/" + mdl)
-				a.scale = Vector3.ONE * Style.RESIDENT_SCALE * 1.5
+				a.scale = Vector3.ONE * Style.LEGACY_MODEL_UNIT * 1.5
 				a.position = Vector3((i - (k - 1) * 0.5) * 0.9, 0.0, 0.3 * (i % 2))
 				a.rotation.y = 0.6 * i
 		Immigrants.ITEM:                  # 이주민: 작은 뗏목 꾸러미 (통나무 넷 + 보따리 + 웅크린 작은 사람들) — 내려앉은 뒤 반나절 사그라듦

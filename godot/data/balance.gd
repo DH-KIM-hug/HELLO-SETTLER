@@ -485,9 +485,12 @@ const SKIN_COLORS := ["edb06e", "eac79c", "c99f73", "a66f3c"]
 const CLOTH_COLORS := ["46759e", "6e452f", "3e5c2c", "725b4f", "a0703e", "355b6e", "8b5733", "60782e"]
 # 옷·소품의 고정 색 (화면이 읽음 — 그림체를 바꿀 때 여기만 고친다)
 ## A20 (주민 v2, design/characters): 셔츠(소매·깃 — 모두 크림색) · 감은 눈·눈썹 선 · 입 · 촌장 띠 · 약초 잎 · 지팡이
-const LOOK_FIXED := {"trouser": "6e452f", "boot": "4a3426", "stocking": "d3c6a8", "belt": "533727", "apron": "ece4d2",
-	"eye": "252122", "straw": "deab43", "straw_dark": "a6974b", "scarf_a": "e2ded8", "scarf_b": "b54023", "elder_hair": "b6b0b1",
-	"shirt": "eadfc6", "lash": "4a3a30", "mouth": "9b5446", "sash": "b8453a", "herb": "6f9a3e", "cane": "7a5636", "baker": "f4f0e6"}
+## A23 (아트 바이블 5.3): 셔츠·깃·빵 모자 = 크림 P4 · 바지·긴 양말 = 중간 명도 (짙은 색은 신발·허리띠만) · 흰머리 = 따뜻한 회백 H8 ·
+## 낮 쓰개 (kerchief 머릿수건 크림 · cone 고깔 마른 풀 P3 · straw 풀 모자)
+const LOOK_FIXED := {"trouser": "9c7c5a", "boot": "4a3426", "stocking": "c2ab88", "belt": "533727", "apron": "ece2cc",
+	"eye": "252122", "straw": "d8b66e", "straw_dark": "a8925a", "scarf_a": "e2ded8", "scarf_b": "b54023", "elder_hair": "d9d1c3",
+	"shirt": "f3e6cc", "lash": "4a3a30", "mouth": "9b5446", "sash": "b8453a", "herb": "6f9a3e", "cane": "7a5636", "baker": "f3e6cc",
+	"kerchief": "efe0c2", "cone": "c8ae82", "cone_dark": "a8905f"}
 
 # ───────────────────────── v4.0 — 영역·자율 건설·소원·길·제물 (기획서 3.1 · 6.7 · 11.1, RESIDENT_AI 2.1 · 6.2, BALANCE v3) ─────────────────────────
 # 부락 영역 (기획서 3.1 · BALANCE v3-5): 시대별 지름 → 품는 인구 = 영역 넓이 × 0.5 ÷ 1인당 땅 (약 40 / 90 / 225 / 560)

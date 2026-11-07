@@ -189,21 +189,10 @@ static func _cut(svg: String, cut: float) -> String:
 
 ## 색 — ResidentModel.build_look과 같은 규칙 (유전자가 있으면 유전자에서, 없으면 예전 색표)
 static func colors(lk: Dictionary) -> Dictionary:
-	var g: PackedByteArray = lk.get("genes", PackedByteArray())
 	var cues: PackedStringArray = Bloodlines.looks(lk.get("blood", PackedStringArray()))
-	var age: float = lk.get("age", 10.0)
-	var hair_i: int = lk.get("hair_i", 0)
-	var skin_i: int = lk.get("skin_i", 0)
-	var skin := Color(Balance.SKIN_COLORS[skin_i % Balance.SKIN_COLORS.size()])
-	var hair := Color(Balance.HAIR_COLORS[hair_i % Balance.HAIR_COLORS.size()])
-	if g.size() >= Genetics.MIN_BYTES:
-		var st := Genetics.skin_step(g)
-		if "tanned" in cues:
-			st = mini(st + 2, Genetics.SKIN_TONES.size() - 1)
-		skin = Color(Genetics.SKIN_TONES[st])
-		hair = Genetics.hair_color(g, age, "silver_early" in cues)
-	elif age >= Balance.AGE_ELDER:
-		hair = Color(Balance.LOOK_FIXED["elder_hair"])
+	var tones := ResidentModel.tones_of(lk)       # (A23) 피부 S1~S8 · 머리 H1~H8 (아트 바이블 5.7)
+	var skin: Color = tones["skin"]
+	var hair: Color = tones["hair"]
 	if "pale" in cues:
 		skin = skin.lerp(Color(Genetics.PALE), 0.35)
 	return {"skin": skin, "hair": hair}

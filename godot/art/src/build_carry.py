@@ -3,11 +3,12 @@ wheat sheaf -> flour sack -> dough bowl -> bread basket, plus logs, planks, ston
 
 One glb per prop: godot/art/models/carry/<name>.glb with two parts (Art.parts):
   "<name>"      close look, ~150-400 tris, storybook low-poly (smooth round shapes + flat caps), fixed palette colours
-  "<name>_far"  a tiny coloured blob (~30 tris) of the same size for the far LOD
+  "<name>__far" a tiny coloured blob (~30 tris) of the same size for the far LOD (art bible 8.3 LOD node name)
 Every part is centred on its bounding box (pivot = bbox centre) in its natural upright pose (long things along X).
 Godot (view/resident_model.gd CARRY) puts it on a socket (hands / shoulder / back / head / hand) and turns it there;
 the bbox decides the offset (sits on the shoulder, hangs from the hand ...), so props can be reshaped freely here.
-Sizes are a bit oversized (resident is ~1.95 units tall before Style.RESIDENT_SCALE) so they read at the default zoom.
+Units (A23, art bible 8.13): 1 = 1 cell = adult resident height. The shapes below are still drawn in the old resident-model
+units (adult ~1.9) and scaled by UNIT on export, so they keep their on-screen size (a bit oversized to read at the default zoom).
 Run: blender -b --factory-startup --python build_carry.py -- [out_dir]   (out_dir = art/models; writes into out_dir/carry)
 """
 import math
@@ -20,6 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, PartSet, shade, mix, srgb, out_dir_from_argv  # noqa: E402
 
 OUT = os.path.join(out_dir_from_argv(), "carry")
+UNIT = 0.52                # old resident-model units (adult ~1.9) -> cells (= old Style.RESIDENT_SCALE)
 
 # soft storybook colours (kept off the resident shader's tint keys: r never ~0, never r~1 & g~0)
 FLOUR = "f3e8cf"
@@ -289,14 +291,17 @@ if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     total = 0
     for name, model, far in PROPS:
+        for bm in model.groups.values():                 # old resident-model units -> cells
+            for v in bm.verts:
+                v.co *= UNIT
         lo, hi = bbox(model)
         c = (lo + hi) / 2
         half = (hi - lo) / 2
-        blob = Model(name + "_far")
+        blob = Model(name + "__far")
         blob.sphere(1.0, pos=c, scl=tuple(max(0.05, h * 0.92) for h in half), color=far, seg=6, rings=4)
         ps = PartSet(name)
         ps.add(name, model, pivot=c)
-        ps.add(name + "_far", blob, pivot=c)
+        ps.add(name + "__far", blob, pivot=c)
         tris = ps.export(OUT)
         total += tris.get(name, 0)
     print("  carry props: %d, avg %d tris" % (len(PROPS), total // max(1, len(PROPS))))
