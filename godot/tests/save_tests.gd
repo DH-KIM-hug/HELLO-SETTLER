@@ -682,16 +682,17 @@ func test_creation_day() -> void:
 	var v := Village.new_prototype(41)
 	var c := JarClock.new(v)
 	c.start_creation_day()
-	check(c.creation and c.speed() == 12.0, "첫 병의 첫날은 ×12")
+	var sp0 := Notebook.PACE * Notebook.NORMAL_BASE
+	check(c.creation and absf(c.speed() - sp0) < 0.01, "첫 병의 첫날은 창세의 날 빠르기 (×%.0f — 보통 하루의 %.2f배)" % [c.speed(), Notebook.PACE])
 	check(absf(c.creation_until - 23.0 * Balance.HOUR) < 1.0, "창세의 날 = 병 시계 7시 → 다음 날 6시 (%.2f시간)" % (c.creation_until / 3600.0))
 	var n := c.tick(1.0)
-	check(n == 12, "현실 1초 = 병 12초 (%d걸음)" % n)
+	check(n == int(sp0), "현실 1초 = 병 %d초 (%d걸음)" % [int(sp0), n])
 	# 끝: 시험이 빨리 끝나게 끝 시각을 당겨서 확인
 	c.creation_until = v.t + 30.0
 	for i in 5:
 		c.tick(1.0)
 	check(not c.creation and c.creation_done and c.speed() == JarClock.normal_speed() and c.notice == JarClock.CREATION_HINT,
-		"창세의 날이 끝나면 ×1 + 배속 단추 한 줄 ('%s')" % c.notice)
+		"창세의 날이 끝나면 보통 + 배속 단추 한 줄 ('%s')" % c.notice)
 	var c2 := JarClock.from_dict(v, bytes_to_var(var_to_bytes(c.to_dict())))
 	c2.start_creation_day()
 	check(not c2.creation and c2.speed() == JarClock.normal_speed(), "저장 후 다시 켜도 되풀이하지 않는다")
@@ -699,9 +700,11 @@ func test_creation_day() -> void:
 	var c3 := JarClock.new(w)
 	c3.start_creation_day()
 	c3.cycle_speed()
-	check(not c3.creation and c3.speed() == JarClock.normal_speed() and c3.creation_done and c3.notice == "", "거인이 배속을 고르면 창세의 날은 그 자리에서 끝 (알림 없이)")
-	c3.cycle_speed()
-	check(c3.speed() == 720.0, "그다음은 빠르게 (1일=2분)")
+	var ratio := float(Balance.SPEEDS[c3.speed_i]) / JarClock.normal_speed()
+	check(c3.creation and ratio > 1.0 and absf(c3.speed() - sp0 * ratio) < 0.01, "거인이 배속(%s)을 골라도 창세의 날은 이어지고 그 위에 곱함 (병 %.0f초/현실 1초)" % [JarClock.label_of(c3.speed_i), c3.speed()])
+	check(c3.speed_text() == JarClock.label_of(c3.speed_i), "창세의 날 칩도 배속 이름 그대로 ('%s' — 옛 ×12 글자 없음)" % c3.speed_text())
+	c3.set_speed(Balance.SPEED_DEFAULT_I)
+	check(absf(c3.speed() - sp0) < 0.01, "다시 보통 → 창세의 날 빠르기")
 	# 두 번째 병은 창세의 날 없음 — SaveManager가 첫 병에만 부른다
 	var sm := manager()
 	sm.giant = {"first_jar_done": true}

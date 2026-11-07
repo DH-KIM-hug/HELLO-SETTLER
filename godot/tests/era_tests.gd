@@ -176,7 +176,7 @@ func test_awakening_and_altar() -> void:
 	check(int(v.stats.get("offered", 0)) >= 2, "그 저녁부터 평소 저녁 기도 제물 (바친 횟수 %d)" % int(v.stats.get("offered", 0)))
 
 
-## OPENING 3.1 v3: 2:00 톡 → 3:00 뚜껑·불기 → 깨달음 → 제단 — 창세의 날 ×12로 현실 10분 안 (자막 단계도)
+## OPENING 3.1 v3.3: 2:00 톡 → 3:00 물 뿌리기 (뚜껑은 손짓마다 저절로) → 깨달음 → 제단 — ×12로 현실 10분 안 (자막은 톡 하나뿐)
 func test_guided_path() -> void:
 	var v := proto()
 	v.guide = {"on": true}
@@ -193,18 +193,15 @@ func test_guided_path() -> void:
 			GuideCaption.done(v, "tap")
 			marks["after_tap"] = GuideCaption.step(v)
 			marks["hl"] = GuideCaption.highlight(v)
-		if real >= 180.0 and not marks.has("blow"):
-			marks["blow"] = true
+		if real >= 180.0 and not marks.has("water"):
+			marks["water"] = true
 			v.open_lid()
-			marks["hl2"] = GuideCaption.highlight(v)
-			v.blow_seeds(Vector2(0, 1))
-			GuideCaption.done(v, "blow")
+			v.spray_water(v.fire + Vector2(3, 3))
 			v.close_lid()
 		if v.aware and not marks.has("aware"):
 			marks["aware"] = v.t / X12 / 60.0
 	check(not marks.has("early"), "안내 자막은 2분쯤부터 (그 전엔 없음)")
-	check(marks.get("tap", "") == "tap" and marks.get("after_tap", "") == "blow", "자막 ① 유리 톡 → 톡 하면 ② 뚜껑·불기로")
-	check(marks.get("hl", "") == "lid" and marks.get("hl2", "") == "blow", "버튼 빛: 뚜껑 → (열리면) 불기")
+	check(marks.get("tap", "") == "tap" and marks.get("after_tap", "x") == "" and marks.get("hl", "x") == "", "자막 ① 유리 톡 → 톡 하면 끝 (뚜껑·불기 안내 없음)")
 	var aw: float = marks.get("aware", 99.0)
 	check(aw >= 3.0 and aw <= 6.5, "깨달음 현실 %.1f분 (목표 4~6분)" % aw)
 	check(v.altar_built and v.t / X12 / 60.0 <= 10.0, "제단 완공 현실 %.1f분 (10분 안)" % (v.t / X12 / 60.0))

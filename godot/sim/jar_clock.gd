@@ -44,13 +44,15 @@ var auto_slow := true                 # 빠른 흐름 중 중요한 일 → ×1 
 var last_event := ""                  # 마지막으로 천천히 되돌린 까닭 (born·died·aware·revelation·letter·omen)
 var _step_ms := 0.0                   # 빠른 걸음 하나의 평균 계산 시간 (예산 맞추기)
 var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
-# 창세의 날 (OPENING 3.0): 첫 병의 첫날(7시 → 다음 6시)은 ×12. 거인이 다른 배속을 고르거나 위기·밤 건너뛰기면 끝.
-# 끝까지 가면 ×1로 돌아오고 배속 단추를 한 줄로 알려 준다. 저장된다 (다시 켜도 되풀이하지 않음)
+# 창세의 날 (OPENING 3.0 v3.3): 첫 병의 첫날(7시 → 다음 6시)은 현실 약 12분 — 빠르기는 Notebook.day_speed (보통에 대한 몫,
+# 수첩 쪽지·장면 앞에서 느리게, 수첩 뒤 빠르게) × 거인이 고른 배속 ÷ 보통. 첫 저녁 기도 뒤 모두 잠들면 밤을 저절로 건너뛰고, 아침이 되면 끝 →
+# 보통으로 돌아오고 배속 단추를 한 줄로 알려 준다. 저장된다 (다시 켜도 되풀이하지 않음)
 var creation := false
 var creation_until := 0.0             # 끝나는 병 시각 t
 var creation_done := false            # 창세의 날을 지났다 (끝까지 갔든 거인이 바꿨든)
+var creation_real := 0.0              # [창세의 날 v3.3] 창세의 날이 흐른 현실 초 (빠르기 단계 — Notebook.day_speed)
 
-const CREATION_SPEED := 12.0
+const CREATION_SPEED := 12.0          # (옛 ×12 — 이제 창세의 날 빠르기는 Notebook.day_scale × 보통(1일=5분) × 고른 배속÷보통: 쪽지 동안 0.08 · 장면 앞 0.03~0.04 · 수첩 뒤 1.15, 첫날 ≈ 현실 10~12분)
 const EVENT_NOTE := "중요한 일이 생겨서 천천히 흘러가요"
 const SAVE_SKIP := ["v", "world", "rate", "budget_ms", "auto_slow", "_step_ms"]
 const CREATION_HINT := "병의 첫날이 지났어요. 이제부터는 아래 [속도] 단추로 병의 시간을 빠르게 흘릴 수 있어요."
@@ -84,8 +86,8 @@ func _init(village: Village) -> void:
 func speed() -> float:
 	if skipping:
 		return skip_span / Balance.SKIP_NIGHT_SECONDS
-	if creation:
-		return CREATION_SPEED
+	if creation:                      # [창세의 날 v3.3] 첫날 빠르기 (보통에 대한 몫) × 거인이 고른 배속 ÷ 보통
+		return Notebook.day_speed(v, creation_real) * float(Balance.SPEEDS[speed_i]) / normal_speed()
 	return float(Balance.SPEEDS[speed_i])
 
 
@@ -113,9 +115,7 @@ static func rate_label(x: float) -> String:
 
 ## 지금 칩에 띄울 배속 이름 — 빠른 흐름이 목표의 85%를 못 내면 실제 배속을 작게 덧붙인다 ("1초=12시간 (실제 1초=3시간)")
 func speed_text() -> String:
-	if creation:
-		return "×%d" % int(CREATION_SPEED)
-	var s := label_of(speed_i)
+	var s := label_of(speed_i)               # 창세의 날도 고른 배속 이름 그대로 (첫날의 빠르기 변화는 수첩·장면이 맡음)
 	if fast and rate > 0.0 and rate < speed() * 0.85:
 		s += " (실제 %s)" % rate_label(rate)
 	return s
@@ -144,8 +144,7 @@ func fast_budget_ms() -> float:
 func set_speed(i: int) -> void:
 	if skipping:
 		_end_skip()
-	_end_creation(false)
-	speed_i = clampi(i, 0, Balance.SPEEDS.size() - 1)
+	speed_i = clampi(i, 0, Balance.SPEEDS.size() - 1)     # [창세의 날 v3.3] 배속을 골라도 창세의 날은 이어짐 (그 위에 곱함)
 	_sync_fast()
 	rate = speed()
 
@@ -153,7 +152,7 @@ func set_speed(i: int) -> void:
 ## 배속 버튼: 보통 → 빠르게 → 아주 빠르게 → 느리게 → 조금 느리게 → 보통 (앞 다섯, Balance.SPEED_TAP_N).
 ## 밤 건너뛰는 중·창세의 날·"1초=…" 배속에서 누르면 보통으로
 func cycle_speed() -> void:
-	if skipping or creation or speed_i >= Balance.SPEED_TAP_N:
+	if skipping or speed_i >= Balance.SPEED_TAP_N:
 		set_speed(Balance.SPEED_DEFAULT_I)
 	else:
 		set_speed((speed_i + 1) % Balance.SPEED_TAP_N)
@@ -252,6 +251,8 @@ func _tick_skip(real_dt: float) -> int:
 		set_speed(Balance.SPEED_DEFAULT_I)
 		notice = "아침이 밝았어요"
 		notice_t = 4.0
+		if creation and v.t >= creation_until - 1.0:     # [창세의 날 v3.3] 첫날 밤을 건너뛰면 창세의 날 끝
+			_end_creation(true)
 	return n
 
 
@@ -263,6 +264,12 @@ func tick(real_dt: float) -> int:
 	if skipping:
 		rate = speed()
 		return _tick_skip(real_dt)
+	Notebook.tick(v, real_dt)         # [거인의 수첩] 쪽지 차례 (현실 시간)
+	if creation:                      # [창세의 날 v3.3] 첫 저녁 기도 뒤 모두 잠들면 밤을 저절로 건너뜀 (약 3초)
+		creation_real += real_dt
+		if Notebook.nap_time(v) and can_skip_night() and start_skip_night():
+			rate = speed()
+			return _tick_skip(real_dt)
 	_sync_fast()
 	if fast:
 		return _tick_fast(real_dt)
@@ -409,9 +416,7 @@ func _lid_auto_close(real_dt: float) -> void:
 	lid_real += real_dt
 	if lid_real >= Balance.LID_AUTO_CLOSE_REAL:
 		v.close_lid()
-		lid_real = 0.0
-		notice = "뚜껑이 저절로 닫혔어요"
-		notice_t = 3.0
+		lid_real = 0.0                # (v3.3) 뚜껑은 손짓마다 저절로 열고 닫힌다 — 닫힘 알림은 없음 (화면은 CorkPop)
 
 
 # ───────────────────────── 저장 (docs/SAVE.md) ─────────────────────────

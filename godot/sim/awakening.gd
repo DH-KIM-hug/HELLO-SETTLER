@@ -112,7 +112,7 @@ static func _murmur(v: Village, ws: Array[Resident]) -> void:
 static func step(v: Village, dt: float) -> void:
 	if not v.aware:
 		_add(v, WONDER_DRIP_HOUR * dt / Balance.HOUR)
-		if v.awaken_at >= 0.0 and v.t >= v.awaken_at:
+		if v.awaken_at >= 0.0 and v.t >= v.awaken_at and Notebook.awaken_ok(v):     # [거인의 수첩] 첫 병은 현실 ~5:00 전에는 아님
 			awaken(v)
 		return
 	if not v.altar_built and altar_site(v) == null and not v.people.is_empty():

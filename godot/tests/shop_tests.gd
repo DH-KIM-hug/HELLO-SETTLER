@@ -774,7 +774,9 @@ func test_ui() -> void:
 			small += 1
 	check(small == 0, "도구 버튼 모두 44px 이상")
 	scene.call("toggle_hand")
-	check(bool(scene.call("hand_open")) and (scene.get("lid_btn") as Button).is_visible_in_tree(), "손 → 뚜껑·불기·등불·손에 든 것 칸")
+	var hc: GiantHandCtl = scene.get("hand_ctl")
+	check(bool(scene.call("hand_open")) and hc.spray_btn.is_visible_in_tree() and hc.blow_btn.is_visible_in_tree() and not hc.lid_btn.is_visible_in_tree(),
+		"손 → 물 뿌리기·불기·핀셋·등불·손에 든 것 칸 (뚜껑 단추 없음 — 저절로 열림)")
 	Market.hand = [{"id": 99, "item": "각설탕", "paid": 500.0}]
 	scene.call("start_drop", 99)
 	var sv: Village = scene.get("village")
