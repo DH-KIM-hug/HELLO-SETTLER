@@ -16,7 +16,8 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_world_seeds", "test_world_determinism", "test_world_water", "test_far_lakes", "test_kits_and_fog", "test_two_kits_contact", "test_world_rotation", "test_world_budget"])
+	run.timed(self, ["test_world_seeds", "test_world_determinism", "test_world_water", "test_far_lakes", "test_kits_and_fog", "test_two_kits_contact", "test_world_rotation", "test_world_budget",
+		"test_sim_speed"])
 
 
 static func h_sig(ww: WorldWater) -> String:
@@ -323,3 +324,79 @@ func test_world_budget() -> void:
 	check(day_ms < 2500.0, "몰아서 하루 계산 2.5초 안 (목표 1.5초, 실제 %.2f초)" % (day_ms / 1000.0))
 	check(water_ms < 1000.0, "물만 하루 1초 안 (%.2f초)" % (water_ms / 1000.0))
 	check(run.pctl(each, 0.95) < 16.0, "물 한 번이 한 화면(16 ms)을 넘지 않음 (95%% %.1f ms · 최대 %.1f ms — 한 번 튀는 건 기기 탓)" % [run.pctl(each, 0.95), worst])
+
+
+## E0-1 시뮬 속도: (1) 빨라진 물 계산(젖은 칸만 도는 고운·거친 계산, 소금 들판 훑기)이 옛 계산과 같은 값
+## (2) 며칠 지난 넓은 세상에서 따라잡기 걸음(30초) 병 하루 · 지켜보는 걸음(10초) 병 2시간이 넉넉한 한도 안 (느려지면 알림 — 벽시계라 한도는 크게)
+func test_sim_speed() -> void:
+	print("== 시뮬 속도 (E0-1) — 빠른 물 계산 = 옛 계산 · 계산 시간 한도")
+	var jw := JarWorld.create(2)
+	var rec := jw.recommended_kit_spots()
+	var v := jw.place_kit(rec[0].x, rec[0].y)
+	v.auto_reveal = true
+	v.water.offline = true
+	v.step_dt = Balance.AWAY_STEP
+	for q: Village in jw.settlements:
+		q.watching = false
+	jw.advance((2.0 if quick else 4.0) * Balance.DAY)
+	# (1) 물: 같은 상태 둘 → 새 계산 / 옛 계산 40번 (중간에 바깥에서 물 붓기)
+	var a := jw.water as WorldWater
+	var b := JarWater.from_dict(bytes_to_var(var_to_bytes(a.to_dict()))) as WorldWater
+	for it in 40:
+		a.fine_step(10.0)
+		b.fine_step_ref(10.0)
+		a.coarse_slice(80.0, it % WorldWater.SLICES)
+		b.coarse_slice_ref(80.0, it % WorldWater.SLICES)
+		a.tick += 1
+		b.tick += 1
+		if it % 13 == 0:
+			var k := a.fcells[(it * 7919) % a.fcells.size()]
+			a.w[k] += 0.02
+			b.w[k] += 0.02
+	var same := a.w == b.w and a.flux == b.flux and a.salt == b.salt and a.halite == b.halite and a.wet_c == b.wet_c and a.cV == b.cV and a.cS == b.cS \
+		and a.cL == b.cL and a.cK == b.cK and a.cFL == b.cFL and a.cHal == b.cHal and a.cwet == b.cwet and a.added == b.added and a.removed == b.removed
+	check(same, "빠른 물 계산 (젖은 칸만) = 옛 계산 (모든 칸) — 40번 뒤 물·흐름·소금·습기·거친 칸이 똑같다 (고운 칸 %d)" % a.fcells.size())
+	var scan_ok := true
+	for cr: Array in [[v.center, v.view_r * 1.5, 0.004, 0.003], [v.center, 90.0, 1.0, 0.0], [Vector2(-120, 80), 60.0, 0.004, 0.0]]:
+		var flat := 0
+		var fc := Vector2.ZERO
+		for k in a.village_cells(cr[0], cr[1]):
+			if a.depth(k) < cr[2] and a.salt_k(k) > cr[3]:
+				flat += 1
+				fc += Vector2(a.cx(k), a.cy(k))
+		var sc := a.salt_flat_scan(cr[0], cr[1], cr[2], cr[3])
+		scan_ok = scan_ok and int(sc[0]) == flat and sc[1] == fc
+	check(scan_ok, "소금 들판 훑기 (빠른 길) = 칸마다 depth·salt_k 본 것")
+	# (2) 계산 시간: 따라잡기 걸음 병 하루 (반나절 두 번 중 빠른 쪽 × 2) · 지켜보는 걸음 병 2시간
+	var pop := 0
+	for q: Village in jw.settlements:
+		pop += q.people.size()
+	var w2 := JarWorld.from_dict(bytes_to_var(var_to_bytes(jw.to_dict())))
+	w2.primary().step_dt = Balance.AWAY_STEP
+	w2.water.offline = true
+	for q: Village in w2.settlements:
+		q.watching = false
+	var away_ms := INF
+	for i in 2:
+		var t0 := Time.get_ticks_usec()
+		w2.advance(Balance.DAY * 0.5)
+		away_ms = minf(away_ms, (Time.get_ticks_usec() - t0) / 1000.0 * 2.0)
+	var lv := w2.primary()
+	lv.step_dt = Balance.STEP
+	for q: Village in w2.settlements:
+		q.watching = true
+	var each: Array = []
+	var live_ms := 0.0
+	for i in int(2.0 * Balance.HOUR / Balance.STEP):
+		var t1 := Time.get_ticks_usec()
+		lv.step(Balance.STEP)
+		var ms := (Time.get_ticks_usec() - t1) / 1000.0
+		each.append(ms)
+		live_ms += ms
+		for q: Village in w2.settlements:
+			q.crises.clear()
+	print("  세상 %d일 · 무리 %d · 인구 %d — 따라잡기 걸음 병 하루 %.0f ms · 지켜보는 10초 걸음 병 1시간 %.0f ms (걸음 99%% %.1f ms · 최대 %.1f ms)" % [
+		int(lv.t / Balance.DAY), w2.settlements.size(), pop, away_ms, live_ms / 2.0, run.pctl(each, 0.99), each.max()])
+	check(away_ms < 6000.0, "따라잡기 걸음(30초) 병 하루 6초 안 (실제 %.2f초)" % (away_ms / 1000.0))
+	check(live_ms / 2.0 < 1500.0, "지켜보는 걸음(10초) 병 1시간 1.5초 안 (실제 %.0f ms)" % (live_ms / 2.0))
+	check(run.pctl(each, 0.99) < 30.0, "걸음 하나 99%% 30 ms 안 (실제 %.1f ms)" % run.pctl(each, 0.99))
