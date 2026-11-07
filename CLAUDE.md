@@ -56,6 +56,7 @@
 - `isolation: worktree`. 지시문 첫 줄에 "작업 트리가 옛 커밋일 수 있으니 `git merge ccr-5955ceb0-i7kj1q` (안 되면 `git reset --hard …`)".
 - 맡은 파일 범위와 **다른 에이전트가 고치는 파일**을 적어 겹침을 줄인다. 3D·화면 일은 스크린샷을 찍어 **직접 보고 고치게** 한다.
 - 결과를 받으면: 스크린샷 확인 → 작업 트리에서 커밋 → `git merge --no-edit worktree-agent-…` → 충돌 풀기 (`tests/run.gd`의 묶음 목록은 양쪽 다 살림) → 추적 안 된 `godot/art/**/*.import`·`*.uid`가 병합을 막으면 지움 → `--import` + quick 시험 → 푸시 → `git worktree remove -f -f` + 브랜치 삭제.
+- 스크린샷(`godot_shots/`, 저장소 맨 위)은 작업 트리에서 `git add -A godot`로는 안 들어간다 — 커밋할 때 `godot_shots`도 함께 add (작업 트리를 지우면 사라짐).
 - `.glb` 같은 바이너리가 충돌하면 합쳐진 빌드 스크립트로 블렌더에서 다시 만든다.
 
 ---
