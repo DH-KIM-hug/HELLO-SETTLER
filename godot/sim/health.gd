@@ -92,23 +92,21 @@ static func protection(v: Village, r: Resident, heat_raw: float) -> Array:
 	var mc := 1.0
 	var mh := 1.0
 	var hm := v.bld(r.home)
-	if hm != null and hm.built and Vector2(r.x - hm.x, r.y - hm.y).length() <= hm.size() + Balance.HOUSE_IN_R:
+	var indoor := hm != null and hm.built and Vector2(r.x - hm.x, r.y - hm.y).length() <= hm.size() + Balance.HOUSE_IN_R
+	if indoor:
 		var pr: Array = Balance.PROTECT_HOUSE_FUEL if hm.fuel_on else Balance.PROTECT_HOUSE_COLD
 		mc = minf(mc, pr[0])
 		mh = minf(mh, pr[1])
 	if Vector2(r.x - v.fire.x, r.y - v.fire.y).length() <= Balance.FIRE_R:
 		mc = minf(mc, Balance.PROTECT_FIRE[0])
 		mh = minf(mh, Balance.PROTECT_FIRE[1])
-	if heat_raw > 0.0 and mh > Balance.PROTECT_SHADE[1]:
-		var r2 := Balance.SHADE_R * Balance.SHADE_R
-		for tr: Dictionary in v.trees:
-			if tr["s"] == "tree" and Vector2(float(tr["x"]) - r.x, float(tr["y"]) - r.y).length_squared() <= r2:
-				mh = minf(mh, Balance.PROTECT_SHADE[1])
-				break
-	if heat_raw > 0.0 and mh > Balance.SHROOM_SHADE and v.flora != null and v.flora.shade_at(r.x, r.y):
-		mh = Balance.SHROOM_SHADE                     # [하늘의 것] 큰 갓 아래 그늘 ×0.6 (WORLD_EVENTS 2.6)
+	# 그늘 지도 하나 (flower-forest R2 · F2): 꽃숲 1.5칸 · 큰 갓 · 해바라기 꽃판 그림자 · 큰 나무 잎 아래 — 겹쳐도 ×0.6 한 번
+	if heat_raw > 0.0 and mh > Balance.SHADE_HEAT and GiantPlants.shade_at(v, r.x, r.y):
+		mh = Balance.SHADE_HEAT
 	if v.flora != null and v.flora.cotton_on(v, r):
-		mc *= Balance.COTTON_COLD                     # [하늘의 것] 민들레 솜을 넣은 옷 ×0.8 (입는 것이라 다른 것과 겹침 — WORLD_EVENTS 2.7)
+		mc *= Balance.COTTON_COLD                     # [하늘의 것] 솜을 넣은 옷 ×0.8 (입는 것이라 다른 것과 겹침 — WORLD_EVENTS 2.7)
+	if indoor and GiantPlants.quilt_on(v, r):
+		mc *= Balance.QUILT_COLD                      # 솜 이불 — 집 안 추위 ×0.75 (덮는 것이라 곱함, health.md 메인 판단 ①)
 	return [mc, mh]
 
 
@@ -418,21 +416,17 @@ static func _hourly(v: Village, clinic: Array) -> void:
 			fall_ill(v, r, in_clinic, kind)
 
 
-static var _wmax := {}
-
-
-## 자연 발병 배율의 최댓값 (모든 '어디서'가 참일 때 몫 × 배율의 합) — 거르기용. 기후마다 (그 병에 사는 병만)
+## 자연 발병 배율의 최댓값 (모든 '어디서'가 참일 때 몫 × 배율의 합) — 거르기용. 기후마다 (그 병에 사는 병만).
+## 시간마다 한 번만 부르므로 그때 셈 (static 캐시 없음 — ADR-0001 d, ROADMAP F-2)
 static func _where_max(climate := "") -> float:
-	if not _wmax.has(climate):
-		var w := 0.0
-		for kind: String in Balance.DISEASE_ORDER:
-			var dz: Dictionary = Balance.DISEASES[kind]
-			var m := share_of(kind, climate) if climate != "" else float(dz["share"])
-			for k: String in dz["where"]:
-				m *= maxf(1.0, float(dz["where"][k]))
-			w += m
-		_wmax[climate] = w
-	return float(_wmax[climate])
+	var w := 0.0
+	for kind: String in Balance.DISEASE_ORDER:
+		var dz: Dictionary = Balance.DISEASES[kind]
+		var m := share_of(kind, climate) if climate != "" else float(dz["share"])
+		for k: String in dz["where"]:
+			m *= maxf(1.0, float(dz["where"][k]))
+		w += m
+	return w
 
 
 # ───────────────────────── 병이 들어오는 길 (WORLD_EVENTS 5 · HEALTH 2.6 — ROADMAP B7) ─────────────────────────

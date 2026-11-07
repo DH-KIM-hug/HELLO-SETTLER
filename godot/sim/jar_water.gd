@@ -53,6 +53,8 @@ var humid := 0.5
 var dew := 0.0                          # 모인 김·맺힌 이슬 (분 단위 — × DRIP_RATE × 돌기 배율 = 돌기 하나의 물)
 var dew_cum := 0.0                      # 지금까지 떨어진 이슬 (같은 단위, 늘기만 한다)
 var dew_given := 0.0                    # 그중 이미 땅에 준 몫 (소형 병 — 넓은 세상은 돌기마다 WorldWater.drip_got)
+var vapour := -1.0                      # 병 안의 김 (물 부피 — 증발이 채우고 이슬·골이 씀, inflow_k). −1 = 뚜껑 닫기 전 (끝없음)
+var _ink := 1.0                         # 이번 물 걸음의 이슬·골 배율 (inflow_k)
 var offline := false
 var offline_mult := 1.0                 # 몰아서 계산할 때 물 계산 간격 배율 (따라잡기 빠른 길 CatchUp.fast — 저장하지 않음)
 var climate := "온대"                     # 기후대 (한 병 = 한 기후대, 기획서 5.2 · HEALTH.md 1.2) — Balance.CLIMATES의 키
@@ -244,16 +246,43 @@ func advance(seconds: float) -> void:
 			humid = maxf(0.2, humid - dt / (DAY * 0.9))
 
 
-static var dew_legacy := false          # (시험용) 예전 방식 — 모으지 않고 그때그때 떨어뜨림 (test_dew_rhythm이 같은 세상을 비교)
+## 물 보존 (design/gdd/water.md · ROADMAP F-2): 증발·스며듦은 병 안의 김(vapour, 물 부피 단위)으로 가고, 이슬(돌기)·유리벽 골은
+## 그 김에서 나온다 → 땅의 물 + 김 = 늘 같음. 병 밖으로 나가는 길은 뚜껑(JarAir.water_lost)뿐, 들어오는 길은 거인의 물뿐.
+## vapour < 0 = 뚜껑을 닫기 전 (세상 만들기의 물 자리 잡기 — 김이 끝없음). 닫으면(close_vapour) 하루 들어오는 물 × VAPOUR_DAYS로 시작.
+## 이슬·골의 굵기 = 김 / (하루 들어오는 물 × VAPOUR_DAYS) (0 ~ VAPOUR_MAX_K, inflow_k) — 닫을 때 1. 증발이 많아 김이 쌓이면
+## 새벽 이슬이 굵어지고, 김이 모자라면 가늘어진다 → 닫힌 고리 (증발 = 김 = 이슬). 호수는 커지기만·마르기만 하지 않는다.
+func inflow_k() -> float:
+	if vapour < 0.0:
+		return 1.0
+	var full := Balance.VAPOUR_DAYS * daily_inflow()
+	return 1.0 if full <= 1e-12 else clampf(vapour / full, 0.0, Balance.VAPOUR_MAX_K)
+
+
+func daily_inflow() -> float:
+	var s := DRIP_RATE * DEW_FULL * drips.size()
+	for g: Vector2 in grooves:
+		s += GROOVE_RATE * 0.35 * DAY / 60.0
+	return s
+
+
+## 뚜껑을 닫는다 — 이때부터 물이 보존된다 (WorldGen.generate 끝 · 옛 저장을 불러올 때)
+func close_vapour() -> void:
+	if vapour < 0.0:
+		vapour = daily_inflow() * Balance.VAPOUR_DAYS
+
+
+## 땅의 물 + 김 (보존되는 양 — 시험용)
+func water_and_vapour() -> float:
+	var s := maxf(vapour, 0.0)
+	for k in w.size():
+		s += w[k]
+	return s
 
 
 ## 이슬 한 조각 (dt초, 방금 흐른 시간): 김이 모이고, 새벽이면 모인 것의 몫이 떨어진다 (dew → dew_cum).
 ## 떨어지는 몫 = 1 − R(u1)/R(u0), R(u) = (1 + cos πu)/2 (새벽 창 안에서 남은 몫) — 곱하면 맞물려 조각 크기와 상관없이 같은 모양,
 ## 창 끝(DEW_TO)에는 남김없이 떨어진다. 하루 동안 모인 양 = 예전에 하루 동안 떨어지던 양 (테스트 test_dew_rhythm)
 func dew_step(dt: float) -> void:
-	if dew_legacy:
-		dew_cum += dt / 60.0 * (0.6 + humid)
-		return
 	dew += dt / 60.0 * (0.6 + humid)
 	var h1 := hour_now()
 	var h0 := h1 - dt / HOUR
@@ -301,14 +330,19 @@ func hydro_step(sc: float) -> void:
 	var nbs := nb_start
 	var nbl := nb_list
 	# 들어오는 물: 물방울 돌기 (새벽에 떨어진 이슬 — dew_step)
-	var dd := DRIP_RATE * (dew_cum - dew_given)
+	var ink := inflow_k()
+	var got := 0.0
+	var dd := DRIP_RATE * (dew_cum - dew_given) * ink
 	dew_given = dew_cum
 	for d: Dictionary in drips:
 		ww[cell_idx(d["x"], d["y"])] += dd
+		got += dd
 	# 유리벽의 '골': 뚜껑 경사가 모이는 곳으로만 흘러내린다 (그늘일수록 많이)
 	for g: Vector2 in grooves:
 		var k := cell_idx(g.x, g.y)
-		ww[k] += GROOVE_RATE * pow(1.0 - wm[k], 1.5) * sc
+		var ga := GROOVE_RATE * pow(1.0 - wm[k], 1.5) * sc * ink
+		ww[k] += ga
+		got += ga
 	for k in cells:
 		fl[k] *= FLUX_DECAY
 	# 흐름: 물은 가장 낮은 이웃으로 (제자리 갱신 — 프로토타입과 같은 칸 순서)
@@ -350,14 +384,19 @@ func hydro_step(sc: float) -> void:
 		sl[k] += d
 	# 증발과 스며듦 (물만 사라지고 소금은 남는다)
 	var ev := EVAP
+	var lost := 0.0
 	for k in cells:
 		var v := ww[k]
 		if v <= 0.0:
 			continue
+		var v0 := v
 		v -= ev * (0.35 + wm[k]) * sc
 		if v < SEEP_DEPTH:
 			v -= SEEP * sc
 		ww[k] = v if v > 0.0 else 0.0
+		lost += v0 - ww[k]
+	if vapour >= 0.0:
+		vapour += lost - got
 	tick += 1
 	scale = sc
 	if tick % 8 == 0:
@@ -597,4 +636,6 @@ static func from_dict(d: Dictionary) -> JarWater:
 	# (giant-touch AC14) 없앤 커튼·감싸기 값(curtain·curtain_dark·curtain_frost·cup_left)은 변수가 없어 SaveCodec이 읽고 버림
 	if not d.has("hs") and s is WorldWater:
 		s._after_load()
+	if not d.has("vapour") and d.has("dew_cum"):    # 옛 저장 (김 없음) — 불러온 때 뚜껑이 닫힌 것으로
+		s.close_vapour()
 	return s

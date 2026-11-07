@@ -122,7 +122,7 @@ func test_world_determinism() -> void:
 
 
 ## E3-7 이슬의 하루 박자 (기획서 4.2b): 돌기 물은 새벽(4~8시)에 몰아서 떨어지고 낮엔 안 떨어진다 — 하루 총량은 예전의
-## '늘 같은 빠르기'(DRIP_RATE × (0.6 + 습도) / 분)와 같다 · 시간 조각 크기와 상관없음 · 넓은 세상의 돌기 호수·강은 그대로
+## '늘 같은 빠르기'(DRIP_RATE × (0.6 + 습도) / 분)와 같다 · 시간 조각 크기와 상관없음 · 넓은 세상은 물 + 김이 보존
 func test_dew_rhythm() -> void:
 	print("== 이슬의 하루 박자 — 새벽에 몰아서, 하루 총량 그대로")
 	# 1) 소형 병: 10초씩 흘리며 예전 빠르기를 따로 더해 비교 (8시 → 4일 뒤 8시 + 1시간 — 새벽 창이 끝난 뒤)
@@ -162,37 +162,32 @@ func test_dew_rhythm() -> void:
 		b.advance(7.0)
 	b.advance(2.0 * JarWater.DAY - int(2.0 * JarWater.DAY / 7.0) * 7.0)
 	check(absf(a.dew_cum - b.dew_cum) < 1e-3 * a.dew_cum, "시간 조각 크기와 상관없음 (한 번에 %.3f · 7초씩 %.3f)" % [a.dew_cum, b.dew_cum])
-	# 3) 넓은 세상: 돌기마다 받은 물 = DRIP_RATE × 배율 × 떨어진 이슬 (거친 칸이 SLICES번에 한 번 받아도) ·
-	#    같은 세상을 예전 방식(JarWater.dew_legacy — 늘 같은 빠르기)으로 돌린 것과 돌기 호수·강·물 총량이 같다
+	# 3) 넓은 세상: 돌기마다 받은 물 = DRIP_RATE × 배율 × 떨어진 이슬 × 김 배율 (거친 칸이 SLICES번에 한 번 받아도) ·
+	#    물 보존 (water.md, ROADMAP F-2): 증발·스며듦은 김으로, 이슬·골은 김에서 → 땅의 물 + 김 = 그대로 (뚜껑 닫힘)
 	var days := 2 if quick else 4
-	var nw: Dictionary = _dew_world(false, days)
-	var lw: Dictionary = _dew_world(true, days)
-	var ratio_lo := 9.0
-	var ratio_hi := 0.0
-	for i in (nw["lakes"] as Array).size():
-		if int(lw["lakes"][i]) > 15:
-			var r := float(nw["lakes"][i]) / float(lw["lakes"][i])
-			ratio_lo = minf(ratio_lo, r)
-			ratio_hi = maxf(ratio_hi, r)
-	print("  넓은 세상 %d일 (10시 → 10시) 새 / 예전: 떨어진 이슬 %.1f / %.1f · 물 총량 %.2f / %.2f · 마을 둘레 강 칸 %d / %d · 돌기 호수 크기 비 %.2f~%.2f · 첫 호수 새벽 전→10시%s" % [
-		days, nw["cum"], lw["cum"], nw["water"], lw["water"], nw["river"], lw["river"], ratio_lo, ratio_hi, nw["swing"]])
+	var nw: Dictionary = _dew_world(days)
+	print("  넓은 세상 %d일 (10시 → 10시): 떨어진 이슬 %.1f · 땅의 물 %.3f → %.3f · 김 %.3f → %.3f · 합 차이 %.6f · 김 배율 %.2f · 돌기 호수 %s · 첫 호수 새벽 전→10시%s" % [
+		days, nw["cum"], nw["w0"], nw["water"], nw["v0"], nw["vap"], nw["drift"], nw["ink"], nw["lakes"], nw["swing"]])
 	check(nw["all_got"], "10시엔 모든 돌기가 그날 새벽 이슬을 다 받았다 (거친 칸 포함)")
-	check(absf(float(nw["cum"]) / float(lw["cum"]) - 1.0) < 0.02, "넓은 세상에 떨어진 돌기 물 = 예전 ±2%")
-	# 물 총량은 재는 때(10시)에 새벽 이슬이 막 들어와 아직 덜 증발한 만큼 조금 많다 — 들어온 양은 같다
-	check(absf(float(nw["water"]) / float(lw["water"]) - 1.0) < 0.03, "세상의 물 총량 = 예전 ±3%% (%.2f / %.2f)" % [nw["water"], lw["water"]])
-	check(ratio_lo >= 0.9 and ratio_hi <= 1.1, "돌기 호수 크기 = 예전 ±10%% (%.2f~%.2f)" % [ratio_lo, ratio_hi])
-	check(absf(float(nw["river"]) - float(lw["river"])) <= 0.15 * maxf(20.0, float(lw["river"])), "마을 둘레 강 = 예전과 비슷 (%d / %d칸)" % [nw["river"], lw["river"]])
+	check(float(nw["v0"]) > 0.0 and float(nw["vap"]) >= 0.0, "뚜껑을 닫을 때 김이 차 있고 (%.3f) 음수가 되지 않는다 (%.3f)" % [nw["v0"], nw["vap"]])
+	check(absf(float(nw["drift"])) < 1e-6 * maxf(1.0, float(nw["w0"]) + float(nw["v0"])), "땅의 물 + 김이 그대로 (물은 뚜껑으로만 나감 — 차이 %.6f)" % nw["drift"])
+	var big := 0
+	for la: Variant in nw["lakes"]:
+		if int(la) > 15:
+			big += 1
+	check(big >= 1, "돌기 호수는 그대로 선다 (%s)" % [nw["lakes"]])
 
 
-## test_dew_rhythm용: 시드 21 세상을 10시부터 days일 (온·오프라인 번갈아) — 예전 방식(legacy)이면 이슬을 그때그때 떨어뜨림
-func _dew_world(legacy: bool, days: int) -> Dictionary:
-	JarWater.dew_legacy = legacy
+## test_dew_rhythm용: 시드 21 세상을 10시부터 days일 (온·오프라인 번갈아)
+func _dew_world(days: int) -> Dictionary:
 	var ww := WorldGen.generate(21)
 	var sp := ww.spots[0]
 	var list: Array[Dictionary] = [{"x": sp.x, "y": sp.y, "r": 36.0}]
 	ww.set_interest(list)
 	ww.advance(fposmod(10.0 * JarWater.HOUR - ww.clock(), JarWater.DAY))     # 10시부터 (새벽 창이 끝나 모두 받은 뒤)
 	var cum0 := ww.dew_cum
+	var w0 := ww.total_water()
+	var v0 := ww.vapour
 	var swing := ""
 	for dd in days:
 		ww.offline = dd % 2 == 1
@@ -200,18 +195,15 @@ func _dew_world(legacy: bool, days: int) -> Dictionary:
 		var pre_dawn := ww.lake_cells_in(Vector2(ww.drips[0]["x"], ww.drips[0]["y"]), 14.0)
 		ww.advance(7.0 * JarWater.HOUR)       # 10시
 		swing += " %d→%d" % [pre_dawn, ww.lake_cells_in(Vector2(ww.drips[0]["x"], ww.drips[0]["y"]), 14.0)]
-	JarWater.dew_legacy = false
 	var lakes: Array = []
 	for d: Dictionary in ww.drips:
 		lakes.append(ww.lake_cells_in(Vector2(d["x"], d["y"]), 14.0))
 	var all_got := true
 	for i in ww.drip_k.size():
 		all_got = all_got and ww.drip_got[i] == ww.dew_cum
-	var river := 0
-	for k in ww.cells_near(sp, 36.0):
-		if ww.is_river(k):
-			river += 1
-	return {"lakes": lakes, "cum": ww.dew_cum - cum0, "water": ww.total_water(), "river": river, "all_got": all_got, "swing": swing}
+	var wt := ww.total_water()
+	return {"lakes": lakes, "cum": ww.dew_cum - cum0, "water": wt, "w0": w0, "v0": v0, "vap": ww.vapour,
+		"drift": (wt + ww.vapour) - (w0 + v0), "ink": ww.inflow_k(), "all_got": all_got, "swing": swing}
 
 
 ## 물·소금 보존: 고운 칸 ↔ 거친 칸을 오가도 (마을 둘레가 옮겨 다녀도) 들어온 − 나간 만큼만 바뀐다

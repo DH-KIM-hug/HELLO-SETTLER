@@ -27,3 +27,13 @@
 - 2026-11-07: 사건 줄은 넓은 세상이면 `JarWorld.events` 하나를 무리들이 함께 쓰고(`village` = sid), 작은 병(`Village.new_prototype`)은 마을마다 하나. 저장하지 않으며 불러오면 새 줄(번호 0부터).
 - `watch_changed`(ADR 3절)는 아직 없음 — 이행 4단계에서 `set_watching`과 함께.
 - 2026-11-08 (giant-touch): `giant_acted`·`giant_refused`·`spray_flooded`·`tweeze_done`을 냄. GDD의 `tool_unlocked`·`sky_drop_landed`·`lamp_moved`·`drop_knocked`와 내려 주기의 `giant_acted{kind: &"drop"}`는 아직 내지 않음 (이름만 예약 — 내기 시작할 때 이 표에 적는다). 손길 사건은 `emit` 앞뒤로 난수를 쓰지 않는다.
+- 2026-11-08 (F-2 거대 식물 — design/gdd/flower-forest.md, `sim/giant_plants.gd`): 아래 kind를 냄. 모두 저장 순번 아니오 · 연대기는 `log_line` (씨앗비·목화 첫 줄만). 병 하나의 것은 물을 흘리는 첫 무리(`owns_water`)가 낸다.
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"sunflower_turned"` | `GiantPlants.step` — 등불을 옮긴 뒤 꽃판이 SF_TURN(병 2시간)에 걸쳐 다 돎 | `{"id": int}` | `at` = 줄기 · who −1 | `tests/plants_tests.gd` |
+| `&"sunflower_bloomed"` / `&"sunflower_drooped"` | `GiantPlants.hourly` — 철이 바뀜 (6월 핌 / 9월 숙임) | `{"id": int}` | `at` = 줄기 · who −1 | (앞으로 연출) |
+| `&"seed_shadow"` | `GiantPlants.step` — 씨앗비 씨앗이 떨어지기 SEED_WARN(병 20분) 전, 땅 위 그림자가 커지기 시작 | `{"id": int}` | `at` = 떨어질 자리 | (화면은 `SunflowerView`가 `sf_seeds`를 직접 읽음) |
+| `&"seed_landed"` | `GiantPlants._land` — 씨앗이 땅에 박힘 (먼지, 곁에 선 사람 작은 확률로 다침) | `{"id": int, "hurt": int}` | `at` = 자리 | `tests/plants_tests.gd` |
+| `&"seed_stored"` | `GiantPlants.run_op("gplant_seed_put")` — 어른이 굴려 와 창고에 `해바라기씨` | `{"amt": float}` | `who` = 굴린 사람 · `at` | `tests/plants_tests.gd` |
+| `&"cotton_burst"` | `GiantPlants._cotton_season` — 그 해 처음 목화 다래가 터짐 (9~11월) | `{"n": int}` | — | `tests/plants_tests.gd` |

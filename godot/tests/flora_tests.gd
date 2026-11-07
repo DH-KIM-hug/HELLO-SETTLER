@@ -538,7 +538,7 @@ func test_weeds() -> void:
 	_keep_texts(v2)
 
 
-## 거인이 뚜껑을 열고 불기: 솜털 공의 꽃씨가 한꺼번에 · 믿음↑ · "하늘에 눈이 내린다!" · 뚜껑이 닫혀 있으면 못 붊
+## 뚜껑 바람 (불기 손짓은 없앰 — flower-forest AC8): 솜털 공의 꽃씨가 한꺼번에 · 믿음 그대로 · "하늘에 눈이 내린다!" · 뚜껑이 닫혀 있으면 없음
 func test_blow() -> void:
 	var v := settled("온대", 4, 22)
 	var f := v.flora
@@ -547,16 +547,21 @@ func test_blow() -> void:
 	for i in np:
 		f.dands[i]["st"] = "puff"
 		f.dands[i]["seeds"] = Balance.DAND_SEEDS
-	check(f.blow_seeds(v, Vector2(1, 0)) == -1, "뚜껑이 닫혀 있으면 불 수 없다")
+	check(not f.has_method("blow_seeds") and not "blown" in f, "Flora에 blow_seeds·blown 없음 (AC8)")
+	var old := f.to_dict() if f.has_method("to_dict") else {}
+	old["blown"] = 3
+	var back := Flora.from_dict(old)
+	check(back != null and not "blown" in back, "옛 저장의 blown 키는 읽고 버림")
+	check(f.lid_breeze(v, Vector2(1, 0)) == -1, "뚜껑이 닫혀 있으면 바람이 들지 않는다")
 	v.open_lid()
 	var b0 := v.faith
 	var x0 := 0.0
-	var n := f.blow_seeds(v, Vector2(1, 0))
+	var n := f.lid_breeze(v, Vector2(1, 0))
 	for s: Dictionary in f.seeds:
 		x0 += float(s["x"])
 	x0 /= maxf(1.0, f.seeds.size())
 	check(np >= 3 and n >= np * Balance.DAND_SEEDS and f.count_st("puff") == 0, "솜털 공 %d포기의 꽃씨 %d개가 한꺼번에" % [np, n])
-	check(v.faith > b0 and v.people.any(func(p: Resident) -> bool: return p.say == Balance.BLOW_LINE), "믿음↑ (%.1f → %.1f) · \"%s\"" % [b0, v.faith, Balance.BLOW_LINE])
+	check(is_equal_approx(v.faith, b0) and v.people.any(func(p: Resident) -> bool: return p.say == Balance.BLOW_LINE), "믿음 그대로 (뚜껑은 손짓이 아님 — %.2f → %.2f) · \"%s\"" % [b0, v.faith, Balance.BLOW_LINE])
 	for i in 24:
 		v.t += Balance.SEED_TICK
 		f._seed_tick(v, Balance.SEED_TICK)

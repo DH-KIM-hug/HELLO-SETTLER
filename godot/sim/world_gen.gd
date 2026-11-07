@@ -273,6 +273,7 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	ww.offline = false
 	ww.added = 0.0
 	ww.removed = 0.0
+	ww.close_vapour()                   # 뚜껑이 닫힘 — 이때부터 물은 보존 (water.md: 증발 → 김 → 이슬, 병 밖으로는 뚜껑으로만)
 	for b: Dictionary in ww.basins:
 		b["area0"] = ww.basin_area(b)
 	GreatTrees.place(ww)                # 큰 나무 다섯 (GD 3.0) — 물이 자리 잡은 뒤, 서로·키트 자리·물가에서 멀리
