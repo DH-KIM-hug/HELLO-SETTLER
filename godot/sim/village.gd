@@ -119,6 +119,12 @@ var _starve_day := -1
 var _timers := {"life": 0.0, "jobs": 0.0, "chief": 0.0, "lake": 0.0, "decay": 0.0, "speak": 0.0, "econ": 0.0}
 # v4.0 — 제단·제물·소원·분가 (기획서 6.7 · 11.1 · 3.1). 계산은 아래 '제단' 절
 var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
+# [마을의 삶] 사람 사이 — 이야기·다툼·사랑·혼례 모임 (ROADMAP E2 — sim/social.gd, 난수도 따로)
+var social := {}                      # {"p": 짝마다 관계 값, "wed": 혼례 모임 약속, "story": 사랑 이야기 …} (저장됨)
+var social_rng := RandomNumberGenerator.new()
+var social_events: Array = []         # 화면이 가져가는 장면 (저장 안 함 — view/social_stage.gd)
+var social_serial := 0
+var _social_t := 0.0
 # [곰팡이·뚜껑] 병의 공기(김·연기·탁한 공기·뚜껑)와 곰팡이 무리 — WORLD_EVENTS 2.1 · 3 (sim/jar_air.gd · sim/mold.gd, 난수도 각자)
 var air: JarAir
 var mold: Mold
@@ -246,6 +252,8 @@ func _init_prototype(seed_v: int) -> void:
 
 func _init_health(seed_v: int) -> void:
 	health_rng.seed = seed_v * 104729 + 7
+	social_rng.seed = seed_v * 2654435 + 17
+	Social.lines()                        # 말 묶음을 미리 읽음 (첫 만남 걸음이 갑자기 느려지지 않게 — 빠른 흐름의 계산 예산)
 	disc_rng.seed = seed_v * 7919 + 13
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
@@ -894,6 +902,7 @@ func step(dt: float) -> void:
 		ResidentAI.update(self, p, dt)
 	_walker = null
 	SimProf.mark("resident_ai")
+	Social.step(self, dt)             # [마을의 삶] 쉬는 둘이 만나면 이야기·다툼·사랑 (sim/social.gd)
 	_update_trees(dt)
 	SimProf.mark("trees")
 	# 주기 처리
@@ -1711,6 +1720,7 @@ func _marriages(dt: float) -> void:
 		return
 	_shuffle(men)
 	_shuffle(women)
+	Social.pair_up(self, men, women)  # [마을의 삶] 서로 좋아하는 둘이 같은 자리에 (확률·짝 수는 그대로)
 	for i in mini(men.size(), women.size()):
 		var a := men[i]
 		var b := women[i]
@@ -1718,6 +1728,7 @@ func _marriages(dt: float) -> void:
 			continue
 		if rng.randf() < Balance.MARRY_RATE * dt / DAY:
 			marry(a, b)
+			Social.on_marry(self, a, b)
 			if a.home != b.home:
 				a.home = -1
 				b.home = -1
@@ -3588,7 +3599,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix"]
 
 

@@ -394,6 +394,8 @@ func _process(dt: float) -> void:
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
 		var vfast := clock.view_fast()
+		Social.rate = clock.speed()                 # [마을의 삶] 장면은 보통 이하 빠르기에서만 (주민이 제 걸음일 때)
+		Social.stage_on = not vfast and not clock.skipping and not clock.fast and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
 		var sdt := village.step_dt if clock.fast else clock.step
 		var al := 1.0 if clock.skipping or vfast else clampf(clock.acc / sdt, 0.0, 1.0)
 		for vv: Array in village_views():
@@ -1443,10 +1445,22 @@ func see_ground(p: Vector2) -> void:
 	look_at_ground(p)
 
 
-## 말하고 있는 주민 머리 위 말풍선 (화면 안, 모두 합쳐 4개까지) — 지금까지 띄운 수를 돌려줌
+## 말하고 있는 주민 머리 위 말풍선 (화면 안, 모두 합쳐 5개까지) — 지금까지 띄운 수를 돌려줌.
+## [마을의 삶] 장면의 말(vw.social.say_of)이 먼저 — 기분마다 색과 작은 그림 (화남 · 사랑 · 노래 · 환호 · 시무룩). 멀리서는 장면 말풍선을 띄우지 않는다
 func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
+	var close_enough := cam.ppu >= BUBBLE_SCENE_PPU
 	for r in vil.people:
-		if r.say_t <= 0.0 or r.say == "" or shown >= 4:
+		if shown >= 5:
+			break
+		var text := ""
+		var mood := ""
+		var sc: Array = vw.social.say_of(r.id) if vw.social != null and close_enough else []
+		if not sc.is_empty():
+			text = String(sc[0])
+			mood = String(sc[1])
+		elif r.say_t > 0.0 and r.say != "":
+			text = r.say
+		else:
 			continue
 		var m: ResidentModel = vw.residents.get(r.id)
 		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
@@ -1454,17 +1468,18 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		var p := cam.camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
 		if p.x < 0 or p.y < top_h + 20.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
 			continue
+		var st: Array = BUBBLE_MOOD.get(mood, BUBBLE_MOOD[""])
 		var l := Label.new()
-		l.text = r.say
+		l.text = text
 		l.add_theme_font_override("font", UiTheme.hand_font())          # 주민의 말 = 손글씨
 		l.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)
 		l.add_theme_constant_override("line_spacing", 0)
-		l.add_theme_color_override("font_color", Color("252122"))
+		l.add_theme_color_override("font_color", st[2])
 		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color("fffbea")
-		sb.border_color = Color("252122")
-		sb.set_border_width_all(1)
-		sb.set_corner_radius_all(6)
+		sb.bg_color = st[0]
+		sb.border_color = st[1]
+		sb.set_border_width_all(2 if mood == "angry" else 1)
+		sb.set_corner_radius_all(3 if mood == "angry" else 6)
 		sb.content_margin_left = 5
 		sb.content_margin_right = 5
 		sb.content_margin_top = 0
@@ -1473,8 +1488,23 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		bubbles.add_child(l)
 		var ms := l.get_minimum_size()
 		l.position = Vector2(roundf(p.x - ms.x * 0.5), roundf(p.y - ms.y - 2.0))
+		if mood in SocialEmote.KINDS:              # 말풍선 오른쪽 위 작은 그림
+			var em := SocialEmote.new()
+			em.kind = mood
+			em.position = l.position + Vector2(ms.x - 4.0, -9.0)
+			bubbles.add_child(em)
 		shown += 1
 	return shown
+
+
+const BUBBLE_SCENE_PPU := 11.0
+## 기분 → [바탕, 테두리, 글자]
+const BUBBLE_MOOD := {"": [Color("fffbea"), Color("252122"), Color("252122")],
+	"angry": [Color("ffe1d8"), Color("b8321f"), Color("7d1a0c")],
+	"love": [Color("fff0f4"), Color("c85a7a"), Color("5a2233")],
+	"song": [Color("eef6ff"), Color("4a6fa0"), Color("23384f")],
+	"cheer": [Color("fff6d6"), Color("b07a1c"), Color("4a3410")],
+	"sad": [Color("eceef2"), Color("6b7280"), Color("3f4652")]}
 
 
 ## 화면 조작 — 휴대폰: 한 손가락 끌기 = 이동, 두 손가락 = 벌리고 오므리기 확대(+ 가운데 이동), 톡 = 주민 고르기 / 빈 곳은 유리 톡.
