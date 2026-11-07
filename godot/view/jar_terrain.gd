@@ -445,6 +445,8 @@ func _update_paths() -> void:
 		_mat.set_shader_parameter("path_rect0", Vector4(0, 0, -1, 0))
 		return
 	var img := GroundLook.path_image(paths, path_n, 1.0)
+	if village != null and village.paths == paths and village.path_n == path_n:
+		img = VillagePlan.road_image(village, 1.0)        # [길] 그래프를 따라 매끈한 띠 (sim/village_plan.gd)
 	if _path_tex == null or _path_tex.get_width() != path_n:
 		_path_tex = ImageTexture.create_from_image(img)
 	else:

@@ -177,6 +177,9 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 				VillageEra.route(v, r, s)          # 강 건너: 나루터로 돌아가는 게 빠르면 (A6) — 걸음이 늘면 첫 걸음부터 다시
 				if r.steps[0] != s:
 					continue
+				VillagePlan.route(v, r, s)         # [길] 길을 따라 (sim/village_plan.gd) — 사이 걸음이 끼면 첫 걸음부터
+				if r.steps[0] != s:
+					continue
 			var to := Vector2(s["x"], s["y"])
 			var from := Vector2(r.x, r.y)
 			var d := to - from
@@ -649,7 +652,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return true
 	if b.type == "산림관":
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
-		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y):
+		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y) or not VillagePlan.plantable(v, sp):     # [배치] 길·광장·집 앞은 비움
 			r.steps.append(act(45.0, "idle"))
 			return true
 		r.steps.append(walk(sp.x, sp.y))

@@ -433,7 +433,7 @@ func _sync_buildings() -> void:
 		n.position = Vector3(b.x, y, b.y)
 		n.scale = Vector3.ONE * BUILDING_SCALE
 		# 앞(문)이 기본 카메라 쪽(방위 45°)을 보게 + 조금씩 다르게 (시뮬레이션에는 방향이 없음)
-		n.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG) + (fposmod(b.id * 0.7, 0.5) - 0.25 if not b.is_store else 0.0)
+		n.rotation.y = VillagePlan.facing(v, b)       # [배치] 앞(문, 모델 +z)이 길·광장 쪽 (sim/village_plan.gd)
 		if b.type == "나루터" and b.has_link:          # 나루터 모델은 +x가 물 쪽 → 건너편을 보게 (A6)
 			var ld := Vector2(b.link_x - b.x, b.link_y - b.y)
 			n.rotation.y = atan2(ld.x, ld.y)        # 잔교는 모델의 +z 쪽으로 뻗는다
@@ -487,6 +487,11 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	Art.instance(n, nm)
 	for y: Array in YARD.get(b.type, []):
 		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]), y[1]))
+	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN)
+		var s := b.size()
+		var m := 1.0 if b.id % 2 == 0 else -1.0
+		Art.instance(n, "flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s)))
+		Art.instance(n, "bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s)))
 
 
 ## 건설 현장 — 몇 초마다 눈에 띄게 바뀌는 여덟 단계 (OPENING 3.1b v3.3 '늘 무언가 바뀌는 게 보이게'):
