@@ -27,6 +27,8 @@ var _giant_depth := 0
 var created_date: Dictionary = {"year": 2026, "month": 4, "day": 15}
 var climate_override := ""            # 비면 물(병)의 기후대
 var cold_season := false              # 앞으로 반나절 안에 추위가 온다 (땔감 운반·나무꾼 넉넉함 — 정시마다)
+var _sg_day := -1                     # Health.season_grow 캐시 (병 하루마다)
+var _sg := 1.0
 var sick_share := 0.0                 # 앓는 사람 비율
 var warnings: Array = []              # 말풍선·편지로 띄울 위기 예고 {t, kind, text} (화면이 가져감)
 var outbreaks: Dictionary = {}        # 병 → 지금 유행 {c 전염 배율, l 치사율, s 독함 0~1, name, t, n, won} (HEALTH.md 2.5 — sim/health.gd)
@@ -852,8 +854,8 @@ func step(dt: float) -> void:
 			crisis("hunger", "창고에 먹을 것이 떨어졌다")
 		last_short_t = t
 	for p in people:
-		if deficit > 0.0:
-			p.hunger = minf(4.0, p.hunger + deficit * dt / Balance.FOOD_IV)
+		if deficit > 0.0:             # v5-0: 모자란 몫만큼 배고파지고 먹은 몫만큼 풀린다 — 반 넘게 모자라야 굶주림이 쌓임 (조금 모자란 날이 온 마을의 죽음이 되지 않게)
+			p.hunger = clampf(p.hunger + (deficit - (1.0 - deficit) * Balance.HUNGER_EASE) * dt / Balance.FOOD_IV, 0.0, 4.0)
 		else:
 			p.hunger = maxf(0.0, p.hunger - dt / Balance.FOOD_IV)
 		if p.hunger >= Balance.STARVING_AT:
@@ -1335,6 +1337,7 @@ func _update_building(b: Building, dt: float) -> void:
 		place *= Wildlife.field_mult(self, b)             # [들짐승] 토끼가 넘치면 밭 −10~−30% (울타리 ×0.3 — WILDLIFE 3)
 		place *= SmallCrises.farm_mult(self, b)          # [작은 위기] 먼지 뭉치가 덮은 밭은 자람이 멈춤 (WORLD_EVENTS 2.2)
 		place *= GiantHand.farm_mult(self, b)            # [거인의 손] 커튼·유리의 먼지막·물을 반긴 마른 밭·냉해 (GD 6.4 · WE 4.2)
+		place *= Health.season_grow(self)                # [철] 추운 철엔 밀이 더디 자람 (BALANCE v5-0 — 겨울의 빠듯함)
 	if (b.type == "빵집" or b.type == "화덕") and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	if b.type == "빵집" or b.type == "화덕":
@@ -1943,6 +1946,35 @@ func chief() -> Resident:
 	return c
 
 
+## v5-0: 시간당 먹을 것 (촌장의 어림) = 밭의 밀 × 철 자람 — 그중 맷돌간·화덕이 빻고 구울 수 있는 몫은 빵(×1.5), 나머지는 죽(×0.75)
+func food_rate() -> float:
+	var w := farm_rate() * Health.season_grow(self)
+	var mill := 0.0
+	var oven := 0.0
+	for b in buildings:
+		if not b.built:
+			continue
+		if b.type == "맷돌간" or b.type == "방앗간":
+			mill += HOUR / float(b.def()["cycle"])
+		elif b.type == "화덕" or b.type == "빵집":
+			oven += HOUR / float(b.def()["cycle"])
+	var flour := minf(w, minf(mill, oven))
+	return flour * Balance.BREAD_YIELD + (w - flour) * Balance.PORRIDGE_YIELD
+
+
+## v5-0: 빵을 굽고 있나 = 일꾼이 있는 맷돌간(방앗간)과 화덕(빵집)이 다 있다 — 일손이 모자라 비면 밭은 죽 값으로만 먹인다
+func bakes_now() -> bool:
+	var mill := false
+	var oven := false
+	for b in buildings:
+		if b.built and b.worker >= 0:
+			if b.type == "맷돌간" or b.type == "방앗간":
+				mill = true
+			elif b.type == "화덕" or b.type == "빵집":
+				oven = true
+	return mill and oven
+
+
 func count_type(type: String) -> int:
 	var n := 0
 	for b in buildings:
@@ -2040,10 +2072,11 @@ func chief_build() -> void:
 			n_houses += 1
 	var basics := count_type("농장") > 0 and count_type("나무꾼") > 0
 	# v5: 밭이 먹이는 양 = 밀 × (빵을 굽게 되면 1.5, 아니면 죽 0.75). 창고 먹을 것이 이틀치 아래로 떨어져도 먹을 것부터
-	var bakes := (count_type("맷돌간") + count_type("방앗간")) > 0 and (count_type("화덕") + count_type("빵집")) > 0
+	var bakes := bakes_now()
 	var yld := Balance.BREAD_YIELD if bakes else Balance.PORRIDGE_YIELD
 	var food_low := food_total() < Balance.BIRTH_FOOD_DAYS * Production.day_need(self)
-	var food_short := farm_rate() * yld < pop * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY or (food_low and farm_rate() * yld < pop * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY * 1.5)
+	var fr := food_rate()                 # v5-0: 철(겨울엔 더디 자람)과 맷돌·화덕이 빻고 굽는 만큼까지 센 시간당 먹을 것
+	var food_short := fr < pop * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY or (food_low and fr < pop * (HOUR / Balance.FOOD_IV) * Balance.FARM_SAFETY * 1.5)
 	var mill_n := count_type("맷돌간") + count_type("방앗간") * 3
 	var oven_n := count_type("화덕") + count_type("빵집") * 3
 	var want := ""
@@ -2064,8 +2097,8 @@ func chief_build() -> void:
 		want = "화덕"                 # 모닥불 곁 공용 화덕
 	elif food_low and food_short and count_type("농장") < 2 and n_houses >= 1:
 		want = "농장"                 # v5: 시작 건량은 하루치 — 밭이 모자라면 둘째 밭을 집보다 먼저 (첫 며칠 굶주림 막기)
-	elif food_short or (food_low and count_type("농장") * 6 < pop + 6):
-		want = "농장"                 # v5: 창고 먹을 것이 이틀치 아래면 촌장은 밭부터 (집보다 먼저)
+	elif food_short or (food_low and count_type("농장") * Balance.FARM_FEEDS * yld / Balance.PORRIDGE_YIELD < pop + 6):
+		want = "농장"                 # v5: 창고 먹을 것이 이틀치 아래면 촌장은 밭부터 (집보다 먼저) — v5-0: 밭 하나가 먹이는 사람 수는 빵을 구우면 두 배 (죽 기준 6명)
 	elif cap - pop <= 1 or (crowded and basics and not food_low):
 		want = "집"                   # v5: 먹을 것이 모자라면 아이 낳을 큰 집은 미룬다
 	elif count_type("농장") > 0 and mill_n * Balance.MILL_PER < maxi(pop, 1):
@@ -2759,7 +2792,7 @@ func _prayer_key() -> int:
 
 ## 밭(빵을 굽게 되면 ×1.5, 아니면 죽 ×0.75)이 마을이 먹는 만큼 거두나
 func _food_steady() -> bool:
-	var bakes := (count_type("맷돌간") + count_type("방앗간")) > 0 and (count_type("화덕") + count_type("빵집")) > 0
+	var bakes := bakes_now()
 	var yld := Balance.BREAD_YIELD if bakes else Balance.PORRIDGE_YIELD
 	return farm_rate(true) * yld * 24.0 >= Production.day_need(self)
 

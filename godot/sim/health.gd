@@ -30,6 +30,23 @@ static func jar_date(v: Village) -> Dictionary:
 	return {"year": int(d["year"]), "month": int(d["month"]), "day": int(d["day"]), "season": season_of(int(d["month"]))}
 
 
+## 철에 따른 밭 자람 (BALANCE v5-0): 그날의 철 기온(낮밤 뺌)으로 — 바탕 기온에서 1.0, 추울수록 느림 (SEASON_GROW_*).
+## 첫 빵 전(창세·첫날 튜토리얼)에는 1.0 — 첫 여정의 숫자가 계절에 흔들리지 않게. 병 하루에 한 번 셈.
+static func season_grow(v: Village) -> float:
+	if not Production.bread_made(v):
+		return 1.0
+	var day := int(floor((v.start_clock + v.t) / Balance.DAY))
+	if day == v._sg_day:
+		return v._sg
+	var row := climate_row(v)
+	var c: Dictionary = v.created_date
+	var dd := float(doy(int(c["month"]), int(c["day"]))) + float(day) + 0.5
+	var ts := float(row[0]) - float(row[1]) * cos(TAU * (dd - Balance.COLDEST_DOY) / 365.0)
+	v._sg_day = day
+	v._sg = clampf(1.0 + (ts - Balance.SEASON_GROW_T) * Balance.SEASON_GROW_K, Balance.SEASON_GROW_MIN, Balance.SEASON_GROW_MAX)
+	return v._sg
+
+
 static func climate_row(v: Village) -> Array:
 	return Balance.CLIMATES.get(v.climate(), Balance.CLIMATES[Balance.CLIMATE_DEFAULT])
 
