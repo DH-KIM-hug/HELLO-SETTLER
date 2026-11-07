@@ -1,5 +1,6 @@
 # 인구 (Population)
 
+> **2026-11-08 측정 반영 (메인 판단)**: 출산 0.6 유지를 위해 문턱 조정 — CARE_CAP 12 (안전 범위 4~16으로 넓힘), BIRTH_FOOD_DAYS 2.0, HOUSE_SLACK 1.0, BULK 210. 6씨앗×60일: 손 없음 인구 17~22·굶어 죽음 0~1·빠듯함 평균 2, 도움 20~24·0·1.7.
 > **Status**: Designed (사용자 결정 반영, 2026-11-08 — `/design-review`는 새 세션에서)
 > **Author**: 메인 세션 + systems-designer
 > **Last Updated**: 2026-11-08
