@@ -21,7 +21,7 @@ func all() -> void:
 	print("== E3 소인의 세상: 큰 나무 다섯 · 꽃숲 · 나뭇가지")
 	var old_nav := StartFlow.navigate
 	StartFlow.navigate = false
-	run.timed(self, ["test_great_trees", "test_great_trees_save", "test_giant_fruit", "test_carry_twigs", "test_camera_clears_trees", "test_view_flora"])
+	run.timed(self, ["test_great_trees", "test_great_trees_save", "test_world_tree_is_cherry", "test_great_tree_budget", "test_giant_fruit", "test_carry_twigs", "test_camera_clears_trees", "test_view_flora"])
 	StartFlow.navigate = old_nav
 	GroundLook.month_override = 0
 
@@ -87,6 +87,67 @@ func test_great_trees_save() -> void:
 	check(ob.water.great_trees.size() == 5 and far, "옛 저장(큰 나무 없음): 불러올 때 다섯을 무리에서 먼 자리에 세움")
 
 
+## E3-11: 옛 저장의 세계수("world")는 불러오면 벚나무 — 자리·반지름은 그대로
+func test_world_tree_is_cherry() -> void:
+	var jw := JarWorld.create_with_kit(5, WorldCfg.SMALL_SIZE, Kits.make([]))
+	var d := jw.to_dict(false)
+	var old: Dictionary = d.duplicate(true)
+	var t0: Dictionary = (old["water"]["great_trees"] as Array)[0]
+	t0["kind"] = "world"
+	t0["name"] = "세계수"
+	t0["r"] = 22.0
+	var back := JarWorld.from_dict(old)
+	var t1: Dictionary = back.water.great_trees[0]
+	check(t1["kind"] == "cherry" and t1["name"] == "벚나무" and float(t1["r"]) == 22.0 and float(t1["x"]) == float(t0["x"])
+		and back.water.great_trees.size() == 5, "옛 저장 세계수 → 벚나무 (자리·반지름 그대로) %s" % [t1])
+	check(FloraLook.great_model("world", "봄")["parts"] == "flora/tree_cherry", "화면도 옛 이름을 벚나무로 받음")
+	var kinds := {}
+	for t: Dictionary in jw.water.great_trees:
+		kinds[t["kind"]] = true
+	check(kinds.has("cherry") and not kinds.has("world"), "새 세상에는 세계수 없이 벚나무")
+
+
+## 아트 바이블 8.7: 큰 나무 철마다 보이는 부품 합 — 가까이 몸 ≤ 6,000 · 접힌 곳 선 ≤ 800 · 멀리 ≤ 1,200 (선 없음, 늘 있음)
+func test_great_tree_budget() -> void:
+	var bad: Array = []
+	var worst := {}
+	for k: String in GreatTrees.KINDS:
+		for se: String in ["봄", "여름", "가을", "겨울"]:
+			var spec := FloraLook.great_model(k, se)
+			var parts := Art.parts(spec["parts"])
+			var body := 0
+			var lines := 0
+			var far := 0
+			var far_lines := 0
+			for pn: String in spec["keep"]:
+				if not parts.has(pn):
+					bad.append("%s %s 부품 없음 %s" % [k, se, pn])
+					continue
+				body += _tris(parts[pn]["mesh"])
+				lines += _tris(parts[pn]["lines"])
+				if parts.has(pn + "__far"):
+					far += _tris(parts[pn + "__far"]["mesh"])
+					far_lines += _tris(parts[pn + "__far"]["lines"])
+			if not parts.has("trunk__far") or far == 0:
+				bad.append("%s %s 멀리 LOD 없음" % [k, se])
+			if body > 6000 or lines > 800 or far > 1200 or far_lines > 0:
+				bad.append("%s %s 몸 %d 선 %d 멀리 %d/%d" % [k, se, body, lines, far, far_lines])
+			var w: Array = worst.get(k, [0, 0, 0])
+			worst[k] = [maxi(w[0], body), maxi(w[1], lines), maxi(w[2], far)]
+	check(bad.is_empty(), "큰 나무 예산 (가장 큰 철 [몸, 선, 멀리]) %s %s" % [worst, bad])
+
+
+static func _tris(m: Mesh) -> int:
+	if m == null:
+		return 0
+	var n := 0
+	for s in m.get_surface_count():
+		var a := m.surface_get_arrays(s)
+		var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX] if a[Mesh.ARRAY_INDEX] != null else PackedInt32Array()
+		n += (ix.size() if not ix.is_empty() else (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()) / 3
+	return n
+
+
 func test_giant_fruit() -> void:
 	var jw := JarWorld.create_with_kit(7, WorldCfg.SMALL_SIZE, Kits.make([]))
 	var ww := jw.water
@@ -120,9 +181,17 @@ func test_carry_twigs() -> void:
 	check(not p.is_empty() and p["mesh"] != null and p["far"] != null, "나뭇가지 다발 소품 (가까이 + 멀리 덩어리)")
 
 
-## 기본 확대·가까이·멀리에서 화면 아래 끝에 선 세계수 꼭대기도 카메라 앞면(near) 안쪽 (잘리지 않음)
+## 기본 확대·가까이·멀리에서 화면 아래 끝에 선 가장 큰 나무 꼭대기도 카메라 앞면(near) 안쪽 (잘리지 않음)
 func test_camera_clears_trees() -> void:
-	var h := 115.0 * FloraLook.GREAT_SCALE
+	var h := FloraLook.GREAT_MAX_H * FloraLook.GREAT_SCALE
+	var tallest := 0.0
+	for k: String in GreatTrees.KINDS:
+		var parts := Art.parts("flora/tree_" + k)
+		for pn: String in parts:
+			var m: Mesh = parts[pn]["mesh"]
+			if m != null:
+				tallest = maxf(tallest, m.get_aabb().end.y + (parts[pn]["origin"] as Vector3).y)
+	check(tallest > 40.0 and tallest <= FloraLook.GREAT_MAX_H, "가장 큰 나무 %.0f ≤ GREAT_MAX_H %.0f" % [tallest, FloraLook.GREAT_MAX_H])
 	var p := deg_to_rad(JarCamera.PITCH_DEG)
 	var bad: Array = []
 	for ppu: float in [JarCamera.PPU_MAX, 32.0, 16.0, 9.0, 6.0]:
@@ -189,11 +258,27 @@ func test_view_flora() -> void:
 		gv.sync(0.0, true)
 		seen[m] = gv.models.duplicate()
 	check(gv.n_trees == 5, "큰 나무 다섯을 그림 (%d)" % gv.n_trees)
-	check(seen[10]["ginkgo"] == "flora/tree_ginkgo_autumn" and seen[7]["ginkgo"] == "flora/tree_ginkgo"
-		and seen[10]["maple"] == "flora/tree_maple" and seen[7]["maple"] == "flora/tree_maple_green"
-		and seen[4]["fruit"] == "flora/tree_fruit_bloom" and seen[7]["fruit"] == "flora/tree_fruit" and seen[10]["fruit"] == "flora/tree_fruit"
-		and String(seen[1]["maple"]).contains("trunk") and seen[1]["pine"] == "flora/tree_pine",
-		"철마다 잎: 은행 가을 노랑 · 단풍 여름 초록/가을 빨강 · 과일나무 봄 꽃/여름·가을 열매 · 겨울 잎 진 가지 · 소나무 늘 푸름")
+	check(seen[10]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage_autumn,carpet" and seen[7]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage"
+		and seen[10]["maple"] == "flora/tree_maple:trunk,foliage_autumn" and seen[7]["maple"] == "flora/tree_maple:trunk,foliage"
+		and seen[4]["fruit"] == "flora/tree_fruit:trunk,foliage_bloom" and seen[7]["fruit"] == "flora/tree_fruit:trunk,foliage,fruit_green"
+		and seen[10]["fruit"] == "flora/tree_fruit:trunk,foliage_autumn,fruit"
+		and seen[4]["cherry"] == "flora/tree_cherry:trunk,blossom" and seen[7]["cherry"] == "flora/tree_cherry:trunk,foliage,cherries"
+		and seen[1]["cherry"] == "flora/tree_cherry:trunk" and seen[1]["maple"] == "flora/tree_maple:trunk,seeds"
+		and seen[1]["pine"] == "flora/tree_pine:trunk,foliage_winter" and seen[7]["pine"] == "flora/tree_pine:trunk,foliage",
+		"철마다: 벚나무 봄 꽃구름/여름 버찌/겨울 맨가지 · 은행 가을 노랑+융단 · 단풍 가을 빨강 · 과일나무 봄 크림 꽃/여름 덜 익은 열매/가을 익은 열매 · 소나무 늘 푸름(겨울 서리) %s" % [seen])
+	# 멀리 LOD: 축소하면 멀리 부품으로 바뀌고 사라지지 않음 (가까이 숨김 · 멀리 보임)
+	gv.force_lod = 1
+	gv.lod_check()
+	var far_ok := gv.far_lod
+	for c in gv.get_children():
+		if c.has_node("near") and c.has_node("far") and not c.is_queued_for_deletion():
+			far_ok = far_ok and not (c.get_node("near") as Node3D).visible and (c.get_node("far") as Node3D).visible \
+				and (c.get_node("far") as Node3D).get_child_count() > 0
+	gv.force_lod = 0
+	gv.lod_check()
+	check(far_ok and not gv.far_lod, "큰 나무 멀리 LOD: 축소하면 멀리 부품으로 (숨지 않음), 확대하면 가까이로")
+	gv.force_lod = -1
+	check(GreatTreeView.far_boost(16.0) == 1.0 and GreatTreeView.far_boost(0.5) > 1.5, "세상 전체에서만 멀리 LOD를 조금 키움 (랜드마크)")
 	var ww: WorldWater = n.get("world").water
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 3

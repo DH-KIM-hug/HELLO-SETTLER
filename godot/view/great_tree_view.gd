@@ -1,7 +1,9 @@
-## 큰 나무 다섯 화면 (GAME_DESIGN 3.0 · ROADMAP E3-3) — WorldWater.great_trees (sim/great_trees.gd)를 분재 모델로.
-## 세상 어디서나 보이는 랜드마크라 안개와 상관없이 늘 선다 (안개 위로 솟음). 철이 바뀌면 잎을 바꾼다 (FloraLook.great_model):
-## 은행 가을 노랑 · 단풍 여름 초록/가을 빨강 · 과일나무 봄 꽃/여름·가을 열매 · 겨울엔 잎 진 가지.
-## 과일나무 아래 떨어진 거대한 열매 (WorldWater.giant_fruits)도 여기서. 모양이 바뀔 때만 다시 만든다 (1초마다 확인).
+## 큰 나무 다섯 화면 (GAME_DESIGN 3.0 · ROADMAP E3-3 · E3-11 · A27) — WorldWater.great_trees (sim/great_trees.gd)를 분재 모델로.
+## 세상 어디서나 보이는 랜드마크라 안개와 상관없이 늘 선다 (안개 위로 솟음). 철이 바뀌면 보일 부품을 바꾼다 (FloraLook.great_model).
+## 멀리 LOD (아트 바이블 8.7·8.9): 확대가 FAR_PPU 아래면 "<부품>__far" (선 없음, 삼각형 ≤ 1,200) — 세상 전체에서도 사라지지 않는다.
+## 과일나무 아래 떨어진 커다란 열매 (WorldWater.giant_fruits — 저장 키라 이름 그대로)도 여기서. 모양이 바뀔 때만 다시 만든다 (1초마다 확인).
+## TODO(겹 2 — 아트 바이블 6.4): 카메라가 수관 안에 들어가 화면이 잎으로 덮이는 것(e3_tree_edge_clip) 막기 + 시야 가운데 잎 덩어리 디더 구멍.
+##   셰이더(툰·껍데기) 쪽 일이라 가림 작업에서 함께 (여기서는 부품 노드를 near/far로 나눠 두기만 함).
 class_name GreatTreeView
 extends Node3D
 
@@ -13,7 +15,18 @@ var _t := 1.0e9
 var n_trees := 0
 var n_fruits := 0
 var n_foot := 0
-var models := {}                  # kind → 지금 쓰는 모델 이름 (시험·캡처용)
+var models := {}                  # kind → "모델:부품,…" 지금 보이는 것 (시험·캡처용)
+## 이보다 멀리 축소하면 멀리 LOD. 아트 바이블 8.9는 원경 7~12에서 건물을 멀리 LOD로 두지만, 큰 나무는 키가 55칸이라
+## 마을 원경(×9)에서도 화면 반을 덮는다 → 멀리 LOD의 각진 면이 보임 (trees2_game_* 캡처). 그래서 ×4 아래(나무 약 220px)부터.
+const FAR_PPU := 4.0
+const LOD_GAP := 0.5              # 경계에서 깜빡이지 않게 (가까이로 돌아오는 건 FAR_PPU + LOD_GAP 위에서)
+## 세상 전체(×0.55)에서는 나무가 30px로 숲 덩이와 같은 크기라 실루엣이 묻힌다 → 멀리 LOD만 랜드마크로 조금 키움
+## (×2 이상 1배 → ×0.5 이하 FAR_BOOST배, 로그로 이음). 화면만 — 줄기 둘레(짓지 못하는 곳)는 그대로.
+const FAR_BOOST := 1.7
+var _boost := 1.0
+var far_lod := false
+var force_lod := -1               # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (캡처·시험)
+var _lods: Array = []             # [가까이 노드, 멀리 노드] 나무마다
 
 
 func _init(w: WorldWater, t: JarTerrain, src: Callable = Callable()) -> void:
@@ -29,6 +42,72 @@ func _ready() -> void:
 
 func _process(dt: float) -> void:
 	sync(dt)
+	lod_check()
+
+
+## 지금 확대 (세계 1칸당 화면 px) — 정사영 카메라의 화면 세로 / 크기 (JarCamera.ppu와 같음). 카메라가 없으면 기본 확대
+func view_ppu() -> float:
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp != null else null
+	if cam == null or cam.projection != Camera3D.PROJECTION_ORTHOGONAL or cam.size <= 0.0:
+		return 16.0
+	return float(vp.get_visible_rect().size.y) / cam.size
+
+
+func lod_check() -> void:
+	var want := far_lod
+	if force_lod >= 0:
+		want = force_lod == 1
+	else:
+		var p := view_ppu()
+		if p < FAR_PPU:
+			want = true
+		elif p > FAR_PPU + LOD_GAP:
+			want = false
+	if want != far_lod:
+		far_lod = want
+		_apply_lod()
+	var b := far_boost(view_ppu()) if far_lod and force_lod < 0 else 1.0
+	if absf(b - _boost) > 0.01:
+		_boost = b
+		_apply_lod()
+
+
+static func far_boost(ppu: float) -> float:
+	var k := clampf((1.0 - log(maxf(ppu, 0.01)) / log(2.0)) / 2.0, 0.0, 1.0)      # ×2 → 0 · ×0.5 → 1
+	return lerpf(1.0, FAR_BOOST, k)
+
+
+func _apply_lod() -> void:
+	for pair: Array in _lods:
+		(pair[0] as Node3D).visible = not far_lod
+		(pair[1] as Node3D).visible = far_lod
+		(pair[1] as Node3D).scale = Vector3.ONE * _boost
+
+
+## 큰 나무 한 그루 (부품 모음 → 노드): far = 멀리 LOD 부품("<부품>__far", 선 없음). 멀리 부품이 없는 작은 것(버찌·씨앗)은 멀리에선 뺀다.
+static func make_tree(parent: Node3D, model: String, keep: Array, far: bool) -> Node3D:
+	var n := Node3D.new()
+	n.name = "far" if far else "near"
+	parent.add_child(n)
+	var parts := Art.parts(model)
+	for pn: String in keep:
+		var key := pn + "__far" if far else pn
+		if not parts.has(key):
+			continue
+		var pd: Dictionary = parts[key]
+		var mi := MeshInstance3D.new()
+		mi.mesh = pd["mesh"]
+		mi.material_override = Art.body_mat()
+		mi.position = pd["origin"]
+		n.add_child(mi)
+		if pd["lines"] != null and not far:
+			var li := MeshInstance3D.new()
+			li.mesh = pd["lines"]
+			li.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			li.position = pd["origin"]
+			n.add_child(li)
+	return n
 
 
 func season() -> String:
@@ -52,46 +131,28 @@ func sync(dt: float, force := false) -> void:
 		c.queue_free()
 	n_trees = 0
 	models.clear()
+	_lods.clear()
 	for t: Dictionary in ww.great_trees:
 		var x: float = t["x"]
 		var z: float = t["y"]
 		var y := _base_y(x, z, float(t["r"]) * 0.5)
 		var xf := Transform3D(Basis(Vector3.UP, float(t.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.GREAT_SCALE), Vector3(x, y, z))
 		var spec := FloraLook.great_model(String(t["kind"]), se)
-		if spec.has("model"):
-			var n := Art.instance(self, spec["model"], xf)
-			n.name = String(t["kind"])
-			models[t["kind"]] = spec["model"]
-		else:
-			var n := Node3D.new()
-			n.name = String(t["kind"])
-			n.transform = xf
-			add_child(n)
-			var parts := Art.parts(spec["parts"])
-			for pn: String in spec["keep"]:
-				if not parts.has(pn):
-					continue
-				var pd: Dictionary = parts[pn]
-				var mi := MeshInstance3D.new()
-				mi.mesh = pd["mesh"]
-				mi.material_override = Art.body_mat()
-				mi.position = pd["origin"]
-				n.add_child(mi)
-				if pd["lines"] != null:
-					var li := MeshInstance3D.new()
-					li.mesh = pd["lines"]
-					li.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-					li.position = pd["origin"]
-					n.add_child(li)
-			models[t["kind"]] = "%s:%s" % [spec["parts"], ",".join(spec["keep"])]
+		var n := Node3D.new()
+		n.name = String(t["kind"])
+		n.transform = xf
+		add_child(n)
+		_lods.append([make_tree(n, spec["parts"], spec["keep"], false), make_tree(n, spec["parts"], spec["keep"], true)])
+		models[t["kind"]] = "%s:%s" % [spec["parts"], ",".join(spec["keep"])]
 		n_trees += 1
+	_apply_lod()
 	_foot(se)
 	n_fruits = 0
 	for f: Dictionary in ww.giant_fruits:
 		var x: float = f["x"]
 		var z: float = f["y"]
 		# (E3-3) 자르기 시작하면 잘린 열매
-		Art.instance(self, "flora/giant_fruit_cut" if f.get("cut", false) else "flora/giant_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
+		Art.instance(self, "flora/great_fruit_cut" if f.get("cut", false) else "flora/great_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
 			Vector3(x, terrain.ground_y(x, z) - 0.15, z)))
 		n_fruits += 1
 

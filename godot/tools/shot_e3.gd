@@ -143,7 +143,7 @@ func _process(dt: float) -> bool:
 				_season(10)
 			_zoom(9.0)
 			# 나무 가운데 높이가 화면 가운데에 오게: 높이 h인 점은 카메라 반대쪽(−x, −z) h / tan 48° 칸 땅과 겹쳐 보인다
-			var hh := {"world": 69.0, "pine": 46.0, "fruit": 40.0, "ginkgo": 53.0, "maple": 43.0}.get(t["kind"], 50.0) as float
+			var hh := {"cherry": 46.0, "pine": 46.0, "fruit": 40.0, "ginkgo": 53.0, "maple": 43.0}.get(t["kind"], 50.0) as float
 			scene.look_at_ground(Vector2(t["x"], t["y"]) - Vector2(1, 1).normalized() * hh * 0.45 / tan(deg_to_rad(48.0)))
 			_settle()
 			_wait = 30

@@ -1,5 +1,5 @@
 ## 세상에 한 그루씩만 있는 큰 나무 다섯 (GAME_DESIGN 3.0 — 2026-11-07 사용자 결정, ROADMAP E3-3·E3-4).
-## 세계수·소나무·과일나무·은행나무·단풍나무 — 분재 모양 랜드마크. 베지 않는다 (Village.trees에 넣지 않음 → 나무꾼·건물·길이 건드리지 않음).
+## 벚나무·소나무·과일나무·은행나무·단풍나무 (E3-11: 세계수 → 벚나무 — 옛 저장의 "world"는 불러올 때 벚나무로) — 분재 모양 랜드마크. 베지 않는다 (Village.trees에 넣지 않음 → 나무꾼·건물·길이 건드리지 않음).
 ## 세상을 만들 때(WorldGen.generate 끝) 시드로 정한 자리에 하나씩: 서로 멀리, 좋은 키트 자리(물가 마을 터)에서 멀리, 물가에서 떨어져.
 ## 키트 자리 고르기도 큰 나무 곁은 막는다 (어느 부락도 처음부터 곁에 있지 않음 — 탐험·이주의 목표).
 ## 과일나무는 여름~가을에 가끔 거대한 열매를 떨어뜨린다 (WorldWater.giant_fruits).
@@ -7,10 +7,12 @@
 class_name GreatTrees
 extends RefCounted
 
-const KINDS := ["world", "pine", "fruit", "ginkgo", "maple"]
-const NAMES := {"world": "세계수", "pine": "소나무", "fruit": "과일나무", "ginkgo": "은행나무", "maple": "단풍나무"}
+const KINDS := ["cherry", "pine", "fruit", "ginkgo", "maple"]
+const NAMES := {"cherry": "벚나무", "pine": "소나무", "fruit": "과일나무", "ginkgo": "은행나무", "maple": "단풍나무"}
+## 옛 이름 → 지금 이름 (옛 저장의 세계수 = 벚나무, 자리·반지름은 그대로)
+const LEGACY := {"world": "cherry"}
 ## 줄기 둘레 (칸) — 이 안에는 짓지 않고 숲(꽃숲)도 두지 않는다. 화면 크기 0.6배 모델의 뿌리·줄기 폭
-const TRUNK_R := {"world": 22.0, "pine": 15.0, "fruit": 13.0, "ginkgo": 14.0, "maple": 15.0}
+const TRUNK_R := {"cherry": 16.0, "pine": 15.0, "fruit": 13.0, "ginkgo": 14.0, "maple": 15.0}
 const KIT_APART := 70.0           # 키트(첫 마을 터 지름 64칸)는 큰 나무에서 이만큼 떨어져야
 const SPOT_APART := 12.0          # 세상이 고른 좋은 키트 자리에서 kit_apart + 이만큼 (키트 막는 거리보다 넉넉히 — 추천 자리를 지우지 않게)
 const DRY_R := 16.0               # 이 안에 호수·강이 없는 땅
@@ -100,12 +102,24 @@ static func _score(ww: WorldWater, p: Vector2, kind: String, spots: Array, min_a
 ## 옛 저장 (큰 나무가 생기기 전) — 불러올 때 한 번 세운다 (무리 자리에서 멀리)
 static func ensure(jw: JarWorld) -> void:
 	var ww := jw.water
-	if ww == null or not ww.great_trees.is_empty():
+	if ww == null:
+		return
+	migrate(ww)
+	if not ww.great_trees.is_empty():
 		return
 	var avoid: Array = []
 	for s in jw.settlements:
 		avoid.append(s.center)
 	place(ww, avoid)
+
+
+## 옛 저장: 세계수("world") → 벚나무 (자리·반지름·돌림은 그대로 — 둘레에 지은 것을 건드리지 않게)
+static func migrate(ww: WorldWater) -> void:
+	for t: Dictionary in ww.great_trees:
+		var k := String(t.get("kind", ""))
+		if LEGACY.has(k):
+			t["kind"] = LEGACY[k]
+			t["name"] = NAMES[LEGACY[k]]
 
 
 ## p에서 큰 나무 줄기 둘레(+pad) 안이면 그 나무 (아니면 빈 사전)

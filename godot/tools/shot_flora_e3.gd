@@ -110,6 +110,15 @@ func _at(x: float, z: float) -> Vector3:
 
 
 func _put(name: String, x: float, z: float, ry := 0.0, s := 1.0) -> void:
+	if name.begins_with("tree_"):             # 큰 나무 = 부품 모음 (철마다 부품 · 멀리 LOD) → 여름 가까이 모양
+		var holder := Node3D.new()
+		holder.position = _at(x, z)
+		holder.rotation.y = yaw + ry
+		holder.scale = Vector3.ONE * s
+		world.add_child(holder)
+		var spec := FloraLook.great_model(name.trim_prefix("tree_"), "여름")
+		GreatTreeView.make_tree(holder, spec["parts"], spec["keep"], false)
+		return
 	var d := Art.model("flora/" + name)
 	if d.get("mesh") == null:
 		push_warning("no model " + name)
@@ -236,12 +245,12 @@ func _bundle_on(m: ResidentModel) -> void:
 
 
 func _trees() -> void:
-	var plan := [["tree_world", -95.0, -50.0], ["tree_pine", -110.0, 45.0], ["tree_fruit", -20.0, 40.0],
+	var plan := [["tree_cherry", -95.0, -50.0], ["tree_pine", -110.0, 45.0], ["tree_fruit", -20.0, 40.0],
 		["tree_ginkgo", 50.0, -45.0], ["tree_maple", 65.0, 45.0]]
 	for e: Array in plan:
 		_put(e[0], e[1], e[2])
 		_resident(e[1] + 18.0, e[2] + 40.0, 1, 10.0, "m")
-	_put("giant_fruit", 0.0, 60.0)
+	_put("great_fruit", 0.0, 60.0)
 	_put("sunflower_a", -60.0, 70.0)
 	_put("rose_red", 20.0, 75.0)
 	_put("cosmos_pink", 100.0, 70.0)
@@ -249,7 +258,7 @@ func _trees() -> void:
 
 
 func _trees_season() -> void:
-	var plan := [["tree_fruit_bloom", -80.0, 0.0], ["tree_ginkgo_autumn", 0.0, 0.0], ["tree_maple_green", 80.0, 0.0]]
+	var plan := [["tree_fruit", -80.0, 0.0], ["tree_ginkgo", 0.0, 0.0], ["tree_maple", 80.0, 0.0]]
 	for e: Array in plan:
 		_put(e[0], e[1], e[2])
 		_resident(e[1] + 18.0, e[2] + 40.0, 1, 10.0, "m")
@@ -258,8 +267,8 @@ func _trees_season() -> void:
 
 func _tree_close() -> void:
 	_put("tree_fruit", 0.0, -30.0)
-	_put("giant_fruit", -3.0, 6.0, 0.3)
-	_put("giant_fruit_cut", 7.0, 8.0, -0.6)
+	_put("great_fruit", -3.0, 6.0, 0.3)
+	_put("great_fruit_cut", 7.0, 8.0, -0.6)
 	_put("grass_a", -12.0, 10.0)
 	_put("clover_a", 12.0, 14.0)
 	_put("dandelion_a", -14.0, -4.0)

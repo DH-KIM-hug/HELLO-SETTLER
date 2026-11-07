@@ -3,13 +3,13 @@
 importer="scene"
 importer_version=1
 type="PackedScene"
-uid="uid://qp13lt3h7gpy"
-path="res://.godot/imported/giant_white.glb-42eeb4efb395db4045f6949cf3498e49.scn"
+uid="uid://byg448aujxvli"
+path="res://.godot/imported/tree_cherry.glb-1248d00725b118e710fd488bf50c15f7.scn"
 
 [deps]
 
-source_file="res://art/models/giant_white.glb"
-dest_files=["res://.godot/imported/giant_white.glb-42eeb4efb395db4045f6949cf3498e49.scn"]
+source_file="res://art/models/flora/tree_cherry.glb"
+dest_files=["res://.godot/imported/tree_cherry.glb-1248d00725b118e710fd488bf50c15f7.scn"]
 
 [params]
 
