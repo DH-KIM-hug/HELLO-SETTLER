@@ -8,6 +8,9 @@ extends Node3D
 const FALL_SECS := 0.65
 const FALL_H := 26.0
 const FRESH := 30.0                      # 이 병 시간 안에 내려온 것만 떨어지는 모습
+## v5 설계도 (art/src/build_pioneer.py): 손에 든 것·떨어지는 것 = 두루마리, 촌장 곁에 내려앉으면 펼쳐짐 (Village.just_blueprint)
+const BLUEPRINT_SCALE := 2.2             # 거인의 작은 그림 종이 = 주민에겐 커다란 두루마리
+const BLUEPRINT_SECS := 14.0             # 펼친 채 놓여 있는 시간 (화면 초) — 그동안 촌장이 터를 잡는다
 
 var v: Village
 var terrain: JarTerrain
@@ -17,6 +20,7 @@ var _algae: Node3D
 var _algae_key := ""
 var _falls: Array = []                   # [{node, y0, t}]
 var _dust: Array = []                    # [{node, t}]
+var _bp: Dictionary = {}                 # 방금 내려온 설계도 {node, t, open}
 static var _green_tex: Texture2D
 
 
@@ -95,6 +99,7 @@ func sync(dt: float) -> void:
 			(_towers[id]["decal"] as Node3D).queue_free()
 			_towers.erase(id)
 	_sync_algae()
+	_sync_blueprint(dt)
 	_animate(dt)
 
 
@@ -152,6 +157,39 @@ func _animate(dt: float) -> void:
 				(mi.material_override as StandardMaterial3D).albedo_color.a = 0.6 * (1.0 - u)
 		dk.append(d)
 	_dust = dk
+
+
+## 설계도가 내려옴: 두루마리가 촌장 곁에 떨어져 쿵 → 펼쳐진 종이 → 잠시 뒤 사라짐
+func _sync_blueprint(dt: float) -> void:
+	if v.just_blueprint != "":
+		v.just_blueprint = ""
+		if not _bp.is_empty() and is_instance_valid(_bp["node"]):
+			(_bp["node"] as Node3D).queue_free()
+		var c := v.chief()
+		var at := Vector2(c.x, c.y) + Vector2(0.9, 0.6) if c != null else Vector2(v.fire.x, v.fire.y) + Vector2(1.5, 1.0)
+		var n := make_item("설계도")
+		add_child(n)
+		n.position = Vector3(at.x, gy(at.x, at.y), at.y)
+		fall(n, n.position.y)
+		_bp = {"node": n, "t": 0.0, "open": false}
+	if _bp.is_empty():
+		return
+	var n: Node3D = _bp["node"]
+	if not is_instance_valid(n):
+		_bp = {}
+		return
+	_bp["t"] = float(_bp["t"]) + dt
+	var t: float = _bp["t"]
+	if not bool(_bp["open"]) and t >= FALL_SECS + 0.35:
+		_bp["open"] = true
+		for ch in n.get_children():
+			ch.queue_free()
+		Art.instance(n, "blueprint_open", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * BLUEPRINT_SCALE), Vector3.ZERO))
+		_puff(n.position, 0.8)
+	if t >= BLUEPRINT_SECS:
+		_puff(n.position, 1.2)
+		n.queue_free()
+		_bp = {}
 
 
 ## 먼지 고리 (떨어진 자리)
@@ -245,6 +283,9 @@ static func _box(sz: Vector3) -> BoxMesh:
 static func make_item(item: String) -> Node3D:
 	var n := Node3D.new()
 	n.name = "item"
+	if item == "설계도" or Shop.is_building(item):      # v5: 건물 카드 = 설계도 (손에 든 두루마리)
+		Art.instance(n, "blueprint_scroll", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * BLUEPRINT_SCALE), Vector3.ZERO))
+		return n
 	match item:
 		"각설탕":
 			Art.instance(n, "sugar_cube")

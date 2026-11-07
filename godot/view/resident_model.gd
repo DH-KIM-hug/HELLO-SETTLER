@@ -54,10 +54,11 @@ const CARRY := {
 	"소금": ["salt_sack", "back"], "물": ["water_bucket", "hand"], "생선": ["fish_string", "hand"],
 	"약초": ["herb_bundle", "hand"], "민들레 잎": ["herb_bundle", "hand"], "꽃잎": ["herb_bundle", "hand"],
 	"버섯": ["mushroom_basket", "front"], "빛버섯": ["mushroom_basket", "front"], "말린 버섯": ["mushroom_basket", "front"],
+	"유모차": ["pram", "push"],          # v5 (GD 7.3) 아기 산책: 땅 위를 굴러가는 나무 유모차를 두 손으로 민다 (art/src/build_pioneer.py)
 }
 const CARRY_GENERIC := ["bundle", "back"]
 const CARRY_PROPS := ["wheat_sheaf", "flour_sack", "grain_sack", "salt_sack", "dough_bowl", "bread_basket", "loaf",
-	"porridge_pot", "log", "plank_stack", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle"]
+	"porridge_pot", "log", "plank_stack", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle", "pram"]
 ## 아이: 작은 것으로 바꿔 (빵 바구니 → 빵 한 덩이) 두 손으로 안는다 · 머리에 이는 건 바구니만 (어른 여자 반쯤)
 const CARRY_CHILD := {"bread_basket": "loaf"}
 const CARRY_HEAD_OK := ["bread_basket", "mushroom_basket"]
@@ -69,13 +70,17 @@ const CARRY_FAR_SCALE := 1.35
 const CARRY_BOB := 0.035          # 걸음에 맞춰 짐이 통통
 ## 자리 → 붙는 곳 (모델 좌표, 쉴 자세 — 앞 = +Z, 오른쪽 = -X)
 const CARRY_SOCKET := {"front": Vector3(0, 0.86, 0.42), "shoulder": Vector3(-0.22, 1.18, -0.1), "back": Vector3(0, 0.96, -0.17),
-	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02)}
+	"head": Vector3(0, 1.9, 0.0), "hand": Vector3(-0.36, 0.62, 0.02), "push": Vector3(0, 0, 1.16)}
+## push (유모차): 모델 원점(땅)에 붙음 — 소품 원점 = 바구니 아래 땅, 손잡이가 주민 쪽(-Z). 바퀴 부품 (굴러감)
+const PRAM_SCALE := 1.3          # 유모차 크기 (손잡이가 손 높이에 오게)
+const PRAM_WHEELS := {"pram_wheel_fl": 0.13, "pram_wheel_fr": 0.13, "pram_wheel_bl": 0.17, "pram_wheel_br": 0.17}   # 부품 → 반지름
 ## 자리 → 팔 자세 (build_residents.py arms()와 같은 말: [윗팔 (x 앞으로 듦(-), y 옆으로 벌림, z), 팔뚝 굽힘(-)]). 빠진 팔은 살랑
 const CARRY_ARMS := {
 	"shoulder": {"R": [Vector3(-1.25, 0.75, 0.0), -2.1]},
 	"back": {"R": [Vector3(-0.45, 0.4, 0.0), -2.55]},
 	"head": {"R": [Vector3(-2.75, 0.5, 0.0), -0.45], "L": [Vector3(-2.75, -0.5, 0.0), -0.45]},
 	"hand": {"R": [Vector3(0.0, 0.3, 0.0), -0.08]},
+	"push": {"R": [Vector3(-0.7, 0.1, 0.0), -0.75], "L": [Vector3(-0.7, -0.1, 0.0), -0.75]},
 }
 const A_OUT := 0.12                # 쉴 때 팔이 몸에서 벌어진 정도 (build_residents.py A_OUT)
 ## 직업(일터 종류) → 옷·연장 (A20, design/characters/jobs_a·jobs_b). hat = 모자(본디 모자 대신), over = 겉옷, robe = 긴 옷,
@@ -158,6 +163,8 @@ var _carry_style := ""          # 지금 짐 드는 자리 (CARRY_SOCKET 키, ""
 var _carry_prop := ""
 var _carry_close: MeshInstance3D
 var _carry_far: MeshInstance3D
+var _wheels: Array = []         # 유모차 바퀴 [MeshInstance3D, 반지름]
+var _wheel_last := Vector3.INF  # 지난 화면의 세계 자리 (바퀴는 실제로 간 거리만큼 굴러감)
 var _item_base := Vector3.ZERO
 var _female := false
 var _arm_bi := PackedInt32Array([-1, -1, -1, -1])   # upper_arm.R · forearm.R · upper_arm.L · forearm.L
@@ -915,6 +922,8 @@ func set_item(kind: String) -> void:
 	_carry_far = null
 	_carry_style = ""
 	_carry_prop = ""
+	_wheels.clear()
+	_wheel_last = Vector3.INF
 	item.visible = kind != ""
 	if kind == "":
 		return
@@ -928,6 +937,9 @@ func set_item(kind: String) -> void:
 		return
 	_carry_prop = sp[0]
 	_carry_style = sp[1]
+	if _carry_style == "push":
+		_set_push(parts)
+		return
 	_reparent_item(head if _carry_style == "head" else (arm_r if _carry_style == "hand" else chest))
 	_carry_close = _carry_mi(parts["mesh"])
 	_carry_far = _carry_mi(parts["far"] if parts["far"] != null else parts["mesh"])
@@ -952,6 +964,25 @@ func set_item(kind: String) -> void:
 		"hand":
 			pos = at + Vector3(0, -h.y * 0.9, 0)
 	item.transform = Transform3D(b, pos - c)
+	_item_base = item.position
+
+
+## 유모차: 모델 원점(땅)에 붙여 앞(+Z)에 두고, 바퀴 부품을 따로 (굴러감). 크기는 모델 그대로 (주민 단위)
+func _set_push(parts: Dictionary) -> void:
+	_reparent_item(self)
+	_carry_close = _carry_mi(parts["mesh"])
+	_carry_far = _carry_mi(parts["far"] if parts["far"] != null else parts["mesh"])
+	var ps := Art.parts("carry/" + _carry_prop)
+	for wn: String in PRAM_WHEELS:
+		if not ps.has(wn) or ps[wn].get("mesh") == null:
+			continue
+		var w := _carry_mi(ps[wn]["mesh"])
+		w.position = ps[wn]["origin"]
+		w.reparent(_carry_close, false)        # 가까이 LOD에서만 (멀리는 덩어리 하나)
+		_wheels.append([w, float(PRAM_WHEELS[wn])])
+	_carry_close.visible = lod_close
+	_carry_far.visible = not lod_close
+	item.transform = Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * PRAM_SCALE), CARRY_SOCKET["push"])
 	_item_base = item.position
 
 
@@ -1177,8 +1208,10 @@ func _carry_pose(walking: bool) -> void:
 	if _player != null and _player.current_animation != "":
 		var ln := _player.current_animation_length
 		ph = _player.current_animation_position / ln if ln > 0.0 else 0.0
-	var bob := absf(cos(ph * TAU)) * CARRY_BOB if walking else 0.0
+	var bob := absf(cos(ph * TAU)) * CARRY_BOB if walking and _carry_style != "push" else 0.0
 	item.position = _item_base + Vector3(0, bob, 0)
+	if not _wheels.is_empty():
+		_roll_wheels()
 	if _carry_style == "front":
 		return
 	var arms: Dictionary = CARRY_ARMS.get(_carry_style, {})
@@ -1200,6 +1233,22 @@ func _carry_pose(walking: bool) -> void:
 		else:                           # 빈 팔: 걸음에 맞춰 살랑
 			_set_bone_euler(ua, Vector3(swing * sg * -1.0, A_OUT * sg, 0))
 			_set_bone_euler(fa, Vector3(-0.25 - maxf(0.0, swing * sg) * 0.3, 0, 0))
+
+
+## 유모차 바퀴: 지난 화면부터 실제로 간 거리만큼 굴림 (앞으로 가면 앞으로 구름)
+func _roll_wheels() -> void:
+	if not is_inside_tree():
+		return
+	var p := global_position
+	if _wheel_last != Vector3.INF:
+		var d := p - _wheel_last
+		var fwd := global_transform.basis.z.normalized()
+		var dist := Vector2(d.x, d.z).dot(Vector2(fwd.x, fwd.z)) / maxf(0.001, global_transform.basis.get_scale().x * PRAM_SCALE)
+		if absf(dist) < 2.0:                        # 순간 이동(자리 다시 잡기)은 굴리지 않음
+			for e: Array in _wheels:
+				var w: MeshInstance3D = e[0]
+				w.rotation.x = fposmod(w.rotation.x + dist / float(e[1]), TAU)
+	_wheel_last = p
 
 
 ## 뼈를 쉴 자세 기준 '모델 축 오일러'로 (build_residents.py key()와 같은 셈: Euler YXZ, Blender 축 → Godot 축)

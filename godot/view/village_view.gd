@@ -17,6 +17,8 @@ var residents := {}             # id → ResidentModel
 var _res_key := {}              # id → 나이 단계 (바뀌면 모델을 다시 만듦)
 var _blds := {}                 # id → Node3D
 var _bld_key := {}
+var _live := {}                 # 건물 id → {"stone": 맷돌 윗돌 · "glow": 화덕 불} (_animate_live)
+static var _oven_mat: StandardMaterial3D
 var _trees: Node3D
 var _tree_key := ""
 var _rocks: Node3D
@@ -140,6 +142,7 @@ func sync(dt: float, force := false) -> void:
 			_lily_t = 0.0
 			_sync_lilies(false)
 	_animate_fire()
+	_animate_live(dt)
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
@@ -466,7 +469,8 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 ## v3 (2026-11): 종류마다 실루엣·지붕 재료가 다르게 — 둥근 초가 · 너와 · 슬레이트 · 붉은 기와 · 잔디 지붕. 집은 색 변형을 번갈아.
 const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber", "house_timber_b"], "석조주택": ["house_stone", "house_stone_b"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
-	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "맷돌간": ["hut"], "화덕": ["bakery"],     # v5: 맷돌간·공용 화덕은 모델이 생기기 전까지 오두막·빵집 모델 "소금밭": ["saltpan"], "농장": ["field_green"],
+	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
+	"맷돌간": ["quern_house"], "화덕": ["oven"],     # v5 빵 사슬 (art/src/build_pioneer.py): 맷돌 윗돌·화덕 불은 따로 (QUERN_STONE · OVEN_GLOW)
 	"버섯꾼": ["mushroom_hut"],
 	# 마을 시대 (A6, art/src/build_village.py) — 시뮬레이션 종류 이름이 정해지면 여기 이름을 맞춘다. 모델 바닥 크기(칸):
 	# 어부 1.6×1.2 · 사냥꾼 1.6×1.2 · 약초꾼 1.7×1.2 · 치료소 2.5×1.5(+오른쪽 툇마루 1칸) · 방직소 2.3×1.5(+왼쪽 처마 0.8)
@@ -475,6 +479,13 @@ const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "
 	"어부": ["fisher"], "사냥꾼": ["hunter"], "약초꾼": ["herbalist"], "치료소": ["healer"], "방직소": ["weaver"],
 	"대장간": ["smithy"], "교회": ["chapel"], "광장": ["plaza"], "묘지": ["graveyard"], "목장": ["pasture"],
 	"망루": ["watchtower"], "나루터": ["ferry"]}
+## 맷돌간의 윗돌 (art/models/quern_stone.glb — 원점 = 도는 축, 아랫돌 윗면): 빻는 동안 돈다
+const QUERN_STONE := "quern_stone"
+const QUERN_STONE_AT := Vector3(0.0, 0.46, -0.05)
+const QUERN_SPIN := 2.4             # 라디안/초 (화면 시간)
+## 공용 화덕 아궁이 불 (art/models/oven_glow.glb — 원점 = 화덕 원점): 굽는 동안만 켜짐 (빛나는 재질 + 발밑 빛 웅덩이)
+const OVEN_GLOW := "oven_glow"
+const OVEN_GLOW_COLOR := Color(1.0, 0.62, 0.28)
 ## 마당 소품: [모델, 건물 기준 자리(x, z — 건물 앞 = +z), 방위(라디안)]
 const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]]}
 
@@ -485,6 +496,10 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	if b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at:
 		nm = "field_ripe"
 	Art.instance(n, nm)
+	if nm == "quern_house" and Art.exists(QUERN_STONE):
+		_live[b.id] = {"stone": Art.instance(n, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
+	elif nm == "oven" and Art.exists(OVEN_GLOW):
+		_live[b.id] = {"glow": _oven_glow(n)}
 	for y: Array in YARD.get(b.type, []):
 		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]), y[1]))
 	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN)
@@ -492,6 +507,66 @@ func _build_shape(n: Node3D, b: Building) -> void:
 		var m := 1.0 if b.id % 2 == 0 else -1.0
 		Art.instance(n, "flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s)))
 		Art.instance(n, "bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s)))
+
+
+## 화덕 불: 빛나는(그늘 없는) 재질 + 아궁이 앞 땅의 따뜻한 빛 웅덩이. 처음엔 꺼 둠 (_animate_live가 켬)
+func _oven_glow(n: Node3D) -> Node3D:
+	var g := Art.instance(n, OVEN_GLOW)
+	if _oven_mat == null:
+		_oven_mat = StandardMaterial3D.new()
+		_oven_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_oven_mat.vertex_color_use_as_albedo = true
+		_oven_mat.vertex_color_is_srgb = true
+		_oven_mat.emission_enabled = true
+		_oven_mat.emission = OVEN_GLOW_COLOR
+		_oven_mat.emission_energy_multiplier = 0.6
+	for c in g.get_children():
+		if c is MeshInstance3D:
+			(c as MeshInstance3D).material_override = _oven_mat
+			(c as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var pool := MeshInstance3D.new()
+	var disc := PlaneMesh.new()
+	disc.size = Vector2(1.4, 1.1)
+	pool.mesh = disc
+	pool.material_override = _glow_mat()
+	pool.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pool.position = Vector3(0, 0.04, 0.75)
+	g.add_child(pool)
+	g.visible = false
+	return g
+
+
+## 일터가 지금 돌아가나 (일꾼이 있고 재료가 들어와 있다) — 맷돌이 돌고 화덕에 불이 켜지는 기준
+static func working(b: Building) -> bool:
+	if not b.built or b.worker < 0 or b.upgrade_to != "":
+		return false
+	for k: String in b.def().get("in", {}):
+		if float(b.in_buf.get(k, 0.0)) < float(b.def()["in"][k]):
+			return false
+	return true
+
+
+## 맷돌 윗돌 돌리기 · 화덕 불 켜고 끄기 (매 화면 — 값만 바꿈)
+func _animate_live(dt: float) -> void:
+	for id: int in _live.keys():
+		var e: Dictionary = _live[id]
+		var b := v.bld(id)
+		var any_ok := false
+		for key: String in e:
+			var nd: Node3D = e[key]
+			if nd == null or not is_instance_valid(nd):
+				continue
+			any_ok = true
+			var on := b != null and working(b)
+			if key == "stone":
+				if on:
+					nd.rotation.y = fposmod(nd.rotation.y + dt * QUERN_SPIN, TAU)
+			else:
+				nd.visible = on
+				if on:
+					nd.scale = Vector3.ONE * (0.94 + 0.06 * sin(_anim_t * 7.0 + id))
+		if not any_ok:
+			_live.erase(id)
 
 
 ## 건설 현장 — 몇 초마다 눈에 띄게 바뀌는 여덟 단계 (OPENING 3.1b v3.3 '늘 무언가 바뀌는 게 보이게'):
