@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -47,7 +47,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"immigrant": "res://tests/immigrant_tests.gd", "crisis": "res://tests/crisis_tests.gd", "shelf": "res://tests/shelf_tests.gd",
 	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd",
 	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
-	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd"}
+	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd"}
 
 
 func _initialize() -> void:

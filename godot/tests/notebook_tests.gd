@@ -265,8 +265,8 @@ func test_first_ten_minutes() -> void:
 	var af: Dictionary = a["after"]
 	check(int(af["grain"]["manna"]) >= int(bf["grain"]["manna"]) + 3, "하늘 낟알 한 줌 → 낟알 무더기 %d개가 보이게 내림" % (int(af["grain"]["manna"]) - int(bf["grain"]["manna"])))
 	check(int(v.stats.get("snacks", 0)) >= 2, "낟알 곁의 주민 %d명이 주워 먹음" % int(v.stats.get("snacks", 0)))
-	var sp: Dictionary = v.notebook["sprout"]
-	check(not sp.is_empty() and bool(sp.get("applied", false)), "첫 밭에 물 → 그 자리 싹 (첫 수확이 %.1f시간 당겨짐)" % (Notebook.SPROUT_HEAD / 3600.0))
+	check(not Notebook.TASKS.any(func(tk: Dictionary) -> bool: return String(tk["id"]) in ["water", "wipe", "cup"]),
+		"첫 10분 쪽지는 직관적인 일만 — 물 뿌리기·유리 닦기·감싸기 쪽지 없음 (6c — 그 도구가 필요한 사건 때)")
 	check(float(v.stats.get("site_logs", 0.0)) >= 6.0, "짐꾼이 하늘의 통나무 %.0f개를 터로 나름" % float(v.stats.get("site_logs", 0.0)))
 	check(String(v.notebook.get("named", "")) != "" and has_line(v, "'%s'라는 이름" % v.notebook["named"]), "첫 아기 이름: %s (연대기)" % v.notebook.get("named", ""))
 	var b := first_day(true, false, 4.0 * 60.0)
@@ -458,9 +458,15 @@ func test_scene() -> void:
 		clock.tick(DT)
 	scene.call("tap_glass", false, null)
 	check(Notebook.index(v) == 2, "장면의 유리 톡 → 쪽지 끝")
+	Firsts.reset()
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
-	check(not hc.lid_btn.is_visible_in_tree() and hc.spray_btn.is_visible_in_tree(), "[손] 칸: 뚜껑 단추 없음 · 물 뿌리기는 늘 보임")
+	hc.refresh()
+	check(not hc.lid_btn.is_visible_in_tree() and not hc.spray_btn.is_visible_in_tree() and hc.slot_row.is_visible_in_tree(),
+		"[손] 칸: 뚜껑 단추 없음 · 처음엔 손에 든 것만 (물 뿌리기는 밭이 마를 때 열림 — 6c)")
+	Firsts.unlock("spray")
+	hc.refresh()
+	check(hc.spray_btn.is_visible_in_tree(), "밭이 마른 뒤: [물 뿌리기]가 보임")
 	check(not v.air.lid_open, "처음엔 뚜껑 닫힘")
 	scene.call("spray")
 	check(v.air.lid_open, "물 뿌리기 → 뚜껑이 저절로 열림")
@@ -475,7 +481,9 @@ func test_scene() -> void:
 	for k in 16:
 		clock.tick(DT)
 	check(not v.air.lid_open, "떨어뜨린 뒤 곧 닫힘")
-	# 휴대폰 크기 (360×640 · 세로로 긴 360×780): 손 칸 단추가 쪽지·화면 밖에 가리지 않음
+	# 휴대폰 크기 (360×640 · 세로로 긴 360×780): 손 칸 단추가 쪽지·화면 밖에 가리지 않음 (도구가 모두 열린 손)
+	Firsts.open_all()
+	hc.refresh()
 	for sz: Vector2i in [Vector2i(360, 640), Vector2i(360, 780)]:
 		run.root.size = sz
 		scene.call("layout_bars")
@@ -483,7 +491,7 @@ func test_scene() -> void:
 		var nr := note.get_global_rect()
 		var vs := Vector2(sz)
 		var hidden := PackedStringArray()
-		for b: Button in [hc.spray_btn, hc.blow_btn, hc.tweeze_btn, hc.cup_btn, hc.wipe_btn, hc.curtain_btn, hc.lamp_btn]:
+		for b: Button in [hc.spray_btn, hc.tweeze_btn, hc.wipe_btn, hc.lamp_btn]:
 			var br := b.get_global_rect()
 			if br.intersects(nr) or br.position.y < 0.0 or br.end.y > vs.y + 0.5 or br.end.x > vs.x + 0.5:
 				hidden.append(b.text)
@@ -491,3 +499,4 @@ func test_scene() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	Market.reset()
+	Firsts.reset()

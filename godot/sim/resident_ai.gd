@@ -162,8 +162,13 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 		"manna_undo":
 			if r.carry_amt > 0.0:
 				v.manna_batches.append({"amt": r.carry_amt, "born": float(d["born"])})
+		"carry_set":                              # (E1-2) 제단에 쌓을 돌을 안음 / 내려놓음 (보이는 것만 — 창고와 상관없음)
+			r.carry = String(d["item"])
+			r.carry_amt = 0.0
 		"build":
 			var b: Building = d["b"]
+			if bool(d.get("drop", false)):
+				r.carry = ""
 			if not b.is_site():
 				return
 			b.prog += float(d["chunk"]) * v.build_mult(b) * v.opening_build(b)    # 들어준 소원 ×1.5 (기획서 6.7) · 첫 한 시간의 터는 천천히
@@ -1001,7 +1006,35 @@ static func build_task(v: Village, r: Resident) -> bool:
 		chunk = 1.0
 	r.doing = "%s 짓는 중" % Balance.label(b.site_type())
 	var sp := near(v, b.x, b.y, 0.8 + b.size() * 0.5)
+	if b.site_type() == Awakening.ALTAR:
+		return _altar_task(v, r, b, chunk, sp)
 	var work := op("build", {"b": b, "chunk": chunk})
 	r.steps.append(walk(sp.x, sp.y))
 	r.steps.append(act(chunk, "work", work, true))
+	return true
+
+
+## (E1-2 · EVENTS_STAGING 2b) 제단: 둘레에서 둥근 돌을 하나 주워 안고 와서 쌓는다 — 돌을 안은 모습이 보이게 (r.carry "돌").
+## 주우러 가는 길도 짓는 일로 친다 (제단이 서는 때는 그대로 — 첫 병 ~7:30). 난수를 쓰지 않는다 (다른 흐름을 흔들지 않게)
+const ALTAR_PICK_R := [2.8, 4.2]     # 돌을 줍는 곳 (제단에서 칸)
+const ALTAR_PICK := 4.0              # 줍는 동작 (병 초)
+
+
+static func _altar_task(v: Village, r: Resident, b: Building, chunk: float, sp: Vector2) -> bool:
+	var c := Vector2(b.x, b.y)
+	var pick := c
+	for k in 6:                                  # 사람마다 다른 쪽 (물이면 다음 쪽)
+		var a := float((r.id * 7 + int(b.prog / 30.0) * 3 + k * 5) % 12) * TAU / 12.0
+		var rr: float = lerpf(ALTAR_PICK_R[0], ALTAR_PICK_R[1], fposmod(r.id * 0.37 + k * 0.21, 1.0))
+		var q := c + Vector2(cos(a), sin(a)) * rr
+		if not v.water_at(q.x, q.y):
+			pick = q
+			break
+	var walk_s := (Vector2(r.x, r.y).distance_to(pick) + pick.distance_to(sp)) / maxf(0.05, Balance.WALK * v.pace_walk())
+	var credit := chunk + 0.3 * minf(walk_s + ALTAR_PICK, chunk)     # 오가는 길의 몫 (제단이 서는 때 — 첫 병 ~7:30에 맞춤)
+	r.doing = "제단에 쌓을 돌을 줍는 중" if v.aware else "둥근 돌을 줍는 중"
+	r.steps.append(walk(pick.x, pick.y))
+	r.steps.append(act(ALTAR_PICK, "work", op("carry_set", {"item": "돌"}), true, op("carry_set", {"item": ""})))
+	r.steps.append(walk(sp.x, sp.y))
+	r.steps.append(act(chunk, "work", op("build", {"b": b, "chunk": credit, "drop": true}), true, op("carry_set", {"item": ""})))
 	return true

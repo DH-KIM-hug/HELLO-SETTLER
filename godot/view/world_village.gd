@@ -831,8 +831,6 @@ func _process(dt: float) -> void:
 	if room_zoom != null:
 		room_zoom.update(dt)
 		_shelf_process(dt)
-		if room_zoom.room != null and room_zoom.room.curtain_step != world.water.curtain:     # [거인의 손 B6] 방의 3D 커튼 = 병의 커튼 (GiantRoom.set_curtain)
-			room_zoom.room.set_curtain(world.water.curtain)
 		if _enter_fly and not catching and not leaving:
 			_enter_fly = false
 			fly_to_settlement(village)
@@ -911,6 +909,11 @@ func look_at_ground(p: Vector2) -> void:
 	var q := p.rotated(PI * 0.5 * _rot_shown)
 	cam.target = Vector3(q.x, terrain.ground_y(p.x, p.y), q.y)
 	cam._apply()
+
+
+func ground_point(p: Vector2) -> Vector3:
+	var q := p.rotated(PI * 0.5 * _rot_shown)
+	return Vector3(q.x, terrain.ground_y(p.x, p.y), q.y)
 
 
 ## 지도 돌리기: 화면 위쪽(카메라가 보는 쪽)이 지도 위쪽이 되게

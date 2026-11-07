@@ -550,6 +550,9 @@ static func from_dict(d: Dictionary) -> JarWater:
 	d = WorldPack.unpack_water(d)                 # 누른 넓은 세상 (A16) — 옛 사전은 그대로
 	var s: JarWater = WorldWater.new() if d.get("$kind", "jar") == "world" else JarWater.new()
 	SaveCodec.apply(s, d)
+	s.curtain = 0                                 # (EVENTS_STAGING 6c-1) 커튼 도구는 없앴다 — 옛 저장에 쳐 둔 커튼은 열림으로
+	s.curtain_dark = 0.0
+	s.curtain_frost = false
 	if not d.has("hs") and s is WorldWater:
 		s._after_load()
 	return s
