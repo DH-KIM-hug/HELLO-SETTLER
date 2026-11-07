@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -46,7 +46,8 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "discovery": "res://tests/discovery_tests.gd", "room": "res://tests/room_zoom_tests.gd",
 	"immigrant": "res://tests/immigrant_tests.gd", "crisis": "res://tests/crisis_tests.gd", "shelf": "res://tests/shelf_tests.gd",
 	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd",
-	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd"}
+	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
+	"slowdown": "res://tests/slowdown_tests.gd"}
 
 
 func _initialize() -> void:
@@ -713,9 +714,10 @@ func test_fast_speeds() -> void:
 	while ce.speed_i == 9 and guard < 20000:
 		ce.tick(1.0 / 60.0)
 		guard += 1
-	check(ce.speed() == JarClock.normal_speed() and ce.notice == JarClock.EVENT_NOTE and ce.last_event != "",
-		"보통보다 빠를 때 중요한 일 (%s, %s) → 보통 + '%s'" % [ce.last_event, ve.fmt_time(ve.t), ce.notice])
-	check(words_ok([JarClock.EVENT_NOTE]) == "", "알림에 금지어 없음")
+	var cev := ce.take_events().filter(func(e: Dictionary) -> bool: return e["stop"])
+	check(ce.speed() == JarClock.normal_speed() and ce.last_event != "" and not cev.is_empty() and ce.notice == String(cev[0]["text"]) and ce.notice != JarClock.EVENT_NOTE,
+		"보통보다 빠를 때 중요한 일 (%s, %s) → 보통 + 무슨 일인지 '%s'" % [ce.last_event, ve.fmt_time(ve.t), ce.notice])
+	check(words_ok([ce.notice]) == "", "알림에 금지어 없음")
 	# 출생은 따로: 첫 아기가 태어나는 날을 빠른 흐름으로 → 그 걸음에서 ×1
 	var vk := Village.new_prototype(7)
 	var ck := JarClock.new(vk)

@@ -124,6 +124,11 @@ func _build_settings(body: VBoxContainer) -> void:
 		away_btn.text = GameSettings.away_words(settings.away_speed))
 	var an := _label(body, "앱을 끈 동안 병 안의 시간이 흐르는 빠르기예요. 등불이 타는 동안만 흘러요.", "Small")
 	an.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_section(body, "빠르게 갈 때 멈출 일")
+	for c: String in GameSettings.STOP_NAMES:
+		_toggle_row(body, "stop_" + c, GameSettings.STOP_NAMES[c])
+	var sn := _label(body, "켠 일이 생기면 시간이 보통 빠르기로 돌아와요. 끈 일은 짧은 알림만 떠요. 처음 몇 번의 탄생과 편지는 늘 알려 줘요.", "Small")
+	sn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_section(body, "기기")
 	_toggle_row(body, "vibration", "진동")
 	_toggle_row(body, "notify", "알림")
