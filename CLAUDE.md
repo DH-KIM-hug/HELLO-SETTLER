@@ -78,3 +78,12 @@
 - 설치: `adb=/opt/homebrew/share/android-commandlinetools/platform-tools/adb` → `$adb install -r build/nazakji-debug.apk` → `$adb shell monkey -p com.ddoystory.najakji -c android.intent.category.LAUNCHER 1` (샌드박스 밖에서 실행해야 기기가 보임). 폰: R3CY30R8K0W (SM-S931N).
 - 폰이 안 보이면 사용자에게: 화면 잠금 풀기 → 알림에서 '파일 전송' → 'USB 디버깅 허용'.
 - APK가 30MB를 넘으면 파일로 보낼 수 없다 — 경로를 알려 주고 adb로 설치.
+
+---
+
+## 6. 게임 스튜디오 스킬 (Claude Code Game Studios, MIT — 2026-11-07 사용자 요청으로 설치)
+
+- `.claude/skills/` 72개 · `.claude/agents/` 38개(고도·공통) · `.claude/docs/` · `.claude/scripts/` · `project.yaml`. 출처 https://github.com/Donchitos/Claude-Code-Game-Studios (라이선스 `.claude/CCGS-LICENSE`).
+- **넣지 않은 것**: 훅·settings.json(커밋·푸시·쓰기를 가로챔 — 우리 병합 절차와 충돌), 규칙(rules), 그쪽 CLAUDE.md, 기본 명령과 이름이 겹치는 `code-review`·`help`, 유니티·언리얼 에이전트.
+- **우선순위**: 이 CLAUDE.md(0~5장)와 `docs/` 기획서가 스킬의 기본 흐름보다 앞선다. 스킬이 `design/`·`production/`에 새 문서를 만들려 하면, 이미 있는 `docs/` 문서를 기준으로 삼는다. 사용자에게 하는 말은 스킬을 쓸 때도 한국어.
+- 쓸 만한 것: `/balance-check` (BALANCE), `/playtest-report`, `/design-review`, `/scope-check`, `/qa-plan`, `/perf-profile`, `/test-flakiness`, `/ux-review`, `/consistency-check`, `/milestone-review`, 에이전트 `godot-specialist`·`economy-designer`·`game-designer`·`ux-designer`·`qa-lead`.
