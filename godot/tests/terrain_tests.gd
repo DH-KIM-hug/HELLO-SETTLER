@@ -207,6 +207,7 @@ func test_world_terrain() -> void:
 				if c0[i + j] > 0.5:
 					types[j] = true
 	check(types.size() >= 2, "조각 꼭짓점에 겉흙 무게 (물가·진흙·숲 바닥·이끼 중 %d가지)" % types.size())
+	_water_checks(wt)
 	# 한 조각을 화면 예산으로 나눠 만들기 — 어떤 한 번도 예산을 크게 넘지 않음
 	var job := wt._region_job(0, 0, WorldTerrain.RC, 1, MeshInstance3D.new(), MeshInstance3D.new(), true)
 	var steps := 0
@@ -242,3 +243,66 @@ func test_world_terrain() -> void:
 	var py := clampi(floori((float(f["y"]) + jw.water.rr) / WorldTerrain.FM), 0, fw - 1)
 	check(wt._fmap[py * fw + px] > 150, "세상 숲 무리 한가운데는 짙은 숲 (%d/255)" % wt._fmap[py * fw + px])
 	wt.free()
+
+
+## (물 다듬기) 수면 — 한 자리에 물이 한 겹 · 조각 경계에서 수면이 이어짐 · 물가가 칸 사이 같은 자리가 아니라 땅 높이선을 따라 · 화면 안 조각은 LOD 1
+func _water_checks(wt: WorldTerrain) -> void:
+	var painted := 0
+	var lod_bad := 0
+	var edge := {}                       # (x, z) → 수면 y (조각 경계 꼭짓점, 삼각형이 쓰는 것만)
+	var seam_n := 0
+	var seam_bad := 0.0
+	var ts: Array = []
+	var n_water := 0
+	for ch: int in wt._chunks:
+		var cur: Dictionary = wt._chunks[ch]
+		if wt._chunk_gap(ch) <= wt.view_r and int(cur["lod"]) != 1:
+			lod_bad += 1
+		var tm: MeshInstance3D = cur["t"]
+		var wm: MeshInstance3D = cur["w"]
+		if tm.mesh != null:
+			var uv2: PackedVector2Array = (tm.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_TEX_UV2]
+			for u in uv2:
+				if u.x > 0.05:
+					painted += 1
+		if wm.mesh == null or int(cur["lod"]) != 1:
+			continue
+		n_water += 1
+		var arr := (wm.mesh as ArrayMesh).surface_get_arrays(0)
+		var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uv: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var idx: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var used := {}
+		for i in idx:
+			used[i] = true
+		var x0 := -wt.ww.rr + (ch % wt.nrc) * WorldTerrain.RC
+		var z0 := -wt.ww.rr + (ch / wt.nrc) * WorldTerrain.RC
+		for i: int in used:
+			var p := vs[i]
+			if absf(p.x - x0) < 0.01 or absf(p.x - x0 - WorldTerrain.RC) < 0.01 or absf(p.z - z0) < 0.01 or absf(p.z - z0 - WorldTerrain.RC) < 0.01:
+				var key := Vector2i(roundi(p.x * 4.0), roundi(p.z * 4.0))
+				if edge.has(key):
+					seam_n += 1
+					seam_bad = maxf(seam_bad, absf(float(edge[key]) - p.y))
+				else:
+					edge[key] = p.y
+		# 물가가 지나는 삼각형 변: 수면−땅이 양수·음수로 갈리는 자리 t (0~1)
+		for t in range(0, idx.size(), 3):
+			for e in 3:
+				var a := uv[idx[t + e]].x
+				var b := uv[idx[t + (e + 1) % 3]].x
+				if (a > 0.0) != (b > 0.0):
+					ts.append(a / (a - b))
+	check(painted == 0, "강은 땅에 칠하지 않고 수면 메시로만 (땅 칠 꼭짓점 %d개 — 한 자리에 물 한 겹)" % painted)
+	check(lod_bad == 0, "화면 반지름 안에 걸친 조각은 모두 LOD 1 (거친 조각 %d개)" % lod_bad)
+	check(n_water > 0 and seam_n > 0 and seam_bad < 0.001, "이웃 조각 경계에서 수면 높이가 같음 (꼭짓점 %d개 · 가장 큰 차 %.4f)" % [seam_n, seam_bad])
+	var lo := 0
+	var mid := 0
+	for t: float in ts:
+		if t < 0.25:
+			lo += 1
+		elif t < 0.75:
+			mid += 1
+	var hi := ts.size() - lo - mid
+	check(ts.size() > 20 and lo > ts.size() / 10 and mid > ts.size() / 10 and hi > ts.size() / 10,
+		"물가가 칸 안 여러 자리를 지남 (땅 높이선 — 물가 변 %d개: 앞 %d · 가운데 %d · 뒤 %d)" % [ts.size(), lo, mid, hi])
