@@ -1125,7 +1125,7 @@ func release_animals() -> void:
 		_beat.tween_callback(_ask_fish))
 
 
-## 짐승 박자 끝: 짐승은 제자리 · 상자는 손이 치움 · "사슴과 토끼는…"
+## 짐승 박자 끝: 짐승은 제자리 · 빈 상자는 떠올라 감 (A24 손 없이) · "사슴과 토끼는…"
 func _animals_done(skipped := true) -> void:
 	if step != "releasing":
 		return

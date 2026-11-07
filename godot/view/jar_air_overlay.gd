@@ -4,7 +4,7 @@
 ##  · 탁한 공기 (JarAir.stale 0.35↑) → 하늘이 누렇게 바램
 ##  · [E3-7 이슬의 하루 박자] 낮에 오르는 김 (JarWater.dew_vapour × 김) → 유리 위쪽이 엷게 뿌예짐 (습할수록 짙게, 닦으면 걷힘)
 ##  · 뚜껑이 열림 → 위에서 쏟아지는 거인의 방 빛 + 떠다니는 먼지 알갱이, 김은 빠르게 걷힘. 닫힐 때 부드럽게 사라짐
-##  · [거인의 손 B6] 유리의 먼지막 (GiantHand.dust_shown) · 커튼 (낮이 어둑) · 감싼 손 (가장자리 손가락 + 따뜻한 빛) · 닦는 반짝임 (play_wipe)
+##  · [거인의 손 B6] 유리의 먼지막 (GiantHand.dust_shown) · 커튼 (낮이 어둑) · 닦는 줄 (play_wipe — A24: 손 없이 유리 위를 비스듬히 쓸고 지나가는 반짝이는 줄)
 ## 밤에는 막도 함께 어두워진다.
 class_name JarAirOverlay
 extends ColorRect

@@ -1,13 +1,14 @@
 ## 스타터킷 풀기 (OPENING 단계 8 v3.9 — 2026-11-07 사용자 결정) — 넓은 세상 장면(world_village)이 키트 자리를 정한 뒤 붙인다.
-##   fly    카메라가 고른 자리 위로 날아감 (하늘 높이 거인의 손이 상자를 들고 있음)
-##   drop   손이 상자를 내려놓음 — 쿵 · 흙먼지 · 안개가 나머지 세상을 덮음
+##   fly    카메라가 고른 자리 위로 날아감 (상자는 하늘 높이 옅은 반짝임 속에 떠 있고, 땅엔 옅은 그림자)
+##   drop   상자가 내려앉음 (그림자가 커지고 짙어짐) — 쿵 · 흙먼지 · 안개가 나머지 세상을 덮음
+##          (A24 2026-11-08 그림 원칙: 거인의 손은 화면에 나오지 않는다 — view/sky_descent.gd)
 ##   rush   카메라가 상자 바로 앞까지 확 다가감 (주민 키 높이 — 정사영 그대로 낮은 각)
 ##   open   뚜껑이 열림
 ##   climb  주민이 한 명씩 상자 가장자리를 넘어 기어 나와 폴짝 내려서고 두리번거림. 한 아이는 하늘을 올려다보며 갸웃 (아직 거인을 모름)
 ##   pull   카메라가 물러나 상자 둘레가 보이는 높이로
 ##   tray   아래 칸에 상자에 든 것 (모닥불·창고·오두막·산 업그레이드 건물) — 하나 골라 땅을 누르면 그림자 미리보기 (초록 = 놓을 수 있음,
-##          빨강 = 없음 + 까닭) → 놓으면 손이 내려와 톡 · 흙먼지 · 쿵. [알아서 놓기] = 지금의 자동 배치. 상자 곁 Village.KIT_PLACE_R 안에서만
-##   end    빈 상자를 손이 들고 감 → finished (장면이 첫 주민 소개 → 이름)
+##          빨강 = 없음 + 까닭) → 놓으면 위에서 내려앉아 (자라는 그림자) 톡 · 흙먼지 · 쿵. [알아서 놓기] = 지금의 자동 배치. 상자 곁 Village.KIT_PLACE_R 안에서만
+##   end    빈 상자의 뚜껑이 닫히고 반짝임 속에 하늘로 떠올라 감 → finished (장면이 첫 주민 소개 → 이름)
 ## 놓은 자리는 곧바로 시뮬레이션 자리 (Village.move_kit_building · move_fire) + creation.json의 placed (앱이 꺼지면 여기서 다시).
 ## 병 시간은 이름을 지을 때까지 멈춰 있다 (장면의 paused).
 class_name KitUnpack
@@ -17,7 +18,7 @@ signal finished
 
 const BOX := Vector3(2.6, 1.15, 1.9)    # 상자 (칸) — 아이 키보다 조금 낮은 가장자리
 const WALL := 0.12
-const HOLD_H := 24.0                    # 손이 상자를 들고 기다리는 높이
+const HOLD_H := 24.0                    # 상자가 떠서 기다리는 높이
 const FLY_PPU := 11.0                   # 날아가서 내려앉는 확대 (상자가 보이는 높이)
 const PLACE_PPU := 13.0                 # 건물을 놓는 확대 (상자 둘레 KIT_PLACE_R가 화면에 들게)
 const CLOSE_SIZE := 9.5                 # 초확대: 화면 세로가 덮는 칸
@@ -42,10 +43,11 @@ var gy0 := 0.0
 var phase := ""
 var t := 0.0
 var yaw_deg := 45.0
-var root: Node3D                        # 상자·손 (장면의 jar 아래 — 병 데이터 좌표)
+var root: Node3D                        # 상자·그림자 (장면의 jar 아래 — 병 데이터 좌표)
 var box: Node3D
 var lid: Node3D
-var hand: Node3D
+var glint: CPUParticles3D               # (A24) 떠 있는 상자 둘레의 반짝임
+var box_shadow: MeshInstance3D          # (A24) 상자가 내려앉을 자리의 그림자 (내려올수록 커짐)
 var _rush_from := {}
 var _rush_to := {}
 var _pull_to := {}
@@ -67,7 +69,7 @@ var hint: Label
 var auto_btn: Button
 var _btns: Dictionary = {}              # key → Button
 var _press := false
-var _busy := 0.0                        # 손이 내려오는 동안 (다음 것을 고를 수는 있음)
+var _busy := 0.0                        # 건물이 내려오는 동안 (다음 것을 고를 수는 있음)
 
 
 func setup(scene: Node, village: Village, view: VillageView, p: Vector2, cplan: CreationPlan) -> void:
@@ -136,7 +138,7 @@ static func stand_spots(village: Village, p: Vector2, yaw: float, n: int) -> Arr
 	return out
 
 
-# ───────────────────────── 상자 · 손 ─────────────────────────
+# ───────────────────────── 상자 ─────────────────────────
 func _make_box() -> Node3D:
 	var b := Node3D.new()
 	var wood := Toon.mat(Color("e3c08f"))
@@ -185,10 +187,13 @@ func play() -> void:
 	t = 0.0
 	yaw_deg = close_yaw()
 	root.rotation.y = deg_to_rad(yaw_deg)
-	hand = SkyDropView.giant_hand(2.3)
-	hand.position = Vector3(0, BOX.y + 0.1, 0)
-	box.add_child(hand)
+	glint = SkyDescent.shimmer(BOX.x * 0.75)
+	glint.position.y = BOX.y * 0.5
+	box.add_child(glint)
+	box_shadow = SkyDescent.ground_shadow(BOX.x * 0.62)
+	root.add_child(box_shadow)
 	box.position.y = HOLD_H
+	SkyDescent.set_shadow(box_shadow, 0.15)
 	for r in v.people:
 		vw.staged[r.id] = {"vis": false}
 	caption.say("이 세상에 살 사람들을 데려왔어요.")
@@ -220,16 +225,15 @@ func _process(dt: float) -> void:
 		"drop":
 			var u := clampf(t / DROP_T, 0.0, 1.0)
 			box.position.y = HOLD_H * (1.0 - (1.0 - (1.0 - u) * (1.0 - u)))
+			SkyDescent.set_shadow(box_shadow, lerpf(0.15, 1.0, u * u))
 			if u >= 1.0:
 				box.position.y = 0.0
 				_thud(Vector3(spot.x, gy0, spot.y), 2.6)
-				var hp := hand.global_position
-				box.remove_child(hand)
-				root.add_child(hand)
-				hand.global_position = hp
+				SkyDescent.fade_out(glint)
+				glint = null
+				var sh := box_shadow
 				var tw := create_tween()
-				tw.tween_property(hand, "position", hand.position + Vector3(3.0, 26.0, -6.0), 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-				tw.tween_callback(hand.queue_free)
+				tw.tween_method(func(a: float) -> void: SkyDescent.set_shadow(sh, 1.0, a), 1.0, 0.0, 0.5)
 				_start_rush()
 		"rush":
 			var u := clampf(t / RUSH_T, 0.0, 1.0)
@@ -758,7 +762,7 @@ func aim_ground(p: Vector2) -> Dictionary:
 	return ghost_r
 
 
-## 그 자리에 놓음 (놓을 수 없으면 false). 손이 내려와 톡 · 흙먼지 · 쿵 → 시뮬레이션 자리 + creation.json
+## 그 자리에 놓음 (놓을 수 없으면 false). 위에서 내려앉아 톡 · 흙먼지 · 쿵 → 시뮬레이션 자리 + creation.json
 func place_at(p: Vector2) -> bool:
 	var r := aim_ground(p)
 	if not bool(r["ok"]):
@@ -827,16 +831,9 @@ func _nudge_people(p: Vector2, size: float) -> void:
 func _drop_fx(it: Dictionary, p: Vector2) -> void:
 	var gy := (sc.terrain as JarTerrain).ground_y(p.x, p.y)
 	var size := float(it["size"])
-	var h := SkyDropView.giant_hand(maxf(1.2, size * 0.9))
-	(sc.jar as Node3D).add_child(h)
-	var top := gy + maxf(2.0, size * 2.0)
-	h.position = Vector3(p.x, top + SkyDropView.FALL_H, p.y)
-	var tw := create_tween()
-	tw.tween_property(h, "position:y", top, SkyDropView.FALL_SECS).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tw.tween_property(h, "position:y", top + 28.0, 0.7).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.tween_callback(h.queue_free)
 	_busy = SkyDropView.FALL_SECS
-	if String(it["key"]) == "fire":
+	if String(it["key"]) == "fire":                # (A24) 모닥불은 따로 떨어지는 노드가 없음 — 그 자리에 그림자가 자라고 반짝임이 내려옴
+		SkyDescent.landing(sc.jar as Node3D, Vector3(p.x, gy, p.y), maxf(0.8, size), SkyDropView.FALL_SECS, 8.0)
 		var tw2 := create_tween()
 		tw2.tween_interval(SkyDropView.FALL_SECS)
 		tw2.tween_callback(func() -> void: _thud(Vector3(p.x, gy, p.y), 1.6))
@@ -910,13 +907,15 @@ func _finish() -> void:
 		return
 	var tw := create_tween()
 	tw.tween_interval(0.9)
-	if box != null and is_instance_valid(box) and box.is_inside_tree():      # 빈 상자는 손이 들고 감
-		var h := SkyDropView.giant_hand(2.3)
-		h.position = Vector3(0, BOX.y + 0.1 + 26.0, 0)
-		box.add_child(h)
-		tw.tween_property(h, "position:y", BOX.y + 0.1, 0.5).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	if box != null and is_instance_valid(box) and box.is_inside_tree():      # (A24) 빈 상자는 뚜껑이 닫히고 반짝임 속에 떠올라 감 (손 없이)
 		tw.tween_method(_lid_pose, 1.0, 0.0, 0.3)
-		tw.tween_property(box, "position:y", 70.0, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		tw.tween_callback(func() -> void:
+			var g := SkyDescent.shimmer(BOX.x * 0.75)
+			g.position.y = BOX.y * 0.5
+			box.add_child(g))
+		tw.tween_interval(0.35)
+		tw.tween_method(func(k: float) -> void: SkyDescent.set_shadow(box_shadow, 1.0 - k, 1.0 - k), 0.0, 1.0, 0.9)
+		tw.parallel().tween_property(box, "position:y", 70.0, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_callback(func() -> void: box.visible = false)
 	tw.tween_callback(func() -> void:
 		phase = "done"

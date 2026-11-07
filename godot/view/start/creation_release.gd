@@ -1,14 +1,14 @@
 ## 창조 들짐승·물고기 풀기 연출 (view/start/creation.gd 단계 wildlife — 두 박자, 2026-11-07 폰 피드백 "직관적이지 않음"):
-##   1. 나무 상자(널 틈으로 작은 짐승 얼굴) → 거인의 손가락이 병 안 땅에 내려놓음 → 뚜껑이 열리고 사슴·토끼·들양·멧돼지·늑대·들소가
+##   1. 나무 상자(널 틈으로 작은 짐승 얼굴) → 반짝임 속에 병 안 땅으로 내려앉음 (그림자가 자람) → 뚜껑이 열리고 사슴·토끼·들양·멧돼지·늑대·들소가
 ##      뛰어나와 제 서식지로 달림 (이름표 잠깐 — "사슴" "토끼"…). 서식지 = WorldGen.wildlife_plan 그대로 (보여 주기만).
 ##   2. 물고기가 헤엄치는 작은 유리병 → 호수 위에서 기울임 → 물고기가 퐁당 (물결 · 물방울) → 호수에서 빙빙 헤엄 · 가끔 뛰어오름.
+## (A24 2026-11-08 그림 원칙) 거인의 손·손가락은 그리지 않는다 — 떠 있는 것은 옅은 반짝임 + 땅의 그림자 (view/sky_descent.gd).
 ## 병 안 좌표는 CreationJar (u, v ∈ [-1, 1] → X = u·RIN, Z = v·RIN). 짐승 모델 = Art.parts("animals/<종>") (앞 = +Z).
 class_name CreationRelease
 extends Node3D
 
 const NAMES := {"deer": "사슴", "rabbit": "토끼", "wolf": "늑대", "boar": "멧돼지", "sheep": "들양", "aurochs": "들소"}
 const SCALE := {"deer": 0.6, "rabbit": 1.15, "wolf": 0.75, "boar": 0.92, "sheep": 0.75, "aurochs": 0.48}   # 병 안 크기 (작은 종은 더 크게)
-const SKIN := Color("f1c3a2")
 const WOOD := Color("d3a066")
 const WOOD_D := Color("8f5f38")
 const CW := 3.3                         # 상자 너비 (X)
@@ -23,10 +23,11 @@ const KIND_GAP := 0.22                  # 종이 바뀔 때 더 쉼 (이름표�
 var jar: CreationJar
 var crate: Node3D
 var crate_lid: Node3D
-var crate_hand: Node3D
+var crate_glint: CPUParticles3D          # (A24) 떠 있는 상자 둘레의 반짝임 (손 대신)
+var crate_shadow: MeshInstance3D        # 상자가 내려앉을 자리의 그림자
 var crate_inside: Node3D                # 상자 안에서 널 틈으로 내다보는 짐승들
 var fish_jar: Node3D
-var fish_hand: Node3D
+var fish_glint: CPUParticles3D           # (A24) 떠 있는 유리병 둘레의 반짝임
 var fish_body: Node3D                   # 유리병 몸 (기울이는 것)
 var _t := 0.0
 var _rng := RandomNumberGenerator.new()
@@ -57,49 +58,6 @@ static func _box(parent: Node3D, size: Vector3, at: Vector3, c: Color) -> MeshIn
 	mi.position = at
 	parent.add_child(mi)
 	return mi
-
-
-## a → b 원통 (손가락)
-static func _limb(parent: Node3D, a: Vector3, b: Vector3, r: float, c: Color) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	var cm := CapsuleMesh.new()
-	cm.radius = r
-	cm.height = a.distance_to(b) + 2.0 * r
-	cm.radial_segments = 12
-	cm.rings = 4
-	mi.mesh = cm
-	mi.material_override = Toon.mat(c)
-	parent.add_child(mi)
-	var up := (b - a).normalized()
-	var side := up.cross(Vector3.FORWARD)
-	if side.length() < 0.01:
-		side = Vector3.RIGHT
-	side = side.normalized()
-	mi.transform = Transform3D(Basis(side, up, side.cross(up)), (a + b) * 0.5)
-	return mi
-
-
-## 거인의 엄지·검지가 위에서 집은 모양 (끝 = 물건 양옆 half_w, 높이 tip_y) — 손가락만 (손바닥은 화면 위 밖, 거인은 크니까)
-static func _hand(half_w: float, tip_y: float) -> Node3D:
-	var h := Node3D.new()
-	for sx: float in [-1.0, 1.0]:
-		var r := 0.42 if sx < 0.0 else 0.48
-		var tip := Vector3(sx * (half_w + 0.32), tip_y, 0.1)
-		var mid := Vector3(sx * (half_w + 0.6), tip_y + 2.0, -0.7)
-		var base := Vector3(sx * (half_w + 0.35), tip_y + 5.0, -2.8)
-		_limb(h, tip, mid, r, SKIN)
-		_limb(h, mid, base, r * 1.06, SKIN)
-		_limb(h, base, Vector3(sx * (half_w * 0.4 + 0.6), tip_y + 14.0, -8.5), r * 1.12, SKIN)
-		var nail := MeshInstance3D.new()                 # 손톱 (끝이 손가락이라는 표시)
-		var nm := SphereMesh.new()
-		nm.radius = r * 0.62
-		nm.height = r * 0.5
-		nail.mesh = nm
-		nail.material_override = Toon.mat(Color("f8e0d2"))
-		nail.position = tip + Vector3(sx * 0.12, 0.25, r * 0.8)
-		nail.rotation.x = 1.25
-		h.add_child(nail)
-	return h
 
 
 ## 짐승 하나 (부품마다 관절 노드)
@@ -158,12 +116,17 @@ func _build_crate() -> void:
 		r.position = p[1]
 		r.rotation.y = float(p[2])
 		crate_inside.add_child(r)
-	crate_hand = _hand(CW * 0.5, CH * 0.62)
-	crate.add_child(crate_hand)
+	crate_glint = SkyDescent.shimmer(CW * 0.7)
+	crate_glint.position.y = CH * 0.5
+	crate_glint.emitting = false
+	crate.add_child(crate_glint)
+	crate_shadow = SkyDescent.ground_shadow(CW * 0.6)
+	crate_shadow.visible = false
+	add_child(crate_shadow)
 	crate.visible = false
 
 
-## 물고기 유리병: 유리 · 물 · 안에서 빙빙 도는 물고기 셋 · 코르크 (원점 = 병 가운데 — 손가락이 집은 축, fish_body가 앞으로 기울어짐)
+## 물고기 유리병: 유리 · 물 · 안에서 빙빙 도는 물고기 셋 · 코르크 (원점 = 병 가운데 — 떠 있는 축, fish_body가 앞으로 기울어짐)
 func _build_fish_jar() -> void:
 	fish_jar = Node3D.new()
 	add_child(fish_jar)
@@ -212,8 +175,9 @@ func _build_fish_jar() -> void:
 		var f := make_animal("fish_a" if i != 1 else "fish_b", 1.9)
 		fish_body.add_child(f["root"])
 		_jar_fish.append({"root": f["root"], "j": f["j"], "r": 0.5 + 0.1 * i, "y": -0.85 + 0.45 * i, "ang": i * 2.1, "sp": 1.6 + 0.4 * i})
-	fish_hand = _hand(1.12, 0.0)                 # 양옆 가운데를 집음 → 병은 그 축으로 앞으로 기울어짐 (손가락은 그대로)
-	fish_jar.add_child(fish_hand)
+	fish_glint = SkyDescent.shimmer(1.4)          # (A24) 손가락 대신 — 병은 반짝임 속에 떠서 그 축으로 앞으로 기울어짐
+	fish_glint.emitting = false
+	fish_jar.add_child(fish_glint)
 	fish_jar.visible = false
 
 
@@ -224,8 +188,7 @@ func hold_crate() -> void:
 	crate.visible = true
 	crate_inside.visible = true
 	crate_lid.rotation.x = 0.0
-	crate_hand.position = Vector3.ZERO
-	crate_hand.visible = true
+	crate_glint.emitting = true
 	crate.position = Vector3(0, HOLD_Y, 0)
 	crate.rotation = Vector3(0, 0, 0)
 
@@ -234,18 +197,23 @@ func hold_crate() -> void:
 func play_crate(at: Vector2, groups: Array) -> float:
 	hold_crate()
 	var ground := jar.uv_point(at.x, at.y)
+	crate_shadow.position = ground + Vector3(0, 0.06, 0)
+	crate_shadow.visible = true
 	var tw := _tw()
 	tw.tween_property(crate, "position", Vector3(ground.x, ground.y + 2.2, ground.z), 0.55).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_method(func(k: float) -> void: SkyDescent.set_shadow(crate_shadow, k), 0.15, 0.85, 0.55)
 	tw.tween_property(crate, "position", ground, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(func() -> void: GameAudio.fx("box_open", "Room", -4.0))
+	tw.parallel().tween_method(func(k: float) -> void: SkyDescent.set_shadow(crate_shadow, k), 0.85, 1.0, 0.5)
+	tw.tween_callback(func() -> void:
+		crate_glint.emitting = false
+		GameAudio.fx("box_open", "Room", -4.0))
 	tw.tween_property(crate_lid, "rotation:x", -3.0, 0.32).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tw.parallel().tween_property(crate_hand, "position:y", 9.0, 0.6).set_trans(Tween.TRANS_SINE)
+	tw.parallel().tween_method(func(a: float) -> void: SkyDescent.set_shadow(crate_shadow, 1.0, a), 1.0, 0.0, 0.32)
 	tw.tween_callback(func() -> void:
 		crate_inside.visible = false
-		crate_hand.visible = false
 		GameAudio.fx("sheep", "Room", -14.0))
 	var n := _spawn(at, groups, _t + 1.35, true)
-	tw.tween_interval(n * SPAWN_GAP + 5.0 * KIND_GAP + JD)                # 다 뛰어나오면 손이 빈 상자를 치움 (서식지를 가리지 않게)
+	tw.tween_interval(n * SPAWN_GAP + 5.0 * KIND_GAP + JD)                # 다 뛰어나오면 빈 상자가 떠올라 감 (서식지를 가리지 않게)
 	tw.tween_callback(lift_crate)
 	return 5.6
 
@@ -256,6 +224,8 @@ func finish_crate(at: Vector2, groups: Array, hard := true) -> void:
 	if hard:
 		_kill_fx()
 		crate.visible = false
+		crate_glint.emitting = false
+		crate_shadow.visible = false
 		for t: Dictionary in _tags:
 			(t["label"] as Node).queue_free()
 		_tags.clear()
@@ -265,18 +235,20 @@ func finish_crate(at: Vector2, groups: Array, hard := true) -> void:
 		a["t0"] = minf(float(a["t0"]), _t - JD - float(a["dur"]))
 
 
-## 상자를 치움 (손이 다시 집어 올림)
+## 상자를 치움 (A24 — 손 없이: 반짝임 속에 떠올라 감, 그림자가 작아지며 사라짐)
 func lift_crate() -> void:
 	if not crate.visible or bool(crate.get_meta("lifting", false)):
 		return
 	crate.set_meta("lifting", true)
-	crate_hand.visible = true
-	crate_hand.position.y = 9.0
+	crate_glint.emitting = true
 	var tw := _tw()
-	tw.tween_property(crate_hand, "position:y", 0.0, 0.4).set_trans(Tween.TRANS_SINE)
+	tw.tween_interval(0.3)
 	tw.tween_property(crate, "position:y", crate.position.y + 16.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_method(func(k: float) -> void: SkyDescent.set_shadow(crate_shadow, 1.0 - k, 1.0 - k), 0.0, 1.0, 0.8)
 	tw.tween_callback(func() -> void:
 		crate.visible = false
+		crate_glint.emitting = false
+		crate_shadow.visible = false
 		crate.set_meta("lifting", false))
 
 
@@ -363,8 +335,7 @@ func _fx_scale(n: Node3D, to: Vector3) -> void:
 func hold_fish_jar(lake: Dictionary) -> void:
 	_lake = lake
 	fish_jar.visible = true
-	fish_hand.visible = true
-	fish_hand.position = Vector3.ZERO
+	fish_glint.emitting = true
 	fish_jar.rotation = Vector3.ZERO
 	fish_body.rotation = Vector3.ZERO
 	(fish_body.get_node("Cork") as Node3D).visible = true
@@ -394,7 +365,9 @@ func play_fish(lake: Dictionary) -> float:
 	tw.tween_callback(func() -> void: jar.set_pour(""))
 	tw.tween_property(fish_body, "rotation:x", 0.0, 0.35)
 	tw.tween_property(fish_jar, "position:y", over.y + 14.0, 0.8).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.tween_callback(func() -> void: fish_jar.visible = false)
+	tw.tween_callback(func() -> void:
+		fish_jar.visible = false
+		fish_glint.emitting = false)
 	return 4.4
 
 
@@ -424,6 +397,7 @@ func finish_fish(lake: Dictionary) -> void:
 	_kill_fx()
 	jar.set_pour("")
 	fish_jar.visible = false
+	fish_glint.emitting = false
 	for f: Dictionary in _flying:
 		_to_swim(f)
 	_flying.clear()
