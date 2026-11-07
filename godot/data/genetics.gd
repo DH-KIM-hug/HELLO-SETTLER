@@ -20,7 +20,13 @@ const BALD := 13         # 13·14 대머리: 1 있음 (남자 하나면 · 여�
 const RARE := 15         # 드문 변이: 0 없음 · 1 짝짝이 눈 · 2 흰 앞머리 한 줌
 const PIEBALD := 16      # 점박이 유전자 1벌 (0/1)
 const PATTERN := 17      # 무늬 시드 (점박이 무늬 6종 × 자리)
-const GENE_BYTES := 18
+## (A20 주민 2차, 2026-11-07) 얼굴 생김새 — 연속값, 부모 평균 ± 흔들림 (닮음). 능력과 무관.
+const FACE := 18         # 얼굴형 0~255 → 4종 (둥근 · 갸름한 · 넓적한 · 하트)
+const NOSE := 19         # 코 0~255 → 3종 (작은 · 동그란 · 오똑한)
+const BROW := 20         # 눈썹 0~255 → 3종 (가는 · 도톰한 · 둥근)
+const STYLE := 21        # 차림 취향 씨앗 (유전 안 됨 — 사람마다 새로): 머리 모양 고르기 · 꾸밈 (꽃·목수건·잎 망토)
+const MIN_BYTES := 18    # 예전 저장의 유전자 길이 (18) — 이만큼 있으면 유전자 있음. 새 칸이 없으면 앞 18바이트에서 정해진 값
+const GENE_BYTES := 22
 
 # ───────────── 유전 수치 (안) ─────────────
 const SKIN_NOISE := 0.08         # 아이 = 부모 평균 ± 이만큼
@@ -36,6 +42,7 @@ const BALD_FULL_HOMO := 17.0     # 두 벌이면 조금 일찍
 const GREY_FROM := 20.0          # 모두 노년(20일~)부터 흰머리
 const GREY_FROM_EARLY := 12.0    # '장수' 혈통의 은빛 머리는 일찍
 const GREY_FULL_DAYS := 8.0      # 흰머리가 다 덮기까지
+const FACE_NOISE := 0.18         # 얼굴형·코·눈썹: 아이 = 부모 평균 ± 이만큼 (형제도 조금씩 다르게)
 
 # 무작위 사람(키트 추천값·이주민)의 대립유전자 빈도 (안)
 const P_EYE := [0.4, 0.2, 0.4]
@@ -111,6 +118,10 @@ static func random_genes(rng: RandomNumberGenerator, rare_ok := true) -> PackedB
 	if rare_ok and rng.randf() < PIEBALD_NEW_P:
 		g[PIEBALD] = 1
 	g[PATTERN] = rng.randi() % 256
+	g[FACE] = rng.randi() % 256
+	g[NOSE] = rng.randi() % 256
+	g[BROW] = rng.randi() % 256
+	g[STYLE] = rng.randi() % 256
 	return g
 
 
@@ -170,7 +181,7 @@ static func _set_shown(rng: RandomNumberGenerator, g: PackedByteArray, at: int, 
 
 ## 아이 = 부모에게서 (연속값: 평균 + 흔들림, 대립유전자: 부모 각자 한 벌씩 무작위, 점박이: 가진 부모마다 50%)
 static func inherit(rng: RandomNumberGenerator, mom: PackedByteArray, dad: PackedByteArray) -> PackedByteArray:
-	if mom.size() < GENE_BYTES or dad.size() < GENE_BYTES:
+	if mom.size() < MIN_BYTES or dad.size() < MIN_BYTES:
 		return random_genes(rng)
 	var g := blank()
 	g[SKIN] = _b((mom[SKIN] + dad[SKIN]) / 510.0 + rng.randf_range(-SKIN_NOISE, SKIN_NOISE))
@@ -188,6 +199,9 @@ static func inherit(rng: RandomNumberGenerator, mom: PackedByteArray, dad: Packe
 		pb = true
 	g[PIEBALD] = 1 if pb else 0
 	g[PATTERN] = rng.randi() % 256
+	for at: int in [FACE, NOSE, BROW]:
+		g[at] = _b((byte_of(mom, at) + byte_of(dad, at)) / 510.0 + rng.randf_range(-FACE_NOISE, FACE_NOISE))
+	g[STYLE] = rng.randi() % 256
 	return g
 
 
@@ -276,6 +290,36 @@ static func heterochromia(g: PackedByteArray) -> bool:
 
 static func forelock(g: PackedByteArray) -> bool:
 	return g[RARE] == 2
+
+
+## 바이트 하나 — 예전 저장(18바이트)에 없는 새 칸은 앞 바이트들에서 정해진 값 (늘 같음, 사람마다 다름)
+static func byte_of(g: PackedByteArray, at: int) -> int:
+	if at < g.size():
+		return g[at]
+	var h := 7 + at * 131
+	for i in mini(g.size(), MIN_BYTES):
+		h = (h * 31 + g[i] * (i + 3)) % 65521
+	return (h * 2654435761 >> 8) & 255
+
+
+## 얼굴형 0 둥근 · 1 갸름한 · 2 넓적한 · 3 하트 (뾰족한 턱)
+static func face_shape(g: PackedByteArray) -> int:
+	return clampi(byte_of(g, FACE) * 4 / 256, 0, 3)
+
+
+## 코 0 작은 · 1 동그란 · 2 오똑한
+static func nose(g: PackedByteArray) -> int:
+	return clampi(byte_of(g, NOSE) * 3 / 256, 0, 2)
+
+
+## 눈썹 0 가는 · 1 도톰한 · 2 둥근
+static func brow(g: PackedByteArray) -> int:
+	return clampi(byte_of(g, BROW) * 3 / 256, 0, 2)
+
+
+## 차림 취향 씨앗 0~255 (유전 아님)
+static func style(g: PackedByteArray) -> int:
+	return byte_of(g, STYLE)
 
 
 static func skin_color(g: PackedByteArray) -> Color:

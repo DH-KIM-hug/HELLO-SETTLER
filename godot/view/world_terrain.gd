@@ -1473,27 +1473,11 @@ func _build_marks() -> void:
 	for c in marks.get_children():
 		c.queue_free()
 	_drops.clear()
-	var drop_mat := Toon.mat(Style.DROP)
-	for d: Dictionary in ww.drips:
+	for d: Dictionary in ww.drips:        # [E3-7] 돌기마다 물방울·동심원·낮의 김 (JarTerrain._add_dew_marks — 새벽에만 떨어짐)
 		var x: float = d["x"]
 		var z: float = d["y"]
-		var fall := SphereMesh.new()
-		fall.radius = 0.22
-		fall.height = 0.5
-		var fn := _add(fall, drop_mat, Vector3(x, LID_Y, z))
 		var k := ww.idx(x, z)
-		var surf := (ww.h[k] + ww.depth(k)) * HS - WATER_SINK
-		var phase := randf()
-		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "big": true})
-		for r in 2:
-			var tm := TorusMesh.new()
-			tm.inner_radius = 0.94
-			tm.outer_radius = 1.0
-			tm.rings = 24
-			tm.ring_segments = 3
-			var rn := _add(tm, Toon.mat(Style.WATER_FOAM), Vector3(x, surf + 0.03, z))
-			rn.scale = Vector3(1, 0.05, 1)
-			_drops.append({"node": rn, "ring": true, "phase": fposmod(phase + 0.5 * r, 1.0), "speed": 0.35})
+		_add_dew_marks(x, z, (ww.h[k] + ww.depth(k)) * HS - WATER_SINK, 6.0, 1.1)
 
 
 ## 멀리 축소하면 높이 단계 줄(terrain.gdshader band_h)이 너무 촘촘해져 땅이 어두워진다 → 단계 간격을 넓힘 (내 재질만)

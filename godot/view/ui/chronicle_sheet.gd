@@ -368,7 +368,51 @@ func _fill_recent() -> void:
 			if String(e["where"]) != "":
 				var wl := _label(col, String(e["where"]), "Small")
 				wl.add_theme_color_override("font_color", UiTheme.PRIMARY)
-			_hand(col, String(e["text"]))
+			if String(e.get("card", "")) != "":
+				col.add_child(picture_card(String(e.get("pic", "")), String(e["text"])))
+			else:
+				_hand(col, String(e["text"]))
+
+
+## (E1-0) 연대기 그림 카드 — 그 장면 한 장 + 손글씨 한 줄 (그림 파일이 없으면 글만 카드에)
+static var _pic_cache: Dictionary = {}
+
+
+func picture_card(path: String, text: String) -> PanelContainer:
+	var pc := PanelContainer.new()
+	pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("fbf3dc")
+	sb.border_color = UiTheme.PARCHMENT_EDGE
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(3)
+	sb.set_content_margin_all(6)
+	sb.shadow_color = Color(0.3, 0.2, 0.05, 0.25)
+	sb.shadow_size = 3
+	sb.shadow_offset = Vector2(1, 2)
+	pc.add_theme_stylebox_override("panel", sb)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	pc.add_child(col)
+	var tex: Texture2D = _pic_cache.get(path)
+	if tex == null and path != "" and FileAccess.file_exists(path):
+		var img := Image.load_from_file(path)
+		if img != null and not img.is_empty():
+			tex = ImageTexture.create_from_image(img)
+			_pic_cache[path] = tex
+	if tex != null:
+		var tr := TextureRect.new()
+		tr.texture = tex
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+		tr.custom_minimum_size = Vector2(0, 150)
+		tr.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		tr.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		tr.clip_contents = true
+		col.add_child(tr)
+	_hand(col, text)
+	return pc
 
 
 func _clock(tt: float) -> String:

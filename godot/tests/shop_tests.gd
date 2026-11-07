@@ -781,10 +781,12 @@ func test_ui() -> void:
 		if b.size.x < UiTheme.TOUCH - 0.5 or b.size.y < UiTheme.TOUCH - 0.5:
 			small += 1
 	check(small == 0, "도구 버튼 모두 44px 이상")
+	Firsts.open_all()                       # (6c) 도구는 사건과 함께 열린다 — 여기선 모두 열린 손 (잠긴 손은 tests/staging_tests.gd)
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
-	check(bool(scene.call("hand_open")) and hc.spray_btn.is_visible_in_tree() and hc.blow_btn.is_visible_in_tree() and not hc.lid_btn.is_visible_in_tree(),
-		"손 → 물 뿌리기·불기·핀셋·등불·손에 든 것 칸 (뚜껑 단추 없음 — 저절로 열림)")
+	hc.refresh()
+	check(bool(scene.call("hand_open")) and hc.spray_btn.is_visible_in_tree() and not hc.blow_btn.is_visible_in_tree() and not hc.lid_btn.is_visible_in_tree(),
+		"손 → 물 뿌리기·핀셋·유리 닦기·등불·손에 든 것 칸 (뚜껑·불기 단추 없음 — 6c-1)")
 	Market.hand = [{"id": 99, "item": "각설탕", "paid": 500.0}]
 	scene.call("start_drop", 99)
 	var sv: Village = scene.get("village")
@@ -794,3 +796,4 @@ func test_ui() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	Market.reset()
+	Firsts.reset()

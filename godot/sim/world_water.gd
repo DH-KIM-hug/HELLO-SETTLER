@@ -75,6 +75,7 @@ var _wet_rr := 0
 # 물이 들어오는 곳 (JarWater.drips·grooves에 더해)
 var drip_k := PackedInt32Array()
 var drip_mult := PackedFloat32Array()
+var drip_got := PackedFloat64Array()    # 돌기마다 이미 땅에 준 이슬 (dew_cum 기준 — 거친 칸은 SLICES번에 한 번 받아도 빠짐없이, 4.2b)
 var groove_k := PackedInt32Array()
 var groove_mult := PackedFloat32Array()   # 골마다 배율 (키트 자리로 가는 강의 골은 더 많이)
 
@@ -551,15 +552,28 @@ func advance(seconds: float) -> void:
 		left -= dt
 		t += dt
 		_hydro_acc += dt
-		var every := OFFLINE_EVERY_BIG if offline else ONLINE_EVERY
+		var every := OFFLINE_EVERY_BIG * offline_mult if offline else ONLINE_EVERY
 		while _hydro_acc >= every:
 			world_tick(every / 60.0)
 			_hydro_acc -= every
+		dew_step(dt)
 		var hr := hour_now()
 		if hr >= 7.0 and hr < 18.0:
 			humid = minf(1.0, humid + dt / (DAY * 0.45))
 		else:
 			humid = maxf(0.2, humid - dt / (DAY * 0.9))
+
+
+## 돌기 i가 마지막으로 받은 뒤 떨어진 이슬 (E3-7 이슬의 하루 박자 — 새벽에 몰아서, 하루 총량은 예전과 같다)
+func _dew_take(i: int) -> float:
+	if drip_got.size() != drip_k.size():
+		var n0 := drip_got.size()
+		drip_got.resize(drip_k.size())
+		for j in range(n0, drip_k.size()):
+			drip_got[j] = dew_cum
+	var a := DRIP_RATE * drip_mult[i] * (dew_cum - drip_got[i])
+	drip_got[i] = dew_cum
+	return a
 
 
 ## 한 번: 고운 조각 한 걸음 + 거친 칸 한 묶음 (거친 칸마다 SLICES번에 한 번 = sc × SLICES)
@@ -595,7 +609,7 @@ func fine_step(sc: float) -> void:
 	for i in drip_k.size():
 		var k := drip_k[i]
 		if is_fine_k(k):
-			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			var a := _dew_take(i)
 			ww[k] += a
 			added += a
 	for i in groove_k.size():
@@ -720,7 +734,7 @@ func fine_step_ref(sc: float) -> void:
 	for i in drip_k.size():
 		var k := drip_k[i]
 		if is_fine_k(k):
-			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			var a := _dew_take(i)
 			ww[k] += a
 			added += a
 	for i in groove_k.size():
@@ -830,7 +844,7 @@ func coarse_slice(sc: float, slice: int) -> void:
 		var k := drip_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			var a := _dew_take(i)
 			V[c] += a
 			added += a
 			_relevel(c)
@@ -1008,7 +1022,7 @@ func coarse_slice_ref(sc: float, slice: int) -> void:
 		var k := drip_k[i]
 		var c := coarse_of(k)
 		if (c / m) % SLICES == slice and not is_fine_k(k):
-			var a := DRIP_RATE * drip_mult[i] * sc * (0.6 + humid)
+			var a := _dew_take(i)
 			V[c] += a
 			added += a
 			_relevel(c)

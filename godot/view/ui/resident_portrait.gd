@@ -1,8 +1,8 @@
 ## 주민 초상 — 그 주민의 모델(ResidentModel)을 정면 가까이, 천천히 숨 쉬게. 따로 쓰는 작은 3D 세상(SubViewport)에 그린다.
 ## 겉모습 단계(ResidentModel.look_key)가 바뀌면 다시 만든다. 잠든(죽은) 사람은 회색으로.
 ## A20 v4: 늘 가까이 LOD + 직업 옷(일터 종류 · 촌장 띠)을 입고, 시트처럼 앞쪽 왼편 위에서 비추는 3/4 빛 (얼굴·옷 결이 보이게).
-## 그림 초상 (plan ②): 그림 층(PortraitComposer · art/portrait)이 다 있으면 3D 대신 콘셉트 시트풍 그림을 겹쳐 그린다.
-## 그림이 하나라도 없으면 예전처럼 3D 모델.
+## 그림 초상 (A20 2차): PortraitComposer · PortraitArt가 코드로 그린 SVG 조각을 겹쳐 그린다 (3D 대신).
+## 그림 초상이 꺼져 있으면 (PortraitComposer.enabled = false) 예전처럼 3D 모델.
 class_name ResidentPortrait
 extends SubViewportContainer
 

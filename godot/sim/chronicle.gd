@@ -17,7 +17,8 @@ static func recent(villages: Array, limit := 200) -> Array:
 		var from := maxi(0, b.size() - limit)
 		for i in range(from, b.size()):
 			var e: Dictionary = b[i]
-			all.append({"t": float(e["t"]), "text": String(e["text"]), "where": q.settlement_name if many else "", "day": q.cal_day(float(e["t"])), "i": i})
+			all.append({"t": float(e["t"]), "text": String(e["text"]), "where": q.settlement_name if many else "", "day": q.cal_day(float(e["t"])), "i": i,
+				"card": String(e.get("card", "")), "pic": String(e.get("pic", ""))})     # (E1-0) 사건 연출의 그림 카드
 	all.sort_custom(func(a: Dictionary, c: Dictionary) -> bool:
 		return a["t"] > c["t"] if a["t"] != c["t"] else a["i"] > c["i"])
 	all = all.slice(0, limit)

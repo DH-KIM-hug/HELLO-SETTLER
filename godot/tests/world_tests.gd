@@ -17,7 +17,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	run.timed(self, ["test_world_seeds", "test_world_determinism", "test_world_water", "test_far_lakes", "test_kits_and_fog", "test_two_kits_contact", "test_world_rotation", "test_world_budget",
-		"test_sim_speed", "test_world_carriers"])
+		"test_sim_speed", "test_world_carriers", "test_dew_rhythm"])
 
 
 ## BALANCE v5 · E0 (사용자 2026-11-07: "게임 화면에서 아무도 짐을 들고 있지 않았다"): 넓은 세상 키트 마을에서도 첫 병 하루 안에
@@ -119,6 +119,99 @@ func test_world_determinism() -> void:
 	var c: String = sig.call(12)
 	check(a == b, "시드 11 두 번 → 같은 땅·물·키트 무리·안개 (%d자)" % a.length())
 	check(a != c, "시드 12는 다르다")
+
+
+## E3-7 이슬의 하루 박자 (기획서 4.2b): 돌기 물은 새벽(4~8시)에 몰아서 떨어지고 낮엔 안 떨어진다 — 하루 총량은 예전의
+## '늘 같은 빠르기'(DRIP_RATE × (0.6 + 습도) / 분)와 같다 · 시간 조각 크기와 상관없음 · 넓은 세상의 돌기 호수·강은 그대로
+func test_dew_rhythm() -> void:
+	print("== 이슬의 하루 박자 — 새벽에 몰아서, 하루 총량 그대로")
+	# 1) 소형 병: 10초씩 흘리며 예전 빠르기를 따로 더해 비교 (8시 → 4일 뒤 8시 + 1시간 — 새벽 창이 끝난 뒤)
+	var s := JarWater.new_prototype_world()
+	var c0 := s.dew_cum
+	var old := 0.0
+	var day_rel := 0.0           # 낮 (9~16시)에 떨어진 몫
+	var dawn_rel := 0.0          # 새벽 (4~8시)
+	var steps := int((4.0 * JarWater.DAY + JarWater.HOUR) / JarWater.SUBSTEP)
+	var max_bead := 0.0
+	var noon_bead := 1.0
+	for i in steps:
+		old += JarWater.SUBSTEP / 60.0 * (0.6 + s.humid)
+		var before := s.dew_cum
+		s.advance(JarWater.SUBSTEP)
+		var hr := s.hour_now()
+		if hr > 9.0 and hr < 16.0:
+			day_rel += s.dew_cum - before
+			noon_bead = minf(noon_bead, 1.0 - s.dew_bead())
+		elif hr > JarWater.DEW_FROM and hr < JarWater.DEW_TO + 0.1:
+			dawn_rel += s.dew_cum - before
+		if hr > 2.0 and hr < 4.0:
+			max_bead = maxf(max_bead, s.dew_bead())
+	var got := s.dew_cum - c0
+	# 예전 방식은 그때그때 떨어졌고, 새 방식은 첫 새벽 전(8시 이전 = 시작 전 시간)까지 모인 것을 떨어뜨린다 → 시작 직후 모인 몫(마지막 새벽 뒤 1시간)만 다르다
+	var lag := s.dew
+	print("  4일: 예전 빠르기 합 %.1f · 떨어진 이슬 %.1f + 아직 모인 김 %.2f · 낮(9~16시)에 떨어진 몫 %.3f · 새벽 %.1f · 새벽 전 물방울 크기 %.2f" % [old, got, lag, day_rel, dawn_rel, max_bead])
+	check(absf(got + lag - old) < 1e-6 * old, "모인 김 = 예전에 떨어지던 양 그대로 (차이 %.6f)" % absf(got + lag - old))
+	check(absf(got - old) < 0.02 * old, "4일 동안 땅에 떨어진 이슬 = 예전 총량의 ±2%% (%.1f / %.1f = %.4f)" % [got, old, got / old])
+	check(day_rel == 0.0 and absf(dawn_rel - got) < 1e-6 * got, "낮엔 안 떨어지고 새벽(4~8시)에 다 떨어진다")
+	check(max_bead > 0.6 and noon_bead > 0.999, "새벽 전엔 돌기에 물방울이 크게 맺히고 (%.2f), 한낮엔 없다" % max_bead)
+	# 2) 조각 크기: 같은 시간을 한 번에 / 7초씩 흘려도 거의 같다 (10초 조각 안에서 끊긴 것만 다름)
+	var a := JarWater.new_prototype_world()
+	var b := JarWater.new_prototype_world()
+	a.advance(2.0 * JarWater.DAY)
+	for i in int(2.0 * JarWater.DAY / 7.0):
+		b.advance(7.0)
+	b.advance(2.0 * JarWater.DAY - int(2.0 * JarWater.DAY / 7.0) * 7.0)
+	check(absf(a.dew_cum - b.dew_cum) < 1e-3 * a.dew_cum, "시간 조각 크기와 상관없음 (한 번에 %.3f · 7초씩 %.3f)" % [a.dew_cum, b.dew_cum])
+	# 3) 넓은 세상: 돌기마다 받은 물 = DRIP_RATE × 배율 × 떨어진 이슬 (거친 칸이 SLICES번에 한 번 받아도) ·
+	#    같은 세상을 예전 방식(JarWater.dew_legacy — 늘 같은 빠르기)으로 돌린 것과 돌기 호수·강·물 총량이 같다
+	var days := 2 if quick else 4
+	var nw: Dictionary = _dew_world(false, days)
+	var lw: Dictionary = _dew_world(true, days)
+	var ratio_lo := 9.0
+	var ratio_hi := 0.0
+	for i in (nw["lakes"] as Array).size():
+		if int(lw["lakes"][i]) > 15:
+			var r := float(nw["lakes"][i]) / float(lw["lakes"][i])
+			ratio_lo = minf(ratio_lo, r)
+			ratio_hi = maxf(ratio_hi, r)
+	print("  넓은 세상 %d일 (10시 → 10시) 새 / 예전: 떨어진 이슬 %.1f / %.1f · 물 총량 %.2f / %.2f · 마을 둘레 강 칸 %d / %d · 돌기 호수 크기 비 %.2f~%.2f · 첫 호수 새벽 전→10시%s" % [
+		days, nw["cum"], lw["cum"], nw["water"], lw["water"], nw["river"], lw["river"], ratio_lo, ratio_hi, nw["swing"]])
+	check(nw["all_got"], "10시엔 모든 돌기가 그날 새벽 이슬을 다 받았다 (거친 칸 포함)")
+	check(absf(float(nw["cum"]) / float(lw["cum"]) - 1.0) < 0.02, "넓은 세상에 떨어진 돌기 물 = 예전 ±2%")
+	# 물 총량은 재는 때(10시)에 새벽 이슬이 막 들어와 아직 덜 증발한 만큼 조금 많다 — 들어온 양은 같다
+	check(absf(float(nw["water"]) / float(lw["water"]) - 1.0) < 0.03, "세상의 물 총량 = 예전 ±3%% (%.2f / %.2f)" % [nw["water"], lw["water"]])
+	check(ratio_lo >= 0.9 and ratio_hi <= 1.1, "돌기 호수 크기 = 예전 ±10%% (%.2f~%.2f)" % [ratio_lo, ratio_hi])
+	check(absf(float(nw["river"]) - float(lw["river"])) <= 0.15 * maxf(20.0, float(lw["river"])), "마을 둘레 강 = 예전과 비슷 (%d / %d칸)" % [nw["river"], lw["river"]])
+
+
+## test_dew_rhythm용: 시드 21 세상을 10시부터 days일 (온·오프라인 번갈아) — 예전 방식(legacy)이면 이슬을 그때그때 떨어뜨림
+func _dew_world(legacy: bool, days: int) -> Dictionary:
+	JarWater.dew_legacy = legacy
+	var ww := WorldGen.generate(21)
+	var sp := ww.spots[0]
+	var list: Array[Dictionary] = [{"x": sp.x, "y": sp.y, "r": 36.0}]
+	ww.set_interest(list)
+	ww.advance(fposmod(10.0 * JarWater.HOUR - ww.clock(), JarWater.DAY))     # 10시부터 (새벽 창이 끝나 모두 받은 뒤)
+	var cum0 := ww.dew_cum
+	var swing := ""
+	for dd in days:
+		ww.offline = dd % 2 == 1
+		ww.advance(17.0 * JarWater.HOUR)      # 3시: 새벽 전 (호수가 가장 낮을 때)
+		var pre_dawn := ww.lake_cells_in(Vector2(ww.drips[0]["x"], ww.drips[0]["y"]), 14.0)
+		ww.advance(7.0 * JarWater.HOUR)       # 10시
+		swing += " %d→%d" % [pre_dawn, ww.lake_cells_in(Vector2(ww.drips[0]["x"], ww.drips[0]["y"]), 14.0)]
+	JarWater.dew_legacy = false
+	var lakes: Array = []
+	for d: Dictionary in ww.drips:
+		lakes.append(ww.lake_cells_in(Vector2(d["x"], d["y"]), 14.0))
+	var all_got := true
+	for i in ww.drip_k.size():
+		all_got = all_got and ww.drip_got[i] == ww.dew_cum
+	var river := 0
+	for k in ww.cells_near(sp, 36.0):
+		if ww.is_river(k):
+			river += 1
+	return {"lakes": lakes, "cum": ww.dew_cum - cum0, "water": ww.total_water(), "river": river, "all_got": all_got, "swing": swing}
 
 
 ## 물·소금 보존: 고운 칸 ↔ 거친 칸을 오가도 (마을 둘레가 옮겨 다녀도) 들어온 − 나간 만큼만 바뀐다

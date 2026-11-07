@@ -346,7 +346,9 @@ func test_drop_lifecycle() -> void:
 	var added := s._pour(v, Vector2(s.drop_splash["x"], s.drop_splash["y"]), 3.0, 0.05)
 	var total1 := v.water.total(v.water.w)
 	check(added > 0.0 and absf(total1 - total0) < total0 * 1e-4, "물은 병의 물에서 덜어 온 것 (닫힌 순환 — 합 %.3f → %.3f, 부은 물 %.3f)" % [total0, total1, added])
-	check(s.drop_trail.size() >= 3, "구른 자리에 물자국")
+	# E3-7: 새벽 이슬로 강이 불어난 아침엔 구르다 금방 물에 닿아 터지기도 한다 (물에 닿으면 터짐 — 그땐 자국이 짧다)
+	var into_water := v.water_at(float(s.drop_splash["x"]), float(s.drop_splash["y"]))
+	check(s.drop_trail.size() >= 3 or (into_water and s.drop_trail.size() >= 1), "구른 자리에 물자국 (%d곳%s)" % [s.drop_trail.size(), " · 물에 닿아 터짐" if into_water else ""])
 	check(_lines(v, bk).any(func(t: String) -> bool: return t.contains("하늘 물덩이가 떨어진 날")), "연대기 이름: '하늘 물덩이가 떨어진 날'")
 	check(not v.dead.any(func(r: Resident) -> bool: return r.death_t >= Balance.MOLD_FIRST_DAY * D and r.death_why == "부상"), "물바다로 죽은 사람은 없다 (다칠 뿐)")
 

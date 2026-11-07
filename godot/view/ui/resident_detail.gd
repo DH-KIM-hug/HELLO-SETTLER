@@ -432,7 +432,7 @@ func _fill_looks() -> void:
 		c.queue_free()
 	for line in ResidentText.appearance(r):
 		_label(look_box, "· " + line)
-	if r.genes.size() >= Genetics.GENE_BYTES and Genetics.piebald(r.genes):
+	if r.genes.size() >= Genetics.MIN_BYTES and Genetics.piebald(r.genes):
 		var l := _label(look_box, "하늘의 눈송이가 내려앉은 아이")
 		l.add_theme_color_override("font_color", UiTheme.ACCENT)
 	var cues := PackedStringArray()

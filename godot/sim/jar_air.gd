@@ -96,9 +96,10 @@ func step(v: Village, dt: float) -> void:
 		if lid_mix < 1e-4:
 			lid_mix = 0.0
 	_acc += dt
-	while _acc >= Balance.AIR_TICK - 1e-6:
-		_acc -= Balance.AIR_TICK
-		_tick(v, Balance.AIR_TICK)
+	var tk := Balance.AIR_TICK * v.tick_mult          # 따라잡기 빠른 길이면 성기게
+	while _acc >= tk - 1e-6:
+		_acc -= tk
+		_tick(v, tk)
 
 
 ## 처음: 목표값에서 시작 (첫 걸음 — 병의 상태가 정해진 뒤)

@@ -101,6 +101,11 @@ var _tray_h := 0.0
 var chronicle: ChronicleSheet
 var people_sheet: PeopleSheet          # [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] (view/ui/people_sheet.gd)
 var rev_show: RevelationShow
+var director: StageDirector           # (E1-0) 사건 연출 바탕 — 깨달음·제단 짓기·첫 기도 (view/stage_director.gd · view/stagings.gd)
+var first_popup: FirstPopup           # (6b·6c) 처음 겪는 일의 안내 창 (sim/firsts.gd)
+var _firsts_t := 0.0
+var _popup_wait := 0.0                # 연출이 끝난 뒤 안내 창까지 잠깐 (현실 초)
+var _tool_glow := {}                  # 아래 띠 단추 이름 → 반짝일 남은 현실 초 (연출이 부름 — glow_tool)
 var guide_cap: GuideCaption
 var _awake_seen := {}                # 무리(Village) → 본 깨달음 시각 (새로 깨달으면 빛 한 줄기)
 var _btn_glow_t := 0.0
@@ -370,6 +375,11 @@ func look_at_ground(p: Vector2) -> void:
 	cam._apply()
 
 
+## 마을 데이터 좌표 → 카메라가 쓰는 세계 좌표 (넓은 세상은 돌린 만큼 — world_village가 덮어씀)
+func ground_point(p: Vector2) -> Vector3:
+	return Vector3(p.x, terrain.ground_y(p.x, p.y), p.y)
+
+
 ## 시간을 흘린다 (화면은 다음 sync에서 따라옴)
 func advance(seconds: float) -> void:
 	village.advance(seconds)
@@ -416,6 +426,7 @@ func _process(dt: float) -> void:
 		for m in lineup.get_children():
 			if m is ResidentModel:
 				(m as ResidentModel).tick(dt)
+	terrain.dew_humid = village.air.humid if village.air != null else -1.0     # [E3-7] 돌기 물방울·김은 병 안 김을 따라
 	terrain.animate(dt)
 	update_night()
 	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]
@@ -733,6 +744,20 @@ func _setup_ui() -> void:
 	add_child(rlayer)
 	rev_show = RevelationShow.new()
 	rlayer.add_child(rev_show)
+	var slayer := CanvasLayer.new()       # (E1-0) 사건 연출 — 띠 위, 시트 아래
+	slayer.layer = 4
+	add_child(slayer)
+	director = StageDirector.new(self)
+	slayer.add_child(director)
+	director.finished.connect(func(_id: String, _sk: bool) -> void: _popup_wait = 1.2)
+	director.started.connect(_on_stage_started)
+	var player := CanvasLayer.new()       # (6b) 안내 창 — 수첩 쪽지 위, 편지 아래
+	player.layer = 7
+	add_child(player)
+	first_popup = FirstPopup.new()
+	player.add_child(first_popup)
+	first_popup.go.connect(_on_popup_go)
+	first_popup.closed.connect(func(_id: String) -> void: _popup_wait = 0.6)
 	guide_cap = GuideCaption.new()
 	guide_cap.setup(village)
 	guide_cap.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1016,16 +1041,105 @@ func beam_at(v: Village, secs: float) -> SkyBeam:
 	return SkyBeam.spawn(jar, Vector3(sq.x, terrain.ground_y(sq.x, sq.y), sq.y), secs)
 
 
-## 깨달음 (A4b): 시뮬레이션이 일으키면 (Village.awakened_t가 바뀜) 화면에 빛 한 줄기 + 연대기 한 줄. 보고 있는 무리만 연출
+## 깨달음 (A4b) · 제단 짓기 · 첫 기도 (E1-0~2): 시뮬레이션이 일으키면 사건 연출 (StageDirector — 보고 있는 무리만).
+## 다른 무리의 일은 연출 없이 안내 창만 (Firsts)
 func _check_awakening() -> void:
+	if director == null:
+		return
+	var fv := focus_village()
+	if not rev_show.playing():
+		director.watch(fv, not catching and views_live)
 	for vv: Array in village_views():
 		var q: Village = vv[0]
-		var seen: float = _awake_seen.get(q, -1.0)
-		if q.awakened_t != seen:
+		if q != fv and q.awakened_t >= 0.0 and float(_awake_seen.get(q, -1.0)) != q.awakened_t:
 			_awake_seen[q] = q.awakened_t
-			if q.awakened_t >= 0.0 and q.t - q.awakened_t < 120.0 and q == focus_village() and not rev_show.playing():
-				beam_at(q, RevelationShow.AWAKEN_DUR)
-				rev_show.play_awakening(q)
+			Firsts.fire("awakening")
+
+
+## (E1-0) 연출이 아래 띠 단추를 잠깐 반짝이게 ("altar" · "shop" · "hand" · "chronicle")
+func glow_tool(what: String, secs: float) -> void:
+	_tool_glow[what] = secs
+
+
+func _tool_glowing(what: String) -> bool:
+	return float(_tool_glow.get(what, 0.0)) > 0.0
+
+
+## (6b·6c) 처음 겪는 일: 가끔 마을을 보고 (Firsts.check) · 연출·시트·편지가 없을 때 안내 창을 하나씩
+func _update_firsts(dt: float) -> void:
+	for k: String in _tool_glow.keys():
+		_tool_glow[k] = float(_tool_glow[k]) - dt
+		if float(_tool_glow[k]) <= 0.0:
+			_tool_glow.erase(k)
+	_firsts_t += dt
+	if _firsts_t >= 0.5 and not catching:
+		_firsts_t = 0.0
+		for vv: Array in village_views():
+			Firsts.check(vv[0])
+	_popup_wait = maxf(0.0, _popup_wait - dt)
+	if first_popup == null or first_popup.showing() or not Firsts.pending() or _popup_wait > 0.0:
+		return
+	if not popup_ok():
+		return
+	var pid := Firsts.take()
+	if pid != "":
+		first_popup.show_id(pid)
+		var sm := GameSave.get_instance()
+		if use_save and sm != null:
+			sm.save_giant(false)          # 본 안내 창 · 열린 도구 (거인 묶음)
+
+
+## 안내 창을 띄워도 될 때 — 연출 중이 아니고, 시트·편지·따라잡기·밤 건너뛰기가 아닐 때
+func popup_ok() -> bool:
+	if catching or leaving or not views_live or clock.skipping:
+		return false
+	if director != null and not director.idle():
+		return false
+	if rev_show != null and rev_show.playing():
+		return false
+	if return_letter != null and return_letter.visible:
+		return false
+	if confirm_sheet != null and confirm_sheet.visible:
+		return false
+	if baby_sheet != null and baby_sheet.visible:
+		return false
+	if hand_ctl != null and hand_ctl.aiming():
+		return false
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
+		if sh != null and sh.visible:
+			return false
+	return true
+
+
+## 연출이 시작됨: 떠 있던 안내 창은 접어 두었다가 (줄 맨 앞으로) 연출이 끝난 뒤 다시 — 연출을 가리지 않게
+func _on_stage_started(_id: String) -> void:
+	if first_popup == null or not first_popup.showing() or director.idle():
+		return
+	var pid := first_popup.id
+	Firsts.seen.erase(pid)
+	Firsts.queue.push_front(pid)
+	first_popup.close()
+
+
+## 안내 창의 [보러 가기]
+func _on_popup_go(_id: String, what: String) -> void:
+	match what:
+		"altar":
+			if not altar_sheet.visible:
+				open_altar()
+		"shop":
+			if not shop_sheet.visible:
+				open_shop()
+		"chronicle":
+			open_chronicle()
+		"people":
+			open_people()
+		"store":
+			close_sheets(store_sheet)
+			store_sheet.open(focus_village())
+		"hand":
+			if not hand_ctl.is_open():
+				toggle_hand()
 
 
 ## 아래 띠 버튼을 부드럽게 빛냄 (빨간 점 대신 — UI 원칙): on이면 금빛 테두리가 천천히 숨 쉼
@@ -1282,24 +1396,7 @@ func spray() -> void:
 		GameAudio.fx("water_lap", "Village")
 
 
-## [거인의 손] 손으로 감싸기 (병 밖 — WORLD_EVENTS 4.2): 병 전체 +6° 한 시간
-func cup() -> void:
-	var r := focus_village().cup_hands()
-	if not bool(r["ok"]):
-		hand_ctl.say(String(r["why"]))
-		return
-	GameAudio.fx("finger_place")
-	GameAudio.buzz()
-
-
-## [거인의 손] 커튼 다음 단 (열림 → 반쯤 → 닫힘 → 열림 — 기획서 6.4). 넓은 세상은 방의 3D 커튼도 (world_village.gd)
-func curtain_next() -> void:
-	var fv := focus_village()
-	fv.set_curtain((fv.curtain() + 1) % 3)
-	GameAudio.fx("sheet_close" if fv.curtain() > 0 else "sheet_open")
-
-
-## [거인의 손] 유리 닦기 (병 밖): 서린 김·먼지막이 걷힘
+## (EVENTS_STAGING 6c-1) 손으로 감싸기·커튼은 없앴다 — 추위는 등불을 가까이, 더위·가뭄은 물 뿌리기 (시뮬레이션의 cup_hands·set_curtain은 쓰지 않음)
 func wipe() -> void:
 	var r := focus_village().wipe_glass()
 	if not bool(r["ok"]):
@@ -1381,6 +1478,7 @@ func _update_ui() -> void:
 		_tray_h = hand_ctl.height()
 		layout_bars()
 	_check_awakening()
+	_update_firsts(get_process_delta_time())
 	_update_notebook()
 	_take_clock_events()
 	if clock.notice_t <= 0.0 and not _toast_q.is_empty():     # 멈추지 않은 자잘한 일 (짧게, 하나씩)
@@ -1825,7 +1923,26 @@ func auto_lid() -> void:
 			cork_pop.top_y = top_h
 			cork_pop.play(true)
 		_lid_was = true
+		_lid_breeze()
 	clock.lid_real = 0.0
+
+
+## (EVENTS_STAGING 6c-1) 불기 도구 대신: 손이 들어가 뚜껑이 열리면 들어온 바람에 다 핀 민들레 솜털이 저절로 날아오른다
+func _lid_breeze() -> void:
+	var fv := focus_village()
+	if fv.flora == null:
+		return
+	var puffs := 0
+	for d: Dictionary in fv.flora.dands:
+		if String(d.get("st", "")) == "puff":
+			puffs += 1
+	if puffs == 0:
+		return
+	var f := cam.camera.global_transform.basis.z
+	var n := fv.blow_seeds(Vector2(-f.x, -f.z))
+	if n > 0:
+		GameAudio.fx("seeds_wind", "Village")
+		GameAudio.say("seeds")
 
 
 ## 손짓이 끝났다 — 뚜껑이 곧 저절로 닫힌다 (JarClock의 자동 닫힘을 당김)
@@ -1850,10 +1967,10 @@ func _nb_target() -> Button:
 				if String(Market.hand[i]["item"]) == item and i < hand_ctl.slots.size():
 					return hand_ctl.slots[i]
 			return hand_btn
-		"spray", "wipe", "cup":
+		"spray", "wipe":
 			if not hand_ctl.is_open():
 				return hand_btn
-			var m := {"spray": hand_ctl.spray_btn, "wipe": hand_ctl.wipe_btn, "cup": hand_ctl.cup_btn}
+			var m := {"spray": hand_ctl.spray_btn, "wipe": hand_ctl.wipe_btn}
 			return m[hl]
 		"chronicle":
 			return null if chronicle.visible else chron_btn
@@ -1921,6 +2038,8 @@ func _update_notebook() -> void:
 	for sh: Control in [altar_sheet, shop_sheet, chronicle, settings_sheet, shelf_sheet, baby_sheet, return_letter]:
 		if sh != null and sh.visible:
 			big = true
+	if (director != null and director.playing()) or (first_popup != null and first_popup.showing()):
+		big = true                        # 사건 연출·안내 창 동안도 비켜 줌
 	notebook_note.hidden_by_sheet = big
 	var tk := Notebook.shown(fv)
 	var btn := _nb_target()
@@ -1944,9 +2063,9 @@ func _update_notebook() -> void:
 			var key := String(tk.get("area", "")) if String(tk.get("area", "")) != "" else String(tk.get("hl", ""))
 			word = String(RING_WORDS.get(key, ""))
 	notebook_note.point(rect, ring, word)
-	for b: Button in [hand_ctl.spray_btn, hand_ctl.wipe_btn, hand_ctl.cup_btn, chron_btn, shop_btn]:
+	for b: Button in [hand_ctl.spray_btn, hand_ctl.wipe_btn, chron_btn, shop_btn]:
 		_glow_button(b, b == btn)
-	_glow_button(altar_btn, btn == altar_btn or fv.revelation_pending())     # [계시]를 기다림 (A5) · 수첩
+	_glow_button(altar_btn, btn == altar_btn or fv.revelation_pending() or _tool_glowing("altar"))     # [계시]를 기다림 (A5) · 수첩 · 첫 기도 연출 (E1-2)
 	_site_progress(fv)
 	# 뚜껑이 저절로 닫힘 → 코르크가 내려앉음
 	if _lid_was and not fv.air.lid_open and cork_pop != null:
@@ -1995,7 +2114,7 @@ func _on_note_pressed() -> void:
 		_stop_follow()
 		look_at_ground(area)
 	var hl := Notebook.highlight(fv)
-	if hl in ["slot", "spray", "wipe", "cup"] and not hand_ctl.is_open() and not hand_ctl.aiming():
+	if hl in ["slot", "spray", "wipe"] and not hand_ctl.is_open() and not hand_ctl.aiming():
 		toggle_hand()
 
 

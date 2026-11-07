@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== A20 주민 모델 v3: 겉모습 부품 · 뼈대 동작 · LOD")
 	run.timed(self, ["test_look_deterministic", "test_look_ignores_stats", "test_parts_exist", "test_job_outfit", "test_face", "test_baby_basket",
-		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood", "test_action_map", "test_action_village", "test_action_desync"])
+		"test_anims", "test_lod_budget", "test_detail_atlases", "test_hood", "test_action_map", "test_action_village", "test_action_desync", "test_walk_stride_match"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -54,7 +54,30 @@ func test_look_deterministic() -> void:
 		hairs[a["hair"]] = true
 	check(same, "같은 주민 → 같은 부품 (200명)")
 	check(bodies.size() == 3, "체형 3종이 모두 나옴 (호리호리·다부진·둥근): %s" % [bodies.keys()])
-	check(hairs.size() >= 6, "머리 모양 여러 가지: %d종" % hairs.size())
+	check(hairs.size() >= 10, "머리 모양 여러 가지: %d종 %s" % [hairs.size(), hairs.keys()])
+	# (A20 2차) 시대마다 옷·꾸밈이 달라짐 · 얼굴형 4종
+	var by_era := []
+	var shapes := {}
+	for era in 3:
+		var seen := {}
+		var rng2 := RandomNumberGenerator.new()
+		rng2.seed = 99
+		for i in 300:
+			var r := _resident(rng2, i)
+			var lk := ResidentModel.look_of(r)
+			lk["era"] = era
+			var p := ResidentModel.parts_for(lk)
+			shapes[p["face_shape"]] = true
+			var lst: Array = [p["torso"], p["hat"]]
+			lst.append_array(p["acc"])
+			for a: String in lst:
+				seen[a] = int(seen.get(a, 0)) + 1
+		by_era.append(seen)
+	check(int(by_era[0].get("buttons_seed", 0)) == 0 and int(by_era[2].get("buttons_seed", 0)) > 30, "씨앗 단추: 개척기엔 없고 읍내엔 흔함 (%d → %d)" % [by_era[0].get("buttons_seed", 0), by_era[2].get("buttons_seed", 0)])
+	check(int(by_era[0].get("cape_leaf", 0)) > int(by_era[2].get("cape_leaf", 0)), "잎 망토: 개척기에 더 흔함")
+	check(int(by_era[2].get("torso_petal", 0)) > int(by_era[0].get("torso_petal", 0)) and int(by_era[0].get("torso_petal", 0)) > 0, "꽃잎 치마: 시대가 갈수록 많아짐")
+	check(int(by_era[1].get("hat_acorn", 0)) > 0 and int(by_era[1].get("acc_scarf", 0)) > 0, "도토리 모자 · 목수건도 나옴")
+	check(shapes.size() == 4, "얼굴형 4종이 모두 나옴")
 
 
 func test_look_ignores_stats() -> void:
@@ -93,6 +116,9 @@ func test_parts_exist() -> void:
 	for row: Array in ResidentModel.HAIR_BY_LOOK:
 		want.append_array(row)
 	want.append_array(["hair_curly", "hair_curly_long", "hair_curly_under", "hair_curly_long_under", "hair_wave", "hair_wave_long"])
+	# (A20 2차) 머리 모양 더 · 소인의 옷 · 꾸밈
+	want.append_array(["hair_crop", "hair_bob", "hair_pony", "hair_twinbuns", "torso_petal", "cape_leaf", "acc_scarf", "buttons_seed", "hat_acorn"])
+	want.append_array(ResidentModel.FLOWERS)
 	var want_props: Array = ["cane"]
 	for j: String in ResidentModel.JOB_LOOK:
 		var jl := ResidentModel.job_look(j)
@@ -446,7 +472,8 @@ func test_action_village() -> void:
 			top_n = hist[c]
 			top = c
 	check(hist.size() >= 8, "동작: 마을 2시간에 여러 클립 (%d가지) %s" % [hist.size(), hist])
-	check(top_n <= n / 2, "동작: 잠 말고 한 클립이 절반을 넘지 않음 (%s %.0f%%)" % [top, 100.0 * top_n / maxf(1, n)])
+	# (걸음 다시 2026-11-07) 걸음이 1.5 → 1칸/초로 느려져 아침 나르기가 길게 보인다 — 2시간 45% · 1시간(quick) 51% 안팎이라 상한 55%
+	check(top_n <= n * 0.55, "동작: 잠 말고 한 클립이 반을 크게 넘지 않음 (%s %.0f%% ≤ 55%%)" % [top, 100.0 * top_n / maxf(1, n)])
 	for m: ResidentModel in models.values():
 		m.free()
 
@@ -462,7 +489,7 @@ func test_action_desync() -> void:
 		r.age = 10.0
 		var m := ResidentModel.new()
 		m.setup_from(r)
-		m.set_anim("walk")
+		m.set_anim("idle")
 		m.tick(0.0)
 		ms.append(m)
 		pos.append(m._player.current_animation_position / m._player.current_animation_length)
@@ -476,16 +503,40 @@ func test_action_desync() -> void:
 			if minf(d, 1.0 - d) < 0.03:
 				close += 1
 	check(close * 4 < pairs, "동작: 같이 걷기 시작해도 박자가 엇갈림 (같은 박자 짝 %d / %d)" % [close, pairs])
-	check(rates.size() >= 6, "동작: 사람마다 빠르기가 조금씩 다름 (%d가지)" % rates.size())
+	check(rates.size() >= 6, "동작: 사람마다 빠르기가 조금씩 다름 (숨쉬기 — 걸음은 땅 빠르기를 따름) (%d가지)" % rates.size())
 	# 같은 사람은 늘 같게 (난수 씨앗 = 주민 번호)
 	var r2 := Resident.new()
 	r2.id = 100
 	r2.age = 10.0
 	var m2 := ResidentModel.new()
 	m2.setup_from(r2)
-	m2.set_anim("walk")
+	m2.set_anim("idle")
 	m2.tick(0.0)
 	check(is_equal_approx(m2._player.current_animation_position, (ms[0] as ResidentModel)._player.current_animation_position), "동작: 같은 주민이면 같은 시작 자리")
 	m2.free()
 	for m: ResidentModel in ms:
+		m.free()
+
+
+## (GD 6.6 걸음 다시) 걸음 동작 빠르기 = 땅 위 빠르기 ÷ (발 미는 빠르기 × 모델 배율) — 어른·아이·노인·짐, 느리게~빠르게
+func test_walk_stride_match() -> void:
+	for cfg: Array in [[10.0, "walk", ""], [2.5, "walk", ""], [30.0, "walk", ""], [10.0, "carry", "밀"]]:
+		var r := Resident.new()
+		r.id = 300
+		r.age = cfg[0]
+		var m := ResidentModel.new()
+		m.setup_from(r)
+		m.set_item(cfg[2])
+		m.set_anim(cfg[1])
+		var clip := m._clip(cfg[1])
+		var k := float(ResidentModel.STRIDE[clip]) * m.scale.x * m.pose.scale.y
+		for g: float in [0.5, 1.0, 2.5]:            # 땅 빠르기 (칸/현실 초): 느리게 · 보통 · 빠르게
+			m._gpos = Vector3.INF
+			m._ground = -1.0
+			m.move_to(Vector3.ZERO, 0.0)
+			for i in 30:
+				m.move_to(Vector3(0, 0, g * (i + 1) / 30.0), 1.0 / 30.0)
+			m.tick(1.0 / 30.0)
+			var foot := m._player.speed_scale * k        # 동작이 미는 땅 빠르기
+			check(absf(foot - g) < 0.05 * g + 0.01, "걸음 맞춤 %s (나이 %.1f) 땅 %.1f칸/초 → 발 %.2f칸/초 (동작 ×%.2f)" % [clip, cfg[0], g, foot, m._player.speed_scale])
 		m.free()

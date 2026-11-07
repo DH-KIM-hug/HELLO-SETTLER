@@ -210,7 +210,7 @@ static func hair_word(g: PackedByteArray) -> String:
 static func appearance(r: Resident) -> PackedStringArray:
 	var out := PackedStringArray()
 	var g := r.genes
-	if g.size() < Genetics.GENE_BYTES:
+	if g.size() < Genetics.MIN_BYTES:
 		out.append("겉모습을 아직 알 수 없음")
 		return out
 	var cues := Bloodlines.looks(r.blood)

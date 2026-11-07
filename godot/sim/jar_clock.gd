@@ -48,6 +48,7 @@ var prev_speed_i := -1                # 중요한 일로 보통이 되기 전 �
 var stop_count := {}                  # 갈래 → 지금까지 그 일로 멈춘 횟수 (탄생·편지는 처음 몇 번만 — STOP_FIRST_FEW)
 var stop_last_t := {}                 # 갈래 → 마지막으로 멈춘 병 시각 (편지가 잇달아 오면 알림만 — LETTER_GAP)
 var _step_ms := 0.0                   # 빠른 걸음 하나의 평균 계산 시간 (예산 맞추기)
+var stage_rate := -1.0                # (E1-0) 사건 연출 중: 병 시간이 이보다 빨리 흐르지 않는다 (현실 1초 = 병 n초 — StageDirector가 정함, 저장 안 함). <0 = 없음
 var lid_real := 0.0                   # [곰팡이·뚜껑] 뚜껑이 열린 뒤 흐른 현실 시간 (초) — 1분이면 저절로 닫힘 (WORLD_EVENTS 3)
 # 창세의 날 (OPENING 3.0 v3.3): 첫 병의 첫날(7시 → 다음 6시)은 현실 약 12분 — 빠르기는 Notebook.day_speed (보통에 대한 몫,
 # 수첩 쪽지·장면 앞에서 느리게, 수첩 뒤 빠르게) × 거인이 고른 배속 ÷ 보통. 첫 저녁 기도 뒤 모두 잠들면 밤을 저절로 건너뛰고, 아침이 되면 끝 →
@@ -59,7 +60,7 @@ var creation_real := 0.0              # [창세의 날 v3.3] 창세의 날이 �
 
 const CREATION_SPEED := 12.0          # (옛 ×12 — 이제 창세의 날 빠르기는 Notebook.day_scale × 보통(1일=5분) × 고른 배속÷보통: 쪽지 동안 0.08 · 장면 앞 0.03~0.04 · 수첩 뒤 1.15, 첫날 ≈ 현실 10~12분)
 const EVENT_NOTE := "중요한 일이 생겨서 천천히 흘러가요"     # (옛 알림 — 이제 무슨 일인지 이름으로: events[i].text)
-const SAVE_SKIP := ["v", "world", "rate", "budget_ms", "auto_slow", "_step_ms", "events"]
+const SAVE_SKIP := ["v", "world", "rate", "budget_ms", "auto_slow", "_step_ms", "events", "stage_rate"]
 const STOP_CATS := ["born", "died", "omen", "letter", "reveal", "settle"]   # 설정 "빠르게 갈 때 멈출 일" 갈래 (GameSettings.stop_<갈래>)
 const STOP_FIRST_FEW := 3             # 탄생·편지는 설정이 꺼져 있어도 처음 세 번은 멈춘다
 const LETTER_GAP := 6.0 * 3600.0      # 편지가 병 6시간 안에 또 오면 멈추지 않고 알림만
@@ -98,9 +99,12 @@ func _init(village: Village) -> void:
 func speed() -> float:
 	if skipping:
 		return skip_span / Balance.SKIP_NIGHT_SECONDS
+	var s := float(Balance.SPEEDS[speed_i])
 	if creation:                      # [창세의 날 v3.3] 첫날 빠르기 (보통에 대한 몫) × 거인이 고른 배속 ÷ 보통
-		return Notebook.day_speed(v, creation_real) * float(Balance.SPEEDS[speed_i]) / normal_speed()
-	return float(Balance.SPEEDS[speed_i])
+		s = Notebook.day_speed(v, creation_real) * float(Balance.SPEEDS[speed_i]) / normal_speed()
+	if stage_rate > 0.0:              # (E1-0) 사건 연출 중엔 느리게 (주민의 몸짓이 보이게)
+		s = minf(s, stage_rate)
+	return s
 
 
 ## 배속 이름 (칩·목록): ×1 … ×60 · 1초=5분 … 1초=12시간

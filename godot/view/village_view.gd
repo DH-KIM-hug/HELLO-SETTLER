@@ -59,6 +59,13 @@ var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Village.graves)
 var _grave_key := ""
 var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
+var _raft_era := -1             # (E3-6) 뗏목 모양을 정한 시대 (바뀌면 다시 만듦: 개척 = 갈대 뗏목 · 그 뒤 = 잎 배)
+## (E3-6) 물 건너는 자리 — [{"kind": "bridge"|"stones", "c": Vector2 가운데, "u": Vector2 건너는 방향, "half": 반 길이, "y": 높이}]
+var crossings: Array[Dictionary] = []
+var n_stones := 0
+## (E3-6) 둘이 메는 물고기: 주민 id → [역할 "앞"/"뒤", 짝 id] (매 화면 fish_pairs) · 뒤 사람이 장대 자리로 붙는 정도 (0~1)
+var fish_pair := {}
+var _pair_w := {}
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 var lerp_max := 3.0             # 걸음 사이 이만큼(칸) 넘게 옮겼으면 순간이동 (보간 안 함) — 10초 걸음이면 화면이 키운다
 var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주민은 멀리 LOD로 FAST_EVERY초마다 제자리에 순간이동 (걷기·몸짓 멈춤),
@@ -71,6 +78,7 @@ var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
+var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -80,7 +88,7 @@ func _init(village: Village, t: JarTerrain) -> void:
 
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
 const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
-	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
+	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "bridge_stones", "raft_reed", "boat_leaf", "mushroom_hut",
 	"bush", "bush_b", "bush_flower", "bush_berry",
 	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
 	"campfire", "campfire_extra", "campfire_seat"]
@@ -196,9 +204,11 @@ func _resident_lod_close() -> bool:
 
 
 func _sync_residents(dt: float) -> void:
+	ResidentModel.village_era = v.era     # (A20 2차) 시대마다 옷이 달라짐 — look_of · look_key가 읽음
 	var seen := {}
 	var chief := v.chief()
 	var lod_close := _resident_lod_close()
+	fish_pair = fish_pairs(v.people)
 	for r in v.people:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
@@ -223,8 +233,10 @@ func _sync_residents(dt: float) -> void:
 		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
-		m.position = Vector3(x, gy(x, z), z)
+		m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
 		m.rotation.y = r.facing
+		if (r.anim == "walk" or r.anim == "carry") and not crossings.is_empty():     # (E3-6) 징검돌에서 폴짝 · 다리 위
+			m.position.y = maxf(m.position.y, crossing_y(x, z))
 		if staged.has(r.id):            # (스타터킷 풀기) 장면이 직접 — 상자 가장자리를 넘어 폴짝
 			var st: Dictionary = staged[r.id]
 			m.visible = bool(st.get("vis", true))
@@ -238,21 +250,27 @@ func _sync_residents(dt: float) -> void:
 			if tl != Vector2.ZERO:
 				m.tilt_head(tl.x, tl.y)
 			continue
-		_raft(r, m)                     # (A6) 나루터 뗏목 위
+		var rafting := _raft(r, m)      # (A6) 나루터 뗏목 위 (E3-6: 갈대 뗏목 / 잎 배 + 장대)
 		_ride(r, m)                     # [하늘의 것] 꽃씨에 매달린 아이 — 떠올라 날아감
 		var jb0 := v.bld(r.job)                 # (A20) 직업 옷·연장 · 촌장 띠 · 표정 — 바뀔 때만 부품을 갈아 끼움
 		m.set_job(jb0.type if jb0 != null else "", r == chief)
 		m.set_face(ResidentModel.face_of(r))
 		m.set_pale(r.latent != "")      # [B7] 밖에서 병을 지니고 온 사람: 잠복 동안 창백한 얼굴빛 (거인에게만 보이는 조짐)
-		m.set_item(r.carry)
+		m.set_item(r.carry if not fish_pair.has(r.id) else "생선:" + String(fish_pair[r.id][0]))
 		if r.anim == "work":
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
-		m.set_anim("work" if r.anim == "torch" else r.anim, r.action)
+		m.set_anim("idle" if rafting else ("work" if r.anim == "torch" else r.anim), r.action)
 		if r.action == "social" and r.anim != "walk" and not fast:
 			_face_partner(r, m)
 		if social != null and not fast:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
+		var po: Dictionary = pose_over.get(r.id, {})
+		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함
+			if po.has("face"):
+				m.set_face(String(po["face"]))
+			if po.has("anim") and r.anim != "walk":
+				m.set_anim(String(po["anim"]), r.action)
 		m.set_lod(lod_close and not fast)
 		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다
 			m.tick(dt)
@@ -260,7 +278,16 @@ func _sync_residents(dt: float) -> void:
 				social.after_tick(r, m)
 		elif fresh:
 			m.tick(0.0)
+		if not po.is_empty():
+			if float(po.get("up", 0.0)) != 0.0 or float(po.get("side", 0.0)) != 0.0:
+				m.tilt_head(float(po.get("up", 0.0)), float(po.get("side", 0.0)))
+			if po.has("arm"):
+				var ar: Vector2 = po["arm"]
+				m.aim_arm_r(ar.x, ar.y)
 		_torch(r, m)
+		if rafting:                     # 장대를 두 손으로 밀어 나감 (오른팔 — 장대와 같은 박자)
+			m.aim_arm_r(-0.95 + 0.3 * sin(_anim_t * POLE_SPEED + r.id), 0.35)
+	_pair_follow(dt)
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):
 			_torches.erase(id)
@@ -277,6 +304,66 @@ func _sync_residents(dt: float) -> void:
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()
 			_rafts.erase(id)
+
+
+## (E3-6 GD 3.0) 물고기를 나르는 어른 둘이 같은 쪽으로 가까이 걸으면 장대에 메고 간다 → id → [역할 "앞"/"뒤", 짝 id].
+## 화면만 — 시뮬레이션의 먹을거리 양은 그대로 (각자 제 몫을 창고에 내려놓음)
+const PAIR_R := 3.2             # 이만큼 가까이 (칸)
+const PAIR_ANGLE := 0.75        # 걷는 방향 차이 (라디안)
+
+
+static func fish_pairs(people: Array) -> Dictionary:
+	var cs: Array[Resident] = []
+	for r: Resident in people:
+		if r.carry == "생선" and (r.anim == "carry" or r.anim == "walk") and not r.is_child() and not r.sleeping:
+			cs.append(r)
+	var out := {}
+	if cs.size() < 2:
+		return out
+	for i in cs.size():
+		var a := cs[i]
+		if out.has(a.id):
+			continue
+		var best: Resident = null
+		var bd := PAIR_R
+		for j in range(i + 1, cs.size()):
+			var b := cs[j]
+			if out.has(b.id) or absf(angle_difference(a.facing, b.facing)) > PAIR_ANGLE:
+				continue
+			var d := Vector2(a.x - b.x, a.y - b.y).length()
+			if d < bd:
+				bd = d
+				best = b
+		if best == null:
+			continue
+		var fwd := Vector2(sin(a.facing), cos(a.facing))
+		var lead := a if Vector2(a.x - best.x, a.y - best.y).dot(fwd) >= 0.0 else best
+		var back := best if lead == a else a
+		out[lead.id] = ["앞", back.id]
+		out[back.id] = ["뒤", lead.id]
+	return out
+
+
+## 뒤 사람을 앞 사람의 장대 끝으로 (짝이 생기면 0.3초쯤에 걸쳐 붙고, 풀리면 제 자리로)
+func _pair_follow(dt: float) -> void:
+	for id: int in _pair_w.keys():
+		if not fish_pair.has(id) or fish_pair[id][0] != "뒤":
+			_pair_w.erase(id)
+	for id: int in fish_pair:
+		if fish_pair[id][0] != "뒤":
+			continue
+		var m: ResidentModel = residents.get(id)
+		var lm: ResidentModel = residents.get(int(fish_pair[id][1]))
+		if m == null or lm == null or not m.visible or not lm.visible:
+			continue
+		var wgt := minf(1.0, float(_pair_w.get(id, 0.0)) + (dt * 3.5 if dt > 0.0 else 1.0))
+		_pair_w[id] = wgt
+		var f := Vector3(sin(lm.rotation.y), 0.0, cos(lm.rotation.y))
+		var to := lm.position - f * ResidentModel.POLE_GAP * lm.scale.x      # 모델 단위 × 모델 크기 = 칸
+		var p := m.position.lerp(to, wgt)
+		p.y = maxf(gy(p.x, p.z), crossing_y(p.x, p.z))
+		m.position = p
+		m.rotation.y = lerp_angle(m.rotation.y, lm.rotation.y, wgt)
 
 
 ## 어울리는 사람: 가까이 있는 다른 어울리는 사람 쪽으로 몸을 돌림 (둘씩 마주 보고 이야기) — 화면만, 시뮬레이션은 그대로
@@ -314,8 +401,18 @@ func _sync_graves() -> void:
 		_box(n, Vector3(0.22, 0.06, 0.1), Vector3(0, 0.42, -0.22), Style.STONE.lightened(0.15))
 
 
-## (A6) 뗏목 길을 건너는 사람: 발밑에 작은 뗏목 (물 위 높이) · 치료소에 누운 사람: 밑에 흰 깔개
-func _raft(r: Resident, m: ResidentModel) -> void:
+## (A6) 뗏목 길을 건너는 사람: 발밑에 뗏목 (물 위 높이) · 치료소에 누운 사람: 밑에 흰 깔개.
+## (E3-6 GD 3.0 물가 표) 개척 시대 = 마른 갈대 다발 뗏목, 그 뒤 = 말려 굳힌 큰 잎 배. 탄 사람이 장대로 바닥을 밀어 건넌다. 뗏목 위면 true
+const POLE_SPEED := 2.4
+
+
+func _raft(r: Resident, m: ResidentModel) -> bool:
+	if _raft_era != v.era:          # 시대가 바뀌면 뗏목 모양도 (갈대 뗏목 → 잎 배)
+		_raft_era = v.era
+		for k0: int in _rafts.keys():
+			if k0 % 2 == 0:
+				(_rafts[k0] as Node3D).queue_free()
+				_rafts.erase(k0)
 	var on := not r.steps.is_empty() and bool((r.steps[0] as Dictionary).get("raft", false)) and m.visible
 	var mat := r.doing == "치료소에 누운 중" and r.anim == "sleep" and m.visible
 	var key := r.id * 2 + (1 if mat else 0)
@@ -325,7 +422,7 @@ func _raft(r: Resident, m: ResidentModel) -> void:
 			if old != null:
 				old.visible = false
 	if not on and not mat:
-		return
+		return false
 	var rf: Node3D = _rafts.get(key)
 	if rf == null:
 		rf = _node(self)
@@ -333,22 +430,40 @@ func _raft(r: Resident, m: ResidentModel) -> void:
 			_box(rf, Vector3(0.62, 0.05, 1.25), Vector3(0, -0.08, 0.0), Color("f3ecd8"))
 			_box(rf, Vector3(0.5, 0.1, 0.28), Vector3(0, -0.03, -0.45), Color("d9e4ec"))
 		else:
-			for i in 4:
-				_box(rf, Vector3(0.22, 0.12, 1.2), Vector3(-0.36 + i * 0.24, 0.0, 0.0), Style.WOOD)
-			_box(rf, Vector3(1.0, 0.06, 0.12), Vector3(0, 0.07, -0.4), Style.WOOD_DARK)
-			_box(rf, Vector3(1.0, 0.06, 0.12), Vector3(0, 0.07, 0.4), Style.WOOD_DARK)
+			var nm := raft_model(v.era)
+			if Art.exists(nm):
+				Art.instance(rf, nm, Transform3D(Basis(Vector3.UP, PI / 2.0), Vector3.ZERO))    # 모델은 x로 길다 → 가는 쪽(+z)으로
+			else:
+				for i in 4:
+					_box(rf, Vector3(0.22, 0.12, 1.2), Vector3(-0.36 + i * 0.24, 0.0, 0.0), Style.WOOD)
+			var pole := _node(rf)          # 장대: 오른손 높이를 축으로, 물 바닥을 뒤로 밀며 흔들림
+			pole.name = "pole"
+			pole.position = Vector3(-0.3, 0.62, 0.05)
+			_box(pole, Vector3(0.045, 1.9, 0.045), Vector3(0, -0.45, 0), Color("c4b47a"))
+			_box(pole, Vector3(0.06, 0.05, 0.06), Vector3(0, 0.1, 0), Color("8f7a48"))
 		_rafts[key] = rf
 	rf.visible = true
 	if mat:
 		rf.position = m.position + Vector3(0, 0.1, 0)
 		rf.rotation.y = r.facing
-		return
+		return false
 	var k := v.water.idx(m.position.x, m.position.z)
 	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS - JarTerrain.WATER_SINK
 	var y := maxf(m.position.y, wy) + 0.05
-	rf.position = Vector3(m.position.x, y, m.position.z)
+	var bob := sin(_anim_t * 1.7 + r.id) * 0.025      # 물결에 살랑
+	rf.position = Vector3(m.position.x, y + bob, m.position.z)
 	rf.rotation.y = r.facing
-	m.position.y = y + 0.12
+	rf.rotation.z = sin(_anim_t * 1.3 + r.id * 0.7) * 0.04
+	var pole: Node3D = rf.get_node_or_null("pole")
+	if pole != null:
+		pole.rotation.x = -0.45 + 0.3 * sin(_anim_t * POLE_SPEED + r.id)
+	m.position.y = y + bob + 0.1
+	return true
+
+
+## 나루터 배 모양: 개척 시대 = 갈대 뗏목 · 그 뒤 = 잎 배 (GD 3.0 물가 표 — 씨앗 껍데기 배는 나중)
+static func raft_model(era: int) -> String:
+	return "raft_reed" if era <= 0 else "boat_leaf"
 
 
 ## [곰팡이·뚜껑] 곰팡이 쫓는 사람: 오른손에 횃불 (걸을 땐 높이 들고, 휘두를 땐 연장 대신). 불꽃은 깜빡임
@@ -442,7 +557,8 @@ func _bld_state(b: Building) -> String:
 		stage = site_stage(b)
 	var ripe := b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at
 	# 자리·병 방향도 키에 (병을 돌리면 건물 자리가 돈다)
-	return "%s|%s|%s|%d|%d,%d|%s|%s|%.2f,%.2f|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot]
+	var era := v.era if b.type == "나루터" else 0      # (E3-6) 나루터: 개척 시대는 갈대 뗏목, 그 뒤 잎 배
+	return "%s|%s|%s|%d|%d,%d|%s|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot, era]
 
 
 func _sync_buildings() -> void:
@@ -532,6 +648,8 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	var nm: String = names[b.id % names.size()]
 	if b.type == "농장" and b.ready_at >= 0.0 and v.t >= b.ready_at:
 		nm = "field_ripe"
+	if nm == "ferry" and v.era == 0 and Art.exists("ferry_raft"):
+		nm = "ferry_raft"
 	Art.instance(n, nm)
 	if nm == "quern_house" and Art.exists(QUERN_STONE):
 		_live[b.id] = {"stone": Art.instance(n, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
@@ -1126,23 +1244,84 @@ func _decor_crossings(groups: Dictionary) -> void:
 		_add(groups, "pier", Transform3D(Basis(Vector3.UP, atan2(-dir.z, dir.x)), origin))
 		placed.append(p)
 	n_piers = placed.size()
-	# 다리: 오솔길이 가장 짙은 강 칸 하나
-	var best := -1
-	var best_p := 4.0
+	# (E3-6 GD 3.0 물가 표) 건너는 자리: 오솔길이 짙은 강 칸 — 좁은 개울은 징검돌, 넓은 물은 갈대 다리 (하나)
+	var rc: Array = []
 	for k in cells:
-		if w.is_river(k) and terrain._path_at(k) > best_p:
-			best_p = terrain._path_at(k)
-			best = k
+		if w.is_river(k) and terrain._path_at(k) > CROSS_PATH:
+			rc.append([terrain._path_at(k), k])
+	rc.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	crossings.clear()
 	n_bridges = 0
-	if best >= 0:
-		var x := w.cx(best)
-		var z := w.cy(best)
+	n_stones = 0
+	for e: Array in rc:
+		if crossings.size() >= CROSS_MAX:
+			break
+		var k: int = e[1]
+		var x := w.cx(k)
+		var z := w.cy(k)
+		var far := true
+		for c: Dictionary in crossings:
+			if (c["c"] as Vector2).distance_to(Vector2(x, z)) < CROSS_APART:
+				far = false
+		if not far:
+			continue
 		var along_x := w.is_river(w.idx(x + 1, z)) or w.is_river(w.idx(x - 1, z))
-		# 다리 모델은 x 방향으로 걸침 (강은 z 방향) → 강이 x로 흐르면 90° 돌림
-		var span := Vector3(0, 0, 1) if along_x else Vector3(1, 0, 0)
-		var y := maxf(gy(x + span.x * 1.9, z + span.z * 1.9), gy(x - span.x * 1.9, z - span.z * 1.9)) - 0.15
-		_add(groups, "bridge", Transform3D(Basis(Vector3.UP, PI / 2.0 if along_x else 0.0), Vector3(x, y, z)))
-		n_bridges = 1
+		var u := Vector2(0, 1) if along_x else Vector2(1, 0)       # 건너는 방향 (강을 가로질러)
+		var width := river_width(w, Vector2(x, z), u)
+		var stones := width <= STONES_MAX_W
+		if not stones and n_bridges > 0:
+			continue
+		var rot := Basis(Vector3.UP, PI / 2.0 if along_x else 0.0)   # 모델은 x 방향으로 걸침 → 강이 x로 흐르면 90° 돌림
+		if stones:
+			var lvl := (w.ground(k) + w.depth(k)) * JarTerrain.HS - JarTerrain.WATER_SINK
+			var sx := clampf((width + 1.4) / 3.6, 0.8, 1.35)
+			var y := lvl - 0.1
+			_add(groups, "bridge_stones", Transform3D(rot * Basis.from_scale(Vector3(sx, STONE_TALL, STONE_WIDE)), Vector3(x, y, z)))
+			crossings.append({"kind": "stones", "c": Vector2(x, z), "u": u, "half": 1.8 * sx, "y": y + STONE_TOP, "step": 0.6 * sx})
+			n_stones += 1
+		else:
+			var y := maxf(gy(x + u.x * 1.9, z + u.y * 1.9), gy(x - u.x * 1.9, z - u.y * 1.9)) - 0.15
+			_add(groups, "bridge", Transform3D(rot, Vector3(x, y, z)))
+			crossings.append({"kind": "bridge", "c": Vector2(x, z), "u": u, "half": 1.95, "y": y})
+			n_bridges += 1
+
+
+const CROSS_PATH := 4.0         # 이만큼 짙은 오솔길이 강을 건너는 칸
+const CROSS_MAX := 3            # 건너는 자리 (다리 하나 + 징검돌)
+const CROSS_APART := 8.0
+const STONES_MAX_W := 3         # 물 칸 폭이 이 이하면 징검돌 (작은 개울)
+const STONE_TOP := 0.33         # 징검돌 윗면 (모델 원점 위, 높이 배율 STONE_TALL 뒤)
+const STONE_TALL := 1.4          # 징검돌을 소인에게 맞게 키움 (높이 · 건너는 방향에 직각인 너비)
+const STONE_WIDE := 1.6
+const HOP_H := 0.22             # 돌에서 돌로 폴짝 (화면만)
+
+
+## 강 폭 (칸): 가운데 칸에서 건너는 방향 양쪽으로 물 칸을 셈
+static func river_width(w: JarWater, c: Vector2, u: Vector2) -> int:
+	var n := 1
+	for sg: float in [1.0, -1.0]:
+		for i in range(1, 8):
+			var q := c + u * sg * float(i)
+			if not w.inside(q.x, q.y) or w.depth(w.idx(q.x, q.y)) <= Balance.WADE_DEPTH:
+				break
+			n += 1
+	return n
+
+
+## (E3-6) 건너는 자리 위의 높이 (징검돌 = 돌에서 돌로 폴짝 · 다리 = 갈대 다발 위). 자리 밖이면 −INF
+func crossing_y(x: float, z: float) -> float:
+	for c: Dictionary in crossings:
+		var d := Vector2(x, z) - (c["c"] as Vector2)
+		var u: Vector2 = c["u"]
+		var t := d.dot(u)
+		var half := float(c["half"])
+		if absf(t) > half or absf(d.dot(Vector2(-u.y, u.x))) > 0.7:
+			continue
+		if c["kind"] == "stones":
+			var ph := (t + half) / float(c["step"])
+			return float(c["y"]) + absf(sin(ph * PI)) * HOP_H
+		return float(c["y"]) + 0.36 + 0.16 * cos(PI * t / (2.0 * half)) + 0.15
+	return -INF
 
 
 ## (6단계) 마을 둘레(view_r) 밖의 세상 숲 무리 — 안개가 걷힌 곳만, 나무만 (소품·물가 장식 없음).

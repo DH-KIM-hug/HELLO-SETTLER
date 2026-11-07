@@ -35,6 +35,9 @@ var marks: Node3D
 var _inside := PackedByteArray()
 var _corner := PackedFloat32Array() # 꼭짓점 높이 (세계), (N+1)²
 var _drops: Array[Dictionary] = []
+## [E3-7 이슬의 하루 박자] 화면의 김 0~1 (마을 화면이 JarAir.humid를 넣음 — 음수면 물 순환의 습도). 돌기 물방울 수·크기 · 아지랑이 짙기
+var dew_humid := -1.0
+var _haze_mat: ShaderMaterial
 var _anim_t := 0.0
 var village: Village = null         # (선택) 숲·건물·바위·시대·계절을 읽을 마을 — test_village가 넣는다
 var waterfalls: Waterfalls
@@ -135,30 +138,67 @@ func animate(dt: float) -> void:
 		_update_season()
 	if waterfalls != null:
 		waterfalls.ppu = view_ppu         # (폭포는 스스로 _process에서 움직인다 — 키트 자리 고르기 화면처럼 animate를 안 부르는 곳에서도)
+	# [E3-7] 이슬의 하루 박자 (기획서 4.2b): 낮엔 돌기에 아무것도 없고 호수 위로 김(아지랑이)이 오름 · 해 질 녘~밤엔 돌기에 물방울이
+	# 맺혀 점점 부풂 · 새벽엔 똑, 똑 떨어짐 (6시 무렵 가장 잦음). 습하면 많이·크게, 마르면 거의 안 맺힘. 시뮬레이션은 읽기만
+	var bead := sim.dew_bead()
+	var drip := sim.dew_drip()
+	var vap := sim.dew_vapour()
+	var hv := dew_humid if dew_humid >= 0.0 else sim.humid
+	var show_n := clampf((hv - 0.17) / 0.28, 0.0, 1.0)           # 물방울이 맺히는 돌기의 몫 (김 0.2 → 열에 하나 · 보통 0.45↑ → 모두)
+	var size_k := lerpf(0.55, 1.3, clampf(hv, 0.0, 1.0))
 	for d: Dictionary in _drops:     # 떨어지는 물방울 (초당 몇 번)
 		if not is_instance_valid(d["node"]):
 			continue
-		var f := fmod(_anim_t * float(d["speed"]) + float(d["phase"]), 1.0)
 		var nd := d["node"] as Node3D
-		if d.has("drip"):              # 물방울이 수면에 닿음 → 소리 (AUDIO.md 3 '물방울 똑')
-			if f < float(d["f"]):
-				drop_landed.emit(nd.global_position)
-			d["f"] = f
-		if d.has("ring"):              # 수면의 동심원: 물방울이 닿은 뒤 퍼진다
-			nd.scale = Vector3(1.0, 0.05, 1.0) * lerpf(0.2, 1.2, f)
-			nd.visible = f < 0.85
-		elif d.has("big"):             # 뚜껑 돌기의 큰 물방울: 매달려 부풀다가(눈송이처럼 떠다니지 않게) 중력으로 확 떨어져 길쭉하게
+		if d.has("haze"):              # 낮의 김: 호수 위로 오르며 일렁이다 사라짐
+			var hf := fmod(_anim_t * float(d["speed"]) + float(d["phase"]), 1.0)
+			var ha := vap * lerpf(0.35, 1.0, clampf((hv - 0.15) / 0.7, 0.0, 1.0)) * sin(PI * hf)
+			nd.visible = ha > 0.01
+			if nd.visible:
+				nd.position.y = float(d["bottom"]) + float(d["rise"]) * hf
+				var sc := float(d["size"]) * (0.8 + 0.5 * hf)
+				nd.scale = Vector3(sc, sc * 0.7, sc)
+				(nd as GeometryInstance3D).set_instance_shader_parameter("a", ha)
+			continue
+		var shown := float(d.get("rank", 0.0)) < show_n
+		if d.has("ring"):              # 수면의 동심원: 새벽에 물방울이 닿은 뒤 퍼진다
+			var rf := fmod(float(d["p"]) * 0.65 + float(d["phase"]), 1.0)
+			nd.scale = Vector3(1.0, 0.05, 1.0) * lerpf(0.2, 1.2, rf) * float(d["rs"])
+			nd.visible = shown and drip > 0.03 and rf < 0.85
+			d["p"] = float(d["p"]) + dt * float(d["speed"]) * (0.3 + 1.6 * drip) / 0.65
+			continue
+		if not d.has("big"):
+			var f0 := fmod(_anim_t * float(d["speed"]) + float(d["phase"]), 1.0)
+			nd.position.y = lerpf(d["top"], d["bottom"], f0 * f0)
+			continue
+		if not shown or (drip <= 0.03 and bead <= 0.02):
+			nd.visible = false
+			d["f"] = 0.0
+			continue
+		nd.visible = true
+		var swell := clampf(bead, 0.0, 1.2)
+		if drip > 0.03:                # 새벽: 매달려 부풀다가(눈송이처럼 떠다니지 않게) 중력으로 확 떨어져 길쭉하게
+			d["p"] = float(d["p"]) + dt * float(d["speed"]) * (0.3 + 1.6 * drip)
+			var f := fmod(float(d["p"]) + float(d["phase"]), 1.0)
+			if d.has("drip"):          # 물방울이 수면에 닿음 → 소리 (AUDIO.md 3 '물방울 똑')
+				if f < float(d["f"]):
+					drop_landed.emit(nd.global_position)
+				d["f"] = f
 			const HANG := 0.55                 # 한 주기 중 매달려 부푸는 몫
+			var bk := size_k * (0.6 + 0.4 * swell)
 			if f < HANG:
 				var g := f / HANG
 				nd.position.y = float(d["top"])
-				nd.scale = Vector3(0.6 + 0.5 * g, 0.6 + 0.7 * g, 0.6 + 0.5 * g)
+				nd.scale = Vector3(0.6 + 0.5 * g, 0.6 + 0.7 * g, 0.6 + 0.5 * g) * bk
 			else:
 				var u := (f - HANG) / (1.0 - HANG)
 				nd.position.y = lerpf(d["top"], d["bottom"], u * u)
-				nd.scale = Vector3(0.85, 1.2 + 2.2 * u, 0.85)   # 빨라질수록 길쭉 (빗방울)
-		else:
-			nd.position.y = lerpf(d["top"], d["bottom"], f * f)
+				nd.scale = Vector3(0.85, 1.2 + 2.2 * u, 0.85) * bk   # 빨라질수록 길쭉 (빗방울)
+		else:                          # 해 질 녘~밤: 돌기에 매달려 천천히 부풂 (무거워질수록 아래로 늘어짐)
+			var wob := 1.0 + 0.04 * sin(_anim_t * 1.3 + float(d["phase"]) * TAU)
+			var b := size_k * (0.25 + 0.95 * swell)
+			nd.position.y = float(d["top"]) - 0.12 * swell
+			nd.scale = Vector3(b, b * (1.0 + 0.3 * swell) * wob, b)
 
 
 func _corner_h(ci: int, cj: int) -> float:
@@ -674,28 +714,85 @@ func _build_marks() -> void:
 	for c in marks.get_children():
 		c.queue_free()
 	_drops.clear()
-	var drop_mat := Toon.mat(Style.DROP)
-	# 물방울 돌기: 떨어지는 물방울 + 수면의 동심원 (RENDERING.md 2.7 — 지구 시점엔 뚜껑이 보이지 않아 매달린 방울은 그리지 않음)
+	# 물방울 돌기: 떨어지는 물방울 + 수면의 동심원 + 낮의 김 (RENDERING.md 2.7 — 지구 시점엔 뚜껑이 보이지 않아 매달린 방울은 그리지 않음)
 	for d: Dictionary in sim.drips:
 		var x: float = d["x"]
 		var z: float = d["y"]
-		var fall := SphereMesh.new()
-		fall.radius = 0.22
-		fall.height = 0.5
-		var fn := _add(fall, drop_mat, Vector3(x, LID_Y, z))
 		var surf := (sim.h[JarWater.cell_idx(x, z)] + sim.w[JarWater.cell_idx(x, z)]) * HS
-		var phase := randf()
-		_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "drip": true, "big": true, "f": 0.0})
-		for r in 2:
-			var tm := TorusMesh.new()
-			tm.inner_radius = 0.94
-			tm.outer_radius = 1.0
-			tm.rings = 24
-			tm.ring_segments = 3
-			var rn := _add(tm, Toon.mat(Style.WATER_FOAM), Vector3(x, surf + 0.03, z))
-			rn.scale = Vector3(1, 0.05, 1)
-			_drops.append({"node": rn, "ring": true, "phase": fposmod(phase + 0.5 * r, 1.0), "speed": 0.35})
+		_add_dew_marks(x, z, surf, 4.0)
 	# 유리벽의 골 = 폭포 (view/waterfalls.gd — A12)
+
+
+## [E3-7] 돌기 하나의 표시: 물방울 (밤에 맺혀 부풀고 새벽에 떨어짐) · 동심원 두 개 · 호수 위 김 네 가닥. 넓은 세상 화면도 같이 쓴다
+## rank = 습도가 낮을 때 어느 돌기부터 안 맺히는지 (자리로 정해 늘 같다)
+func _add_dew_marks(x: float, z: float, surf: float, lake_r: float, bead_r := 0.4) -> void:
+	var fall := SphereMesh.new()
+	fall.radius = bead_r
+	fall.height = bead_r * 2.2
+	var fn := _add(fall, Toon.mat(Style.DROP), Vector3(x, LID_Y, z))
+	fn.visible = false
+	var glint := SphereMesh.new()                # 물방울의 반짝임 (밤에도 물방울로 읽히게)
+	glint.radius = bead_r * 0.26
+	glint.height = bead_r * 0.52
+	var gm := StandardMaterial3D.new()
+	gm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	gm.albedo_color = Color(1.0, 1.0, 1.0, 0.9)
+	gm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var gi := MeshInstance3D.new()
+	gi.mesh = glint
+	gi.material_override = gm
+	gi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	gi.position = Vector3(-0.4, 0.45, 0.4) * bead_r
+	fn.add_child(gi)
+	var phase := fposmod(x * 0.618034 + z * 0.381966, 1.0)
+	var rank := fposmod(x * 0.1318 + z * 0.7549 + 0.37, 1.0)
+	_drops.append({"node": fn, "top": LID_Y - 1.2, "bottom": surf, "phase": phase, "speed": 0.55, "drip": true, "big": true, "f": 0.0, "p": 0.0, "rank": rank})
+	for r in 2:
+		var tm := TorusMesh.new()
+		tm.inner_radius = 0.94
+		tm.outer_radius = 1.0
+		tm.rings = 24
+		tm.ring_segments = 3
+		var rn := _add(tm, Toon.mat(Style.WATER_FOAM), Vector3(x, surf + 0.03, z))
+		rn.scale = Vector3(1, 0.05, 1)
+		rn.visible = false
+		_drops.append({"node": rn, "ring": true, "phase": fposmod(phase + 0.5 * r, 1.0), "speed": 0.35, "p": 0.0, "rank": rank, "rs": bead_r * 5.0})
+	if _haze_mat == null:
+		_haze_mat = ShaderMaterial.new()
+		var sh := Shader.new()
+		sh.code = HAZE_SHADER
+		_haze_mat.shader = sh
+	for i in 4:
+		var q := QuadMesh.new()
+		q.size = Vector2(1.0, 1.0)
+		var ang := (float(i) + phase) * TAU / 4.0
+		var off := Vector2(cos(ang), sin(ang)) * lake_r * (0.25 + 0.45 * fposmod(phase * 7.0 + i * 0.37, 1.0))
+		var hn := _add(q, _haze_mat, Vector3(x + off.x, surf, z + off.y))
+		hn.visible = false
+		hn.set_instance_shader_parameter("seed", phase * 10.0 + i)
+		_drops.append({"node": hn, "haze": true, "bottom": surf + 0.2, "rise": lake_r * 0.8, "size": lake_r * 1.3, "phase": fposmod(phase + i * 0.25, 1.0), "speed": 0.07})
+
+
+## 낮의 김 (호수 위 아지랑이): 카메라를 보는 엷은 흰 얼룩 + 가로로 일렁이는 결 (그림자 없음 · 깊이 안 씀)
+const HAZE_SHADER := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled;
+instance uniform float a = 0.0;
+instance uniform float seed = 0.0;
+void vertex() {
+	MODELVIEW_MATRIX = VIEW_MATRIX * mat4(INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+	MODELVIEW_MATRIX = MODELVIEW_MATRIX * mat4(vec4(length(MODEL_MATRIX[0].xyz), 0.0, 0.0, 0.0), vec4(0.0, length(MODEL_MATRIX[1].xyz), 0.0, 0.0), vec4(0.0, 0.0, length(MODEL_MATRIX[2].xyz), 0.0), vec4(0.0, 0.0, 0.0, 1.0));
+}
+void fragment() {
+	vec2 uv = UV - 0.5;
+	uv.x += sin(UV.y * 9.0 + TIME * 1.4 + seed) * 0.05;
+	float d = length(uv * vec2(2.0, 2.3));
+	float soft = smoothstep(1.0, 0.15, d);
+	float band = 0.55 + 0.45 * sin(UV.y * 16.0 - TIME * 2.2 + sin(UV.x * 5.0 + TIME * 0.8 + seed) * 1.6);
+	ALBEDO = vec3(1.0, 1.0, 0.98);
+	ALPHA = clamp(soft * band * a * 0.85, 0.0, 0.7);
+}
+"""
 
 
 func _add(mesh: Mesh, m: Material, pos: Vector3) -> MeshInstance3D:

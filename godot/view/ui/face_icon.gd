@@ -33,7 +33,7 @@ func set_resident(r: Resident) -> void:
 		paper.set_layers(ls)
 	if paper != null:
 		paper.visible = not ls.is_empty()
-	if r != null and r.genes.size() >= Genetics.GENE_BYTES:
+	if r != null and r.genes.size() >= Genetics.MIN_BYTES:
 		var g := r.genes
 		var cues := Bloodlines.looks(r.blood)
 		var st := Genetics.skin_step(g)
