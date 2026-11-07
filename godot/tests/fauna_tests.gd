@@ -236,7 +236,7 @@ func test_bark() -> void:
 	v.t = 4.0 * Balance.HOUR                          # 낮 (start_clock 7시 + 4시간)
 	v.advance(30.0)
 	var bugs := v.wild.bugs_of(v)
-	check(bugs.size() == Wildlife.BUGS, "애벌레 %d마리 (마을 둘레)" % bugs.size())
+	check(bugs.size() > 0 and bugs.size() == v.caterpillars.cats.size(), "애벌레 %d마리 (꽃 무리 곁 — sim/caterpillars.gd의 산 애벌레)" % bugs.size())
 	var x: Dictionary = v.dogs.village_dogs(v)[0]
 	x["x"] = float(bugs[0]["x"]) + 1.0
 	x["y"] = float(bugs[0]["y"])

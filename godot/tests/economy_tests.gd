@@ -40,7 +40,7 @@ func test_v5_food_gift_altar() -> void:
 	v.manna.clear()
 	v.manna_batches.clear()
 	v.stock["밀"] = 100.0
-	var left := v.consume(30.0)
+	var left := v.consume_unmet(30.0)
 	check(left < 1e-6 and is_equal_approx(float(v.stock["밀"]), 60.0) and not ("밀" in Balance.FOODS),
 		"밀은 날로 못 먹는다 — 죽으로 끓이면 밀 40 → 먹을 것 30 (×%.2f)" % Balance.PORRIDGE_YIELD)
 	check(is_equal_approx(v.food_total(), 60.0 * Balance.PORRIDGE_YIELD), "먹을 것 합 = 밀 × %.2f (%.1f)" % [Balance.PORRIDGE_YIELD, v.food_total()])

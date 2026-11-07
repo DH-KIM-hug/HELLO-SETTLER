@@ -42,6 +42,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("crisis_"):         # [작은 위기] 모깃불·먼지 뭉치 뜯기 (sim/small_crises.gd)
 		v.smalls.run_op(v, r, d)
 		return
+	if n.begins_with("cat_"):            # 애벌레 잡이·고치 (sim/caterpillars.gd — production-chain R7-5)
+		Caterpillars.run_op(v, r, d)
+		return
 	if n.begins_with("wild_"):           # [들짐승] 낚시·사냥·울타리 (sim/wildlife.gd)
 		Wildlife.run_op(v, r, d)
 		return
@@ -147,6 +150,7 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			var k: String = d["k"]
 			b.in_inc[k] = float(b.in_inc[k]) - float(d["amt"])
 			v.stock[k] = float(v.stock[k]) + float(d["amt"])
+			Production.gift_add(v, k, float(d.get("gift", 0.0)))     # 나르다 그만둠 — 거인 몫도 창고로 되돌림
 		"manna_pick":
 			var m: Dictionary = d["m"]
 			var take := minf(float(d["cap"]), m["amt"])
@@ -713,7 +717,9 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return dry or v.flora.weed_task(v, r, b)
 	if b.type == "농장" and Wildlife.fence_needed(v, r, b):     # [들짐승] 토끼가 밭을 갉으면 울타리 (WILDLIFE 3)
 		return dry or Wildlife.fence_task(v, r, b)
-	if (b.type == "어부" or b.type == "사냥꾼") and not Wildlife.has_work(v, r, b):     # [들짐승] 물고기·사슴이 없거나 넉넉하면 쉼
+	if b.type == "어부" and not Wildlife.has_work(v, r, b):     # [들짐승] 물고기가 없거나 넉넉하면 쉼
+		return false
+	if b.type == "사냥꾼" and not Caterpillars.has_work(v, r, b):     # 애벌레 잡이 (사냥꾼 키 — 사슴 없음, production-chain R1-5)
 		return false
 	if d.has("out"):
 		var all_full := true
@@ -729,6 +735,8 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 	if b.out_total() >= minf(4.0, _bulk_of(b)):
 		for k: String in b.out:
 			if float(b.out[k]) >= 1.0:
+				if _haul_direct(v, r, b, k, float(b.out[k])):     # 바로 보냄 (production-chain R3)
+					return true
 				var take := minf(maxf(4.0, float(Balance.BULK.get(k, 4.0))), floorf(b.out[k]))     # v5: 낟알·가루·빵은 수레 하나
 				b.out[k] = float(b.out[k]) - take
 				r.doing = "%s 나르는 중" % k
@@ -753,7 +761,12 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		return v.flora.pick_task(v, r, b)
 	if b.type == "약초꾼":                # (A6) 습한 땅·숲 가에서 약초
 		return VillageEra.herb_task(v, r, b)
-	if b.type == "어부" or b.type == "사냥꾼":       # [들짐승] 물가에서 낚시 · 숲에서 사냥 (WILDLIFE 2 · 3)
+	if b.type == "사냥꾼":                # 애벌레 잡이: 조를 꾸려 잡거나 고치를 따고 주움 (production-chain R7-5)
+		if Caterpillars.work_task(v, r, b):
+			return true
+		r.steps.append(act(120.0, "idle"))
+		return true
+	if b.type == "어부":                  # [들짐승] 물가에서 낚시 (WILDLIFE 2)
 		if Wildlife.work_task(v, r, b):
 			return true
 		r.steps.append(act(120.0, "idle"))
@@ -802,9 +815,9 @@ static func haul_min(k: String) -> float:
 	return maxf(1.0, float(Balance.BULK.get(k, 1.0)) * 0.25)
 
 
-## 가공 건물 앞 재료가 이 아래면 채운다 (수레 물건은 한 수레, 나머지 3)
+## 가공 건물 입구의 가득 (수레 물건은 한 수레, 나머지 3) — 채우는 문턱은 Production.refill_low (REFILL_AT)
 static func _inbuf_low(k: String) -> float:
-	return float(Balance.BULK.get(k, 3.0)) * Balance.IN_BUF_TRIPS
+	return Production.in_cap(k)
 
 
 ## 한 번에 나르는 양 (v5 — 수레로 나르는 물건은 BULK, 나머지는 사람의 짐)
@@ -858,7 +871,7 @@ static func haul_requests(v: Village) -> int:
 			var d := b.def()
 			if d.has("in") and b.upgrade_to == "":
 				for k in d["in"]:
-					if float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0)) < _inbuf_low(k) and float(v.stock.get(k, 0.0)) >= 1.0:
+					if Production.in_have(b, k) < Production.refill_low(v, k) and float(v.stock.get(k, 0.0)) >= 1.0:
 						n += 1
 		if b.is_site():
 			if plank_ok and b.need("판자") - int(b.delivered["판자"]) - int(b.incoming["판자"]) > 0:
@@ -883,13 +896,15 @@ static func haul_task(v: Village, r: Resident) -> bool:
 
 
 static func _haul_out(v: Village, r: Resident, s: Building, cap: int) -> bool:
-	# ① 건물 앞 산출물 → 창고
+	# ① 건물 앞 산출물 → 바로 다음 건물 (입구가 REFILL_AT 아래인 가장 가까운 곳 — production-chain R3) · 없으면 창고
 	for b in v.buildings:
 		if not b.built or b.is_store:
 			continue
 		for k: String in b.out:
 			var n := float(b.out[k])
 			if n >= haul_min(k):
+				if _haul_direct(v, r, b, k, n):
+					return true
 				var take := minf(load_of(r, k), floorf(n))
 				b.out[k] = n - take
 				r.doing = "%s 나르는 중" % k
@@ -897,6 +912,25 @@ static func _haul_out(v: Village, r: Resident, s: Building, cap: int) -> bool:
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
 	return false
+
+
+## 건물 b 앞의 k를 바로 다음 건물 입구로 (production-chain R3) — 보낼 곳이 없으면 false (창고로)
+## 받는 건물의 가득까지만 싣는다 (R3-3 '한 수레 가득'). 섞인 거인 몫은 받는 건물의 gift_in으로 (R3-6)
+static func _haul_direct(v: Village, r: Resident, b: Building, k: String, n: float) -> bool:
+	var to := Production.dest_for(v, b, k)
+	if to == null:
+		return false
+	var amt := minf(minf(load_of(r, k), floorf(n)), ceilf(Production.in_cap(k) - Production.in_have(to, k)))
+	if amt < 1.0:
+		return false
+	b.out[k] = n - amt
+	var g := Production.gift_use(v, k, amt)
+	to.in_inc[k] = float(to.in_inc.get(k, 0.0)) + amt
+	r.doing = "%s에서 %s로 %s 나르는 중" % [b.label(), to.label(), k]
+	var put := op("inbuf_put", {"b": to, "k": k, "amt": amt, "gift": g})
+	var undo := op("inbuf_undo", {"b": to, "k": k, "amt": amt, "gift": g})
+	_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(to.x + 0.6, to.y + 0.6), k, amt, put, undo)
+	return true
 
 
 static func _haul_sites(v: Village, r: Resident, s: Building, cap: int) -> bool:
@@ -928,19 +962,19 @@ static func _haul_inputs(v: Village, r: Resident, s: Building, cap: int) -> bool
 		if not b.built or not b.def().has("in") or b.upgrade_to != "":
 			continue
 		for k: String in b.def()["in"]:
-			var have := float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0))
-			var low := _inbuf_low(k)
+			var have := Production.in_have(b, k)
+			var low := _inbuf_low(k)              # 가득 — 채우러 가는 문턱은 refill_low, 갈 때는 한 수레를 가득 (R3-3)
 			var keep := 0.0                   # v5: 판자가 넉넉하면 제재소가 통나무를 다 켜지 않게 (땔감·횃불 몫) — 판자가 모자라면 다 켠다
 			if k == "통나무" and float(v.stock.get("판자", 0.0)) >= v._owed("판자") + Balance.PLANK_RESERVE + 8:
 				keep = v.enough(k) * 0.4
-			if have < low and float(v.stock.get(k, 0.0)) - keep >= 1.0:
+			if have < Production.refill_low(v, k) and float(v.stock.get(k, 0.0)) - keep >= 1.0:
 				var take := minf(minf(load_of(r, k), low - have), floorf(v.stock[k]))
 				v.stock[k] = float(v.stock[k]) - take
 				var g := Production.gift_use(v, k, take)      # v5: 거인이 준 재료 몫은 가공품으로 옮겨 감
 				b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
 				r.doing = "%s에 %s 나르는 중" % [b.label(), k]
 				var put := op("inbuf_put", {"b": b, "k": k, "amt": take, "gift": g})
-				var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take})
+				var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take, "gift": g})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
 				return true
 	return false

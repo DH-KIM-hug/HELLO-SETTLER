@@ -51,8 +51,19 @@ static func _take(v: Village, k: String, need: float) -> float:
 	return take
 
 
-## 먹는다 — 못 먹은 양을 돌려준다. 낟알 → 창고 먹을 것 (FOODS 순서) → 건물 앞의 빵 → 밀을 죽으로 (밀 1 → 0.75)
+## 먹는다 — 먹은 몫(got, 소금으로 줄인 뒤 실제로 꺼낸 식량)을 돌려준다 (design/gdd/production-chain.md R2-3 계약).
+## 낟알 → 창고 먹을 것 (FOODS 순서) → 건물 앞의 빵 → 밀을 죽으로 (밀 1 → 0.75)
 static func consume(v: Village, need: float) -> float:
+	var eff := need * (Balance.SALT_SAVING if float(v.stock.get("소금", 0.0)) > 0.0 else 1.0)
+	return maxf(0.0, eff - _eat(v, need))
+
+
+## 옛 계약 (호환 — 한 줄 감싸기): 못 먹은 양 (소금으로 줄인 단위)
+static func consume_unmet(v: Village, need: float) -> float:
+	return _eat(v, need)
+
+
+static func _eat(v: Village, need: float) -> float:
 	if float(v.stock.get("소금", 0.0)) > 0.0:
 		v.stock["소금"] = maxf(0.0, float(v.stock["소금"]) - need / 400.0)
 		need *= Balance.SALT_SAVING
@@ -76,6 +87,8 @@ static func consume(v: Village, need: float) -> float:
 		need -= got
 		if k == "빵" and got > 0.0:
 			v.ate_bread_t = v.t
+		if k == "꿀" and got > 0.0:
+			v.ate_honey_t = v.t
 		if k == "빵" and need > 0.0:
 			for b in v.buildings:
 				if need <= 0.0:
@@ -104,24 +117,35 @@ static func consume(v: Village, need: float) -> float:
 	return need if need > 1e-6 else 0.0     # 죽 나눗셈의 부스러기는 굶주림이 아니다
 
 
-## 창고에서 상함 (새벽마다 하루 몫 — 밀 3% · 가루 1% · 빵 0.4%)
+## 창고에서 상함 (새벽마다 하루 몫 — 표 하나 Balance.SPOIL_DAY, production-chain R4 · F4).
+## 생선·고기는 소금이 있으면 × Wildlife.SALT_KEEP · 질그릇 항아리(발견 W2) × keep_mult. 생버섯은 섞인 얼룩버섯 조각도 같은 몫.
+## 물건마다 그날 상한 양을 `spoiled` 사건으로
 static func spoil(v: Village) -> void:
+	var salt := float(v.stock.get("소금", 0.0)) >= Wildlife.SALT_MIN
 	for k: String in Balance.SPOIL_DAY:
 		var have := float(v.stock.get(k, 0.0))
 		if have <= 0.0:
 			continue
-		var lost := have * float(Balance.SPOIL_DAY[k])
+		var p := float(Balance.SPOIL_DAY[k])
+		if k == "생선" or k == "고기":
+			p *= (Wildlife.SALT_KEEP if salt else 1.0) * Discovery.keep_mult(v)
+		var lost := have * p
 		v.stock[k] = have - lost
 		gift_use(v, k, lost * float(v.gift.get(k, 0.0)) / have)
+		if k == "버섯" and v.flora != null:
+			v.flora.tainted *= 1.0 - p
+		if lost > 1e-6:
+			v.emit(&"spoiled", {"v": {"k": StringName(k), "amt": lost}})
 
 
 ## 행복: 지난 하루 빵을 먹었다 + · 죽만 먹었다 −
 static func food_happy(v: Village) -> float:
+	var honey := Balance.HONEY_HAPPY if v.t - v.ate_honey_t < Balance.DAY else 0.0     # 꿀을 먹은 날 + (R2-4)
 	if v.t - v.ate_bread_t < Balance.DAY:
-		return Balance.HAPPY_BREAD
+		return Balance.HAPPY_BREAD + honey
 	if v.t - v.ate_porridge_t < Balance.DAY:
-		return Balance.HAPPY_PORRIDGE_ONLY
-	return 0.0
+		return Balance.HAPPY_PORRIDGE_ONLY + honey
+	return honey
 
 
 ## 빵을 구운 적이 있나 (그 전까지 거인이 낟알 한 줌을 무료로 내려 준다)
@@ -142,6 +166,101 @@ static func hunger_hint(v: Village) -> void:
 	var c := v.chief()
 	if c != null and not c.sleeping:
 		v.speak(c, "배가 고파요… 먹을 게 모자라요", 6)
+
+
+# ───────────────────────── 바로 보냄 (production-chain R3) ─────────────────────────
+## 가공 건물 입구의 가득 (한 수레 × IN_BUF_TRIPS — 수레 물건이 아니면 3)
+static func in_cap(k: String) -> float:
+	return float(Balance.BULK.get(k, 3.0)) * Balance.IN_BUF_TRIPS
+
+
+## 이 아래로 떨어지면 채운다 (바로 보냄을 끄면 옛 방식: 가득에서 조금만 줄어도)
+static func refill_low(v: Village, k: String) -> float:
+	return in_cap(k) * (Balance.REFILL_AT if v.direct_route else 1.0)
+
+
+## 입구 (안에 있는 것 + 오는 중)
+static func in_have(b: Building, k: String) -> float:
+	return float(b.in_buf.get(k, 0.0)) + float(b.in_inc.get(k, 0.0))
+
+
+## 입구를 채울 건물인가 (지어졌고, 넓혀 짓는 중이 아니고, 재료로 k를 씀)
+static func takes_input(b: Building, k: String) -> bool:
+	if not b.built or b.upgrade_to != "":
+		return false
+	var d := b.def()
+	return d.has("in") and (d["in"] as Dictionary).has(k)
+
+
+## 건물 b 앞의 산출물 k를 바로 보낼 곳 — 입구가 refill_low 아래인 건물 중 가장 가까운 곳 (같으면 id가 작은 쪽).
+## 없으면 null (창고로). 빵은 늘 창고로 (먹는 곳). 바로 보냄을 끄면 늘 null
+static func dest_for(v: Village, b: Building, k: String) -> Building:
+	if not v.direct_route or k == "빵":
+		return null
+	var best: Building = null
+	var bd := INF
+	for o in v.buildings:
+		if o == b or not takes_input(o, k):
+			continue
+		if in_have(o, k) >= refill_low(v, k):
+			continue
+		var d := Vector2(o.x - b.x, o.y - b.y).length_squared()
+		if d < bd - 1e-9 or (absf(d - bd) <= 1e-9 and best != null and o.id < best.id):
+			bd = d
+			best = o
+	return best
+
+
+# ───────────────────────── 막힘 (production-chain States · 사건 chain_stalled / chain_resumed) ─────────────────────────
+## 건물 걸음마다: why = &"no_input"·&"no_worker"면 그 상태, &""면 돌아감·넉넉해서 쉼 (막힘 아님).
+## 상태는 저장하지 않는다 (Village._stall — 불러온 첫 걸음엔 사건 없음, 처음부터 다시 잼)
+static func stall_tick(v: Village, b: Building, why: StringName) -> void:
+	var s: Dictionary = v._stall.get(b.id, {})
+	if s.is_empty():
+		s = {"why": &"", "since": v.t, "stalled": false, "at": 0.0, "ok": -1.0}
+		v._stall[b.id] = s
+	if why != &"":
+		s["ok"] = -1.0
+		if s["why"] != why:
+			if not s["stalled"]:
+				s["since"] = v.t
+			s["why"] = why
+		if not s["stalled"] and v.t - float(s["since"]) >= Balance.STALL_AFTER:
+			s["stalled"] = true
+			s["at"] = float(s["since"])
+			v.emit(&"chain_stalled", {"v": {"b": b.id, "type": StringName(b.type), "why": why}})
+		return
+	s["why"] = &""
+	if not s["stalled"]:
+		s["since"] = v.t
+		return
+	if float(s["ok"]) < 0.0:
+		s["ok"] = v.t
+	elif v.t - float(s["ok"]) >= Balance.STALL_CLEAR:
+		s["stalled"] = false
+		s["since"] = v.t
+		v.emit(&"chain_resumed", {"v": {"b": b.id, "secs": float(s["ok"]) - float(s["at"])}})
+		s["ok"] = -1.0
+
+
+## 첫 밀·첫 가루·첫 빵 (그 병에서 한 번씩 — stats에 표시)
+static func first_made(v: Village, b: Building, w: Resident) -> void:
+	var kind := &""
+	var key := ""
+	match b.type:
+		"농장":
+			kind = &"first_harvest"
+			key = "first_wheat_ev"
+		"맷돌간", "방앗간":
+			kind = &"first_flour"
+			key = "first_flour_ev"
+		"화덕", "빵집":
+			kind = &"first_bread"
+			key = "first_bread_ev"
+	if key == "" or int(v.stats.get(key, 0)) > 0:
+		return
+	v.stats[key] = 1
+	v.emit(kind, {"who": w.id if w != null else -1, "v": {"b": b.id}})
 
 
 # ───────────────────────── 거인이 준 몫 ─────────────────────────

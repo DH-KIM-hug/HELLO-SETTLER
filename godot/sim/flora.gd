@@ -167,12 +167,7 @@ func _tick(v: Village, dt: float) -> void:
 	_dand_tick(v, dt)
 	_pending_tick(v)
 	_drying_tick(v)
-	# 생버섯은 상한다 (말리면 오래 감) — 섞인 얼룩버섯 조각도 같은 몫
-	var fresh := float(v.stock.get("버섯", 0.0))
-	if fresh > 0.0:
-		var k := Balance.SHROOM_SPOIL_DAY * dt / Balance.DAY
-		v.stock["버섯"] = fresh * (1.0 - k)
-		tainted *= 1.0 - k
+	# 생버섯 상함은 Production.spoil (새벽 — 표 하나 Balance.SPOIL_DAY["버섯"], 섞인 얼룩버섯 조각도 같은 몫 · production-chain R4)
 	if _poison_new:
 		_poison_new = false
 		_poisoned(v)

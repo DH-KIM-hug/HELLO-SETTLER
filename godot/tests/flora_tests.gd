@@ -306,7 +306,7 @@ func test_poison_eat() -> void:
 	v.stock["건량"] = 0.0
 	v.stock["버섯"] = 16.0
 	f.tainted = 8.0
-	var left := v.consume(8.0)
+	var left := v.consume_unmet(8.0)
 	check(left == 0.0 and f.tainted < 8.0 and f.poison_until > v.t, "생버섯을 먹으면 섞인 조각도 같은 몫 (남은 독 조각 %.1f)" % f.tainted)
 	check(is_equal_approx(Flora.ill_mult(v), Balance.POISON_ILL), "그날 배앓이 ×%.0f" % Flora.ill_mult(v))
 	var kid: Resident = null

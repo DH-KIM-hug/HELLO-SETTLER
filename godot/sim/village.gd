@@ -138,6 +138,9 @@ var hand: GiantHand                   # [거인의 손] 물 뿌리기·감싸기
 var smalls: SmallCrises                # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2 — sim/small_crises.gd, 난수도 따로)
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var dogs: Dogs                        # [강아지] 집 강아지·마을 강아지·꿀떡이 — 무리마다 (GD 3.0 · E3-13 — sim/dogs.gd, 난수도 따로)
+var caterpillars: Caterpillars        # 애벌레 → 고치 → 나비 · 애벌레 잡이 · 꿀방울 — 무리마다 (production-chain R7 — sim/caterpillars.gd)
+var direct_route := Balance.DIRECT_ROUTE   # 바로 보냄 (production-chain R3) — 시험이 끌 수 있게 (저장 안 함)
+var _stall: Dictionary = {}           # 건물 id → 막힘 판정 (Production.stall_tick — 저장 안 함, 불러온 첫 걸음엔 사건 없음)
 var wild: Wildlife                    # [들짐승] 물고기·애벌레 자리 (E3-12 — 큰 짐승 없음) 병 하나에 하나 — 첫 무리가 돌리고 다른 무리는 같은 것을 함께 쓴다 (WILDLIFE — sim/wildlife.gd)
 var altar_pos := Vector2.ZERO         # 첫 모닥불 곁 작은 돌 제단
 var altar: Array = []                 # 제단의 제물 {item, amt, t, by: PackedInt32Array, away?: 거인이 비운 동안(등불 시간) 바친 것}
@@ -179,6 +182,7 @@ var altar_level := 0                  # 제단 단계 0~3 (Balance.ALTAR_NAMES �
 var altar_rebuild_until := -1.0       # 넓힌 제단을 주민이 다시 짓는 중 (이때까지)
 var ate_bread_t := -1.0e9             # 마지막으로 빵을 먹은 때 (행복)
 var ate_porridge_t := -1.0e9          # 마지막으로 밀을 죽으로 끓여 먹은 때
+var ate_honey_t := -1.0e9             # 마지막으로 꿀을 먹은 때 (행복 + HONEY_HAPPY)
 var _offer_key := -1                  # 마지막 기도 제물 (달력 날 × 2 + 아침 0 · 저녁 1)
 var _drop_id := 0
 var migrants: Dictionary = {}         # 마지막 이주민 맞이 {t, until, mood, kind, ids} (sim/immigrants.gd — 행복 잠깐 ±)
@@ -268,6 +272,7 @@ func _init_health(seed_v: int) -> void:
 	smalls = SmallCrises.new(seed_v)     # [작은 위기]
 	hand = GiantHand.new()                # [거인의 손]
 	flora = Flora.new(seed_v)             # [하늘의 것]
+	caterpillars = Caterpillars.new()     # 애벌레 한살이 (production-chain R7-5)
 	dogs = Dogs.new(seed_v)               # [강아지] 처음 걸음에 마을 강아지 둘 (첫 병이면 꿀떡이도)
 	wild = Wildlife.new(seed_v)           # [들짐승] (넓은 세상의 다른 무리는 JarWorld.place_kit이 첫 무리 것으로 바꿈)
 	if not default_created.is_empty():
@@ -774,8 +779,14 @@ func _food_people() -> float:
 	return n
 
 
+## 먹은 몫 (got) — production-chain R2-3 계약 (sim/production.gd)
 func consume(need: float) -> float:
-	return Production.consume(self, need)   # v5: 밀은 죽으로 끓여서만 (sim/production.gd)
+	return Production.consume(self, need)   # v5: 밀은 죽으로 끓여서만
+
+
+## 옛 계약 (호환): 못 먹은 몫
+func consume_unmet(need: float) -> float:
+	return Production.consume_unmet(self, need)
 
 
 ## 하늘 낟알 — 도착 직후 1회, 첫 수확 전까지 매일 새벽 하루치 (기획서 8.4)
@@ -870,7 +881,7 @@ func step(dt: float) -> void:
 	_fp_n = people.size()
 	_fp_t = t
 	var need := fp * dt / Balance.FOOD_IV
-	var unmet := consume(need)
+	var unmet := consume_unmet(need)
 	deficit = unmet / need if need > 0.0 else 0.0
 	Production.hunger_hint(self)          # v5: 빵을 굽기 전 배고프면 거인에게 안내
 	if deficit > 0.0:
@@ -908,6 +919,8 @@ func step(dt: float) -> void:
 	SimProf.mark("hand")
 	Flora.step(self, dt)              # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (WORLD_EVENTS 2.6 · 2.7)
 	SimProf.mark("flora")
+	Caterpillars.step(self, dt)       # 애벌레 → 고치 → 나비 · 꽃숲 피해 · 꿀방울 (production-chain R7)
+	SimProf.mark("caterpillars")
 	if owns_water:
 		Wildlife.step(self, dt)       # [들짐승] 무리 수·늑대·토끼 밭 피해·상함·늑대 울음 (WILDLIFE 1~4 — 병 하나에 한 번)
 	SimProf.mark("wildlife")
@@ -1328,14 +1341,19 @@ func _update_building(b: Building, dt: float) -> void:
 		return
 	if b.type == "농장" and b.ready_at < 0.0:
 		b.ready_at = t + Balance.GROW_FIRST
-	if b.worker < 0:
-		return                        # 일꾼이 없으면 아래에서도 그냥 돌아간다 (빠른 길)
 	var d := b.def()
+	var chain: bool = d.get("job", false) and d.has("out") and not d.get("gather", false) and b.upgrade_to == ""   # 막힘 판정 대상 (production-chain States)
+	if b.worker < 0:
+		if chain:
+			Production.stall_tick(self, b, &"no_worker")
+		return                        # 일꾼이 없으면 아래에서도 그냥 돌아간다 (빠른 길)
 	# 생산·가공: 일꾼이 배정돼 있으면 밤에도 돌아간다 (RESIDENT_AI 9장). 채집형만 일꾼이 직접 걸어가서 일함
 	if not d.get("job", false) or not d.has("out") or d.get("gather", false) or b.worker < 0:
 		return
 	var w := person(b.worker)
 	if w != null and w.sick_left > 0.0:
+		if chain:
+			Production.stall_tick(self, b, &"no_worker")
 		return                        # 일꾼이 앓아누우면 일터가 쉰다 (HEALTH.md 2)
 	if b.type == "소금밭":
 		_update_salt_works(b, dt, w)
@@ -1354,10 +1372,16 @@ func _update_building(b: Building, dt: float) -> void:
 			all_full = false
 			break
 	if all_full:
+		if chain:
+			Production.stall_tick(self, b, &"")     # 넉넉해서 쉼은 막힘이 아니다
 		return
 	var ins: Dictionary = d.get("in", {})
 	if not _inputs_ready(b, ins):
+		if chain:
+			Production.stall_tick(self, b, &"no_input")
 		return
+	if chain:
+		Production.stall_tick(self, b, &"")
 	var place := 1.0
 	if b.type == "농장":
 		if b.farm_mult < 0.0:
@@ -1390,6 +1414,7 @@ func _update_building(b: Building, dt: float) -> void:
 					Production.gift_add(self, ko, gu * float(outs[ko]) / float(ins[k]))
 		for k in outs:
 			b.out[k] = float(b.out.get(k, 0.0)) + float(outs[k])
+		Production.first_made(self, b, w)            # first_harvest · first_flour · first_bread 사건 (한 번씩)
 		if b.type == "농장" and w != null:
 			harvest_check(w)
 		if b.type == "빵집" or b.type == "화덕":
@@ -3704,7 +3729,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
@@ -3720,6 +3745,8 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 	d["flora"] = flora.to_dict()
 	if dogs != null:
 		d["dogs"] = dogs.to_dict()    # [강아지]
+	if caterpillars != null:
+		d["caterpillars"] = caterpillars.to_dict()
 	if owns_water and wild != null:
 		d["wild"] = wild.to_dict()    # [들짐승] 병 하나에 한 번 (다른 무리는 첫 무리 것을 함께 — JarWorld.from_dict)
 	var bl := []
@@ -3764,6 +3791,7 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	v.hand = GiantHand.from_dict(d["hand"]) if d.has("hand") else GiantHand.new()     # 옛 저장: 손을 쓴 기록 없이
 	v.flora = Flora.from_dict(d["flora"])
 	v.dogs = Dogs.from_dict(d["dogs"]) if d.has("dogs") else Dogs.new(int(v.rng.seed % 100000))     # 옛 저장: 처음 걸음에서 강아지를 놓는다
+	v.caterpillars = Caterpillars.from_dict(d["caterpillars"]) if d.has("caterpillars") else Caterpillars.new()   # 옛 저장: 처음 걸음에서 꽃 무리를 놓는다
 	v.wild = Wildlife.from_dict(d["wild"]) if d.has("wild") else Wildlife.new(int(v.rng.seed % 100000))   # 옛 저장: 처음 걸음에서 무리를 놓는다
 	for bd: Dictionary in d.get("buildings", []):
 		var b := Building.from_dict(bd)
