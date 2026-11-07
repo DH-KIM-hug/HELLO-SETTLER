@@ -99,6 +99,7 @@ var _tray_h := 0.0
 var chronicle: ChronicleSheet
 var people_sheet: PeopleSheet          # [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] (view/ui/people_sheet.gd)
 var rev_show: RevelationShow
+var firsts: Firsts = _giant_firsts()   # 별지기 단위 안내 창·열린 도구 (ADR-0001 5절 — SaveManager.player 것을 나눠 씀, 없으면 이 장면만의 것)
 var director: StageDirector           # (E1-0) 사건 연출 바탕 — 깨달음·제단 짓기·첫 기도 (view/stage_director.gd · view/stagings.gd)
 var first_popup: FirstPopup           # (6b·6c) 처음 겪는 일의 안내 창 (sim/firsts.gd)
 var _firsts_t := 0.0
@@ -124,6 +125,12 @@ var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_s
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
 const GEAR_HOLD := 0.6               # 톱니를 이만큼(초) 길게 누르면 개발 모드
+
+
+## 별지기 단위 안내 창·도구 (sim/firsts.gd) — 저장 계통이 있으면 그것이 가진 것 (거인 묶음에 저장), 없으면 (캡처·시험) 이 장면만의 것
+static func _giant_firsts() -> Firsts:
+	var sm := GameSave.get_instance()
+	return sm.player.firsts if sm != null else Firsts.new()
 
 
 func _ready() -> void:
@@ -405,14 +412,16 @@ func _process(dt: float) -> void:
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
 		var vfast := clock.view_fast()
-		Social.rate = clock.speed()                 # [마을의 삶] 장면은 보통 이하 빠르기에서만 (주민이 제 걸음일 때)
-		Social.stage_on = not vfast and not clock.skipping and not clock.fast and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
+		# [마을의 삶] 말풍선 장면은 보통 이하 빠르기에서만 (주민이 제 걸음일 때) — 화면 상태라 SocialStage 인스턴스에 (시뮬은 늘 같음, ADR-0001)
+		var talk_on := not vfast and not clock.skipping and not clock.fast and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
 		var sdt := village.step_dt if clock.fast else clock.step
 		var al := 1.0 if clock.skipping or vfast else clampf(clock.acc / sdt, 0.0, 1.0)
 		for vv: Array in village_views():
 			(vv[1] as VillageView).alpha = al
 			(vv[1] as VillageView).lerp_max = 3.0 * sdt / Balance.WATCH_STEP * 0.7 if clock.fast else 3.0   # 10초 걸음 사이도 걸어가는 것으로 (순간이동만 건너뜀)
 			(vv[1] as VillageView).fast = vfast           # 1초=5분~: 주민은 멀리 LOD 점처럼 순간이동, 움직임·효과는 띄엄띄엄
+			if (vv[1] as VillageView).social != null:
+				(vv[1] as VillageView).social.stage_on = talk_on
 		_terrain_t += dt
 		# 오솔길·물가는 천천히 바뀌므로 가끔만 다시 그림 (밤 건너뛰기 중엔 1초마다, 끝나면 바로)
 		if _terrain_t > (1.0 if clock.skipping else 4.0) or (was_skipping and not clock.skipping):
@@ -1053,7 +1062,7 @@ func _check_awakening() -> void:
 		var q: Village = vv[0]
 		if q != fv and q.awakened_t >= 0.0 and float(_awake_seen.get(q, -1.0)) != q.awakened_t:
 			_awake_seen[q] = q.awakened_t
-			Firsts.fire("awakening")
+			firsts.fire("awakening")
 
 
 ## (E1-0) 연출이 아래 띠 단추를 잠깐 반짝이게 ("altar" · "shop" · "hand" · "chronicle")
@@ -1065,7 +1074,7 @@ func _tool_glowing(what: String) -> bool:
 	return float(_tool_glow.get(what, 0.0)) > 0.0
 
 
-## (6b·6c) 처음 겪는 일: 가끔 마을을 보고 (Firsts.check) · 연출·시트·편지가 없을 때 안내 창을 하나씩
+## (6b·6c) 처음 겪는 일: 가끔 마을을 보고 (firsts.check) · 연출·시트·편지가 없을 때 안내 창을 하나씩
 func _update_firsts(dt: float) -> void:
 	for k: String in _tool_glow.keys():
 		_tool_glow[k] = float(_tool_glow[k]) - dt
@@ -1075,13 +1084,13 @@ func _update_firsts(dt: float) -> void:
 	if _firsts_t >= 0.5 and not catching:
 		_firsts_t = 0.0
 		for vv: Array in village_views():
-			Firsts.check(vv[0])
+			firsts.check(vv[0])
 	_popup_wait = maxf(0.0, _popup_wait - dt)
-	if first_popup == null or first_popup.showing() or not Firsts.pending() or _popup_wait > 0.0:
+	if first_popup == null or first_popup.showing() or not firsts.pending() or _popup_wait > 0.0:
 		return
 	if not popup_ok():
 		return
-	var pid := Firsts.take()
+	var pid := firsts.take()
 	if pid != "":
 		first_popup.show_id(pid)
 		var sm := GameSave.get_instance()
@@ -1116,8 +1125,8 @@ func _on_stage_started(_id: String) -> void:
 	if first_popup == null or not first_popup.showing() or director.idle():
 		return
 	var pid := first_popup.id
-	Firsts.seen.erase(pid)
-	Firsts.queue.push_front(pid)
+	firsts.seen.erase(pid)
+	firsts.queue.push_front(pid)
 	first_popup.close()
 
 

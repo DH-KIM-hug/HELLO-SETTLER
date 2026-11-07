@@ -33,7 +33,7 @@ func all() -> void:
 	run.timed(self, ["test_roundtrip", "test_determinism_save_load", "test_determinism_clock", "test_world_roundtrip",
 		"test_files_and_slots", "test_corrupt_recovery", "test_migration_v0", "test_clock_backwards", "test_giant_action_persisted",
 		"test_autosave_cost", "test_offline_no_new_crisis", "test_offline_death_cap", "test_offline_era_altar",
-		"test_creation_day", "test_catchup_and_letter", "test_lamp_upgrade", "test_offline_offerings", "test_catchup_determinism",
+		"test_creation_day", "test_catchup_and_letter", "test_notification_plan", "test_letter_no_numbers", "test_lamp_upgrade", "test_offline_offerings", "test_catchup_determinism",
 		"test_return_effects", "test_world_files", "test_world_pack", "test_world_v1_file", "test_world_catchup", "test_world_giant_action", "test_catchup_speed", "test_world_catchup_speed"])
 	check(SaveCodec.errors == 0, "저장할 수 없는 값(객체·Callable)을 한 번도 만나지 않았다 (%d)" % SaveCodec.errors)
 	_clean()
@@ -792,7 +792,7 @@ func test_lamp_upgrade() -> void:
 	drop(sm)
 
 
-## 비운 동안의 제물 (SAVE.md 3.1): 등불 시간 동안 이틀 상한 없이 쌓이고, 편지의 [모두 받기]가 장터 값 그대로 지폐로
+## 비운 동안의 제물 (SAVE.md 3.1 · awakening-altar.md D4): 등불 시간 동안 제단 크기까지 쌓이고 이틀이 지나도 창고로 가지 않으며, 편지의 [모두 받기]가 장터 값 그대로 지폐로
 func test_offline_offerings() -> void:
 	var v := Village.new_prototype(55)
 	v.water.offline = true
@@ -801,14 +801,13 @@ func test_offline_offerings() -> void:
 	v.altar_level = 3                                 # v5: 제단 크기 = 쌓이는 양 (작은 사당 = 사흘치 — SAVE.md 3.1)
 	var c := CatchUp.new(v, 4.0 * Balance.DAY, 4.0 * Balance.DAY)   # 시험용 긴 등불 (나흘) — 이틀 상한이 걸릴 만큼
 	check(v.altar_hold, "따라잡는 동안은 제단 상한이 쉰다")
+	# (awakening-altar.md D4·F6, 2026-11-08) 상한은 비운 동안에도 늘 제단 크기 — 멈추는 것은 '이틀 지나면 창고로'(만료)뿐.
+	# 얼마나 바치는지는 그날 남는 것(경제)에 달려 시드마다 흔들리므로, 만료 규칙은 떠나기 전 놓아 둔 '비운 동안의 제물' 하나로 직접 본다
+	v.altar.append({"item": "통나무", "amt": 1, "t": v.t, "by": PackedInt32Array(), "k": 1, "away": true})
 	var l := c.finish()
-	var days := {}
-	var oldest := 0.0
-	for o: Dictionary in v.altar:
-		if o.get("away", false):
-			days[v.cal_day(float(o["t"]))] = true
-			oldest = maxf(oldest, v.t - float(o["t"]))
-	check(days.size() >= 3 and oldest >= Balance.OFFER_DAYS, "비운 동안의 제물은 이틀치를 넘게 쌓인다 (%d번의 저녁 기도, 가장 오래된 것 %.0f시간 전)" % [days.size(), oldest / 3600.0])
+	var held := v.altar.filter(func(o: Dictionary) -> bool: return int(o["k"]) == 1 and o.get("away", false))
+	check(held.size() == 1 and v.t - float(held[0]["t"]) >= Balance.OFFER_DAYS, "비운 동안의 제물은 이틀이 지나도 창고로 가지 않고 기다린다 (%.0f시간 전 것)" % ((v.t - float(held[0]["t"])) / 3600.0 if not held.is_empty() else -1.0))
+	check(Altar.used(v) <= Altar.slots(v), "비운 동안에도 제단 크기가 상한 (기도 %d / 자리 %d — D4)" % [Altar.used(v), Altar.slots(v)])
 	check(not v.altar_hold and String(l["altar_line"]).contains("장터 값 약") and float(l["offer_value"]) > 0.0,
 		"편지 '기다리는 것': %s" % l["altar_line"])
 	var bad: String = run.words_ok([l["altar_line"]])
@@ -851,6 +850,68 @@ func test_offline_offerings() -> void:
 	rl2.free()
 	check(got2 > 0.0 and int(sm.stats["writes"]) > int(w0), "등불 12시간 안의 제물도 편지에서 받으면 곧바로 저장 (%.0f 지폐, 쓰기 %d번)" % [got2, int(sm.stats["writes"]) - int(w0)])
 	drop(sm)
+
+
+## (F-1 · notifications.md F1·R2~R5) 알림 계획: 병 초 ÷ 비운 빠르기 · 등불 상한 · 조용한 시간 · 가까운 알림 버림 · 하루 두 번 · 숫자 없는 문장
+func test_notification_plan() -> void:
+	var day0 := 1767225600.0                     # 2026-01-01 00:00 UTC (시간대 0으로 잼)
+	var noon := day0 + 12.0 * 3600.0
+	var lamp := 12.0 * 3600.0
+	var j := {"jar": 3, "people": 10, "altar": true, "altar_jar_s": 6.0 * 3600.0}
+	var p := GameSave.plan_notifications(noon, [j], 6.0, lamp, 0)
+	var alt: Array = p.filter(func(n: Dictionary) -> bool: return n["id"] == "altar_full")
+	check(alt.size() == 1 and is_equal_approx(float(alt[0]["unix"]) - noon, 3600.0) and int(alt[0]["jar"]) == 3, "AC4: 비운 빠르기 ×6 · 제단까지 병 6시간 → 현실 1시간 뒤 (%s)" % str(p))
+	var lo: Array = p.filter(func(n: Dictionary) -> bool: return n["id"] == "lamp_out")
+	check(lo.size() == 1 and _hour_of(float(lo[0]["unix"])) == 8.0, "등불 꺼짐 (정오 + 12시간 = 자정) → 조용한 시간이라 아침 8시로")
+	var near := GameSave.plan_notifications(noon, [{"jar": 1, "people": 5, "altar": true, "altar_jar_s": 3.0 * 3600.0}], 6.0, lamp, 0)
+	check(not near.any(func(n: Dictionary) -> bool: return n["id"] == "altar_full"), "R5: 병 3시간 ÷ 6 = 현실 30분 안 → 버림")
+	var late := GameSave.plan_notifications(day0 + 21.0 * 3600.0, [{"jar": 1, "people": 5, "altar": true, "altar_jar_s": 12.0 * 3600.0}], 6.0, 11.0 * 3600.0, 0)
+	check(late.size() == 1 and late[0]["id"] == "both" and _hour_of(float(late[0]["unix"])) == 8.0, "R4: 23시 제단 · 8시 등불 → 둘 다 8시로 밀려 하나로 합침 (%s)" % str(late))
+	var slow := GameSave.plan_notifications(noon, [{"jar": 1, "people": 5, "altar": true, "altar_jar_s": 3.0 * 86400.0}], 3.0, lamp, 0)
+	check(not slow.any(func(n: Dictionary) -> bool: return n["id"] == "altar_full"), "등불이 먼저 꺼지면 (병 3일 ÷ 3 = 24시간 > 12시간) 제단 알림 없음")
+	var none := GameSave.plan_notifications(noon, [{"jar": 1, "people": 5, "altar": false, "altar_jar_s": INF}], 6.0, lamp, 0)
+	check(none.size() == 1 and none[0]["id"] == "lamp_out", "제단 없음 → 등불 알림만")
+	check(GameSave.plan_notifications(noon, [{"jar": 1, "people": 0, "altar": true, "altar_jar_s": 7200.0}], 6.0, lamp, 0).is_empty(), "사람 0명 → 알림 없음")
+	var two := GameSave.plan_notifications(noon, [j, {"jar": 4, "people": 3, "altar": true, "altar_jar_s": 2.0 * 3600.0 * 6.0}], 6.0, lamp, 0)
+	check(two.size() <= GameSave.NOTIFY_DAILY_MAX and two.filter(func(n: Dictionary) -> bool: return n["id"] == "altar_full").size() == 1, "병 여럿: 가장 이른 제단 하나 · 하루 두 번까지")
+	var nums := RegEx.create_from_string("[0-9]")
+	for k: String in GameSave.NOTIFY_TEXT:
+		var tx := String(GameSave.NOTIFY_TEXT[k])
+		check(nums.search(tx) == null and not tx.contains("거인") and run.words_ok([tx]) == "", "AC7: 알림 문장에 숫자·'거인'·금지어 없음 — %s" % tx)
+
+
+## (F-1 · chronicle-letters.md C1 · AC1) 돌아온 편지: 촌장 손편지엔 숫자 없음, 수는 크림 머리띠에만
+func test_letter_no_numbers() -> void:
+	check(CatchUp.count_words(2, "", "이", "가") == "둘이" and CatchUp.count_words(2, "쌍", "이", "가") == "두 쌍이" and CatchUp.count_words(5, "채", "을", "를") == "여러 채를"
+		and CatchUp.count_words(1, "통", "이", "가") == "한 통이" and CatchUp.count_words(4, "", "이", "가") == "여럿이", "수를 말로: 둘이 · 두 쌍이 · 여러 채를 · 한 통이 · 여럿이")
+	var v := Village.new_prototype(57)
+	v.water.offline = true
+	var l := {"chief": "마르타", "away": 3.0 * 86400.0, "pop0": 13, "pop1": 17, "slept": 3600.0, "lamp_h": 12, "settlements": 2, "world_pop0": 20, "world_pop1": 25,
+		"events": ["아기 %s 태어났어요 — 가람, 나래." % CatchUp.count_words(2, "", "이", "가"), "%s 모닥불 앞에서 혼인을 약속했어요." % CatchUp.count_words(3, "쌍", "이", "가")],
+		"born": [], "lost": [], "waiting": ["소원 편지 %s 기다려요." % CatchUp.count_words(2, "통", "이", "가")], "altar_line": "제단에 빵 3개가 있어요 (장터 값 약 12 지폐).",
+		"offerings": {"빵": 3}, "offer_value": 12.0}
+	var rl := ReturnLetter.new()
+	rl.village = v
+	rl.data = l
+	rl.call("_fill_letter")
+	var nums := RegEx.create_from_string("[0-9]")
+	var hand := PackedStringArray()
+	for c: Node in rl.body.get_children():
+		if c.name == "Header":
+			continue
+		for lb: Node in c.find_children("*", "Label", true, false) + ([c] if c is Label else []):
+			hand.append((lb as Label).text)
+	var head := PackedStringArray()
+	for lb: Node in rl.header.find_children("*", "Label", true, false):
+		head.append((lb as Label).text)
+	check(nums.search(" ".join(hand)) == null, "촌장 손편지에 숫자 없음: %s" % " / ".join(hand))
+	check(" ".join(head).contains("13 → 17") and " ".join(head).contains("+4") and " ".join(head).contains("빵 3개") and rl.take_btn != null and rl.header.is_ancestor_of(rl.take_btn),
+		"크림 머리띠: 인구 13 → 17 (+4) · 제단 줄 + [모두 받기] (%s)" % " / ".join(head))
+	rl.free()
+
+
+func _hour_of(unix: float) -> float:
+	return snappedf(fposmod(unix, 86400.0) / 3600.0, 0.01)
 
 
 ## 따라잡기 결정론: 같은 저장에서 나눠 흘리든(화면마다 조금씩) 한 번에 흘리든 똑같은 병 — 등불 상한·잠든 시간 포함

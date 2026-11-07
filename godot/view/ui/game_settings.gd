@@ -15,7 +15,7 @@ var sfx := true
 var voice := true                       # 주민 목소리 (AUDIO.md 7)
 var vibration := true
 var language := "ko"
-var notify := true
+var notify := false              # 알림 기본 꺼짐 (notifications GDD A2, 2026-11-08)
 var away_speed := Balance.AWAY_DEFAULT_I   # 자리를 비운 동안 시간 (v4.3): 0 느리게 · 1 보통 · 2 빠르게 → Balance.AWAY_RATES
 # 빠르게 갈 때 멈출 일 (JarClock.STOP_CATS) — 꺼도 처음 몇 번의 탄생·편지는 멈추고, 꺼진 일은 짧은 알림만
 var stop_born := false

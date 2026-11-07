@@ -449,7 +449,7 @@ func test_dust_lifecycle() -> void:
 	check(SmallCrises.farm_mult(v, fb) == 0.0, "밭을 덮은 먼지 뭉치 → 그 밭 자람이 멈춤")
 	# 뜯어 실을 잣는다 (아이가 만지거나 반나절 뒤 노인이 옛말을 떠올림)
 	var yarn0 := float(v.stock.get("먼지 실", 0.0))
-	v.advance(Balance.DUST_LEARN + 6.0 * H)
+	v.advance(Balance.DUST_LEARN + 12.0 * H)        # 반나절 뒤 옛말을 떠올린 때가 저녁이면 다음 일할 때(아침)까지 — 뜯기는 일할 시간에만
 	print("  뜯기 %d번 · 먼지 실 %.0f → %.0f · 남은 덩어리 %d" % [s.stats["pulled"], yarn0, float(v.stock.get("먼지 실", 0.0)), s.live("dust").size()])
 	check(s.dust_known and int(s.stats["pulled"]) >= 1 and float(v.stock.get("먼지 실", 0.0)) > yarn0, "주민이 뜯어 실을 잣는다 → 먼지 실 (작은 세계의 자원)")
 	# 거인이 불면 흩어져 날아감

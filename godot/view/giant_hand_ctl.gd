@@ -206,13 +206,13 @@ func tool_buttons() -> Dictionary:
 
 ## (EVENTS_STAGING 6c) 열린 도구만 보인다 — 잠긴 도구는 자리도 없다. 열린 것이 없는 줄은 줄째 숨김
 func _sync_tools() -> void:
-	var sig := str(Firsts.tools.keys())
+	var sig := str(_firsts().tools.keys())
 	if sig == _tools_sig:
 		return
 	_tools_sig = sig
 	var bs := tool_buttons()
 	for k: String in bs:
-		(bs[k] as Button).visible = Firsts.has_tool(k)
+		(bs[k] as Button).visible = _firsts().has_tool(k)
 	var any := false
 	for r in tool_rows:
 		var on := false
@@ -567,3 +567,15 @@ func process(dt: float) -> void:
 				var vs: Vector2 = sc.get_viewport().get_visible_rect().size
 				if mp.y < vs.y - sc.bottom_h - 10.0 and bool(pv.get("ok", false)) and String(pv.get("warn", "")) == "":
 					confirm_drop()
+
+
+## 별지기 단위 안내 창·도구 (ADR-0001 5절 — 장면(test_village.firsts)이 가진 것, 장면이 없으면 이것만의 것)
+var _own_firsts: Firsts
+
+
+func _firsts() -> Firsts:
+	if sc != null and sc.get("firsts") is Firsts:
+		return sc.get("firsts")
+	if _own_firsts == null:
+		_own_firsts = Firsts.new()
+	return _own_firsts

@@ -10,7 +10,8 @@
 | `&"chronicle"` | `Village.log_line(text)` (호환 껍데기, 약 190곳) | 연대기 글 (String) | — | 예 | 예 — `emit` 안에서 바로 (옛 형식 `{t, text}`) | (앞으로 알림·시험) |
 | `&"crisis"` | `Village.crisis(kind, text)` — 굶주림·쓰러짐 등 위기 시작 | 위기 kind (String) | — | 예 | 아니오 (`crises`에 따로) | JarClock은 아직 `crises`를 읽음 |
 | `&"manna_fall"` | `Village.manna_fall(reason)` (도착·새벽 하늘 낟알) · `SkyDrops._grain` (수첩 '하늘 낟알 한 줌') | 까닭: `"arrival"`·`"dawn"`… / `"grain"` | `at` = 떨어뜨린 자리 (한 줌만) | 아니오 | 아니오 | `view/manna_fx.gd` (커서, 최근 120병초 안 것만, 여러 번이어도 연출 한 번) |
-| `&"blueprint_dropped"` | `SkyDrops.place_building` (거인이 설계도를 내림) | 건물 종류 (String) | — | 아니오 | 아니오 (연대기는 `Production.give_blueprint`의 log_line) | `view/sky_drop_view.gd` (커서, 마지막 것, 최근 병 1시간 안) |
+| `&"blueprint_dropped"` | `SkyDrops.place_building` (거인이 설계도를 내림) | 건물 종류 (String) | — | 아니오 | 아니오 (연대기는 `Production.give_blueprint`의 log_line) | `view/sky_drop_view.gd` (커서, 마지막 것, 최근 병 1시간 안) · `Firsts.check` (안내 창 '설계도' — 구독, notebook N1) |
+| `&"talk_started"` | `Social._stage` · `Social.wedding_gathering` (만남 → 멈춰 서서 이야기 — 늘, 지켜봄과 무관, village-life-min R2) | `{"with": 상대 id, "kind": 장면 종류, "secs": 멈춤 병 초, "id": 장면 번호}` | `who` = 먼저 말한 사람 · `at` = 장면 자리 | 아니오 | 아니오 | `tests/social_tests.gd` (화면은 아직 `Social.take_events`) |
 | `&"dog_born"` | `Dogs.litter` (새벽 — 다 자란 암수 강아지, 1~3마리, E3-13b) | 새 강아지 id (int) | `who` = 막내 이름을 지은 아이 (없으면 -1) · `at` = 엄마 자리 | 아니오 | 아니오 (연대기는 `log_line`) | `tests/fauna_tests.gd` (화면 연출은 나중) |
 | `&"dog_adopted"` | `Dogs._grow_up` (새끼가 다 자람 — 강아지 없는 집이 데려감, 없으면 마을 강아지) | 강아지 id (int) | `who` = 데려간 집 주인 (마을 강아지면 -1) · `at` | 아니오 | 아니오 | (화면 연출은 나중) |
 | `&"dog_died"` | `Dogs.die` (늙어서 — 가족·아이들이 가볍게 슬퍼함) | 강아지 id (int) | `who` = 주인 (마을 강아지면 -1) · `at` | 아니오 | 아니오 | (화면 연출은 나중) |

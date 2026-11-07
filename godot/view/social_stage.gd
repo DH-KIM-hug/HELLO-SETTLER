@@ -1,7 +1,8 @@
 ## 마을의 삶 화면 (ROADMAP E2 · EVENTS_STAGING 6e) — sim/social.gd가 쌓은 장면을 현실 시간으로 펼친다.
 ## 장면 = 두세 사람이 마주 서서 말풍선을 번갈아 (LINE_REAL초씩) + 몸짓·표정 + 소품 (꽃잎 한 장 · 혼례 꽃잎 비).
 ## 화면만의 작은 장면도 (시뮬레이션은 그대로): 저녁 모닥불 노래와 손뼉 · 아이들 술래잡기 · 노인 둘의 옛이야기 · 거대한 꽃을 올려다봄.
-## 한꺼번에 MAX_SCENES개까지, 빠른 흐름(vw.fast)·따라잡기 중에는 아무것도 하지 않는다 (Social.stage_on도 꺼짐).
+## 한꺼번에 MAX_SCENES개까지, 빠른 흐름(vw.fast)·따라잡기·stage_on 꺼짐(보통보다 빠름)일 때는 아무것도 하지 않는다.
+## 시뮬은 지켜봄·연출과 무관하게 늘 '멈춰 서서 이야기'를 넣는다 (ADR-0001 3절) — 여기는 보여 주기만. 멈춤(병 초)이 끝나 걸어가도 말풍선은 남는다 (village-life-min 열린 질문 1 권장안).
 ## VillageView가 만든다: sync(dt) 매 화면 → pose(r, m)로 모델의 방향·동작·표정·자리를 덮어씀 → after_tick(r, m) 고개 들기.
 ## 말풍선은 test_village._bubbles_of가 say_of(id)로 그린다 (기분 = 색·작은 그림).
 class_name SocialStage
@@ -21,6 +22,7 @@ var _rng := RandomNumberGenerator.new()
 var _sing_t := -100.0                 # 마지막 모닥불 노래 (현실 초)
 var _clock := 0.0
 var n_played := 0                     # 시험·캡처: 펼친 장면 수
+var stage_on := true                  # 화면이 장면을 펼치나 (test_village가 빠르기에 따라 — 화면 상태, 시뮬은 읽지 않음)
 
 
 func _init(village: Village, view: Node3D) -> void:
@@ -42,11 +44,13 @@ func sync(dt: float, fast: bool) -> void:
 	_clock += dt
 	_says.clear()
 	_poses.clear()
-	if fast or not v.is_watching():
+	if fast or not stage_on or not v.is_watching():
 		Social.take_events(v)          # 빠른 흐름 중 쌓인 것은 버린다 (말은 관계 값으로 이미 남음)
 		_clear_all()
 		return
 	for ev: Dictionary in Social.take_events(v):
+		if float(ev.get("t", v.t)) + float(ev.get("secs", 0.0)) + Balance.HOUR < v.t:
+			continue                   # 오래전 (따라잡기·불러오기 전) 만남 — 펼치지 않음
 		if scenes.size() >= MAX_SCENES + 1 and String(ev["kind"]) != "wedding":
 			continue
 		start(ev)
@@ -138,8 +142,13 @@ func _play(sc: Dictionary) -> void:
 	var a := ppl[0]
 	var b := ppl[1]
 	var standing := a.anim != "walk" and b.anim != "walk"
-	if li < 0 or not standing:
+	if li < 0:
 		return                          # 아직 걸어가는 중 — 시뮬레이션 걸음 그대로
+	if not standing:                    # 멈춤이 끝나 다시 걸음: 몸짓은 시뮬 걸음 그대로, 말풍선만 머리 위에 남김
+		var cw: Array = ls[li] if li < ls.size() else []
+		if not cw.is_empty() and fposmod(float(sc["t"]) - float(sc["walk"]), Social.LINE_REAL) < Social.LINE_REAL * 0.92 and int(cw[0]) < ppl.size():
+			_says[ppl[int(cw[0])].id] = [String(cw[1]), String(cw[2])]
+		return
 	var cur: Array = ls[li] if li < ls.size() else []
 	var lt := fposmod(float(sc["t"]) - float(sc["walk"]), Social.LINE_REAL)
 	if not cur.is_empty() and lt < Social.LINE_REAL * 0.92:

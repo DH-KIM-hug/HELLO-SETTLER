@@ -842,7 +842,7 @@ func test_catchup_fast() -> void:
 	var keep_s := CatchUp.step_override
 	CatchUp.rate_override = -1.0
 	CatchUp.step_override = -1.0
-	var seeds := [31, 32, 33] if mode == "quick" else [31, 32, 33, 34, 35, 36, 37, 38]
+	var seeds := [31, 32, 33, 34, 35, 36] if mode == "quick" else [31, 32, 33, 34, 35, 36, 37, 38]   # 시드마다 먹을 것 편차가 커서(약 600~1600) 3개 평균은 30% 허용을 쉽게 넘음 — 6개 (F-1, 2026-11-08)
 	var rate := 3.0 if mode == "quick" else 6.0          # 병 1.5일 ('느리게') · 전체 시험은 3일 ('보통')
 	var sums := {"exact": {}, "fast": {}}
 	var ms := {"exact": 0.0, "fast": 0.0}

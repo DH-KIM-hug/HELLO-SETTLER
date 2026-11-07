@@ -81,15 +81,15 @@ func test_mailto() -> void:
 func test_settings_roundtrip() -> void:
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TMP_SETTINGS))
 	var d := GameSettings.load_from(TMP_SETTINGS)
-	check(d.music and d.sfx and d.vibration and d.notify and d.language == "ko", "파일이 없으면 기본값 (모두 켜짐, 한국어)")
+	check(d.music and d.sfx and d.vibration and not d.notify and d.language == "ko", "파일이 없으면 기본값 (소리·진동 켜짐 · 알림은 꺼짐 — notifications A2 · 한국어)")
 	var s := GameSettings.new()
 	s.music = false
 	s.sfx = true
 	s.vibration = false
-	s.notify = false
+	s.notify = true                     # 기본(꺼짐)과 다른 값으로 왕복
 	check(s.save(TMP_SETTINGS) == OK, "user://에 저장")
 	var t := GameSettings.load_from(TMP_SETTINGS)
-	check(not t.music and t.sfx and not t.vibration and not t.notify and t.language == "ko", "저장 → 읽기 왕복 (음악 끔·효과음 켬·진동 끔·알림 끔)")
+	check(not t.music and t.sfx and not t.vibration and t.notify and t.language == "ko", "저장 → 읽기 왕복 (음악 끔·효과음 켬·진동 끔·알림 켬)")
 	var cf := ConfigFile.new()
 	cf.load(TMP_SETTINGS)
 	cf.set_value("general", "language", "xx")

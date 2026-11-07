@@ -781,7 +781,8 @@ func test_ui() -> void:
 		if b.size.x < UiTheme.TOUCH - 0.5 or b.size.y < UiTheme.TOUCH - 0.5:
 			small += 1
 	check(small == 0, "도구 버튼 모두 44px 이상")
-	Firsts.open_all()                       # (6c) 도구는 사건과 함께 열린다 — 여기선 모두 열린 손 (잠긴 손은 tests/staging_tests.gd)
+	var sf: Firsts = scene.get("firsts")
+	sf.open_all()                       # (6c) 도구는 사건과 함께 열린다 — 여기선 모두 열린 손 (잠긴 손은 tests/staging_tests.gd)
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
 	hc.refresh()
@@ -796,4 +797,4 @@ func test_ui() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	Market.reset()
-	Firsts.reset()
+	sf.reset()
