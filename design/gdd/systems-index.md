@@ -4,7 +4,7 @@
 > **Created**: 2026-11-07
 > **Last Updated**: 2026-11-07
 > **Source Concept**: design/gdd/game-concept.md
-> **Gates**: TD-SYSTEM-BOUNDARY = CONCERNS (반영: 새 계통 3개·쪼개기 4개·순환 계약) · PR-SCOPE = OPTIMISTIC (반영: 아래 Priority Tiers 밑 메모) · CD-SYSTEMS = (아래)
+> **Gates**: TD-SYSTEM-BOUNDARY = CONCERNS (반영: 새 계통 3개·쪼개기 4개·순환 계약) · PR-SCOPE = OPTIMISTIC (반영) · CD-SYSTEMS = CONCERNS (반영: 안개·마을의 삶 나눔, 담당 지정 — 46개)
 
 ---
 
@@ -24,7 +24,7 @@
 
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
-| 1 | 병 시간·속도·비운 시간 따라잡기 ✅ | Core | MVP | Not Started | — | — |
+| 1 | 병 시간·속도·비운 시간 따라잡기 + 중요한 일이 생기면 저절로 느려지고 까닭을 말함 ✅ | Core | MVP | Not Started | — | — |
 | 2 | 세상 생성·창조 오프닝 ✅ | Core | MVP | Not Started | — (docs/OPENING.md) | — |
 | 3 | 닫힌 병의 물·소금·이슬 ✅ | Core | MVP | Not Started | — | 1, 2, 4 |
 | 4 | 빛·등불·계절·날씨 ✅ | Core | MVP | Not Started | — | 1 |
@@ -35,14 +35,14 @@
 | 9 | 건강·나이·죽음 ✅ | Gameplay | MVP | Not Started | — (docs/HEALTH.md) | 1, 8, 10 |
 | 10 | 필요와 기분 (배고픔·행복·두려움) (inferred) 🔄 | Gameplay | MVP | Not Started | — | 1, 8, 15 |
 | 11 | 하루 일정·일자리 배정 ✅ | Gameplay | MVP | Not Started | — | 8, 10, 13, 15 |
-| 12 | 움직임·길 찾기·나르기·길과 도로 ✅ | Gameplay | MVP | Not Started | — | 2, 11 |
+| 12 | 움직임·길 찾기·나르기·길과 도로 + **손에 든 물건·더미·멈춤 표시** (막힌 곳이 화면에 보임 — 기둥 2, 그림은 28) ✅ | Gameplay | MVP | Not Started | — | 2, 11 |
 | 13 | 건물·짓기 ✅ | Economy | MVP | Not Started | — | 2, 8, 18 |
 | 14 | 시대 ✅ | Progression | MVP | Not Started | — | 13, 17, 20 |
 | 15 | 생산 사슬 (밀·빵·송사리·거대 과일, 애벌레 = 31) ✅ | Economy | MVP | Not Started | — (docs/FOOD.md) | 13, 6, 3 |
 | 16 | 마을 경제 (창고·가격·장터) ✅ | Economy | MVP | Not Started | — (docs/BALANCE.md) | 15 |
 | 17 | 인구 (출산·혼인·가족·세대) ✅ | Gameplay | MVP | Not Started | — | 8, 9, 10, 16 |
 | 18 | 촌장의 결정 (inferred) 🔄 — VS는 지금 최소판, 막힌 곳을 보고 고르는 판단은 MVP 밖 | Gameplay | MVP | Not Started | — | 13, 16, 10 |
-| 19 | 거인의 손길 (내려 주기·물·유리 닦기·핀셋·등불·유리 톡) ✅ | Gameplay | MVP | Not Started | — (docs/EVENTS_STAGING.md 6c) | 3, 4, 7 |
+| 19 | 거인의 손길 — **MVP에 열림: 내려 주기·유리 톡·물 뿌리기** / VS(위기와 함께) 열림: 유리 닦기·핀셋·떠돌이 물방울 톡·등불 옮기기 ✅ | Gameplay | MVP | Not Started | — (docs/EVENTS_STAGING.md 6c) | 3, 4, 7 |
 | 20 | 깨달음·믿음 ✅ | Narrative | MVP | Not Started | — | 7, 8, 17 |
 | 21 | 제단·공물 ✅ | Economy | MVP | Not Started | — | 20, 16 |
 | 22 | 거인의 지갑·상점·설계도·이주민 ✅ | Economy | MVP | Not Started | — (docs/SHOP.md) | 21, 16 |
@@ -50,7 +50,7 @@
 | 24 | 카메라·확대·병 안 ↔ 방 ✅ | UI | MVP | Not Started | — (docs/GIANT_ROOM.md) | 2 |
 | 25 | 사건 연출 ✅ | Narrative | MVP | Not Started | — (EVENTS_STAGING) | 7, 24 |
 | 26 | 처음 겪는 사건 안내·거인의 수첩·튜토리얼 ✅ | Meta | MVP | Not Started | — (OPENING 3.1b) | 7, 19 |
-| 27 | 연대기·도감·돌아온 편지 ✅ | Narrative | MVP | Not Started | — | 7, 1 |
+| 27 | 연대기·돌아온 편지 ✅ (도감은 VS — #44) | Narrative | MVP | Not Started | — | 7, 1 |
 | 28 | 주민 모델·초상화·옷 🔄 (4등신 다시) | UI | MVP | Not Started | — (art-bible 5장) | 8, 12 |
 | 29 | HUD·시트·설정·접근성 🔄 | UI | MVP | Not Started | — (art-bible 7장, docs/UI.md) | 전 계통 |
 | 30 | 알림·세션 끝 훅 🔄 | Meta | MVP | Not Started | — | 7, 1 |
@@ -58,13 +58,16 @@
 | 32 | 위기 — 곰팡이·떠돌이 물방울 ✅ | Gameplay | Vertical Slice | Not Started | — (docs/WORLD_EVENTS.md) | 3, 8, 19, 7 |
 | 33 | 소인 크기 생물 (사슴·토끼 대신) ⬜ | Gameplay | Vertical Slice | Not Started | — (GD 3.0) | 6, 12 |
 | 34 | 개미 군단 ⬜ | Gameplay | Vertical Slice | Not Started | — (WORLD_EVENTS 2.1b) | 15, 16, 32, 19 |
-| 35 | 마을의 삶 (반드시: 대화·연애 기본·아이 놀이 1 / 뺄 수 있음: 추수 축제·삼각관계) ✅ | Narrative | Vertical Slice | Not Started | — | 8, 11, 12, 7 |
-| 36 | 안개·탐험 🔄 | Progression | Vertical Slice | Not Started | — | 2, 12, 17 |
+| 35 | 마을의 삶 — VS 부분: 연애~혼례·다툼·아이 놀이·추수 축제 (뺄 수 있음: 추수 축제·삼각관계) ✅ | Narrative | Vertical Slice | Not Started | — | 8, 11, 12, 7 |
+| 36 | 안개 걷기·탐험 (망루·나들이, **분가 없이도 큰 나무에 닿는 길을 처음부터**) 🔄 | Progression | Vertical Slice | Not Started | — | 2, 12, 17 |
 | 37 | 분가 마을 (화면 밖 요약 계산 포함) 🔄 — 폰 성능 통과 전에는 시작하지 않음 | Progression | Vertical Slice | Not Started | — | 36, 17, 13, 1 |
 | 38 | 소리·음악·목소리 ✅ | Audio | Vertical Slice | Not Started | — (docs/AUDIO.md) | 7 |
 | 39 | 렌더링·품질 단계·외곽선·꽃 그늘 🔄 | Core | Vertical Slice | Not Started | — (art-bible 8장, docs/RENDERING.md) | 24, 6 |
 | 40 | 성능·계측 🔄 | Meta | Vertical Slice | Not Started | — | 1, 39 |
 | 41 | 출시 트랙 (스토어·개인정보·등급·AAB·Play 비공개 테스트) ⬜ | Meta | Vertical Slice | Not Started | — | 40 |
+| 45 | 안개 보이기 (덮인 상태·칠하지 않은 스케치·경계의 윤곽과 소리) — CD-SYSTEMS로 36에서 나눔 🔄 | Core | MVP | Not Started | — (art-bible 6.6) | 2, 39 |
+| 46 | 마을의 삶 MVP 최소판 (대화·생각 말풍선·하루의 흐름·저녁 모닥불) — CD-SYSTEMS로 35에서 나눔 ✅ | Narrative | MVP | Not Started | — | 8, 10, 11, 12, 7 |
+| 44 | 도감 (발견 기록) ✅ | Narrative | Vertical Slice | Not Started | — (docs/DISCOVERIES.md) | 7 |
 | 42 | 선반·여러 병 ✅ | Progression | Alpha | Not Started | — | 5, 2, 1 |
 | 43 | 친구의 선반 (온라인 이웃) ⬜ | Meta | Full Vision | Not Started | — | 42, 5 |
 
@@ -94,6 +97,8 @@
 | **Vertical Slice** | **첫 출시 범위**의 나머지 — 첫 주를 붙잡는 위기·생물·사냥·마을의 삶·안개·분가 + 소리·렌더링·성능·출시 트랙 | 첫 출시 (4~5개월, Play 비공개 테스트 늦어도 2027-02 초 시작) | Design SECOND |
 | **Alpha** | 두 번째 병·읍내 이후 시대 | 출시 뒤 첫 갱신 | Design THIRD |
 | **Full Vision** | 친구의 선반(온라인), 여러 기후 | 장기 | Design as needed |
+
+> **Creative Director Note** (CD-SYSTEMS CONCERNS, 2026-11-07 — 사용자: 목록 고치기로 반영): (MVP) 기둥 5가 첫 30분에 보이도록 안개를 '보이기(45, MVP)'와 '걷기·탐험(36, VS)'으로 나눔 · 기둥 2의 핵심 신호(손에 든 물건·더미·멈춤 표시)는 12가 맡음 · 마을의 삶 중 대화·생각 말풍선·하루 흐름·저녁 모닥불은 MVP 최소판(46) · 손길(19)은 MVP 손짓과 위기 때 열리는 손짓을 나눠 적음 · 저절로 느려짐은 1이 맡음 · 도감은 VS(44). (VS) 36은 분가 없이도 큰 나무에 닿는 길을 처음부터 설계 (분가를 빼도 기둥 5 유지). **확인 기준**: 첫 30분에 다섯 기둥이 모두 한 번 이상 화면에 보임 (특히 안개 경계, 쌓인 밀가루를 보고 알아채기), MVP 계통만으로 OPENING 3.1 대본이 끝까지 돎.
 
 > **Producer Note** (PR-SCOPE OPTIMISTIC, 2026-11-07): 코드 속도는 충분(3일 커밋 392), 위험은 폰 성능(미측정)·✅ 뒤에 숨은 다시 할 일(아트 바이블 A23~A27, 사건 흐름 재연결, village.gd 나누기)·서두를 수 없는 달력(사용자 검수, 비공개 테스트 12명 × 14일). 조정 반영: village.gd 나누기는 ADR 먼저 + 한 담당 + 그동안 잠금 · 마을의 삶 반드시/뺄 수 있음 · 촌장 판단은 MVP 최소판 · 필요와 기분 담당 지정 · 출시 날짜 역산(개인정보·등급·스토어 자료 지금 병행, 테스터 12명 미리) · A23~A27을 로드맵에 크기와 함께. **검증 기준**: 11/21까지 중저가 폰 주민 30명 30fps + 6일 따라잡기 10초 안 · 12월 중순 여정 3단계 폰 통과 · 2월 초 비공개 테스트 시작 — 하나라도 2주 넘게 밀리면 분가를 빼는 중간 단계로 (사용자 결정). **사용자 선택: 폰 실측과 그림 다시 만들기 병행** (예산 초과 시 다시 만들 위험을 받아들임).
 
@@ -214,12 +219,12 @@
 
 | Metric | Count |
 |--------|-------|
-| Total systems identified | 43 |
+| Total systems identified | 46 |
 | Design docs started | 0 (콘셉트·아트 바이블 완료) |
 | Design docs reviewed | 0 |
 | Design docs approved | 0 |
-| MVP systems designed | 0/30 |
-| Vertical Slice systems designed | 0/11 |
+| MVP systems designed | 0/32 |
+| Vertical Slice systems designed | 0/12 |
 
 ---
 
