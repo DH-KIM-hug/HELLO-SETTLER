@@ -270,6 +270,7 @@ func _start_save() -> void:
 			clock.start_creation_day()
 			if not village.aware:
 				Notebook.begin(village)          # 첫 병만: 거인의 수첩 (OPENING 3.1b) — 그 병과 함께 저장 (옛 안내 자막 대신)
+			Dogs.give_kkultteok(village)         # [강아지] 첫 병만: 꿀떡이 (GD 3.0 — 어느 집인지는 마을 씨앗으로)
 		sm.giant["first_jar_done"] = true
 		sm.save_all(true)
 		return

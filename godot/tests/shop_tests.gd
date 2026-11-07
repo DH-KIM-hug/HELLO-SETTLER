@@ -552,7 +552,7 @@ func test_shop_tables() -> void:
 	Shop.update_unlocks(v)
 	# 건물: 그 건물의 시대 (기획서 8.3 · 21장)
 	var pioneer := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소"]
-	var village := ["어부", "방앗간", "목조주택", "사냥꾼", "목장", "방직소", "대장간"]
+	var village := ["어부", "방앗간", "목조주택", "목장", "방직소", "대장간"]     # (E3-12) 사냥꾼은 진열 안 함
 	var era_ok := true
 	for b: String in Shop.BUILDINGS:
 		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else (2 if b == "빵집" else 1))
@@ -563,11 +563,11 @@ func test_shop_tables() -> void:
 		var c := Shop.card(v, b)
 		waits = waits and String(c["lock"]) == "곧" and String(c["inside"]).contains("아직은")
 	check(waits, "목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함)")
-	var fh := true                                   # B3: 어부·사냥꾼은 마을 시대에 (1,500)
-	for b: String in ["어부", "사냥꾼"]:
+	var fh := not Shop.BUILDINGS.has("사냥꾼")        # B3: 어부는 마을 시대에 (1,500) · (E3-12) 사냥꾼은 진열 안 함
+	for b: String in ["어부"]:
 		var c := Shop.card(v, b)
 		fh = fh and String(c["lock"]) == "마을 시대에" and not String(c["inside"]).contains("아직은") and int(c["price"]) == int(Balance.SHOP[b])
-	check(fh, "어부·사냥꾼 설계도: 개척기엔 \"마을 시대에\" · %d (B3 — 들짐승이 산다)" % int(Balance.SHOP["어부"]))
+	check(fh, "어부 설계도: 개척기엔 \"마을 시대에\" · %d (B3) · 사냥꾼은 없음 (E3-12)" % int(Balance.SHOP["어부"]))
 	# 광맥 돌 4종 (SHOP 2.4 · BALANCE v3-4)
 	var veins := {"회색 돌멩이": [1200, 0, "돌"], "하얀 돌": [2500, 1, "소금"], "붉은 돌멩이": [3000, 2, "철광석"], "검은 돌": [3000, 2, "석탄"]}
 	var vok := true
