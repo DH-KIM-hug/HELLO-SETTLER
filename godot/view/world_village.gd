@@ -44,6 +44,7 @@ const LEAVE_TIME := 0.9              # 뒤로 가기 → 방으로 날아 나가
 const DOUBLE_TAP := 0.35
 
 var world: JarWorld
+var great_view: GreatTreeView         # 큰 나무 다섯 (view/great_tree_view.gd)
 var wterrain: WorldTerrain
 var extra_views: Array = []          # 두 번째 무리부터 [Village, VillageView]
 var minimap: WorldMinimap
@@ -562,6 +563,9 @@ func _make_terrain() -> JarTerrain:
 
 
 func _after_ready() -> void:
+	great_view = GreatTreeView.new(world.water, terrain, func() -> Village: return village)     # 큰 나무 다섯 (GD 3.0 · E3-3)
+	jar.add_child(great_view)
+	sun.directional_shadow_max_distance = JarTerrain.SHADOW_DIST_WORLD    # 카메라가 큰 나무만큼 물러나 있다 (JarCamera.inside_dist)
 	altar_sheet.set_meta("world", world)
 	altar_sheet.split_requested.connect(begin_split_pick)
 	_sync_views()

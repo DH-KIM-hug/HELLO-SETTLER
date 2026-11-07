@@ -21,6 +21,8 @@ var _live := {}                 # 건물 id → {"stone": 맷돌 윗돌 · "glow
 static var _oven_mat: StandardMaterial3D
 var _trees: Node3D
 var _tree_key := ""
+var season := ""                # 지금 철 (꽃숲 모양 — FloraLook.season_of)
+var n_flora := 0                # 꽃숲으로 그린 시뮬레이션 나무 수 (시험용)
 var _rocks: Node3D
 var _rock_key := ""
 var _manna: Node3D
@@ -36,6 +38,7 @@ var _lily_y := PackedFloat32Array()   # 마지막으로 놓은 높이 (−1e9 = 
 var _lily_t := 0.0
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
 var _far_key := -1
+var _far_season := ""
 var _far_t := -1.0e9
 var n_far_trees := 0
 var far_ms := 0.0
@@ -77,8 +80,8 @@ func _init(village: Village, t: JarTerrain) -> void:
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
 const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
-	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
-	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar",
+	"bush", "bush_b", "bush_flower", "bush_berry",
+	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
 	"campfire", "campfire_extra", "campfire_seat"]
 
 
@@ -506,7 +509,9 @@ const QUERN_SPIN := 2.4             # 라디안/초 (화면 시간)
 const OVEN_GLOW := "oven_glow"
 const OVEN_GLOW_COLOR := Color(1.0, 0.62, 0.28)
 ## 마당 소품: [모델, 건물 기준 자리(x, z — 건물 앞 = +z), 방위(라디안)]
-const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]]}
+## (E3 소인의 세상) 장작더미 대신 나뭇가지 더미 [모델, 자리, 방위, 크기]
+const YARD := {"나무꾼": [["flora/twig_pile_a", Vector3(-1.75, 0, -0.1), 0.0, 0.36], ["flora/twig_pile_b", Vector3(-1.2, 0, 1.2), 0.6, 0.26]]}
+const TWIG_PILE_GOODS := ["통나무", "판자"]   # 쌓인 짐이 이것이면 상자 대신 나뭇가지 더미
 
 
 func _build_shape(n: Node3D, b: Building) -> void:
@@ -520,7 +525,7 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	elif nm == "oven" and Art.exists(OVEN_GLOW):
 		_live[b.id] = {"glow": _oven_glow(n)}
 	for y: Array in YARD.get(b.type, []):
-		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]), y[1]))
+		Art.instance(n, y[0], Transform3D(Basis(Vector3.UP, y[2]).scaled(Vector3.ONE * float(y[3]) if y.size() > 3 else Vector3.ONE), y[1]))
 	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN)
 		var s := b.size()
 		var m := 1.0 if b.id % 2 == 0 else -1.0
@@ -648,8 +653,9 @@ func _build_site(n: Node3D, b: Building) -> void:
 			mi.position = Vector3(side * s * 0.5, h + 0.42, 0)
 			mi.rotation.z = -side * atan2(0.8, s)
 			n.add_child(mi)
-	for i in mini(6, int(b.delivered["판자"])):
-		_box(n, Vector3(0.9, 0.08, 0.26), Vector3(s + 0.5, 0.05 + i * 0.09, 0.3), Style.THATCH)
+	var np := mini(6, int(b.delivered["판자"]))
+	if np > 0:                       # (E3) 판자 = 쪼갠 갈대·나뭇가지 → 나뭇가지 더미 (많을수록 크게)
+		Art.instance(n, "flora/twig_pile_b", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * (0.16 + 0.025 * np)), Vector3(s + 0.55, 0, 0.3)))
 	for i in mini(6, int(b.delivered["돌"])):
 		_box(n, Vector3(0.26, 0.22, 0.26), Vector3(-s - 0.4 - (i % 2) * 0.3, 0.11 + (i / 2) * 0.22, 0.4), Style.STONE)
 
@@ -660,6 +666,11 @@ func _build_piles(n: Node3D, b: Building) -> void:
 	for k in b.out:
 		var cnt := mini(6, int(b.out[k]))
 		var c: Color = Style.ITEM_COLORS.get(k, Style.WOOD)
+		if k in TWIG_PILE_GOODS:
+			if cnt > 0:
+				Art.instance(n, "flora/twig_pile_a", Transform3D(Basis(Vector3.UP, i * 1.3).scaled(Vector3.ONE * (0.15 + 0.025 * cnt)), Vector3(b.size() + 0.55, 0, -0.6 + i * 0.4)))
+			i += 1
+			continue
 		for j in cnt:
 			_box(n, Vector3(0.28, 0.2, 0.28), Vector3(b.size() + 0.3 + (j % 2) * 0.3, 0.1 + (j / 2) * 0.2, -0.6 + i * 0.4), c)
 		i += 1
@@ -765,6 +776,8 @@ func _prop_ok(x: float, z: float, clear_r: float) -> bool:
 		return false
 	if terrain._path_at(k) > 5.0:
 		return false
+	if GreatTrees.blocks(w, x, z, clear_r):          # 큰 나무 다섯의 줄기 둘레
+		return false
 	if Vector2(x - v.fire.x, z - v.fire.y).length() < 2.5 + clear_r:
 		return false
 	if Vector2(x - v.altar_pos.x, z - v.altar_pos.y).length() < Village.ALTAR_CLEAR + clear_r:     # 제단 돌 단 (아직 없어도 그 자리는 비움)
@@ -801,24 +814,31 @@ func _sync_trees() -> void:
 			n_tree += 1
 		elif tr["s"] == "stump":
 			n_stump += 1
-	var key := "%d|%d|%d|%d" % [v.trees.size(), n_tree, n_stump, v.water.rot]
+	season = FloraLook.season_of(v)
+	var key := "%d|%d|%d|%d|%s" % [v.trees.size(), n_tree, n_stump, v.water.rot, season]
 	if key == _tree_key:
 		return
 	_tree_key = key
+	# (E3-3 소인의 세상) 나무 = 꽃숲 덩이 · 벤 자리 = 나뭇가지 더미 · 묘목 = 클로버·풀 싹 (view/flora_look.gd)
 	var groups := {}
+	n_flora = 0
 	for tr: Dictionary in v.trees:
 		var x: float = tr["x"]
 		var z: float = tr["y"]
 		var h := _hash(x, z)
 		var yaw := _hash(z, x, 1.0) * TAU
+		var c: Array
 		match String(tr["s"]):
 			"tree":
-				_put(groups, TREE_KINDS[int(h * 97.0) % TREE_KINDS.size()], x, z, (0.85 + 0.3 * h) * TREE_SCALE, yaw)
+				var o := _to_orig(Vector2(x, z))
+				c = FloraLook.clump(season, _hash(o.x, o.y, 11.0), _hash(o.y, o.x, 12.0))
+				n_flora += 1
 			"stump":
-				_put(groups, "stump", x, z, 1.0, yaw)
+				c = FloraLook.twig(h)
 			_:
-				_put(groups, "sapling", x, z, 1.0, yaw)
-	_flush(_trees, groups)
+				c = FloraLook.sprout(h)
+		_put(groups, c[0], x, z, float(c[1]) * TREE_SCALE, yaw)
+	_flush(_trees, groups, FloraLook.NO_SHADOW)
 
 
 func _sync_rocks() -> void:
@@ -869,7 +889,7 @@ const FAR_MAX := 200.0            # 이 반지름 밖의 숲은 지도에만 (�
 func _sync_props() -> void:
 	if v.water is WorldWater:
 		_sync_far()
-	var key := "%d|%d|%d" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0)]
+	var key := "%d|%d|%d|%s" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0), season]
 	if key == _prop_key:
 		return
 	_prop_key = key
@@ -891,7 +911,7 @@ func _sync_props() -> void:
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
-	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b"])
+	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b", "flora/fallen_leaf_dry"] + FloraLook.NO_SHADOW)
 	_sync_lilies(true)
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
@@ -925,14 +945,13 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 							near = true
 			if near:
 				continue
-			var h := _hash(gi, gj, 4.0)
-			var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % TREE_KINDS.size()]
-			_put(groups, kind, p.x, p.y, (0.82 + 0.38 * _hash(gi, gj, 5.0)) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
+			var c := FloraLook.clump(season, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0))
+			_put(groups, c[0], p.x, p.y, float(c[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 			n_decor_trees += 1
 
 
 ## 소품 무리: 숲 가장자리엔 덤불·고사리·버섯·이끼 돌·쓰러진 통나무, 빈 풀밭엔 드문드문 클로버·풀 포기·꽃 덤불
-const FRINGE := ["bush", "bush_b", "fern", "fern", "mushrooms", "rocks", "stump", "log", "bush_flower", "fern", "rocks_b", "bush_berry"]
+const FRINGE := ["bush", "bush_b", "fern", "fern", "mushrooms", "rocks", "flora/twig_pile_a", "flora/fallen_leaf_dry", "bush_flower", "fern", "rocks_b", "bush_berry"]
 const OPEN := ["clover", "clover", "tuft", "tuft", "flowers", "rock_small", "bush_flower", "mushrooms", "flowers_b", "fern", "bush_b", "tuft"]
 
 
@@ -952,7 +971,7 @@ func _decor_clusters(groups: Dictionary) -> void:
 				continue
 			var table: Array = FRINGE if fringe or f >= 0.9 else OPEN
 			var kind: String = table[int(_hash(gi, gj, 6.0) * table.size()) % table.size()]
-			var cnt := 1 if kind in ["stump", "log", "rocks", "rocks_b"] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
+			var cnt := 1 if kind in ["flora/twig_pile_a", "flora/fallen_leaf_dry", "rocks", "rocks_b"] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
 			for i in cnt:
 				var a := _hash(gi, gj, 10.0 + i) * TAU
 				var d := (0.35 + 0.8 * _hash(gi, gj, 20.0 + i)) if i > 0 else 0.0
@@ -960,7 +979,7 @@ func _decor_clusters(groups: Dictionary) -> void:
 				var z := c.y + sin(a) * d
 				if not _prop_ok(x, z, 0.3):
 					continue
-				var s := 0.75 + 0.5 * _hash(gi, gj, 30.0 + i)
+				var s := (0.75 + 0.5 * _hash(gi, gj, 30.0 + i)) * (FloraLook.base_scale(kind) * 0.7 if kind.begins_with("flora/") else 1.0)
 				var k2 := kind
 				if i > 0 and kind in ["bush", "fern"] and _hash(gi, gj, 40.0 + i) < 0.4:
 					k2 = "tuft"
@@ -1118,9 +1137,10 @@ func _decor_crossings(groups: Dictionary) -> void:
 func _sync_far() -> void:
 	var ww := v.water as WorldWater
 	var now := Time.get_ticks_msec() / 1000.0
-	if ww.fog_version == _far_key or now - _far_t < FAR_REDECOR:
+	if (ww.fog_version == _far_key and season == _far_season) or now - _far_t < FAR_REDECOR:
 		return
 	_far_key = ww.fog_version
+	_far_season = season
 	_far_t = now
 	var t0 := Time.get_ticks_usec()
 	var nz := _forest_noise()
@@ -1157,13 +1177,12 @@ func _sync_far() -> void:
 					if not ww.inside(p.x, p.y, 1.5):
 						continue
 					var k := ww.idx(p.x, p.y)
-					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015:
+					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015 or GreatTrees.blocks(ww, p.x, p.y, 1.0):
 						continue
-					var h := _hash(gi, gj, 4.0)
-					var kind: String = "conifer" if h > 0.9 else TREE_KINDS[int(h * 31.0) % TREE_KINDS.size()]
-					_put(groups, kind, p.x, p.y, (0.82 + 0.38 * _hash(gi, gj, 5.0)) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
+					var fc := FloraLook.clump(season, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), true)
+					_put(groups, fc[0], p.x, p.y, float(fc[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 					n_far_trees += 1
-	_flush(_far, groups)
+	_flush(_far, groups, FloraLook.NO_SHADOW)
 	far_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 

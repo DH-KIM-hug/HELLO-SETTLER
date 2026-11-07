@@ -101,6 +101,8 @@ var meadows: Array[Dictionary] = []     # 풀씨를 뿌린 들판 {x, y, r}
 var moss: Array[Dictionary] = []        # 이끼를 뿌린 곳 {x, y, r}
 var wildlife: Array[Dictionary] = []    # 들짐승 무리 {kind: deer/rabbit/wolf/boar/sheep/aurochs, x, y, n} (WILDLIFE.md 1)
 var fish: Array[Dictionary] = []        # 물고기 {name, x, y, n} — 민물 호수만
+var great_trees: Array[Dictionary] = [] # 큰 나무 다섯 {kind, name, x, y, r, yaw} — 한 그루씩, 베지 않음 (sim/great_trees.gd · GD 3.0)
+var giant_fruits: Array[Dictionary] = [] # 과일나무가 떨어뜨린 거대한 열매 {x, y, t, yaw, food}
 var creation: Dictionary = {}           # 창조 요약 (핵·물·돌기·씨앗·창세 신화 줄들 — 지구 카드·연대기용)
 
 # 안개·발견

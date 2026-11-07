@@ -430,9 +430,9 @@ func test_creation_stages() -> void:
 	check(under == 3, "거인이 찍은 돌기 아래에 물방울 호수 (%d/3)" % under)
 	check(jw.water.drips.size() >= 8 and jw.water.drips.size() <= 12, "세상의 물방울 호수 %d곳 (메이슨 자 8~12)" % jw.water.drips.size())
 	c.call("next")
-	check(c.get("step") == "sow" and (chips.get_child(1) as Button).text == "숲을 더", "→ 씨앗: [알아서 · 숲을 더 · 풀밭을 더]")
+	check(c.get("step") == "sow" and (chips.get_child(1) as Button).text == "꽃을 더", "→ 씨앗: [알아서 · 꽃을 더 · 풀밭을 더]")
 	c.call("pick", 1)
-	check(c.get("step") == "grow" and (plan.seeds["tree"] as Array).size() > (plan.seeds["grass"] as Array).size(), "숲을 더 → 나무 씨앗이 많음 → 배양")
+	check(c.get("step") == "grow" and (plan.seeds["tree"] as Array).size() > (plan.seeds["grass"] as Array).size(), "꽃을 더 → 꽃씨(키 tree)가 많음 → 배양")
 	c.call("next")
 	var cr: CreationRelease = (c.get("jar") as CreationJar).release
 	check(c.get("step") == "release" and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "들짐승 풀어 주기"
@@ -461,7 +461,7 @@ func test_creation_stages() -> void:
 	check(StartFlow.last_target == StartFlow.GAME_SCENE and CreationPlan.load_from(sm.dir).stage == "spot", "→ 스타터킷 자리 (creation.json = spot)")
 	var myth: Array = StartFlow.pending_world.water.creation.get("myth", [])
 	check(myth.size() >= 6 and String(myth[0]).contains("뜨겁게") and String(myth[1]).contains("골짜기") and String(myth[2]).contains("조금") and String(myth[4]).contains("우거"),
-		"창세 신화가 고른 대로 (핵 크게 · 산과 골짜기 · 물 조금 · 숲을 더)")
+		"창세 신화가 고른 대로 (핵 크게 · 산과 골짜기 · 물 조금 · 꽃을 더)")
 	StartFlow.take()
 	StartFlow.pending_world = null
 	remove(c)
@@ -638,7 +638,7 @@ func test_creation_presets() -> void:
 	var sg := CreationPlan.make(44, WorldCfg.SMALL_SIZE)
 	sg.seed_preset(2)
 	check(str(sp.seeds) == str(sq.seeds) and (sp.seeds["tree"] as Array).size() > (sp.seeds["grass"] as Array).size() * 3
-		and (sg.seeds["grass"] as Array).size() > (sg.seeds["tree"] as Array).size() * 2, "씨앗: 숲을 더 = 나무가 많이 · 풀밭을 더 = 풀이 많이 (같은 시드면 같게)")
+		and (sg.seeds["grass"] as Array).size() > (sg.seeds["tree"] as Array).size() * 2, "씨앗: 꽃을 더 = 꽃씨가 많이 · 풀밭을 더 = 풀이 많이 (같은 시드면 같게)")
 	# 물: 같은 땅에 조금 · 알맞게 · 넉넉히 → 세상의 물
 	var tot: Array[float] = []
 	for i in 3:

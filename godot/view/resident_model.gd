@@ -49,7 +49,7 @@ const ITEMS := {"통나무": "item_log", "판자": "item_plank", "돌": "item_st
 const CARRY := {
 	"밀": ["wheat_sheaf", "shoulder"], "밀가루": ["flour_sack", "back"], "반죽": ["dough_bowl", "front"],
 	"빵": ["bread_basket", "front"], "죽": ["porridge_pot", "front"], "건량": ["grain_sack", "back"], "낟알": ["grain_sack", "back"],
-	"통나무": ["log", "shoulder"], "판자": ["plank_stack", "shoulder"],
+	"통나무": ["twig_bundle", "shoulder"], "판자": ["twig_bundle", "shoulder"],   # (E3 소인의 세상) 통나무·판자 = 나뭇가지 다발·쪼갠 갈대 다발 (GD 3.0)
 	"돌": ["stone_block", "front"], "철광석": ["stone_block", "front"], "석탄": ["stone_block", "front"], "철": ["stone_block", "front"],
 	"소금": ["salt_sack", "back"], "물": ["water_bucket", "hand"], "생선": ["fish_string", "hand"],
 	"약초": ["herb_bundle", "hand"], "민들레 잎": ["herb_bundle", "hand"], "꽃잎": ["herb_bundle", "hand"],
@@ -58,7 +58,7 @@ const CARRY := {
 }
 const CARRY_GENERIC := ["bundle", "back"]
 const CARRY_PROPS := ["wheat_sheaf", "flour_sack", "grain_sack", "salt_sack", "dough_bowl", "bread_basket", "loaf",
-	"porridge_pot", "log", "plank_stack", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle", "pram"]
+	"porridge_pot", "log", "plank_stack", "twig_bundle", "stone_block", "fish_string", "herb_bundle", "water_bucket", "mushroom_basket", "bundle", "pram"]
 ## 아이: 작은 것으로 바꿔 (빵 바구니 → 빵 한 덩이) 두 손으로 안는다 · 머리에 이는 건 바구니만 (어른 여자 반쯤)
 const CARRY_CHILD := {"bread_basket": "loaf"}
 const CARRY_HEAD_OK := ["bread_basket", "mushroom_basket"]

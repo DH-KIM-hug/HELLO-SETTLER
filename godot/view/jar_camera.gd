@@ -377,8 +377,12 @@ func _apply() -> void:
 
 
 ## 병 안 카메라 거리: 화면 아래쪽 땅이 카메라 앞에 있을 만큼 (정사영이라 거리는 크기와 상관없음)
+## + INSIDE_MARGIN: 화면 아래 끝에 선 큰 나무(세계수 약 69칸 — FloraLook.GREAT_SCALE)의 꼭대기도 카메라 앞에 (높이 / sin 48° ≈ 93)
+const INSIDE_MARGIN := 100.0
+
+
 static func inside_dist(size: float, pitch_rad: float) -> float:
-	return maxf(DISTANCE, size * 0.5 * cos(pitch_rad) / sin(pitch_rad) * 1.1 + 60.0)
+	return maxf(DISTANCE, size * 0.5 * cos(pitch_rad) / sin(pitch_rad) * 1.1 + INSIDE_MARGIN)
 
 
 ## 병 밖 카메라 자리 (beyond b, 0~1): 세상 쪽 자리(target·size·pitch·yaw·dist) → ④ 병 전체 → ⑤ 거인의 방. 모든 값이 b에 대해 매끄럽다.
