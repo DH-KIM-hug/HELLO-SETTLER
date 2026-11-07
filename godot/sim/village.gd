@@ -22,7 +22,8 @@ static var default_created: Dictionary = {}
 static var on_giant_action := Callable()
 # 깨달음 (A4b — sim/awakening.gd): 시험 고정용. true면 예전처럼 처음부터 거인을 알고 제단이 있다 (기존 시험 묶음이 tests/run.gd에서 켬)
 static var start_aware := false
-var event_serial := 0                 # 큰 일(연대기 한 줄·위기 시작)마다 +1 — SaveManager가 보고 이 병을 곧 저장한다
+var event_serial := 0                 # 저장 순번(dirty): 큰 일(연대기 한 줄·위기 시작)마다 +1 — SaveManager가 보고 이 병을 곧 저장한다. 사건 번호(events.serial)와 별개 (ADR-0001)
+var events := EventStream.new()       # 사건 기록 흐름 (ADR-0001 — sim/event_stream.gd). 넓은 세상은 JarWorld가 무리들에 하나를 나눠 줌. 저장 안 함
 var _giant_depth := 0
 var created_date: Dictionary = {"year": 2026, "month": 4, "day": 15}
 var climate_override := ""            # 비면 물(병)의 기후대
@@ -91,7 +92,6 @@ var stock: Dictionary = {}
 var manna: Array = []                 # 들판의 낟알 {x, y, amt, born, res}
 var manna_batches: Array = []         # 창고에 주워 온 낟알 {amt, born}
 var manna_falls := 0
-var just_manna := false               # 화면 연출용 — 방금 하늘 낟알이 내렸다 (화면이 보고 끔)
 var first_harvest_t := -1.0
 var manna_ended := false
 var festival_t := -1.0e9
@@ -174,7 +174,6 @@ var altar_level := 0                  # 제단 단계 0~3 (Balance.ALTAR_NAMES �
 var altar_rebuild_until := -1.0       # 넓힌 제단을 주민이 다시 짓는 중 (이때까지)
 var ate_bread_t := -1.0e9             # 마지막으로 빵을 먹은 때 (행복)
 var ate_porridge_t := -1.0e9          # 마지막으로 밀을 죽으로 끓여 먹은 때
-var just_blueprint := ""              # 화면 연출용 — 방금 설계도가 내려왔다 (화면이 보고 비움)
 var _offer_key := -1                  # 마지막 기도 제물 (달력 날 × 2 + 아침 0 · 저녁 1)
 var _drop_id := 0
 var migrants: Dictionary = {}         # 마지막 이주민 맞이 {t, until, mood, kind, ids} (sim/immigrants.gd — 행복 잠깐 ±)
@@ -637,8 +636,18 @@ func note_discovery(id: String, who: Resident) -> void:
 
 
 func log_line(text: String) -> void:
-	book.append({"t": t, "text": text})
-	event_serial += 1
+	emit(&"chronicle", {"v": text})
+
+
+## 사건을 낸다 (ADR-0001 — 시뮬레이션의 출구). t·village는 이 마을 것으로 채움. 연대기·위기 kind는 여기서 바로 book·저장 순번에.
+func emit(kind: StringName, data: Dictionary = {}) -> int:
+	data["t"] = t
+	data["village"] = sid
+	if kind == &"chronicle":
+		book.append({"t": t, "text": data["v"]})   # 사건 줄은 저장하지 않으므로 연대기는 곧바로 (옛 book 형식 그대로)
+	if kind == &"chronicle" or kind == &"crisis":
+		event_serial += 1
+	return events.emit(kind, data)
 
 
 ## 거인의 행동이 끝났다 → 곧바로 저장 (여러 행동을 묶어 부르는 동안은 한 번만 — begin/end_giant)
@@ -659,7 +668,7 @@ func end_giant() -> void:
 ## 위기 시작 (굶주림·재해) — 화면 쪽(JarClock)이 빨리 돌리기를 ×1로 되돌리고 알림을 띄운다
 func crisis(kind: String, text: String) -> void:
 	crises.append({"t": t, "kind": kind, "text": text})
-	event_serial += 1
+	emit(&"crisis", {"v": kind})
 
 
 func speak(r: Resident, text: String, dur := 6.0) -> void:
@@ -779,7 +788,7 @@ func manna_fall(reason: String) -> void:
 	bless_all(Balance.BELIEF_MANNA)
 	var kids := people.filter(func(p: Resident) -> bool: return p.is_child() and not p.is_baby())
 	var who: Resident = kids[rng.randi() % kids.size()] if not kids.is_empty() else people[rng.randi() % people.size()]
-	just_manna = true                     # 화면: 금빛 낟알이 하늘에서 쏟아짐 (view/manna_fx.gd)
+	emit(&"manna_fall", {"v": reason})    # 화면: 금빛 낟알이 하늘에서 쏟아짐 (view/manna_fx.gd)
 	if not aware:                         # 아직 거인을 모른다 — '하늘이 주는 것' (OPENING 3.1 v3)
 		speak(who, "하늘에서 뭐가 떨어졌어!", 8)
 		for q in people:
@@ -3276,8 +3285,10 @@ var kit: Dictionary = {}
 
 
 ## 거인이 세상 지도에서 고른 자리 spot에 키트를 푼다 (JarWorld.place_kit이 부름). 좌표는 세상 좌표.
-static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int) -> Village:
+static func new_settlement(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int, sid_v: int, ev: EventStream = null) -> Village:
 	var v := Village.new()
+	if ev != null:
+		v.events = ev                     # 한 병의 무리들이 사건 줄 하나를 함께 (도착 사건부터)
 	v._init_world(ww, spot, kit_def, seed_v, sid_v)
 	return v
 
@@ -3654,7 +3665,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

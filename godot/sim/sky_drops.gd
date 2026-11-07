@@ -377,7 +377,7 @@ static func place_building(v: Village, type: String, p: Vector2) -> Dictionary:
 	if v.blueprints.has(type):
 		return {"ok": false, "why": "이미 아는 건물이에요"}
 	v.begin_giant()
-	v.just_blueprint = type                # 화면: 커다란 두루마리가 촌장 곁에 내려앉아 펼쳐짐
+	v.emit(&"blueprint_dropped", {"v": type})   # 화면: 커다란 두루마리가 촌장 곁에 내려앉아 펼쳐짐
 	var b := Production.give_blueprint(v, type)
 	v.end_giant()
 	return {"ok": true, "why": "", "building": b, "blueprint": type, "crushed": 0, "fled": 0}
@@ -652,14 +652,14 @@ static func _haul_to_site(v: Village, d: Dictionary, site: Building) -> void:
 			v.speak(r, "하늘에서 통나무가 왔다! 터로 나르자!" if v.aware else "통나무다! 터로 나르자!", 7)
 
 
-## 하늘 낟알 한 줌: 낟알 무더기 셋이 보이게 내림 (MannaFx — just_manna) + 곁의 사람들이 주워 먹으러 옴 → 먹은 사람 수
+## 하늘 낟알 한 줌: 낟알 무더기 셋이 보이게 내림 (MannaFx — 사건 manna_fall) + 곁의 사람들이 주워 먹으러 옴 → 먹은 사람 수
 static func _grain(v: Village, p: Vector2) -> int:
 	var pile := maxf(3.0, v.people.size() * Balance.DAY / Balance.FOOD_IV * Balance.GRAIN_DAYS / 3.0)     # v5: 마을 반나절치 (빵 전의 주된 먹을 것)
 	for i in 3:
 		var a := TAU * i / 3.0 + 0.4
 		var q := p + Vector2(cos(a), sin(a)) * 0.7
 		v.manna.append({"x": q.x, "y": q.y, "amt": pile, "born": v.t, "res": 0})
-	v.just_manna = true
+	v.emit(&"manna_fall", {"v": "grain", "at": p})
 	Awakening.witness(v, "manna")
 	var ws := _awake_near(v, p, GRAIN_R)
 	var n := 0
