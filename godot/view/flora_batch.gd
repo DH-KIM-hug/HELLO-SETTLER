@@ -24,6 +24,16 @@ const FAR_PPU := 6.0              # 이보다 멀리 축소하면 멀리 덩이
 const LOD_GAP := 1.5
 const TINY_PPU := 1.5             # 이보다 멀리: 납작한 것은 숨김 (1~2px도 안 됨)
 const TINY_GAP := 0.5
+## (P1 2차) 아트 바이블 8.9: ppu < 24에서 꽃·풀의 접힌 곳 선(lines MultiMesh)을 끈다 — 경계 ±10% 이력.
+## 껍데기 외곽선·화면 깊이 외곽선은 그대로라 둘레는 남고, 꽃잎 안쪽 가는 선만 빠진다 (16 px 주민 크기에선 거의 안 보임).
+const LINES_PPU := 24.0
+const LINES_GAP := 0.1
+## (P1 2차) 그림자는 큰 꽃만 (아트 바이블 8.10 · 메인 판단 2026-11-08): 화면 높이(모델 높이 × 놓은 배율 중앙값)가 이 칸 이상인 모양만
+## 그림자를 드리운다. 주민 키 = 1칸. 작은 꽃·풀대·고사리·덤불·작은 바위는 그림자 패스에서 빠진다 (그리기·그림자 삼각형 절약).
+const SHADOW_MIN_H := 9.0
+## (P1 2차) 아트 바이블 8.7 각주: 땅에 낮게 붙은 것(덤불·클로버·버섯·고사리 포기·조약돌 — 화면 높이가 이 칸 미만)은 ppu < 24에서
+## 껍데기 외곽선 패스도 끈다 (화면 깊이 외곽선이 둘레를 대신). 삼각형·그리기 반으로. 키 큰 꽃은 껍데기 그대로.
+const HULL_MIN_H := 2.0
 ## 아주 멀리서 숨기는 납작한 것
 const TINY := ["tuft", "clover", "lily", "flora/moss_a", "flora/moss_c", "flora/clover_a", "flora/grass_b", "flora/twig_pile_a",
 	"flora/twig_pile_b", "flora/fallen_leaf_dry", "rock_small", "flowers", "flowers_b"]
@@ -39,6 +49,7 @@ var _vis := {}                    # 지금 담은 칸 (Vector2i → true)
 var _all := true                  # 지금 전부 담겨 있나
 var far := false
 var tiny_off := false
+var lines_off := false            # ppu < LINES_PPU: 접힌 곳 선 끔
 var n_total := 0                  # 놓은 인스턴스 수
 var n_drawn := 0                  # 지금 버퍼에 담긴 수 (시험·측정용)
 
@@ -68,17 +79,33 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 			var arr: PackedFloat32Array = cells.get(key, PackedFloat32Array())     # 묶음 배열은 값 복사 — 붙인 뒤 다시 넣는다
 			arr.append_array(PackedFloat32Array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z]))
 			cells[key] = arr
-		var shadow := not (k in no_shadow)
+		var hgt := shown_height(m["mesh"], xfs)
+		var shadow := not (k in no_shadow) and hgt >= SHADOW_MIN_H
 		var near: Array = []
+		var lines: MultiMeshInstance3D = null
 		for key in ["mesh", "lines"]:
 			if m[key] == null:
 				continue
-			near.append(_mmi(m[key], shadow and key == "mesh"))
-		_kinds[k] = {"cells": cells, "n": xfs.size(), "near": near, "far": null, "shadow": shadow}
+			var mmi := _mmi(m[key], shadow and key == "mesh")
+			near.append(mmi)
+			if key == "lines":
+				lines = mmi
+		_kinds[k] = {"cells": cells, "n": xfs.size(), "near": near, "lines": lines, "far": null, "shadow": shadow, "low": hgt < HULL_MIN_H}
 		n_total += xfs.size()
 	_all = true
 	_rect = Rect2()
 	_fill(true)
+
+
+## 화면에서의 높이 (칸): 모델 높이 × 놓은 세로 배율의 중앙값
+static func shown_height(mesh: Mesh, xfs: Array) -> float:
+	if mesh == null or xfs.is_empty():
+		return 0.0
+	var sy: Array = []
+	for xf: Transform3D in xfs:
+		sy.append(xf.basis.y.length())
+	sy.sort()
+	return mesh.get_aabb().size.y * float(sy[sy.size() / 2])
 
 
 func _mmi(mesh: Mesh, shadow: bool) -> MultiMeshInstance3D:
@@ -108,9 +135,15 @@ func update(ppu: float, view: Dictionary) -> void:
 		want_tiny = true
 	elif ppu > TINY_PPU + TINY_GAP:
 		want_tiny = false
-	var lod_changed := want_far != far or want_tiny != tiny_off
+	var want_lines_off := lines_off
+	if ppu < LINES_PPU * (1.0 - LINES_GAP):
+		want_lines_off = true
+	elif ppu > LINES_PPU * (1.0 + LINES_GAP):
+		want_lines_off = false
+	var lod_changed := want_far != far or want_tiny != tiny_off or want_lines_off != lines_off
 	far = want_far
 	tiny_off = want_tiny
+	lines_off = want_lines_off
 	var everything := not cull or not has_view
 	if not lod_changed:
 		if everything and _all:
@@ -170,6 +203,14 @@ func _fill(lod_changed: bool) -> void:
 		n_drawn += n
 		var show: Array = e["near"]
 		var hide: Array = []
+		if lines_off and e["lines"] != null:
+			show = show.filter(func(x: MultiMeshInstance3D) -> bool: return x != e["lines"])
+			hide = [e["lines"]]
+		if not (e["near"] as Array).is_empty():
+			var body: MultiMeshInstance3D = e["near"][0]
+			var want_mat: Material = Art.flat_mat() if lines_off and bool(e["low"]) else null
+			if body.material_override != want_mat:
+				body.material_override = want_mat
 		if far:
 			if e["far"] == null:
 				e["far"] = _mmi(proxy(k), e["shadow"])

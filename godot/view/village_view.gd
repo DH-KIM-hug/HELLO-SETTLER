@@ -18,6 +18,9 @@ var _res_key := {}              # id → 나이 단계 (바뀌면 모델을 다�
 var _blds := {}                 # id → Node3D
 var _bld_key := {}
 var _live := {}                 # 건물 id → {"stone": 맷돌 윗돌 · "glow": 화덕 불} (_animate_live)
+var _yard: Node3D               # (P1 2차) 집 앞마당 꽃·꽃덤불 — 집마다 따로가 아니라 모양마다 MultiMesh 하나 (가까이 LOD에서만 보임)
+var _yard_xf := {}              # 건물 id → [[모델, 건물 기준 Transform3D]…]
+var _yard_dirty := false
 ## (P1 성능 후속 · buildings GDD 메인 판단 1) 건물 멀리 LOD: 확대가 BLD_FAR_IN 아래면 모델의 "__far" 노드(≤ 600, 선·껍데기 없음),
 ## BLD_FAR_OUT 위로 돌아오면 가까이 (가운데 24 — Mobile엔 visibility_range 페이드가 없어 확대로 직접 바꿈, 경계에서 깜빡이지 않게 틈).
 ## 멀리에서는 마당 꽃·덤불도 숨김. 건물 노드 아래 "near" · "far" 두 갈래 (_build_shape).
@@ -234,6 +237,8 @@ func _bld_lod(force := false) -> void:
 	bld_far = want
 	for id in _blds:
 		_apply_bld_lod(_blds[id])
+	if _yard != null:
+		_yard.visible = not bld_far
 
 
 func _apply_bld_lod(n: Node3D) -> void:
@@ -481,15 +486,31 @@ func _sync_graves() -> void:
 	if _graves != null:
 		_graves.queue_free()
 	_graves = _node(self)
+	# (P1 2차) 무덤마다 상자 셋을 따로 그리면 무덤 27개 = 그리기 54+ → 부품마다 MultiMesh 하나 (그리기 3).
+	# 주민 키 절반보다 낮아 그림자 끔 (아트 바이블 8.8).
+	var parts := [[Vector3(0.42, 0.1, 0.62), Vector3(0, 0.04, 0.08), Style.WOOD.darkened(0.15)],
+		[Vector3(0.3, 0.38, 0.09), Vector3(0, 0.2, -0.22), Style.STONE],
+		[Vector3(0.22, 0.06, 0.1), Vector3(0, 0.42, -0.22), Style.STONE.lightened(0.15)]]
+	var xfs: Array[Transform3D] = []
 	for g: Dictionary in v.graves:
 		var x := float(g["x"])
 		var z := float(g["y"])
-		var n := _node(_graves)
-		n.position = Vector3(x, gy(x, z), z)
-		n.rotation.y = deg_to_rad(JarCamera.BASE_YAW_DEG) + fposmod(float(g["id"]) * 0.37, 0.3) - 0.15
-		_box(n, Vector3(0.42, 0.1, 0.62), Vector3(0, 0.04, 0.08), Style.WOOD.darkened(0.15))
-		_box(n, Vector3(0.3, 0.38, 0.09), Vector3(0, 0.2, -0.22), Style.STONE)
-		_box(n, Vector3(0.22, 0.06, 0.1), Vector3(0, 0.42, -0.22), Style.STONE.lightened(0.15))
+		var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG) + fposmod(float(g["id"]) * 0.37, 0.3) - 0.15
+		xfs.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(x, gy(x, z), z)))
+	if xfs.is_empty():
+		return
+	for p: Array in parts:
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = ResidentModel.box_of(p[0])
+		mm.instance_count = xfs.size()
+		for i in xfs.size():
+			mm.set_instance_transform(i, xfs[i] * Transform3D(Basis.IDENTITY, p[1]))
+		var mmi := MultiMeshInstance3D.new()
+		mmi.multimesh = mm
+		mmi.material_override = Toon.mat(p[2])
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_graves.add_child(mmi)
 
 
 ## (A6) 뗏목 길을 건너는 사람: 발밑에 뗏목 (물 위 높이) · 치료소에 누운 사람: 밑에 흰 깔개.
@@ -664,6 +685,8 @@ func _sync_buildings() -> void:
 		if _bld_key.get(b.id, "") == key:
 			continue
 		_bld_key[b.id] = key
+		if _yard_xf.erase(b.id):             # 다시 만들 때 _build_shape가 다시 넣는다
+			_yard_dirty = true
 		if _blds.has(b.id):
 			(_blds[b.id] as Node3D).queue_free()
 		var n := Node3D.new()
@@ -694,6 +717,31 @@ func _sync_buildings() -> void:
 			(_blds[id] as Node3D).queue_free()
 			_blds.erase(id)
 			_bld_key.erase(id)
+			if _yard_xf.erase(id):
+				_yard_dirty = true
+	if _yard_dirty:
+		_sync_yard()
+
+
+## (P1 2차) 앞마당 소품을 모양마다 MultiMesh로 (집 15채 × 2 = 노드 30개 × 몸·껍데기·그림자 → 모양 3개). 낮은 것이라 그림자 끔.
+func _sync_yard() -> void:
+	_yard_dirty = false
+	if _yard != null:
+		_yard.queue_free()
+	_yard = _node(self)
+	_yard.name = "yard"
+	_yard.visible = not bld_far
+	var groups := {}
+	for id in _yard_xf:
+		var n: Node3D = _blds.get(id)
+		if n == null:
+			continue
+		for e: Array in _yard_xf[id]:
+			if not groups.has(e[0]):
+				groups[e[0]] = [] as Array[Transform3D]
+			(groups[e[0]] as Array[Transform3D]).append(n.transform * (e[1] as Transform3D))
+	for k: String in groups:
+		Art.multi(_yard, k, groups[k], false)
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -> MeshInstance3D:
@@ -758,11 +806,14 @@ func _build_shape(n: Node3D, b: Building) -> void:
 		_live[b.id] = {"glow": _oven_glow(n)}
 	for y: Array in YARD.get(b.type, []):
 		Art.instance(near, y[0], Transform3D(Basis(Vector3.UP, y[2]).scaled(Vector3.ONE * float(y[3]) if y.size() > 3 else Vector3.ONE), y[1]))
-	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN) — 멀리에선 숨김
+	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN) — 멀리에선 숨김 (_sync_yard)
 		var s := b.size()
 		var m := 1.0 if b.id % 2 == 0 else -1.0
-		Art.instance(near, "flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s)))
-		Art.instance(near, "bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s)))
+		_yard_xf[b.id] = [["flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s))],
+			["bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s))]]
+		_yard_dirty = true
+	elif _yard_xf.erase(b.id):
+		_yard_dirty = true
 	_apply_bld_lod(n)
 
 
