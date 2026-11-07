@@ -21,6 +21,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, PartSet, Vector, shade, mix, out_dir_from_argv  # noqa: E402
+from far_kit import add_far  # noqa: E402  (far LOD node "body__far", buildings GDD decision 1)
 from build_buildings import smoke  # noqa: E402
 
 OUT = out_dir_from_argv()
@@ -185,6 +186,7 @@ def build_quern_house():
     grass_pouch(m, -0.38, 0.22, 0.04, 0.95, 0.6)
     wheat_sheaf_standing(m, 0.48, -0.2, 0.62, 0.15)
     wheat_sheaf_standing(m, 0.5, 0.18, 0.55, -0.1)
+    add_far(m)
     m.export(OUT)
 
 
@@ -202,6 +204,7 @@ def build_quern_stone():
     hx, hy = 0.19, 0.0
     stem(m, (hx, hy, 0.08), (hx, hy, 0.4), 0.032, TWIG, TWIG_DARK, 1, 7)          # a straight twig peg
     lash(m, (hx, hy, 0.115), 0.042)
+    add_far(m)
     m.export(OUT)
 
 
@@ -251,6 +254,7 @@ def build_oven():
     m.sphere(1.0, pos=(ox - 0.42, oy - 0.68, 0.025), scl=(0.21, 0.14, 0.03), rot=(0, 0, 0.2), color=PEBBLE, seg=10, rings=3)
     for (x, y) in ((-0.5, -0.68), (-0.34, -0.65)):
         m.sphere(0.075, pos=(ox + x, oy + y, 0.09), scl=(1.3, 0.9, 0.7), color="BREAD", seg=8, rings=5)
+    add_far(m)
     m.export(OUT)
 
 
@@ -263,6 +267,7 @@ def build_oven_glow():
     m.cyl(0.1, 0.1, 0.02, pos=(ox, my - 0.165, PL + 0.17), rot=(math.pi / 2, 0, 0), color="FLAME2", seg=8, group="body_nh")
     for (x, r) in ((-0.07, 0.035), (0.05, 0.03), (0.0, 0.04)):                                  # embers on the floor
         m.sphere(r, pos=(ox + x, my - 0.19, PL + 0.06), scl=(1.2, 1, 0.6), color="FLAME", seg=5, rings=3, group="body_nh")
+    add_far(m)
     m.export(OUT)
 
 
@@ -282,6 +287,7 @@ def build_blueprint_scroll():
     m.sphere(0.03, pos=(0, -R * 0.4, 2 * R + 0.015), color=shade(RIBBON, 0.85), seg=6, rings=3)
     for sx in (-1, 1):
         m.box((0.035, 0.13, 0.012), pos=(sx * 0.035, -R * 0.4 - 0.1, R * 1.6), rot=(-0.9, 0, sx * 0.35), color=RIBBON)
+    add_far(m)
     m.export(OUT)
 
 
@@ -315,6 +321,7 @@ def build_blueprint_open():
         line(px + k * 0.1, -0.25, px + k * 0.1, -0.23, 0.01)
     line(-0.42, 0.27, -0.1, 0.27, 0.02)                      # title stroke
     m.box((0.05, 0.05, 0.004), pos=(0.36, 0.26, z), rot=(0, 0, 0.785), color=RIBBON, group="body_nh")   # a red seal
+    add_far(m)
     m.export(OUT)
 
 

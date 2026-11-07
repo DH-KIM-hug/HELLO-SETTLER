@@ -2159,11 +2159,7 @@ func chief_build() -> void:
 		want = era_house
 		# 땅이 한계: 집 정원 합계는 품을 수 있는 인구 × 1.1까지. 넘으면 작은 옛 집을 그 시대 집으로 넓혀 짓는다
 		if cap + era_cap > land_capacity() * Balance.HOUSE_SLACK:
-			for b in buildings:
-				if b.built and b.is_house() and b.upgrade_to == "" and b.cap() < era_cap:
-					if cap + era_cap - b.cap() <= land_capacity() * Balance.HOUSE_SLACK:
-						upgrade = b
-					break
+			upgrade = upgrade_candidate(cap, era_cap, land_capacity() * Balance.HOUSE_SLACK)
 			if upgrade == null:
 				return
 	if upgrade == null and want == era_house and not _affordable(want) and _affordable("오두막"):
@@ -2213,6 +2209,16 @@ func chief_build() -> void:
 		log_line("촌장 %s%s {w:이/가} 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 		return
 	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
+
+
+## 땅 한계일 때 그 시대 집으로 넓혀 지을 작은 옛 집 — 바꿔도 정원 합계(cap_total - 옛 정원 + era_cap)가 limit 안인 첫 집.
+## (예전엔 첫 작은 집 하나만 보고 멈춤 → 그 집이 맞지 않으면 다른 집이 맞아도 못 고름 — buildings 시험 5)
+func upgrade_candidate(cap_total: int, era_cap: int, limit: float) -> Building:
+	for b in buildings:
+		if b.built and b.is_house() and b.upgrade_to == "" and b.cap() < era_cap:
+			if cap_total + era_cap - b.cap() <= limit:
+				return b
+	return null
 
 
 ## 넓혀 지을 수 있는 그 종류의 건물 (다 지었고 개축 중이 아님) — 없으면 null

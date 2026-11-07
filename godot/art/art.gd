@@ -31,13 +31,14 @@ static var _models: Dictionary = {}
 static var _parts: Dictionary = {}
 static var _body_mat: ShaderMaterial
 static var _line_mat: ShaderMaterial
+static var _flat_mat: ShaderMaterial
 
 
 static func exists(name: String) -> bool:
 	return ResourceLoader.exists(DIR + name + ".glb")
 
 
-## 한 모델 (모든 노드를 한 메시로)
+## 한 모델 (모든 노드를 한 메시로). 멀리 LOD 노드("<부품>__far…", 아트 바이블 8.3)는 빼고 — 그건 model_far.
 static func model(name: String) -> Dictionary:
 	if _models.has(name):
 		return _models[name]
@@ -46,11 +47,44 @@ static func model(name: String) -> Dictionary:
 	if root != null:
 		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
 			var nm := String(mi.name)
+			if nm.contains("__far"):
+				continue
 			acc.add(mi.mesh, _rel_xf(mi, root), not (nm.ends_with("_nl") or nm.ends_with("_nh")), not nm.ends_with("_nh"))
 		root.free()
 	var res := acc.build(body_mat(), line_mat())
 	_models[name] = res
 	return res
+
+
+## 멀리 LOD (건물 — buildings GDD 메인 판단 1): "__far"가 든 노드만 한 메시로, 접힌 곳 선·껍데기 외곽선 없음 (ppu < 24).
+## {"mesh": 몸 또는 null (멀리 노드가 없는 모델), "lines": null}
+static func model_far(name: String) -> Dictionary:
+	var key := name + "|far"
+	if _models.has(key):
+		return _models[key]
+	var acc := _Acc.new()
+	var root := _instantiate(name)
+	if root != null:
+		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+			if String(mi.name).contains("__far"):
+				acc.add(mi.mesh, _rel_xf(mi, root), false, false)
+		root.free()
+	var res := acc.build(flat_mat(), null)
+	_models[key] = res
+	return res
+
+
+static func has_far(name: String) -> bool:
+	return model_far(name)["mesh"] != null
+
+
+## 툰 몸만 (껍데기 외곽선 패스 없음) — 멀리 LOD 건물 (그리기 1, 삼각형 몸 한 번)
+static func flat_mat() -> ShaderMaterial:
+	if _flat_mat == null:
+		var m := body_mat().duplicate() as ShaderMaterial
+		m.next_pass = null
+		_flat_mat = m
+	return _flat_mat
 
 
 ## 부품 모음 (주민): 노드마다 따로 — {부품 이름: {"mesh", "lines", "origin": 관절 자리}}. "이름_body_nl" · "이름_body_nh" 노드는 "이름"에 합침.
@@ -155,12 +189,12 @@ static func multi(parent: Node3D, name: String, xfs: Array[Transform3D], shadows
 		parent.add_child(mmi)
 
 
-## 모델 하나 → 노드 (몸 + 선)
-static func instance(parent: Node3D, name: String, xf := Transform3D.IDENTITY) -> Node3D:
+## 모델 하나 → 노드 (몸 + 선). far = 멀리 LOD 노드만 (선·껍데기 없음)
+static func instance(parent: Node3D, name: String, xf := Transform3D.IDENTITY, far := false) -> Node3D:
 	var n := Node3D.new()
 	n.transform = xf
 	parent.add_child(n)
-	var m := model(name)
+	var m := model_far(name) if far else model(name)
 	for key in ["mesh", "lines"]:
 		if m[key] == null:
 			continue

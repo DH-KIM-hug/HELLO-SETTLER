@@ -9,7 +9,7 @@
 ##
 ## 하는 일: 넓은 세상(world.tscn, 본 게임 장면)에 마을 시대 건물 + 주민 30명을 세우고 →
 ##   ① 6일 따라잡기(비운 12시간 × 12배) 네 번 연달아 (콜드 + 3번) ② 장면: 기본 확대 · 가까이 · 세상 전체 · 세상 전체(안개 걷음) —
-##   프레임 시간(평균·p95·최대)·렌더 cpu/gpu 시간·그리기 호출·삼각형·메모리 ③ 켜고 끄기: 외곽선·그림자·꽃숲(나무·소품)·마을 전체.
+##   프레임 시간(평균·p95·최대)·렌더 cpu/gpu 시간·그리기 호출·삼각형·메모리 ③ 켜고 끄기: 외곽선·그림자·꽃숲(나무·소품)·건물만·마을 전체.
 ## 결과: logcat 줄 머리 "NAZAKJI_PERF" (안드로이드 로그 태그는 godot) + user://perf_results_<tag>.json
 class_name PerfProbe
 extends Node
@@ -18,7 +18,7 @@ const FLAG := "user://perf_probe.cfg"
 const PREFIX := "NAZAKJI_PERF"
 const SEED := 20261107
 const ADD := ["목조주택", "목조주택", "석조주택", "석조주택", "창고", "제재소", "방앗간", "빵집", "우물", "산림관", "채석장",
-	"약초꾼", "치료소", "교회", "광장", "망루", "어부", "사냥꾼", "묘지", "버섯꾼", "오두막", "오두막"]
+	"약초꾼", "치료소", "교회", "광장", "망루", "어부", "사냥꾼", "묘지", "버섯꾼", "오두막", "오두막", "농장"]   # 농장 = 밀 숲 터 (A27-c)
 const RESIDENTS := 30
 
 var opts: Dictionary = {}
@@ -143,6 +143,11 @@ func _run() -> void:
 		await _measure("no_flora_" + zn, tog, true)
 		for n: Node3D in flora:
 			n.visible = true
+		for id in scene.view._blds:                 # 건물만 끔 (buildings GDD 열린 질문 2 — 건물 몫 실측)
+			(scene.view._blds[id] as Node3D).visible = false
+		await _measure("no_buildings_" + zn, tog, true)
+		for id in scene.view._blds:
+			(scene.view._blds[id] as Node3D).visible = true
 		scene.view.visible = false
 		scene.great_view.visible = false
 		await _measure("terrain_only_" + zn, tog, true)
@@ -305,6 +310,7 @@ func _measure(name: String, secs: float, toggle := false) -> void:
 		"scene_proc_ms": _stats(rec["proc"]), "ppu": snappedf(scene.cam.ppu, 0.01), "mem": _mem(), "t_unix": Time.get_unix_time_from_system()}
 	if not toggle:
 		out["breakdown"] = breakdown(scene)
+		out["bld_far"] = scene.view.bld_far          # 건물 멀리 LOD였나 (village_view.gd _bld_lod)
 		if _opt("shots", "0") == "1":
 			await _shot(name)
 	((results["toggles"] if toggle else results["scenarios"]) as Array).append(out)
