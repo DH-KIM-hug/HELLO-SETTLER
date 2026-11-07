@@ -28,6 +28,10 @@ var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.
 var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
 var _props: Node3D
 var _prop_key := ""
+var _lily_node: Node3D          # 수련·연꽃 (따로 — 수면이 오르내리면 높이만 다시)
+var _lilies: Array = []         # [모델, 칸, x, z, 돌림, 크기]
+var _lily_y := PackedFloat32Array()   # 마지막으로 놓은 높이 (−1e9 = 숨김)
+var _lily_t := 0.0
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
 var _far_key := -1
 var _far_t := -1.0e9
@@ -75,6 +79,7 @@ func _ready() -> void:
 	_rocks = _node(self)
 	_manna = _node(self)
 	_props = _node(self)
+	_lily_node = _node(self)
 	_far = _node(self)
 	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
 	add_child(mold_view)
@@ -125,6 +130,10 @@ func sync(dt: float, force := false) -> void:
 		_sync_rocks()
 		_sync_manna()
 		_sync_props()
+		_lily_t += 0.25
+		if force or _lily_t >= 1.0:
+			_lily_t = 0.0
+			_sync_lilies(false)
 	_animate_fire()
 	if altar_view != null:
 		altar_view.sync(dt)
@@ -275,7 +284,7 @@ func _raft(r: Resident, m: ResidentModel) -> void:
 		rf.rotation.y = r.facing
 		return
 	var k := v.water.idx(m.position.x, m.position.z)
-	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS
+	var wy := (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS - JarTerrain.WATER_SINK
 	var y := maxf(m.position.y, wy) + 0.05
 	rf.position = Vector3(m.position.x, y, m.position.z)
 	rf.rotation.y = r.facing
@@ -707,10 +716,12 @@ func _sync_props() -> void:
 		sim_pts.append(Vector2(r["x"], r["y"]))
 	_decor_forest(groups, sim_pts)
 	_decor_clusters(groups)
+	_lilies.clear()
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
 	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b"])
+	_sync_lilies(true)
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
 
@@ -815,8 +826,37 @@ func _decor_water(groups: Dictionary) -> void:
 			elif hh < 0.3:
 				_put(groups, "reeds", p.x, p.y, 0.9 + hh, hh * 50.0)
 		elif w.depth(k) > 0.03 and hh > 0.9:
-			var lvl := (w.ground(k) + w.depth(k)) * JarTerrain.HS + 0.02
-			_add(groups, "lotus" if hh > 0.975 else "lily", Transform3D(Basis(Vector3.UP, hh * 50.0), Vector3(x, lvl, z)))
+			_lilies.append(["lotus" if hh > 0.975 else "lily", k, x, z, hh * 50.0, LILY_SCALE * (0.85 + 1.5 * (hh - 0.9))])
+
+
+## 수련·연꽃을 지금 수면에 띄운다 (장식은 6시간마다 다시 놓지만 ×60에선 그 사이 수면이 오르내려 잎이 물에 잠겨
+## 테두리만 점선처럼 보였다 — 1초마다 높이를 보고 달라졌으면 이것만 다시). 물이 빠진 칸은 숨김.
+const LILY_SCALE := 0.8
+const LILY_LIFT := 0.035
+
+
+func _sync_lilies(force: bool) -> void:
+	var w := v.water
+	var ys := PackedFloat32Array()
+	ys.resize(_lilies.size())
+	var changed := force or _lily_y.size() != _lilies.size()
+	for i in _lilies.size():
+		var k: int = _lilies[i][1]
+		var d := w.depth(k)
+		var y := (w.ground(k) + d) * JarTerrain.HS - JarTerrain.WATER_SINK + LILY_LIFT if d > JarWater.LAKE_DEPTH else -1.0e9
+		ys[i] = y
+		if not changed and absf(y - _lily_y[i]) > 0.004:
+			changed = true
+	if not changed:
+		return
+	_lily_y = ys
+	var groups := {}
+	for i in _lilies.size():
+		if ys[i] < -1.0e8:
+			continue
+		var it: Array = _lilies[i]
+		_add(groups, it[0], Transform3D(Basis(Vector3.UP, it[4]).scaled(Vector3.ONE * float(it[5])), Vector3(it[2], ys[i], it[3])))
+	_flush(_lily_node, groups, ["lily", "lotus"])
 
 
 ## 집 둘레 덤불 (앞쪽 양옆)
@@ -876,7 +916,7 @@ func _decor_crossings(groups: Dictionary) -> void:
 			continue
 		var d: Vector2i = c[3]
 		var kw := w.idx(p.x + d.x, p.y + d.y)
-		var lvl := (w.ground(kw) + w.depth(kw)) * JarTerrain.HS
+		var lvl := (w.ground(kw) + w.depth(kw)) * JarTerrain.HS - JarTerrain.WATER_SINK
 		var y := maxf(lvl + 0.04, gy(p.x, p.y) - 0.2)
 		var dir := Vector3(d.x, 0, d.y)
 		var origin := Vector3(p.x, y, p.y) - dir * 0.35
