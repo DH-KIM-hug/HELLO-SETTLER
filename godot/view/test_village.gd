@@ -424,6 +424,7 @@ func _process(dt: float) -> void:
 		for m in lineup.get_children():
 			if m is ResidentModel:
 				(m as ResidentModel).tick(dt)
+	terrain.dew_humid = village.air.humid if village.air != null else -1.0     # [E3-7] 돌기 물방울·김은 병 안 김을 따라
 	terrain.animate(dt)
 	update_night()
 	air_overlay.update_from(dt, night)   # [곰팡이·뚜껑]

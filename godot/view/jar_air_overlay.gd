@@ -2,6 +2,7 @@
 ## 화면 전체를 덮는 얇은 막 (UI 아래, 3D 위). 시뮬레이션은 읽기만:
 ##  · 김 (JarAir.glass_fog · 곰팡이 조짐 Mold.omen_fog) → 유리 안쪽에 서린 김: 가장자리부터 뿌연 얼룩 + 흘러내리는 물줄기 몇 가닥
 ##  · 탁한 공기 (JarAir.stale 0.35↑) → 하늘이 누렇게 바램
+##  · [E3-7 이슬의 하루 박자] 낮에 오르는 김 (JarWater.dew_vapour × 김) → 유리 위쪽이 엷게 뿌예짐 (습할수록 짙게, 닦으면 걷힘)
 ##  · 뚜껑이 열림 → 위에서 쏟아지는 거인의 방 빛 + 떠다니는 먼지 알갱이, 김은 빠르게 걷힘. 닫힐 때 부드럽게 사라짐
 ##  · [거인의 손 B6] 유리의 먼지막 (GiantHand.dust_shown) · 커튼 (낮이 어둑) · 감싼 손 (가장자리 손가락 + 따뜻한 빛) · 닦는 반짝임 (play_wipe)
 ## 밤에는 막도 함께 어두워진다.
@@ -17,6 +18,7 @@ uniform float night = 0.0;
 uniform float dust = 0.0;
 uniform float dim = 0.0;
 uniform float wipe = 0.0;
+uniform float vapour = 0.0;
 uniform float t = 0.0;
 uniform vec2 size = vec2(360.0, 640.0);
 
@@ -52,6 +54,15 @@ void fragment() {
 		col = vec4(vec3(0.86, 0.92, 0.93), a);
 		col.rgb = mix(col.rgb, vec3(1.0), drop * 0.6);
 		col.a = max(col.a, drop * 0.5 * fog * (1.0 - wiped));
+	}
+	// [E3-7] 낮의 김: 유리 위쪽(뚜껑 쪽)에 엷은 서림 — 아래로 갈수록 옅어지고, 천천히 일렁인다
+	if (vapour > 0.001) {
+		vec2 q2 = floor(px / 4.0) * 4.0 / size.y;
+		float n2 = noise(q2 * 5.0 + vec2(t * 0.02, -t * 0.03)) * 0.65 + noise(q2 * 13.0 - vec2(0.0, t * 0.05)) * 0.35;
+		float top = smoothstep(0.5, 0.02, uv.y + (n2 - 0.5) * 0.14);
+		float av = clamp(top * (0.6 + 0.7 * n2) * vapour * (1.0 - wiped), 0.0, 0.6);
+		col.rgb = mix(col.rgb, vec3(0.9, 0.95, 0.97), av / max(col.a + av, 0.001));
+		col.a = col.a + av * (1.0 - col.a);
 	}
 	// 누런 하늘 (탁한 공기)
 	float y = smoothstep(0.35, 0.9, stale) * 0.16;
@@ -108,6 +119,7 @@ var fog := 0.0
 var dust := 0.0                       # [거인의 손 B6] 유리의 먼지막 · 커튼 · 감싼 손 · 닦는 반짝임 (화면만 부드럽게)
 var dim := 0.0
 var wipe := 0.0
+var vapour := 0.0                     # [E3-7] 낮의 김 (화면만 부드럽게)
 var _t := 0.0
 
 
@@ -140,6 +152,7 @@ func update_from(dt: float, night: float) -> void:
 		dust = lerpf(dust, GiantHand.dust_shown(v), 1.0 - exp(-4.0 * dt))
 	var day := 1.0 - night
 	dim = lerpf(dim, 0.0 * day, 1.0 - exp(-3.0 * dt))     # (6c-1) 커튼 도구 없음 — 화면을 어둡게 하지 않음
+	vapour = lerpf(vapour, vapour_goal(v), 1.0 - exp(-1.5 * dt))
 	if wipe > 0.0:
 		wipe = wipe + dt / 0.7 if wipe < 1.0 else 0.0
 	mat.set_shader_parameter("fog", fog * (1.0 - 0.75 * lid))      # 열면 유리의 김이 금방 걷힌다
@@ -150,8 +163,17 @@ func update_from(dt: float, night: float) -> void:
 	mat.set_shader_parameter("dust", dust * (1.0 - 0.5 * lid))
 	mat.set_shader_parameter("dim", dim)
 	mat.set_shader_parameter("wipe", minf(wipe, 1.0))
+	mat.set_shader_parameter("vapour", vapour * (1.0 - 0.8 * lid))
 	mat.set_shader_parameter("size", get_viewport_rect().size)
-	visible = fog > 0.01 or lid > 0.01 or (v.air != null and v.air.stale > 0.36) or dust > 0.01 or dim > 0.01 or wipe > 0.0
+	visible = fog > 0.01 or lid > 0.01 or (v.air != null and v.air.stale > 0.36) or dust > 0.01 or dim > 0.01 or wipe > 0.0 or vapour > 0.01
+
+
+## [E3-7] 낮의 김이 유리 위쪽에 서리는 정도 0~0.6 — 습할수록 짙고 (김 0.1 → 거의 없음 · 0.65↑ → 짙음), 닦으면 걷혔다가 다시 서림
+static func vapour_goal(vg: Village) -> float:
+	if vg.water == null:
+		return 0.0
+	var hum := vg.air.humid if vg.air != null else vg.water.humid
+	return vg.water.dew_vapour() * clampf((hum - 0.05) / 0.6, 0.0, 1.0) * 0.6 * (1.0 - vg.water.glass_clear)
 
 
 ## [B6] 유리 닦기의 반짝임 한 번
