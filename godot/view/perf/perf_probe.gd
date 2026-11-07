@@ -5,6 +5,7 @@
 ##   1) adb shell am start -n com.ddoystory.najakji/com.godot.game.GodotApp --esa command_line_params "--perf,scale=0.75"
 ##   2) 안 되면 깃발 파일: echo "perf scale=0.75" | adb shell run-as com.ddoystory.najakji sh -c 'cat > files/perf_probe.cfg'  (한 번 읽고 지워진다)
 ## 옵션 (key=value): dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
+##   · flora=old (꽃숲 자르기·멀리 덩이 끔 — 이전과 비교) · shots=1 (데스크톱: 장면마다 화면을 godot_shots/perf_<tag>_<장면>.png로 — 창이 필요)
 ##
 ## 하는 일: 넓은 세상(world.tscn, 본 게임 장면)에 마을 시대 건물 + 주민 30명을 세우고 →
 ##   ① 6일 따라잡기(비운 12시간 × 12배) 네 번 연달아 (콜드 + 3번) ② 장면: 기본 확대 · 가까이 · 세상 전체 · 세상 전체(안개 걷음) —
@@ -106,6 +107,9 @@ func _run() -> void:
 		return
 	# 장면
 	var v: Village = scene.village
+	if _opt("flora", "") == "old":             # 비교용: 꽃숲 자르기·멀리 덩이 끔 (P1 이전과 같은 그림·같은 양)
+		scene.view.flora_cull = false
+		scene.view.flora_force_near = true
 	await _goto(16.0, v)
 	await _measure("village_far", dur)
 	await _goto(32.0, v)
@@ -117,6 +121,11 @@ func _run() -> void:
 	await _measure("world_zoom_revealed", dur * 0.5)
 	scene.wterrain.reveal_all = false
 	scene.wterrain.update_now()
+	if _opt("shots", "0") == "1":              # 꽃숲 그림 비교 (캡처만): 마을 곁 숲 한가운데 — 기본 확대 · 멀리 덩이 경계 아래 · 넓은 땅
+		var fp := _forest_spot(v)
+		for z in [16.0, 9.0, 5.0, 2.0]:
+			await _goto(z, v, fp)
+			await _shot("forest_%d" % int(z))
 	# 켜고 끄기 (기본 확대와 가까이)
 	for z in [16.0, 32.0]:
 		await _goto(z, v)
@@ -264,12 +273,12 @@ func _catchup_runs(n: int) -> void:
 
 # ───────────────────────── 장면 이동 · 측정 ─────────────────────────
 ## ppu < 0 = 세상 전체 (카메라가 허락하는 가장 멀리)
-func _goto(ppu: float, v: Village) -> void:
+func _goto(ppu: float, v: Village, at := Vector2.INF) -> void:
 	var cam: JarCamera = scene.cam
 	var goal := cam.ppu_min if ppu < 0.0 else ppu
 	cam.ppu = goal
 	cam.ppu_goal = goal
-	scene.look_at_ground(v.center + Vector2(1.0, 1.0))
+	scene.look_at_ground(v.center + Vector2(1.0, 1.0) if at == Vector2.INF else at)
 	cam._apply()
 	for i in 45:
 		await get_tree().process_frame
@@ -294,8 +303,121 @@ func _measure(name: String, secs: float, toggle := false) -> void:
 		"render_cpu_ms": _stats(rec["cpu"]), "render_gpu_ms": _stats(rec["gpu"]), "draw_calls": _stats(rec["draw"]),
 		"primitives": _stats(rec["prim"]), "objects": _stats(rec["obj"]), "time_process_ms": _stats(rec["tp"]),
 		"scene_proc_ms": _stats(rec["proc"]), "ppu": snappedf(scene.cam.ppu, 0.01), "mem": _mem(), "t_unix": Time.get_unix_time_from_system()}
+	if not toggle:
+		out["breakdown"] = breakdown(scene)
+		if _opt("shots", "0") == "1":
+			await _shot(name)
 	((results["toggles"] if toggle else results["scenarios"]) as Array).append(out)
 	_log("scene " + JSON.stringify(out))
+
+
+## 무엇이 삼각형·그리기를 먹나 (CPU 쪽 어림 — 화면 밖 자르기·그림자 패스는 빼고, 보이는 노드만):
+## 묶음 → {"tris": 삼각형 × 인스턴스 (재질 패스 수만큼), "nodes": 메시 노드 수, "passes": 재질 패스 수(그리기 어림)}.
+## 멀티메시는 보이는 인스턴스 수(visible_instance_count)와 visibility_range 를 따른다.
+static func breakdown(sc: Node) -> Dictionary:
+	var out := {}
+	var view: Node = sc.get("view")
+	var cam := sc.get_viewport().get_camera_3d()
+	var named := {}
+	if view != null:
+		for k in ["_trees", "_props", "_far", "_rocks", "_lily_node", "_graves", "_manna", "flora_view", "mold_view", "crisis_view", "drop_view", "animal_view", "social"]:
+			var n: Variant = view.get(k)
+			if n is Node:
+				named[n] = k
+		for id in (view.get("_blds") as Dictionary):
+			named[view.get("_blds")[id]] = "buildings"
+		for id in (view.get("residents") as Dictionary):
+			named[view.get("residents")[id]] = "residents"
+	var gv: Variant = sc.get("great_view")
+	if gv is Node:
+		named[gv] = "great_trees"
+	var wt: Variant = sc.get("wterrain")
+	if wt is Node:
+		named[wt] = "terrain"
+	for gi: GeometryInstance3D in sc.find_children("*", "GeometryInstance3D", true, false):
+		if not gi.is_visible_in_tree():
+			continue
+		if cam != null and gi.visibility_range_end > 0.0:
+			var d := cam.global_position.distance_to(gi.global_transform * gi.get_aabb().get_center())
+			if d > gi.visibility_range_end or d < gi.visibility_range_begin:
+				continue
+		var cat := "other"
+		var p: Node = gi
+		while p != null and p != sc:
+			if named.has(p):
+				cat = named[p]
+				break
+			p = p.get_parent()
+		if cat == "other" and gi.get_parent() == view:
+			cat = "view_misc"
+		var mesh: Mesh = null
+		var inst := 1
+		if gi is MeshInstance3D:
+			mesh = (gi as MeshInstance3D).mesh
+		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var mm := (gi as MultiMeshInstance3D).multimesh
+			mesh = mm.mesh
+			inst = mm.instance_count if mm.visible_instance_count < 0 else mm.visible_instance_count
+		if mesh == null or inst == 0:
+			continue
+		var tris := 0
+		var passes := 0
+		for s in mesh.get_surface_count():
+			var n_idx := 0
+			if mesh is ArrayMesh:
+				var am := mesh as ArrayMesh
+				n_idx = am.surface_get_array_index_len(s) if (am.surface_get_format(s) & Mesh.ARRAY_FORMAT_INDEX) else am.surface_get_array_len(s)
+			else:
+				var ia: Variant = mesh.surface_get_arrays(s)[Mesh.ARRAY_INDEX]
+				n_idx = (ia as PackedInt32Array).size() if ia is PackedInt32Array and not (ia as PackedInt32Array).is_empty() else (mesh.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+			var mat: Material = gi.material_override if gi.material_override != null else mesh.surface_get_material(s)
+			var np := 1
+			while mat != null and mat.next_pass != null:
+				np += 1
+				mat = mat.next_pass
+			tris += n_idx / 3 * np
+			passes += np
+		var e: Dictionary = out.get(cat, {"tris": 0, "nodes": 0, "passes": 0})
+		e["tris"] += tris * inst
+		e["nodes"] += 1
+		e["passes"] += passes
+		out[cat] = e
+	return out
+
+
+## 데스크톱 비교용: 저장소 맨 위 godot_shots/perf_<tag>_<장면>.png (화면 위 UI는 잠깐 숨김)
+func _shot(name: String) -> void:
+	var hid: Array = []
+	for c: Node in scene.find_children("*", "CanvasLayer", true, false):
+		if (c as CanvasLayer).visible:
+			(c as CanvasLayer).visible = false
+			hid.append(c)
+	for c: Node in scene.get_children():
+		if c is Control and (c as Control).visible:
+			(c as Control).visible = false
+			hid.append(c)
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	var dir := ProjectSettings.globalize_path("res://").path_join("../godot_shots").simplify_path()
+	DirAccess.make_dir_recursive_absolute(dir)
+	get_viewport().get_texture().get_image().save_png(dir.path_join("perf_%s_%s.png" % [String(_opt("tag", "run")), name]))
+	for c: Node in hid:
+		c.set("visible", true)
+
+
+## 마을 곁 장식 숲이 가장 짙은 곳 (12~30칸)
+func _forest_spot(v: Village) -> Vector2:
+	var best := v.center
+	var bf := -1.0
+	for i in 48:
+		var a := TAU * i / 48.0
+		for r in [12.0, 18.0, 24.0, 30.0]:
+			var p: Vector2 = v.center + Vector2(cos(a), sin(a)) * r
+			var f: float = scene.view.forest_at(p)
+			if f > bf:
+				bf = f
+				best = p
+	return best
 
 
 func _process(_dt: float) -> void:

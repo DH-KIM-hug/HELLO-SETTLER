@@ -37,6 +37,10 @@ var _lilies: Array = []         # [모델, 칸, x, z, 돌림, 크기]
 var _lily_y := PackedFloat32Array()   # 마지막으로 놓은 높이 (−1e9 = 숨김)
 var _lily_t := 0.0
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
+## (P1 성능) 꽃숲·소품·먼 숲 묶음 — 화면 자르기 + 멀리 덩이 (view/flora_batch.gd). 부모 노드 → FloraBatch
+var _batches := {}
+var flora_cull := true          # false = 화면 밖도 늘 그림 (캡처·시험)
+var flora_force_near := false  # true = 늘 가까이 모양 (예전 그림과 비교하는 캡처용)
 var _far_key := -1
 var _far_season := ""
 var _far_t := -1.0e9
@@ -105,6 +109,8 @@ func _ready() -> void:
 	_props = _node(self)
 	_lily_node = _node(self)
 	_far = _node(self)
+	for n: Node3D in [_trees, _props, _far]:
+		_batches[n] = FloraBatch.new(n)
 	mold_view = MoldView.new(v)     # [곰팡이·뚜껑]
 	add_child(mold_view)
 	crisis_view = CrisisView.new(v)   # [작은 위기]
@@ -159,11 +165,41 @@ func sync(dt: float, force := false) -> void:
 		if force or _lily_t >= 1.0:
 			_lily_t = 0.0
 			_sync_lilies(false)
+	_flora_lod()
 	_animate_fire()
 	_animate_live(dt)
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
+
+
+## (P1 성능) 꽃숲 묶음: 확대에 따라 멀리 덩이 · 화면 밖 자르기 (view/flora_batch.gd)
+func _flora_lod() -> void:
+	if _batches.is_empty() or not is_inside_tree():
+		return
+	var cam := get_viewport().get_camera_3d()
+	var ppu := 16.0
+	var vr := {"ok": false}
+	if cam != null:
+		if cam.projection == Camera3D.PROJECTION_ORTHOGONAL and cam.size > 0.0:
+			ppu = float(get_viewport().get_visible_rect().size.y) / cam.size
+		if flora_cull:
+			vr = FloraBatch.view_rect(cam, self, -2.0, 6.0)
+	for b: FloraBatch in _batches.values():
+		b.cull = flora_cull
+		b.update(1.0e9 if flora_force_near else ppu, vr)
+
+
+## 꽃숲 묶음 수 (시험·측정): {"total": 놓은 수, "drawn": 지금 그리는 수, "far": 멀리 덩이인가}
+func flora_stats() -> Dictionary:
+	var t := 0
+	var d := 0
+	var f := false
+	for b: FloraBatch in _batches.values():
+		t += b.n_total
+		d += b.n_drawn
+		f = f or b.far
+	return {"total": t, "drawn": d, "far": f}
 
 
 func _exit_tree() -> void:
@@ -932,6 +968,10 @@ func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: fl
 
 
 func _flush(parent: Node3D, groups: Dictionary, no_shadow: Array = []) -> void:
+	if _batches.has(parent):
+		(_batches[parent] as FloraBatch).set_groups(groups, no_shadow)
+		_flora_lod()
+		return
 	for c in parent.get_children():
 		c.queue_free()
 	for k: String in groups:
