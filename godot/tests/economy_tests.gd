@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	Market.today_override = "시험날"
-	run.timed(self, ["test_market_saturation", "test_territory", "test_chief_autonomous", "test_wish", "test_offerings", "test_forced_taking", "test_buy_building", "test_footpath", "test_split"])
+	run.timed(self, ["test_market_saturation", "test_territory", "test_chief_autonomous", "test_wish", "test_offerings", "test_forced_taking", "test_buy_building", "test_footpath", "test_split", "test_v5_food_gift_altar"])
 	Market.today_override = ""
 	Market.reset()
 
@@ -30,24 +30,88 @@ static func lab(seed_v := 3) -> Village:
 	return v
 
 
-## 같은 물건 60개째(61번째 단가)에 반값 — 현실 하루, 모든 병 합산 (BALANCE v3-2)
-func test_market_saturation() -> void:
-	print("== 장터 값 · 포화 (BALANCE v3-1·v3-2)")
+## BALANCE v5: 밀은 날로 못 먹음(죽 ×0.75) · 빵 사슬 · 거인이 준 몫은 제물로 안 나감 · 제단 크기 · 설계도로 아는 건물
+func test_v5_food_gift_altar() -> void:
+	print("== v5 — 죽·빵 · 거인이 준 몫 · 제단 크기 · 설계도")
+	Market.reset(10000.0)
+	var v := lab(21)
+	for k: String in Balance.FOODS:
+		v.stock[k] = 0.0
+	v.manna.clear()
+	v.manna_batches.clear()
+	v.stock["밀"] = 100.0
+	var left := v.consume(30.0)
+	check(left < 1e-6 and is_equal_approx(float(v.stock["밀"]), 60.0) and not ("밀" in Balance.FOODS),
+		"밀은 날로 못 먹는다 — 죽으로 끓이면 밀 40 → 먹을 것 30 (×%.2f)" % Balance.PORRIDGE_YIELD)
+	check(is_equal_approx(v.food_total(), 60.0 * Balance.PORRIDGE_YIELD), "먹을 것 합 = 밀 × %.2f (%.1f)" % [Balance.PORRIDGE_YIELD, v.food_total()])
+	check(float(Balance.B["화덕"]["out"]["빵"]) == Balance.BREAD_YIELD and Balance.BREAD_YIELD >= 2.0 * Balance.PORRIDGE_YIELD and Balance.label("화덕") == "공용 화덕"
+		and int(Balance.B["맷돌간"]["era"]) == 0 and int(Balance.B["화덕"]["era"]) == 0 and String(Balance.B["방앗간"]["replaces"]) == "맷돌간" and String(Balance.B["빵집"]["replaces"]) == "화덕",
+		"빵 사슬: 맷돌간·공용 화덕은 개척기부터 (밀 1 → 가루 1 → 빵 %.1f = 죽의 두 배) · 방앗간·빵집이 넓혀 지음" % Balance.BREAD_YIELD)
+	check(float(Balance.SPOIL_DAY["빵"]) < float(Balance.SPOIL_DAY["밀"]) * 0.25 and float(Balance.PRICE["빵"]) > 3.0 * float(Balance.PRICE["밀"]),
+		"빵은 오래 간다 (하루 %.1f%% vs 밀 %.0f%%) · 제물 값 ×%.1f" % [100.0 * float(Balance.SPOIL_DAY["빵"]), 100.0 * float(Balance.SPOIL_DAY["밀"]), float(Balance.PRICE["빵"])])
+	# 거인이 준 몫은 제물로 되돌아가지 않는다 (가격 연구 3장 ⑥ — 되팔기 막기)
+	var g := lab(22)
+	g.add_building("농장", 12.0, 12.0, true)
+	g.add_building("나무꾼", -12.0, 12.0, true)
+	g.stock["통나무"] = 200.0
+	Production.gift_add(g, "통나무", 200.0)
+	g.stock["설탕"] = 3000.0
+	Production.gift_add(g, "설탕", 3000.0)
+	var sp := g.surplus()
+	check(not sp.has("통나무") and not sp.has("설탕"), "하늘에서 내려와 나른 통나무·설탕은 남는 물건이 아니다 (%s)" % str(sp))
+	g.stock["통나무"] = 260.0
+	check(float(g.surplus().get("통나무", 0.0)) <= 60.0 - (g.enough("통나무") * Balance.OFFER_KEEP) + 1.0, "마을이 스스로 벤 몫만 남는 물건 (%.0f)" % float(g.surplus().get("통나무", 0.0)))
+	Production.gift_add(g, "밀", 50.0)
+	Production.gift_move(g, "밀", 50.0)
+	Production.gift_move(g, "밀가루", 20.0)
+	check(is_equal_approx(float(g.gift.get("밀가루", 0.0)), 30.0) and is_equal_approx(float(g.gift.get("빵", 0.0)), 20.0 * Balance.BREAD_YIELD),
+		"가공하면 거인 몫도 따라감 (밀 50 → 가루 50 → 빵 %.0f)" % (20.0 * Balance.BREAD_YIELD))
+	# 제단 크기 (SAVE.md 3.1)
+	var a := lab(23)
+	check(Altar.slots(a) == 1 and Altar.next(a)["cost"] == Balance.ALTAR_COST[0], "처음 돌무더기 제단 = 반나절치 (기도 1번) · 넓히기 %.0f" % Balance.ALTAR_COST[0])
+	var n0 := Market.notes
+	check(Altar.expand(a) and a.altar_level == 1 and Altar.slots(a) == 2 and Altar.rebuilding(a) and is_equal_approx(n0 - Market.notes, Balance.ALTAR_COST[0]),
+		"넓히면 판석 제단 = 하루치 · 주민이 다시 쌓는 중 (지폐 %.0f)" % (n0 - Market.notes))
+	check(String(Altar.next(a)["lock"]) != "", "다시 쌓는 동안·시대가 이르면 더 못 넓힘 (%s)" % Altar.next(a)["lock"])
+	var b := through(a)
+	check(b.altar_level == 1, "제단 단계는 저장된다")
+	# 설계도 · 처음엔 우물을 모름 (스스로 깨치거나 설계도)
+	var w := lab(24)
+	check(not VillageEra.can_build(w, "우물") and VillageEra.can_build(w, "맷돌간") and VillageEra.can_build(w, "화덕"), "처음엔 우물을 모른다 — 맷돌간·공용 화덕은 안다")
+	Production.give_blueprint(w, "우물")
+	check(VillageEra.can_build(w, "우물") and w.count_type("우물") == 1 and w.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("그림 종이")),
+		"설계도 → 지을 줄 알고 촌장이 곧바로 터를 잡음")
+	check(through(w).blueprints.has("우물"), "받은 설계도는 병에 저장된다")
 	Market.reset()
+
+
+static func through(v: Village) -> Village:
+	return Village.from_dict(bytes_to_var(var_to_bytes(v.to_dict())))
+
+
+## 같은 물건 MARKET_HALF개째에 반값 — 현실 하루, 모든 병 합산 (BALANCE v3-2 · v5: 60 → 600개 — 병 하루가 현실 5분이라 하루에 병 10일치가 팔림)
+func test_market_saturation() -> void:
+	print("== 장터 값 · 포화 (BALANCE v3-1·v3-2 · v5 반값 %d개)" % int(Balance.MARKET_HALF))
+	Market.reset()
+	var hh := int(Balance.MARKET_HALF)
 	check(is_equal_approx(Market.unit_price("빵", 1), 3.2), "빵 첫 개 3.2지폐")
-	check(is_equal_approx(Market.unit_price("빵", 61), 1.6), "61번째 단가 = 반값 (%.3f)" % Market.unit_price("빵", 61))
-	var got := Market.sell("빵", 60)
-	check(is_equal_approx(Market.quote("빵", 1), 1.6) and Market.notes > 0.0, "60개를 판 뒤 다음 하나는 1.6 (받은 %.1f지폐)" % got)
+	check(is_equal_approx(Market.unit_price("빵", hh + 1), 1.6), "%d번째 단가 = 반값 (%.3f)" % [hh + 1, Market.unit_price("빵", hh + 1)])
+	var got := Market.sell("빵", hh)
+	check(is_equal_approx(Market.quote("빵", 1), 1.6) and Market.notes > 0.0, "%d개를 판 뒤 다음 하나는 1.6 (받은 %.1f지폐)" % [hh, got])
+	var sum := 0.0
+	for i in 50:
+		sum += Market.unit_price("밀", i + 1)
+	check(absf(Market.quote("밀", 50) - sum) < 1e-6, "한꺼번에 거둔 값 = 하나씩 거둔 값의 합 (등비 합 %.3f)" % sum)
 	check(is_equal_approx(Market.quote("밀", 1), 1.0), "다른 물건은 따로 센다")
 	var a := lab(1)
 	var b := lab(2)
 	a.add_building("나무꾼", 10.0, 10.0, true)
 	b.add_building("나무꾼", 10.0, 10.0, true)
-	a.altar.append({"item": "통나무", "amt": 30, "t": a.t, "by": PackedInt32Array([a.people[0].id])})
-	b.altar.append({"item": "통나무", "amt": 30, "t": b.t, "by": PackedInt32Array([b.people[0].id])})
+	a.altar.append({"item": "통나무", "amt": hh / 2, "t": a.t, "by": PackedInt32Array([a.people[0].id])})
+	b.altar.append({"item": "통나무", "amt": hh / 2, "t": b.t, "by": PackedInt32Array([b.people[0].id])})
 	a.take_offering("통나무")
 	b.take_offering("통나무")
-	check(int(Market.sold["통나무"]) == 60 and is_equal_approx(Market.quote("통나무", 1), 0.9), "두 병이 같은 장터 — 합쳐서 60개 → 다음 단가 반값")
+	check(int(Market.sold["통나무"]) == hh and is_equal_approx(Market.quote("통나무", 1), 0.9), "두 병이 같은 장터 — 합쳐서 %d개 → 다음 단가 반값" % hh)
 	Market.today_override = "다음날"
 	check(is_equal_approx(Market.quote("빵", 1), 3.2), "현실 날짜가 바뀌면 값이 돌아온다")
 	Market.today_override = "시험날"
@@ -132,11 +196,11 @@ func test_chief_autonomous() -> void:
 		check(v.buildings.size() >= b0 + 4 and built >= 4, "%s 12시간: 촌장이 터 %d곳을 잡고 %d채 완공" % ["거인이 볼 때" if watched else "거인이 없을 때", v.buildings.size() - b0, built - 1])
 
 
-## 소원 편지 (기획서 6.7): 하루 1~2통, 들어주면 믿음↑ · 우선순위 맨 위 · 짓는 속도 ×1.5
+## 소원 편지 (기획서 6.7): v5 — 병 1.5~3일에 한 통 (병 하루 = 현실 5분이라 현실 하루 3~6통), 들어주면 믿음↑ · 우선순위 맨 위 · 짓는 속도 ×1.5
 func test_wish() -> void:
 	print("== 소원 편지 (기획서 6.7)")
 	var v := lab(5)
-	v.advance(3.0 * Balance.DAY)
+	v.advance(6.0 * Balance.DAY)
 	var wl := v.letters.filter(func(l: Dictionary) -> bool: return l["kind"] == "wish")
 	var per_day := {}
 	for l: Dictionary in wl:
@@ -145,7 +209,7 @@ func test_wish() -> void:
 	var most := 0
 	for d: int in per_day:
 		most = maxi(most, int(per_day[d]))
-	check(wl.size() >= 3 and most <= 2, "3일 동안 소원 편지 %d통, 하루 많아야 %d통 (하루 1~2통)" % [wl.size(), most])
+	check(wl.size() >= 2 and wl.size() <= 6 and most <= 2, "6일 동안 소원 편지 %d통, 하루 많아야 %d통 (병 1.5~3일에 한 통 — v5)" % [wl.size(), most])
 	var texts: Array = []
 	for l: Dictionary in wl:
 		texts.append(l["text"])
@@ -204,10 +268,24 @@ func test_offerings() -> void:
 		for p in v.people:
 			p.belief = belief
 		v._update_belief(0.0)
-		got.append(v.evening_offering().get("통나무", 0))
-	check(int(got[0]) == 12 and int(got[1]) == 40, "남는 통나무 40 (넉넉함 20의 절반을 남김) → 믿음 0: %d개 · 믿음 1: %d개 (0.3 / 1.0배)" % [got[0], got[1]])
+		var sp := float(v.surplus().get("통나무", 0.0))
+		var budget := v.people.size() * Balance.OFFER_VALUE_PER * 0.5 * v.offer_factor()
+		var want := mini(floori(sp * Balance.OFFER_SHARE * v.offer_factor("통나무")), floori(budget / Balance.PRICE["통나무"]))
+		var o := int(v.evening_offering().get("통나무", 0))
+		check(o == want, "믿음 %.0f: 남는 통나무 %.0f × ½(아침·저녁) × 비율 · 값의 상한(사람 수 × %.0f) → %d개 (예상 %d)" % [belief, sp, Balance.OFFER_VALUE_PER, o, want])
+		got.append(o)
+	check(int(got[0]) >= 1 and int(got[1]) > int(got[0]) * 2, "믿음이 깊을수록 더 바친다 — 믿음 0: %d개 · 믿음 1: %d개 (v5: 넉넉함이 인구에 맞게 늘고 기도는 아침·저녁 두 번)" % [got[0], got[1]])
+	var full := lab(8)
+	full.add_building("나무꾼", 12.0, 12.0, true)
+	full.stock["통나무"] = 50.0
+	full.evening_offering()
+	full.t += 0.5 * Balance.DAY
+	full.stock["통나무"] = 50.0
+	check(Altar.slots(full) == 1 and full.evening_offering().is_empty() and full.stock["통나무"] == 50.0,
+		"돌무더기 제단(1단계)은 기도 한 번치만 — 가득 차면 남는 것은 창고에 그대로 (SAVE.md 3.1 v5)")
 	var v := lab(8)
 	v.add_building("나무꾼", 12.0, 12.0, true)
+	v.altar_level = 3                    # 작은 사당 (사흘치) — 이틀 지난 제물이 창고로 돌아가는 규칙만 본다
 	var counts: Array = []
 	for d in 4:
 		v._expire_offerings()           # 이틀 지난 제물은 창고로 (그다음 창고를 같은 양으로 맞춤)
@@ -287,17 +365,18 @@ func test_forced_taking() -> void:
 	Market.reset()
 
 
-## 건물 사 주기 (기획서 6.7 · RESIDENT_AI 2.1): 지폐로 산 건물은 완성된 채 하늘에서 내려옴 = 기적
+## 건물 사 주기 (기획서 6.7 · RESIDENT_AI 2.1): v5 — 다 지은 건물이 내려오는 것은 소원의 [하늘에서 내려 주기] (설계도 값 × 2.5 = 우물 500)
 func test_buy_building() -> void:
-	print("== 건물 사 주기 (우물 600지폐)")
-	Market.reset(500.0)
+	var cost := float(Balance.SHOP["우물"]) * Balance.WISH_DROP_MULT
+	print("== 건물 사 주기 (우물 %.0f지폐 — 소원의 기적)" % cost)
+	Market.reset(cost - 100.0)
 	var v := lab(12)
-	check(v.buy_building("우물") == null, "지폐가 모자라면 못 산다 (500 < 600)")
-	Market.notes = 700.0
+	check(v.buy_building("우물") == null, "지폐가 모자라면 못 산다 (%.0f < %.0f)" % [cost - 100.0, cost])
+	Market.notes = cost + 100.0
 	v._update_belief(0.0)
 	var f0 := v.faith
 	var b := v.buy_building("우물")
-	check(b != null and b.built and b.bought and is_equal_approx(Market.notes, 100.0), "우물이 완성된 채 내려옴 · 남은 지폐 %.0f" % Market.notes)
+	check(b != null and b.built and b.bought and is_equal_approx(Market.notes, 100.0) and v.blueprints.has("우물"), "우물이 완성된 채 내려옴 · 남은 지폐 %.0f · 짓는 법도 앎" % Market.notes)
 	check(v.faith > f0 + 5.0 and v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("하늘에서 우물이")), "기적 — 믿음↑ (%.1f → %.1f)" % [f0, v.faith])
 	Market.reset()
 
@@ -320,7 +399,7 @@ func test_footpath() -> void:
 		r.steps.append(ResidentAI.walk(a.x, a.y))
 	r.steps.append(ResidentAI.act(1.0e9, "idle"))      # 다 걸으면 그 자리에 선다 (다른 행동을 고르지 않게)
 	var n := 0
-	while r.steps.size() > 1 and n < 2000:
+	while r.steps.size() > 1 and n < 60000:             # v5: 걸음이 현실 사람 걸음 (병 초로 240배 느림)
 		ResidentAI.update(v, r, 10.0)       # 몰아서 계산하는 긴 걸음 (10초)에도 길이 끊기지 않는다
 		n += 1
 	print("  24번 오간 뒤 길 값 %.1f (기준 %.0f) · 옆 칸 %.1f" % [v.path_at(mid.x, mid.y), Balance.PATH_AT, v.path_at(side.x, side.y)])

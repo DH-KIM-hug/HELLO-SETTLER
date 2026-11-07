@@ -21,7 +21,7 @@ static var mig_serial := 0            # 지금까지 뽑은 횟수 (꾸러미 se
 static var mig_seed := 0              # 거인의 뽑기 흐름 (0 = 처음 뽑을 때 정함)
 
 const LAMP_HOURS := [12, 16, 20, 24]                       # 단계별 등불 시간 (비운 동안 병이 흐르는 최대 시간)
-const LAMP_COST := [2000.0, 6000.0, 15000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1
+const LAMP_COST := [1500.0, 5000.0, 12000.0]               # 다음 단계 값 (지폐) — LAMP_COST[n] = n → n+1 (BALANCE v5 — 가격 연구 2장)
 const LAMP_NAMES := ["큰 기름병", "더 큰 등잔", "거인의 램프"]
 
 
@@ -103,11 +103,11 @@ static func unit_price(item: String, nth: int) -> float:
 ## 지금 amt개를 거두면 받을 값 (거두지는 않음)
 static func quote(item: String, amt: int) -> float:
 	_roll_day()
+	if amt <= 0:
+		return 0.0
 	var n0 := int(sold.get(item, 0))
-	var s := 0.0
-	for i in amt:
-		s += unit_price(item, n0 + i + 1)
-	return s
+	var q := pow(0.5, 1.0 / Balance.MARKET_HALF)          # 등비 합 (v5 — 반값 600개라 한 번에 수천 개도 바로)
+	return base_price(item) * pow(q, float(n0)) * (1.0 - pow(q, float(amt))) / (1.0 - q)
 
 
 ## amt개를 판다 → 받은 지폐 (지갑에 더함)

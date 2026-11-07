@@ -174,6 +174,7 @@ static func on_altar_built(v: Village, b: Building) -> void:
 	v.altar_pos = Vector2(b.x, b.y)
 	v.log_line("모닥불 곁에 돌 제단이 섰다. 사람들은 제단을 둘러싸고 처음으로 하늘의 분께 기도를 드렸다.")
 	gather_ring(v, FIRST_PRAYER, "첫 기도를 드리는 중")
+	v.staged_until = v.t + FIRST_PRAYER * 2.0      # v5: 첫 기도 장면까지는 예전 걸음 (Village.staged)
 	var c := v.chief()
 	if c != null and not c.sleeping:
 		v.speak(c, "하늘의 분이시여, 우리를 지켜 주소서", 8)

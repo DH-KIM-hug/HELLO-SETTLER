@@ -13,6 +13,7 @@ var incoming := {"판자": 0, "돌": 0}  # 나르는 중인 자재
 var worker := -1
 var in_buf: Dictionary = {}           # 가공 재료 (도착)
 var in_inc: Dictionary = {}           # 가공 재료 (나르는 중)
+var gift_in: Dictionary = {}          # v5: 들어온 재료 중 거인이 준 몫 (가공품으로 옮겨 감 — Production)
 var out: Dictionary = {}              # 건물 앞에 쌓인 산출물
 var timer := 0.0
 var ready_at := -1.0                  # 농장 첫 수확 시각

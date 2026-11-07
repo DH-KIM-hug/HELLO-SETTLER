@@ -21,6 +21,8 @@ static func can_build(v: Village, type: String) -> bool:
 		return false
 	if type == "약초꾼" and Codex.knows(v, "herb"):
 		return true
+	if not Production.knows(v, type):      # v5: 처음부터 아는 것 · 계시 · 설계도 · 스스로 깨침 (sim/production.gd)
+		return false
 	return int(Balance.B[type]["era"]) <= v.era
 
 

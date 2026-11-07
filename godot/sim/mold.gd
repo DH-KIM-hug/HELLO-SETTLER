@@ -357,7 +357,7 @@ func _rot(v: Village, n_gnaw: int, dt: float) -> void:
 		return
 	var rate := Balance.MOLD_ROT_DAY * minf(1.0, float(n_gnaw) / Balance.MOLD_ROT_FULL) * (0.5 if adapted() else 1.0)
 	var f := rate * dt / Balance.DAY
-	for k: String in Balance.FOODS:
+	for k: String in Balance.STORE_FOODS:
 		var have := float(v.stock.get(k, 0.0))
 		if have > 0.0:
 			v.stock[k] = have * (1.0 - f)

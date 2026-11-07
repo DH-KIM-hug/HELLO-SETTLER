@@ -300,17 +300,19 @@ func test_village_opening() -> void:
 	var h := func(x: float) -> String: return "-" if x < 0.0 else v.fmt_time(x)
 	print("  첫 오두막 %s · 첫 농장 %s · 첫 수확 %s · 낟알 %d번 · 첫 출생 %s · 마을 시대 %s" % [h.call(first_hut), h.call(first_farm), h.call(v.first_harvest_t), v.manna_falls, h.call(first_birth), h.call(era_t)])
 	print("  3일 뒤 인구 %d (출생 %d · 사망 %d · 굶주림 %d) · 건물 %d · 하루 계산 %.0f ms (10초 걸음, 물 60초 간격)" % [v.people.size(), v.stats["born"], v.stats["died"], v.stats["starved"], v.buildings.size(), ms / 3.0])
-	check(v.manna_falls >= 1 and v.book.any(func(e: Dictionary) -> bool: return e["t"] < 60.0 and String(e["text"]).contains("낟알")), "도착하자마자 하늘 낟알 (T0)")
+	check(v.manna_falls >= 1 and v.book.any(func(e: Dictionary) -> bool: return e["t"] < 60.0 and String(e["text"]).contains("낟알")), "도착하자마자 하늘 낟알 (T0 — 작은 시험 병만 저절로, v5 새 세상은 거인이 손으로)")
 	check(is_equal_approx(v.start_clock, 7.0 * Balance.HOUR) and v.fmt_time(0.0) == "1일차 07:00", "병 시계는 아침 7시에 시작 (기획서 4.1 · %s)" % v.fmt_time(0.0))
 	check(first_hut >= 0.0 and first_hut < 6.0 * Balance.HOUR, "첫 오두막이 첫날 오전에 (도착 후 %.1f시간)" % (first_hut / 3600.0))
 	check(first_farm >= 0.0 and v.cal_day(first_farm) == 1, "첫 농장이 1일차에 (%s)" % h.call(first_farm))
 	check(v.first_harvest_t >= 0.0 and v.cal_day(v.first_harvest_t) <= 2, "첫 수확 1~2일차 (%s)" % h.call(v.first_harvest_t))
 	check(v.manna_ended and v.manna_falls == 1, "낟알은 도착 직후 한 번뿐, 첫 수확 다음 새벽에 그침 (%d번, BALANCE 5장: 7시 도착 → 1회)" % v.manna_falls)
+	check(int(v.stats.get("first_bread", 0)) == 1, "사흘 안에 맷돌간 → 공용 화덕에서 첫 빵 (빵 사슬 — v5)")
 	var fest: Array = v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("첫 수확 축제"))
 	check(not fest.is_empty() and v.cal_day(fest[0]["t"]) == v.cal_day(v.first_harvest_t) + 1 and v.fmt_time(fest[0]["t"]).ends_with("06:00"),
 		"첫 수확 축제가 수확 다음 날 새벽 (%s)" % (h.call(fest[0]["t"]) if not fest.is_empty() else "-"))
 	check(first_birth >= 0.0 and first_birth <= Balance.DAY, "첫 출생 1일차 (첫 24시간 안, %s)" % h.call(first_birth))
-	check(era_t >= 0.0 and era_t <= 2.0 * Balance.DAY, "'마을' 시대 점수가 2일차 안에 참 (%s)" % h.call(era_t))
+	# BALANCE v5: 병 하루 = 현실 5분 → '마을'은 병 5~8일 (현실 1일차). 사흘 동안엔 차는 중 (예전: 2일차 안에)
+	check(era_t < 0.0 and v.era_pts >= 0.25 * Balance.ERA_NEED[0], "'마을' 시대 점수가 사흘 동안 차는 중 — 병 5~8일에 참 (%.0f / %.0f · %s)" % [v.era_pts, Balance.ERA_NEED[0], h.call(era_t)])
 	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "3일 동안 식량이 모자란 적 없음")
 	check(v.people.size() >= 11 and v.people.size() <= 18, "3일 뒤 인구 11~18 (%d)" % v.people.size())
 	check(bad.is_empty(), "물자·주민 값이 음수/NaN이 아니고 집 정원 초과 없음 %s" % ("" if bad.is_empty() else str(bad.slice(0, 3))))
@@ -373,6 +375,7 @@ func test_stump_stays() -> void:
 	var r: Resident = v.people[0]
 	var tr: Dictionary = v.trees[0]
 	var spot := Vector2(tr["x"], tr["y"])
+	tr["logs"] = 1                    # v5: 나무 한 그루 = 통나무 TREE_LOGS개 — 마지막 몫을 베면 그루터기
 	ResidentAI.run_op(v, r, ResidentAI.op("chop", {"tr": tr}))
 	r.carry = ""
 	r.carry_amt = 0.0
@@ -680,7 +683,8 @@ func test_fast_speeds() -> void:
 	fast_run(cf2, hours * Balance.HOUR, [1.0 / 60.0], 1.0e9)
 	var f1 := v1.food_total()
 	var f2 := vf2.food_total()
-	check(v1.people.size() == vf2.people.size() and absi(v1.buildings.size() - vf2.buildings.size()) <= 1 and absf(f1 - f2) <= maxf(4.0, 0.25 * maxf(f1, f2))
+	# v5: 첫 아기 보장이 도착 1시간 뒤부터라 (빈자리 있는 집이 서는 때가 걸음 크기에 따라 조금 다름) 6시간 안에 한쪽만 태어날 수 있다 → 인구 ±1
+	check(absi(v1.people.size() - vf2.people.size()) <= 1 and absi(v1.buildings.size() - vf2.buildings.size()) <= 1 and absf(f1 - f2) <= maxf(4.0, 0.25 * maxf(f1, f2))
 		and v1.check_invariants().is_empty() and vf2.check_invariants().is_empty(),
 		"1초 걸음과 1초=12시간의 병 %.0f시간: 인구 %d = %d · 건물 %d ~ %d · 식량 %.0f ~ %.0f · 값 이상 없음" % [hours, v1.people.size(), vf2.people.size(), v1.buildings.size(), vf2.buildings.size(), f1, f2])
 	# 3) 화면 예산: 한 화면 계산이 예산(+ 걸음 하나) 안 → 못 따라가면 실제 배속이 내려가고 칩에 작게

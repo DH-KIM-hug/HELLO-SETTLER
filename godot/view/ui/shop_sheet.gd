@@ -481,7 +481,7 @@ func press(item: String) -> void:
 	var r := Shop.buy(village, item)
 	if bool(r["ok"]):
 		GameAudio.fx("coins")
-		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % Balance.label(item))
+		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % String(Shop.card(village, item)["name"]))
 		bought.emit(item)
 	else:
 		GameAudio.fx("glass_tap_light", "Room", -8.0)

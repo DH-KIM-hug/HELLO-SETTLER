@@ -173,7 +173,7 @@ func test_awakening_and_altar() -> void:
 	check(not v.open_letters("wish").is_empty() and (v.t - tw) / 60.0 <= 30.0, "제단 뒤 첫 소원 편지 (병 %.0f분 뒤)" % ((v.t - tw) / 60.0))
 	var c := fmod(v.start_clock + v.t, Balance.DAY)
 	v.advance(fposmod(Balance.OFFER_HOUR * Balance.HOUR + 120.0 - c, Balance.DAY))
-	check(int(v.stats.get("offered", 0)) >= 2, "그 저녁부터 평소 저녁 기도 제물 (바친 횟수 %d)" % int(v.stats.get("offered", 0)))
+	check(v._offer_key == v.cal_day(v.t) * 2 + 1 and v.book.size() > 0, "그 저녁부터 평소 저녁 기도 (기도 번호 %d — v5: 남는 물건이 있을 때만 제물, 넉넉함이 인구에 맞게 늘어 첫날 저녁엔 없을 수 있음)" % v._offer_key)
 
 
 ## OPENING 3.1 v3.3: 2:00 톡 → 3:00 물 뿌리기 (뚜껑은 손짓마다 저절로) → 깨달음 → 제단 — ×12로 현실 10분 안 (자막은 톡 하나뿐)
@@ -302,7 +302,7 @@ func test_revelation_flow() -> void:
 	var kneel := v.people.filter(func(r: Resident) -> bool: return not r.steps.is_empty() and r.steps[0].get("anim", "") == "pray").size()
 	check(kneel >= 5, "깨어 있는 사람 %d명이 그 자리에서 무릎 꿇고 하늘을 봄" % kneel)
 	var un := Village.era_unlocks(1)
-	check("목조주택" in un and "방앗간" in un and "빵집" in un, "새로 열린 건물: %s" % ", ".join(un))
+	check("목조주택" in un and "방앗간" in un and "빵집" in Village.era_unlocks(2), "새로 열린 건물: %s (v5: 빵집은 읍내 — 공용 화덕을 넓힘)" % ", ".join(un))
 	check(not v.giant_reveal(), "점수가 다시 찰 때까지 또 계시 없음")
 	var c := through_bytes(v)
 	check(c.era == 1 and has_line(c, "새 시대를 열었다"), "저장/불러오기: 시대 1 · 연대기 줄")
@@ -335,10 +335,10 @@ func test_era_pace() -> void:
 		v.advance(minf(Balance.HOUR, end_day1 - v.t))
 	check(v.era == 0 and not v.era_full() and v.era_pts < Balance.ERA_NEED[0] * 0.8,
 		"내내 지켜봐도 1일차가 끝날 때 아직 개척기 (점수 %.0f / %.0f)" % [v.era_pts, Balance.ERA_NEED[0]])
-	while not v.era_full() and v.t < 3.0 * Balance.DAY:
+	while not v.era_full() and v.t < 12.0 * Balance.DAY:
 		v.advance(Balance.HOUR)
 	var d := v.t / Balance.DAY
-	check(v.era_full() and d >= 1.0 and d <= 2.0, "마을 시대 점수가 차는 때: 시작에서 %.2f일 (1~2일 — 모델 1.8일은 저녁 계시까지 기다린 값)" % d)
+	check(v.era_full() and d >= 3.0 and d <= 9.0, "마을 시대 점수가 차는 때: 시작에서 %.2f일 (BALANCE v5: 병 3~9일 = 현실 1일차 — 예전 1~2일)" % d)
 
 
 func test_offline_no_auto_reveal() -> void:
@@ -439,7 +439,10 @@ func test_chronicle_people() -> void:
 		nv = jw.place_kit(sp[1].x, sp[1].y)
 		Village.start_aware = false
 		nv.settlement_name = "새 무리"
-		var movers: Array[Resident] = [v.people[v.people.size() - 1], v.people[v.people.size() - 2]]
+		var movers: Array[Resident] = []      # 새 무리의 번호와 겹치지 않는 두 사람 (v5: 첫 아기가 일찍 태어나 마지막 두 사람의 번호가 새 무리 번호와 겹칠 수 있다)
+		for i in range(v.people.size() - 1, -1, -1):
+			if movers.size() < 2 and nv.person(v.people[i].id) == null:
+				movers.append(v.people[i])
 		v.move_people_to(nv, movers)
 	var moved := 0
 	for r in nv.people:

@@ -203,6 +203,11 @@ func _on_dawn(v: Village) -> void:
 			stats["dye"] += dye
 
 
+## 꽃잎을 이만큼까지만 쌓는다 — 꽃차 이틀치 + 물감 한 번치 (v5)
+static func petal_cap(v: Village) -> float:
+	return Balance.DYE_PETALS + v.people.size() * Balance.TEA_PER * 2.0
+
+
 ## 꽃차를 마신 날 — 행복 + (Village._update_happiness)
 func tea_on(v: Village) -> bool:
 	return v.t < tea_until
@@ -1014,6 +1019,8 @@ static func decide(v: Village, r: Resident) -> bool:
 func _gather(v: Village, r: Resident, d: Dictionary, hungry: bool) -> bool:
 	var st: String = d["st"]
 	var what := "greens" if hungry else ("petals" if st == "flower" else ("cotton" if st == "puff" else "greens"))
+	if what == "petals" and float(v.stock.get("꽃잎", 0.0)) >= petal_cap(v):
+		return false                      # v5: 꽃잎은 꽃차·물감에 쓸 만큼만 딴다 (창고에 149장씩 쌓이지 않게)
 	d["res"] = int(d["res"]) + 1
 	r.action = "flora"
 	r.last_action = "flora"

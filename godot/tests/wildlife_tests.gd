@@ -285,8 +285,8 @@ func test_rabbit_fields() -> void:
 	w._fields(v)
 	check(farmer.say == Wildlife.LINES["field_say"], "농부: \"%s\"" % farmer.say)
 	check(Wildlife.fence_needed(v, farmer, farm), "농부가 울타리를 칠 일")
-	for i in 30:
-		v.advance(120.0)
+	for i in 120:                         # v5: 걸음이 현실 사람 걸음 — 병 시간으로 더 걸린다 (예전 1시간 → 10시간 안)
+		v.advance(300.0)
 		if w.fenced.has(Wildlife.key(v, farm.id)):
 			break
 	check(w.fenced.has(Wildlife.key(v, farm.id)) and has_line(v, "울타리"), "농부가 울타리를 쳤다 (연대기)")

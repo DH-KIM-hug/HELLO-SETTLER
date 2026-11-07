@@ -503,18 +503,19 @@ func test_firewood() -> void:
 		var hm := v.bld(r.home)
 		r.x = hm.x
 		r.y = hm.y + 0.3
-	for i in 60:
+	var ticks := int(6.0 * Balance.FUEL_EVERY / 60.0)     # v5: 땔감 4시간에 1개 (예전 10분) — 그 여섯 배 동안 재서 같은 개수로 본다
+	for i in ticks:
 		Health.tick(v, 60.0, v.t)
 	var used0 := 20.0 - float(houses[0].in_buf["통나무"])
 	var inside := v.people[0]
 	var cold_no := v.people[2]
-	check(absf(used0 - 3.0) <= 1.0, "석조 주택: 추운 동안 20분마다 통나무 1개 (한 시간 %.0f개 — 보통 집 6개 × 0.5)" % used0)
+	check(absf(used0 - 3.0) <= 1.0, "석조 주택: 추운 동안 8시간마다 통나무 1개 (하루 %.0f개 — 보통 집 6개 × 0.5)" % used0)
 	check(houses[0].fuel_on and absf(inside.cold - Health.cold_of(v.temperature_at(inside.x, inside.y)) * 0.2) < 1e-4, "땔감 있는 집 안 추위 ×0.2 (%.2f)" % inside.cold)
 	check(not houses[1].fuel_on and absf(cold_no.cold - Health.cold_of(v.temperature_at(cold_no.x, cold_no.y)) * 0.6) < 1e-4, "땔감 없는 집 안 ×0.6 (%.2f)" % cold_no.cold)
 	houses[1].in_buf["통나무"] = 20.0
-	for i in 60:
+	for i in ticks:
 		Health.tick(v, 60.0, v.t)
-	check(absf((20.0 - float(houses[1].in_buf["통나무"])) - 6.0) <= 1.0, "목조 주택: 10분마다 1개 (한 시간 %.0f개)" % (20.0 - float(houses[1].in_buf["통나무"])))
+	check(absf((20.0 - float(houses[1].in_buf["통나무"])) - 6.0) <= 1.0, "목조 주택: 4시간마다 1개 (하루 %.0f개)" % (20.0 - float(houses[1].in_buf["통나무"])))
 	# 운반: 추운 철이면 창고 통나무를 집으로 (기존 운반 일)
 	v.cold_season = Health._cold_ahead(v, v.t)
 	v.stock["통나무"] = 30.0
@@ -528,7 +529,7 @@ func test_firewood() -> void:
 	var spring := lab(2, 2, 4, 15)
 	set_clock(spring, 1, 4.0)
 	spring.cold_season = Health._cold_ahead(spring, spring.t)
-	check(not spring.cold_season and spring.enough("통나무") == Balance.ENOUGH["통나무"], "4월 중순 온대: 땔감 철 아님")
+	check(not spring.cold_season and spring.enough("통나무") == Balance.ENOUGH["통나무"] + Balance.ENOUGH_PER["통나무"] * spring.people.size(), "4월 중순 온대: 땔감 철 아님 (넉넉함 = 바탕 + 사람 수 — v5)")
 
 
 # ───────────────────────── 3. 부상 ─────────────────────────

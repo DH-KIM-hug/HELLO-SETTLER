@@ -764,15 +764,17 @@ func test_catchup_and_letter() -> void:
 ## 등불 업그레이드 (SAVE.md 3 · SHOP.md): 16 → 20 → 24시간, 2,000 / 6,000 / 15,000 지폐, 영구 (거인 묶음에 저장)
 func test_lamp_upgrade() -> void:
 	var sm := manager()
-	Market.notes = 1999.0
-	check(not sm.buy_lamp_upgrade() and Market.lamp_level == 0 and Market.notes == 1999.0, "지폐가 모자라면 등불을 올리지 못한다")
-	Market.notes = 25000.0
+	var first := float(Market.LAMP_COST[0]) - 1.0     # BALANCE v5: 1,500 / 5,000 / 12,000 (예전 2,000 / 6,000 / 15,000)
+	Market.notes = first
+	check(not sm.buy_lamp_upgrade() and Market.lamp_level == 0 and Market.notes == first, "지폐가 모자라면 등불을 올리지 못한다")
+	var all := float(Market.LAMP_COST[0]) + float(Market.LAMP_COST[1]) + float(Market.LAMP_COST[2])
+	Market.notes = all + 2000.0
 	var hours: Array = []
 	for i in 3:
 		var nx := Market.next_lamp()
 		check(sm.buy_lamp_upgrade(), "등불 올리기 %d번째 (%s · %d 지폐)" % [i + 1, nx["name"], int(nx["cost"])])
 		hours.append(Market.lamp_hours())
-	check(hours == [16, 20, 24] and absf(Market.notes - 2000.0) < 1e-6, "등불 16 → 20 → 24시간, 모두 23,000 지폐 (남은 %.0f)" % Market.notes)
+	check(hours == [16, 20, 24] and absf(Market.notes - 2000.0) < 1e-6, "등불 16 → 20 → 24시간, 모두 %.0f 지폐 (남은 %.0f)" % [all, Market.notes])
 	check(Market.next_lamp().is_empty() and not sm.buy_lamp_upgrade() and Market.lamp_hours() == 24, "24시간이 끝 — 더 올릴 수 없다")
 	# 저장 → 다시 켜기 (거인 묶음)
 	Market.lamp_level = 0
@@ -796,6 +798,7 @@ func test_offline_offerings() -> void:
 	v.water.offline = true
 	v.advance(1.5 * Balance.DAY)
 	v.take_all()                                      # 떠나기 전 제단을 비움
+	v.altar_level = 3                                 # v5: 제단 크기 = 쌓이는 양 (작은 사당 = 사흘치 — SAVE.md 3.1)
 	var c := CatchUp.new(v, 4.0 * Balance.DAY, 4.0 * Balance.DAY)   # 시험용 긴 등불 (나흘) — 이틀 상한이 걸릴 만큼
 	check(v.altar_hold, "따라잡는 동안은 제단 상한이 쉰다")
 	var l := c.finish()
@@ -834,6 +837,9 @@ func test_offline_offerings() -> void:
 	w.water.offline = true
 	w.advance(1.0 * Balance.DAY)
 	w.take_all()
+	if w.count_type("나무꾼") == 0:      # v5: 넉넉함이 인구에 맞게 늘고 먹을 것은 밭이 먹는 만큼 거둘 때만 바쳐 이틀째엔 남는 게 없을 수 있다 — 남는 통나무를 둠
+		w.add_building("나무꾼", w.center.x + 9.0, w.center.y - 9.0, true)
+	w.stock["통나무"] = 200.0
 	sm.register_jar(1, w, JarClock.new(w), {"name": "시험"})
 	var c2 := CatchUp.new(w, 30.0 * Balance.HOUR)
 	var l2 := c2.finish()

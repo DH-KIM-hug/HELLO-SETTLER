@@ -332,8 +332,12 @@ func test_tweeze() -> void:
 	var dr := SkyDrops.drop(v, "나무젓가락", p)
 	check(bool(dr["ok"]), "하늘에서 통나무 산이 떨어짐")
 	var o: Dictionary = dr["drop"]
-	var to := p + Vector2(20, 0)
-	var rm := v.tweeze(p, to)
+	var rm := {}
+	for i in 8:                           # 비어 있는 쪽으로 (v5: 걸음이 느려 둘레에 짓는 터·사람이 다르게 남아 있을 수 있다)
+		var to := p + Vector2(20, 0).rotated(TAU * i / 8.0)
+		rm = v.tweeze(p, to)
+		if bool(rm["ok"]):
+			break
 	var moved := Vector2(float(o["x"]), float(o["y"])).distance_to(p)
 	check(bool(rm["ok"]) and bool(rm["moved"]) and o in v.drops and absf(moved - GiantHand.MOVE_MAX) < 0.01, "떨어진 물건을 짧은 거리(%.0f칸)만 옮겨 놓음" % GiantHand.MOVE_MAX)
 	var at := Vector2(float(o["x"]), float(o["y"]))

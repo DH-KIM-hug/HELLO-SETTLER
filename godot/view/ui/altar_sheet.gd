@@ -234,6 +234,7 @@ func _state_sig() -> String:
 	var items := village.altar_items()
 	var s := "%s|%d|%s|%s|%s|%d|%s|%s|%d|" % [str(items), int(Market.notes), str(force_open), _force_item, str(Market.sold), Market.lamp_level,
 		str(village.revelation_pending()), str(village.altar_built), village.era]
+	s += "%d|%s|" % [village.altar_level, str(Altar.rebuilding(village))]
 	for l: Dictionary in village.open_letters():
 		s += "%d;" % int(l["id"])
 	if force_open:
@@ -273,6 +274,17 @@ func _refresh() -> void:
 		_card(offer_box, "%s × %d" % [item, n], "장터 값 %s 지폐%s" % [_num(val), fav], "받기", _on_take.bind(item), true, item)
 	take_all_btn.visible = items.size() > 1
 	take_all_btn.text = "모두 받기 (%s 지폐)" % _num(total)
+	if village.altar_built:                   # v5 제단 크기 (SAVE.md 3.1): 담는 양 + 넓히기
+		var dn := Altar.days(village)
+		var how := "반나절치" if dn < 1.0 else "%d일치" % int(dn)
+		var sub := "%s — 기도 %d번(%s)까지 쌓여요%s" % [Altar.level_name(village), Altar.slots(village), how, " · 가득 찼어요" if Altar.full(village) else ""]
+		var nx := Altar.next(village)
+		if nx.is_empty():
+			_label(offer_box, sub, "Small")
+		else:
+			var lk := String(nx["lock"])
+			var bt := "넓히기 %s" % _num(float(nx["cost"])) if lk == "" else lk
+			_card(offer_box, "제단 넓히기 → %s" % nx["name"], sub, bt, _on_expand, lk == "" and Market.can_pay(float(nx["cost"])))
 	# 소원 편지
 	var wl := village.open_letters()
 	if wl.is_empty():
@@ -377,6 +389,12 @@ func _on_take(item: String) -> void:
 	if village.take_offering(item) > 0.0:
 		GameAudio.fx("coins")                  # 지폐 받기 (짤랑) + "고맙습니다!" (AUDIO.md 3 · 7)
 		GameAudio.say("offering_taken")
+	_refresh()
+
+
+func _on_expand() -> void:
+	if Altar.expand(village):
+		GameAudio.fx("coins")
 	_refresh()
 
 
