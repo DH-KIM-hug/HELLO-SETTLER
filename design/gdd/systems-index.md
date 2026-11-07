@@ -34,8 +34,8 @@
 | 8 | 유전·겉모습 ✅ | Gameplay | MVP | Not Started | — | 1 |
 | 9 | 건강·나이·죽음 ✅ | Gameplay | MVP | Not Started | — (docs/HEALTH.md) | 1, 8, 10 |
 | 10 | 필요와 기분 (배고픔·행복·두려움) (inferred) 🔄 | Gameplay | MVP | Designed | design/gdd/needs-and-mood.md | 1, 8, 15 |
-| 11 | 하루 일정·일자리 배정 ✅ | Gameplay | MVP | Not Started | — | 8, 10, 13, 15 |
-| 12 | 움직임·길 찾기·나르기·길과 도로 + **손에 든 물건·더미·멈춤 표시** (막힌 곳이 화면에 보임 — 기둥 2, 그림은 28) ✅ | Gameplay | MVP | Not Started | — | 2, 11 |
+| 11 | 하루 일정·일자리 배정 ✅ | Gameplay | MVP | Designed | design/gdd/daily-schedule.md | 8, 10, 13, 15 |
+| 12 | 움직임·길 찾기·나르기·길과 도로 + **손에 든 물건·더미·멈춤 표시** (막힌 곳이 화면에 보임 — 기둥 2, 그림은 28) ✅ | Gameplay | MVP | Designed | design/gdd/movement-carry.md | 2, 11 |
 | 13 | 건물·짓기 ✅ | Economy | MVP | Not Started | — | 2, 8, 18 |
 | 14 | 시대 ✅ | Progression | MVP | Not Started | — | 13, 17, 20 |
 | 15 | 생산 사슬 (밀·빵·송사리·거대 과일, 애벌레 = 31) ✅ | Economy | MVP | Designed | design/gdd/production-chain.md | 13, 6, 3 |
