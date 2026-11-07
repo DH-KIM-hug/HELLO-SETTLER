@@ -46,7 +46,7 @@
 | 20 | 깨달음·믿음 ✅ | Narrative | MVP | Designed | design/gdd/awakening-altar.md | 7, 8, 17 |
 | 21 | 제단·공물 ✅ | Economy | MVP | Designed | design/gdd/awakening-altar.md | 20, 16 |
 | 22 | 거인의 지갑·상점·설계도·이주민 ✅ | Economy | MVP | Not Started | — (docs/SHOP.md) | 21, 16 |
-| 23 | 소원 들어주기·계시 🔄 | Gameplay | MVP | Not Started | — (EVENTS_STAGING 6d·3b) | 20, 19, 22, 18 |
+| 23 | 소원 들어주기·계시 🔄 | Gameplay | MVP | Designed | design/gdd/wishes-revelations.md | 20, 19, 22, 18 |
 | 24 | 카메라·확대·병 안 ↔ 방 ✅ | UI | MVP | Not Started | — (docs/GIANT_ROOM.md) | 2 |
 | 25 | 사건 연출 ✅ | Narrative | MVP | Not Started | — (EVENTS_STAGING) | 7, 24 |
 | 26 | 처음 겪는 사건 안내·거인의 수첩·튜토리얼 ✅ | Meta | MVP | Not Started | — (OPENING 3.1b) | 7, 19 |
