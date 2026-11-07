@@ -50,6 +50,7 @@
 - 그림 캡처는 창이 필요한 `godot/tools/shot_*.gd` (서브에이전트가 찍음), 결과는 `godot_shots/`.
 - 3D: 블렌더(`/opt/homebrew/bin/blender`)로 `godot/art/src/build_*.py` → `godot/art/models/`. 한 번에: `bash godot/art/src/build_all.sh [이름]`. 블렌더로 할 수 있는 건 블렌더로, 그림(이미지)은 아이콘·로고·UI·콘셉트·칠한 결(텍스처 아틀라스)만.
 - 소리·목소리·음악: ElevenLabs (`godot/tools/gen_sfx.py`, `tools/gen_music.py`, `tools/gen_voice.py`), 키는 `~/.config/elevenlabs/key` — **절대 출력·커밋하지 않는다.** mp3로.
+- **엔진 참고 문서**: `docs/engine-reference/godot/` (4.7.2 — 4.4~4.7 바뀐 점·쓰지 말 것·모바일 렌더러·내보내기, 공식 출처만, 2026-11-07). 4.4 이후 API는 기억 대신 여기를 먼저 본다 (근거 없는 항목은 NOT SOURCEABLE로 표시됨).
 - 시간 기준: **보통 = 병의 하루가 현실 5분**, 주민은 보통 이하에서 제 걸음, 비운 동안 12시간 = 병 3일 (설정 1.5/3/6일), 등불이 상한.
 
 ### 서브에이전트에게 맡길 때
