@@ -1310,8 +1310,13 @@ func _update_building(b: Building, dt: float) -> void:
 		return
 	var outs: Dictionary = d["out"]
 	var all_full := true
+	var waiting := float(b.out.get("밀", 0.0))
+	if b.type == "농장":                # (걸음 다시 2026-11-07) 밭이 여럿이면 다른 밭 앞에서 나르기를 기다리는 밀도 센다
+		for o in buildings:
+			if o != b and o.type == "농장":
+				waiting += float(o.out.get("밀", 0.0))
 	for k in outs:
-		if not (float(stock.get(k, 0.0)) + float(b.out.get(k, 0.0)) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5) · 밀도 넉넉하면 멈춤 (BALANCE v4-4)
+		if not (float(stock.get(k, 0.0)) + (waiting if k == "밀" else float(b.out.get(k, 0.0))) >= enough(k)):     # 좋아하시는 물건은 더 (×1.5) · 밀도 넉넉하면 멈춤 (BALANCE v4-4)
 			all_full = false
 			break
 	if all_full:

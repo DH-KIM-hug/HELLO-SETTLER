@@ -15,7 +15,11 @@
 class_name ResidentModel
 extends Node3D
 
-const STEP_HZ := 1.8              # 걸음 주기 (초당 왕복) — 걷기 동작 길이 20프레임/30fps = 1.5회/초 → speed_scale로 맞춤
+## 걸음 동작이 1배속일 때 디딘 발이 몸 뒤로 미는 빠르기 (칸/초, 모델 배율 1 기준 — tools/measure_stride.gd로 잰 값).
+## 동작 빠르기 = 땅 위 실제 빠르기 ÷ (이 값 × 모델 배율) → 발이 미끄러지지 않는다 (GD 6.6 '걸음 다시' 2026-11-07)
+const STRIDE := {"walk": 1.82, "carry": 1.60, "run": 3.10, "walk_elder": 0.91}
+const GROUND_NORMAL := 1.0        # 땅 빠르기를 모를 때(초상화·사진) 어른 걸음 = 보통 배속 1초에 1칸 (Balance.WALK × 288)
+const GROUND_EASE := 6.0          # 잰 땅 빠르기를 부드럽게 따라가는 정도 (1/초)
 const PARTS := "resident_props"   # 소품: art/models/resident_props.glb (Art.parts)
 const BODY := "res://art/models/resident.glb"
 const FACE_TEX := "res://art/models/resident_face.png"
@@ -184,7 +188,9 @@ var _clip_now := ""
 var _action := ""               # 시뮬레이션 행동 (r.action: social · rest · play …) — 같은 동작이라도 클립을 달리 고름
 var _job_name := ""
 var _rng := RandomNumberGenerator.new()
-var _rate := 1.0                # 사람마다 조금 다른 동작 빠르기
+var _rate := 1.0                # 사람마다 조금 다른 동작 빠르기 (걸음 동작은 땅 빠르기를 따르므로 제외)
+var _ground := -1.0             # 땅 위에서 움직이는 빠르기 (칸/현실 초, village_view가 move_to로 잼) — -1 = 모름
+var _gpos := Vector3.INF
 var _base := ""                 # 지금 기본 클립 (사이 동작이 끝나면 돌아올 것)
 var _var_clip := ""             # 지금 끼어 튼 사이 동작 ("" = 없음)
 var _var_left := 0.0            # 사이 동작 남은 시간 (초)
@@ -1137,7 +1143,7 @@ func tick(dt: float) -> void:
 		if c != _var_clip:                 # 기본 클립: 엇갈린 자리에서 (사이 동작은 처음부터 — 몸짓 하나)
 			_player.seek(_rng.randf() * _player.get_animation(c).length, false)
 		_clip_now = c
-	_player.speed_scale = _speed(c) * _rate
+	_player.speed_scale = _speed(c) * (1.0 if STRIDE.has(c) else _rate)
 	_skip_dt += dt
 	if not lod_close and not _skip:         # 멀리 LOD: 동작은 두 화면에 한 번 (작게 보여 티 안 남, CPU 절반)
 		_skip = true
@@ -1149,11 +1155,23 @@ func tick(dt: float) -> void:
 
 
 func _speed(c: String) -> float:
-	if c == "walk" or c == "carry":
-		return STEP_HZ / 1.5 * _gait
-	if c == "walk_elder":
-		return _gait / 0.85
+	if STRIDE.has(c):
+		var g := _ground
+		if g < 0.0:                     # 모름: 보통 배속의 제 걸음 (아이·노인 비율 · '굼뜬' 걸음걸이)
+			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else (Balance.WALK_ELDER / 0.85 if look.get("elder", false) else 1.0))
+		return clampf(g / (float(STRIDE[c]) * absf(scale.x) * pose.scale.y), 0.0, 8.0)
 	return 1.0
+
+
+## 자리 옮기기 + 땅 위 빠르기 재기 (화면 dt초 동안 옮긴 거리 — 걸음 동작 빠르기를 여기에 맞춤). 순간이동은 재지 않는다
+func move_to(p: Vector3, dt: float) -> void:
+	if dt > 0.0 and _gpos != Vector3.INF:
+		var d := Vector2(p.x - _gpos.x, p.z - _gpos.z).length()
+		if d < 3.0:
+			var sp := d / dt
+			_ground = sp if _ground < 0.0 else lerpf(_ground, sp, clampf(dt * GROUND_EASE, 0.0, 1.0))
+	position = p
+	_gpos = p
 
 
 ## 동작 자세 — 그 동작의 t초 자세 (섞지 않음: 사진 도구 · 시험)
