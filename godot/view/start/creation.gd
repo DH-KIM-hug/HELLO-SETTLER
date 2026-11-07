@@ -659,7 +659,7 @@ func _lid_closed() -> void:
 	step = "lapse"
 	jar.cork.position.y = CreationJar.CORK_C
 	_show_next(false)
-	_say("……")
+	_say("유리병에 이슬이 맺히고,\n흘러내리며 강이 생겨요.")
 	_lapse_t = 0.0
 	_start_gen()
 	jar.shot("lapse", 0.0 if instant else 1.5)
