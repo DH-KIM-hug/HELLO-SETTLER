@@ -4,13 +4,13 @@
 ##
 ## 닫힌 병의 생태 (1): 호수마다 물고기(송사리) 무리의 수를 센다. **수가 참값이다** — 화면은 카메라 곁만 (view/animal_view.gd).
 ##   하루 한 번 (새벽 6시): 물 넓이 → 상한, 로지스틱 증가 (한 마리만 남으면 늘지 않는다), 사라짐 (연대기 "마지막 물고기가 …에서 사라졌다.").
-##   한 시간마다: 생선·고기가 상함 (소금이 있으면 덜 — 절임·훈제는 나중).
+##   상함은 Production.spoil (표 하나 Balance.SPOIL_DAY — 새벽). 여기는 소금 규칙(SALT_KEEP·SALT_MIN)만.
 ## 낚시 (2): 어부(물가) — 한 번 던질 때마다 잡힐 확률(숙련), 하루에 어부마다 숙련만큼, 그 호수 물고기의 12%까지 (지혜를 알면 10%).
 ##   아이·노인은 쉬는 시간에 물가에서 낚싯대를 드리운다 (식량 조금, 행복 +). 첫 물고기를 낚은 아이는 연대기에 한 줄.
 ## 큰 짐승 없음 (E3-12): 사슴·토끼·늑대·멧돼지·들양·들소는 살지 않는다 — 옛 저장의 무리는 불러올 때 버린다 (LEGACY).
 ##   사냥꾼 오두막은 열쇠만 남긴다 (옛 저장의 건물 — 일감 없음, 상점에도 없음). 토끼·멧돼지 밭 피해·울타리·늑대 울음도 없음.
 ## 작은 생물 (E3-12): 무당벌레·달팽이·메뚜기·나비·딱정벌레·꿀벌은 화면만의 둘레 생물 (view/fauna_view.gd — 수를 세지 않음).
-##   애벌레만 여기서 자리를 정한다 (bugs — 무리마다 몇 마리, 날마다 다른 꽃 곁): 강아지가 짖는 상대 (sim/dogs.gd). 애벌레·고치·나비 한살이는 E3-9.
+##   애벌레 한살이(알 → 애벌레 → 고치 → 나비)는 sim/caterpillars.gd (production-chain R7-5) — bugs는 그 산 애벌레 자리의 사본 (강아지·화면).
 ## 처음 물고기 (1 · 창조 '부화'): 넓은 세상은 첫 걸음에 호수마다 상한의 35~50%에서 시작한다.
 ## 이 파일 밖의 고리: Village.step (step) · Village._update_building (field_mult) · Village._update_happiness (happy) ·
 ##   Village.chief_build (want) · VillageEra.spot_center (spot_center) · ResidentAI.decide (decide) · work_task (has_work · work_task ·
@@ -27,10 +27,6 @@ const SPEC := {
 }
 ## 화면 모델 — 물고기 + 창조 오프닝의 '생명의 씨앗' 연출이 아직 보여 주는 옛 짐승 (view/start/creation_release.gd — A28에서 다시)
 const MODEL := {"fish": "fish_a", "deer": "deer", "rabbit": "rabbit", "wolf": "wolf", "boar": "boar", "sheep": "wild_sheep", "aurochs": "aurochs"}
-# 애벌레 (E3-12 둘레 생물 중 하나 — 강아지가 짖는 상대): 무리마다 BUGS마리, 마을 가운데에서 BUG_R_LO~HI칸 마른 땅, 날마다 자리를 바꿈
-const BUGS := 3
-const BUG_R_LO := 4.0
-const BUG_R_HI := 14.0
 const DAWN_H := 6.0
 const LAKE_R := 20.0                    # (정함) 호수 무리가 세는 물 넓이 반지름
 const SMALL_LAKE_R := 9.0               # 소형 병 호수
@@ -50,9 +46,11 @@ const FUN_TIME := 600.0
 const FUN_CATCH := 0.3
 const FUN_FOOD := 1.0
 const HAPPY_FISH := 0.03                # 낚시한 날 행복 +
-# 상함 (하루 몫) — 소금이 있으면 ×0.5 (절임 — 훈제는 나중)
-const SPOIL := {"생선": 0.30, "고기": 0.10}
+# 상함: 표는 Balance.SPOIL_DAY 하나 (production-chain R4 — Production.spoil이 새벽에). 여기는 소금 규칙만 —
+# 창고에 소금이 SALT_MIN 이상이면 생선·고기 상함 ×SALT_KEEP (절임 — 훈제는 나중)
 const SALT_KEEP := 0.5
+const SALT_MIN := 5.0
+const HUNT_POP := 10                    # 촌장이 애벌레 잡이 일터를 짓는 인구 (마을 시대 — 식량 다양성)
 # 처음 물고기: 창조의 부화 동안 늘어 상한의 이만큼에서 시작 (WILDLIFE 1 · OPENING — 부화하는 동안 생명이 자랐다)
 const FISH_START_LO := 0.35
 const FISH_START_HI := 0.50
@@ -80,7 +78,7 @@ var day_i := -1                       # 마지막으로 하루 계산을 한 날
 var _hacc := 0.0
 var gone: Dictionary = {}             # 종 → 병에서 사라진 때 (닫힌 병 — 다시 넣어 주기 전엔 그대로)
 var firsts: Dictionary = {}           # "fish"·"kid_fish" → t
-var bugs: Array = []                  # 애벌레 {sid, x, y, i} — 무리마다 BUGS (날마다 자리를 바꿈 — 화면·강아지)
+var bugs: Array = []                  # 산 애벌레 자리 사본 {sid, x, y, i} (sim/caterpillars.gd — 화면·강아지)
 var bug_day := -1
 var fenced: Dictionary = {}           # (옛 저장) 울타리 친 밭 "sid:밭 id" → 때 — 화면의 말뚝만
 var carry: Dictionary = {}            # (옛 저장 자리) 메고 오는 것 — 이제 비어 있음
@@ -282,25 +280,22 @@ func _quotas(_v: Village) -> void:
 		h["quota"] = int(floorf(int(h["n"]) * (FISH_FRAC_WISE if _wise else FISH_FRAC)))
 
 
-# ───────────────────────── 애벌레 자리 (E3-12) ─────────────────────────
-## 무리마다 BUGS마리 — 마을 가운데 둘레의 마른 땅 (건물 위는 피함). 자리는 (무리, 날, 번호)로 정한 값 — 난수 흐름을 쓰지 않는다
+# ───────────────────────── 애벌레 자리 (E3-12 → production-chain R7-5) ─────────────────────────
+## 애벌레는 이제 수를 센다 (sim/caterpillars.gd — 무리마다 꽃 무리의 알·애벌레·고치·나비). 여기 bugs는 그 산 애벌레의 자리 사본
+## (강아지가 짖는 상대 · 화면 — {sid, x, y, i = 애벌레 id}). 한 시간마다·새벽마다 다시 모은다 (난수 없음)
 func _place_bugs(v: Village) -> void:
-	var di := _day_idx(v)
-	if di == bug_day and not bugs.is_empty():
-		return
-	bug_day = di
+	bug_day = _day_idx(v)
 	bugs.clear()
 	for q: Village in group(v):
-		for i in BUGS:
-			for tryn in 8:
-				var hsh := _hash3(q.sid, di, i * 17 + tryn)
-				var a := hsh.x * TAU
-				var d := lerpf(BUG_R_LO, BUG_R_HI, hsh.y)
-				var p := q.center + Vector2(cos(a), sin(a)) * d
-				if not q.water.inside(p.x, p.y, 2.0) or q.water_at(p.x, p.y) or _on_building(q, p):
-					continue
-				bugs.append({"sid": q.sid, "x": p.x, "y": p.y, "i": i})
-				break
+		if q.caterpillars == null:
+			continue
+		for c: Dictionary in q.caterpillars.live_cats():
+			bugs.append({"sid": q.sid, "x": float(c["x"]), "y": float(c["y"]), "i": int(c["id"])})
+
+
+## 애벌레가 생기거나 잡히면 곧바로 사본을 고침 (Caterpillars가 부름)
+func refresh_bugs(v: Village) -> void:
+	_place_bugs(v)
 
 
 static func _hash3(a: int, b: int, c: int) -> Vector2:
@@ -323,14 +318,7 @@ func bugs_of(v: Village) -> Array:
 
 # ───────────────────────── 한 시간마다 ─────────────────────────
 func _hour(v: Village) -> void:
-	for q: Village in group(v):
-		var salt := float(q.stock.get("소금", 0.0)) >= 5.0
-		for item: String in SPOIL:
-			var have := float(q.stock.get(item, 0.0))
-			if have <= 0.0:
-				continue
-			var p := float(SPOIL[item]) * (SALT_KEEP if salt else 1.0) * Discovery.keep_mult(q)     # 발견 W2 진흙 — 질그릇 항아리 ×0.6
-			q.stock[item] = have * pow(1.0 - p, 1.0 / 24.0)
+	_place_bugs(v)
 	_wise = false
 	for q: Village in group(v):
 		if Codex.knows(q, "fish_wisdom"):
@@ -399,6 +387,10 @@ static func want(v: Village) -> String:
 		var h := w._nearest_live(v, "fish", v.center, v.territory_r() + 6.0)
 		if not h.is_empty() and int(h["n"]) >= 6 and shore_point(v, v.center, v.territory_r()) != null:
 			return "어부"
+	# 애벌레 잡이 (사냥꾼 키 — production-chain R1-5): 꽃 무리에 애벌레가 살고, 마을이 열 명 넘으면
+	if v.count_type("사냥꾼") == 0 and v.people.size() >= HUNT_POP and VillageEra.can_build(v, "사냥꾼") \
+			and v.caterpillars != null and not v.caterpillars.cats.is_empty():
+		return "사냥꾼"
 	return ""
 
 

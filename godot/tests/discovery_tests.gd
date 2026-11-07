@@ -132,14 +132,14 @@ func test_clay() -> void:
 	check(has_line(v, "진흙으로 그릇을 빚어"), "연대기: 진흙 그릇")
 	check(v.era_pts > pts0 or v.era_pts >= Balance.ERA_NEED[v.era], "시대 점수 +10")
 	check(is_equal_approx(v.enough("생선"), enough0 * Discovery.CLAY_STORE) and Discovery.keep_mult(v) == Discovery.CLAY_KEEP, "효과: 저장 항아리 (생선 쌓는 양 %.0f → %.0f) · 덜 상함" % [enough0, v.enough("생선")])
-	# 상함이 실제로 줄어든다 (Wildlife 한 시간)
+	# 상함이 실제로 줄어든다 (새벽 상함 — Production.spoil, 표 하나)
 	var a := proto(11)
 	var c := proto(11)
 	c.discoveries["clay"] = {"t": 0.0, "who": -1, "name": ""}
 	for q: Village in [a, c]:
 		q.stock["생선"] = 50.0
 		q.stock["소금"] = 0.0
-		q.wild._hour(q)
+		Production.spoil(q)
 	check(float(c.stock["생선"]) > float(a.stock["생선"]), "질그릇이 있으면 생선이 덜 상함 (%.2f > %.2f)" % [c.stock["생선"], a.stock["생선"]])
 
 

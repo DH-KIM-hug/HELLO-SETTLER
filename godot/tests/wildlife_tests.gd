@@ -127,7 +127,7 @@ func test_seed_world() -> void:
 	for k: String in Wildlife.LEGACY:
 		land += w2.total(k)
 	check(land == 0 and w2.total("fish") > 0, "창조 계획의 들짐승은 놓지 않음 (큰 짐승 %d · 물고기 %d)" % [land, w2.total("fish")])
-	check(w2.bugs_of(jw2.primary()).size() == Wildlife.BUGS, "애벌레 %d마리 (강아지가 짖는 상대)" % w2.bugs_of(jw2.primary()).size())
+	check(w2.bugs_of(jw2.primary()).size() == jw2.primary().caterpillars.cats.size(), "애벌레 %d마리 = 꽃 무리의 산 애벌레 (강아지가 짖는 상대)" % w2.bugs_of(jw2.primary()).size())
 
 
 # ───────────────────────── 늘기 ─────────────────────────
@@ -293,14 +293,14 @@ func test_spoil() -> void:
 	v.stock["생선"] = 100.0
 	v.stock["고기"] = 100.0
 	v.stock["소금"] = 0.0
-	for i in 24:
-		v.wild._hour(v)
-	check(absf(float(v.stock["생선"]) - 70.0) < 1.0 and absf(float(v.stock["고기"]) - 90.0) < 1.0, "하루: 생선 −30%% (%.1f) · 고기 −10%% (%.1f)" % [v.stock["생선"], v.stock["고기"]])
+	Production.spoil(v)                   # 상함 표는 하나 (Balance.SPOIL_DAY — production-chain R4, 새벽)
+	var fp := 100.0 * (1.0 - float(Balance.SPOIL_DAY["생선"]))
+	var mp := 100.0 * (1.0 - float(Balance.SPOIL_DAY["고기"]))
+	check(absf(float(v.stock["생선"]) - fp) < 1.0 and absf(float(v.stock["고기"]) - mp) < 1.0, "새벽: 생선 %.1f · 고기 %.1f (표 하나 SPOIL_DAY)" % [v.stock["생선"], v.stock["고기"]])
 	v.stock["생선"] = 100.0
 	v.stock["소금"] = 50.0
-	for i in 24:
-		v.wild._hour(v)
-	check(float(v.stock["생선"]) > 80.0, "소금이 있으면 덜 상한다 (절임 — %.1f)" % v.stock["생선"])
+	Production.spoil(v)
+	check(float(v.stock["생선"]) > fp + 1.0, "소금이 있으면 덜 상한다 (절임 — %.1f)" % v.stock["생선"])
 	check("생선" in Balance.FOODS and "고기" in Balance.FOODS and Balance.PRICE.has("가죽") and Balance.PRICE.has("뿔") and Balance.PRICE.has("털"),
 		"생선·고기는 식량, 가죽·뿔·털은 장터 값")
 

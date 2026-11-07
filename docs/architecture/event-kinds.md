@@ -21,9 +21,20 @@
 | `&"spray_flooded"` | 물 뿌리기 넘침 (`GiantHand.spray`, giant-touch F4) | `{"x", "y": float, "houses": int}` | `at` = 뿌린 자리 | 아니오 | 아니오 (연대기는 log_line) | (앞으로 연출) |
 | `&"tweeze_done"` | 핀셋으로 집음/옮김 (`GiantHand.tweeze`) | `{"what": StringName (&"gnat"·&"dust"·&"drop"·&"rock"), "moved": bool, "crushed": int (0·1)}` | `at` = 누른 자리 | 아니오 | 아니오 | (앞으로 연출) |
 | `&"immigrant_hint"` | `Immigrants.give_hints` (어른 이주민이 조각 하나를 지니고 옴 — design/gdd/population.md R6-6, 굴림은 `Village.pop_rng`) | `{"hint": String (&"word"·"song"·"moon"·"coin" — `Balance.IMMIGRANT_HINTS` id)}` | `who` = 그 이주민 | 아니오 | 아니오 (연대기는 log_line) | `tests/population_tests.gd` (거인 UI는 `Resident.hint`를 읽음) |
+| `&"first_harvest"` | `Production.first_made` (그 병의 첫 밀 — `Village._update_building`, design/gdd/production-chain.md) | `{"b": 건물 id}` | `who` = 일꾼 id | 아니오 | 아니오 (연대기는 `harvest_check`의 log_line) | `tests/production_tests.gd` |
+| `&"first_flour"` | `Production.first_made` (첫 가루 — 맷돌간·방앗간) | `{"b": 건물 id}` | `who` = 일꾼 id | 아니오 | 아니오 | (앞으로 연출) |
+| `&"first_bread"` | `Production.first_made` (첫 빵 — 화덕·빵집, `stats.first_bread`와 같은 걸음) | `{"b": 건물 id}` | `who` = 일꾼 id | 아니오 | 아니오 (연대기는 log_line) | (앞으로 #26 안내 · 연출) |
+| `&"chain_stalled"` | `Production.stall_tick` (재료 기다림·일꾼 없음이 `STALL_AFTER` 1시간 이어짐 — 넉넉해서 쉼은 아님, 불러온 첫 걸음엔 없음) | `{"b": 건물 id, "type": StringName, "why": &"no_input"·&"no_worker"}` | — | 아니오 | 아니오 | `tests/production_tests.gd` (앞으로 #12 멈춤 표시) |
+| `&"chain_resumed"` | `Production.stall_tick` (다시 돌아감이 `STALL_CLEAR` 30분 이어짐) | `{"b": 건물 id, "secs": float (막혔던 병 초)}` | — | 아니오 | 아니오 | `tests/production_tests.gd` |
+| `&"spoiled"` | `Production.spoil` (새벽 — 물건마다 그날 상한 합) | `{"k": StringName, "amt": float}` | — | 아니오 | 아니오 | `tests/production_tests.gd` |
+| `&"honey_found"` | `Caterpillars._honey` (여름 반나절마다 성한 꽃 무리 곁 어른 — 마을 `rng`, id 순) | `{}` (null) | `who` = 주운 사람 · `at` = 그 자리 | 아니오 | 아니오 | (앞으로 #38 맑은 한 음) |
+| `&"caterpillar_caught"` | `Caterpillars.catch_now` (조에서 처음 끝낸 사람이 잡음) | `{"crew": int}` | `who` = 조장 id · `at` = 애벌레 자리 | 아니오 | 아니오 | `tests/production_tests.gd` |
+| `&"cocoon_taken"` | `Caterpillars.take_cocoon` (산 고치 따기·빈 고치 줍기 → 비단 실) | `{"live": bool}` | `who` = 딴 사람 · `at` | 아니오 | 아니오 | `tests/production_tests.gd` |
+| `&"butterfly_out"` | `Caterpillars._tick` (고치 → 나비 + 빈 고치) | `{"patch": int (꽃 무리 id)}` | `at` = 고치 자리 | 아니오 | 아니오 | `tests/production_tests.gd` (앞으로 #33 작은 장면) |
 
 ## 메모
 - 저장 순번은 위 표의 "예"인 kind와, 사건 없이 올리는 곳(`notebook.gd`·`awakening.gd`)에서만 오른다 — 10초 걸음마다 저장되지 않게.
 - 2026-11-07: 사건 줄은 넓은 세상이면 `JarWorld.events` 하나를 무리들이 함께 쓰고(`village` = sid), 작은 병(`Village.new_prototype`)은 마을마다 하나. 저장하지 않으며 불러오면 새 줄(번호 0부터).
 - `watch_changed`(ADR 3절)는 아직 없음 — 이행 4단계에서 `set_watching`과 함께.
 - 2026-11-08 (giant-touch): `giant_acted`·`giant_refused`·`spray_flooded`·`tweeze_done`을 냄. GDD의 `tool_unlocked`·`sky_drop_landed`·`lamp_moved`·`drop_knocked`와 내려 주기의 `giant_acted{kind: &"drop"}`는 아직 내지 않음 (이름만 예약 — 내기 시작할 때 이 표에 적는다). 손길 사건은 `emit` 앞뒤로 난수를 쓰지 않는다.
+- 2026-11-08 (production-chain): 사슬 사건 10개 (`first_harvest`~`butterfly_out`)를 냄. 바로 보냄·넉넉해서 쉼은 사건을 내지 않는다. 막힘 판정 상태(`Village._stall`)는 저장하지 않는다. 사슬 사건은 `emit` 앞뒤로 난수를 쓰지 않는다 (꿀방울 굴림은 사건과 무관하게 먼저 함).

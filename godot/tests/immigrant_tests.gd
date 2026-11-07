@@ -456,6 +456,9 @@ func test_disease() -> void:
 	carrier.latent = ""
 	Health.make_latent(w, carrier, Balance.PLAGUE)
 	check(carrier.latent == Balance.PLAGUE and carrier.sick_left <= 0.0 and carrier.immune.is_empty(), "내려온 사람: 잠복 중 · 이 마을이 겪은 병의 면역은 없다")
+	for dk: String in Balance.DISEASES:          # 그사이 다른 병(고뿔·배앓이…)을 먼저 앓으면 잠복한 병이 묻힘 (궤적에 따라 — 이 시험은 잠복만 봄)
+		if dk != Balance.PLAGUE:
+			carrier.immune[dk] = w.t + 5.0 * Balance.DAY
 	w.advance(0.5 * Balance.DAY)
 	check(carrier.sick_left <= 0.0 and not w.outbreaks.has(Balance.PLAGUE), "잠복 동안은 앓지도 옮기지도 않는다")
 	w.advance(0.6 * Balance.DAY)
