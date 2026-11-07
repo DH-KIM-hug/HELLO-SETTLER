@@ -1,4 +1,4 @@
-## 하늘 낟알이 내리는 연출 (기획서 8.4 · OPENING 3.1 v3) — 도착할 때와 첫 수확 전 새벽마다 (Village.manna_fall → just_manna).
+## 하늘 낟알이 내리는 연출 (기획서 8.4 · OPENING 3.1 v3) — 도착할 때와 첫 수확 전 새벽마다 (Village.manna_fall → 사건 &"manna_fall", ADR-0001).
 ## 짧게 (약 2초) 낟알 몇 알이 반짝이며 무더기 자리로 내려앉는다 + 옅은 반짝임 + 소리(꽃씨 바람 · 차임). 빛기둥 없음.
 ## 무더기 자체는 village_view.gd _sync_manna (금빛 작은 더미). CPU로 조각 몇십 개만 — 휴대폰에서도 가볍게.
 class_name MannaFx
@@ -19,6 +19,8 @@ const GOLD_HI := Color("fff0b0")
 var v: Village
 var terrain: JarTerrain
 var _t := -1.0
+var _ev_cur := 0                     # 사건 줄 커서 (ADR-0001 — 화면 구독자는 자기 커서를 가진다)
+const RECENT := 120.0                # 이보다 오래된 사건은 연출하지 않음 (start()가 무더기를 거르는 기준과 같음)
 var _bits: Array = []                # [{node, tw (반짝임), from: Vector3, to: Vector3, delay}]
 var _sparks: Array = []              # [{node, at: 내려앉는 때}]
 static var _spark_m: ShaderMaterial
@@ -35,8 +37,7 @@ func playing() -> bool:
 
 
 func sync(dt: float) -> void:
-	if v.just_manna:
-		v.just_manna = false
+	if take_events():
 		start()
 	if _t < 0.0:
 		return
@@ -60,6 +61,16 @@ func sync(dt: float) -> void:
 		s.scale = Vector3.ONE * (0.4 + 0.6 * clampf(w, 0.0, 1.0)) * (1.0 - clampf(w, 0.0, 1.0) * 0.6)
 	if _t > DUR + 0.5:
 		stop()
+
+
+## 커서 뒤의 사건 중 이 마을의 하늘 낟알이 (최근에) 내렸나 — 여러 번이어도 연출은 한 번 (옛 just_manna와 같음)
+func take_events() -> bool:
+	var hit := false
+	for e: Dictionary in v.events.since(_ev_cur):
+		if e["kind"] == &"manna_fall" and int(e["village"]) == v.sid and float(e["t"]) >= v.t - RECENT:
+			hit = true
+	_ev_cur = v.events.serial
+	return hit
 
 
 func start() -> void:

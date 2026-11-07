@@ -8,7 +8,7 @@ extends Node3D
 const FALL_SECS := 0.65
 const FALL_H := 26.0
 const FRESH := 30.0                      # 이 병 시간 안에 내려온 것만 떨어지는 모습
-## v5 설계도 (art/src/build_pioneer.py): 손에 든 것·떨어지는 것 = 두루마리, 촌장 곁에 내려앉으면 펼쳐짐 (Village.just_blueprint)
+## v5 설계도 (art/src/build_pioneer.py): 손에 든 것·떨어지는 것 = 두루마리, 촌장 곁에 내려앉으면 펼쳐짐 (사건 &"blueprint_dropped", ADR-0001)
 const BLUEPRINT_SCALE := 2.2             # 거인의 작은 그림 종이 = 주민에겐 커다란 두루마리
 const BLUEPRINT_SECS := 14.0             # 펼친 채 놓여 있는 시간 (화면 초) — 그동안 촌장이 터를 잡는다
 
@@ -21,6 +21,8 @@ var _algae_key := ""
 var _falls: Array = []                   # [{node, y0, t}]
 var _dust: Array = []                    # [{node, t}]
 var _bp: Dictionary = {}                 # 방금 내려온 설계도 {node, t, open}
+var _bp_cur := 0                         # 사건 줄 커서 (ADR-0001 — blueprint_dropped)
+const BP_RECENT := 3600.0                # 병 한 시간보다 오래된 설계도 사건은 연출하지 않음 (화면을 새로 만들 때 다시 떨어지지 않게)
 static var _green_tex: Texture2D
 
 
@@ -159,10 +161,19 @@ func _animate(dt: float) -> void:
 	_dust = dk
 
 
+## 커서 뒤의 사건 중 이 마을에 마지막으로 내려온 설계도 종류 (없으면 "") — 옛 just_blueprint와 같음
+func take_blueprint() -> String:
+	var type := ""
+	for e: Dictionary in v.events.since(_bp_cur):
+		if e["kind"] == &"blueprint_dropped" and int(e["village"]) == v.sid and float(e["t"]) >= v.t - BP_RECENT:
+			type = String(e["v"])
+	_bp_cur = v.events.serial
+	return type
+
+
 ## 설계도가 내려옴: 두루마리가 촌장 곁에 떨어져 쿵 → 펼쳐진 종이 → 잠시 뒤 사라짐
 func _sync_blueprint(dt: float) -> void:
-	if v.just_blueprint != "":
-		v.just_blueprint = ""
+	if take_blueprint() != "":
 		if not _bp.is_empty() and is_instance_valid(_bp["node"]):
 			(_bp["node"] as Node3D).queue_free()
 		var c := v.chief()

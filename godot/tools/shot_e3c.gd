@@ -262,7 +262,7 @@ func _s_manna() -> int:
 	var ad := _adults()
 	_put(ad[0], p + Vector2(1.6, 0.9), atan2(-1.6, -0.9), "", "idle")
 	_put(ad[1], p + Vector2(-1.4, 1.2), atan2(1.4, -1.2), "", "idle")
-	vv.just_manna = true
+	vv.emit(&"manna_fall", {"v": "shot"})
 	_look(p, 30.0)
 	return 26
 

@@ -8,6 +8,7 @@ extends RefCounted
 var water: WorldWater
 var settlements: Array[Village] = []
 var seed_v := 0
+var events := EventStream.new()       # 사건 기록 흐름 — 이 병의 무리들이 함께 (ADR-0001, 사건마다 village = 무리 sid). 저장 안 함
 
 
 static func create(seed_v: int, size := WorldCfg.SIZE, opts: Dictionary = {}) -> JarWorld:
@@ -219,7 +220,7 @@ func place_kit(x: float, y: float, kit: Dictionary = {}) -> Village:
 	WorldGen.flatten(water, p, WorldCfg.KIT_FLAT_R)
 	water.rebuild_coarse_around(x, y, WorldCfg.KIT_FLAT_R * 2.0 + WorldWater.F)
 	var sid := settlements.size()
-	var v := Village.new_settlement(water, p, kit, seed_v * 31 + sid * 7919 + 1, sid)
+	var v := Village.new_settlement(water, p, kit, seed_v * 31 + sid * 7919 + 1, sid, events)
 	v.settlement_name = "%d번째 무리" % (sid + 1)
 	water.kits.append({"x": x, "y": y, "sid": sid})
 	if settlements.is_empty():
@@ -385,7 +386,9 @@ static func from_dict(d: Dictionary) -> JarWorld:
 	jw.seed_v = int(d["seed_v"])
 	jw.water = JarWater.from_dict(d["water"]) as WorldWater
 	for sd: Dictionary in d["settlements"]:
-		jw.settlements.append(Village.from_dict(sd, jw.water))
+		var sv := Village.from_dict(sd, jw.water)
+		sv.events = jw.events
+		jw.settlements.append(sv)
 	GreatTrees.ensure(jw)               # 옛 저장: 큰 나무 다섯을 무리에서 먼 자리에
 	var others: Array = d.get("others", [])
 	for i in jw.settlements.size():

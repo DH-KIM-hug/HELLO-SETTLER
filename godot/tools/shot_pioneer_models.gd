@@ -142,7 +142,7 @@ func _process(dt: float) -> bool:
 					p.carry_amt = 1.0
 					p.anim = "carry"
 					break
-			v.just_blueprint = "우물"
+			v.emit(&"blueprint_dropped", {"v": "우물"})
 			scene.refresh()
 			var oven: Building = null
 			for bb in v.buildings:
