@@ -943,6 +943,7 @@ func step(dt: float) -> void:
 		Discovery.hourly(self)        # 발견 W2 · F3 · F5 · S3 · P1 (DISCOVERIES — sim/discovery.gd)
 		if owns_water:
 			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
+		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)

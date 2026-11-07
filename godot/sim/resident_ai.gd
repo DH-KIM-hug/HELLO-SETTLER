@@ -45,6 +45,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("wild_"):           # [들짐승] 낚시·사냥·울타리 (sim/wildlife.gd)
 		Wildlife.run_op(v, r, d)
 		return
+	if n.begins_with("fruit_"):          # (E3-3) 거대한 열매 자르기·나르기 (sim/great_trees.gd)
+		GreatTrees.run_op(v, r, d)
+		return
 	if n.begins_with("sky_"):            # [상점] 하늘에서 내려온 것 깎아 나르기 (sim/sky_drops.gd)
 		SkyDrops.run_op(v, r, d)
 		return

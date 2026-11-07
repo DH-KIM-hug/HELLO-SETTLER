@@ -176,7 +176,7 @@ for i, (x, y, z) in enumerate(((-0.07, 0.0, -0.12), (0.05, 0.02, -0.15), (0.0, -
     m.cyl(0.055, 0.0, 0.08, pos=(x, y, z - 0.1), rot=(math.pi, 0, 0), scl=(1.0, 0.25, 1.0), color=shade(FISH, 0.8), seg=4)
     m.sphere(0.012, pos=(x + 0.03, y - 0.02, z + 0.07), color="252122", seg=4, rings=2)           # eye
 
-m = prop("herb_bundle", LEAF)           # a bunch of herbs tied with twine (stems up, hanging from the hand)
+m = prop("herb_bundle", LEAF)          # a bunch of herbs tied with twine (stems up, hanging from the hand)
 m.cyl(0.04, 0.03, 0.12, pos=(0, 0, 0.0), color="LOOK_HERB", seg=6)
 m.cyl(0.045, 0.045, 0.03, pos=(0, 0, 0.03), color=TWINE, seg=6)
 for k in range(6):
@@ -207,6 +207,72 @@ for k in range(3):                                                              
     a = k * 2.1
     m.sphere(0.03, pos=(math.cos(a) * 0.15, -0.16 + 0.03 * k, math.sin(a) * 0.08), scl=(1, 0.4, 1),
              color=CLOTH_LIGHT, seg=5, rings=2)
+
+
+# (E3-6, GD 3.0 물가 — 2026-11-07 사용자) the fish residents catch are medaka (송사리), about a resident's size:
+# a small one is hugged by one carrier, a bigger one is slung on a pole between two. Big lake fish are scenery only.
+POLE_HALF = 1.3          # half the gap between the two carriers (model units — view/resident_model.gd POLE_GAP / 2)
+MEDAKA = "e2e8d6"        # pale, see-through-looking body (pale olive-cream)
+MEDAKA_BACK = "c3cba6"   # a faint darker line along the back
+MEDAKA_BELLY = "f6f3e8"
+MEDAKA_FIN = "eef0e4"
+
+
+def medaka(m, cx, cz, L=1.1):
+    """A slim medaka along X (head at +X), upright (back +Z), centred at (cx, 0, cz): long thin pale body, a faint
+    back line, big round eyes with white rims near the snout, upturned little mouth, broad pale tail fin, a long
+    anal fin underneath and a small dorsal fin set far back."""
+    m.sphere(L * 0.5, pos=(cx, 0, cz), scl=(1.0, 0.2, 0.25), color=MEDAKA, seg=8, rings=5)
+    m.sphere(L * 0.42, pos=(cx - 0.02, 0, cz + L * 0.05), scl=(1.0, 0.13, 0.13), color=MEDAKA_BACK, seg=6, rings=3)
+    m.sphere(L * 0.4, pos=(cx + 0.02, 0, cz - L * 0.05), scl=(1.0, 0.17, 0.14), color=MEDAKA_BELLY, seg=6, rings=3)
+    m.cyl(L * 0.17, 0.0, L * 0.2, pos=(cx - L * 0.44, 0, cz), rot=(0, -math.pi / 2, 0), scl=(1.0, 0.18, 1.0),
+          color=MEDAKA_FIN, seg=4)                                                                # tail fin
+    m.box((L * 0.4, L * 0.02, L * 0.09), pos=(cx - L * 0.12, 0, cz - L * 0.19), color=MEDAKA_FIN)    # anal fin
+    m.cyl(L * 0.06, 0.0, L * 0.08, pos=(cx - L * 0.26, 0, cz + L * 0.1), scl=(1.4, 0.2, 1.0), color=MEDAKA_FIN, seg=4)
+    for sy in (-1, 1):                                                                            # big eyes
+        m.sphere(L * 0.07, pos=(cx + L * 0.33, sy * L * 0.08, cz + L * 0.02), scl=(1, 0.5, 1), color="ffffff", seg=6, rings=3)
+        m.sphere(L * 0.05, pos=(cx + L * 0.34, sy * L * 0.105, cz + L * 0.02), scl=(1, 0.5, 1), color="252122", seg=6, rings=3)
+    m.sphere(L * 0.035, pos=(cx + L * 0.49, 0, cz + L * 0.04), scl=(0.8, 1.2, 0.6), color=MEDAKA_BACK, seg=5, rings=3)  # mouth
+
+
+def pole(m, x0, x1, z=0.0):
+    """A straight grass-stalk pole along X (joints + two lashings)."""
+    m.cyl(0.035, 0.035, x1 - x0, pos=(x0, 0, z), rot=(0, math.pi / 2, 0), color="a9c070", seg=6, smooth=True,
+          cap="d8c896", bottom_cap="d8c896")
+    for k in range(1, 3):
+        x = x0 + (x1 - x0) * k / 3
+        m.cyl(0.043, 0.043, 0.035, pos=(x, 0, z), rot=(0, math.pi / 2, 0), color="8fa45c", seg=6)
+
+
+m = prop("medaka", MEDAKA)              # a small medaka hugged in both arms by one carrier
+medaka(m, 0.0, 0.0, 0.62)
+
+m = prop("fish_pole", MEDAKA)             # front carrier: the pole from his shoulder back to the middle, the fish slung under it
+pole(m, -0.15, POLE_HALF + 0.05)
+medaka(m, POLE_HALF, -0.42, 1.15)
+for x in (POLE_HALF - 0.3, POLE_HALF + 0.32):           # two cords from the pole round the fish
+    m.cyl(0.014, 0.014, 0.4, pos=(x, 0, -0.38), color=TWINE, seg=4)
+    m.cyl(0.05, 0.05, 0.03, pos=(x, 0, -0.02), color=TWINE, seg=6)
+
+m = prop("pole_half", "a9c070")         # back carrier: the other half of the pole (meets the front half over the fish)
+pole(m, -0.15, POLE_HALF + 0.05)
+m.cyl(0.05, 0.05, 0.05, pos=(POLE_HALF, 0, 0), rot=(0, math.pi / 2, 0), color=TWINE, seg=6)
+m.sphere(0.06, pos=(-0.05, 0, 0.02), scl=(1.2, 1.0, 0.6), color=TWINE, seg=6, rings=3)   # a pad on the shoulder
+
+m = prop("fruit_piece", "f39a5a")       # (E3-3) a wedge cut from the giant fruit: blush skin outside, juicy flesh on the cut faces
+fp = m.sphere(0.3, pos=(0, 0, 0), color="f39a5a", seg=10, rings=7)
+bmw = m._bm("body")
+for v in {v: True for f in fp for v in f.verts}:
+    if v.co.y < 0:
+        v.co.y = 0.0
+    if v.co.z < -0.05:
+        v.co.z = -0.05
+bmw.normal_update()
+for f in fp:
+    n = f.normal
+    flat = n.y < -0.9 or n.z < -0.9
+    m._finish(bmw, [f], "f6dc8a" if flat else mix("f6c065", "e0703f", max(0.0, min(1.0, 0.5 + 0.5 * n.x))), not flat)
+m.sphere(0.04, pos=(0.08, 0.02, 0.27), scl=(1.0, 1.0, 0.5), color="6f9a3e", seg=5, rings=3)   # a bit of stalk
 
 
 def bbox(model):
