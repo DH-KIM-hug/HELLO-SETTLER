@@ -2,7 +2,8 @@
 ## 마을 장면(view/test_village.gd)의 화면·조작(위아래 띠·제단·뚜껑·불기·속도·설정·주민 상세·따라가기·알림·유리 톡·
 ## 소리·개발 모드·뒤로 가기·저장·따라잡기·편지)을 그대로 물려받고, 땅만 넓은 세상으로 바꾼다:
 ##   - 새 세상(무작위 시드 — world_seed가 0이 아니면 그 시드). 짧은 창조에서 들어온 새 병(StartFlow "new")이면 먼저 키트 자리 고르기
-##     (OPENING 단계 8 — 안개 없는 세상 전체 + 빛나는 추천 자리 3~5곳, 누르면 그 자리에 키트 → 안개 → 그 빈터로 날아 내려감).
+##     (OPENING 단계 8 v3.9 — 안개 없는 세상 전체에서 아무 데나 누름 → 그 자리의 특성 쪽지 → [여기에 내려놓기] → 손이 상자를 내려놓고
+##     카메라가 상자 앞까지 → 주민이 기어 나옴 → 거인이 키트 건물을 놓음 (view/start/kit_unpack.gd) → 첫 주민 소개 → 이름).
 ##     그 밖(캡처·시험·pick_spot = false)은 첫 추천 자리에 바로 키트.
 ##   - 무리가 여럿이면 무리마다 VillageView. 제단·유리 톡·불기·소리·위 띠 = 카메라가 보고 있는 무리 (focus_village)
 ##   - 뚜껑은 병 하나에 하나 → 모든 무리가 함께. 병 돌리기(빛)는 세상 전체 (JarWorld.rotate_jar)
@@ -92,10 +93,15 @@ func _kit_ups(saving: bool) -> Array:
 	return sm.kit_upgrades()
 
 
-# ───────────────────────── 키트 자리 고르기 (OPENING 단계 8 '스타터킷 풀기' — 최소판) ─────────────────────────
-## 안개 없는 세상 전체를 내려다보고 빛나는 추천 자리를 누른다 → 키트를 놓고 나서야 병 안 장면(위아래 띠·마을)을 만든다
-var _pick: Dictionary = {}           # 고르는 중인 화면 {root, cam, terrain, layer, marks: [[node, label, choice]], confirm, caption, t}
+# ───────────────────────── 키트 자리 고르기 (OPENING 단계 8 '스타터킷 풀기' v3.9) ─────────────────────────
+## 안개 없는 세상 전체를 내려다보고 아무 데나 누른다 → 그 자리에 작은 표식 + 특성 쪽지 (물·숲·땅 모양·바위·흙 — 숫자 없이) →
+## [여기에 내려놓기] / [다시 고르기]. 놓을 수 없는 곳은 까닭. 물이 멀면 "정말 여기에 둘까요?". 키트를 놓고 나서야 병 안 장면을 만든다.
+## 고르는 동안(가만히 있는 화면) 마을 모델을 한 화면에 하나씩 미리 읽어 둔다 → 상자가 내려앉을 때 멈칫하지 않게 (A18)
+var _pick: Dictionary = {}           # 고르는 중인 화면 {root, cam, terrain, layer, marker, note, note_l, put_btn, confirm, caption, sel, preload}
 var _pick_ups: Array = []            # 첫 키트에 넣을 키트 업그레이드 (선반 — C1)
+var unpack: KitUnpack                # (v3.9) 상자를 풀고 건물을 거인이 놓는 동안
+var kit_tray := false                # 시험: 연출 없이(kit_anim = false)도 건물 놓기 칸을 띄움
+const PICK_CAPTION := "이 세상에 살 사람들을 데려왔어요.\n살 곳을 아무 데나 눌러 보세요. 어떤 곳인지 알려 드려요."
 
 
 func _ready() -> void:
@@ -154,7 +160,7 @@ func _begin_pick() -> void:
 	ui.theme = UiTheme.get_theme()
 	layer.add_child(ui)
 	var cap := Label.new()
-	cap.text = "이 세상에 살 사람들을 데려왔어요.\n빛나는 곳은 물가·숲 곁이에요. 내려놓을 곳을 눌러 주세요."
+	cap.text = PICK_CAPTION
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cap.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	cap.set_anchors_preset(Control.PRESET_TOP_WIDE)
@@ -166,63 +172,140 @@ func _begin_pick() -> void:
 	cap.add_theme_constant_override("shadow_offset_x", 1)
 	cap.add_theme_constant_override("shadow_offset_y", 1)
 	ui.add_child(cap)
-	var marks: Array = []
-	var mat := StandardMaterial3D.new()
-	mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.albedo_color = Color(1.0, 0.82, 0.3, 0.7)
-	mat.no_depth_test = true
-	for ch: Dictionary in world.spot_choices(5):
-		var p: Vector2 = ch["p"]
-		var disc := MeshInstance3D.new()
-		var cm := CylinderMesh.new()
-		cm.top_radius = 26.0
-		cm.bottom_radius = 26.0
-		cm.height = 0.4
-		cm.radial_segments = 32
-		disc.mesh = cm
-		disc.material_override = mat.duplicate()
-		disc.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		disc.position = Vector3(p.x, pt.ground_y(p.x, p.y) + 3.0, p.y)
-		root.add_child(disc)
-		var l := Label.new()
-		l.text = String(ch["reason"])
-		l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)
-		l.add_theme_color_override("font_color", Color("242121"))
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = Color("fffbea")
-		sb.border_color = Color("242121")
-		sb.set_border_width_all(1)
-		sb.set_content_margin_all(2)
-		l.add_theme_stylebox_override("normal", sb)
-		ui.add_child(l)
-		marks.append([disc, l, ch])
+	# 누른 자리 표식 (작은 깃발: 기둥 + 둥근 고리 — 화면에서 늘 같은 크기)
+	var marker := Node3D.new()
+	marker.visible = false
+	root.add_child(marker)
+	var mm := StandardMaterial3D.new()
+	mm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mm.no_depth_test = true
+	mm.albedo_color = Color(1.0, 0.86, 0.35, 0.95)
+	var u := 1.0 / maxf(fit, 0.01)                 # 화면 1px = 세상 u칸
+	var ringm := MeshInstance3D.new()
+	var tm := TorusMesh.new()
+	tm.inner_radius = 7.0 * u
+	tm.outer_radius = 10.0 * u
+	ringm.mesh = tm
+	ringm.material_override = mm
+	ringm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	marker.add_child(ringm)
+	var pole := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 1.2 * u
+	cm.bottom_radius = 1.2 * u
+	cm.height = 26.0 * u
+	pole.mesh = cm
+	pole.material_override = mm
+	pole.position.y = 13.0 * u
+	pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	marker.add_child(pole)
+	var flag := MeshInstance3D.new()
+	var fm := BoxMesh.new()
+	fm.size = Vector3(10.0 * u, 7.0 * u, 1.0 * u)
+	flag.mesh = fm
+	flag.material_override = mm
+	flag.position = Vector3(5.0 * u, 22.0 * u, 0)
+	flag.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	marker.add_child(flag)
+	# 특성 쪽지 (화면 아래 종이 카드)
+	var note := PanelContainer.new()
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.988, 0.965, 0.905, 0.97)
+	sb.border_color = Color(0.145, 0.13, 0.133, 0.3)
+	sb.set_border_width_all(1)
+	sb.set_corner_radius_all(14)
+	sb.set_content_margin_all(12)
+	sb.shadow_color = Color(0, 0, 0, 0.18)
+	sb.shadow_size = 8
+	note.add_theme_stylebox_override("panel", sb)
+	note.mouse_filter = Control.MOUSE_FILTER_STOP
+	note.visible = false
+	ui.add_child(note)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	note.add_child(col)
+	var note_t := Label.new()
+	note_t.text = "이 자리는…"
+	note_t.add_theme_font_override("font", UiTheme.hand_font())
+	note_t.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND)
+	note_t.add_theme_color_override("font_color", UiTheme.INK_SOFT)
+	col.add_child(note_t)
+	var note_l := Label.new()
+	note_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note_l.add_theme_font_size_override("font_size", UiTheme.SIZE)
+	note_l.add_theme_color_override("font_color", UiTheme.INK)
+	note_l.add_theme_constant_override("line_spacing", 4)
+	col.add_child(note_l)
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	col.add_child(row)
+	var again := Button.new()
+	again.text = "다시 고르기"
+	again.focus_mode = Control.FOCUS_NONE
+	again.custom_minimum_size = Vector2(0, 48)
+	again.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	again.pressed.connect(GameAudio.ui_click)
+	again.pressed.connect(pick_again)
+	row.add_child(again)
+	var put := Button.new()
+	put.text = "여기에 내려놓기"
+	put.theme_type_variation = "Primary"
+	put.focus_mode = Control.FOCUS_NONE
+	put.custom_minimum_size = Vector2(0, 48)
+	put.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	put.pressed.connect(GameAudio.ui_click)
+	put.pressed.connect(put_here)
+	row.add_child(put)
 	var cs := ConfirmSheet.new()
 	layer.add_child(cs)
-	_pick = {"root": root, "cam": pc, "terrain": pt, "layer": layer, "marks": marks, "confirm": cs, "caption": cap, "t": 0.0, "pending": null}
+	var pre: Array = VillageView.PRELOAD.duplicate()
+	pre.append("@parts")
+	pre.append("@kit")
+	_pick = {"root": root, "cam": pc, "terrain": pt, "layer": layer, "marker": marker, "note": note, "note_l": note_l, "put_btn": put,
+		"confirm": cs, "caption": cap, "t": 0.0, "pending": null, "sel": null, "preload": pre, "u": u}
 	cs.answered.connect(func(yes: bool) -> void:
 		var pp: Variant = _pick.get("pending")
 		_pick["pending"] = null
 		if yes and pp != null:
-			_place_first_kit(pp as Vector2))
-	print("세상 시드 %d · 지름 %d칸 · 키트 자리 고르기 (추천 %d곳)" % [sd, size, marks.size()])
+			_drop_kit(pp as Vector2))
+	print("세상 시드 %d · 지름 %d칸 · 키트 자리 고르기 (아무 데나)" % [sd, size])
 	if _plan != null:
 		cap.add_theme_font_override("font", UiTheme.font(true))
 		GameAudio.fx("paper", "Room", -8.0)
-		if _plan.stage == "name" and _plan.spot.size() == 2:    # 이름 짓다가 꺼졌음 → 고른 자리 그대로
-			_place_first_kit(Vector2(float(_plan.spot[0]), float(_plan.spot[1])))
+		if _plan.stage in ["build", "name"] and _plan.spot.size() == 2:    # 건물을 놓거나 이름 짓다가 꺼졌음 → 고른 자리 그대로
+			_place_first_kit(Vector2(float(_plan.spot[0]), float(_plan.spot[1])), true)
 
 
 func _pick_process(dt: float) -> void:
 	_pick["t"] = float(_pick["t"]) + dt
-	var pc: JarCamera = _pick["cam"]
-	var a := 0.62 + 0.25 * sin(float(_pick["t"]) * 3.0)         # 은은하게 빛남
-	for m: Array in _pick["marks"]:
-		var disc: MeshInstance3D = m[0]
-		(disc.material_override as StandardMaterial3D).albedo_color.a = a
-		var l: Label = m[1]
-		var sp := pc.camera.unproject_position(disc.global_position)
-		l.position = Vector2(roundf(sp.x - l.get_minimum_size().x * 0.5), roundf(sp.y + 10.0))
+	var pre: Array = _pick["preload"]
+	if not pre.is_empty():                         # 가만히 있는 화면에서 마을 모델을 하나씩 (A18 — 내려앉을 때 멈칫하지 않게)
+		var nm := String(pre.pop_front())
+		if nm == "@parts":
+			Art.parts(ResidentModel.PARTS)
+		elif nm == "@kit":
+			ResidentModel.kit()
+		else:
+			Art.model(nm)
+	var build_at: Variant = _pick.get("build_at")
+	if build_at != null:                           # 쪽지를 감춘 화면을 한 번 그린 뒤에 장면을 만든다
+		_pick["build_wait"] = int(_pick.get("build_wait", 0)) + 1
+		if int(_pick["build_wait"]) >= 2:
+			_place_first_kit(build_at as Vector2)
+		return
+	var marker: Node3D = _pick["marker"]
+	if marker.visible:
+		var bob := 1.0 + 0.08 * sin(float(_pick["t"]) * 4.0)
+		(marker.get_child(0) as Node3D).scale = Vector3(bob, 1.0, bob)
+	var note: PanelContainer = _pick["note"]
+	if note.visible:
+		var vs := get_viewport().get_visible_rect().size
+		var w := minf(340.0, vs.x - 32.0)
+		note.custom_minimum_size.x = w
+		note.size = Vector2(w, 0)
+		note.reset_size()
+		note.position = Vector2((vs.x - w) * 0.5, vs.y - SafeArea.insets(get_viewport()).y - 20.0 - note.size.y)
 
 
 ## 고르는 화면 위 한 점 → 땅 위 점 (세상 좌표)
@@ -240,21 +323,61 @@ func _pick_ground(sp: Vector2) -> Vector2:
 	return Vector2(hit.x, hit.z)
 
 
-## 누른 곳: 빛나는 자리 가까이면 그 자리, 아니면 누른 땅. 놓을 수 없으면 까닭, 물이 멀면 "정말 여기에 둘까요?"
+## 누른 곳 → 그 자리 표식 + 특성 쪽지
 func pick_at(sp: Vector2) -> void:
-	var pc: JarCamera = _pick["cam"]
-	var p := _pick_ground(sp)
-	for m: Array in _pick["marks"]:
-		var c: Vector2 = m[2]["p"]
-		if pc.camera.unproject_position((m[0] as Node3D).global_position).distance_to(sp) < 28.0:
-			p = c
-	choose_spot(p)
+	if _pick.has("build_at"):
+		return
+	show_spot(_pick_ground(sp))
+
+
+## 그 자리의 특성 쪽지 (놓을 수 없으면 까닭만, [여기에 내려놓기]는 꺼짐) → 쪽지 줄들
+func show_spot(p: Vector2) -> Array:
+	var tr := world.spot_traits(p.x, p.y)
+	_pick["sel"] = p
+	var pt: WorldTerrain = _pick["terrain"]
+	var marker: Node3D = _pick["marker"]
+	marker.visible = true
+	marker.position = Vector3(p.x, pt.ground_y(p.x, p.y) + 0.5, p.y)
+	var ok := bool(tr["ok"])
+	var mm := (marker.get_child(0) as MeshInstance3D).material_override as StandardMaterial3D
+	mm.albedo_color = Color(1.0, 0.86, 0.35, 0.95) if ok else Color(0.92, 0.3, 0.25, 0.95)
+	var lines: Array = tr["lines"]
+	var txt := ""
+	for l: Variant in lines:
+		txt += ("\n" if txt != "" else "") + "· " + String(l)
+	if not ok:
+		txt += "\n다른 곳을 눌러 주세요."
+	(_pick["note_l"] as Label).text = txt
+	(_pick["note_l"] as Label).add_theme_color_override("font_color", UiTheme.INK if ok else Color("b3261e"))
+	(_pick["put_btn"] as Button).disabled = not ok
+	(_pick["note"] as Control).visible = true
+	(_pick["caption"] as Label).visible = false
+	GameAudio.fx("glass_tap_light" if not ok else "paper", "Room", -10.0)
+	return lines
+
+
+## [다시 고르기] — 표식·쪽지를 치우고 처음 자막으로
+func pick_again() -> void:
+	_pick["sel"] = null
+	(_pick["marker"] as Node3D).visible = false
+	(_pick["note"] as Control).visible = false
+	var cap: Label = _pick["caption"]
+	cap.visible = true
+	cap.text = PICK_CAPTION
+
+
+## [여기에 내려놓기]
+func put_here() -> void:
+	var sp: Variant = _pick.get("sel")
+	if sp != null:
+		choose_spot(sp as Vector2)
 
 
 func choose_spot(p: Vector2) -> void:
 	var r := world.kit_spot_ok(p.x, p.y)
 	var cap: Label = _pick["caption"]
 	if not r["ok"]:
+		cap.visible = true
 		cap.text = "%s. 다른 곳을 눌러 주세요." % r["why"]
 		GameAudio.fx("glass_tap_light")
 		return
@@ -265,112 +388,49 @@ func choose_spot(p: Vector2) -> void:
 	_drop_kit(p)
 
 
-## 거인의 손이 상자를 그 자리에 내려놓는다 (창조에서 왔을 때만 — 시험·개발 고르기는 바로)
+## 자리가 정해짐. 창조에서 왔으면 쪽지를 감추고 다음 화면에 장면을 만든다 (가만히 있는 화면 — 그 뒤 연출은 끊김 없이). 시험·개발은 바로
 func _drop_kit(p: Vector2) -> void:
-	if _plan == null or not kit_anim or _pick.has("dropping"):
+	if _plan == null or not kit_anim:
 		_place_first_kit(p)
 		return
-	_pick["dropping"] = true
-	var pc: JarCamera = _pick["cam"]
-	var pt: WorldTerrain = _pick["terrain"]
-	var u := 40.0 / maxf(pc.ppu, 0.01)                 # 화면에서 약 40px 상자
-	var gy := pt.ground_y(p.x, p.y)
-	var root := Node3D.new()
-	(_pick["root"] as Node3D).add_child(root)
-	root.position = Vector3(p.x, gy + u * 9.0, p.y)
-	var box := MeshInstance3D.new()
-	var bm := BoxMesh.new()
-	bm.size = Vector3(u, u * 0.62, u * 0.75)
-	box.mesh = bm
-	box.material_override = Toon.mat(Color("e8c99a"))
-	box.position.y = u * 0.31
-	root.add_child(box)
-	var lid := MeshInstance3D.new()
-	var lm := BoxMesh.new()
-	lm.size = Vector3(u * 1.06, u * 0.14, u * 0.8)
-	lid.mesh = lm
-	lid.material_override = Toon.mat(Color("d6694f"))
-	lid.position.y = u * 0.69
-	root.add_child(lid)
-	var hand := _giant_hand(u)
-	hand.position = Vector3(0, u * 0.95, 0)
-	root.add_child(hand)
-	for m: Array in _pick["marks"]:
-		(m[1] as Label).visible = false
-	(_pick["caption"] as Label).text = "이 세상에 살 사람들을 데려왔어요."
-	var tw := create_tween()
-	tw.tween_property(root, "position:y", gy + 0.5, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tw.tween_callback(func() -> void:
-		GameAudio.fx("drop_thud")
-		GameAudio.buzz())
-	tw.tween_property(hand, "position:y", u * 8.0, 0.6).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(hand, "position:x", u * 3.0, 0.6)
-	tw.tween_callback(func() -> void: GameAudio.fx("box_open", "Room", -4.0))     # 뚜껑이 열리는 소리 (A17)
-	tw.tween_property(lid, "rotation:x", -1.8, 0.3).set_trans(Tween.TRANS_BACK)
-	tw.parallel().tween_property(lid, "position:z", -u * 0.5, 0.3)
-	tw.tween_interval(0.35)
-	tw.tween_callback(func() -> void: _place_first_kit(p))
+	if _pick.has("build_at"):
+		return
+	(_pick["note"] as Control).visible = false
+	(_pick["marker"] as Node3D).visible = false
+	var cap: Label = _pick["caption"]
+	cap.visible = true
+	cap.text = "이 세상에 살 사람들을 데려왔어요."
+	_pick["build_at"] = p
 
 
 ## 거인의 손 (낮은 폴리곤: 손바닥 + 손가락 넷 + 엄지) — 상자 위에서 잡고 있다가 놓고 올라감
 static func _giant_hand(u: float) -> Node3D:
-	var h := Node3D.new()
-	var skin := Toon.mat(Color("f2c4a0"))
-	var palm := MeshInstance3D.new()
-	var pm := BoxMesh.new()
-	pm.size = Vector3(u * 1.1, u * 0.35, u * 1.0)
-	palm.mesh = pm
-	palm.material_override = skin
-	palm.position = Vector3(0, u * 0.35, -u * 0.2)
-	h.add_child(palm)
-	for i in 4:
-		var f := MeshInstance3D.new()
-		var cm := CapsuleMesh.new()
-		cm.radius = u * 0.12
-		cm.height = u * 0.75
-		f.mesh = cm
-		f.material_override = skin
-		f.rotation.x = PI * 0.5 + 0.5
-		f.position = Vector3(-u * 0.39 + i * u * 0.26, u * 0.12, u * 0.45)
-		h.add_child(f)
-	var th := MeshInstance3D.new()
-	var tm := CapsuleMesh.new()
-	tm.radius = u * 0.13
-	tm.height = u * 0.6
-	th.mesh = tm
-	th.material_override = skin
-	th.rotation = Vector3(0.4, 0, 1.1)
-	th.position = Vector3(-u * 0.62, u * 0.2, -u * 0.05)
-	h.add_child(th)
-	var arm := MeshInstance3D.new()
-	var am := CylinderMesh.new()
-	am.top_radius = u * 0.42
-	am.bottom_radius = u * 0.48
-	am.height = u * 6.0
-	arm.mesh = am
-	arm.material_override = Toon.mat(Color("8fb3c9"))      # 거인의 소매
-	arm.rotation.x = -0.9
-	arm.position = Vector3(0, u * 2.6, -u * 2.6)
-	h.add_child(arm)
-	return h
+	return SkyDropView.giant_hand(u)
 
 
-## 키트를 놓는다 → 안개가 나머지를 덮고 → 병 안 장면을 만들고 → 멀리서 그 빈터로 날아 내려감
-func _place_first_kit(p: Vector2) -> void:
+## 키트를 놓는다 → 병 안 장면을 만들고 → (창조에서 왔으면) 상자 풀기 (KitUnpack: 손이 내려놓고 · 초확대 · 기어 나옴 · 건물 놓기) →
+## 첫 주민 소개. 시험·개발(_plan 없음)은 멀리서 그 빈터로 날아 내려감. resume = 앱을 다시 켬 (creation.json build · name)
+func _place_first_kit(p: Vector2, resume := false) -> void:
 	var far_ppu: float = (_pick["cam"] as JarCamera).ppu
 	print("첫 키트 자리 %s (%s)" % [str(p), world.spot_reason(p.x, p.y)])
 	var v := world.place_kit(p.x, p.y, Kits.make(_pick_ups, kit_variant))
-	if _plan != null:                              # 이름 짓기 전 (앱이 꺼지면 이 자리에서 다시) · 주민들은 상자에서 걸어 나온다
-		_plan.spot = [p.x, p.y]
-		_plan.stage = "name"
-		_plan.save(StartFlow.save_dir())
-		var r := RandomNumberGenerator.new()
-		r.seed = world.seed_v + 3
+	var trayed := _plan != null and (kit_anim or kit_tray)
+	if _plan != null:                              # 이름 짓기 전 (앱이 꺼지면 이 자리에서 다시) · 주민들은 상자에서 나온다
+		if not resume:
+			_plan.spot = [p.x, p.y]
+			_plan.placed = {}
+			_plan.stage = "build" if trayed else "name"
+			_plan.save(StartFlow.save_dir())
+		var ppl: Array[Resident] = []
 		for q in v.people:
-			q.x = p.x + r.randf_range(-1.2, 1.2)
-			q.y = p.y + r.randf_range(-1.2, 1.2)
-			q.px = q.x
-			q.py = q.y
+			if not q.is_baby():
+				ppl.append(q)
+		var stands := KitUnpack.stand_spots(v, p, deg_to_rad(JarCamera.BASE_YAW_DEG), ppl.size())
+		for i in v.people.size():
+			var q := v.people[i]
+			var sp: Vector2 = stands[mini(ppl.find(q), stands.size() - 1)] if ppl.has(q) else stands[0] + Vector2(0.5, 0.3)
+			KitUnpack._set_pos(q, sp, deg_to_rad(JarCamera.BASE_YAW_DEG))
+		KitUnpack.apply_placed(v, _plan)
 	(_pick["root"] as Node).queue_free()
 	(_pick["layer"] as Node).queue_free()
 	_pick = {}
@@ -380,9 +440,42 @@ func _place_first_kit(p: Vector2) -> void:
 	cam.ppu_goal = far_ppu
 	cam.target = Vector3(0, 0, 0)
 	cam._apply()
-	fly_to_settlement(village)
+	if _plan == null:
+		fly_to_settlement(village)
+		return
+	paused = true                        # 지구 이름을 짓기 전엔 병 시간이 흐르지 않는다 (2026-11-07 사용자)
+	_set_hud(false)
+	if trayed and _plan.stage == "build":
+		unpack = KitUnpack.new()
+		add_child(unpack)
+		unpack.setup(self, v, view, p, _plan)
+		unpack.finished.connect(_on_unpacked)
+		if kit_anim and not resume:
+			unpack.play()
+		else:
+			unpack.open_tray_now()
+		return
+	v.finish_kit_layout()
+	if resume:
+		cam.ppu = KitUnpack.PLACE_PPU
+		cam.ppu_goal = KitUnpack.PLACE_PPU
+		cam.target = Vector3(p.x, terrain.ground_y(p.x, p.y), p.y)
+		cam._apply()
+	else:
+		fly_to_settlement(village)
+	_begin_arrival()
+
+
+## 다 놓음 → 제단 자리를 새 배치에 맞추고 · 이름 짓기부터 다시 (creation.json name) → 첫 주민 소개
+func _on_unpacked() -> void:
+	village.finish_kit_layout()
 	if _plan != null:
-		_begin_arrival()
+		_plan.stage = "name"
+		_plan.save(StartFlow.save_dir())
+	if unpack != null:
+		unpack.queue_free()
+		unpack = null
+	_begin_arrival()
 
 
 # ───────────────────────── 첫 주민 소개 · 지구 이름 (OPENING 8 끝 · 9) ─────────────────────────
@@ -1338,6 +1431,9 @@ func _unhandled_input(e: InputEvent) -> void:
 			pick_at((e as InputEventMouseButton).position)
 		return
 	if village == null:
+		return
+	if unpack != null and unpack.handle_input(e):       # (v3.9) 상자 풀기 · 건물 놓기 중
+		get_viewport().set_input_as_handled()
 		return
 	# 날아가는 중에 화면을 누르면 그 자리에서 멈춤
 	if cam.flying and ((e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed)

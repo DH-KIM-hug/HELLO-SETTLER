@@ -26,7 +26,7 @@ func all() -> void:
 	var old_notes := Market.notes
 	StartFlow.navigate = false
 	var old_plan := StartFlow.plan
-	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick",
+	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick", "test_kit_place_by_hand",
 		"test_creation_stages", "test_creation_land_morph", "test_creation_nubs", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
 	StartFlow.plan = old_plan
 	StartFlow.pending_world = null
@@ -268,6 +268,128 @@ func test_first_run_and_back() -> void:
 	check(ok and absf(lt - t_now) < 1.0, "떠나기 전에 저장됨 (병 시각 %.0f = %.0f)" % [lt, t_now])
 	sm2.free()
 	StartFlow.take()
+	drop(sm)
+
+
+## OPENING 8 v3.9: 아무 데나 누른 자리의 특성 쪽지 (숫자 없이) · 놓을 수 없는 곳은 까닭 → [여기에 내려놓기] → 거인이 키트 건물을 놓음
+## (상자 곁만 · 겹치면 안 됨) → 그 자리가 마을(시뮬레이션) 자리이자 저장의 자리 · 놓다가 꺼지면 이어서 · [알아서 놓기] → 첫 주민 소개
+func test_kit_place_by_hand() -> void:
+	var sm := manager()
+	var c := creation(CreationPlan.make(3, WorldCfg.SMALL_SIZE))
+	c.call("jump", "wildlife")
+	for i in 3:
+		c.call("next")
+	remove(c)
+	var s: Node = load(StartFlow.GAME_SCENE).instantiate()
+	s.set("kit_anim", false)
+	s.set("kit_tray", true)
+	run.root.add_child(s)
+	var w: JarWorld = s.get("world")
+	var pk: Dictionary = s.get("_pick")
+	check(not pk.has("marks") and not (pk["marker"] as Node3D).visible, "빛나는 추천 자리는 없음 (아무 데나 누름)")
+	var p: Vector2 = w.spot_choices(1)[0]["p"]
+	var lines: Array = s.call("show_spot", p)
+	var digits := false
+	for l: Variant in lines:
+		for ch in "0123456789":
+			digits = digits or String(l).contains(ch)
+	check(lines.size() >= 4 and not digits and (pk["note"] as Control).visible and not (pk["put_btn"] as Button).disabled,
+		"누른 자리 → 표식 + 특성 쪽지 (숫자 없이): %s" % [lines])
+	var wp := Vector2.INF
+	for k in range(0, w.water.n * w.water.n, 97):
+		if w.water.depth(k) > 0.05 and w.water.inside(w.water.cx(k), w.water.cy(k), 30.0):
+			wp = Vector2(w.water.cx(k), w.water.cy(k))
+			break
+	var bad: Array = s.call("show_spot", wp)
+	check(bad.size() == 1 and String(bad[0]).contains("물") and (pk["put_btn"] as Button).disabled, "물 위 → 까닭 ('%s') · [여기에 내려놓기] 꺼짐" % [bad[0] if not bad.is_empty() else ""])
+	s.call("pick_again")
+	check(not (pk["note"] as Control).visible, "[다시 고르기] → 쪽지를 치움")
+	s.call("show_spot", p)
+	s.call("put_here")
+	var un: KitUnpack = s.get("unpack")
+	var v: Village = s.get("village")
+	check(un != null and un.phase == "tray" and s.get("arrival") == null and bool(s.get("paused")) and un.remaining() == un.items.size() and un.items.size() >= 4,
+		"내려놓으면 상자에 든 것 칸 (모닥불·창고·오두막 %d개) — 다 놓기 전엔 소개도 병 시간도 없음" % (un.items.size() if un != null else 0))
+	var hut: Dictionary = {}
+	for it: Dictionary in un.items:
+		if String(it["type"]) == "오두막":
+			hut = it
+			break
+	un.select(String(hut["key"]))
+	check(not un.place_at(p + Vector2(Village.KIT_PLACE_R + 3.0, 0.0)), "상자에서 멀면 못 놓음 (빨강)")
+	check(not bool(un.aim_ground(p)["ok"]), "상자 위에는 못 놓음")
+	var q := Vector2.INF
+	for i in 24:
+		var tq := p + Vector2(7.0, 0.0).rotated(i * TAU / 24.0)
+		if bool(un.aim_ground(tq)["ok"]):
+			q = tq
+			break
+	check(q != Vector2.INF and un.place_at(q), "상자 곁 빈 땅 → 손이 내려와 놓음 (초록)")
+	var b: Building = hut["b"]
+	check(Vector2(b.x, b.y).distance_to(q) < 0.001 and not un.view_hidden(b.id), "거인이 고른 자리 = 마을의 건물 자리 (%s)" % [Vector2(b.x, b.y)])
+	var pl := CreationPlan.load_from(sm.dir)
+	var key := String(hut["key"])
+	check(pl != null and pl.stage == "build" and pl.placed.has(key) and Vector2(float(pl.placed[key][0]), float(pl.placed[key][1])).distance_to(q) < 0.01,
+		"놓을 때마다 creation.json (build · 놓은 자리)")
+	for it: Dictionary in un.items:
+		if String(it["type"]) == "오두막" and it != hut:
+			un.select(String(it["key"]))
+			check(not bool(un.aim_ground(q)["ok"]) and String(un.aim_ground(q)["why"]).contains("겹"), "놓은 것과 겹치면 못 놓음 ('%s')" % un.aim_ground(q)["why"])
+			break
+	remove(s)
+	# 놓다가 꺼짐 → 다시 켜면 같은 자리에 상자 · 놓은 것은 그대로 · 남은 것만 칸에
+	StartFlow.plan = null
+	StartFlow.pending_world = null
+	var c2: Node = load(StartFlow.CREATION_SCENE).instantiate()
+	c2.set("instant", true)
+	run.root.add_child(c2)
+	check(StartFlow.pending_world != null and StartFlow.plan != null and StartFlow.plan.stage == "build", "꺼졌다 켜짐 (build) → 창조를 건너뛰고 넓은 세상으로")
+	remove(c2)
+	var s2: Node = load(StartFlow.GAME_SCENE).instantiate()
+	s2.set("kit_anim", false)
+	s2.set("kit_tray", true)
+	run.root.add_child(s2)
+	var un2: KitUnpack = s2.get("unpack")
+	var v2: Village = s2.get("village")
+	var b2 := v2.bld(b.id) if v2 != null else null
+	check(un2 != null and un2.phase == "tray" and b2 != null and Vector2(b2.x, b2.y).distance_to(q) < 0.01 and un2.remaining() == un2.items.size() - 1,
+		"이어서: 놓은 오두막은 그 자리 · 남은 %d개만 칸에" % (un2.remaining() if un2 != null else -1))
+	un2.select("fire")
+	var fq := Vector2.INF
+	for i in 24:
+		var tq := v2.center + Vector2(-4.5, 0.0).rotated(i * TAU / 24.0)
+		if bool(un2.aim_ground(tq)["ok"]):
+			fq = tq
+			break
+	check(fq != Vector2.INF and un2.place_at(fq) and v2.fire.distance_to(fq) < 0.001, "모닥불도 거인이 고른 자리 (광장 한가운데)")
+	un2.auto_place()
+	var arr: FirstArrival = s2.get("arrival")
+	var pl2 := CreationPlan.load_from(sm.dir)
+	check(s2.get("unpack") == null and arr != null and pl2 != null and pl2.stage == "name" and pl2.placed.size() == un2.items.size(),
+		"[알아서 놓기] → 남은 것을 자동 배치로 → 첫 주민 소개 (creation.json name)")
+	var b3 := v2.bld(b.id)
+	check(Vector2(b3.x, b3.y).distance_to(q) < 0.01 and v2.altar_pos.distance_to(v2.fire) < 5.0, "자동으로 놓아도 거인이 놓은 것은 그대로 · 제단 자리는 새 모닥불 곁")
+	var home_ok := false
+	for r in v2.people:
+		home_ok = home_ok or r.home == b.id
+	check(home_ok, "주민이 그 오두막에 산다 (집 = 거인이 놓은 자리)")
+	arr.start(v2, StartFlow.plan, w.water)
+	for i in 4:
+		arr.meet_next()
+	arr.show_name()
+	check(arr.confirm_name("작은손"), "이름")
+	arr.finish()
+	remove(s2)
+	var sm2 := GameSave.new()
+	sm2.dir = TMP_DIR
+	var ok := sm2.load_all()
+	var lv: Village = sm2.jar_village(1) if ok and sm2.jars.has(1) else null
+	var lb: Building = lv.bld(b.id) if lv != null else null
+	check(lb != null and Vector2(lb.x, lb.y).distance_to(q) < 0.01 and lv.fire.distance_to(fq) < 0.01, "저장에도 거인이 놓은 자리 (오두막 %s · 모닥불)" % [Vector2(lb.x, lb.y) if lb != null else "-"])
+	sm2.free()
+	StartFlow.take()
+	StartFlow.plan = null
+	StartFlow.pending_world = null
 	drop(sm)
 
 

@@ -70,6 +70,9 @@ var beyond_goal := 0.0
 var b_glass := 0.42                 # 카메라가 유리를 지나는 beyond (set_room이 계산)
 ## (C1) 선반 위 옆 병 보기 — ⑤에서 좌우로 밀면 바라보는 점이 선반을 따라 옆으로 (cm, 0 = 지금 병). 범위는 장면이 정함 (병이 놓인 데까지)
 var shelf_pan := 0.0
+## (OPENING 8 v3.9) 장면이 잠깐 직접 잡는 자리 — {"target": Vector3, "size": 화면 세로(칸), "pitch": 도, "yaw": 도, "dist": 칸}.
+## 비어 있지 않으면 _apply가 이것만 쓴다 (상자 바로 앞 주민 키 높이까지 확 다가가는 연출). 놓으면(hold = {}) 평소대로
+var hold := {}
 var shelf_range := Vector2.ZERO
 ## 로그 확대 (log2 ppu) — 화면·나중 단계가 한 값으로 다룬다
 var zoom_log: float:
@@ -98,6 +101,9 @@ func _ready() -> void:
 
 func _process(dt: float) -> void:
 	_whoosh_check(dt)
+	if not hold.is_empty():
+		_apply()
+		return
 	if flying:
 		_fly_step(dt)
 		return
@@ -331,6 +337,18 @@ func _k3() -> float:
 func _apply() -> void:
 	if camera == null:
 		return
+	if not hold.is_empty():
+		var hp := deg_to_rad(float(hold["pitch"]))
+		var hy := deg_to_rad(float(hold["yaw"]))
+		var hd := float(hold["dist"])
+		var hb := Vector3(sin(hy) * cos(hp), sin(hp), cos(hy) * cos(hp))
+		camera.size = float(hold["size"])
+		camera.near = float(hold.get("near", 1.0))
+		camera.far = hd + maxf(100.0, float(hold["size"]) * 1.2)
+		camera.global_transform = Transform3D(Basis.looking_at(-hb, Vector3.UP), (hold["target"] as Vector3) + hb * hd)
+		pitch_deg = float(hold["pitch"])
+		return
+	camera.near = 1.0
 	if not room.is_empty():
 		var k := _k3()
 		pitch_deg = lerpf(PITCH_DEG, PITCH_TOP, k * k * (3.0 - 2.0 * k))

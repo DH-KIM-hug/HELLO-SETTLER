@@ -48,6 +48,7 @@ func _process(dt: float) -> bool:
 			StartFlow.take()
 			StartFlow.mode = "new"
 			s = load(StartFlow.GAME_SCENE).instantiate()
+			s.set("kit_anim", false)        # 스타터킷 풀기 연출·건물 놓기는 tools/shot_kit_unpack.gd (여기선 자동 배치로 바로 소개)
 			root.add_child(s)
 			t = 0.0
 			step = 1

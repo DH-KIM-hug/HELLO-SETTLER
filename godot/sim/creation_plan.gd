@@ -1,6 +1,6 @@
 ## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md 1·2 — 첫 병 줄임판).
 ## 단계: core 핵 → soil 땅 → water 물 → lid 물방울 돌기·뚜껑 잠그기(배양, 저절로) → seeds 씨앗(배양) →
-##       wildlife 들짐승·물고기 풀기(배양) → spot 스타터킷 자리 (넓은 세상 장면) → name 지구 이름 → 병 안.
+##       wildlife 들짐승·물고기 풀기(배양) → spot 스타터킷 자리 (넓은 세상 장면) → build 키트 건물 놓기 (v3.9) → name 지구 이름 → 병 안.
 ## 단계마다 큰 단추 2~3개 (2026-11-07 — 손으로 빚기·게이지·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
 ##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 씨앗 seed_preset.
 ## 돌기는 거인이 뚜껑 안쪽을 콕콕 찍는다 (2026-11-07 다시 — 큰 호수 자리를 고름): add_drip · 다시 누르면 drip_near → remove_drip · [알아서] fill_drips.
@@ -12,7 +12,7 @@
 class_name CreationPlan
 extends RefCounted
 
-const STAGES := ["core", "soil", "water", "lid", "seeds", "wildlife", "spot", "name"]
+const STAGES := ["core", "soil", "water", "lid", "seeds", "wildlife", "spot", "build", "name"]
 const SG := 32                          # 빚기 격자 한 변
 const REACH := 1.0                      # 병 안 원판 → 세상 (같은 비율)
 const FILE := "creation.json"
@@ -39,6 +39,7 @@ var seeds := {"moss": [], "grass": [], "tree": []}
 var animals: Array = []                 # [u, v] 들짐승을 푼 곳 (가까운 숲 — 비면 알아서)
 var fish: Array = []                    # [u, v] 물고기를 푼 호수
 var spot: Array = []                    # [x, y] 스타터킷 자리 (세상 좌표)
+var placed: Dictionary = {}             # (v3.9 build) 거인이 놓은 키트 건물: 건물 번호(문자열) 또는 "fire" → [x, y] (세상 좌표)
 var climate := "temperate"              # 첫 병은 온대 고정 (GAME_DESIGN 5.3) — 두 번째 병부터 태양 단계가 정함
 var jar_name := ""
 var quick := false                      # 두 번째 병부터 — 빠른 창조 (OPENING 4: 한 화면에 핵·땅·물·기후·씨앗)
@@ -397,6 +398,7 @@ func to_dict() -> Dictionary:
 	d["size"] = size
 	d["stage"] = stage
 	d["spot"] = spot.duplicate()
+	d["placed"] = placed.duplicate(true)
 	d["climate"] = climate
 	d["name"] = jar_name
 	d["quick"] = quick
@@ -426,6 +428,12 @@ static func from_dict(d: Dictionary) -> CreationPlan:
 	p.fish = [float(fv[0]), float(fv[1])] if fv.size() == 2 else []
 	var sp: Array = d.get("spot", [])
 	p.spot = [float(sp[0]), float(sp[1])] if sp.size() == 2 else []
+	var pl: Variant = d.get("placed", {})
+	if pl is Dictionary:
+		for k: Variant in pl:
+			var xy: Variant = pl[k]
+			if xy is Array and (xy as Array).size() == 2:
+				p.placed[String(k)] = [float(xy[0]), float(xy[1])]
 	p.climate = String(d.get("climate", "temperate"))
 	p.jar_name = String(d.get("name", ""))
 	p.quick = bool(d.get("quick", false))

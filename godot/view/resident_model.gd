@@ -997,6 +997,15 @@ func greet() -> void:
 	_start_variety("wave", 2.0)
 
 
+## 고개를 들고 갸웃 (이번 화면만 — tick 뒤에 부름): up = 위로 젖힘(라디안) · side = 옆으로 기울임 — 하늘을 올려다보는 아이 (OPENING 8)
+func tilt_head(up: float, side: float) -> void:
+	if skel == null:
+		return
+	var i := skel.find_bone("skull")
+	_rot_world(i, Vector3.RIGHT, -up)
+	_rot_world(i, Vector3.FORWARD, side)
+
+
 ## 횃불처럼 오른팔을 직접 겨눔 (이번 화면만 — tick 뒤에 부름). rx = 앞으로 듦(-), rz = 옆으로 벌림
 func aim_arm_r(rx: float, rz := 0.0) -> void:
 	_arm_aim = Vector2(rx, rz)

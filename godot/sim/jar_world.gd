@@ -63,6 +63,103 @@ func spot_reason(x: float, y: float) -> String:
 	return String(r["warn"])
 
 
+## (OPENING 8 v3.9) 거인이 아무 데나 누른 자리의 특성 쪽지 — 숫자 없이 말로: 물까지 · 숲 · 평지/언덕 · 바위 · 흙.
+## {ok, why, warn, lines: [String]} — 놓을 수 없으면 lines = [까닭] 하나
+func spot_traits(x: float, y: float) -> Dictionary:
+	var r := kit_spot_ok(x, y)
+	var out := {"ok": r["ok"], "why": r["why"], "warn": r["warn"], "lines": []}
+	if not r["ok"]:
+		out["lines"] = [String(r["why"])]
+		return out
+	var ww := water
+	var p := Vector2(x, y)
+	var lines: Array = []
+	# 물
+	var wd := _nearest_water(p, WorldCfg.KIT_WATER_R * 2.0)
+	if wd < 0.0:
+		lines.append("물이 멀어요")
+	elif wd < 12.0:
+		lines.append("물가 바로 곁이에요")
+	elif wd < WorldCfg.KIT_WATER_R:
+		lines.append("물이 가까워요")
+	else:
+		lines.append("물이 조금 멀어요")
+	# 숲
+	var fd := 1.0e9
+	for f: Dictionary in ww.forests:
+		fd = minf(fd, Vector2(f["x"], f["y"]).distance_to(p) - float(f["r"]) * 0.7)
+	if fd < 10.0:
+		lines.append("숲 바로 곁이에요")
+	elif fd < WorldCfg.KIT_FOREST_R:
+		lines.append("숲이 가까워요")
+	else:
+		lines.append("숲이 멀어요")
+	# 땅 모양
+	var rel := relief(p, 14.0)
+	if rel < FLAT_RELIEF:
+		lines.append("평평한 들판이에요")
+	elif rel < HILL_RELIEF:
+		lines.append("나지막한 언덕이에요")
+	else:
+		lines.append("가파른 언덕 사이예요")
+	# 바위
+	var rock := false
+	for rp in ww.rock_spots:
+		if rp.distance_to(p) < WorldCfg.KIT_ROCKS_R * 0.6:
+			rock = true
+			break
+	lines.append("바위가 가까이 있어요" if rock else "바위는 조금 멀어요")
+	# 흙 (따뜻하고 촉촉하면 기름짐)
+	var wet := ww.wet_k(ww.idx(x, y))
+	var warm := ww.warm_at(x, y)
+	if wd >= 0.0 and wd < WorldCfg.KIT_WATER_R and warm > 0.45:
+		lines.append("흙이 촉촉하고 기름져요")
+	elif warm < 0.28:
+		lines.append("땅이 조금 서늘해요")
+	elif wet <= 0.05 and (wd < 0.0 or wd > WorldCfg.KIT_WATER_R):
+		lines.append("흙이 조금 메말랐어요")
+	else:
+		lines.append("흙이 무난해요")
+	out["lines"] = lines
+	return out
+
+
+const FLAT_RELIEF := 0.13                # 둘레 높낮이(가장 높은 곳 − 낮은 곳)가 이 아래면 평평한 들 (정함)
+const HILL_RELIEF := 0.3                # 이 위면 가파른 언덕
+const CLIFF_RELIEF := 0.45               # 키트 반지름(KIT_FLAT_R) 안이 이만큼 높낮이가 나면 벼랑 — 놓을 수 없음 (정함)
+
+
+## 가장 가까운 호수·강까지 (칸) — reach 안에 없으면 −1
+func _nearest_water(p: Vector2, reach: float) -> float:
+	var best := -1.0
+	for k in water.cells_near(p, reach):
+		if water.is_lake(k) or water.is_river(k):
+			var d := Vector2(water.cx(k) - p.x, water.cy(k) - p.y).length()
+			if best < 0.0 or d < best:
+				best = d
+	return best
+
+
+## p 둘레 r 안 마른 땅의 높낮이 (가장 높은 곳 − 가장 낮은 곳) — 4칸 간격으로 훑음
+func relief(p: Vector2, r: float) -> float:
+	var lo := 1.0e9
+	var hi := -1.0e9
+	var st := 2.0
+	var yy := -r
+	while yy <= r:
+		var xx := -r
+		while xx <= r:
+			if xx * xx + yy * yy <= r * r and water.inside(p.x + xx, p.y + yy):
+				var k := water.idx(p.x + xx, p.y + yy)
+				if water.depth(k) <= 0.004:          # 물 밑(호수 바닥)은 세지 않음
+					var g := water.ground(k)
+					lo = minf(lo, g)
+					hi = maxf(hi, g)
+			xx += st
+		yy += st
+	return maxf(0.0, hi - lo) if hi >= lo else 0.0
+
+
 ## 새 창조 — 새 무작위 시드 (기획서 5.1 '세상은 매번 무작위다')
 static func new_random(size := WorldCfg.SIZE) -> JarWorld:
 	return create(WorldGen.new_seed(), size)
@@ -84,6 +181,8 @@ func kit_spot_ok(x: float, y: float) -> Dictionary:
 	for s in settlements:
 		if s.center.distance_to(p) < WorldCfg.KIT_APART:
 			return {"ok": false, "warn": "", "why": "다른 무리와 너무 가까워요"}
+	if relief(p, WorldCfg.KIT_FLAT_R) > CLIFF_RELIEF:
+		return {"ok": false, "warn": "", "why": "벼랑이라 놓을 수 없어요"}
 	var water_near := false
 	for k in ww.cells_near(p, WorldCfg.KIT_WATER_R):
 		if ww.is_lake(k) or ww.is_river(k):

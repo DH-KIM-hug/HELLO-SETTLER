@@ -550,6 +550,62 @@ func pick_altar_pos() -> Vector2:
 	return altar_pos
 
 
+# ───────────────────────── 스타터킷 건물을 거인이 놓기 (OPENING 8 v3.9) ─────────────────────────
+## 상자(center) 곁 KIT_PLACE_R 안 · 물·벽·바위·가파른 땅이 아닌 곳 · obstacles([[Vector2, 반지름]] — 이미 놓은 것·상자)와 겹치지 않게.
+## {ok, why}. 아직 놓지 않은 키트 건물은 세지 않는다 (장면이 obstacles로 놓은 것만 넘김)
+const KIT_PLACE_R := 14.0
+const KIT_STEEP := 0.25                  # 건물 바닥 둘레 높낮이가 이 위면 '땅이 너무 기울었어요' (정함 — JarWorld.relief 단위)
+
+
+func kit_item_ok(p: Vector2, size: float, obstacles: Array) -> Dictionary:
+	if p.distance_to(center) > KIT_PLACE_R:
+		return {"ok": false, "why": "상자에서 너무 멀어요"}
+	if water == null or not water.inside(p.x, p.y, size + 1.2):
+		return {"ok": false, "why": "세상 끝 벽에 너무 가까워요"}
+	if water_at(p.x, p.y):
+		return {"ok": false, "why": "물 위에는 놓을 수 없어요"}
+	for a in 8:
+		var q := p + Vector2(cos(a * TAU / 8.0), sin(a * TAU / 8.0)) * (size + 0.4)
+		if water_at(q.x, q.y):
+			return {"ok": false, "why": "물가에 너무 붙었어요"}
+	var lo := 1.0e9
+	var hi := -1.0e9
+	for a in 9:
+		var q := p if a == 8 else p + Vector2(cos(a * TAU / 8.0), sin(a * TAU / 8.0)) * size
+		var g := water.ground(water.idx(q.x, q.y))
+		lo = minf(lo, g)
+		hi = maxf(hi, g)
+	if hi - lo > KIT_STEEP:
+		return {"ok": false, "why": "땅이 너무 기울었어요"}
+	for r: Dictionary in rocks:
+		if Vector2(r["x"] - p.x, r["y"] - p.y).length() < size + 0.8:
+			return {"ok": false, "why": "바위가 있어요"}
+	for o: Array in obstacles:
+		if (o[0] as Vector2).distance_to(p) < float(o[1]) + size + 0.5:
+			return {"ok": false, "why": "다른 것과 겹쳐요"}
+	return {"ok": true, "why": ""}
+
+
+## 키트 건물 하나를 거인이 고른 자리로 (건물 자리 = 시뮬레이션 자리 — 저장에 그대로)
+func move_kit_building(b: Building, p: Vector2) -> void:
+	b.x = p.x
+	b.y = p.y
+	_clear_trees(p, b.size())
+
+
+## 모닥불(광장 한가운데)을 거인이 고른 자리로
+func move_fire(p: Vector2) -> void:
+	fire = p
+	_clear_trees(p, 1.2)
+
+
+## 다 놓았으면: 제단 자리를 새 배치에 맞게 다시 (모닥불 곁, 건물을 피해)
+func finish_kit_layout() -> void:
+	altar_pos = fire + ALTAR_OFFSET
+	altar_pos = pick_altar_pos()
+	_clear_trees(altar_pos, ALTAR_CLEAR)
+
+
 func altar_spot_ok(p: Vector2) -> bool:
 	if water == null or not water.inside(p.x, p.y, ALTAR_CLEAR + 0.5) or water_at(p.x, p.y):
 		return false
