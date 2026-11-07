@@ -24,7 +24,7 @@
 
 | # | System Name | Category | Priority | Status | Design Doc | Depends On |
 |---|-------------|----------|----------|--------|------------|------------|
-| 1 | 병 시간·속도·비운 시간 따라잡기 + 중요한 일이 생기면 저절로 느려지고 까닭을 말함 ✅ | Core | MVP | Not Started | — | — |
+| 1 | 병 시간·속도·비운 시간 따라잡기 + 중요한 일이 생기면 저절로 느려지고 까닭을 말함 ✅ | Core | MVP | Designed | design/gdd/jar-time.md | — |
 | 2 | 세상 생성·창조 오프닝 ✅ | Core | MVP | Not Started | — (docs/OPENING.md) | — |
 | 3 | 닫힌 병의 물·소금·이슬 ✅ | Core | MVP | Not Started | — | 1, 2, 4 |
 | 4 | 빛·등불·계절·날씨 ✅ | Core | MVP | Not Started | — | 1 |
