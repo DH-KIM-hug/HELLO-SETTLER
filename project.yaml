@@ -30,10 +30,10 @@ framework:
 project:
   name: "나의 작은 지구 (My Little Earth)"
   genre: "모바일 3D 마을 시뮬레이션 (유리병 속 소인의 세상)"
-  stage: "Production"
+  stage: "Concept"
 
 modes:
-  rigor: minimal
+  rigor: full
   automation: guided
 
 engine:
