@@ -11,6 +11,10 @@ var logo: Control
 
 
 func _ready() -> void:
+	if PerfProbe.requested():        # 폰 실측 (view/perf/perf_probe.gd) — 디버그 빌드 + --perf 일 때만
+		set_process(false)
+		PerfProbe.launch(get_tree())
+		return
 	StartFlow.prepare(self)
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	var bg := ColorRect.new()
