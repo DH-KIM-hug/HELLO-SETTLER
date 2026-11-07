@@ -155,6 +155,8 @@ func wet_avg(v: Village) -> float:
 
 func humid_target(v: Village) -> float:
 	var c := float(Balance.HUMID_CLIMATE.get(v.climate(), 0.0))
+	if v.water is WorldWater:
+		c += Balance.HUMID_WORLD             # 넓은 세상: 병 전체의 호수·강이 보태는 김 (소형 병과 맞춤)
 	return clampf(Balance.HUMID_BASE + Balance.HUMID_WET * wet_avg(v) + c + Balance.HUMID_CYCLE * (v.water.humid - 0.6), 0.0, 1.0)
 
 

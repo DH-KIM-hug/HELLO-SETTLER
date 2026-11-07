@@ -22,7 +22,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 하늘의 것 — 큰 버섯 · 큰 민들레 · 첫 제물 · 밀 (WORLD_EVENTS 2.6 · 2.7, BALANCE v4-4)")
 	Market.today_override = "시험날"
-	run.timed(self, ["test_shroom_where", "test_grove_and_growth", "test_picker", "test_poison_skill", "test_poison_eat", "test_shade_cotton",
+	run.timed(self, ["test_shroom_where", "test_shroom_giant_scale", "test_grove_and_growth", "test_picker", "test_poison_skill", "test_poison_eat", "test_shade_cotton",
 		"test_sky_trust", "test_dand_lifecycle", "test_dand_winter", "test_seeds_to_shade", "test_weeds", "test_blow", "test_ride",
 		"test_first_offering", "test_wheat_bounded", "test_determinism", "test_words"])
 	Market.today_override = ""
@@ -110,6 +110,69 @@ func test_shroom_where() -> void:
 	# 집은 큰 버섯의 대 둘레에 짓지 않는다
 	var s0: Dictionary = f.shrooms[0]
 	check(not v.is_free(s0["x"], s0["y"], 1.0), "큰 버섯 자리에는 집을 짓지 않음 (is_free)")
+
+
+## 노드 아래 모든 도형의 상자 (노드 자신의 변환·배율 포함 — 장면 밖이라 global_transform 대신 부모를 따라 곱함)
+static func _world_aabb(n: Node3D) -> AABB:
+	var out := AABB()
+	var first := true
+	for mi: MeshInstance3D in n.find_children("*", "MeshInstance3D", true, false):
+		if mi.mesh == null or not mi.visible:
+			continue
+		var xf := mi.transform
+		var p := mi.get_parent()
+		while p != null and p != n.get_parent():
+			xf = (p as Node3D).transform * xf
+			p = p.get_parent()
+		var bb: AABB = xf * mi.mesh.get_aabb()
+		out = bb if first else out.merge(bb)
+		first = false
+	return out
+
+
+## 넓은 세상에서도 큰 버섯이 난다 (온대 세상의 김 ≥ 버섯 기준) · 다 자란 먹는 버섯은 진짜 거인 크기 —
+## 갓이 오두막 바닥보다 넓고 주민 키의 몇 배 (WORLD_EVENTS 1.1 두 축척 · 2.6) · 어린 버섯은 작게 시작해 자라며 커짐
+func test_shroom_giant_scale() -> void:
+	var jw := JarWorld.create_with_kit(20261106)          # 본 게임 크기 (작은 세상은 물이 가까워 늘 축축함)
+	var v := jw.primary()
+	jw.advance(0.25 * D)
+	check(v.air.humid_target(v) >= Balance.SHROOM_HUMID_MIN,
+		"넓은 세상(온대)의 김 목표 %.2f ≥ 버섯 기준 %.2f — 큰 버섯이 날 수 있다 (전엔 0.27~0.37이라 빛버섯만 났음)" % [v.air.humid_target(v), Balance.SHROOM_HUMID_MIN])
+	var fv := FloraView.new(v)
+	run.root.add_child(fv)
+	v.flora.shrooms.clear()
+	var c := v.center + Vector2(8.0, 8.0)
+	var big := v.flora.add_shroom(v, c, "흰갓버섯", 1.0)
+	var brown := v.flora.add_shroom(v, c + Vector2(10.0, 0.0), "갈색갓버섯", 1.0)
+	var young := v.flora.add_shroom(v, c + Vector2(0.0, 10.0), "흰갓버섯", 0.02)
+	for i in 40:
+		fv._sync_shrooms(v.flora, 0.1)       # 버섯만 (장면 밖 — 꽃씨·잡초 노드 없이)
+	var cap_w := _world_aabb(fv._sh[big["id"]]["root"]).size.x
+	var brown_w := _world_aabb(fv._sh[brown["id"]]["root"]).size.x
+	var young_w0 := _world_aabb(fv._sh[young["id"]]["root"]).size.x
+	young["g"] = 0.6
+	for i in 40:
+		fv._sync_shrooms(v.flora, 0.1)       # 버섯만 (장면 밖 — 꽃씨·잡초 노드 없이)
+	var young_w1 := _world_aabb(fv._sh[young["id"]]["root"]).size.x
+	# 오두막 (모델 바닥 너비 × 건물 배율)
+	var cot := 0.0
+	for nm: String in VillageView.BUILDING_MODELS["오두막"]:
+		var mb: AABB = (Art.model(nm)["mesh"] as Mesh).get_aabb()
+		cot = maxf(cot, maxf(mb.size.x, mb.size.z) * VillageView.BUILDING_SCALE)
+	# 어른 주민 키 (실제 모델 × RESIDENT_SCALE)
+	var rm := ResidentModel.new()
+	run.root.add_child(rm)
+	rm.build(0, 0, 0, 0, 0, 0, 30.0, "m")
+	rm.set_anim("idle")
+	rm.tick(0.0)
+	var rh := _world_aabb(rm).size.y
+	rm.queue_free()
+	fv.queue_free()
+	check(cot > 1.0 and rh > 0.5, "비교 크기 잼: 오두막 바닥 %.2f · 주민 키 %.2f" % [cot, rh])
+	check(cap_w > cot and brown_w > cot * 1.5, "다 자란 버섯 갓이 오두막보다 넓다 (흰갓 %.2f · 갈색갓 %.2f > 오두막 %.2f)" % [cap_w, brown_w, cot])
+	check(cap_w > 4.0 * rh and brown_w > 5.0 * rh, "갓 너비 = 주민 키의 몇 배 (흰갓 %.1f배 · 갈색갓 %.1f배)" % [cap_w / rh, brown_w / rh])
+	check(young_w0 < cap_w * 0.4 and young_w1 > young_w0 * 1.8 and young_w1 < cap_w,
+		"어린 버섯은 작게 시작해 자람 (%.2f → %.2f, 다 자라면 %.2f)" % [young_w0, young_w1, cap_w])
 
 
 ## 하나씩 천천히 자라고, 습한 밤 뒤 새벽엔 하룻밤 버섯 숲 · 김이 빠지면 시듦 · 부채버섯은 다시 자람
