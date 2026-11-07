@@ -4,6 +4,7 @@
 extends RefCounted
 
 var run: SceneTree
+var fs := Firsts.new()                 # 별지기 단위 안내 창 (sim/firsts.gd 인스턴스 — 장면을 띄우면 그 장면의 것으로 바꿔 듦)
 var quick := false
 const SLOW: Array = []
 const FAST_I := 6                      # 1초=10분 (보통보다 빠름)
@@ -23,10 +24,10 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 사건 연출 · 안내 창 · 손 도구 (E1-0~2 · 6b · 6c)")
 	_old_aware = Village.start_aware
-	run.timed(self, ["test_firsts_once_and_save", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow",
+	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow",
 		"test_popup_scene", "test_words"])
 	Village.start_aware = _old_aware
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 
 
@@ -38,26 +39,26 @@ func proto(seed_v := 20261107) -> Village:
 
 ## 안내 창은 한 번 · 줄 서서 하나씩 · 저장(거인 묶음)에 남음 · 옛 저장은 모두 본 것
 func test_firsts_once_and_save() -> void:
-	Firsts.reset()
-	check(Firsts.fire("baby") and not Firsts.fire("baby") and Firsts.queue == ["baby"], "같은 일은 한 번만 줄 섬")
-	Firsts.fire("death")
-	check(Firsts.peek() == "baby" and Firsts.take() == "baby" and Firsts.was_seen("baby") and Firsts.queue == ["death"], "차례대로 하나씩 (먼저 생긴 것 먼저)")
-	check(not Firsts.fire("baby"), "본 창은 다시 줄 서지 않음")
-	Firsts.unlock("wipe")
-	var d := Firsts.to_dict()
+	fs.reset()
+	check(fs.fire("baby") and not fs.fire("baby") and fs.queue == ["baby"], "같은 일은 한 번만 줄 섬")
+	fs.fire("death")
+	check(fs.peek() == "baby" and fs.take() == "baby" and fs.was_seen("baby") and fs.queue == ["death"], "차례대로 하나씩 (먼저 생긴 것 먼저)")
+	check(not fs.fire("baby"), "본 창은 다시 줄 서지 않음")
+	fs.unlock("wipe")
+	var d := fs.to_dict()
 	var j: Variant = JSON.parse_string(JSON.stringify(d))         # 저장 파일처럼 한 번 글로
-	Firsts.reset()
-	Firsts.from_dict(j)
-	check(Firsts.was_seen("baby") and Firsts.has_tool("wipe") and not Firsts.has_tool("spray") and Firsts.queue == ["death", "tool_wipe"],
+	fs.reset()
+	fs.from_dict(j)
+	check(fs.was_seen("baby") and fs.has_tool("wipe") and not fs.has_tool("spray") and fs.queue == ["death", "tool_wipe"],
 		"저장 → 불러오기: 본 창 · 열린 도구 · 기다리는 창 그대로")
 	var gs := GameSave.new()
 	gs.enabled = false
 	var gp := gs.giant_payload()
 	check((gp.get("firsts", {}) as Dictionary).has("seen"), "거인 묶음에 'firsts'")
 	gs.free()
-	Firsts.from_dict(null)
-	check(Firsts.was_seen("awakening") and Firsts.has_tool("spray") and Firsts.has_tool("lamp") and Firsts.queue.is_empty(), "옛 저장 (값 없음) → 모두 본 것 · 모든 도구 열림")
-	Firsts.reset()
+	fs.from_dict(null)
+	check(fs.was_seen("awakening") and fs.has_tool("spray") and fs.has_tool("lamp") and fs.queue.is_empty(), "옛 저장 (값 없음) → 모두 본 것 · 모든 도구 열림")
+	fs.reset()
 	var missing := PackedStringArray()
 	for id: String in ["awakening", "altar", "wish", "sold", "blueprint", "baby", "sick", "death", "revelation", "crisis", "flour", "bread"]:
 		if not Firsts.POPUPS.has(id) or (Firsts.POPUPS[id]["lines"] as Array).size() < 2:
@@ -69,37 +70,85 @@ func test_firsts_once_and_save() -> void:
 		"제단 알림 창 (2c): 기도·공물 → 지폐 → 살 수 있음 · 비운 동안에도 · 제단 크기·등불 + [제단 보기]")
 
 
+## (F-1 · notebook.md N1·N2) 안내 창 상태는 인스턴스 (static 없음 — 둘이 섞이지 않음) · 설계도는 사건 구독 · 배고픔은 필요 단계 0.8 ·
+## 별지기 묶음(GiantState)으로 저장 · 옛 저장(firsts 없음) → 모두 본 것
+func test_firsts_instance_events() -> void:
+	var src := FileAccess.get_file_as_string("res://sim/firsts.gd")
+	check(not src.contains("static var"), "sim/firsts.gd에 static var 없음 (ADR-0001 5절)")
+	var a := Firsts.new()
+	var b := Firsts.new()
+	a.fire("baby")
+	a.unlock("wipe")
+	check(a.pending() and not b.pending() and not b.has_tool("wipe"), "두 인스턴스는 섞이지 않음")
+	# 설계도: 사건 blueprint_dropped 구독 (상태 훑기 아님)
+	var v := proto()
+	var f := Firsts.new()
+	v.blueprints["우물"] = v.t
+	f.check(v)
+	check(not "blueprint" in f.queue, "사건 없이 설계도 목록만 → 안내 없음 (상태 훑기 아님)")
+	v.emit(&"blueprint_dropped", {"v": "우물"})
+	check("blueprint" in f.check(v) and "blueprint" in f.queue, "blueprint_dropped 사건 → 설계도 안내")
+	f.take("blueprint")
+	v.emit(&"blueprint_dropped", {"v": "화덕"})
+	check(not "blueprint" in f.check(v), "본 뒤 같은 사건은 다시 줄 서지 않음")
+	# 배고픔: 필요와 기분의 배고픔 단계 (Balance.HUNGRY_AT 0.8)
+	var vh := proto()
+	var fh := Firsts.new()
+	vh.stock["빵"] = 0.0
+	for r in vh.people:
+		r.hunger = 0.0
+	vh.people[1].hunger = Balance.HUNGRY_AT - 0.01
+	fh.check(vh)
+	check(not "hungry" in fh.queue, "배고픔 0.79 → 아직 안내 없음")
+	Market.hand = []
+	vh.people[1].hunger = Balance.HUNGRY_AT
+	fh.check(vh)
+	check("hungry" in fh.queue and is_equal_approx(Balance.HUNGRY_AT, 0.8), "배고픔 0.8 (필요 단계 '배고픔') → '배고파 보여요'")
+	Market.hand = []
+	# 별지기 묶음 저장 · 옛 저장
+	var gs := GiantState.new()
+	gs.firsts.fire("death")
+	gs.firsts.unlock("lamp")
+	var gp := gs.to_dict()
+	var gs2 := GiantState.new()
+	var keep := gs2.firsts
+	gs2.from_dict(JSON.parse_string(JSON.stringify(gp)))
+	check(gs2.firsts == keep and gs2.firsts.has_tool("lamp") and "death" in gs2.firsts.queue, "GiantState 'firsts' 저장 → 불러오기 (같은 인스턴스에 채움)")
+	gs2.from_dict({})
+	check(gs2.firsts.was_seen("awakening") and gs2.firsts.has_tool("spray") and not gs2.firsts.pending(), "옛 거인 묶음 (firsts 없음) → 모두 본 것 · 모두 열림")
+
+
 ## 손 도구는 처음엔 잠김 (보이지 않음) · 그 일이 처음 생기면 열림 + 안내 창 (한 줄 쓰는 법)
 func test_tools_locked() -> void:
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 	var v := proto()
-	check(Firsts.check(v).filter(func(id: String) -> bool: return id.begins_with("tool_")).is_empty() and Firsts.tools.is_empty(), "처음: 열린 도구 없음")
+	check(fs.check(v).filter(func(id: String) -> bool: return id.begins_with("tool_")).is_empty() and fs.tools.is_empty(), "처음: 열린 도구 없음")
 	var r := v.people[1]
 	r.cold = 0.6
-	Firsts.check(v)
-	check(Firsts.has_tool("lamp") and "tool_lamp" in Firsts.queue and not Firsts.has_tool("spray") and not "cup" in Firsts.TOOLS and not "curtain" in Firsts.TOOLS and not "blow" in Firsts.TOOLS,
+	fs.check(v)
+	check(fs.has_tool("lamp") and "tool_lamp" in fs.queue and not fs.has_tool("spray") and not "cup" in Firsts.TOOLS and not "curtain" in Firsts.TOOLS and not "blow" in Firsts.TOOLS,
 		"첫 추위 → [등불 옮기기] + 안내 창 (감싸기·커튼 없음 — 6c-1)")
 	r.cold = 0.0
 	r.heat = 0.6
-	Firsts.check(v)
-	check(Firsts.has_tool("spray") and "tool_spray" in Firsts.queue, "첫 더위 → [물 뿌리기] (커튼 대신 — 6c-1)")
+	fs.check(v)
+	check(fs.has_tool("spray") and "tool_spray" in fs.queue, "첫 더위 → [물 뿌리기] (커튼 대신 — 6c-1)")
 	r.heat = 0.0
-	Firsts.reset()
+	fs.reset()
 	v.smalls.gnat_phase = "omen"
-	Firsts.check(v)
-	check(Firsts.has_tool("tweeze") and "crisis" in Firsts.queue, "첫 날벌레 조짐 → [핀셋] + '무언가 다가와요'")
+	fs.check(v)
+	check(fs.has_tool("tweeze") and "crisis" in fs.queue, "첫 날벌레 조짐 → [핀셋] + '무언가 다가와요'")
 	v.smalls.gnat_phase = "calm"
 	v.smalls.drop_phase = "hang"
-	Firsts.check(v)
-	check("drop" in Firsts.queue and String(Firsts.POPUPS["drop"]["lines"][1]).contains("유리를 톡"), "떠돌이 큰 물방울 → '유리를 톡 쳐서 빈 땅에' 안내 (작은 이슬은 안내 없음)")
+	fs.check(v)
+	check("drop" in fs.queue and String(Firsts.POPUPS["drop"]["lines"][1]).contains("유리를 톡"), "떠돌이 큰 물방울 → '유리를 톡 쳐서 빈 땅에' 안내 (작은 이슬은 안내 없음)")
 	v.smalls.drop_phase = "calm"
 	v.water.glass_dust = 0.6
-	Firsts.check(v)
-	check(Firsts.has_tool("wipe"), "유리 먼지가 짙어짐 → [유리 닦기]")
+	fs.check(v)
+	check(fs.has_tool("wipe"), "유리 먼지가 짙어짐 → [유리 닦기]")
 	v.era = 1
-	Firsts.check(v)
-	check("revelation" in Firsts.queue, "마을 시대 → 새 시대 안내")
+	fs.check(v)
+	check("revelation" in fs.queue, "마을 시대 → 새 시대 안내")
 	# 밭이 오래 마름 → 물 뿌리기 (짓자마자가 아니라 병 6시간 뒤)
 	var farm: Building = null
 	for b in v.buildings:
@@ -109,24 +158,25 @@ func test_tools_locked() -> void:
 		farm = v.add_building("농장", v.center.x + 4.0, v.center.y + 3.0, true)
 	var dry := v.wetness(farm.x, farm.y) < GiantHand.SPRAY_DRY
 	if dry:
-		Firsts.check(v)
-		check(not Firsts.has_tool("spray"), "밭이 막 마름: 아직 [물 뿌리기] 아님")
+		fs.check(v)
+		check(not fs.has_tool("spray"), "밭이 막 마름: 아직 [물 뿌리기] 아님")
 		v.t += Firsts.DRY_HOURS * Balance.HOUR + 1.0
-		Firsts.check(v)
-		check(Firsts.has_tool("spray"), "밭이 %d시간 넘게 마름 → [물 뿌리기]" % int(Firsts.DRY_HOURS))
+		fs.check(v)
+		check(fs.has_tool("spray"), "밭이 %d시간 넘게 마름 → [물 뿌리기]" % int(Firsts.DRY_HOURS))
 	else:
-		Firsts.unlock("spray")
-		check(Firsts.has_tool("spray"), "(이 밭은 젖어 있음 — 열기만 확인)")
+		fs.unlock("spray")
+		check(fs.has_tool("spray"), "(이 밭은 젖어 있음 — 열기만 확인)")
 	# 배고픈 얼굴 → 하늘 낟알 한 줌을 손에 (무료)
 	Market.hand = []
 	v.people[2].hunger = 1.5
 	v.stock["빵"] = 0.0
-	Firsts.check(v)
-	check("hungry" in Firsts.queue and Shop.hand_count(Notebook.GRAIN) == 1, "배고픈 얼굴 → '배고파 보여요' + 손에 하늘 낟알 한 줌")
+	fs.check(v)
+	check("hungry" in fs.queue and Shop.hand_count(Notebook.GRAIN) == 1, "배고픈 얼굴 → '배고파 보여요' + 손에 하늘 낟알 한 줌")
 	# 장면: 잠긴 도구는 [손]에 보이지 않음 (자리도 없음) → 열리면 보임
-	Firsts.reset()
+	fs.reset()
 	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
 	run.root.add_child(scene)
+	_adopt(scene)
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
 	hc.refresh()
@@ -136,7 +186,7 @@ func test_tools_locked() -> void:
 			shown.append(k)
 	check(shown.is_empty() and not hc.tool_rows[0].visible and not hc.tool_rows[1].visible and not hc.tool_sep.visible and hc.slot_row.is_visible_in_tree(),
 		"[손] 처음: 손에 든 것만 (도구 줄 없음)%s" % ("" if shown.is_empty() else " — 보임 " + ", ".join(shown)))
-	Firsts.unlock("wipe")
+	fs.unlock("wipe")
 	hc.refresh()
 	check(hc.wipe_btn.is_visible_in_tree() and not hc.lamp_btn.is_visible_in_tree() and not hc.spray_btn.is_visible_in_tree() and hc.tool_rows[1].visible and not hc.tool_rows[0].visible,
 		"[유리 닦기]가 열림 → 그것만 보임")
@@ -147,7 +197,7 @@ func test_tools_locked() -> void:
 	check(not " ".join(texts).contains("감싸") and not " ".join(texts).contains("커튼") and hc.get("blow_btn") == null, "손 칸에 감싸기·커튼·불기 없음 (6c-1)")
 	run.root.remove_child(scene)
 	scene.free()
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 
 
@@ -218,7 +268,15 @@ func test_pebbles() -> void:
 func _scene() -> Node:
 	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
 	run.root.add_child(scene)
+	_adopt(scene)
 	return scene
+
+
+## 장면의 안내 창 인스턴스를 들고, 장면을 띄우기 전 시험이 맞춰 둔 상태를 옮긴다 (static이 없으니 장면과 시험이 같은 것을 보게)
+func _adopt(scene: Node) -> void:
+	var sf: Firsts = scene.get("firsts")
+	sf.from_dict(fs.to_dict())
+	fs = sf
 
 
 func _run(d: StageDirector, secs: float, dt := 0.1) -> void:
@@ -229,7 +287,7 @@ func _run(d: StageDirector, secs: float, dt := 0.1) -> void:
 
 ## 장면: 깨달음 연출 → 제단 짓기 연출 → (다 지어짐) 첫 기도 연출 → 안내 창 차례 (깨달음 → 제단)
 func test_flow_scene() -> void:
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 	Village.start_aware = false
 	var scene := _scene()
@@ -258,7 +316,7 @@ func test_flow_scene() -> void:
 	check(not d.playing() and cam.hold.is_empty() and clock.stage_rate < 0.0 and vw.pose_over.is_empty(), "끝나면 카메라·병 시간·몸짓이 제자리")
 	var e := StageDirector._entry(v, Awakening.LINE_AWAKEN)
 	check(String(e.get("card", "")) == "awakening", "연대기에 그림 카드로 남음 (그림: %s)" % ("있음" if String(e.get("pic", "")) != "" else "헤드리스라 없음"))
-	check("awakening" in Firsts.queue, "끝나면 깨달음 안내 창이 줄 섬")
+	check("awakening" in fs.queue, "끝나면 깨달음 안내 창이 줄 섬")
 	# 제단 짓기 연출 (첫 병 첫날이 아니면)
 	scene.call("_update_ui")
 	check(d.playing() and d.id == "altar_build", "이어서 제단 짓기 연출 (사람들이 돌을 모음)")
@@ -274,20 +332,20 @@ func test_flow_scene() -> void:
 	check(not d.playing(), "첫 기도 연출 끝 (약 9초)")
 	var ids: Array = d.log.map(func(x: Dictionary) -> String: return String(x["id"]))
 	check(ids == ["awakening", "altar_build", "first_prayer"], "차례: %s" % str(ids))
-	check(Firsts.queue.find("awakening") >= 0 and Firsts.queue.find("altar") > Firsts.queue.find("awakening") or (Firsts.was_seen("awakening") and "altar" in Firsts.queue),
-		"안내 창: 깨달음 → 제단 (%s)" % str(Firsts.queue))
+	check(fs.queue.find("awakening") >= 0 and fs.queue.find("altar") > fs.queue.find("awakening") or (fs.was_seen("awakening") and "altar" in fs.queue),
+		"안내 창: 깨달음 → 제단 (%s)" % str(fs.queue))
 	var e2 := StageDirector._entry(v, "돌 제단이 섰다")
 	check(String(e2.get("card", "")) == "first_prayer", "첫 기도: 연대기 그림 카드")
 	run.root.remove_child(scene)
 	scene.free()
 	Village.start_aware = _old_aware
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 
 
 ## 건너뛰기 · 두 번째부터 짧은 판 · 빠르게 흐르던 중이면 보통으로 + 느려진 까닭 카드 → 끝나면 원래 빠르기
 func test_skip_and_slow() -> void:
-	Firsts.reset()
+	fs.reset()
 	Village.start_aware = false
 	var scene := _scene()
 	var v: Village = scene.get("village")
@@ -310,8 +368,8 @@ func test_skip_and_slow() -> void:
 	d._gui_input(ev)
 	check(not d.playing() and d.skipped and cam.hold.is_empty(), "화면을 톡 → 건너뜀 (카메라 제자리)")
 	check(clock.speed_i == FAST_I and clock.stage_rate < 0.0, "끝나면 원래 빠르기로 (1초=10분)")
-	check("awakening" in Firsts.queue and String(StageDirector._entry(v, Awakening.LINE_AWAKEN).get("card", "")) == "awakening", "건너뛰어도 안내 창 · 그림 카드")
-	check(Firsts.play_count("awakening") == 1, "본 횟수 1")
+	check("awakening" in fs.queue and String(StageDirector._entry(v, Awakening.LINE_AWAKEN).get("card", "")) == "awakening", "건너뛰어도 안내 창 · 그림 카드")
+	check(fs.play_count("awakening") == 1, "본 횟수 1")
 	# 두 번째 (다른 병) — 짧은 판
 	d.play("awakening", v)
 	check(d.k < 1.0, "두 번째부터 짧은 판 (시간 ×%.1f)" % d.k)
@@ -320,19 +378,19 @@ func test_skip_and_slow() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	Village.start_aware = _old_aware
-	Firsts.reset()
+	fs.reset()
 
 
 ## 장면: 안내 창은 연출이 끝난 뒤 · 한 번에 하나 · [보러 가기] · 닫으면 다음 · 다시 안 뜸
 func test_popup_scene() -> void:
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 	var scene := _scene()
 	var pop: FirstPopup = scene.get("first_popup")
 	var d: StageDirector = scene.get("director")
 	var v: Village = scene.get("village")
-	Firsts.fire("altar")
-	Firsts.fire("baby")
+	fs.fire("altar")
+	fs.fire("baby")
 	d.play("first_prayer", v)
 	scene.set("_popup_wait", 0.0)
 	scene.call("_update_firsts", 0.1)
@@ -356,10 +414,10 @@ func test_popup_scene() -> void:
 		scene.call("_update_firsts", 0.1)
 	check(pop.showing() and pop.id == "baby", "시트를 닫으면 다음 창 (아기)")
 	pop.ok_btn.pressed.emit()
-	check(not pop.showing() and Firsts.was_seen("altar") and Firsts.was_seen("baby") and not Firsts.fire("altar"), "본 창은 다시 뜨지 않음")
+	check(not pop.showing() and fs.was_seen("altar") and fs.was_seen("baby") and not fs.fire("altar"), "본 창은 다시 뜨지 않음")
 	# 360×640에서 창이 화면 안
 	run.root.size = Vector2i(360, 640)
-	Firsts.fire("crisis")
+	fs.fire("crisis")
 	for i in 10:
 		scene.call("_update_firsts", 0.1)
 	pop._layout()
@@ -368,7 +426,7 @@ func test_popup_scene() -> void:
 	pop.close()
 	run.root.remove_child(scene)
 	scene.free()
-	Firsts.reset()
+	fs.reset()
 	Market.reset()
 
 

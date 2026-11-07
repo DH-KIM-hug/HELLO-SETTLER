@@ -1,5 +1,5 @@
 ## 마을의 삶 — 사람 사이 (sim/social.gd · data/social_lines.json · ROADMAP E2-4 · E2-7).
-## 말 묶음의 금지어 · 깨닫기 전 거인 이야기 없음 · 조사 · 고백 → 연인 → 혼인 → 저녁 혼례 모임 · 짝짓기 순서 · 연출은 지켜볼 때만 ·
+## 말 묶음의 금지어 · 깨닫기 전 거인 이야기 없음 · 조사 · 고백 → 연인 → 혼인 → 저녁 혼례 모임 · 짝짓기 순서 · 멈춰 서서 이야기는 늘 · 지켜봄·연출 결정성 ·
 ## 결정성·저장. tests/run.gd가 부름: 전체·quick·`-- social`.
 extends RefCounted
 
@@ -19,7 +19,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_line_words", "test_fill", "test_unaware_no_giant", "test_romance_to_marriage", "test_pair_up", "test_stage_only_watching", "test_determinism_and_save", "test_relations_words"])
+	run.timed(self, ["test_line_words", "test_fill", "test_unaware_no_giant", "test_romance_to_marriage", "test_pair_up", "test_talk_always", "test_watch_staging_determinism", "test_determinism_and_save", "test_relations_words"])
 
 
 ## 말 묶음 안의 모든 글 (경로, 글)
@@ -137,9 +137,7 @@ func test_romance_to_marriage() -> void:
 	v.advance(Balance.DAY)
 	check(int(v.stats.get("wedding_feasts", 0)) >= 1 and v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("혼례를 축하했다")), "저녁 모닥불 가 혼례 모임 연대기")
 	# 화면이 켜 있으면: 둘이 가운데, 이웃이 둘레에 서서 지켜봄
-	Social.stage_on = true
 	var ev2 := Social.wedding_gathering(v, k, g)
-	Social.stage_on = false
 	check(ev2["kind"] == "wedding" and (ev2["who"] as Array).size() >= 3 and bool(ev2.get("petals", false)), "혼례 모임 장면: 부부 + 이웃 %d명 · 꽃잎" % ((ev2["who"] as Array).size() - 2))
 	check(k.doing == "혼례를 올리는 중" and k.steps.size() >= 1, "부부는 혼례 자리로 걸어감")
 
@@ -170,22 +168,80 @@ func test_pair_up() -> void:
 	check(v.rng.state == st, "마을 난수를 쓰지 않음")
 
 
-## 연출(걸음 끼우기·대사)은 거인이 지켜보고 화면이 켰을 때만. 따라잡기(watching = false)·꺼진 화면은 관계 값만
-func test_stage_only_watching() -> void:
-	print("== 마을의 삶: 연출은 지켜볼 때만 (따라잡기엔 없음)")
-	for mode in [[false, true], [true, false], [true, true]]:
+## (F-1 · village-life-min R2) 멈춰 서서 이야기는 늘 — 지켜보든 아니든 장면(대사)·멈춤(busy)·talk_started가 생긴다
+func test_talk_always() -> void:
+	print("== 마을의 삶: 멈춰 서서 이야기는 늘 (지켜봄과 무관)")
+	for watch in [false, true]:
 		var v := Village.new_prototype(44)
 		v.water.offline = true
-		Social.stage_on = mode[0]
-		v.watching = mode[1]
+		v.watching = watch
+		var cur := v.events.clear_to_end()
 		var evs := 0
+		var busy_seen := 0
+		var talks := 0
 		for i in 96:
 			v.advance(900.0)
 			evs += Social.take_events(v).size()
-		var on: bool = mode[0] and mode[1]
-		check((evs > 0) == on, "화면 %s · 지켜봄 %s → 장면 %d개" % [str(mode[0]), str(mode[1]), evs])
+			busy_seen += (v.social.get("busy", {}) as Dictionary).size()
+			for e: Dictionary in v.events.since(cur):
+				if e["kind"] == &"talk_started":
+					talks += 1
+					if talks == 1:
+						check(e["v"] is Dictionary and int(e["v"]["with"]) >= 0 and float(e["v"]["secs"]) > 0.0 and e["at"] is Vector2, "talk_started 모양 {with, kind, secs}")
+			cur = v.events.clear_to_end()
+		check(evs > 0 and talks > 0 and busy_seen > 0, "지켜봄 %s → 장면 %d개 · talk_started %d · busy %d" % [str(watch), evs, talks, busy_seen])
 		check(Social.pairs(v).size() > 3, "관계 값은 언제나 자람 (%d쌍)" % Social.pairs(v).size())
-	Social.stage_on = false
+	var src := FileAccess.get_file_as_string("res://sim/social.gd")
+	check(not src.contains("static var stage_on") and not src.contains("static var rate") and not src.contains("is_watching"), "sim/social.gd에 화면 상태(stage_on·rate)·지켜봄 읽기 없음 (ADR-0001 5절)")
+
+
+## 결정성 (ADR-0001 3절 시험 (a)): 같은 시드로 병 이틀 — 화면 연출(장면·사건을 가져가 읽나)을 켜든 끄든,
+## 거인이 지켜보든 말든 사람 사이·멈춤·주민 자리·상태가 같다. 지켜봄은 기획상 입력이라 (ADR-0001 3절 — 깨달은 마을의 믿음·시대 점수·위기 대기)
+## 그 길이 없는 깨닫기 전 마을로 잰다. 깨달은 마을은 같은 지켜봄 입력에서 연출 켬 ↔ 끔만.
+func test_watch_staging_determinism() -> void:
+	print("== 마을의 삶: 지켜봄·연출을 바꿔도 병 이틀 뒤 같은 자리·상태")
+	var old_aware := Village.start_aware
+	var aware_on := _det_run(true, true, true)
+	check(aware_on == _det_run(true, false, true), "깨달은 마을 · 지켜봄 켬: 연출 켬 ↔ 끔 → 같음")
+	check(_det_run(false, true, true) == _det_run(false, false, true), "깨달은 마을 · 지켜봄 끔: 연출 켬 ↔ 끔 → 같음")
+	var run_one := func(watch: bool, stage: bool) -> String:
+		return _det_run(watch, stage, false)
+	var base: String = run_one.call(true, true)
+	check(base == run_one.call(true, false), "지켜봄 켬: 연출 켬 ↔ 끔 → 같음")
+	var off: String = run_one.call(false, true)
+	if base != off:
+		var a := base.split("|")
+		var b := off.split("|")
+		for k in mini(a.size(), b.size()):
+			if a[k] != b[k]:
+				print("   첫 차이 #%d: %s ↔ %s" % [k, a[k], b[k]])
+				break
+	check(base == off, "지켜봄 켬 ↔ 끔 (연출 켬) → 같은 자리·상태")
+	check(off == run_one.call(false, false), "지켜봄 끔: 연출 켬 ↔ 끔 → 같음")
+	Village.start_aware = old_aware
+
+
+## 병 이틀 (900초씩) 뒤 주민 자리·행동·걸음 수·배고픔 + 사람 사이 + 난수 상태. stage = 화면처럼 장면·사건을 가져가 읽음
+func _det_run(watch: bool, stage: bool, aware: bool) -> String:
+	var keep := Village.start_aware
+	Village.start_aware = aware
+	var w := Village.new_prototype(31)
+	Village.start_aware = keep
+	w.water.offline = true
+	w.watching = watch
+	for i in 2 * 96:
+		w.advance(900.0)
+		if stage:
+			Social.take_events(w)           # 화면이 장면을 가져가는 것 (읽기만 — 시뮬은 모름)
+			w.events.since(0)
+	var parts := PackedStringArray()
+	for r in w.people:
+		parts.append("%d:%.3f,%.3f:%s:%s:%d:%.4f" % [r.id, r.x, r.y, r.action, r.anim, r.steps.size(), r.hunger])
+	parts.append(SaveCodec.digest(SaveCodec.enc(w.social)))
+	parts.append(str(w.social_rng.state))
+	parts.append(str(w.rng.state))
+	parts.append(str(w.people.size()))
+	return "|".join(parts)
 
 
 func test_determinism_and_save() -> void:

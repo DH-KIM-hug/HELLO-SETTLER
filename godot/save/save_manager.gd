@@ -6,7 +6,7 @@
 ##   - 앱이 뒤로 갈 때·포커스를 잃을 때·닫을 때: 전부, 끝날 때까지 기다림.
 ## 파일: user://save/giant.dat · jar_<id>.dat · chronicle_<id>.dat, 각각 두 칸(.a/.b) 번갈아 + 검사값 (save/save_file.gd).
 ## 형식 버전이 바뀌면 migrate가 옛 저장을 옮긴다 (v0 = 칸 하나짜리 첫 시험 형식 — 지우지 않고 .v0으로 남김).
-## 불러온 뒤 비운 시간 따라잡기: catch_up(elapsed) → CatchUp 목록 (지금 보던 병 먼저). 알림은 schedule_local_notifications (계산·기록만).
+## 불러온 뒤 비운 시간 따라잡기: catch_up(elapsed) → CatchUp 목록 (지금 보던 병 먼저). 알림은 schedule_local_notifications (계획 plan_notifications · 보내기는 아직 STUB — 플러그인 없음).
 class_name GameSave
 extends Node
 
@@ -33,6 +33,7 @@ var current := -1                      # 지금 보는 병
 ## 선반에 놓여 쉬는 병의 요약 (병 파일을 불러오지 않은 병 — C1): id → {id, kind, name, day, era, pop, climate, sim_unix, live}.
 ## 넓은 세상 병 하나가 메모리 수십 MB라 **지금 보는 병만** 불러온다 (load_all). 다른 병은 들어갈 때 (switch_jar → load_all)
 var shelf_info: Dictionary = {}
+var player := GiantState.new()         # 별지기 단위 상태 (ADR-0001 5절 — 안내 창·열린 도구, sim/giant_state.gd). 화면은 GameSave.get_instance().player
 var giant: Dictionary = {}             # 거인 묶음 중 장터(Market) 밖의 값 — 뽑기·키트 업그레이드(끈 것)·지어 본 건물·해금 기후·첫 병 여부·사 둔 빈 병 (sim/shelf.gd)
 var last_load: Dictionary = {}         # 불러온 결과 {away, fell_back: [id], lost: [id], migrated: bool}
 var stats := {"snaps": 0, "snap_ms_sum": 0.0, "snap_ms_max": 0.0, "writes": 0, "write_ms_sum": 0.0, "write_ms_max": 0.0, "sync": 0}
@@ -298,7 +299,7 @@ func reset_all() -> void:
 	_auto_t = 0.0
 	_wipe_dir(ProjectSettings.globalize_path(dir))
 	Market.reset(0.0)
-	Firsts.reset()
+	player.reset()
 	Market.first_paid = false
 	Market.lamp_level = 0
 
@@ -353,7 +354,7 @@ func giant_payload() -> Dictionary:
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
 		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
-		"climates": giant.get("climates", []).duplicate(), "firsts": Firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system(),
+		"climates": giant.get("climates", []).duplicate(), "firsts": player.firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system(),
 		"star_since_unix": star_since()}
 
 
@@ -655,7 +656,7 @@ func load_all(with_jar := true) -> bool:
 	Market.hand = (gp.get("hand", []) as Array).duplicate(true)       # 거인의 손에 든 물건 (SHOP 3 — 옛 저장엔 없음 → 빈손)
 	Market.hand_serial = int(gp.get("hand_serial", Market.hand.size()))
 	Market.set_draws(gp.get("draws", {}) as Dictionary)                # 이주민 뽑기 — 그날 횟수 · seed (옛 저장엔 없음 → 0번)
-	Firsts.from_dict(gp.get("firsts", null))                         # 처음 겪는 일의 안내 창 · 열린 손 도구 (EVENTS_STAGING 6b·6c — 옛 저장엔 없음 → 모두 본 것·모두 열림)
+	player.from_dict(gp)                         # 처음 겪는 일의 안내 창 · 열린 손 도구 (EVENTS_STAGING 6b·6c — 옛 저장엔 없음 → 모두 본 것·모두 열림)
 	giant = {"first_jar_done": bool(gp.get("first_jar_done", true)), "draws": gp.get("draws", {}), "upgrades": gp.get("upgrades", []),
 		"upgrades_off": gp.get("upgrades_off", []), "built": gp.get("built", []), "climates": gp.get("climates", []),
 		"star_since_unix": float(gp.get("star_since_unix", gp.get("last_save_unix", Time.get_unix_time_from_system())))}     # 옛 저장(v2 아래): 마지막 저장 시각부터
@@ -846,30 +847,96 @@ func catch_up(elapsed: float) -> Array:
 	return out
 
 
-# ───────────────────────── 알림 · 클라우드 (SAVE.md 5 · 2 — 아직 보내지 않음) ─────────────────────────
-## 다음 '제단이 가득 찬' 현실 시각을 계산해 기록만 한다 (로컬 알림 예약은 나중 — 설정에서 켠 경우만, 밤 10시~아침 8시 제외, 하루 2번)
-func schedule_local_notifications() -> Dictionary:
-	var best := INF
-	var who := -1
+# ───────────────────────── 알림 · 클라우드 (SAVE.md 5 · 2, design/gdd/notifications.md #30) ─────────────────────────
+## 알림 규칙 값 (notifications.md Tuning Knobs)
+const NOTIFY_DAILY_MAX := 2            # R3 같은 현실 날 예약 최대
+const NOTIFY_QUIET_FROM := 22          # R4 조용한 시간 22:00~08:00 → 08:00으로 밂
+const NOTIFY_QUIET_TO := 8
+const NOTIFY_MIN_LEAD := 30.0 * 60.0   # R5 지금부터 이만큼(현실 초) 안이면 보내지 않음
+const NOTIFY_TEXT := {"altar_full": "별지기님, 제단에 제물이 가득 쌓였어요.", "lamp_out": "등불이 꺼졌어요. 병 속 마을이 조용히 잠들었어요.",
+	"both": "제단이 가득 차고, 등불도 꺼졌어요."}     # A3·R8: 별지기에게, 숫자 없음
+const NOTIFY_WEIGHT := {"altar_full": 2, "lamp_out": 1}
+
+## 앱이 뒤로 갈 때: 알림 계획을 세우고 (plan_notifications) 기기에 보낸다 (_send_local). 돌려줌: 계획 [{id, jar, unix, text}].
+## 시뮬을 미리 돌리지 않고 값만 읽는다 (R9 — 시뮬·사건 흐름에 쓰지 않음).
+func schedule_local_notifications() -> Array:
+	if not GameSettings.get_current().notify:        # R1 (설정 끔 → 0). 권한 확인은 플러그인이 생길 때
+		return []
+	var jars_in: Array = []
 	for id: int in loaded_ids():
 		var v: Village = jars[id]["village"]
 		if v == null:
 			continue
-		var s := altar_full_in(v)
-		if s < best:
-			best = s
-			who = id
-	if who < 0 or best == INF:
-		return {}
-	var at := Time.get_unix_time_from_system() + best
-	var dt := Time.get_datetime_dict_from_unix_time(int(at))
-	var h := int(dt["hour"])
-	if h >= 22 or h < 8:                # 밤 10시~아침 8시엔 보내지 않음 → 아침 8시로
-		var shift := ((8 - h + 24) % 24) * 3600 - int(dt["minute"]) * 60 - int(dt["second"])
-		at += shift
-	var out := {"jar": who, "unix": at, "text": "제단에 제물이 가득 쌓였어요."}
-	print("[알림 예약 — 아직 보내지 않음] %s · %s" % [Time.get_datetime_string_from_unix_time(int(at)), out["text"]])
+		jars_in.append({"jar": id, "people": v.people.size(), "altar": v.altar_built, "altar_jar_s": altar_full_in(v) if v.altar_built else INF})
+	var bias := int(Time.get_time_zone_from_system().get("bias", 0))
+	var out := plan_notifications(Time.get_unix_time_from_system(), jars_in, CatchUp.away_rate(), Market.lamp_seconds(), bias)
+	_send_local(out)
 	return out
+
+
+## 알림 계획 (순수 함수 — 시험이 직접 부름). jars_in = [{jar, people, altar, altar_jar_s(병 초)}], away_rate = 비운 현실 1초에 병 몇 초
+## (Balance.AWAY_RATES — 보통 ×6), lamp_s = 등불이 타는 현실 초, tz_bias_min = 기기 시간대 (분, 조용한 시간을 기기 시각으로)
+## F1: 제단까지 현실 초 = 병 초 ÷ away_rate (병은 등불이 타는 동안만 흐름 — 그보다 늦으면 차지 않음). F2: 등불 꺼짐 = 지금 + lamp_s.
+static func plan_notifications(now_unix: float, jars_in: Array, away_rate: float, lamp_s: float, tz_bias_min := 0) -> Array:
+	var cands: Array = []
+	var best := INF
+	var best_jar := -1
+	var anyone := false
+	for j: Dictionary in jars_in:
+		if int(j.get("people", 0)) <= 0:
+			continue                                   # 사람 0명: 둘 다 없음
+		anyone = true
+		if not bool(j.get("altar", false)):
+			continue                                   # 깨닫기 전·제단 없음: altar_full 없음
+		var real := float(j.get("altar_jar_s", INF)) / maxf(away_rate, 1e-6)
+		if real <= lamp_s and real < best:
+			best = real
+			best_jar = int(j["jar"])
+	if best_jar >= 0:
+		cands.append({"id": "altar_full", "jar": best_jar, "unix": now_unix + best})
+	if anyone and lamp_s > 0.0:
+		cands.append({"id": "lamp_out", "jar": -1, "unix": now_unix + lamp_s})
+	var out: Array = []
+	var per_day := {}
+	cands.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(NOTIFY_WEIGHT[a["id"]]) > int(NOTIFY_WEIGHT[b["id"]]))
+	for c: Dictionary in cands:
+		var at := _quiet_shift(float(c["unix"]), tz_bias_min)
+		if at - now_unix <= NOTIFY_MIN_LEAD:
+			continue                                   # R5 방금 나간 사람을 부르지 않음
+		var merged := false
+		for o: Dictionary in out:
+			if absf(float(o["unix"]) - at) < 60.0:      # R4 08:00에 둘이 겹치면 하나로
+				o["id"] = "both"
+				o["text"] = NOTIFY_TEXT["both"]
+				merged = true
+		if merged:
+			continue
+		var day := floori((at + tz_bias_min * 60.0) / 86400.0)
+		if int(per_day.get(day, 0)) >= NOTIFY_DAILY_MAX:
+			continue                                   # R3 하루 두 번 (무게 순으로 이미 정렬)
+		per_day[day] = int(per_day.get(day, 0)) + 1
+		out.append({"id": String(c["id"]), "jar": int(c["jar"]), "unix": at, "text": NOTIFY_TEXT[c["id"]]})
+	return out
+
+
+## 조용한 시간(기기 시각 22:00~08:00)이면 다음 08:00으로
+static func _quiet_shift(at: float, tz_bias_min: int) -> float:
+	var local := at + tz_bias_min * 60.0
+	var sec_of_day := fposmod(local, 86400.0)
+	var h := sec_of_day / 3600.0
+	if h >= NOTIFY_QUIET_FROM:
+		return at + (24.0 + NOTIFY_QUIET_TO - h) * 3600.0
+	if h < NOTIFY_QUIET_TO:
+		return at + (NOTIFY_QUIET_TO - h) * 3600.0
+	return at
+
+
+## 기기 로컬 알림 보내기 — 자리만 (STUB). Godot 4.7.2 코어에는 로컬 알림 API가 없고, docs/engine-reference/godot/에도 근거가 없으며
+## (NOT SOURCEABLE), 이 프로젝트엔 안드로이드 플러그인(godot/android/·addons/)도 Gradle 빌드도 없다 (export_presets: use_gradle_build=false).
+## 플러그인이 들어오면 여기서 예약하고, 앱이 앞으로 올 때 모두 취소 (R6). 지금은 계획만 로그로 남긴다.
+func _send_local(plan: Array) -> void:
+	for n: Dictionary in plan:
+		print("[알림 STUB — 보내지 않음: 로컬 알림 플러그인 없음] %s · %s · %s" % [String(n["id"]), Time.get_datetime_string_from_unix_time(int(n["unix"])), String(n["text"])])
 
 
 ## 지금부터 그 병의 제단이 이틀치로 가득 찰 때까지 (병 시간 = 비운 현실 시간, 초). 제물을 바칠 사람이 없으면 INF

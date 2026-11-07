@@ -5,7 +5,7 @@
 ## 그보다 오래 비우면 나머지는 잠든 시간 (병 시간이 멈춤 — 계절만 현실 달력대로 바뀐다), 연대기에 "긴 밤이 있었다." 한 줄.
 ## 그래서 따라잡기는 언제나 정밀 계산 (10초 걸음, 물 300초 간격 — 화면 없이 최대 속도, 최대 24시간치).
 ## 비운 동안 거인은 보고 있지 않다 (Village.watching = false): 위기 사망 하루 1명·부부 2쌍 아래로는 없음, 시대 점수 30%,
-## 새 위기(곰팡이)는 조짐에서 기다림 — Village·Mold가 지킨다. 그동안 바친 제물은 이틀 상한 없이 쌓인다 (Village.altar_hold, SAVE.md 3.1).
+## 새 위기(곰팡이)는 조짐에서 기다림 — Village·Mold가 지킨다. 그동안 바친 제물은 이틀이 지나도 창고로 가지 않는다 — 상한은 늘 제단 크기 (Village.altar_hold, SAVE.md 3.1 · awakening-altar.md D4).
 ## 빠른 길 (CatchUp.fast, 기본 — ROADMAP 4 '따라잡기 속도'): 같은 규칙을 더 큰 간격으로 — 걸음 Balance.AWAY_STEP_FAST (60초),
 ##   물 계산 간격 ×AWAY_WATER_MULT, 건강·공기·버섯·혼인출산 간격 ×AWAY_TICK_MULT (Village.tick_mult), 일자리 배정 AWAY_JOBS_EVERY.
 ##   결과(인구·먹을 것·제물)는 정밀 따라잡기와 통계로 같다 (tests/run.gd test_catchup_fast). 재기: tools/bench_catchup.gd.
@@ -269,7 +269,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 	for l: Dictionary in lost.slice(0, 2):
 		events.append("%s%s %s 세상을 떠났어요." % [l["name"], _ga(l["name"]), _death_words(String(l["why"]))])
 	if lost.size() > 2:
-		events.append("그 밖에도 %d명이 세상을 떠났어요." % (lost.size() - 2))
+		events.append("그 밖에도 %s 세상을 떠났어요." % count_words(lost.size() - 2, "분", "이", "가"))
 	# 새 얼굴 (태어남)
 	var born: Array = []
 	var born_names: Array = []
@@ -285,7 +285,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 		else:
 			events.append("%s%s 태어났어요." % [baby.name, _ga(baby.name)])
 	elif born.size() > 1:
-		events.append("아기가 %d명 태어났어요 — %s%s." % [born.size(), ", ".join(PackedStringArray(born_names.slice(0, 3))), (" 외 %d명" % (born.size() - 3)) if born.size() > 3 else ""])
+		events.append("아기 %s 태어났어요 — %s%s." % [count_words(born.size(), "", "이", "가"), ", ".join(PackedStringArray(born_names.slice(0, 3))), " 그리고 다른 아기들" if born.size() > 3 else ""])
 	# 혼례
 	var wed: Array = []
 	var seen := {}
@@ -299,7 +299,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 	if wed.size() == 1:
 		events.append("%s%s %s%s 혼인했어요." % [wed[0][0], Village.josa(wed[0][0], "과", "와"), wed[0][1], _ga(wed[0][1])])
 	elif wed.size() > 1:
-		events.append("%d쌍이 모닥불 앞에서 혼인을 약속했어요." % wed.size())
+		events.append("%s 모닥불 앞에서 혼인을 약속했어요." % count_words(wed.size(), "쌍", "이", "가"))
 	# 새 건물
 	var built_new := {}
 	for bd in vv.buildings:
@@ -308,7 +308,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 	for ty: String in built_new:
 		var n := int(built_new[ty])
 		var lb := Balance.label(ty)
-		events.append(("%s%s 다 지었어요." % [lb, Village.josa(lb, "을", "를")]) if n == 1 else ("%s %d채를 새로 지었어요." % [lb, n]))
+		events.append(("%s%s 다 지었어요." % [lb, Village.josa(lb, "을", "를")]) if n == 1 else ("%s %s 새로 지었어요." % [lb, count_words(n, "채", "을", "를")]))
 	# 발견
 	if vv.salt_known and not b["salt"]:
 		events.append("마른 호수 바닥에서 짠 하얀 흙, '소금'을 찾았어요.")
@@ -348,7 +348,7 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 		altar_line = "제단에 %s%s 있어요 (장터 값 약 %s 지폐)." % ["·".join(parts), Village.josa(parts[parts.size() - 1], "이", "가"), _num(value)]
 	var wishes := vv.open_letters("wish").size()
 	if wishes > 0:
-		waiting.append(WatcherName.fill(vv, "소원 편지 %d통이 {w:을/를} 기다려요." % wishes))
+		waiting.append(WatcherName.fill(vv, "소원 편지 %s {w:을/를} 기다려요." % count_words(wishes, "통", "이", "가")))
 	if vv.open_letters("split").size() > 0:
 		waiting.append("새 땅으로 떠나고 싶다는 편지가 와 있어요.")
 	if vv.revelation_pending():           # A5: 계시는 거인만 내린다 — 비운 동안 시대 점수가 찼으면 기다림 (GD 14)
@@ -362,6 +362,19 @@ static func letter(vv: Village, b: Dictionary, away_s: float, fill := true) -> D
 		"pop0": int(b["pop"]), "pop1": vv.people.size(), "events": events.slice(0, 5), "born": born, "lost": lost,
 		"waiting": waiting, "festival": vv.aware and away_s > FESTIVAL_AWAY, "long": vv.aware and away_s >= LONG_AWAY,     # N2: 깨닫기 전엔 기다림·옛이야기 줄 없음
 		"altar_line": altar_line, "offerings": alt, "offer_value": value}
+
+
+## 편지 본문(촌장 손글씨)의 수를 말로 (chronicle-letters.md R6·C1 — 1·2·3 → 한·두·세, 4 이상 → 여럿, 숫자 없음).
+## unit = 세는 말 ("분"·"쌍"·"채"·"통", 없으면 ""), a/b = 받침 있을 때/없을 때 조사 (Village.josa — "이"/"가" · "을"/"를")
+## 예: (2, "", 이/가) → "둘이" · (2, "쌍", 이/가) → "두 쌍이" · (5, "채", 을/를) → "여러 채를" · (5, "", 이/가) → "여럿이"
+static func count_words(n: int, unit: String, a: String, b: String) -> String:
+	if unit == "":
+		var bare := ["", "하나", "둘", "셋"]
+		var w: String = bare[n] if n >= 1 and n <= 3 else "여럿"
+		return w + Village.josa(w, a, b)
+	var pre := ["", "한", "두", "세"]
+	var word: String = (pre[n] if n >= 1 and n <= 3 else "여러") + " " + unit
+	return word + Village.josa(unit, a, b)
 
 
 ## 지폐 숫자 (1,234)

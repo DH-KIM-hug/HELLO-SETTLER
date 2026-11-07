@@ -257,10 +257,6 @@ func flora_stats() -> Dictionary:
 	return {"total": t, "drawn": d, "far": f}
 
 
-func _exit_tree() -> void:
-	Social.stage_on = false
-
-
 ## 주민 · 곰팡이 · 작은 위기 · 하늘의 것 · 상점 · 들짐승 (보통은 매 화면)
 func _sync_moving(dt: float) -> void:
 	if social != null:

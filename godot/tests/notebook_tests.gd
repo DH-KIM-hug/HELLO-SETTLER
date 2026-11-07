@@ -442,6 +442,7 @@ func test_scene() -> void:
 	var v: Village = scene.get("village")
 	Notebook.begin(v)
 	var clock: JarClock = scene.get("clock")
+	var fs: Firsts = scene.get("firsts")
 	clock.start_creation_day()
 	for k in 100:
 		clock.tick(DT)
@@ -456,13 +457,13 @@ func test_scene() -> void:
 		clock.tick(DT)
 	scene.call("tap_glass", false, null)
 	check(Notebook.index(v) == 2, "장면의 유리 톡 → 쪽지 끝")
-	Firsts.reset()
+	fs.reset()
 	scene.call("toggle_hand")
 	var hc: GiantHandCtl = scene.get("hand_ctl")
 	hc.refresh()
 	check(hc.get("lid_btn") == null and not hc.spray_btn.is_visible_in_tree() and hc.slot_row.is_visible_in_tree(),
 		"[손] 칸: 뚜껑 단추 없음 · 처음엔 손에 든 것만 (물 뿌리기는 밭이 마를 때 열림 — 6c)")
-	Firsts.unlock("spray")
+	fs.unlock("spray")
 	hc.refresh()
 	check(hc.spray_btn.is_visible_in_tree(), "밭이 마른 뒤: [물 뿌리기]가 보임")
 	check(not v.air.lid_open, "처음엔 뚜껑 닫힘")
@@ -492,7 +493,7 @@ func test_scene() -> void:
 		scene.call("_lid_close_tick", DT)
 	check(not v.air.lid_open, "떨어뜨린 뒤 곧 닫힘")
 	# 휴대폰 크기 (360×640 · 세로로 긴 360×780): 손 칸 단추가 쪽지·화면 밖에 가리지 않음 (도구가 모두 열린 손)
-	Firsts.open_all()
+	fs.open_all()
 	hc.refresh()
 	for sz: Vector2i in [Vector2i(360, 640), Vector2i(360, 780)]:
 		run.root.size = sz
@@ -509,4 +510,4 @@ func test_scene() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	Market.reset()
-	Firsts.reset()
+	fs.reset()

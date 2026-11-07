@@ -23,10 +23,10 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	Market.reset(650.0)
-	Firsts.reset()
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = 20261106
 	root.add_child(scene)
+	scene.firsts.reset()
 	steps = [_s_start, _s_awaken, _w_dir.bind(3.9), _s_shot.bind("e1_awaken_up"), _w_dir.bind(7.4), _s_shot.bind("e1_awaken_kneel"),
 		_w_dir.bind(9.3), _s_shot.bind("e1_awaken_card"), _w_end, _w_popup.bind("awakening"), _s_shot.bind("e1_popup_awakening"), _s_close_popup,
 		_s_build.bind(0.17), _w_dir.bind(2.4), _s_shot.bind("e1_altar_1"), _s_build.bind(0.57), _s_shot.bind("e1_altar_3"),
@@ -193,10 +193,10 @@ func _s_hand() -> int:
 ## 첫 추위 → [감싸기]가 열림 (+ 첫 밭이 마름 → [물 뿌리기])
 func _s_unlock() -> int:
 	scene.close_sheets()
-	Firsts.unlock("spray")
-	Firsts.take("tool_spray")
+	scene.firsts.unlock("spray")
+	scene.firsts.take("tool_spray")
 	v().people[1].cold = 0.6
-	Firsts.check(v())
+	scene.firsts.check(v())
 	return 2
 
 

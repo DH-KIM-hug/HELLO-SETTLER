@@ -1,10 +1,13 @@
-## 처음 겪는 사건의 안내 창 (EVENTS_STAGING 6b) · 사건과 함께 열리는 거인의 손 도구 (6c). 순수 로직 — 거인의 것이라 모든 병이 함께 (static).
+## 처음 겪는 사건의 안내 창 (EVENTS_STAGING 6b) · 사건과 함께 열리는 거인의 손 도구 (6c) — design/gdd/notebook.md R6·R8 (N1·N2).
+## 거인(별지기) 단위: 인스턴스 하나를 GiantState(sim/giant_state.gd)가 가진다 — 모든 병이 함께 (ADR-0001 5절: static 상태 없음).
+## 게임에서는 SaveManager(GameSave.player)가 가진 것을 화면(test_village.firsts)이 나눠 쓰고, 시험은 저마다 Firsts.new().
 ## 저장은 GameSave의 거인 묶음 "firsts" (save/save_manager.gd). 옛 저장(이 값이 없음)은 모두 본 것·모두 열린 것으로 (open_all).
 ##
 ## - 사건마다 안내 창은 **한 번** (seen). 생긴 차례대로 queue에 줄을 서고, 화면(view/ui/first_popup.gd)이 연출이 끝난 뒤 하나씩 띄운다.
 ## - [손] 도구는 처음엔 내려놓기(손에 든 것)만 — 유리 톡은 유리를 직접 누름. 나머지는 그 도구가 필요한 일이 처음 생길 때 열린다 (tools).
 ##   열릴 때 그 도구의 안내 창 (한 줄 사용법). 잠긴 도구는 [손]에 보이지 않는다 (회색 자리도 없음 — 놀라움을 위해).
-## - check(v): 화면이 가끔(현실 0.5초마다) 부른다 — 마을 상태를 보고 처음인 일을 찾는다. 행동이 직접 부를 수도 있다 (fire · unlock).
+## - check(v): 화면이 가끔(현실 0.5초마다) 부른다 — 먼저 그 마을 사건 줄(EventStream)을 자기 커서로 읽고 (구독: blueprint_dropped → 설계도),
+##   구독할 kind가 아직 없는 것만 마을 상태를 본다 (N1). 행동이 직접 부를 수도 있다 (fire · unlock).
 ## - 6d(소원 들어주기)가 붙을 자리: fire("miracle") · unlock(도구) — 아직 도구가 안 열렸는데 그 도구가 필요한 소원이면 소원이 연다.
 class_name Firsts
 extends RefCounted
@@ -75,26 +78,31 @@ const DRY_HOURS := 6.0                # 밭이 이만큼(병 시간) 말라 있�
 const PUFFS := 6                      # 마을 곁에 솜털 씨앗 민들레가 이만큼 넘으면 '솜털이 넘침'
 const FOG_AT := 0.4                   # 김이 이만큼 서리면
 const DUST_AT := 0.3                  # 먼지막이 이만큼 보이면 (GiantHand.dust_shown)
-const HUNGER_AT := 1.0                # 못 먹은 식량이 이만큼이면 '배고픈 얼굴'
+## '배고픈 얼굴' = 필요와 기분의 배고픔 단계 (needs-and-mood.md HUNGRY_AT 0.8 — Balance.HUNGRY_AT를 읽음, 따로 값을 두지 않음)
 
-static var seen: Dictionary = {}      # 안내 창 id → true (이미 띄움)
-static var tools: Dictionary = {}     # 도구 → true (열림)
-static var queue: Array = []          # 띄울 차례를 기다리는 안내 창 id
-static var plays: Dictionary = {}     # 연출 id → 본 횟수 (두 번째부터는 짧은 판 — StageDirector)
-static var _dry_since: Dictionary = {}    # (저장 안 함) 밭 id → 마르기 시작한 병 시각
+## 사건 구독 (N1): kind → 안내 창 id. 여기 있는 창은 상태 훑기(_happened)를 하지 않는다
+const SUBSCRIBE := {&"blueprint_dropped": "blueprint"}
+
+var seen: Dictionary = {}      # 안내 창 id → true (이미 띄움)
+var tools: Dictionary = {}     # 도구 → true (열림)
+var queue: Array = []          # 띄울 차례를 기다리는 안내 창 id
+var plays: Dictionary = {}     # 연출 id → 본 횟수 (두 번째부터는 짧은 판 — StageDirector)
+var _dry_since: Dictionary = {}    # (저장 안 함) "마을 sid:밭 id" → 마르기 시작한 병 시각
+var _cursors: Dictionary = {}      # (저장 안 함) 사건 줄(EventStream 인스턴스 id) → 읽은 번호 — 불러온 뒤엔 새 줄이라 처음부터
 
 
 # ───────────────────────── 상태 ─────────────────────────
-static func reset() -> void:
+func reset() -> void:
 	seen = {}
 	tools = {}
 	queue = []
 	plays = {}
 	_dry_since = {}
+	_cursors = {}
 
 
 ## 옛 저장 (이 값이 생기기 전) · 개발 — 모두 본 것, 모든 도구가 열린 것으로
-static func open_all() -> void:
+func open_all() -> void:
 	for id: String in POPUPS:
 		seen[id] = true
 	for t: String in TOOLS:
@@ -102,11 +110,12 @@ static func open_all() -> void:
 	queue = []
 
 
-static func to_dict() -> Dictionary:
+func to_dict() -> Dictionary:
 	return {"seen": seen.keys(), "tools": tools.keys(), "queue": queue.duplicate(), "plays": plays.duplicate()}
 
 
-static func from_dict(d: Variant) -> void:
+## 같은 인스턴스에 다시 채운다 (화면들이 이 인스턴스를 들고 있으므로 바꿔 끼우지 않는다)
+func from_dict(d: Variant) -> void:
 	reset()
 	if not d is Dictionary:
 		open_all()
@@ -124,21 +133,21 @@ static func from_dict(d: Variant) -> void:
 			plays[String(k)] = int(p[k])
 
 
-static func has_tool(t: String) -> bool:
+func has_tool(t: String) -> bool:
 	return tools.has(t)
 
 
-static func was_seen(id: String) -> bool:
+func was_seen(id: String) -> bool:
 	return seen.has(id)
 
 
-static func pending() -> bool:
+func pending() -> bool:
 	return not queue.is_empty()
 
 
 # ───────────────────────── 생김 · 띄움 ─────────────────────────
 ## 처음인 일 — 아직 안 봤고 줄에 없으면 줄 세움. 돌려줌: 새로 줄 섰나
-static func fire(id: String) -> bool:
+func fire(id: String) -> bool:
 	if not POPUPS.has(id) or seen.has(id) or id in queue:
 		return false
 	queue.append(id)
@@ -146,7 +155,7 @@ static func fire(id: String) -> bool:
 
 
 ## 도구를 연다 (그 안내 창도 줄 세움). 이미 열렸으면 false
-static func unlock(t: String) -> bool:
+func unlock(t: String) -> bool:
 	if not t in TOOLS or tools.has(t):
 		return false
 	tools[t] = true
@@ -155,12 +164,12 @@ static func unlock(t: String) -> bool:
 
 
 ## 다음에 띄울 창 (줄에서 꺼내지 않음) — 없으면 ""
-static func peek() -> String:
+func peek() -> String:
 	return String(queue[0]) if not queue.is_empty() else ""
 
 
 ## 창을 띄웠다 — 줄에서 빼고 '본 것'으로 (저장)
-static func take(id := "") -> String:
+func take(id := "") -> String:
 	if queue.is_empty():
 		return ""
 	var i := 0 if id == "" else queue.find(id)
@@ -173,32 +182,46 @@ static func take(id := "") -> String:
 
 
 ## 설정 '안내 다시 보기' — 본 창을 잊는다 (도구는 그대로 열림)
-static func replay() -> void:
+func replay() -> void:
 	seen = {}
 	queue = []
 
 
 ## 연출을 한 번 더 봤다 → 지금까지 본 횟수
-static func played(stage_id: String) -> int:
+func played(stage_id: String) -> int:
 	plays[stage_id] = int(plays.get(stage_id, 0)) + 1
 	return int(plays[stage_id])
 
 
-static func play_count(stage_id: String) -> int:
+func play_count(stage_id: String) -> int:
 	return int(plays.get(stage_id, 0))
 
 
 # ───────────────────────── 처음인 일 찾기 (화면이 가끔) ─────────────────────────
 ## 마을 상태를 보고 처음인 일을 줄 세운다. 돌려줌: 새로 줄 선 창 id들.
 ## 깨달음·제단 창은 그 연출이 끝날 때 띄운다 (StageDirector) — 여기서는 연출 없이 지나간 때(자리를 비운 동안)만: staged_ok = false
-static func check(v: Village, staged_ok := true) -> Array:
+func check(v: Village, staged_ok := true) -> Array:
 	var out: Array = []
 	if v == null:
 		return out
+	# 구독 (N1): 이 마을 사건 줄에서 아직 안 읽은 사건
+	var es := v.events
+	if es != null:
+		var key := "%d:%d" % [es.get_instance_id(), v.sid]     # 넓은 세상은 무리들이 줄 하나를 나눠 씀 → 무리마다 커서
+		var cur := int(_cursors.get(key, 0))
+		for e: Dictionary in es.since(cur):
+			if int(e["village"]) != v.sid:
+				continue                   # 같은 줄의 다른 무리 사건은 그 무리 차례에
+			var pid := String(SUBSCRIBE.get(e["kind"], ""))
+			if pid != "" and not seen.has(pid) and fire(pid):
+				out.append(pid)
+		_cursors[key] = es.serial
 	for id: String in ORDER:
 		if seen.has(id) or id in queue:
 			continue
 		if staged_ok and id in STAGED:
+			continue
+		if id in SUBSCRIBE.values():
 			continue
 		if _happened(v, id):
 			if id.begins_with("tool_"):
@@ -213,7 +236,7 @@ static func check(v: Village, staged_ok := true) -> Array:
 	return out
 
 
-static func _happened(v: Village, id: String) -> bool:
+func _happened(v: Village, id: String) -> bool:
 	match id:
 		"awakening":
 			return v.aware and v.awakened_t >= 0.0
@@ -226,8 +249,6 @@ static func _happened(v: Village, id: String) -> bool:
 			return false
 		"sold":
 			return Market.first_paid
-		"blueprint":
-			return not v.blueprints.is_empty()
 		"baby":
 			return int(v.stats.get("born", 0)) > 0
 		"sick":
@@ -260,7 +281,7 @@ static func _happened(v: Village, id: String) -> bool:
 			if float(v.stock.get("빵", 0.0)) > 0.0:
 				return false
 			for r in v.people:
-				if not r.is_baby() and r.hunger >= HUNGER_AT:
+				if not r.is_baby() and r.hunger >= Balance.HUNGRY_AT:
 					return true
 			return false
 		"tool_spray":                      # 밭이 오래 마름 · 첫 더위·가뭄 (6c-1 — 커튼 대신 물)
@@ -285,7 +306,7 @@ static func _happened(v: Village, id: String) -> bool:
 
 
 ## 지어진 밭이 DRY_HOURS 넘게 말라 있음 (처음 짓자마자가 아니라 — 첫 10분엔 열리지 않게)
-static func _dry_field(v: Village) -> bool:
+func _dry_field(v: Village) -> bool:
 	for b in v.buildings:
 		if b.built and b.type == "농장":
 			if v.wetness(b.x, b.y) < GiantHand.SPRAY_DRY:

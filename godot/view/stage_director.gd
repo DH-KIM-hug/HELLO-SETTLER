@@ -7,7 +7,7 @@
 ##   - 테두리 어둠 (레터박스 없음 — 세로 화면이 좁아지지 않게) · 손글씨 자막 카드 (나눔손글씨 펜)
 ##   - 연대기 그림 카드: 정한 순간의 화면 한 장을 찍어 (자막 전에) 그 사건의 연대기 줄에 붙인다 (user://chron_pics/ — ChronicleSheet가 그림으로)
 ##   - 건너뛰기: 화면 아무 데나 톡 · [건너뛰기]. 두 번째부터는 짧은 판 (Stagings 'short' — Firsts.plays에 본 횟수)
-##   - 끝나면 그 사건의 안내 창을 줄 세움 (Firsts.fire(after) — 장면이 연출이 끝난 뒤 하나씩 띄움)
+##   - 끝나면 그 사건의 안내 창을 줄 세움 (_firsts().fire(after) — 장면이 연출이 끝난 뒤 하나씩 띄움)
 ## 사건이 일어나는 때는 watch()가 본다 (깨달음 · 제단 짓기 · 제단 완성 → 첫 기도). 보고 있지 않던 무리·자리를 비운 동안의 일은 연출 없이 안내 창만.
 ## 새 사건을 붙이려면: Stagings.SCENES에 칸 하나 + watch()에 한 줄 (또는 장면이 play(id, village)를 부름).
 ## 6d(소원 들어주기 — 첫 기적)는 play("miracle", v)를 부를 자리만 — 콘티는 그때 Stagings에.
@@ -179,7 +179,7 @@ func watch(q: Village, can_stage := true) -> void:
 			_seen_aw[q] = q.awakened_t
 			fresh = fresh and q.t - q.awakened_t < STALE
 			if not fresh:
-				Firsts.fire("awakening")
+				_firsts().fire("awakening")
 				_built_staged[q] = true
 				return
 		"altar_build":
@@ -191,7 +191,7 @@ func watch(q: Village, can_stage := true) -> void:
 			var ab := Awakening.altar_site(q)
 			fresh = fresh and ab != null and ab.built_t >= 0.0 and q.t - ab.built_t < STALE
 			if not fresh:
-				Firsts.fire("altar")
+				_firsts().fire("altar")
 				return
 	play(due, q)
 
@@ -240,8 +240,8 @@ func play(stage_id: String, q: Village) -> bool:
 	id = stage_id
 	v = q
 	spec = Stagings.get_scene(stage_id)
-	k = float(spec.get("short", 1.0)) if Firsts.play_count(stage_id) > 0 else 1.0
-	Firsts.played(stage_id)
+	k = float(spec.get("short", 1.0)) if _firsts().play_count(stage_id) > 0 else 1.0
+	_firsts().played(stage_id)
 	t = 0.0
 	_bi = 0
 	skipped = false
@@ -417,7 +417,7 @@ func _end() -> void:
 	_restore_speed()
 	log.append({"id": was, "skipped": skipped, "t": v.t if v != null else 0.0})
 	if after != "":
-		Firsts.fire(after)
+		_firsts().fire(after)
 	id = ""
 	finished.emit(was, skipped)
 
@@ -659,3 +659,15 @@ static func _entry(q: Village, find: String) -> Dictionary:
 		if String(e.get("text", "")).contains(find):
 			return e
 	return {}
+
+
+## 별지기 단위 안내 창·도구 (ADR-0001 5절 — 장면(test_village.firsts)이 가진 것, 장면이 없으면 이것만의 것)
+var _own_firsts: Firsts
+
+
+func _firsts() -> Firsts:
+	if sc != null and sc.get("firsts") is Firsts:
+		return sc.get("firsts")
+	if _own_firsts == null:
+		_own_firsts = Firsts.new()
+	return _own_firsts

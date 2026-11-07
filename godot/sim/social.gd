@@ -4,9 +4,11 @@
 ## 관계 값은 짝마다 (v.social["p"]["작은id:큰id"]): b = 사이 (−100~100), l0/l1 = 작은 쪽→큰 쪽 / 큰 쪽→작은 쪽 마음 (0~100), st = 단계.
 ## 혼인 확률은 그대로 (Balance.MARRY_RATE — Village._marriages). 마음이 하는 일은 '누구와 짝지어 굴리나'뿐 (pair_up) — 서로 좋아하는 둘이 먼저.
 ## 난수는 따로 (v.social_rng) — 다른 흐름의 난수 순서를 바꾸지 않는다. 관계·단계·혼례 약속은 저장된다 (Village 변수 → SaveCodec).
-## 화면 연출: 거인이 보고 있고(v.is_watching) 화면이 켰을 때만 (stage_on — 보통 이하 빠르기, VillageView가 켬). 그때만 두 사람의 걸음 앞에
-##   '멈춰 서서 이야기' 걸음을 끼우고 v.social_events에 대사를 쌓는다 (view/social_stage.gd가 현실 시간으로 말풍선을 띄움).
-##   따라잡기(비운 동안)·시험·빠른 흐름은 관계 값만 바뀌고 걸음·대사는 없다. 말은 data/social_lines.json (작가가 줄을 더함).
+## 멈춰 서서 이야기 (design/gdd/village-life-min.md R2·L1, ADR-0001 3절): 만남마다 두 사람 걸음 앞에 '멈춰 서서 이야기'(TALK_STOP 병 초)를
+##   **늘** 끼우고 busy를 세운다 — 거인이 보든 말든, 화면 연출이 켜졌든 말든, 따라잡기든 아니든 같다 (지켜봄·연출이 결과를 바꾸지 않음).
+##   대사는 v.social_events에 쌓고 사건 &"talk_started"를 낸다. 화면(view/social_stage.gd)은 지켜볼 때만 그것을 말풍선으로 펼친다
+##   (말풍선이 멈춤보다 길면 걸어가는 머리 위에 남음 — 시뮬을 늘리지 않음). 말은 data/social_lines.json (작가가 줄을 더함).
+##   (L2) 화면 상태(stage_on·rate)는 여기 없다 — static 금지 (ADR-0001 5절). _lines는 읽기 전용 대사 표 캐시 (허용 예외).
 class_name Social
 extends RefCounted
 
@@ -33,9 +35,15 @@ const MAX_ACTIVE := 3             # 한꺼번에 벌어지는 장면 (화면)
 const MAX_EVENTS := 8
 const CHRON_PER_DAY := 3          # 사랑·화해 이야기 연대기는 하루 이만큼까지
 
-static var stage_on := false      # 화면 연출 켬 (VillageView — 보통 이하 빠르기에서만)
-static var rate := 288.0          # 지금 병 초 ÷ 현실 초 (대사 길이를 병 시간으로 바꿀 때)
-static var _lines: Dictionary = {}
+## 멈춤 길이 (병 초 — 빠르기와 무관, village-life-min.md Tuning Knobs). 화면 빠르기를 읽지 않는다 (결정성)
+const TALK_STOP := 120.0          # 서서 이야기 (60~240)
+const TALK_WALK_STOP := 180.0     # 같이 걷기 → 멈춰 이야기 (걸음 + 이야기)
+const WEDDING_STOP := 1800.0      # 저녁 모닥불 가 혼례 모임 (VS #35 — 값은 임시, 디자이너 확인)
+## 한 사람이 멈춘 뒤 이만큼(병 초)은 다시 멈추지 않는다 — 만남(사이 값)은 그대로, 걸음을 끼우지만 않음.
+## 늘 멈추게 되자 늘 마주치는 둘(아이 둘 등)이 멈춤을 끝없이 이어 자러 가지 못했다 (값은 임시 — 디자이너 확인)
+const TALK_COOLDOWN := 3600.0
+
+static var _lines: Dictionary = {}    # 읽기 전용 대사 표 캐시 (ADR-0001 5절 허용 예외 — const 취급)
 
 
 # ───────────────────────── 말 묶음 ─────────────────────────
@@ -159,7 +167,6 @@ static func step(v: Village, dt: float) -> void:
 	var love_roll := v.social_rng.randf() < LOVE_P
 	if not meet_roll and not love_roll:
 		return
-	var stage := stage_on and v.is_watching()
 	var free: Array[Resident] = []
 	for r in v.people:
 		if r.sleeping or r.is_baby() or r.dead or r.sick_left > 0.0 or r.anim == "sleep" or not FREE_ACTS.has(r.action):
@@ -192,7 +199,7 @@ static func step(v: Village, dt: float) -> void:
 		if not lp.is_empty():
 			used[lp[0].id] = true
 			used[lp[1].id] = true
-			meet(v, lp[0], lp[1], stage and _active(v) < MAX_ACTIVE)
+			meet(v, lp[0], lp[1], _can_stop(v, lp[0], lp[1]))
 	if not meet_roll:
 		return
 	# 칸 나눔 (가까운 둘만 — 사람이 많아도 빠르게)
@@ -221,7 +228,22 @@ static func step(v: Village, dt: float) -> void:
 					tot += w
 	var pk := _roulette(v, cands, tot)
 	if not pk.is_empty():
-		meet(v, pk[0], pk[1], stage and _active(v) < MAX_ACTIVE)
+		meet(v, pk[0], pk[1], _can_stop(v, pk[0], pk[1]))
+
+
+## 이 만남에 '멈춰 서서 이야기'를 끼우나 — 시뮬 상태만 읽음 (지켜봄·화면 무관): 장면 수 MAX_ACTIVE 안 · 밤(잠자리로 가는 길)이 아님 ·
+## 둘 다 지난 멈춤에서 TALK_COOLDOWN이 지남. 아니면 만남(사이 값)만
+static func _can_stop(v: Village, a: Resident, b: Resident) -> bool:
+	if v.is_night() or _active(v) >= MAX_ACTIVE:
+		return false
+	# 첫 한 시간 대본·제단 장면 중엔 멈춰 서지 않는다 (메인 판단 2026-11-08 — 대본 시간 지킴, 보는지와 무관한 시뮬 상태라 결정성 그대로; A28에서 다시)
+	if v.in_opening() or v.staged():
+		return false
+	var busy: Dictionary = v.social.get("busy", {})
+	for r: Resident in [a, b]:
+		if float(busy.get(str(r.id), -1.0e9)) + TALK_COOLDOWN > v.t:
+			return false
+	return true
 
 
 ## 무게대로 하나 → [먼저 말하는 사람, 받는 사람] (없으면 [])
@@ -248,7 +270,7 @@ static func _active(v: Village) -> int:
 	return n / 2
 
 
-## 만남 하나 (시험이 직접 부를 수 있다). show = 화면 연출 (걸음 끼우기 + 대사)
+## 만남 하나 (시험이 직접 부를 수 있다). show = 멈춰 서서 이야기 (걸음 끼우기 + 대사 + talk_started) — step은 늘 켬 (장면 수 MAX_ACTIVE 안에서)
 static func meet(v: Village, a: Resident, b: Resident, show := false) -> Dictionary:
 	var r := rec(v, a.id, b.id)
 	var t := v.t
@@ -635,14 +657,19 @@ static func _chron(v: Village, text: String, love_story := false) -> void:
 		v.social["story"] = ls
 
 
-# ───────────────────────── 화면 연출: 걸음 끼우기 + 대사 ─────────────────────────
-## 대사 길이(현실 초) → 병 시간
+# ───────────────────────── 멈춰 서서 이야기: 걸음 끼우기 + 대사 ─────────────────────────
+## 화면이 장면을 펼치는 길이 (현실 초 — view/social_stage.gd). 시뮬 멈춤 길이와는 별개
 static func real_secs(ev: Dictionary) -> float:
 	return (ev["lines"] as Array).size() * LINE_REAL + 1.2 + (4.0 if bool(ev.get("walk", false)) else 0.0)
 
 
+## 시뮬 멈춤 길이 (병 초) — 지켜봄·화면 빠르기와 무관
+static func stop_secs(ev: Dictionary) -> float:
+	return TALK_WALK_STOP if bool(ev.get("walk", false)) else TALK_STOP
+
+
 static func _stage(v: Village, ev: Dictionary) -> void:
-	var secs := real_secs(ev) * rate
+	var secs := stop_secs(ev)
 	var who: Array = ev["who"]
 	var a := v.person(int(who[0]))
 	var b := v.person(int(who[1]))
@@ -676,7 +703,9 @@ static func _stage(v: Village, ev: Dictionary) -> void:
 			_hold(v, m, secs, "다툼을 말리는 중", mid + Vector2(cos(ang2), sin(ang2)) * 0.9)
 	for id: int in who:
 		v.social["busy"][str(id)] = v.t + secs
+	ev["secs"] = secs
 	_push(v, ev)
+	v.emit(&"talk_started", {"who": int(who[0]), "at": ev["at"], "v": {"with": int(who[1]), "kind": String(ev["kind"]), "secs": secs, "id": int(ev["id"])}})
 
 
 static func _doing(ev: Dictionary, other: Resident) -> String:
@@ -773,7 +802,7 @@ static func on_marry(v: Village, a: Resident, b: Resident) -> void:
 	v.social["wed"] = wl
 
 
-## 저녁(일이 끝난 뒤 ~ 밤 전)에 혼례 모임: 둘이 가운데, 쉬는 이웃이 둘레에 섬 → 축하·서약·꽃잎 (화면이 켜 있을 때만 걸음이 바뀜)
+## 저녁(일이 끝난 뒤 ~ 밤 전)에 혼례 모임: 둘이 가운데, 쉬는 이웃이 둘레에 섬 → 축하·서약·꽃잎 (걸음은 늘 바뀜 — 지켜봄과 무관)
 static func _weddings(v: Village) -> void:
 	var wl: Array = v.social.get("wed", [])
 	if wl.is_empty():
@@ -790,12 +819,11 @@ static func _weddings(v: Village) -> void:
 			continue
 		v.stats["wedding_feasts"] = int(v.stats.get("wedding_feasts", 0)) + 1
 		_chron(v, "저녁 모닥불 가에 마을 사람들이 모여 %s%s %s의 혼례를 축하했다." % [a.name, Village.josa(a.name, "과", "와"), b.name], true)
-		if stage_on and v.is_watching():
-			wedding_gathering(v, a, b)
+		wedding_gathering(v, a, b)          # 늘 (지켜봄과 무관 — 화면은 지켜볼 때만 펼침)
 	v.social["wed"] = keep
 
 
-## 혼례 모임 연출 (시험·캡처가 직접 부를 수 있다)
+## 혼례 모임 (시험·캡처가 직접 부를 수 있다)
 static func wedding_gathering(v: Village, a: Resident, b: Resident) -> Dictionary:
 	var c := _open_spot(v, v.fire, 2.8)        # 불 곁의 탁 트인 자리 (불 둘레 돌·집을 비켜) · 광장이 있으면 광장
 	var pz := VillageEra.first_built(v, "광장")
@@ -829,7 +857,7 @@ static func wedding_gathering(v: Village, a: Resident, b: Resident) -> Dictionar
 		ev["lines"].append([2 + v.social_rng.randi() % guests.size(), _one(v, "wedding/cheer"), "cheer"])
 	ev["at"] = c
 	ev["petals"] = true
-	var secs := real_secs(ev) * rate + 3.0 * rate
+	var secs := WEDDING_STOP
 	if not v.social.has("busy"):
 		v.social["busy"] = {}
 	for p: Resident in [a, b]:
@@ -845,7 +873,9 @@ static func wedding_gathering(v: Village, a: Resident, b: Resident) -> Dictionar
 		_hold(v, q, secs, "혼례를 지켜보는 중", c + Vector2(cos(ang), sin(ang)) * rad)
 	for p: Resident in who:
 		v.social["busy"][str(p.id)] = v.t + secs
+	ev["secs"] = secs
 	_push(v, ev)
+	v.emit(&"talk_started", {"who": a.id, "at": c, "v": {"with": b.id, "kind": "wedding", "secs": secs, "id": int(ev["id"])}})
 	return ev
 
 
@@ -946,5 +976,5 @@ static func prune(v: Village) -> void:
 			p.erase(k)
 	var busy: Dictionary = v.social.get("busy", {})
 	for k: String in busy.keys():
-		if float(busy[k]) < v.t:
+		if float(busy[k]) + TALK_COOLDOWN < v.t:
 			busy.erase(k)

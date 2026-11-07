@@ -25,10 +25,10 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Market.reset(2400.0)
 	Village.start_aware = true
-	Firsts.open_all()                 # 처음 겪는 사건 안내 창을 띄우지 않게 (캡처)
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = 20261106
 	root.add_child(scene)
+	scene.firsts.open_all()             # 처음 겪는 사건 안내 창을 띄우지 않게 (캡처)
 	plan = [_setup, _settle_w, _close, _settle_w, _shot.bind("fauna_close"), _dogzoom, _settle_w, _shot.bind("fauna_dogs"), _critters, _settle_w, _shot.bind("fauna_critters"),
 		_default, _settle_w, _shot.bind("fauna_default"), _perf_off, _perf_on, _perf_report,
 		_night, _settle_w, _shot.bind("fauna_night"), _sheet]
@@ -111,7 +111,7 @@ func _process(_dt: float) -> bool:
 func _setup() -> int:
 	v = scene.village
 	v.water.offline = true
-	Firsts.open_all()
+	scene.firsts.open_all()
 	Dogs.give_kkultteok(v)
 	_run(fposmod(10.0 - v.hour_now(), 24.0) * 3600.0 + 24.0 * 3600.0, 600.0)
 	# 새끼 몇 (털 섞임이 보이게) — 엄마 곁

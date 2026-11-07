@@ -1,5 +1,6 @@
 ## '자리를 비운 동안' 편지 — docs/SAVE.md 4.2. 촌장이 쓴 편지 한 장 (손글씨는 그림체가 정해질 때까지 UiTheme 글꼴).
-## 큰 일 3~5줄 · 인구 변화 "13명 → 17명" · 새 얼굴(아기 초상) / 떠난 얼굴 · 기다리는 것(제물·소원 편지·위기 조짐) ·
+## 두 겹 (design/gdd/chronicle-letters.md R6·C1): ① 위 크림 머리띠 (별지기 UI — 숫자 됨): 비운 시간·등불·인구 "13 → 17"·넓은 세상 무리 수·제단 줄 + [모두 받기]
+## ② 그 아래 촌장의 손편지 (숫자 없음 — 수는 '한·두·세·여럿' 말로, CatchUp.count_words): 큰 일 3~5줄 · 새 얼굴 / 떠난 얼굴 · 기다리는 것(소원 편지·위기 조짐) ·
 ## 비운 동안 쌓인 제물은 '기다리는 것' 맨 위에 장터 값과 함께 + [모두 받기] (곧바로 지폐, 저장 — SAVE.md 3.1).
 ## 등불보다 오래 비웠으면 머리에 "등불이 n시간 타고 꺼져 있었어요" (천천히 떠오름).
 ## [연대기에서 자세히] (비운 동안의 연대기를 같은 종이에) / [병 안으로] (닫힘 → closed).
@@ -24,6 +25,8 @@ var enter_btn: Button
 var showing_chronicle := false
 var take_btn: Button                    # 제단 [모두 받기] (제물이 있을 때만)
 var taken := 0.0                        # 편지에서 받은 지폐 (받았으면 > 0)
+var header: VBoxContainer               # ① 크림 머리띠 (별지기 UI — 숫자는 여기에만)
+var _into: Container                    # _label·_altar_row가 넣는 곳 (머리띠 / 편지 본문)
 
 
 func _init() -> void:
@@ -158,13 +161,14 @@ func _clear() -> void:
 
 func _label(text: String, variation := "", wrap := true) -> Label:
 	var l := Label.new()
+	var into: Container = _into if _into != null else body
 	l.text = text
 	if variation != "":
 		l.theme_type_variation = variation
 	if wrap:
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	body.add_child(l)
+	into.add_child(l)
 	return l
 
 
@@ -178,6 +182,22 @@ func _rule() -> void:
 func _fill_letter() -> void:
 	_clear()
 	chron_btn.text = "연대기에서 자세히"
+	# ① 머리띠 (크림 — 별지기에게 하는 말, 숫자 됨)
+	var band := PanelContainer.new()
+	var hb := StyleBoxFlat.new()
+	hb.bg_color = UiTheme.PAPER_DEEP
+	hb.border_color = UiTheme.PAPER_LINE
+	hb.set_border_width_all(1)
+	hb.set_corner_radius_all(2)
+	hb.set_content_margin_all(8)
+	hb.anti_aliasing = false
+	band.add_theme_stylebox_override("panel", hb)
+	band.name = "Header"
+	body.add_child(band)
+	header = VBoxContainer.new()
+	header.add_theme_constant_override("separation", 2)
+	band.add_child(header)
+	_into = header
 	var head := _label("자리를 비운 동안", "Title")
 	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_label("별지기님이 %s 비우신 사이" % CatchUp.away_words(float(data.get("away", 0.0))), "Small").horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -186,19 +206,24 @@ func _fill_letter() -> void:
 		lamp.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		lamp.modulate.a = 0.0
 		create_tween().tween_property(lamp, "modulate:a", 1.0, 0.8)
-	_rule()
+	var p0 := int(data.get("pop0", 0))
+	var p1 := int(data.get("pop1", 0))
+	var pl := _label("사람 %d → %d%s" % [p0, p1, (" (%+d)" % (p1 - p0)) if p1 != p0 else ""], "Section")
+	pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	if int(data.get("settlements", 1)) > 1:      # 넓은 세상: 세상 전체
+		var wl := _label("세상 모든 무리 %d곳 · %d → %d" % [int(data["settlements"]), int(data.get("world_pop0", p0)), int(data.get("world_pop1", p1))], "Small")
+		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var altar_line := String(data.get("altar_line", ""))
+	take_btn = null
+	if altar_line != "":                         # 제단 줄 (개수·장터 값) + [모두 받기] — 별지기 UI라 머리띠에
+		_altar_row(altar_line)
+	# ② 촌장의 손편지 (숫자 없음)
+	_into = body
 	if village != null and village.aware:          # 촌장이 쓴 편지 = 손글씨 — 마을이 부르는 말로 (깨닫기 전엔 부름 없이, STORY 4)
 		_label(WatcherName.fill(village, "{w}께,"), "Hand")
 	_label("자리를 비우신 동안 이런 일이 있었어요.", "Hand")
 	for e: String in data.get("events", []):
 		_label("· " + e, "Hand")
-	var p0 := int(data.get("pop0", 0))
-	var p1 := int(data.get("pop1", 0))
-	var pl := _label("우리는 %d명 → %d명이 되었어요." % [p0, p1], "Section")
-	pl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	if int(data.get("settlements", 1)) > 1:      # 넓은 세상: 세상 전체
-		var wl := _label("세상 모든 무리 %d곳 · %d명 → %d명" % [int(data["settlements"]), int(data.get("world_pop0", p0)), int(data.get("world_pop1", p1))], "Small")
-		wl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var born: Array = data.get("born", [])
 	if not born.is_empty():
 		_label("새 얼굴", "Small")
@@ -211,13 +236,9 @@ func _fill_letter() -> void:
 			rs.append(_dead(int(l["id"])))
 		_faces(rs, true)
 	var waiting: Array = data.get("waiting", [])
-	var altar_line := String(data.get("altar_line", ""))
-	take_btn = null
-	if not waiting.is_empty() or altar_line != "":
+	if not waiting.is_empty():
 		_rule()
 		_label("기다리는 것", "Section")
-		if altar_line != "":
-			_altar_row(altar_line)
 		for w: String in waiting:
 			_label("· " + w, "Hand")
 	if data.get("long", false):
@@ -232,7 +253,7 @@ func _fill_letter() -> void:
 func _altar_row(text: String) -> void:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", UiTheme.GAP)
-	body.add_child(row)
+	(_into if _into != null else body).add_child(row)
 	var l := Label.new()
 	l.text = "· " + text
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -305,7 +326,7 @@ func _faces(list: Array, gone: bool) -> void:
 		flow.add_child(col)
 	if list.size() > 8:
 		var more := Label.new()
-		more.text = "그 밖 %d명" % (list.size() - 8)
+		more.text = "그 밖에도 여럿"                 # 편지 본문 — 숫자 없음 (C1)
 		more.theme_type_variation = "Small"
 		flow.add_child(more)
 
@@ -313,6 +334,7 @@ func _faces(list: Array, gone: bool) -> void:
 ## 비운 동안의 연대기 (그 뒤로 쓰인 줄 전부)
 func _fill_chronicle() -> void:
 	_clear()
+	_into = body
 	chron_btn.text = "편지로"
 	_label("연대기 — 비운 동안", "Title")
 	_rule()
