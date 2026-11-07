@@ -139,7 +139,7 @@ func _build_settings(body: VBoxContainer) -> void:
 	ll.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_label(body, "다른 언어는 준비하고 있어요.", "Small")
 	_section(body, "도움")
-	var nb := _button(body, "거인의 수첩 다시 보기")
+	var nb := _button(body, "별지기의 수첩 다시 보기")
 	nb.pressed.connect(func() -> void:
 		GameAudio.ui_click()
 		notebook_requested.emit())

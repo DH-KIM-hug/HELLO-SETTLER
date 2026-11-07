@@ -743,7 +743,7 @@ func test_ui() -> void:
 			crumb = c
 		if c["name"] == "각설탕":
 			sugar = c
-	check(not crumb.is_empty() and (crumb["text"] as String).contains("거인에게는") and (crumb["text"] as String).contains("병 안에서는"), "카드: 두 줄 '거인에게는 / 병 안에서는'")
+	check(not crumb.is_empty() and (crumb["text"] as String).contains("별지기에게는") and (crumb["text"] as String).contains("병 안에서는"), "카드: 두 줄 '별지기에게는 / 병 안에서는'")
 	check(not bool(crumb["dim"]) and bool(sugar["dim"]), "살 수 없는 것은 값이 흐리게")
 	sh.press(crumb["name"])
 	check(Market.hand.size() == 1 and is_equal_approx(Market.notes, 150.0), "누르면 사서 손에 (150 남음)")

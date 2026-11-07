@@ -314,6 +314,7 @@ func split_out(from: Village, x: float, y: float) -> Village:
 	nv.settlement_name = "%d번째 무리 (분가)" % settlements.size()
 	nv._next_wish_t = nv.t + Balance.WISH_FIRST
 	nv.aware = from.aware                 # 거인을 아는 무리가 떠나면 새 땅에서 먼저 제단부터 짓는다 (A4b)
+	WatcherName.inherit(from, nv)         # N2: 어미 마을이 부르는 말을 이어받음 (낮은 확률로 새 말)
 	nv.altar_built = false
 	from.move_people_to(nv, movers)
 	_update_interest()

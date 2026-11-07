@@ -21,6 +21,7 @@ var buy_box: VBoxContainer
 var lamp_box: VBoxContainer
 var kit_box: VBoxContainer
 var notes_l: Label
+var star_l: Label                       # '별생활 N일째' (STORY 4 · N2) — 제목 아래 작게
 var confirm: ConfirmSheet
 var sm: GameSave = null                 # 비면 GameSave.get_instance()
 var current_id := -1                    # 지금 보는 병 (장면이 알려 줌 — 비면 sm.current)
@@ -54,6 +55,7 @@ func _init() -> void:
 	notes_l = _label(head, "")
 	notes_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	notes_l.add_theme_font_override("font", UiTheme.font(true))
+	star_l = _label(outer, "", "Small")
 	var scroll := ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -66,7 +68,7 @@ func _init() -> void:
 	jars_box = _box(body)
 	buy_box = _box(body)
 	body.add_child(HSeparator.new())
-	_section(body, "등불", "거인의 등불")
+	_section(body, "등불", "별지기의 등불")
 	lamp_box = _box(body)
 	body.add_child(HSeparator.new())
 	_section(body, "밀", "키트 업그레이드")
@@ -74,7 +76,7 @@ func _init() -> void:
 	kh.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	kit_box = _box(body)
 	body.add_child(HSeparator.new())
-	var soon := _label(body, "병과 병 사이 거인의 다리 · 유적 탐방은 곧 열려요.", "Small")
+	var soon := _label(body, "병과 병 사이 별지기의 다리 · 유적 탐방은 곧 열려요.", "Small")
 	soon.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var close_btn := Button.new()
 	close_btn.text = "닫기"
@@ -213,6 +215,8 @@ func _cur() -> int:
 func _refresh() -> void:
 	notes_l.text = Shop._num(Market.notes)
 	var s := _sm()
+	star_l.text = "별생활 %d일째" % s.star_days() if s != null else ""
+	star_l.visible = star_l.text != ""
 	var shelf: Array = s.shelf_list() if s != null else []
 	var sig := "%d|%d|%s|%s|%s|%s" % [int(Market.notes), Market.lamp_level, str(shelf), str(s.giant if s != null else {}), climate, _cur()]
 	if sig == _sig:

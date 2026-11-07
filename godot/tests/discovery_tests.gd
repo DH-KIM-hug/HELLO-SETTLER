@@ -394,9 +394,10 @@ func test_unaware_salt() -> void:
 		var b0 := v.book.size()
 		v.salt_discovery()
 		var lines: Array = v.book.slice(b0).map(func(e: Dictionary) -> String: return e["text"])
-		var giant := lines.any(func(s: String) -> bool: return s.contains("거인"))
+		var wn := WatcherName.of(v) if aware else "거인"      # N2: 깨달은 뒤 = 마을이 부르는 말
+		var giant := lines.any(func(s: String) -> bool: return s.contains(wn)) and not lines.any(func(s: String) -> bool: return s.contains("거인"))
 		check(Codex.knows(v, "salt") and lines.size() == 2 and giant == aware and credited(v, "salt"),
-			"소금 (%s): 발견 줄 + 해석 줄%s" % ["깨달은 뒤" if aware else "깨닫기 전", " (거인 이야기)" if aware else " (거인 이야기 없음)"])
+			"소금 (%s): 발견 줄 + 해석 줄%s" % ["깨달은 뒤" if aware else "깨닫기 전", " (부르는 말 이야기)" if aware else " (거인 이야기 없음)"])
 
 
 # ───────────────────────── 저장 ─────────────────────────

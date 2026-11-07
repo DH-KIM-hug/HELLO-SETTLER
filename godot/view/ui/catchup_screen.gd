@@ -25,6 +25,7 @@ var lines_box: VBoxContainer
 var bar: ProgressBar
 var title: Label
 var sub: Label
+var dear_l: Label
 var lamp_l: Label
 var status: Label
 var shown: Array = []                   # 편지에 쓴 줄 (CatchUp.peek의 events)
@@ -69,7 +70,7 @@ func _init() -> void:
 	r.color = UiTheme.PAPER_LINE
 	r.custom_minimum_size = Vector2(0, 1)
 	body.add_child(r)
-	_label("거인님께,", "Hand")
+	dear_l = _label("", "Hand")          # 촌장의 편지 첫 줄 — 마을이 부르는 말 (start에서 채움 · N2)
 	_label("자리를 비우신 동안 이런 일이 있었어요.", "Hand")
 	lines_box = VBoxContainer.new()
 	lines_box.add_theme_constant_override("separation", 6)
@@ -121,7 +122,10 @@ func _layout() -> void:
 func start(list: Array, away_s: float) -> void:
 	jobs = list
 	away = away_s
-	sub.text = "거인님이 %s 비우신 사이" % CatchUp.away_words(away_s)
+	sub.text = "별지기님이 %s 비우신 사이" % CatchUp.away_words(away_s)
+	var fv: Village = (list[0] as CatchUp).v if not list.is_empty() else null
+	dear_l.text = WatcherName.fill(fv, "{w}께,") if fv != null and fv.aware else ""
+	dear_l.visible = dear_l.text != ""
 	var lw := CatchUp.lamp_words((list[0] as CatchUp).lamp, away_s) if not list.is_empty() else ""
 	lamp_l.text = lw
 	lamp_l.visible = lw != ""

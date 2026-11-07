@@ -448,7 +448,7 @@ static func _talk(v: Village, a: Resident, b: Resident, r: Dictionary) -> Dictio
 		for e: Array in ec:                 # 위로하는 쪽 = b
 			lo.append([1 - int(e[0]) if int(e[0]) < 2 else e[0], e[1], "sad" if int(e[0]) == 1 else ""])
 		return _ev(v, "comfort", [a, b], lo, "")
-	var vars := {"a": a.name, "b": b.name, "flower": _flower(v), "food": _food(v)}
+	var vars := {"a": a.name, "b": b.name, "flower": _flower(v), "food": _food(v), "w": WatcherName.of(v)}     # {w} = 마을이 부르는 말 (N2)
 	var opts: Array = []                 # [묶음, 무게]
 	if a.is_child() and b.is_child():
 		opts.append(["kids", 5.0])

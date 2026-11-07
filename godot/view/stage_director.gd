@@ -359,7 +359,7 @@ func _beat(b: Dictionary) -> void:
 	if b.has("vignette"):
 		_vig_goal = float(b["vignette"])
 	if b.has("caption"):
-		_cap_l.text = String(b["caption"])
+		_cap_l.text = WatcherName.fill(v, String(b["caption"]))     # {w} = 마을이 부르는 말 (STORY 4)
 		_cap_on = true
 		_layout()
 	if b.has("beam") and sc != null and sc.has_method("beam_at"):

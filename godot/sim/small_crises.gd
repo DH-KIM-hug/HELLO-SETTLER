@@ -120,7 +120,7 @@ static func say_for(v: Village, aware_text: String, unaware_text: String) -> Str
 
 
 func _warn(v: Village, kind: String, aware_text: String, unaware_text: String) -> void:
-	v.warnings.append({"t": v.t, "kind": kind, "text": say_for(v, aware_text, unaware_text)})
+	v.warnings.append({"t": v.t, "kind": kind, "text": WatcherName.fill(v, say_for(v, aware_text, unaware_text))})
 	if v.warnings.size() > 20:
 		v.warnings.pop_front()
 
@@ -255,7 +255,7 @@ func gnat_in(v: Village) -> bool:
 	_roll_carry(v, g)
 	stats["gnats"] += 1
 	v.log_line("열린 하늘 틈으로 집채만 한 날개 달린 것이 윙윙거리며 날아들었다.")
-	_warn(v, "gnat", "거인님, 하늘에서 윙윙 소리가 나요!", "하늘에서 윙윙 소리가 나요!")
+	_warn(v, "gnat", "{w}, 하늘에서 윙윙 소리가 나요!", "하늘에서 윙윙 소리가 나요!")
 	if gnat_extra > 0.0:
 		v.log_line("망루에서 먼저 윙윙 소리를 들은 사람들이 서둘러 마을에 알렸다.")
 	var tl := _awake(v)
@@ -597,14 +597,14 @@ func tweeze(v: Village, p: Vector2) -> Dictionary:
 	stats["tweezed"] += 1
 	if v.aware:
 		v.bless_all(0.03)
-		v.log_line("거인님의 커다란 집게가 내려와 날개 괴물을 집어 가셨다.")
+		v.log_line("{w}의 커다란 집게가 내려와 날개 괴물을 집어 가셨다.")
 	else:
 		Awakening.witness(v, "tweeze")
 		v.log_line("하늘에서 커다란 집게가 내려와 날개 괴물을 집어 갔다.")
 	var near: Array = v.people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	near.sort_custom(func(a: Resident, c: Resident) -> bool: return Vector2(a.x, a.y).distance_squared_to(p) < Vector2(c.x, c.y).distance_squared_to(p))
 	if not near.is_empty():
-		v.speak(near[0], say_for(v, "거인님이 괴물을 집어 가셨다!", "하늘에서 커다란 손가락이…!"), 7)
+		v.speak(near[0], say_for(v, "{w:이/가} 괴물을 집어 가셨다!", "하늘에서 커다란 손가락이…!"), 7)
 	return {"ok": true, "why": "", "picked": true, "crushed": crushed}
 
 
@@ -687,7 +687,7 @@ func _start_drop(v: Village) -> void:
 	if drop_extra > 0.0:
 		v.log_line("망루에서 하늘 유리에 맺히는 물방울이 먼저 보였다.")
 	v.log_line("하늘에 커다란 물덩이가 맺혔다. 그 아래 땅에 둥근 그림자가 졌다.")
-	_warn(v, "drop_omen", "거인님, 하늘에 커다란 물방울이 매달려 부풀고 있어요.", "하늘에 커다란 물방울이 매달려 부풀고 있어요.")
+	_warn(v, "drop_omen", "{w}, 하늘에 커다란 물방울이 매달려 부풀고 있어요.", "하늘에 커다란 물방울이 매달려 부풀고 있어요.")
 	var tl := _awake(v)
 	if tl != null:
 		v.speak(tl, "하늘에 물덩이가 매달렸어!", 7)
@@ -830,7 +830,7 @@ func _burst(v: Village) -> void:
 		v.log_line("물덩이가 빈 들에서 터져 작은 연못이 되었다.")
 		if drop_knocked and v.aware:
 			v.bless_all(0.02)
-			v.log_line("거인님이 물덩이를 빈 들로 떨어뜨려 주셨다고 사람들은 말했다.")
+			v.log_line("{w:이/가} 물덩이를 빈 들로 떨어뜨려 주셨다고 사람들은 말했다.")
 	else:
 		var parts := PackedStringArray()
 		if houses > 0:
@@ -909,7 +909,7 @@ func _dust_tick(v: Village, dt: float) -> void:
 				dust_phase = "omen"
 				dust_t = v.t
 				v.log_line("열린 하늘 틈으로 들어온 빛 속에 잿빛 가루가 반짝이며 내려왔다.")
-				_warn(v, "dust_omen", "거인님, 하늘에서 잿빛 가루가 내려와요.", "하늘에서 잿빛 가루가 내려와요.")
+				_warn(v, "dust_omen", "{w}, 하늘에서 잿빛 가루가 내려와요.", "하늘에서 잿빛 가루가 내려와요.")
 				var el := _awake(v, true)
 				if el == null:
 					el = _awake(v)
@@ -1050,7 +1050,7 @@ func blow_dust(v: Village, dir: Vector2) -> int:
 			c.state = "gone"
 			stats["blown"] += 1
 	if n > 0:
-		v.log_line(say_for(v, "거인님의 숨결에 회색 구름 덩어리가 흩어져 날아갔다.", "하늘에서 큰 바람이 불어 회색 구름 덩어리가 흩어져 날아갔다."))
+		v.log_line(say_for(v, "{w}의 숨결에 회색 구름 덩어리가 흩어져 날아갔다.", "하늘에서 큰 바람이 불어 회색 구름 덩어리가 흩어져 날아갔다."))
 		if v.aware:
 			v.bless_all(0.01)
 	return n

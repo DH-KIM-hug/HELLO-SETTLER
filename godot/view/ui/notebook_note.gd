@@ -55,7 +55,7 @@ func _init() -> void:
 	head.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(head)
 	title_l = Label.new()
-	title_l.text = "거인의 수첩"
+	title_l.text = "별지기의 수첩"
 	title_l.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	title_l.add_theme_font_override("font", UiTheme.font(true))
 	title_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)

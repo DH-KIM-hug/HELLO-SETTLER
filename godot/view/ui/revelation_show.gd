@@ -112,7 +112,7 @@ func play_revelation(v: Village) -> bool:
 	_title.text = "새 시대 — %s" % nx
 	var un := Village.era_unlocks(v.era + 1)
 	_sub.text = ("이제 %s%s 지을 수 있어요" % ["·".join(Array(un.slice(0, 5)).map(Balance.label)) + (" …" if un.size() > 5 else ""), Village.josa(Balance.label(un[mini(4, un.size() - 1)]), "을", "를")]) if not un.is_empty() else ""
-	_line.text = "거인이 새 시대를 열었다 — %s" % nx
+	_line.text = WatcherName.fill(v, "{w:이/가} 새 시대를 열었다 — %s" % nx)
 	_begin()
 	GameAudio.fx("chime")
 	GameAudio.fx("bell", "Village", -2.0)

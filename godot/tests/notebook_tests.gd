@@ -259,7 +259,7 @@ func test_first_ten_minutes() -> void:
 	check(bool(a["evening_slow"]), "첫 저녁 기도 장면은 느리게 (×%d)" % int(Notebook.SLOW * Notebook.NORMAL_BASE))
 	var c: JarClock = a["clock"]
 	check(not c.creation and c.creation_done and absf(c.speed() - JarClock.normal_speed()) < 0.01, "둘째 날부터 보통 (1일=5분)")
-	check(has_line(v, Notebook.LINE_DONE), "연대기: \"%s\"" % Notebook.LINE_DONE)
+	check(has_line(v, WatcherName.fill(v, Notebook.LINE_DONE)), "연대기: \"%s\"" % WatcherName.fill(v, Notebook.LINE_DONE))
 	# 바로 보이는 결과
 	var bf: Dictionary = a["before"]
 	var af: Dictionary = a["after"]

@@ -267,7 +267,7 @@ static func _greet(v: Village, made: Array[Resident], p: Vector2) -> void:
 
 ## 마을 사람의 말 [깨달은 뒤 반김, 깨달은 뒤 경계, 깨닫기 전]
 const VILLAGE_SAY := {
-	"welcome": ["거인님이 새 이웃을 보내 주셨다!", "어서 와요, 잔치를 열어야겠어!"],
+	"welcome": ["{w:이/가} 새 이웃을 보내 주셨다!", "어서 와요, 잔치를 열어야겠어!"],
 	"wary": ["하늘에서 사람이 내려왔어… 믿어도 될까?", "낯선 얼굴이네. 지켜보자."],
 	"unaware": ["하늘에서 사람이 내려왔어!", "누구지…? 어디서 온 사람일까?"],
 }
@@ -280,7 +280,7 @@ static func village_line(kind: String, i: int) -> String:
 
 static func newcomer_line(aware: bool, family: bool) -> String:
 	if aware:
-		return "여기가 거인님의 마을인가요? 우리 식구도 함께 살게 해 주세요." if family else "여기가 거인님의 마을인가요? 함께 살게 해 주세요."
+		return "여기가 {w}의 마을인가요? 우리 식구도 함께 살게 해 주세요." if family else "여기가 {w}의 마을인가요? 함께 살게 해 주세요."     # {w} — Village.speak가 채움
 	return "여긴 어디지…? 우리 식구가 쉴 곳이 있을까요?" if family else "여긴 어디지…? 쉴 곳이 있을까요?"
 
 

@@ -72,7 +72,7 @@ const TASKS := [
 	{"id": "buy", "at": 540.0, "act": "buy", "hl": "shop", "reward": 50,
 		"text": "받은 지폐로 마을을 도와줄 수 있어.\n[상점]에서 하나 골라 보자."},
 ]
-const LINE_DONE := "거인이 첫날을 지켜 주었다."
+const LINE_DONE := "{w:이/가} 첫날을 지켜 주었다."     # {w} — Village.log_line이 채움 (WatcherName)
 const LINE_DONE_UNAWARE := "그날은 이상하게 일이 잘 풀렸다."
 const THOUGHTS_CHILD := ["하늘 위엔 뭐가 있을까…?", "아까 하늘이 반짝였는데…", "꽃씨 또 날렸으면 좋겠다"]
 const THOUGHTS_ADULT := ["오늘 안에 지붕을 올려야지", "밭이 잘 자라야 할 텐데…", "아이들이 배곯지 않게 해야지"]
@@ -473,7 +473,7 @@ static func name_baby(v: Village, id: int, nm: String) -> bool:
 				e["text"] = tx.replace("%s%s 낳았다" % [old, Village.josa(old, "을", "를")], "%s%s 낳았다" % [s, Village.josa(s, "을", "를")])
 	var mom := v.person(b.parents[0]) if b.parents.size() > 0 else null
 	if v.aware:
-		v.log_line("하늘의 분이 아기에게 '%s'라는 이름을 지어 주셨다." % s)
+		v.log_line("{w:이/가} 아기에게 '%s'라는 이름을 지어 주셨다." % s)
 	else:
 		v.log_line("아기의 이름은 '%s'가 되었다. 누가 지었는지는 아무도 몰랐지만, 모두 좋은 이름이라 했다." % s)
 	if mom != null and not mom.sleeping:

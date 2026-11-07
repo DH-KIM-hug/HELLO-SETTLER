@@ -395,4 +395,4 @@ func test_words() -> void:
 	check(run.words_ok(said) == "" and not said.any(func(s: String) -> bool: return s.contains("지폐") or s.contains("상점") or s.contains("사다")),
 		"연출의 자막·주민 말에 금지어 없음 (%d줄) %s" % [said.size(), run.words_ok(said)])
 	var cap := " ".join(PackedStringArray(said))
-	check(cap.contains("하늘 너머에 누군가") and cap.contains("하늘의 분께 드릴 자리"), "콘티의 자막 (깨달음 · 첫 기도)")
+	check(cap.contains("하늘 너머에 누군가") and cap.contains("{w}께 드릴 자리") and not cap.contains("하늘의 분"), "콘티의 자막 (깨달음 · 첫 기도)")

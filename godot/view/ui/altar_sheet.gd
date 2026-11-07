@@ -288,7 +288,7 @@ func _refresh() -> void:
 	# 소원 편지
 	var wl := village.open_letters()
 	if wl.is_empty():
-		_label(letter_box, "아직 온 편지가 없어요." if village.altar_built else "제단이 생기면 사람들이 거인님께 편지를 써요.", "Small")
+		_label(letter_box, "아직 온 편지가 없어요." if village.altar_built else "제단이 생기면 사람들이 별지기님께 편지를 써요.", "Small")
 	for l: Dictionary in wl:
 		if l["kind"] == "wish":
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])), true, "", true)
@@ -298,7 +298,7 @@ func _refresh() -> void:
 	force_btn.text = ("▼ " if force_open else "▶ ") + "강제로 거두기"
 	force_box.visible = force_open
 	if force_open:
-		var warn := _label(force_box, "창고에서 직접 가져가요. 주민들은 거인님이 노하셨다고 여겨요.", "Status")
+		var warn := _label(force_box, "창고에서 직접 가져가요. 주민들은 별지기님이 노하셨다고 여겨요.", "Status")
 		warn.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		var any := false
 		for item: String in Balance.PRICE:

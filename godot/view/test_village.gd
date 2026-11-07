@@ -194,7 +194,7 @@ func on_back() -> void:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
-	confirm_sheet.ask("거인의 방으로 돌아갈까요?", "돌아가기", "병 안에 있기")
+	confirm_sheet.ask("별지기의 방으로 돌아갈까요?", "돌아가기", "병 안에 있기")
 
 
 ## 전부 저장하고 병을 내려놓은 뒤 거인의 방(타이틀)으로
@@ -1912,7 +1912,7 @@ func _setup_notebook(root: Control, dlayer: CanvasLayer) -> void:
 		var fv := focus_village()
 		if not Notebook.active(fv):
 			Notebook.begin(fv, true)
-		settings_sheet.show_toast("거인의 수첩을 다시 펼쳤어요"))
+		settings_sheet.show_toast("별지기의 수첩을 다시 펼쳤어요"))
 
 
 ## (v3.3) 뚜껑은 거인의 손짓마다 저절로 — 닫혀 있으면 열고 코르크가 '퐁'

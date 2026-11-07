@@ -198,7 +198,7 @@ func _start_omen(v: Village) -> void:
 	var teller := _awake_teller(v)
 	if teller != null:
 		v.speak(teller, "빵에 %s 털이 났어!" % col, 7)
-	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": "거인님, 빵에 %s 털이 났어요." % col})
+	v.warnings.append({"t": v.t, "kind": "mold_omen", "text": (WatcherName.fill(v, "{w}, 빵에 %s 털이 났어요.") if v.aware else "빵에 %s 털이 났어요.") % col})
 	if omen_extra > 0.0:
 		v.log_line("망루에서 먼 하늘이 뿌옇게 흐려지는 것이 먼저 보였다. 사람들은 서둘러 빵을 덮었다.")
 	v.log_line("창고의 빵에 %s 털이 돋았다. 하늘이 뿌옇게 흐려졌다." % col)
