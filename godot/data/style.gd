@@ -117,7 +117,7 @@ const ITEM_COLORS := {"통나무": Color("9a7150"), "판자": Color("e0bf8c"), "
 	"버섯": Color("efe9dc"), "말린 버섯": Color("8a5a36"), "빛버섯": Color("bfe8ef")}   # [하늘의 것]
 
 # ───────────── 주민 ─────────────
-const RESIDENT_SCALE := 0.52               # 5단계: 모델 키 약 1.95 → 어른 키 약 1.0칸 = 720×1280 기본 확대에서 약 22px (잰 값, 밀짚모자 +4)
+const RESIDENT_SCALE := 0.52               # 5단계: 모델 키 약 1.95 → 어른 키 약 1.0칸 = 1080 폭 기본 확대(ppu 16)에서 약 32px — 아트 바이블 5.8 (잰 값, 밀짚모자 +4)
 const RESIDENT_LINE := Color("4a3a30")     # 주민 둘레선 (짙은 갈색, 기준 4-1.png)
 const ANIM_SPEED := 1.0                    # 부드러운 동작의 빠르기 배율
 
