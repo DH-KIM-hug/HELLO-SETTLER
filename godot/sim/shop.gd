@@ -228,6 +228,8 @@ static func card(v: Village, item: String) -> Dictionary:
 	if item == Immigrants.ITEM:
 		out["odds"] = true                   # 확률 공개 — 카드에 [확률 보기]
 		out["left"] = Immigrants.left_today()
+		if Immigrants.free_house_slots(v) <= 0:
+			out["note"] = Immigrants.HOMELESS_NOTE     # 빈 집 자리 없음 — 뽑기는 그대로 (population.md R6-8)
 	return out
 
 

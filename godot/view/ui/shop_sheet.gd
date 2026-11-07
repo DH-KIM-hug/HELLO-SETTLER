@@ -452,6 +452,8 @@ func _card(item: String) -> void:
 		_two(col, "", "탑은 한 병에 둘까지 · 물가는 녹조 주의").modulate = Color(1, 1, 1, 0.85)
 	if bool(c.get("odds", false)):                       # 이주민 뽑기: 확률 공개 + 오늘 남은 횟수
 		_two(col, "", "오늘 %d번 더 데려올 수 있어요" % int(c["left"]) if int(c["left"]) > 0 else "오늘은 다 데려왔어요 — 내일 처음 값으로").modulate = Color(1, 1, 1, 0.85)
+		if String(c.get("note", "")) != "":                # 빈 집 자리 없음 — 뽑기는 되고 한 줄만 (population.md R6-8)
+			_two(col, "", String(c["note"])).modulate = Color(1, 1, 1, 0.85)
 		var ob := Button.new()
 		ob.text = "확률 보기"
 		ob.focus_mode = Control.FOCUS_NONE

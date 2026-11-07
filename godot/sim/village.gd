@@ -125,6 +125,9 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 # [마을의 삶] 사람 사이 — 이야기·다툼·사랑·혼례 모임 (ROADMAP E2 — sim/social.gd, 난수도 따로)
 var social := {}                      # {"p": 짝마다 관계 값, "wed": 혼례 모임 약속, "story": 사랑 이야기 …} (저장됨)
 var social_rng := RandomNumberGenerator.new()
+# [인구] 이주민의 조각 (design/gdd/population.md R6-6 · STORY 1) — 따로 흐름 (혼인·출산 흐름 rng를 흔들지 않게)
+var pop_rng := RandomNumberGenerator.new()
+var hint_bag: Array = []              # 아직 나오지 않은 조각 id (네 가지가 다 나오면 다시 섞어 채움 — 저장됨, 옛 저장은 빈 채로)
 var social_events: Array = []         # 화면이 가져가는 장면 (저장 안 함 — view/social_stage.gd)
 var social_serial := 0
 var _social_t := 0.0
@@ -257,6 +260,7 @@ func _init_prototype(seed_v: int) -> void:
 func _init_health(seed_v: int) -> void:
 	health_rng.seed = seed_v * 104729 + 7
 	social_rng.seed = seed_v * 2654435 + 17
+	pop_rng.seed = seed_v * 15485863 + 31
 	Social.lines()                        # 말 묶음을 미리 읽음 (첫 만남 걸음이 갑자기 느려지지 않게 — 빠른 흐름의 계산 예산)
 	disc_rng.seed = seed_v * 7919 + 13
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
@@ -1750,7 +1754,25 @@ func _siblings(a: Resident, b: Resident) -> bool:
 	return false
 
 
-## 혼인: 성인(4일)~20일 미혼 남녀 짝마다 하루 0.5 (남매 제외). 짝은 sim_life.py처럼 섞어서 한 명씩 맞춘다
+## 걸음 dt 동안 '병 하루 비율' rate인 일이 일어날 확률 — 1 − exp(−rate × dt / DAY) (population.md F2·F3: 늘 0~1, 걸음 크기와 무관)
+static func day_rate_p(rate: float, dt: float) -> float:
+	return 1.0 - exp(-maxf(0.0, rate) * maxf(0.0, dt) / DAY)
+
+
+## 아이를 낳을 수 있는 부부 수 (population.md R4-2 · 사용자 결정 2026-11-08) — 아내 BIRTH_WIFE_MIN ≤ 나이 < BIRTH_WIFE_MAX, 남편 어른.
+## 보지 않을 때 위기 죽음 아끼기(OFFLINE_MIN_COUPLES)와 분가(남길 부부)가 센다 — 늙은 부부는 빠진다
+func fertile_couples() -> int:
+	var n := 0
+	for w in people:
+		if w.sex != "f" or w.partner < 0 or w.age < Balance.BIRTH_WIFE_MIN or w.age >= Balance.BIRTH_WIFE_MAX:
+			continue
+		var h := person(w.partner)
+		if h != null and not h.dead and h.age >= Balance.AGE_ADULT:
+			n += 1
+	return n
+
+
+## 혼인: 성인(4일)~20일 미혼 남녀 짝마다 병 하루 비율 MARRY_RATE (남매 제외). 짝은 sim_life.py처럼 섞어서 한 명씩 맞춘다
 func _marriages(dt: float) -> void:
 	var men: Array[Resident] = []
 	var women: Array[Resident] = []
@@ -1767,7 +1789,7 @@ func _marriages(dt: float) -> void:
 		var b := women[i]
 		if _siblings(a, b):
 			continue
-		if rng.randf() < Balance.MARRY_RATE * dt / DAY:
+		if rng.randf() < day_rate_p(Balance.MARRY_RATE, dt):
 			marry(a, b)
 			Social.on_marry(self, a, b)
 			if a.home != b.home:
@@ -1791,7 +1813,7 @@ func _births(dt: float) -> void:
 	var env := birth_env()
 	var guarantee: bool = Balance.FIRST_BIRTH_GUARANTEE and stats["born"] == 0 and t >= Balance.FIRST_BIRTH_AT and t < 2.0 * DAY
 	var fed := guarantee or food_total() >= Balance.BIRTH_FOOD_DAYS * Production.day_need(self)     # v5: 먹을 것이 모자라면 아이를 미룬다 (성장이 스스로 멈춤)
-	if fed and not guarantee:             # v5: 걸음마 전 아기가 이미 많으면 (돌보는 부모가 일손의 3분의 1 넘게) 미룬다 — 한꺼번에 태어나 밭이 비지 않게
+	if fed and not guarantee:             # v5 · F3a: 걸음마 전 아기 × CARE_CAP < 어른이어야 (돌보는 부모가 일손의 3분의 1을 넘지 않게) — 한꺼번에 태어나 밭이 비지 않게
 		var babies := 0
 		var adults := 0
 		for q in people:
@@ -1799,7 +1821,7 @@ func _births(dt: float) -> void:
 				babies += 1
 			elif q.is_adult():
 				adults += 1
-		fed = babies * 2 * 3 < adults
+		fed = babies * Balance.CARE_CAP < adults
 	var occ := {}                         # 집마다 사는 사람 수 (occupants()와 같은 값 — 한 번 세고 옮길 때마다 고침)
 	var hs: Array[Building] = []
 	var counted := false
@@ -1828,7 +1850,7 @@ func _births(dt: float) -> void:
 			h = to
 			stats["moves"] += 1
 			log_line("%s의 가족이 더 넓은 집으로 옮겼다." % w.name)
-		if guarantee or (fed and rng.randf() < Balance.BIRTH_RATE * w.fert * env * dt / DAY):
+		if guarantee or (fed and rng.randf() < day_rate_p(Balance.BIRTH_RATE * w.fert * env, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
 			guarantee = false
 			_give_birth(w, h)
 			occ[h.id] = int(occ.get(h.id, 0)) + 1     # 아기도 그 집에 산다
@@ -1855,10 +1877,7 @@ func _give_birth(w: Resident, h: Building) -> void:
 
 
 func _deaths(dt: float) -> void:
-	var couples := 0
-	for p in people:
-		if p.sex == "f" and p.partner >= 0:
-			couples += 1
+	var couples := fertile_couples()      # 아끼기는 아이를 낳을 수 있는 부부만 센다 (population.md R4-2)
 	for p in people.duplicate():
 		var why := ""
 		var la: float = p.age / p.f("lifespan")          # 혈통 '장수' ×1.15 · '단명' ×0.8 → 늙는 빠르기로 (노환 확률·상한 나이)
@@ -1867,7 +1886,7 @@ func _deaths(dt: float) -> void:
 			if rng.randf() < pd * dt / (DAY * Balance.AGE_K) or la > Balance.DEATH_MAX_AGE:
 				why = "노환"
 		if why == "" and p.health <= 0.0:
-			# 거인이 없을 때: 위기 사망(굶주림·병·추위·더위)은 하루 1명까지, 부부 2쌍 아래로는 일어나지 않음 (멸망 방지)
+			# 거인이 없을 때: 위기 사망(굶주림·병·추위·더위)은 하루 1명까지, 가임 부부 OFFLINE_MIN_COUPLES쌍 이하면 일어나지 않음 (멸망 방지)
 			if not is_watching() and (couples <= Balance.OFFLINE_MIN_COUPLES or _starve_day == day_no()):
 				p.health = 0.05
 				stats["spared"] = int(stats.get("spared", 0)) + 1
@@ -1938,6 +1957,11 @@ func kill(p: Resident, why: String) -> void:
 
 
 func idle_chatter() -> void:
+	_idle_chatter_main()
+	Immigrants.say_hints(self)             # 조각을 지닌 이주민이 말풍선이 빌 때 한 번 (난수 없음 — 다른 흐름을 흔들지 않게)
+
+
+func _idle_chatter_main() -> void:
 	var awake := people.filter(func(q: Resident) -> bool: return not q.sleeping and q.age >= 2.5)
 	if awake.is_empty():
 		return
@@ -3190,11 +3214,10 @@ func _check_split() -> void:
 func split_movers() -> Array[Resident]:
 	var c := chief()
 	var wives: Array[Resident] = []
-	var couples := 0
+	var couples := fertile_couples()      # 옛 마을에 남길 부부도 가임 부부로 센다 (population.md R4-2)
 	for w in people:
 		if w.sex != "f" or w.partner < 0:
 			continue
-		couples += 1
 		var h := person(w.partner)
 		if h == null or w.age < Balance.AGE_ADULT or w.age >= Balance.BIRTH_WIFE_MAX or h.age < Balance.AGE_ADULT:
 			continue

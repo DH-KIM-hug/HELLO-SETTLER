@@ -83,6 +83,9 @@ var immune: Dictionary = {}           # 병 → 면역이 끝나는 병 시각 t
 var overcome := PackedStringArray()   # 이겨 낸 병 (UI '이겨 낸 병: 열병 · 고뿔')
 var latent := ""                      # 밖에서 지니고 온 병 — 잠복 중 (아프지도 옮기지도 않음, 거인에게는 창백한 얼굴빛 — WORLD_EVENTS 5 · ROADMAP B7)
 var latent_until := -1.0              # 잠복이 끝나고 앓기 시작하는 병 시각
+# 이주민의 조각 (design/gdd/population.md R6-6 · STORY 1) — Balance.IMMIGRANT_HINTS id, 없으면 "" (거인 UI 사람 상세에 작은 물건·버릇으로)
+var hint := ""
+var hint_said := false                # 조각 말풍선을 한 번 했나 (Immigrants.say_hints)
 
 
 func is_adult() -> bool:

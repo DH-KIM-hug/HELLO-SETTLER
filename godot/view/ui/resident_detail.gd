@@ -355,6 +355,10 @@ func _refresh() -> void:
 			_label(trait_box, r.trait_desc, "Small")
 	else:
 		_label(trait_box, "아직 눈에 띄는 특징이 없음", "Small")
+	var hint := Immigrants.hint_ui(r)               # 이주민의 조각 — 작은 물건·버릇 하나 (거인 UI만, population.md R6-6)
+	if not hint.is_empty():
+		_label(trait_box, "지닌 것 · %s" % hint[0], "Section")
+		_label(trait_box, String(hint[1]), "Small")
 	_fill_relations()
 	_fill_blood()
 	_fill_looks()
