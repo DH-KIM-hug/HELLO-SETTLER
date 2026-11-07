@@ -544,6 +544,158 @@ def round_bush(m, x, y, r=0.2, col="BUSH", flowers=None, seed=0):
                      color=flowers, seg=5, rings=3, group="body_nl")
 
 
+# ───────────────────────── v3: roof / wall materials so building types read apart ─────────────────────────
+SHINGLE = "b07b52"                                # split-wood shingles (목조주택, 벌목장)
+SHINGLE_UNDER = "7a5236"
+SHINGLE_BLUE = "7d97a6"                           # blue-grey painted shingles (목조주택 b)
+SHINGLE_BLUE_UNDER = "566e7c"
+SLATE_ROOF = "7c8a8e"                             # slate (석조주택, 예배당)
+SLATE_ROOF_UNDER = "5b676b"
+TEAL_TILE = "6aa59a"                              # glazed green-teal tile (치료소)
+TEAL_TILE_UNDER = "4b7d74"
+SOD = "86b964"                                    # turf / moss roof (약초원)
+SOD_UNDER = "5f7f45"
+BARK = "7d5b42"                                   # bark / dark plank roof (사냥막, 묘목원)
+BARK_UNDER = "553d2c"
+REED_ROOF = "c9b47c"                              # reed thatch, straight gable (어장)
+REED_ROOF_UNDER = "9b8656"
+BARN_RED = "b65a45"                               # barn boards (창고)
+BRICK = "c98262"                                  # bakery bricks
+BRICK_DARK = "a4644a"
+SMOKE = "eeeae2"
+
+
+def log_walls(m, W, D, H, col="TRUNK"):
+    """Log-cabin walls: a dark core + round logs stacked on all four sides, ends crossing at the corners."""
+    m.box((W - 0.08, D - 0.08, H), color=shade(col, 0.75))
+    r = 0.085
+    n = max(3, int(H / (2 * r * 0.95)))
+    dz = H / n
+    for k in range(n):
+        z = k * dz
+        c = shade(col, (1.0, 0.92, 1.06)[k % 3])
+        for sy in (-1, 1):
+            m.cyl(r, r, W + 0.26, pos=(-(W + 0.26) / 2, sy * (D / 2 - 0.02), z + r), rot=(0, math.pi / 2, 0),
+                  color=c, seg=6, cap="STUMP_TOP", bottom_cap="STUMP_TOP")
+        zs = z + dz * 0.5
+        if zs + r <= H + 0.02:
+            for sx in (-1, 1):
+                m.cyl(r, r, D + 0.22, pos=(sx * (W / 2 - 0.02), (D + 0.22) / 2, zs + r), rot=(math.pi / 2, 0, 0),
+                      color=shade(c, 0.95), seg=6, cap="STUMP_TOP", bottom_cap="STUMP_TOP")
+    m.box((W + 0.1, D + 0.1, 0.1), color="STONE_DARK")
+
+
+def brick_walls(m, W, D, H, col=BRICK, dark=BRICK_DARK):
+    """Warm brick walls: body + offset brick courses on the front and sides, stone plinth."""
+    m.box((W, D, H), color=col)
+    m.box((W + 0.08, D + 0.08, 0.16), color="STONE")
+    rows = int((H - 0.2) / 0.14)
+    n = int(W / 0.3)
+    for k in range(rows):
+        z = 0.2 + k * 0.14
+        for i in range(n):
+            if (i + k) % 3:
+                continue
+            x = -W / 2 + 0.15 + (i + (0.5 if k % 2 else 0)) * (W - 0.3) / n
+            m.box((0.24, 0.02, 0.1), pos=(x, -D / 2 - 0.008, z), color=dark if (i + k) % 2 else shade(col, 1.08))
+        if k % 2:
+            for sx in (-1, 1):
+                m.box((0.02, 0.24, 0.1), pos=(sx * (W / 2 + 0.008), -D / 4 + (k % 4) * 0.12, z), color=dark)
+
+
+def lathe(m, prof, seg=16, colfn=None, color="THATCH", smooth=True, top=True, group="body"):
+    """Surface of revolution through profile [(r, z), ...] (bottom -> top). colfn(face, z) -> colour."""
+    rings = [[Vector((math.cos(i * math.tau / seg) * r, math.sin(i * math.tau / seg) * r, z)) for i in range(seg)]
+             for r, z in prof]
+    fs = m.strip(rings, close=True, smooth=smooth, color=color, group=group)
+    bm = m._bm(group)
+    caps = []
+    if top:
+        caps.append(bm.faces.new([bm.verts.new(p) for p in rings[-1]]))
+    bmesh.ops.recalc_face_normals(bm, faces=fs + caps)
+    bm.normal_update()
+    if colfn:
+        for f in fs:
+            m._finish(bm, [f], colfn(f, f.calc_center_median().z), smooth)
+    for f in caps:
+        m._finish(bm, [f], colfn(f, prof[-1][1]) if colfn else color, smooth)
+    return fs
+
+
+def cone_roof(m, R, H, rise, col=GOLD, under=GOLD_UNDER, over=0.3, seg=18, bulge=0.18, x=0.0, y=0.0, finial=True):
+    """Round conical thatch (round huts): rolled eave lip, slightly bulging cone, darker course band, knot finial.
+    Walls of radius R end at height H. Centre (x, y)."""
+    Re = R + over
+    prof = [(R - 0.02, H - 0.02), (Re - 0.06, H - 0.16), (Re + 0.03, H - 0.08), (Re + 0.02, H + 0.04)]
+    K = 7
+    for k in range(1, K + 1):
+        t = k / K
+        r = Re * (1 - t) * (1 + bulge * math.sin(t * math.pi) * 0.6)
+        prof.append((max(r, 0.03), H + 0.04 + rise * t))
+
+    def cf(f, z):
+        if f.normal.z < -0.2:
+            return under
+        t = (z - H) / rise
+        if 0.38 < t < 0.52:
+            return shade(col, 0.86)
+        return shade(col, 0.9 + 0.18 * max(0.0, t))
+    bm = m._bm("body")
+    n0 = len(bm.verts)
+    lathe(m, prof, seg=seg, colfn=cf, color=col)
+    if x or y:
+        bm.verts.ensure_lookup_table()
+        bmesh.ops.translate(bm, verts=bm.verts[n0:], vec=Vector((x, y, 0)))
+    if finial:
+        m.cyl(0.07, 0.03, 0.22, pos=(x, y, H + rise - 0.04), color=shade(col, 0.75), seg=6)
+        m.sphere(0.06, pos=(x, y, H + rise + 0.2), color=shade(col, 0.7), seg=6, rings=3)
+
+
+def sod_tufts(m, W, D, H, rise, n=10, flowers=("ffffff", "f4d64c", "LOTUS"), seed=0, over=0.24):
+    """Grass blades + little flowers on a turf gable roof (ridge along X)."""
+    import random as _r
+    rnd = _r.Random(seed)
+    hy = D / 2 + over
+    for k in range(n):
+        x = rnd.uniform(-W / 2, W / 2)
+        s = rnd.uniform(0.2, 0.8) * (-1 if k % 2 else 1)
+        y = s * hy
+        z = H + rise * (1 - abs(s)) + 0.04
+        for j in range(3):
+            a = j * 2.1 + k
+            m.blade((x, y, z), (x + math.cos(a) * 0.06, y + math.sin(a) * 0.06, z + 0.16), 0.06, color="TUFT")
+        if k % 3 == 0:
+            m.sphere(0.045, pos=(x + 0.04, y, z + 0.09), color=flowers[k % len(flowers)], seg=5, rings=3, group="body_nl")
+
+
+def smoke(m, x, y, z, n=3):
+    """Static soft smoke puffs rising from a chimney."""
+    for k in range(n):
+        m.sphere(0.11 + 0.05 * k, pos=(x + 0.08 * k, y + 0.04 * k, z + 0.12 + k * 0.24), scl=(1, 1, 0.8), color=SMOKE,
+                 seg=7, rings=4, lumps=0.2, group="body_nl")
+
+
+def big_doors(m, x, y, w=1.0, h=1.0, col="WOOD", frame="WOOD_DARK"):
+    """Barn double doors on the front wall plane y: two plank leaves with pale Z braces."""
+    m.box((w + 0.12, 0.04, h + 0.08), pos=(x, y - 0.015, 0.0), color=frame)
+    for sx in (-1, 1):
+        cx = x + sx * w / 4
+        m.box((w / 2 - 0.03, 0.05, h), pos=(cx, y - 0.04, 0.02), color=col)
+        for z in (0.1, h - 0.12):
+            m.box((w / 2 - 0.06, 0.06, 0.07), pos=(cx, y - 0.06, z), color="f2ead8")
+        ln = math.hypot(w / 2 - 0.1, h - 0.3)
+        a = math.atan2(h - 0.3, w / 2 - 0.1)
+        m.box((ln, 0.06, 0.06), pos=(cx, y - 0.065, 0.14 + (h - 0.3) / 2 - 0.03), rot=(0, -sx * a, 0), color="f2ead8")
+    m.box((w + 0.25, 0.22, 0.06), pos=(x, y - 0.12, 0.0), color=shade(STEP, 0.92))
+
+
+def lift(m, dz):
+    """Move everything built so far up by dz (stilt houses)."""
+    for g, bm in m.groups.items():
+        bmesh.ops.translate(bm, verts=bm.verts[:], vec=Vector((0, 0, dz)))
+        bm.normal_update()
+
+
 def house(name, W, D, H, rise, door_x, win_xs, chim, seed, extras=None, walls=("framed", CREAM), roof="bun",
           roof_col=GOLD, roof_under=GOLD_UNDER, hip=0.82, side_win=True, shutter=None, boxes=True, moss=0, steps=2,
           lamp=False, dormer_x=None, ox=0.27, oy=0.25, phi0=0.4, posts=None, door_col="DOOR", upper=None):
@@ -557,6 +709,10 @@ def house(name, W, D, H, rise, door_x, win_xs, chim, seed, extras=None, walls=("
         stone_walls(m, W, D, H, col=wc, seed=seed)
     elif kind == "plank":
         plank_walls(m, W, D, H, col=wc)
+    elif kind == "log":
+        log_walls(m, W, D, H, col=wc)
+    elif kind == "brick":
+        brick_walls(m, W, D, H, col=wc)
     if roof == "bun":
         roof_fn, surf = bun_roof(m, W, D, H, rise, col=roof_col, under=roof_under, hip=hip, moss=moss, seed=seed,
                                  ox=ox, oy=oy, phi0=phi0)
@@ -623,9 +779,8 @@ def build_cottages():
         picket_fence(m, -1.4, -1.0, -1.4, 0.3)
         picket_fence(m, -1.4, -1.0, -0.8, -1.0)
         round_bush(m, -1.05, -0.85, 0.2, flowers="LOTUS", seed=1)
-    # cream plaster + timber frame, fresh golden bun thatch
-    house("cottage_a", 1.9, 1.25, 1.25, 1.2, -0.3, [0.45], (0.62, 0.12), 11, extras=a_extra, shutter=SHUTTER[0],
-          walls=("framed", CREAM)).export(OUT)
+    # v3: small ROUND hut — cream cob wall under a tall golden cone of thatch
+    round_hut("cottage_a", 0.82, 1.05, 1.35, CREAM, GOLD, GOLD_UNDER, 11, extras=a_extra, shutter=SHUTTER[0]).export(OUT)
 
     def b_extra(m):
         sack(m, -1.25, -0.45, 0.9)
@@ -645,21 +800,70 @@ def build_cottages():
         round_bush(m, -1.2, -0.8, 0.22, flowers="ffffff", seed=3)
         m.cyl(0.12, 0.09, 0.2, pos=(0.85, -0.98, 0), color="ROOF_RED", seg=8, cap="FIELD_SOIL")
         m.sphere(0.13, pos=(0.85, -0.98, 0.27), color="BUSH", seg=7, rings=4, lumps=0.2, group="body_nl")
-    house("cottage_c", 1.95, 1.25, 1.25, 1.2, 0.35, [-0.4], (-0.62, 0.12), 14, extras=c_extra, shutter=SHUTTER[2],
-          walls=("framed", OCHRE), roof_col=GOLD, roof_under=GOLD_UNDER, lamp=True).export(OUT)
+    # v3: round hut on a fieldstone footing, ochre wall, weathered straw cone
+    round_hut("cottage_c", 0.86, 1.0, 1.25, OCHRE, OLD, OLD_UNDER, 14, extras=c_extra, shutter=SHUTTER[2],
+              stone_base=True).export(OUT)
 
-    # grey fieldstone cottage under an old mossy bun
+    # grey fieldstone cottage under a small red clay tile gable (v3 — a third home silhouette)
     def d_extra(m):
         barrel(m, -1.2, -0.35, 0.85)
         picket_fence(m, 0.7, -1.05, 1.4, -1.05)
         picket_fence(m, 1.4, -1.05, 1.4, -0.1)
         round_bush(m, 1.1, -0.65, 0.2, flowers="LOTUS", seed=6)
-    house("cottage_d", 1.85, 1.25, 1.2, 1.15, -0.25, [0.45], (0.6, 0.12), 15, extras=d_extra, shutter=SHUTTER[3],
-          walls=("stone", "STONE"), roof_col=MOSSY, roof_under=MOSSY_UNDER, moss=3).export(OUT)
+    house("cottage_d", 1.85, 1.25, 1.2, 0.95, -0.25, [0.45], (0.6, 0.12), 15, extras=d_extra, shutter=SHUTTER[3],
+          walls=("stone", "STONE"), roof="tile", roof_col=TILE, roof_under=TILE_UNDER).export(OUT)
 
-    # pioneer hut: plank walls, low weathered bun with moss, no chimney
-    house("hut", 1.5, 1.1, 1.0, 0.95, 0.15, [-0.4], None, 13, walls=("plank", "WOOD"), side_win=False,
-          roof_col=OLD, roof_under=OLD_UNDER, moss=3, boxes=False, steps=1, ox=0.22, oy=0.2).export(OUT)
+    # 벌목장 (나무꾼): log cabin under a shingle gable + a log yard (stacked trunks on bearers), saw horse.
+    # The woodpile shed and the axe-in-stump chopping block are yard props added by village_view (YARD).
+    def hut_extra(m):
+        for row in range(3):
+            for i in range(4 - row):
+                m.cyl(0.12, 0.12, 1.15, pos=(-0.55 + (i + row * 0.5) * 0.25, 0.95, 0.12 + row * 0.21),
+                      rot=(0, math.pi / 2, 0), color=shade("TRUNK", (1.0, 0.9, 1.08)[(i + row) % 3]), seg=7,
+                      cap="STUMP_TOP", bottom_cap="STUMP_TOP")
+        for x in (-0.55, 0.45):
+            m.box((0.12, 0.6, 0.06), pos=(x, 0.95, 0), color="WOOD_DARK")
+        # saw horse with a half-cut log
+        for dx in (-0.25, 0.25):
+            for s in (-1, 1):
+                m.box((0.04, 0.04, 0.5), pos=(1.15 + dx, -0.55, 0), rot=(s * 0.35, 0, 0), color="WOOD")
+        log(m, 1.15, -0.55, 0.38, 0.85, 0.1, 0.0)
+        m.box((0.5, 0.02, 0.12), pos=(1.15, -0.62, 0.5), rot=(0, 0.4, 0), color="ROCK")
+    house("hut", 1.5, 1.1, 1.0, 0.95, 0.15, [-0.4], (0.45, 0.2), 13, walls=("log", "TRUNK"), side_win=False,
+          roof="tile", roof_col=SHINGLE, roof_under=SHINGLE_UNDER, boxes=False, steps=1, extras=hut_extra).export(OUT)
+
+
+def round_hut(name, R, H, rise, wall, roof_col, roof_under, seed, extras=None, shutter=None, stone_base=False):
+    """v3 오두막 variant: round cob hut under a cone of thatch (reads apart from the square bun cottages)."""
+    m = Model(name, seed)
+    m.cyl(R + 0.07, R + 0.07, 0.3 if stone_base else 0.12, color="STONE" if stone_base else "STONE_DARK", seg=14)
+    if stone_base:
+        for k in range(9):
+            a = -math.pi / 2 + (k - 4) * 0.5
+            m.box((0.2, 0.05, 0.12), pos=(math.cos(a) * (R + 0.08), math.sin(a) * (R + 0.08), 0.06 + (k % 2) * 0.12),
+                  rot=(0, 0, a + math.pi / 2), color=shade("STONE", 0.9 if k % 2 else 1.06))
+    m.cyl(R, R * 0.97, H, color=wall, seg=14, smooth=True)
+    for k in range(6):                                      # timber posts round the wall
+        a = -math.pi / 2 + (k - 2.5) * 0.62
+        m.box((0.07, 0.03, H - 0.1), pos=(math.cos(a) * (R + 0.004), math.sin(a) * (R + 0.004), 0.1),
+              rot=(0, 0, a + math.pi / 2), color="WOOD_DARK")
+    cone_roof(m, R, H, rise, col=roof_col, under=roof_under, over=0.32)
+    door(m, 0.0, -R + 0.03, w=0.4, h=min(0.8, H - 0.2), col="DOOR")
+    stepping_stones(m, 0.0, -R - 0.12, 2)
+    for a in (-math.pi / 2 + 0.95,):
+        def at(rr, s=0.0):
+            return (math.cos(a) * rr - math.sin(a) * s, math.sin(a) * rr + math.cos(a) * s)
+        x, y = at(R + 0.0)
+        m.box((0.32, 0.06, 0.3), pos=(x, y, 0.47), rot=(0, 0, a + math.pi / 2), color="WOOD_DARK")
+        x, y = at(R + 0.02)
+        m.box((0.24, 0.06, 0.22), pos=(x, y, 0.51), rot=(0, 0, a + math.pi / 2), color="WINDOW_LIT")
+        if shutter is not None:
+            for s in (-1, 1):
+                x, y = at(R + 0.03, s * 0.21)
+                m.box((0.1, 0.05, 0.27), pos=(x, y, 0.49), rot=(0, 0, a + math.pi / 2), color=shutter)
+    if extras:
+        extras(m)
+    return m
 
 
 def build_houses():
@@ -669,48 +873,53 @@ def build_houses():
         barrel(m, 1.42, -0.82)
         barrel(m, 1.22, -1.02, 0.85)
         round_bush(m, -1.45, -0.7, 0.24, flowers="FLAME2", seed=2)
-    # 목조주택: two storeys, warm ochre plaster in a full timber frame, big golden thatch with a dormer
-    house("house_timber", 2.4, 1.5, 1.95, 1.35, -0.35, [0.55], (0.85, 0.15), 21, walls=("framed", OCHRE),
-          extras=t_extra, shutter=SHUTTER[2], lamp=True, upper=(-0.75, 0.0, 0.75),
-          posts=[-1.2, -0.4, 0.4, 1.2]).export(OUT)
+    # 목조주택 (v3): two storeys, timber-framed plaster under a straight wood-shingle gable (no thatch) + a variant
+    house("house_timber", 2.4, 1.5, 1.95, 1.1, -0.35, [0.55], (0.85, 0.15), 21, walls=("framed", OCHRE), roof="tile",
+          roof_col=SHINGLE, roof_under=SHINGLE_UNDER, extras=t_extra, shutter=SHUTTER[2], lamp=True,
+          upper=(-0.75, 0.0, 0.75), posts=[-1.2, -0.4, 0.4, 1.2]).export(OUT)
+    house("house_timber_b", 2.4, 1.5, 1.95, 1.1, 0.35, [-0.55], (-0.85, 0.15), 23, walls=("framed", ROSE), roof="tile",
+          roof_col=SHINGLE_BLUE, roof_under=SHINGLE_BLUE_UNDER, extras=t_extra, shutter=SHUTTER[1], lamp=True,
+          upper=(-0.75, 0.0, 0.75), posts=[-1.2, -0.4, 0.4, 1.2]).export(OUT)
 
-    # 석조주택: big stone house with a red clay tile roof (later era)
+    # 석조주택 (v3): big stone house, gable to the front, grey slate roof; variant with red clay tile
     def s_extra(m):
         crate(m, 1.45, -0.85, 0.9)
         round_bush(m, -1.5, -0.6, 0.22, flowers="LOTUS", seed=4)
-    m = house("house_stone", 2.4, 1.55, 1.75, 1.3, 0.0, [-0.75, 0.75], (-0.7, 0.35), 22, walls=("stone", "STONE"),
-              roof="tile_front", roof_col=TILE, roof_under=TILE_UNDER, extras=s_extra, shutter=SHUTTER[3], lamp=True,
-              upper=(-0.75, 0.75))
-    m.export(OUT)
+    house("house_stone", 2.4, 1.55, 1.75, 1.3, 0.0, [-0.75, 0.75], (-0.7, 0.35), 22, walls=("stone", "STONE"),
+          roof="tile_front", roof_col=SLATE_ROOF, roof_under=SLATE_ROOF_UNDER, extras=s_extra, shutter=SHUTTER[3],
+          lamp=True, upper=(-0.75, 0.75)).export(OUT)
+    house("house_stone_b", 2.4, 1.55, 1.75, 1.3, 0.0, [-0.75, 0.75], (0.7, 0.35), 24, walls=("stone", "STONE"),
+          roof="tile_front", roof_col=TILE, roof_under=TILE_UNDER, extras=s_extra, shutter=SHUTTER[0], lamp=True,
+          upper=(-0.75, 0.75)).export(OUT)
 
 
 # ───────────────────────── work buildings ─────────────────────────
 def build_store():
-    """창고: open-fronted thatched shed on posts with barrels, sacks and crates."""
-    m = Model("storehouse", 31)
-    W, D, H = 2.5, 1.7, 1.3
-    m.box((W + 0.1, D + 0.1, 0.1), color="STONE_DARK")
-    m.box((W, 0.1, H), pos=(0, D / 2 - 0.05, 0.1), color="WOOD")                     # back wall
-    for i in range(int(W / 0.22)):
-        x = -W / 2 + 0.11 + i * 0.22
-        m.box((0.2, 0.02, H - 0.05), pos=(x, D / 2 - 0.105, 0.12), color=shade("WOOD", 0.92 if i % 2 else 1.05))
-    for sx in (-1, 1):
-        m.box((0.1, D, H), pos=(sx * (W / 2 - 0.05), 0, 0.1), color="WOOD")              # side walls
-    for x in (-W / 2, 0, W / 2):
-        post(m, x, -D / 2 + 0.05, H + 0.1, 0.12)
-        m.box((0.18, 0.18, 0.12), pos=(x, -D / 2 + 0.05, 0), color="STONE")
-    m.box((W + 0.1, 0.1, 0.1), pos=(0, -D / 2 + 0.05, H), color="WOOD_DARK")
-    bun_roof(m, W, D, H + 0.1, 0.85, hip=0.7, seed=31, oy=0.2)
-    barrel(m, -0.85, 0.35)
-    barrel(m, -0.5, 0.45)
-    barrel(m, -0.68, 0.38, z=0.4)
-    sack(m, 0.0, 0.2)
-    sack(m, 0.3, 0.35, 0.9, rz=0.6)
-    sack(m, 0.12, 0.42, 0.85, z=0.28)
-    crate(m, 0.85, 0.35)
-    crate(m, 0.85, 0.35, 0.85, z=0.32, rz=0.3)
-    crate(m, 1.15, -0.6)
-    m.export(OUT)
+    """창고 (v3): long red-board barn, gable to the front, big double doors with Z braces, hay loft door,
+    sacks / barrels / crates stacked outside."""
+    def ex(m):
+        big_doors(m, 0.0, -0.8, w=1.05, h=1.05, col=shade(BARN_RED, 0.85))
+        # hay loft door in the gable (over the round window) + hoist beam with a rope and a sack
+        yf = -(1.6 / 2 + 0.24) - 0.05
+        m.box((0.42, 0.05, 0.42), pos=(0, yf, 1.55), color="WOOD_DARK")
+        m.box((0.34, 0.06, 0.34), pos=(0, yf - 0.01, 1.59), color=shade(BARN_RED, 0.8))
+        m.box((0.1, 0.5, 0.1), pos=(0, yf - 0.2, 2.15), color="WOOD_DARK")
+        m.box((0.015, 0.015, 0.35), pos=(0, yf - 0.4, 1.82), color="d9b98a")
+        sack(m, 0.0, yf - 0.4, 0.7, z=1.62)
+        # outside: barrels left, sacks + crates right
+        barrel(m, -1.15, -1.0)
+        barrel(m, -1.45, -0.75, 0.9)
+        barrel(m, -1.3, -0.88, 0.85, z=0.4)
+        sack(m, 1.05, -1.05)
+        sack(m, 1.35, -0.95, 0.9, rz=0.5)
+        sack(m, 1.2, -1.0, 0.85, z=0.28)
+        crate(m, 1.55, -0.45)
+        crate(m, 1.55, -0.45, 0.8, z=0.3, rz=0.3)
+        m.box((0.8, 0.5, 0.12), pos=(-1.6, 0.3, 0), color="WOOD")                       # hay on a pallet
+        m.sphere(0.32, pos=(-1.6, 0.3, 0.2), scl=(1.25, 0.8, 0.55), color="CROP_RIPE", seg=8, rings=4, lumps=0.2,
+                 group="body_nl")
+    house("storehouse", 2.6, 1.6, 1.35, 1.25, 0.0, [], None, 31, walls=("plank", BARN_RED), roof="tile_front",
+          roof_col=SHINGLE, roof_under=SHINGLE_UNDER, boxes=False, side_win=False, steps=0, extras=ex).export(OUT)
 
 
 def build_well():
@@ -784,30 +993,46 @@ def build_planter():
 
 
 def build_sawmill():
+    """제재소 (v3): open plank-roofed shed at the back, a tall frame saw cutting a log on the bench in front,
+    a log ramp sloping up from the right, a stack of fresh planks on the left."""
     m = Model("sawmill", 61)
-    W, D, H = 2.2, 1.5, 1.15
-    m.box((W + 0.2, D + 0.2, 0.08), color=shade("PATH", 0.95))
+    W, D, H = 2.2, 1.1, 1.15
+    m.box((W + 0.4, D + 1.4, 0.06), pos=(0, -0.45, 0), color=shade("PATH", 0.95))
+    y0 = 0.35
     for x in (-W / 2, W / 2):
-        for y in (-D / 2, D / 2):
+        for y in (y0 - D / 2, y0 + D / 2):
             post(m, x, y, H, 0.12)
-    for y in (-D / 2, D / 2):
+    m.box((W, 0.08, H - 0.1), pos=(0, y0 + D / 2, 0.06), color="WOOD")             # back wall
+    for i in range(10):
+        m.box((W / 10 - 0.02, 0.02, H - 0.15), pos=(-W / 2 + (i + 0.5) * W / 10, y0 + D / 2 - 0.05, 0.08),
+              color=shade("WOOD", 0.92 if i % 2 else 1.05))
+    for y in (y0 - D / 2, y0 + D / 2):
         m.box((W + 0.1, 0.1, 0.1), pos=(0, y, H - 0.08), color="WOOD_DARK")
-        for sx in (-1, 1):   # knee braces
-            m.box((0.06, 0.06, 0.4), pos=(sx * (W / 2 - 0.15), y, H - 0.35), rot=(0, sx * 0.7, 0), color="WOOD_DARK")
-    bun_roof(m, W, D, H, 0.85, col=OLD, under=OLD_UNDER, hip=0.7, seed=61, moss=2)
-    # saw bench with a log and a big blade
-    m.box((1.3, 0.35, 0.35), pos=(0, 0, 0.0), color="WOOD")
-    log(m, 0.1, 0.0, 0.47, 1.4, 0.13)
-    m.box((0.035, 0.6, 0.5), pos=(0.0, 0.0, 0.32), color="ROCK")
-    m.box((0.06, 0.08, 0.14), pos=(0.0, -0.33, 0.62), color="WOOD_DARK")
-    # log pile outside (+x) and plank stack (front)
-    for row in range(3):
-        for i in range(3 - row):
-            m.cyl(0.13, 0.13, 1.0, pos=(W / 2 + 0.45 + (i - (2 - row) / 2) * 0.27, -0.5, 0.13 + row * 0.23),
-                  rot=(-math.pi / 2, 0, 0), color="TRUNK", seg=7, cap="STUMP_TOP")
-    for k in range(4):
-        m.box((1.0, 0.28, 0.07), pos=(-0.35 + (k % 2) * 0.03, -D / 2 - 0.45, k * 0.075), color=shade("PLANK", 1.0 if k % 2 else 0.92))
-        m.box((1.0, 0.28, 0.07), pos=(-0.35, -D / 2 - 0.15, k * 0.075), color=shade("PLANK", 0.95 if k % 2 else 1.03))
+    rotated(m, lambda: plank_roof(m, W, D, H, 0.45, col=SHINGLE, over=0.2), 0.0, (0, y0, 0))
+    # sawdust heap + tool rack under the shed
+    m.sphere(0.25, pos=(0.7, y0 + 0.1, 0.0), scl=(1.3, 1.0, 0.5), color="e9d3a4", seg=8, rings=4, lumps=0.2,
+             group="body_nl")
+    # bench + log + tall frame saw in front
+    by = -0.55
+    m.box((1.5, 0.36, 0.38), pos=(-0.1, by, 0.0), color="WOOD")
+    log(m, -0.1, by, 0.5, 1.5, 0.13)
+    for dx in (-0.32, 0.32):
+        m.box((0.1, 0.1, 1.9), pos=(-0.1 + dx, by, 0.0), color="WOOD_DARK")
+    m.box((0.82, 0.12, 0.12), pos=(-0.1, by, 1.85), color="WOOD_DARK")
+    m.box((0.56, 0.06, 0.08), pos=(-0.1, by, 1.2), color="WOOD")                    # saw sash
+    m.box((0.56, 0.06, 0.08), pos=(-0.1, by, 0.66), color="WOOD")
+    m.box((0.035, 0.04, 0.62), pos=(-0.1, by, 0.66), color="dfe6e6")               # blade
+    m.cyl(0.1, 0.1, 0.06, pos=(0.27, by - 0.07, 1.62), rot=(math.pi / 2, 0, 0), color="WOOD_DARK", seg=8)   # pulley
+    # log ramp from the right: two sloping rails with logs on it
+    for dy in (-0.25, 0.25):
+        m.box((1.2, 0.07, 0.07), pos=(1.25, by + dy, 0.18), rot=(0, 0.3, 0), color="WOOD_DARK")
+    for k in range(3):
+        x = 1.0 + k * 0.33
+        log(m, x, by, 0.43 - k * 0.1, 0.75, 0.11, 1.57)
+    # fresh plank stack (left)
+    for k in range(5):
+        m.box((0.95, 0.3, 0.06), pos=(-1.35 + (k % 2) * 0.03, -1.05, k * 0.065), rot=(0, 0, 0.12),
+              color=shade("PLANK", 1.0 if k % 2 else 0.92))
     m.export(OUT)
 
 
@@ -882,34 +1107,94 @@ def build_windmill():
 
 
 def build_bakery():
+    """빵집 (v3): warm brick bakehouse, red tile gable to the front, a big domed brick oven on the right with a glowing
+    mouth and its own smoking chimney, a hanging bread sign, a bread table under a striped awning."""
     def extras(m):
-        # clay oven on the +x side with a glowing mouth
-        m.box((0.85, 0.8, 0.35), pos=(1.35, 0.0, 0), color="STONE")
-        m.sphere(0.42, pos=(1.35, 0.0, 0.35), scl=(1, 1, 0.85), color="ROOF_RED", seg=10, rings=6)
-        m.cyl(0.17, 0.17, 0.1, pos=(1.35, -0.38, 0.35), rot=(math.pi / 2, 0, 0), color="FLAME", seg=8)
-        m.cyl(0.1, 0.1, 0.11, pos=(1.35, -0.39, 0.32), rot=(math.pi / 2, 0, 0), color="FLAME2", seg=8)
-        m.cyl(0.09, 0.08, 0.35, pos=(1.45, 0.15, 0.65), color="STONE_DARK", seg=7)
-        # awning + table with bread at the front
-        m.box((1.1, 0.7, 0.05), pos=(-0.5, -1.05, 0.95), rot=(-0.35, 0, 0), color="PLASTER")
-        for k in range(4):
-            m.box((0.12, 0.72, 0.055), pos=(-0.95 + k * 0.3, -1.05, 0.955), rot=(-0.35, 0, 0), color="ROOF_RED")
-        for x in (-1.0, 0.0):
-            post(m, x, -1.35, 0.85, 0.06, "WOOD")
-        m.box((0.9, 0.4, 0.06), pos=(-0.5, -1.15, 0.42), color="WOOD")
-        for x in (-0.85, -0.15):
-            post(m, x, -1.15, 0.42, 0.06, "WOOD_DARK")
+        # domed brick oven on the +x side
+        ox, oy = 1.4, 0.05
+        m.box((0.95, 0.95, 0.35), pos=(ox, oy, 0), color="STONE")
+        m.sphere(0.5, pos=(ox, oy, 0.35), scl=(1, 1, 0.9), color=BRICK, seg=12, rings=6,
+                 colfn=lambda f: BRICK_DARK if (int(f.calc_center_median().z * 9) % 2) else BRICK)
+        m.cyl(0.2, 0.2, 0.1, pos=(ox, oy - 0.45, 0.36), rot=(math.pi / 2, 0, 0), color="FLAME", seg=8)
+        m.cyl(0.12, 0.12, 0.11, pos=(ox, oy - 0.46, 0.33), rot=(math.pi / 2, 0, 0), color="FLAME2", seg=8)
+        m.box((0.5, 0.12, 0.08), pos=(ox, oy - 0.52, 0.25), color="STONE_DARK")
+        m.cyl(0.1, 0.09, 0.55, pos=(ox + 0.12, oy + 0.2, 0.7), color=BRICK_DARK, seg=7, cap=SOOT)
+        smoke(m, ox + 0.12, oy + 0.2, 1.2, 3)
+        # peel leaning on the oven + firewood
+        m.box((0.04, 0.04, 1.0), pos=(ox + 0.55, oy - 0.35, 0.0), rot=(0, -0.35, 0), color="WOOD")
         for k in range(3):
-            m.sphere(0.12, pos=(-0.75 + k * 0.25, -1.15, 0.53), scl=(1.2, 0.9, 0.7), color="BREAD", seg=8, rings=5)
-        barrel(m, 1.05, -0.75, 0.8)
-    house("bakery", 2.0, 1.3, 1.3, 1.15, 0.35, [-0.35], (-0.6, 0.15), 91, extras=extras, walls=("framed", CREAM),
-          shutter=SHUTTER[1]).export(OUT)
+            log(m, ox + 0.15, oy + 0.65, 0.08 + k * 0.15, 0.55, 0.07, 1.57)
+        # hanging bread sign on a bracket (front-left corner)
+        sx, sy = -1.12, -0.7
+        m.box((0.06, 0.06, 1.45), pos=(sx, sy, 0), color="WOOD_DARK")
+        m.box((0.42, 0.05, 0.05), pos=(sx - 0.18, sy, 1.4), color="WOOD_DARK")
+        m.box((0.36, 0.05, 0.3), pos=(sx - 0.24, sy, 1.02), color="f3e2bf")
+        m.box((0.4, 0.04, 0.34), pos=(sx - 0.24, sy + 0.01, 1.0), color="WOOD")
+        m.sphere(0.11, pos=(sx - 0.24, sy - 0.04, 1.17), scl=(1.3, 0.5, 0.75), color="BREAD", seg=8, rings=4)
+        # awning + table with loaves at the front
+        m.box((1.0, 0.6, 0.05), pos=(-0.35, -1.0, 0.95), rot=(-0.35, 0, 0), color="PLASTER")
+        for k in range(4):
+            m.box((0.11, 0.62, 0.055), pos=(-0.74 + k * 0.27, -1.0, 0.955), rot=(-0.35, 0, 0), color="ROOF_RED")
+        for x in (-0.82, 0.12):
+            post(m, x, -1.27, 0.85, 0.06, "WOOD")
+        m.box((0.85, 0.36, 0.06), pos=(-0.35, -1.1, 0.42), color="WOOD")
+        for x in (-0.68, -0.02):
+            post(m, x, -1.1, 0.42, 0.06, "WOOD_DARK")
+        for k in range(3):
+            m.sphere(0.12, pos=(-0.6 + k * 0.25, -1.1, 0.53), scl=(1.2, 0.9, 0.7), color="BREAD", seg=8, rings=5)
+        barrel(m, 1.0, -0.85, 0.8)
+    m = house("bakery", 2.0, 1.3, 1.3, 1.15, 0.35, [-0.35], (-0.55, 0.3), 91, extras=extras, walls=("brick", BRICK),
+              roof="tile_front", roof_col=TILE, roof_under=TILE_UNDER, shutter=SHUTTER[0], boxes=False)
+    smoke(m, -0.55, 0.3, 2.65, 2)
+    m.export(OUT)
 
 
 def build_forester():
-    def extras(m):
-        m.sphere(0.3, pos=(-1.15, 0.5, 0.25), color="BUSH", seg=8, rings=5, lumps=0.2)
-    house("forester", 1.6, 1.15, 1.1, 1.05, -0.2, [0.4], (0.4, 0.2), 101, extras=extras, walls=("stone", "STONE"),
-          roof_col=MOSSY, roof_under=MOSSY_UNDER, moss=2, shutter=SHUTTER[2]).export(OUT)
+    """묘목원 (산림관, v3): a steep A-frame tool shed (bark roof down to the ground, plank gable with a green door)
+    between rows of sapling beds; watering can, little picket fence. Reads as 'nursery', not 'house'."""
+    m = Model("forester", 101)
+    L, B, T = 1.4, 0.78, 1.75
+    tri = [(-B + 0.06, 0.0), (B - 0.06, 0.0), (0.0, T - 0.08)]
+    m.prism(tri, L, rot=(0, 0, math.pi / 2), color="WOOD", cap_color=shade("PLANK", 0.95))
+    ang = math.atan2(T, B)
+    sl = math.hypot(B, T) + 0.2
+    for sx in (-1, 1):
+        m.box((sl, L + 0.3, 0.1), pos=(sx * (B / 2 + 0.04), 0, T / 2 - 0.12), rot=(0, sx * ang, 0), color=BARK,
+              colfn=lambda f: shade(BARK, 1.08) if f.normal.z > 0.2 else BARK_UNDER)
+        for k in range(3):                                    # shingle courses
+            t = 0.25 + k * 0.25
+            m.box((0.04, L + 0.32, 0.12), pos=(sx * (B * (1 - t) + 0.07), 0, T * t - 0.1), rot=(0, sx * ang, 0),
+                  color=shade(BARK, 0.85))
+    m.box((0.16, L + 0.36, 0.14), pos=(0, 0, T - 0.06), color=shade(BARK, 0.8))
+    for k in range(3):
+        m.sphere(0.09, pos=((-1) ** k * 0.32, -0.3 + k * 0.3, T * 0.55), scl=(1.5, 1.2, 0.5), color="MOSS", seg=6,
+                 rings=3, lumps=0.2, group="body_nl")
+    # green door + round window in the front gable
+    door(m, 0.0, -L / 2, w=0.38, h=0.72, col="6f9a5a")
+    m.cyl(0.11, 0.11, 0.04, pos=(0, -L / 2 - 0.01, 1.08), rot=(math.pi / 2, 0, 0), color="WOOD_DARK", seg=10)
+    m.cyl(0.08, 0.08, 0.05, pos=(0, -L / 2 - 0.02, 1.08), rot=(math.pi / 2, 0, 0), color="WINDOW_LIT", seg=10)
+    # sapling beds: two long rows on the left, one on the right
+    def bed(x, y, n, ln):
+        m.box((0.42, ln, 0.16), pos=(x, y, 0), color="WOOD")
+        m.box((0.36, ln - 0.06, 0.04), pos=(x, y, 0.14), color="FIELD_SOIL")
+        for i in range(n):
+            yy = y - ln / 2 + (i + 0.5) * ln / n
+            h = 0.14 + 0.05 * ((i * 7) % 3)
+            m.cyl(0.018, 0.018, h, pos=(x, yy, 0.17), color="TRUNK", seg=4)
+            m.sphere(0.075 + 0.02 * ((i * 5) % 3), pos=(x, yy, 0.2 + h), color=("LEAF_YOUNG", "LEAF_TOP", "8fd07e")[i % 3],
+                     seg=6, rings=4, lumps=0.25, group="body_nl")
+    bed(-1.15, -0.1, 5, 1.5)
+    bed(-1.7, -0.1, 5, 1.5)
+    bed(1.2, 0.1, 4, 1.2)
+    # seedling trays + watering can at the front right
+    for k in range(2):
+        m.box((0.36, 0.26, 0.08), pos=(0.95 + k * 0.4, -0.95, 0), color="WOOD")
+        for j in range(3):
+            m.sphere(0.05, pos=(0.85 + k * 0.4 + j * 0.1, -0.95, 0.11), color="LEAF_YOUNG", seg=5, rings=3, group="body_nl")
+    m.cyl(0.09, 0.08, 0.16, pos=(0.55, -0.95, 0), color="7d9a9e", seg=8, cap="WATER")
+    m.cyl(0.015, 0.015, 0.22, pos=(0.62, -0.95, 0.08), rot=(0, 1.0, 0), color="7d9a9e", seg=4)
+    picket_fence(m, -1.95, -1.05, -0.95, -1.05, h=0.32)
+    m.export(OUT)
 
 
 def build_saltpan():

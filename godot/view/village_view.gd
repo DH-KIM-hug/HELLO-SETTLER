@@ -60,7 +60,7 @@ func _init(village: Village, t: JarTerrain) -> void:
 
 
 ## 처음 한 번 모델을 모두 읽어 둠 (첫 등장 때 끊기지 않게)
-const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_stone", "storehouse", "forester", "quarry", "sawmill",
+const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "field_green", "field_ripe", "woodpile", "chopblock", "planter", "pier", "bridge", "mushroom_hut",
 	"tree_a", "tree_b", "tree_c", "tree_d", "conifer", "stump", "sapling", "bush", "bush_b", "bush_flower", "bush_berry",
 	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "log", "reeds", "altar"]
@@ -411,8 +411,9 @@ func _box(parent: Node3D, size: Vector3, pos: Vector3, c: Color, rot_y := 0.0) -
 
 
 ## 건물 모양 → art/models의 모델 (art/src/build_buildings.py · build_village.py). 종류마다 하나, 오두막은 네 가지를 번갈아.
-## 일터는 모델 + 마당 소품 (나무꾼 = 오두막 + 장작 헛간 + 도끼 박힌 그루터기, 산림관 = 집 + 묘목 상자).
-const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber"], "석조주택": ["house_stone"],
+## 일터는 모델 + 마당 소품 (벌목장 = 통나무집 + 장작 헛간 + 도끼 박힌 그루터기). 묘목원은 묘목 줄이 모델 안에 있다.
+## v3 (2026-11): 종류마다 실루엣·지붕 재료가 다르게 — 둥근 초가 · 너와 · 슬레이트 · 붉은 기와 · 잔디 지붕. 집은 색 변형을 번갈아.
+const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "cottage_d"], "목조주택": ["house_timber", "house_timber_b"], "석조주택": ["house_stone", "house_stone_b"],
 	"창고": ["storehouse"], "나무꾼": ["hut"], "산림관": ["forester"], "채석장": ["quarry"], "제재소": ["sawmill"],
 	"우물": ["well"], "방앗간": ["windmill"], "빵집": ["bakery"], "소금밭": ["saltpan"], "농장": ["field_green"],
 	"버섯꾼": ["mushroom_hut"],
@@ -424,8 +425,7 @@ const BUILDING_MODELS := {"오두막": ["cottage_a", "cottage_b", "cottage_c", "
 	"대장간": ["smithy"], "교회": ["chapel"], "광장": ["plaza"], "묘지": ["graveyard"], "목장": ["pasture"],
 	"망루": ["watchtower"], "나루터": ["ferry"]}
 ## 마당 소품: [모델, 건물 기준 자리(x, z — 건물 앞 = +z), 방위(라디안)]
-const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]],
-	"산림관": [["planter", Vector3(-0.2, 0, 1.35), 0.0]]}
+const YARD := {"나무꾼": [["woodpile", Vector3(-1.65, 0, -0.1), 0.0], ["chopblock", Vector3(-1.1, 0, 1.15), 0.6]]}
 
 
 func _build_shape(n: Node3D, b: Building) -> void:

@@ -593,7 +593,7 @@ func _clumsy(v: Village, p: Vector2, grab_d: float) -> String:
 			hit = b
 	if hit == null:
 		return ""
-	var crushed := hit.type
+	var crushed := hit.label()
 	SkyDrops.remove_building(v, hit)
 	stats["crushed"] += 1
 	v.log_line("하늘에서 내려온 집게가 빗나가 %s%s 짓눌렸다. 다친 사람은 없었다." % [crushed, Village.josa(crushed, "이", "가")])

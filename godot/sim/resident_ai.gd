@@ -138,7 +138,7 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			b.prog += float(d["chunk"]) * v.build_mult(b) * v.opening_build(b)    # 들어준 소원 ×1.5 (기획서 6.7) · 첫 한 시간의 터는 천천히
 			if b.prog >= float(Balance.B[b.site_type()]["time"]) - 1e-3:
 				v.on_built(b)
-				v.speak(r, "%s 완성!" % b.type, 5)
+				v.speak(r, "%s 완성!" % b.label(), 5)
 		_:
 			push_error("ResidentAI.run_op: 모르는 할 일 %s" % n)
 
@@ -556,7 +556,7 @@ static func _pray(v: Village, r: Resident) -> bool:
 	var ch := VillageEra.pray_spot(v, a)           # (A6) 교회가 있으면 교회 앞에서
 	if not ch.is_empty():
 		var cp: Vector2 = ch["p"]
-		r.doing = "교회 앞에서 기도하는 중"
+		r.doing = "예배당 앞에서 기도하는 중"
 		r.steps.append(walk(cp.x, cp.y))
 		var cf: Vector2 = ch["face"]
 		var ff := cp + (cf - cp).normalized() * 0.03
@@ -624,7 +624,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 				var put := op("stock_add", {"k": k, "amt": take})
 				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
 				return true
-	r.doing = "%s에서 일하는 중" % b.type
+	r.doing = "%s에서 일하는 중" % b.label()
 	if b.type == "나무꾼":
 		var tr := _nearest(v.trees, Vector2(b.x, b.y), func(q: Dictionary) -> bool: return q["s"] == "tree" and q["res"] == 0)
 		if tr.is_empty() or Vector2(tr["x"] - b.x, tr["y"] - b.y).length() > Balance.GATHER_RANGE:
@@ -759,7 +759,7 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var take := mini(mini(cap, lack), int(floorf(v.stock[k])))
 				v.stock[k] = float(v.stock[k]) - take
 				b.incoming[k] = int(b.incoming[k]) + take
-				r.doing = "%s 터로 %s 나르는 중" % [b.site_type(), k]
+				r.doing = "%s 터로 %s 나르는 중" % [Balance.label(b.site_type()), k]
 				var put := op("site_put", {"b": b, "k": k, "amt": take})
 				var undo := op("site_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
@@ -774,7 +774,7 @@ static func haul_task(v: Village, r: Resident) -> bool:
 				var take := minf(minf(cap, 3.0 - have), floorf(v.stock[k]))
 				v.stock[k] = float(v.stock[k]) - take
 				b.in_inc[k] = float(b.in_inc.get(k, 0.0)) + take
-				r.doing = "%s에 %s 나르는 중" % [b.type, k]
+				r.doing = "%s에 %s 나르는 중" % [b.label(), k]
 				var put := op("inbuf_put", {"b": b, "k": k, "amt": take})
 				var undo := op("inbuf_undo", {"b": b, "k": k, "amt": take})
 				_carry_steps(v, r, Vector2(s.x + 0.8, s.y + 0.6), Vector2(b.x + 0.6, b.y + 0.6), k, take, put, undo)
@@ -842,7 +842,7 @@ static func build_task(v: Village, r: Resident) -> bool:
 	var chunk := minf(30.0, (total - b.prog) / (v.build_mult(b) * v.opening_build(b)))    # 남은 만큼만 (일하는 초)
 	if chunk <= 1.0:
 		chunk = 1.0
-	r.doing = "%s 짓는 중" % b.site_type()
+	r.doing = "%s 짓는 중" % Balance.label(b.site_type())
 	var sp := near(v, b.x, b.y, 0.8 + b.size() * 0.5)
 	var work := op("build", {"b": b, "chunk": chunk})
 	r.steps.append(walk(sp.x, sp.y))

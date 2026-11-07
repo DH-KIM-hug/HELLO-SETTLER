@@ -255,7 +255,8 @@ static func letter(vv: Village, b: Dictionary, away_s: float) -> Dictionary:
 			built_new[bd.type] = int(built_new.get(bd.type, 0)) + 1
 	for ty: String in built_new:
 		var n := int(built_new[ty])
-		events.append(("%s%s 다 지었어요." % [ty, Village.josa(ty, "을", "를")]) if n == 1 else ("%s %d채를 새로 지었어요." % [ty, n]))
+		var lb := Balance.label(ty)
+		events.append(("%s%s 다 지었어요." % [lb, Village.josa(lb, "을", "를")]) if n == 1 else ("%s %d채를 새로 지었어요." % [lb, n]))
 	# 발견
 	if vv.salt_known and not b["salt"]:
 		events.append("마른 호수 바닥에서 짠 하얀 흙, '소금'을 찾았어요.")

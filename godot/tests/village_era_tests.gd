@@ -278,7 +278,7 @@ func test_chapel() -> void:
 	for k: String in b:
 		sb += int(b[k])
 	check(sa > 0 and sb >= floori(sa * 1.2), "교회 = 큰 제단: 저녁 제물 ×1.3 (%d → %d)" % [sa, sb])
-	check(c.bell_t == c.t and has_line(c, "교회 종"), "저녁 기도 때 교회 종 (소리 고리 bell_t)")
+	check(c.bell_t == c.t and has_line(c, "예배당 종"), "저녁 기도 때 교회 종 (소리 고리 bell_t)")
 	var near := 0
 	for r in c.people:
 		if r.action == "pray" and not r.steps.is_empty():
@@ -289,7 +289,7 @@ func test_chapel() -> void:
 	var pr := c.people[0]
 	ResidentAI.cancel(c, pr)
 	ResidentAI._pray(c, pr)
-	check(pr.doing.contains("교회"), "혼자 기도도 교회 앞에서 (%s)" % pr.doing)
+	check(pr.doing.contains("예배당"), "혼자 기도도 교회 앞에서 (%s)" % pr.doing)
 	check(c.altar_built and not c.altar.is_empty(), "작은 제단은 그대로 (제물은 제단에)")
 	# 혼례
 	var m: Resident = null
@@ -304,7 +304,7 @@ func test_chapel() -> void:
 		m = c.add_person("요한", "m", 6.0, "", c.center.x, c.center.y, null, null)
 		f = c.add_person("마리", "f", 6.0, "", c.center.x, c.center.y, null, null)
 	c.marry(m, f)
-	check(VillageEra.wedding(c, m, f) and VillageEra.wedding_on(c) and has_line(c, "교회에서 혼례"), "혼례는 교회에서 (잔치)")
+	check(VillageEra.wedding(c, m, f) and VillageEra.wedding_on(c) and has_line(c, "예배당에서 혼례"), "혼례는 교회에서 (잔치)")
 	c._update_happiness()
 	var h_w := m.happiness
 	c.wedding_t = -1.0e9

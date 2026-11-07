@@ -46,6 +46,8 @@ const ORIGIN := {
 const JOB := {
 	"농장": "농부", "나무꾼": "나무꾼", "산림관": "산림관", "채석장": "석수", "제재소": "제재공", "방앗간": "방앗간지기",
 	"빵집": "빵 굽는 이", "우물": "물 긷는 이", "소금밭": "소금 일꾼", "창고": "창고지기",
+	"버섯꾼": "버섯꾼", "약초꾼": "약초꾼", "어부": "어부", "사냥꾼": "사냥꾼", "치료소": "약초사", "교회": "사제",
+	"나루터": "뱃사공", "목장": "목동", "방직소": "베 짜는 이", "대장간": "대장장이",
 }
 
 
@@ -80,7 +82,7 @@ static func job_word(r: Resident, v: Village) -> String:
 		return "아이"
 	var b: Building = v.bld(r.job) if v != null and r.job >= 0 else null
 	if b != null:
-		return JOB.get(b.type, b.type + " 일꾼")
+		return JOB.get(b.type, b.label() + " 일꾼")
 	if r.is_elder():
 		return "노인"
 	return "일꾼"

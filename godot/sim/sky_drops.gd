@@ -201,7 +201,7 @@ static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 	if houses > 0:
 		out["warn"] = "여기 떨어뜨리면 집이 부서져요"
 	elif not crush.is_empty():
-		out["warn"] = "여기 떨어뜨리면 %s%s 부서져요" % [(crush[0] as Building).type, Village.josa((crush[0] as Building).type, "이", "가")]
+		out["warn"] = "여기 떨어뜨리면 %s%s 부서져요" % [(crush[0] as Building).label(), Village.josa((crush[0] as Building).label(), "이", "가")]
 	elif np > 0:
 		out["warn"] = "사람들이 있어요 — 놀라서 달아나요"
 	elif bool(out["field"]):
