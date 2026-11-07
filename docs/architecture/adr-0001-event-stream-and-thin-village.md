@@ -1,7 +1,7 @@
 # ADR-0001: 사건 기록 흐름과 얇은 `Village` 겉면
 
 ## Status
-Proposed (TD-ADR CONCERNS·엔진 전문가 BLOCKING 2건 반영한 개정판, 2026-11-07)
+Accepted (사용자 확정 2026-11-07 — TD-ADR CONCERNS·엔진 전문가 BLOCKING 2건 반영한 개정판)
 
 ## Date
 2026-11-07
