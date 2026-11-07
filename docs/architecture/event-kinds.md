@@ -19,6 +19,7 @@
 | `&"giant_refused"` | 손짓이 거절됨 — `Village.touch_refused` (물 뿌리기·유리 닦기·핀셋) | `{"kind": StringName, "why": StringName (&"lid"·&"cooldown"·&"edge"·&"no_target"·&"no_spot")}` | — | 아니오 | 아니오 | (앞으로 화면 한 줄 말) |
 | `&"spray_flooded"` | 물 뿌리기 넘침 (`GiantHand.spray`, giant-touch F4) | `{"x", "y": float, "houses": int}` | `at` = 뿌린 자리 | 아니오 | 아니오 (연대기는 log_line) | (앞으로 연출) |
 | `&"tweeze_done"` | 핀셋으로 집음/옮김 (`GiantHand.tweeze`) | `{"what": StringName (&"gnat"·&"dust"·&"drop"·&"rock"), "moved": bool, "crushed": int (0·1)}` | `at` = 누른 자리 | 아니오 | 아니오 | (앞으로 연출) |
+| `&"immigrant_hint"` | `Immigrants.give_hints` (어른 이주민이 조각 하나를 지니고 옴 — design/gdd/population.md R6-6, 굴림은 `Village.pop_rng`) | `{"hint": String (&"word"·"song"·"moon"·"coin" — `Balance.IMMIGRANT_HINTS` id)}` | `who` = 그 이주민 | 아니오 | 아니오 (연대기는 log_line) | `tests/population_tests.gd` (거인 UI는 `Resident.hint`를 읽음) |
 
 ## 메모
 - 저장 순번은 위 표의 "예"인 kind와, 사건 없이 올리는 곳(`notebook.gd`·`awakening.gd`)에서만 오른다 — 10초 걸음마다 저장되지 않게.

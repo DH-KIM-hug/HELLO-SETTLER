@@ -226,6 +226,7 @@ static func land(v: Village, p: Vector2, seed_v: int) -> Array[Resident]:
 	v.stats["migrants"] = int(v.stats.get("migrants", 0)) + made.size()
 	carry_disease(v, made)
 	_greet(v, made, p)
+	give_hints(v, made)
 	return made
 
 
@@ -278,9 +279,11 @@ static func village_line(kind: String, i: int) -> String:
 	return String(l[clampi(i, 0, l.size() - 1)])
 
 
+## 갓 온 사람의 첫 말 — 깨달은 마을이어도 지켜보는 이를 말하지 않는다 (population.md R6-7 · 사용자 결정 2026-11-08): 낯선 곳의 말만.
+## aware는 옛 부르는 쪽과 같은 모양으로 남겨 둔다 (깨달은 마을 사람들이 반기면 조금 놓인 말)
 static func newcomer_line(aware: bool, family: bool) -> String:
 	if aware:
-		return "여기가 {w}의 마을인가요? 우리 식구도 함께 살게 해 주세요." if family else "여기가 {w}의 마을인가요? 함께 살게 해 주세요."     # {w} — Village.speak가 채움
+		return "여긴 어디지…? 우리 식구도 여기서 지내도 될까요?" if family else "여긴 어디지…? 여기서 지내도 될까요?"
 	return "여긴 어디지…? 우리 식구가 쉴 곳이 있을까요?" if family else "여긴 어디지…? 쉴 곳이 있을까요?"
 
 
@@ -313,3 +316,75 @@ static func mood(v: Village) -> float:
 		return 0.0
 	var k := clampf((until - v.t) / (MOOD_DAYS * Balance.DAY), 0.0, 1.0)
 	return float(v.migrants.get("mood", 0.0)) * k
+
+
+# ───────────────────────── 조각 (숨은 진실 — STORY 1 · population.md R6-6) ─────────────────────────
+## 어른 이주민마다 Balance.HINT_P로 조각 하나. 네 가지가 한 번씩 다 나온 뒤에야 다시 섞어 채운다 (v.hint_bag).
+## 굴림은 v.pop_rng만 (혼인·출산·건강 흐름을 흔들지 않게). 연대기 한 줄 + 사건 immigrant_hint, 말풍선은 say_hints가 한 번.
+static func give_hints(v: Village, made: Array[Resident]) -> void:
+	for r in made:
+		if r.age < Balance.AGE_ADULT:      # 아이는 조각을 지니지 않는다 (어른·노인만)
+			continue
+		if v.pop_rng.randf() >= Balance.HINT_P:
+			continue
+		var id := next_hint(v)
+		r.hint = id
+		r.hint_said = false
+		v.log_line(hint_text(String(Balance.IMMIGRANT_HINTS[id]["book"]), r.name))
+		v.emit(&"immigrant_hint", {"who": r.id, "v": {"hint": id}})
+
+
+## 다음 조각 id — 주머니가 비면 네 가지를 pop_rng로 섞어 채운다 (한 번씩 다 나온 뒤에야 되풀이)
+static func next_hint(v: Village) -> String:
+	if v.hint_bag.is_empty():
+		var bag: Array = Balance.HINT_ORDER.duplicate()
+		for i in range(bag.size() - 1, 0, -1):
+			var j := v.pop_rng.randi() % (i + 1)
+			var tmp: Variant = bag[i]
+			bag[i] = bag[j]
+			bag[j] = tmp
+		v.hint_bag = bag
+	return String(v.hint_bag.pop_front())
+
+
+## {n} = 이름 · {n:은/는} = 이름 + 받침에 맞는 조사
+static func hint_text(tpl: String, nm: String) -> String:
+	var out := tpl
+	var i := out.find("{n:")
+	while i >= 0:
+		var j := out.find("}", i)
+		var pair := out.substr(i + 3, j - i - 3).split("/")
+		out = out.substr(0, i) + nm + Village.josa(nm, pair[0], pair[1] if pair.size() > 1 else pair[0]) + out.substr(j + 1)
+		i = out.find("{n:")
+	return out.replace("{n}", nm)
+
+
+## 조각을 지닌 사람이 말풍선이 비어 있을 때 한 번 (Village.idle_chatter — 하루 몇 번 도는 말 차례, 난수 없음). 한 차례에 한 사람
+static func say_hints(v: Village) -> void:
+	for r in v.people:
+		if r.hint == "" or r.hint_said or r.sleeping or r.say_t > 0.0 or not Balance.IMMIGRANT_HINTS.has(r.hint):
+			continue
+		v.speak(r, String(Balance.IMMIGRANT_HINTS[r.hint]["say"]), 7)
+		r.hint_said = true
+		return
+
+
+## 거인 UI (사람 상세): 이 사람이 지닌 조각 [이름, 설명] — 없으면 []
+static func hint_ui(r: Resident) -> Array:
+	if r == null or r.hint == "" or not Balance.IMMIGRANT_HINTS.has(r.hint):
+		return []
+	var h: Dictionary = Balance.IMMIGRANT_HINTS[r.hint]
+	return [String(h["label"]), String(h["desc"])]
+
+
+# ───────────────────────── 빈 집 자리 (상점 카드 — population.md R6-8 · 사용자 결정 2026-11-08) ─────────────────────────
+## 지은 집의 빈자리 합. 0이어도 뽑기는 막지 않는다 — 카드에 HOMELESS_NOTE 한 줄 (Shop.card "note")
+const HOMELESS_NOTE := "모닥불 곁에서 지내게 돼요"
+
+
+static func free_house_slots(v: Village) -> int:
+	var occ := v.occupancy()
+	var n := 0
+	for h in v.houses():
+		n += maxi(0, h.cap() - int(occ.get(h.id, 0)))
+	return n
