@@ -37,10 +37,10 @@ static var hour_override := -1.0
 ## 칸 하나의 겉흙 무게. 입력은 모두 그 칸의 시뮬레이션 값:
 ##   depth 물 깊이 · lake 호수 · river 강 · near_water 가장 가까운 호수·강까지(칸, 없으면 큰 값) · wet 습기 0~1 · sun 볕 −1~1 ·
 ##   slope 비탈(세계 높이 차/칸) · height 시뮬레이션 높이 · forest 숲 짙기 0~1 · plot 맨흙(밭·집터) 0~1 · rocky 바위 더미 곁 0~1 ·
-##   pool 폭포 웅덩이 곁 0~1
+##   pool 폭포 웅덩이 곁 0~1 · moss_p 이끼 문턱 (그늘 문턱, 습기 문턱, 병의 이끼 덮임 0~1) — moss_params(v) (A28b 서늘한 별은 이끼가 더 넓게)
 ## 돌려줌: [A, B] (위 머리말)
 static func cell_weights(depth: float, lake: bool, river: bool, near_water: float, wet: float, sun: float, slope: float,
-		height: float, forest: float, plot: float, rocky: float, pool: float) -> Array:
+		height: float, forest: float, plot: float, rocky: float, pool: float, moss_p := Vector3(0.15, 0.45, 0.0)) -> Array:
 	if lake or river:
 		return [Vector4.ZERO, Vector4(0, 0, 0, _shade(sun))]
 	var marsh := depth > JarWater.SEEP_DEPTH * 0.375 and depth <= JarWater.LAKE_DEPTH     # 강이 스며드는 끝 · 얕게 고인 물
@@ -53,11 +53,33 @@ static func cell_weights(depth: float, lake: bool, river: bool, near_water: floa
 	var rock := maxf(clampf((slope - ROCK_SLOPE) / (ROCK_SLOPE_FULL - ROCK_SLOPE), 0.0, 1.0), clampf((height - ROCK_HIGH) * 8.0, 0.0, 1.0))
 	rock = maxf(rock, rocky)
 	var fo := clampf((forest - FOREST_FROM) / (FOREST_FULL - FOREST_FROM), 0.0, 1.0)
-	var moss := clampf((-sun - MOSS_SHADE) * 2.5, 0.0, 1.0) * clampf((wet - MOSS_WET) * 4.0, 0.0, 1.0)
+	var moss := clampf((-sun - moss_p.x) * 2.5, 0.0, 1.0) * clampf((wet - moss_p.y) * 4.0, 0.0, 1.0)
+	if moss_p.z > 0.0:          # 서늘한 별: 볕이 덜 드는 축축한 곳마다 얇은 이끼 무더기 (셰이더의 잡음 문턱이 덩이로 끊음)
+		# (시뮬레이션: 바탕 덮임 CORE_MOSS_BASE는 볕 드는 마른 땅에도 얇게 — 화면은 잡음 문턱이 드문드문 덩이로 끊는 값, 그늘·축축할수록 두툼하게)
+		var shade_f := clampf((0.4 - sun) * 1.6, 0.0, 1.0)
+		var wet_f := clampf((wet - 0.15) * 3.0, 0.0, 1.0)
+		moss = maxf(moss, moss_p.z * MOSS_COVER_K * (0.55 + 0.45 * shade_f) * (0.6 + 0.4 * wet_f))
 	moss = maxf(moss, clampf(pool * 1.4, 0.0, 1.0))
 	# 마른 풀 바탕값: 창가 쪽 + 마름. 셰이더가 계절 문턱(dry_thr — 여름이 가장 낮음)으로 끊는다
 	var dry := clampf(0.45 + sun * 0.45 - wet * 0.9, 0.0, 1.0)
 	return [Vector4(shore, mud, fo, moss), Vector4(dry, rock, clampf(plot, 0.0, 1.0), _shade(sun))]
+
+
+## (A28b) 핵 크기 → 이끼 문턱: 시뮬레이션 이끼 셈(CoreWarmth.moss_cover)과 같은 문턱 CORE_MOSS_SUN·CORE_MOSS_WET + 그 병의 이끼 덮임.
+## 덮임은 시뮬레이션이 이미 셈해 둔 캐시만 읽는다 (v.warmth.moss — 화면이 moss_cover()를 부르면 그날 표본 시각이 바뀌므로 부르지 않음),
+## 아직 없으면 바탕값. 핵 1·작은 병 = 예전 그대로 (MOSS_SHADE · MOSS_WET · 0)
+const MOSS_COVER_K := 2.2
+
+static func moss_params(v: Village) -> Vector3:
+	if v == null:
+		return Vector3(MOSS_SHADE, MOSS_WET, 0.0)
+	var c := CoreWarmth.core_of(v)
+	if float(Balance.CORE_MOSS_K[c]) <= 0.0:
+		return Vector3(MOSS_SHADE, MOSS_WET, 0.0)
+	var cover := float(Balance.CORE_MOSS_BASE[c]) * float(Balance.CORE_MOSS_K[c])
+	if v.warmth != null and v.warmth.moss_day >= 0:
+		cover = v.warmth.moss
+	return Vector3(-float(Balance.CORE_MOSS_SUN[c]), float(Balance.CORE_MOSS_WET[c]), clampf(cover, 0.0, 1.0))
 
 
 static func _shade(sun: float) -> float:
@@ -174,7 +196,22 @@ static func season_now(v: Village) -> Dictionary:
 		day = 15
 	if hour_override >= 0.0:
 		hour = hour_override
-	return season_params(month, day, climate, hour)
+	var sp := season_params(month, day, climate, hour)
+	if v != null:
+		hot_summer(sp, CoreWarmth.core_of(v), month)
+	return sp
+
+
+## (A28b) 뜨거운 별의 여름 (마른 철 CORE_DRY_MONTHS): 풀이 조금 더 누렇고 마른 풀이 조금 더 넓게 — 살짝만
+const HOT_GRASS := Color("c4cc78")
+const HOT_GRASS_MIX := 0.35
+const HOT_DRY := 0.07
+
+static func hot_summer(sp: Dictionary, core: int, month: int) -> void:
+	if core != 2 or not month in Balance.CORE_DRY_MONTHS or bool(sp.get("desert", false)):
+		return
+	sp["grass"] = (sp["grass"] as Color).lerp(HOT_GRASS, HOT_GRASS_MIX)
+	sp["dry_thr"] = maxf(0.0, float(sp["dry_thr"]) - HOT_DRY)
 
 
 const BLOOM := {"봄": [Color("f4d44c"), 1.0], "여름": [Color("ee7a8c"), 1.0], "가을": [Color("ec9cc8"), 0.9], "겨울": [Color("e8e2d0"), 0.25]}

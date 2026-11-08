@@ -87,6 +87,10 @@ var _turning: Tween
 var _spinning := false
 var _whoosh_wait := 0.5             # 장면이 막 시작할 때는 조용히
 var _last_log := 4.0
+## (A28b) 땅 흔들림 — 짧게 화면이 떨림 (camera.h/v_offset만 — 자리·확대는 그대로). shake()가 켬
+var _shake_t := 0.0
+var _shake_dur := 0.0
+var _shake_amp := 0.0
 
 
 func _ready() -> void:
@@ -101,6 +105,7 @@ func _ready() -> void:
 
 func _process(dt: float) -> void:
 	_whoosh_check(dt)
+	_shake_step(dt)
 	if not hold.is_empty():
 		_apply()
 		return
@@ -120,6 +125,41 @@ func _process(dt: float) -> void:
 		moved = true
 	if moved:
 		_apply()
+
+
+## (A28b) 짧은 떨림: amp = 화면 세로의 몫 (0.006 ≈ 세로 960에서 6px), dur 초. 움직임 줄이기 설정(A26 — 생기면)이 켜져 있으면 떨지 않는다
+func shake(amp: float, dur: float) -> void:
+	if reduce_motion():
+		return
+	_shake_amp = maxf(_shake_amp if _shake_t < _shake_dur else 0.0, amp)
+	_shake_dur = dur
+	_shake_t = 0.0
+
+
+func shaking() -> bool:
+	return _shake_t < _shake_dur
+
+
+## 설정 '움직임 줄이기'·'흔들림' (ROADMAP A26 — 아직 없으면 늘 false)
+static func reduce_motion() -> bool:
+	var s := GameSettings.get_current()
+	return s.get("reduce_motion") == true or s.get("screen_shake") == false
+
+
+func _shake_step(dt: float) -> void:
+	if camera == null or _shake_dur <= 0.0:
+		return
+	_shake_t += dt
+	if _shake_t >= _shake_dur:
+		_shake_dur = 0.0
+		camera.h_offset = 0.0
+		camera.v_offset = 0.0
+		return
+	var u := _shake_t / _shake_dur
+	var env := sin(PI * minf(u * 4.0, 1.0) * 0.5) * (1.0 - u) * (1.0 - u)     # 빠르게 올라 천천히 가라앉음
+	var a := _shake_amp * camera.size * env
+	camera.h_offset = a * (sin(_shake_t * 61.0) * 0.7 + sin(_shake_t * 23.0 + 1.3) * 0.3)
+	camera.v_offset = a * 0.6 * (sin(_shake_t * 47.0 + 0.5) * 0.7 + sin(_shake_t * 17.0) * 0.3)
 
 
 func view_height_px() -> float:
