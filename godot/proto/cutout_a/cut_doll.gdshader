@@ -14,9 +14,12 @@ uniform sampler2D dye_mask : hint_default_black, filter_linear_mipmap, repeat_di
 uniform sampler2D anim_tex : filter_nearest, repeat_disable;
 uniform int frames = 16;
 uniform vec3 palette[64];          // 물감 (sRGB)
-uniform vec3 base_col[32];         // 그린 바탕색 [묶음 × 8 + 물감 슬롯] (sRGB)
-uniform vec2 head_socket[16];      // 옷 묶음 S의 목 자리 [S × 4 + 보기] (rig 단위)
-uniform vec2 head_top[16];         // 머리 묶음 T의 정수리 - 목 [T × 4 + 보기] — 모자는 고른 머리의 정수리에
+uniform vec3 base_col[64];         // 그린 바탕색 [묶음 × 8 + 물감 슬롯] (sRGB) — 묶음 8개까지
+uniform vec2 head_socket[32];      // 옷 묶음 S의 목 자리 [S × 4 + 보기] (rig 단위, 몸 종류 배율 반영)
+uniform vec2 head_top[32];         // 머리 묶음 T의 정수리 - 목 [T × 4 + 보기] — 모자는 고른 머리의 정수리에
+uniform float head_k[8];           // 몸 종류(옷 묶음 S)마다 머리 배율 — 시안 A 작은 화면처럼 큰 머리 (build_atlas BODY)
+uniform vec2 prop_off[32];         // 옷 묶음 S·보기마다 손 자리 차이 (나르기·안기: 묶음 a 기준, 괭이질: 묶음 d 기준) — 몸이 다르면 소품도 그 손에
+uniform vec2 prop_off_hoe[32];
 uniform float fig = 920.0;         // rig 단위로 그림 키
 uniform vec2 body_pivot = vec2(0.0, 380.0);
 uniform float layer_eps = 0.004;   // 겹 순서: 겹 하나마다 카메라 쪽으로 (세계 단위)
@@ -83,13 +86,20 @@ void vertex() {
 		float f = fract(TIME * misc.z + st.w) * float(frames);
 		vec2 p = VERTEX.xy;
 		vec4 a_own = anim(slot, row0, f);
+		int so = int(sel.x + 0.5) * 4 + cur_view;
 		if (group == 3) {
-			// 소품: 원점 둘레 그림 → 회전·배율 → (dx, dy) 자리 (몸 틀)
+			// 소품: 원점 둘레 그림 → 회전·배율 → (dx, dy) 자리 (몸 틀) + 이 몸의 손 자리 차이
 			p = xf(p, vec2(0.0), vec4(a_own.x, 0.0, 0.0, 1.0)) * a_own.w + a_own.yz;
+			p += int(st.z + 0.5) == 3 ? prop_off_hoe[so] : prop_off[so];
+		} else if (CUSTOM3.z > 0.5) {
+			// 지팡이: 손(CUSTOM3.xy)이 움직인 만큼만 옮김 — 돌지 않고 곧게 섬
+			vec2 g = xf(CUSTOM3.xy, piv, a_own);
+			g = xf(g, CUSTOM2.yz, anim(slot - 2, row0, f));
+			p += g - CUSTOM3.xy;
 		} else {
 			p = xf(p, piv, a_own);
 		}
-		if (slot == 5 || slot == 6) {
+		if ((slot == 5 || slot == 6) && CUSTOM3.z < 0.5) {
 			p = xf(p, CUSTOM2.yz, anim(slot - 2, row0, f));   // 아래팔은 소매(어깨)를 따라
 		}
 		if (group == 1 || group == 2) {
@@ -99,7 +109,7 @@ void vertex() {
 			if (group == 2) {
 				p += head_top[int(sel.y + 0.5) * 4 + cur_view];
 			}
-			p += head_socket[int(sel.x + 0.5) * 4 + cur_view];
+			p = p * head_k[int(sel.x + 0.5)] + head_socket[so];     // 몸 종류의 머리 배율 (턱 = 목 자리 기준)
 		}
 		if (group != 0 || (slot >= 1 && slot <= 6)) {
 			p = xf(p, body_pivot, anim(1, row0, f));       // 몸이 흔들리면 윗몸 전체가 따라
@@ -143,6 +153,9 @@ vec3 dyed(vec3 c, float slot, float set_i) {
 		return c;
 	}
 	int s = int(slot + 0.5);
+	if (dye_index(s) < -0.5) {
+		return c;      // 물감 -1 = 그린 색 그대로 (시안 그대로의 주민)
+	}
 	vec3 b = base_col[int(set_i + 0.5) * 8 + s];
 	vec3 d = palette[int(dye_index(s) + 0.5)];
 	if (s == 0) {

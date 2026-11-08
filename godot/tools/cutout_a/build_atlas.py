@@ -21,7 +21,7 @@ import sheet_layout as L
 ART = L.ART
 PARTS = os.path.join(ART, "parts")
 VIEWS = ["front", "q_front", "q_back", "back"]
-SETS = ["a", "b", "c", "d"]
+SETS = ["a", "b", "c", "d", "e", "f", "g"]
 FIG = 920.0                 # rig units: every figure normalised to 920 tall (feet = 0, y up)
 ATLAS_K = 0.42              # atlas px per rig unit (figure ~386 px tall; 2048x1024 holds all 4 sets x 4 views + necks + props)
 ATLAS_W = 2048
@@ -35,6 +35,52 @@ BASE = {
     "c": {"skin": "ba6b37", "hair": "51392c", "main": "989a64", "second": "f7dbaf", "trim": "ebab53", "hat": "f7daaf", "legwear": "fadfb7", "shoe": "744628"},
     "d": {"skin": "fbb377", "hair": "cf7128", "main": "e8b35b", "second": "f7d4a4", "trim": "a05933", "hat": "fadbaf", "legwear": "9f5c35", "shoe": "77462a"},
 }
+# concept-A cast (2026-11-08): e man, f child, g elder — drawn base colours measured automatically (auto_base) near these
+# expected concept colours; the measured values are written into doll_lib.json "base"
+EXPECT = {
+    "e": {"skin": "9a5a35", "hair": "3a2a22", "main": "8fa87a", "second": "f3e6cc", "trim": "d9a85a", "hat": "e0b860", "legwear": "f3e6cc", "shoe": "8a5a3a"},
+    "f": {"skin": "f2b382", "hair": "c8643a", "main": "dcb555", "second": "f3e6cc", "trim": "8a5a3a", "hat": "f3e6cc", "legwear": "f3e6cc", "shoe": "8a5a3a"},
+    "g": {"skin": "b07048", "hair": "f2efe8", "main": "8f8cc8", "second": "f3e6cc", "trim": "8a5a3a", "hat": "f3e6cc", "legwear": "8f8cc8", "shoe": "8a5a3a"},
+}
+# where each slot's colour is measured (part kinds)
+MEASURE = {"skin": ["arm"], "hair": ["tail", "head"], "main": ["body", "sleeve"], "second": ["body", "sleeve"], "trim": ["body"],
+           "hat": ["knot"], "legwear": ["leg", "body"], "shoe": ["leg"]}
+
+# BODY TYPES (2026-11-08 user: in-game look = the chunky GAME-SCALE INSET of res_A.png — big round head ~1/3 of the height,
+# head right on the shoulders, NO visible neck, compact body, short legs). Per OUTFIT (body) set, tunable here:
+#   head_k : head (+ hair / headwear) size multiplier on this body (heads are first normalised to HEAD_H)
+#   neck   : visible neck between collar top and chin (rig units; < 0 = chin tucked over the collar)
+#   bs     : uniform scale of the body pieces (body, sleeves, arms, legs, cane) about the feet
+#   bsy    : extra vertical squash of the body pieces (short legs / torso)
+#   head_fwd: (optional) head moved forward in the 3/4 views (elder stoop)
+# -> doll_lib.json "body_types"; head_k goes to the shader per body, the rest is baked into the quads / sockets.
+ADULT = {"type": "adult", "head_k": 1.42, "neck": -14.0, "bs": 1.0, "bsy": 0.8}
+BODY = {
+    "a": ADULT, "b": ADULT, "c": ADULT, "d": ADULT, "e": ADULT,
+    "f": {"type": "child", "head_k": 1.5, "neck": -16.0, "bs": 1.0, "bsy": 0.8},
+    "g": {"type": "elder", "head_k": 1.42, "neck": -34.0, "bs": 1.0, "bsy": 0.8, "head_fwd": 28.0},
+}
+LEGS = {"f": ["skin", "shoe", "second"], "g": ["shoe", "main", "skin"]}      # child: bare lower legs; elder: shoes under the robe
+
+
+def auto_base(s):
+    """drawn base colour per dye slot for a cast set: median of the part pixels whose colour is near the expected one"""
+    out = {}
+    for slot, exp in EXPECT[s].items():
+        e = hexrgb(exp)
+        px = []
+        for v in VIEWS:
+            d = os.path.join(PARTS, s, v)
+            for f in os.listdir(d):
+                if f.endswith(".png") and f.split("_")[0].split(".")[0] in MEASURE[slot]:
+                    a = np.asarray(Image.open(os.path.join(d, f)).convert("RGBA")).reshape(-1, 4)
+                    px.append(a[a[:, 3] > 200][:, :3].astype(np.float32) / 255.0)
+        px = np.concatenate(px)
+        dist = np.abs(px - e).sum(-1)
+        near = px[dist < max(0.25, np.percentile(dist, 3))]
+        c = np.median(near, axis=0) if len(near) > 30 else e
+        out[slot] = "%02x%02x%02x" % tuple(int(round(x * 255)) for x in c)
+    return out
 # dye channels per part kind (max 3) — the per-quad R/G/B of the mask
 CHANNELS = {
     "body": ["main", "second", "trim"],
@@ -58,7 +104,7 @@ ORDER = {
 SLOT_OF = {"body": 1, "head": 2, "sleeve_a": 3, "sleeve_b": 4, "arm_a": 5, "arm_b": 6, "leg_a": 7, "leg_b": 8,
            "tail": 9, "knot": 9, "hat": 2, "prop": 10}
 # groups: 0 outfit (body set S, rig frame) 1 head (head set T, frame = its head pivot) 2 headwear (set U, frame = U's head pivot) 3 prop
-PROPS = ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket"]
+PROPS = ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket", "seed"]
 
 
 # concept A (res_A.png, adult woman front, 456 px tall): chin -> collar top 12 px = 2.6 % -> 24 rig units;
@@ -86,6 +132,10 @@ def find_chin(p, skin):
         return int((np.nonzero(dd == -1)[0] - np.nonzero(dd == 1)[0]).max())
     runs = np.array([maxrun(sk[y]) for y in range(p.shape[0])])
     rows = np.nonzero(runs >= 0.12 * p.shape[1])[0]
+    if len(rows) == 0:      # neck stub drawn in the shade colour only (back views of dark skin) -> accept darker skin
+        sk = a & (d < 0.4) & (r > 0.45) & (r < 1.25)
+        runs = np.array([maxrun(sk[y]) for y in range(p.shape[0])])
+        rows = np.nonzero(runs >= 0.12 * p.shape[1])[0]
     yb = int(rows.max())
     xs = np.nonzero(sk[max(0, yb - 8): yb - 3].any(0))[0]
     if len(xs) == 0:
@@ -174,7 +224,11 @@ def main():
     head_socket = {}
     head_top = {}
     head_scale = {}
+    for s in EXPECT:
+        BASE[s] = auto_base(s)
+        print("base", s, BASE[s])
     for s in SETS:
+        bt = BODY[s]
         for v in VIEWS:
             d = os.path.join(PARTS, s, v)
             pl = json.load(open(os.path.join(d, "place.json")))
@@ -207,7 +261,9 @@ def main():
             band = bpng[:, max(0, bx - 6): bx + 7, 3].max(axis=1) > 128
             by = int(np.argmax(band)) if band.any() else 0
             collar_y = (fy - (bq["y"] + by * bq["sy"])) * k
-            head_socket["%s_%s" % (s, v)] = [chin[0], collar_y + NECK_VIS]
+            # body type: the body pieces are scaled about the feet (bs, bsy) -> the socket moves with the collar; neck per body
+            fwd = bt.get("head_fwd", 0.0) if v in ("q_front", "q_back") else 0.0     # stoop: head forward (3/4 views face image-right)
+            head_socket["%s_%s" % (s, v)] = [chin[0] * bt["bs"] + fwd, collar_y * bt["bs"] * bt["bsy"] + bt["neck"]]
             ht = [(hr[0] + hr[2]) / 2, hr[3]]                               # top of the (bare) head
             head_top["%s_%s" % (s, v)] = [(ht[0] - hp[0]) * f_head, (ht[1] - hp[1]) * f_head]
             # generated neck (skin, dyed with the skin channel), drawn behind the body's collar and behind the head
@@ -243,6 +299,20 @@ def main():
                     piv = [(r[0] + r[2]) / 2, r[3] - 0.1 * (r[3] - r[1])]           # hip
                 elif kind == "body":
                     piv = [(r[0] + r[2]) / 2, r[1] + 0.55 * (r[3] - r[1])]          # waist
+                elif kind == "cane":
+                    # walking stick (elder): rides on the nearer HAND but stays upright (shader: moved by the hand, not turned)
+                    ccx = (r[0] + r[2]) / 2
+                    side = min("ab", key=lambda sd: abs((rig_rect(pl["arm_" + sd])[0] + rig_rect(pl["arm_" + sd])[2]) / 2 - ccx))
+                    ar = rig_rect(pl["arm_" + side])
+                    sr = rig_rect(pl["sleeve_" + side])
+                    shoulder = [(sr[0] + sr[2]) / 2, sr[3] - 0.15 * (sr[3] - sr[1])]
+                    piv = [(sr[0] + sr[2]) / 2, (sr[1] + sr[3]) / 2]
+                    grip = [(ar[0] + ar[2]) / 2, ar[1] + 0.18 * (ar[3] - ar[1])]
+                    # stick = from the ground up into the hanging hand (its top just above the fist) — the figure may hold it
+                    # elsewhere; only its drawn width is kept
+                    cw = r[2] - r[0]
+                    r = [grip[0] - cw / 2, 0.0, grip[0] + cw / 2, grip[1] + 0.12 * (ar[3] - ar[1])]
+                    rr = list(r)
                 else:   # tail / knot / hat: hangs from its top
                     piv = [(rr[0] + rr[2]) / 2, rr[3]]
                 img = Image.open(os.path.join(d, name + ".png")).convert("RGBA")
@@ -261,18 +331,33 @@ def main():
                 w = max(2, int(round((rr[2] - rr[0]) * ATLAS_K)))
                 h = max(2, int(round((rr[3] - rr[1]) * ATLAS_K)))
                 img = np.asarray(img.resize((w, h), Image.LANCZOS))
-                chans = list(CHANNELS[kind if pname != "hat" else "knot"])
+                chans = list(CHANNELS.get(kind if pname != "hat" else "knot", []))
                 if kind == "head" and s != "a":
                     chans = ["skin", "hair"]
                 if kind == "leg":
-                    chans = ["legwear", "shoe", LEG3.get(s, "skin")]
+                    chans = LEGS.get(s, ["legwear", "shoe", LEG3.get(s, "skin")])
                 bases = [hexrgb(BASE[s][c]) for c in chans]
-                mask = dye_mask(img, bases)
+                mask = dye_mask(img, bases) if chans else np.zeros(img.shape[:2] + (3,), np.float32)
+                layer = ORDER[v].index(pname if pname in ORDER[v] else "knot")
+                slot = SLOT_OF.get(pname, 1)
+                gp = [0.0, 0.0, 0.0, 0.0]
+                if kind == "cane":
+                    layer = ORDER[v].index("arm_" + side) - 0.5
+                    slot = SLOT_OF["arm_" + side]
+                    gp = [grip[0], grip[1], 1.0, 0.0]
+                pp = shoulder if kind in ("arm", "cane") else [0.0, 0.0]
+                if group == 0:
+                    # body type: scale the body pieces about the feet (rect, pivots, grip)
+                    fx, fy_ = bt["bs"], bt["bs"] * bt["bsy"]
+                    rr = [rr[0] * fx, rr[1] * fy_, rr[2] * fx, rr[3] * fy_]
+                    piv = [piv[0] * fx, piv[1] * fy_]
+                    pp = [pp[0] * fx, pp[1] * fy_]
+                    gp = [gp[0] * fx, gp[1] * fy_, gp[2], gp[3]]
                 items.append((img, mask, {
-                    "set": s, "view": VIEWS.index(v), "part": pname, "group": group, "slot": SLOT_OF.get(pname, 1),
+                    "set": s, "view": VIEWS.index(v), "part": pname, "group": group, "slot": slot,
                     "rect": [round(x, 2) for x in rr], "pivot": [round(x, 2) for x in piv],
-                    "parent_pivot": [round(x, 2) for x in shoulder] if kind == "arm" else [0.0, 0.0],
-                    "layer": ORDER[v].index(pname if pname in ORDER[v] else "knot"),
+                    "parent_pivot": [round(x, 2) for x in pp], "grip": [round(x, 2) for x in gp],
+                    "layer": layer,
                     "dye": [SLOTS[c] for c in chans] + [-1] * (3 - len(chans)),
                     "base": [list(map(float, hexrgb(BASE[s][c]))) for c in chans] + [[1, 1, 1]] * (3 - len(chans)),
                 }))
@@ -283,7 +368,7 @@ def main():
         if not os.path.exists(f):
             continue
         img = Image.open(f).convert("RGBA")
-        sc = {"hoe": 1.55, "rake": 1.55, "sickle": 0.8, "mallet": 0.8}.get(p, 0.5)   # long tools ~ her height
+        sc = {"hoe": 1.55, "rake": 1.55, "sickle": 0.8, "mallet": 0.8, "seed": 0.7}.get(p, 0.5)   # long tools ~ her height
         rw, rh = img.width * sc, img.height * sc
         w, h = int(round(rw * ATLAS_K)), int(round(rh * ATLAS_K))
         img = np.asarray(img.resize((w, h), Image.LANCZOS))
@@ -323,7 +408,7 @@ def main():
     Image.fromarray(atlas).save(os.path.join(ART, "doll_atlas.png"))
     Image.fromarray(mask).save(os.path.join(ART, "doll_mask.png"))
     json.dump({"fig": FIG, "atlas": [ATLAS_W, H], "sets": SETS, "views": VIEWS, "props": PROPS,
-               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "head_socket": head_socket, "head_top": head_top, "head_scale": head_scale, "base": BASE, "quads": quads},
+               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "body_types": {s: BODY[s] for s in SETS}, "head_k": [BODY[s]["head_k"] for s in SETS], "head_socket": head_socket, "head_top": head_top, "head_scale": head_scale, "base": BASE, "quads": quads},
               open(os.path.join(ART, "doll_lib.json"), "w"), indent=0)
     print("atlas", ATLAS_W, "x", H, "quads", len(quads))
 

@@ -34,6 +34,14 @@ PROP_CELLS = [
     ("F", "basket_q", (1040, 540, 1480, 960)),
 ]
 
+# props sheet c (2026-11-08 cast): the elder's walking stick (front + 3/4, tall cells) and the child's seed
+PROP_CELLS_C = [
+    ("A", "cane", (80, 40, 380, 990)),
+    ("B", "cane_q", (440, 40, 740, 990)),
+    ("C", "seed", (860, 80, 1180, 400)),
+    ("D", "seed_q", (860, 560, 1180, 880)),
+]
+
 
 def template(cells, fig=True):
     im = Image.new("RGB", (W, H), (0, 255, 0))
@@ -52,4 +60,5 @@ if __name__ == "__main__":
     os.makedirs(os.path.join(ART, "raw"), exist_ok=True)
     template(CELLS).save(os.path.join(ART, "raw", "template.png"))
     template(PROP_CELLS, fig=False).save(os.path.join(ART, "raw", "template_props.png"))
+    template(PROP_CELLS_C, fig=False).save(os.path.join(ART, "raw", "template_props_c.png"))
     print("ok")
