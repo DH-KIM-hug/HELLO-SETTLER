@@ -51,6 +51,7 @@ var _shadow_dirty := false
 ## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
 ## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
 const WHEAT_MODELS := ["buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_ripe"]
+const WHEAT_MIN_ALPHA := 0.45   # 윗부분이 가장 엷을 때 불투명도 (진짜 반투명 — 0.35는 풀밭 위 금빛 이삭이 너무 흐림, 2026-11-08)
 const WHEAT_SPROUT := 0.33      # 첫 수확까지 시간의 이만큼 지나기 전엔 싹
 static var _fade_mat: ShaderMaterial
 static var _oven_mat: StandardMaterial3D
@@ -341,6 +342,11 @@ func _set_near_shadows(near: Node3D, off: bool) -> void:
 		for g: GeometryInstance3D in list:
 			if not g.has_meta(&"cs0"):
 				g.set_meta(&"cs0", g.cast_shadow)
+			# 그림자 전용 쌍둥이(밀 숲 윗부분 — SHADOWS_ONLY)는 그림자를 끄면 '보이는' 불투명 메시가 되어 버린다 (cast_shadow OFF =
+			# 그림자만 끄고 그림) → 엷어지는 윗부분을 온전히 덮고 먹선까지 생겼다. 이런 것은 숨기기로 (2026-11-08)
+			if int(g.get_meta(&"cs0")) == GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY:
+				g.visible = not off
+				continue
 			g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if off else g.get_meta(&"cs0")
 
 
@@ -1298,11 +1304,8 @@ func _build_wheat(near: Node3D, far: Node3D, b: Building) -> void:
 
 static func wheat_fade_mat() -> ShaderMaterial:
 	if _fade_mat == null:
-		var m := ShaderMaterial.new()
-		m.shader = load("res://render/toon_fade.gdshader")
-		Toon._light(m)
-		m.set_shader_parameter("view_fill", Style.VIEW_FILL)
-		_fade_mat = m
+		_fade_mat = ToonFade.make()      # 불투명 밑 + 반투명 윗부분 (render/toon_fade.gd — 이삭 금빛이 먹선 없이 비쳐 보임)
+		ToonFade.set_param(_fade_mat, &"min_alpha", WHEAT_MIN_ALPHA)
 	return _fade_mat
 
 
