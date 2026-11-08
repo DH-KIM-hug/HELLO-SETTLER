@@ -6,7 +6,9 @@
 ##   · 집 강아지: 집마다 한 마리까지 (주인의 집 — 집이 없으면 그 가족), 낮엔 주인(또는 그 집 아이가 놀면 아이)을 따라다니고 밤엔 집 앞에서 잠.
 ##   · 마을 강아지: 처음부터 둘 (암수), 모닥불 곁에서 자고 광장(없으면 모닥불)을 어슬렁거리다 노는 아이를 따라감. 상한 = 인구 ÷ 5 + 2.
 ##   · 새끼 (병 PUP_DAYS일): 엄마 곁. 다 자라면 강아지 없는 집이 데려가고 (연대기), 없으면 마을 강아지.
-##   · 새끼 낳기 (새벽): 다 자란 암컷 + 같은 무리의 다 자란 수컷 → 하루 BREED_P로 1~3마리 (갈 곳 — 강아지 없는 집 + 마을 강아지 남은 자리 — 만큼만).
+##   · 새끼 낳기 (새벽): 다 자란 암컷 + 같은 무리의 다 자란 수컷 → 하루 BREED_P × 철 배율(BREED_SEASON)로 1~3마리, 낳은 뒤 LITTER_GAP일은 쉼
+##     (갈 곳 — 강아지 없는 집 + 마을 강아지 남은 자리 — 만큼만). 새끼에는 mom_name·dad_name·named_by_name도 적어 둠 (부모가 떠나도 상세에).
+##   · 화면·상세가 읽을 것: look(dg) (털 번호·이름·몸집 — 2D 그림이 이것만 읽음) · info(v, dg) (부모·물려받은 무늬·이름 지은 아이).
 ##     털 유전자는 부모에게서 반씩 + 가끔 돌연변이 (GENES). 겉모습은 아무 능력과도 상관없다 (주민 규칙과 같음).
 ##   · 먹이: 사람 몫의 일부 (Village.step의 식량 소비에 FOOD · FOOD_PUP 사람 몫으로 더함).
 ##   · 죽음 (늙어서): 집 강아지는 그 가족이, 마을 강아지는 아이들이 가볍게 슬퍼함 (grief_until — 사람이 죽었을 때보다 짧게).
@@ -35,7 +37,9 @@ const LIFE_LO := 40.0                 # 일생 (병 날) — 주민(약 100일)�
 const LIFE_HI := 60.0
 const START_AGE_LO := 6.0             # 처음부터 있던 강아지의 나이 (병 날)
 const START_AGE_HI := 14.0
-const BREED_P := 0.12                 # 새벽마다 (다 자란 암컷 하나에)
+const BREED_P := 0.12                 # 새벽마다 (다 자란 암컷 하나에) — 철 배율(BREED_SEASON)을 곱함
+## 철마다 새끼 낳기 배율 (안 — E3-13b 2026-11-08 메인 지시 '철 따라'): 봄에 잦고 겨울엔 드묾. 병 날짜의 철 (Health.jar_date)
+const BREED_SEASON := {"봄": 1.6, "여름": 1.0, "가을": 0.8, "겨울": 0.3}
 const LITTER_GAP := 12.0              # 새끼를 낳은 뒤 다시 낳기까지 (병 날)
 const LITTER_MAX := 3
 const VILLAGE_PER := 5                # 마을 강아지 상한 = 인구 ÷ 5 + 2
@@ -58,6 +62,13 @@ const BARK_TIME := 6.0                # 짖는 동안 (병 초 — 화면 'bark'
 const NAMES := ["콩이", "보리", "누룽지", "호떡", "감자", "깨비", "솜이", "밤톨", "두부", "찹쌀", "단추", "도토리", "몽실", "방울",
 	"쑥떡", "짱아", "복실", "바둑", "누렁", "점박", "고구마", "모찌", "까미", "흰둥", "구름", "만두", "꼬미", "땅콩"]
 const START_NAMES := ["누렁이", "점박이"]
+## 상세 (별지기 UI — 거인 쪽 글): 물려받은 무늬 한 줄 ("엄마 꿀떡이의 눈가면")
+const TRAIT_KEYS := ["base", "pat", "ear", "tail"]
+const INH_WHO := {"mom": "엄마", "dad": "아빠"}
+const INH_NEW := "새로 생긴 %s"
+const SIZE_WORDS := ["몸집 작음", "보통 몸집", "몸집 큼"]
+const SIZE_SMALL := 0.95              # 이보다 작으면 '작음', SIZE_BIG보다 크면 '큼'
+const SIZE_BIG := 1.05
 ## 주민의 말·연대기 (시험이 금지어를 본다 — 여기 모아 둔다)
 const LINES := {
 	"born": "%s 강아지 %d마리를 낳았다. 어린 %s 막내에게 '%s'라는 이름을 지어 주었다.",
@@ -217,6 +228,90 @@ static func coat_key(dg: Dictionary) -> String:
 		2:
 			return "puppy_brown"
 	return "puppy_dark"
+
+
+# ───────────────────────── 겉모습·상세 (화면이 읽는 것 — 2D 종이 인형 강아지 등) ─────────────────────────
+## 강아지 한 마리의 겉모습 (털 유전자 → 그릴 값). 화면은 이것만 읽으면 된다 — 능력과는 아무 상관 없다.
+## {base, pat, ear, tail: 번호 (BASES·PATTERNS·EARS·TAILS 순), base_name·pat_name·ear_name·tail_name: 이름,
+##  size: 몸집 배율 (SIZE_LO~SIZE_HI), special: "" 또는 "kkultteok", sex: "m"·"f"}.
+## 새끼 때 작게 그리는 것은 화면 몫 (info의 grow 0~1 · PUP_DAYS).
+static func look(dg: Dictionary) -> Dictionary:
+	var g: Dictionary = dg.get("genes", {})
+	var b := clampi(int(g.get("base", 1)), 0, BASES.size() - 1)
+	var p := clampi(int(g.get("pat", 0)), 0, PATTERNS.size() - 1)
+	var e := clampi(int(g.get("ear", 0)), 0, EARS.size() - 1)
+	var t := clampi(int(g.get("tail", 0)), 0, TAILS.size() - 1)
+	return {"base": b, "pat": p, "ear": e, "tail": t, "base_name": BASES[b], "pat_name": PATTERNS[p], "ear_name": EARS[e],
+		"tail_name": TAILS[t], "size": float(g.get("size", 1.0)), "special": String(dg.get("special", "")),
+		"sex": String(dg.get("sex", "m"))}
+
+
+## 유전자 하나의 이름 ("황갈 털" · "눈가면" · "민무늬" · "끝 접힌 귀" · "말린 꼬리")
+static func trait_name(k: String, val: int) -> String:
+	match k:
+		"base":
+			return "%s 털" % BASES[clampi(val, 0, BASES.size() - 1)]
+		"pat":
+			return "민무늬" if val == 0 else String(PATTERNS[clampi(val, 0, PATTERNS.size() - 1)])
+		"ear":
+			return EARS[clampi(val, 0, EARS.size() - 1)]
+		"tail":
+			return TAILS[clampi(val, 0, TAILS.size() - 1)]
+	return ""
+
+
+## 물려받은 무늬 줄들: ["엄마 꿀떡이의 눈가면", "아빠 누렁이의 늘어진 귀", "새로 생긴 주근깨", …] — 처음부터 있던 강아지는 빈 배열
+func inherited_lines(dg: Dictionary) -> Array:
+	var inh: Dictionary = dg.get("inh", {})
+	var g: Dictionary = dg.get("genes", {})
+	var out: Array = []
+	for k: String in TRAIT_KEYS:
+		if not inh.has(k):
+			continue
+		var tn := trait_name(k, int(g.get(k, 0)))
+		var src := String(inh[k])
+		if src == "new":
+			out.append(INH_NEW % tn)
+		elif INH_WHO.has(src):
+			var nm := parent_name(dg, src)
+			out.append("%s %s의 %s" % [INH_WHO[src], nm, tn] if nm != "" else "%s의 %s" % [INH_WHO[src], tn])
+	return out
+
+
+## 부모 이름 ("mom"·"dad") — 살아 있으면 지금 이름, 떠났으면 태어날 때 적어 둔 이름 (옛 저장·처음부터 있던 강아지는 빈 글)
+func parent_name(dg: Dictionary, which: String) -> String:
+	var p := dog(int(dg.get(which, -1)))
+	if not p.is_empty():
+		return String(p["name"])
+	return String(dg.get(which + "_name", ""))
+
+
+static func size_word(sz: float) -> String:
+	if sz < SIZE_SMALL:
+		return SIZE_WORDS[0]
+	return SIZE_WORDS[2] if sz > SIZE_BIG else SIZE_WORDS[1]
+
+
+## 상세 (별지기 UI의 강아지 카드가 읽을 것 — 카드는 아직 없음, 자료만): 이름·암수·나이·집/마을·주인·부모·이름 지은 아이·
+## 겉모습(look)·겉모습 말(looks)·물려받은 무늬(inherited)
+func info(v: Village, dg: Dictionary) -> Dictionary:
+	var o := v.person(int(dg.get("owner", -1)))
+	var nb := v.person(int(dg.get("named_by", -1)))
+	var lk := look(dg)
+	var age := age_days(v, dg)
+	return {"id": int(dg["id"]), "name": String(dg["name"]), "sex": lk["sex"], "age_days": age,
+		"grow": clampf(age / PUP_DAYS, 0.0, 1.0), "pup": is_pup(v, dg),
+		"kind": "house" if o != null else "village", "owner": o.id if o != null else -1, "owner_name": o.name if o != null else "",
+		"mom": int(dg.get("mom", -1)), "dad": int(dg.get("dad", -1)),
+		"mom_name": parent_name(dg, "mom"), "dad_name": parent_name(dg, "dad"),
+		"named_by": int(dg.get("named_by", -1)), "named_by_name": nb.name if nb != null else String(dg.get("named_by_name", "")),
+		"look": lk, "looks": [trait_name("base", lk["base"]), trait_name("pat", lk["pat"]), lk["ear_name"], lk["tail_name"], size_word(lk["size"])],
+		"inherited": inherited_lines(dg), "state": String(dg.get("state", "idle")), "special": lk["special"]}
+
+
+## 이 마을 강아지 모두의 상세 (번호 순)
+func infos(v: Village) -> Array:
+	return list.map(func(dg: Dictionary) -> Dictionary: return info(v, dg))
 
 
 # ───────────────────────── 나이 ─────────────────────────
@@ -383,12 +478,13 @@ func _breed(v: Village) -> void:
 	var males := list.filter(func(dg: Dictionary) -> bool: return dg["sex"] == "m" and not is_pup(v, dg))
 	if males.is_empty():
 		return
+	var p_breed := BREED_P * season_mult(v)
 	for mom: Dictionary in list.duplicate():
 		if mom["sex"] != "f" or is_pup(v, mom) or v.t - float(mom["litter_t"]) < LITTER_GAP * Balance.DAY:
 			continue
 		if age_days(v, mom) > float(mom["life"]) * 0.8:
 			continue                                  # 늙은 강아지는 낳지 않음
-		if rng.randf() >= BREED_P:
+		if rng.randf() >= p_breed:
 			continue
 		var left := room(v)
 		if left <= 0:
@@ -396,6 +492,11 @@ func _breed(v: Village) -> void:
 		var dad: Dictionary = males[rng.randi() % males.size()]
 		var n := mini(rng.randi_range(1, LITTER_MAX), left)
 		litter(v, mom, dad, n)
+
+
+## 오늘 철의 새끼 낳기 배율 (BREED_SEASON — 표에 없는 철은 1)
+static func season_mult(v: Village) -> float:
+	return float(BREED_SEASON.get(String(Health.jar_date(v)["season"]), 1.0))
 
 
 ## 새끼 n마리 (시험이 바로 부를 수 있음). 막내 이름은 아이 주민이 지어 줌 — 나머지는 이름 목록에서
@@ -413,9 +514,12 @@ func litter(v: Village, mom: Dictionary, dad: Dictionary, n: int) -> Array:
 		dg["inh"] = m["inh"]
 		dg["mom"] = int(mom["id"])
 		dg["dad"] = int(dad["id"])
+		dg["mom_name"] = String(mom["name"])          # 부모가 떠난 뒤에도 상세에 이름이 남게
+		dg["dad_name"] = String(dad["name"])
 		dg["pup"] = true
 		if namer != null and i == n - 1:
 			dg["named_by"] = namer.id
+			dg["named_by_name"] = namer.name
 		stats["born"] = int(stats["born"]) + 1
 		v.emit(&"dog_born", {"v": int(dg["id"]), "who": namer.id if namer != null else -1, "at": p})
 		out.append(dg)
