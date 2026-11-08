@@ -30,6 +30,8 @@ func _init() -> void:
 	shade.color = Color(0.08, 0.06, 0.05, 0.38)
 	shade.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(shade)
+	var hb := HudBatch.new()               # (P1b) 카드·버튼 바탕과 아이콘을 한 번에
+	add_child(hb)
 	card = PanelContainer.new()
 	card.mouse_filter = Control.MOUSE_FILTER_STOP
 	var sb := StyleBoxFlat.new()
@@ -88,6 +90,7 @@ func _init() -> void:
 	ok_btn.pressed.connect(GameAudio.ui_click)
 	ok_btn.pressed.connect(close)
 	row.add_child(ok_btn)
+	hb.adopt(card)
 
 
 func _ready() -> void:

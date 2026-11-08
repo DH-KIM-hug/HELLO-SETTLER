@@ -1102,6 +1102,8 @@ func _setup_world_ui() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.theme = UiTheme.get_theme()
 	layer.add_child(root)
+	var hb := HudBatch.new()               # (P1b) 지도 테두리·버튼 바탕을 한 번에
+	root.add_child(hb)
 	minimap = WorldMinimap.new()
 	minimap.setup(world)
 	minimap.pressed_at.connect(_on_map_pressed)
@@ -1139,6 +1141,9 @@ func _setup_world_ui() -> void:
 	root.add_child(goto_list)
 	goto_box = VBoxContainer.new()
 	goto_list.add_child(goto_box)
+	for n: Control in [minimap, goto_btn, out_btn]:      # 늘 떠 있는 것만 (목록·분가 띠는 그대로 위에)
+		if n != null:
+			hb.adopt(n)
 	get_viewport().size_changed.connect(_layout_world_ui)
 	_layout_world_ui()
 

@@ -121,8 +121,15 @@ func from_map(q: Vector2) -> Vector2:
 func _draw() -> void:
 	var c := size * 0.5
 	var rad := SIZE * 0.5 - 3.0
-	draw_circle(c, rad + 3.0, RIM)
-	draw_circle(c, rad + 1.0, Color("dfe9ee"))           # 유리벽 (옅은 하늘빛 테)
+	var hb := HudBatch.of(self)
+	if hb != null:                         # (P1b) 테두리는 화면 UI 바탕 겹에 · 지도 위 표시는 삼각형 배열 하나로 (그림은 같음)
+		var g := HudBatch.Geo.new()
+		g.circle(c, rad + 3.0, RIM)
+		g.circle(c, rad + 1.0, Color("dfe9ee"))
+		hb.put_shapes(self, g)
+	else:
+		draw_circle(c, rad + 3.0, RIM)
+		draw_circle(c, rad + 1.0, Color("dfe9ee"))           # 유리벽 (옅은 하늘빛 테)
 	if tex != null:
 		# 둥근 지도 = 원 다각형에 그림을 입힘 (지도 돌림 포함)
 		var pts := PackedVector2Array()
@@ -133,15 +140,16 @@ func _draw() -> void:
 			pts.append(c + u.rotated(_angle) * rad)
 			uvs.append(Vector2(0.5, 0.5) + u * 0.5)
 		draw_polygon(pts, PackedColorArray([Color.WHITE]), uvs, tex)
-	# 지금 보는 곳
+	# 지금 보는 곳 · 무리 — 한 삼각형 배열로 (원·선마다 따로 그리면 그리기가 그만큼 는다)
+	var top := HudBatch.Geo.new()
 	var vr := clampf(_view_r / world.water.rr * rad, 2.5, rad)
-	draw_arc(to_map(_view_c), vr, 0.0, TAU, 32, Color.WHITE, 1.5, true)
-	# 무리
+	top.arc(to_map(_view_c), vr, 0.0, TAU, 32, Color.WHITE, 1.5, true)
 	for q in world.settlements:
 		var p := to_map(q.center)
 		var big := q == _focus
-		draw_circle(p, 3.5 if big else 2.5, RIM)
-		draw_circle(p, 2.3 if big else 1.4, Color("e8b04a") if big else Color("c8743a"))
+		top.circle(p, 3.5 if big else 2.5, RIM)
+		top.circle(p, 2.3 if big else 1.4, Color("e8b04a") if big else Color("c8743a"))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), top.pts, top.cols)
 
 
 func _gui_input(e: InputEvent) -> void:

@@ -361,8 +361,40 @@ func _on_dial_input(e: InputEvent) -> void:
 
 
 ## 화면 구석의 작은 해: 둥근 판 + 가운데 병 + 둘레에 해 (지금 빛이 오는 쪽 — 등불이 옮겨 가는 3초 동안은 함께 돈다)
+var _badge_geo: HudBatch.Geo
+var _badge_dir := Vector2.INF
+var _badge_px := 0.0
+
+
 func _draw_badge() -> void:
 	var c := badge.size * 0.5
+	var hb := HudBatch.of(badge)
+	if hb != null:                           # (P1b) 화면 UI 바탕 겹·아이콘 겹에 함께 (그림은 같음) — 해 방향이 그대로면 그대로
+		var dd0 := screen_dir(sc.lamp_light_shown())
+		if _badge_geo != null and dd0.is_equal_approx(_badge_dir) and _badge_px == HudBatch.px:
+			hb.put_shapes(badge, _badge_geo)
+			return
+		_badge_dir = dd0
+		_badge_px = HudBatch.px
+		var g := HudBatch.Geo.new()
+		_badge_geo = g
+		g.circle(c, BADGE * 0.5, Color(UiTheme.PAPER, 0.92))
+		g.arc(c, BADGE * 0.5 - 0.5, 0.0, TAU, 32, UiTheme.INK, 1.0, true)
+		g.circle(c, 6.0, Color("cfe6dc"))
+		g.arc(c, 6.0, 0.0, TAU, 16, Color(UiTheme.INK, 0.7), 1.0, true)
+		var dd := screen_dir(sc.lamp_light_shown())
+		var pp := c + dd * (BADGE * 0.5 - 10.0)
+		g.line(c + dd * 7.0, pp - dd * 6.0, Color(SUN, 0.7), 2.0)
+		var tx := GameIcons.tex("해")
+		if tx != null:
+			hb.put_icons(badge, [[Rect2(pp - Vector2(9, 9), Vector2(18, 18)), tx, Rect2(Vector2.ZERO, tx.get_size()), Color.WHITE]])
+		else:
+			g.circle(pp, 9.0 * 0.55, SUN)
+			for i in 8:
+				var d2 := Vector2.RIGHT.rotated(TAU * i / 8.0)
+				g.line(pp + d2 * 9.0 * 0.7, pp + d2 * 9.0, SUN, 2.0)
+		hb.put_shapes(badge, g)
+		return
 	badge.draw_circle(c, BADGE * 0.5, Color(UiTheme.PAPER, 0.92))
 	badge.draw_arc(c, BADGE * 0.5 - 0.5, 0.0, TAU, 32, UiTheme.INK, 1.0, true)
 	badge.draw_circle(c, 6.0, Color("cfe6dc"))
