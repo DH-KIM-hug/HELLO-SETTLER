@@ -38,6 +38,8 @@ var _terrain_t := 0.0
 var _drag := false
 var detail: ResidentDetail
 var altar_sheet: AltarSheet          # 제단 시트 (UI 02 — 제물 받기·소원 들어주기·건물 사 주기·강제로 거두기)
+var site_marks_ctl: Control          # 짓는 터 진행 고리를 그리는 칸 (화면 층, 띠·시트 아래)
+var _site_marks: Array = []          # [[화면 점, 0~1]]
 var air_overlay: JarAirOverlay       # [곰팡이·뚜껑] 서린 김·누런 하늘·열린 뚜껑의 빛 (view/jar_air_overlay.gd)
 var follow_id := -1                  # [따라가 보기] 중인 주민 (-1 = 없음)
 var _press_pos := Vector2.ZERO
@@ -567,6 +569,15 @@ func _setup_ui() -> void:
 	bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bubbles)
+	site_marks_ctl = Control.new()        # 첫날 짓는 터 진행 고리 + 쪽지의 땅 고리(제단·짓는 터…) — 띠·버튼·시트 아래 (그 위에 떠 보이지 않게)
+	site_marks_ctl.name = "SiteMarks"
+	site_marks_ctl.set_anchors_preset(Control.PRESET_FULL_RECT)
+	site_marks_ctl.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	site_marks_ctl.draw.connect(func() -> void:
+		NotebookNote.draw_site_marks(site_marks_ctl, _site_marks)
+		if notebook_note != null:
+			notebook_note.draw_ground_ring(site_marks_ctl))
+	root.add_child(site_marks_ctl)
 	hud_batch = HudBatch.new()            # 말풍선 위 · 띠보다 앞 (맡은 것들의 바탕·아이콘을 여기서 한 번에)
 	root.add_child(hud_batch)
 	# 위 띠
@@ -2055,6 +2066,7 @@ func _setup_notebook(root: Control, dlayer: CanvasLayer) -> void:
 	notebook_note = NotebookNote.new()
 	notebook_note.setup(village)
 	nroot.add_child(notebook_note)
+	notebook_note.ground_layer = site_marks_ctl   # 땅 고리(제단·짓는 터…)는 시트 아래 층에
 	notebook_note.pressed.connect(_on_note_pressed)
 	baby_sheet = BabyNameSheet.new()
 	dlayer.add_child(baby_sheet)
@@ -2290,7 +2302,7 @@ func _on_note_pressed() -> void:
 func _site_progress(fv: Village) -> void:
 	var marks: Array = []
 	if not Notebook.first_day(fv):
-		notebook_note.site_marks = marks
+		_set_site_marks(marks)
 		return
 	var vs := get_viewport().get_visible_rect().size
 	var now := {}
@@ -2315,4 +2327,12 @@ func _site_progress(fv: Village) -> void:
 				GameAudio.fx("child_laugh", "Village", -4.0)
 				GameAudio.fx("chime", "Room", -8.0)
 	_site_seen = now
-	notebook_note.site_marks = marks
+	_set_site_marks(marks)
+
+
+func _set_site_marks(marks: Array) -> void:
+	if marks.is_empty() and _site_marks.is_empty():
+		return
+	_site_marks = marks
+	if site_marks_ctl != null:
+		site_marks_ctl.queue_redraw()

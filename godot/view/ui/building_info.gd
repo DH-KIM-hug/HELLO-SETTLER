@@ -42,7 +42,7 @@ var _t := 0.0
 var _sig := ""
 var _swipe := 0.0
 var _thumb_type := ""
-var _thumbs := {}                    # 종류 → 썸네일 Control (한 번 찍어 다시 씀)
+var _thumbs := {}                    # 종류|모델 → 썸네일 Control (한 번 찍어 다시 씀)
 
 var panel: PanelContainer
 var warn_row: VBoxContainer
@@ -298,21 +298,22 @@ func _refresh() -> void:
 	lines_box.visible = not (f["lines"] as PackedStringArray).is_empty()
 	story_l.text = f["story"]
 	story_l.visible = String(f["story"]) != ""
-	_set_thumb(b.site_type())
+	_set_thumb(b.site_type(), b.id)
 	_layout.call_deferred()
 
 
-func _set_thumb(type: String) -> void:
-	if type == _thumb_type:
+func _set_thumb(type: String, variant := 0) -> void:
+	var key := "%s|%s" % [type, BuildingThumb.model_name(type, variant)]     # 오두막처럼 모델이 여럿이면 마을의 그 집 모델
+	if key == _thumb_type:
 		return
-	_thumb_type = type
+	_thumb_type = key
 	for c: Control in thumb_box.get_children():     # 한 번 찍은 그림은 숨겨 두고 다시 씀 (작은 화면을 다시 그리지 않음 · 카드와 함께 풀림)
 		c.visible = false
-	var t: Control = _thumbs.get(type)
+	var t: Control = _thumbs.get(key)
 	if t == null:
-		t = BuildingThumb.rect(type, THUMB_PX)
+		t = BuildingThumb.rect(type, THUMB_PX, variant)
 		t.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		_thumbs[type] = t
+		_thumbs[key] = t
 		thumb_box.add_child(t)
 	t.visible = true
 
