@@ -34,7 +34,7 @@ const TRAIL_D := 3.0            # 길에서 이보다 먼 목적지 → 오솔�
 const TRAIL_CELL := 4.0
 const TRAIL_W := 0.8
 const TRAIL_MAX := 16.0          # 이보다 긴 오솔길은 만들지 않는다 (먼 탐험은 곧장)
-const FACE_JITTER := 0.07       # 건물 방향 흔들림 (라디안)
+const FACE_JITTER := 0.12       # 건물 방향 흔들림 (라디안 — 2026-11-09 자리 잡기: 줄 맞춘 격자가 아니게 조금 더)
 
 ## 띠 그리기
 const K := 1.6                 # 가장자리 기울기 (값/칸) — 클수록 또렷
@@ -223,6 +223,13 @@ static func _ring_spots(v: Village, pl: Dictionary, size: float) -> Array:
 
 
 static func _street_spot(v: Village, size: float, type: String) -> Variant:
+	if Siting.active(v):
+		return Siting.street_spot(v, size, type)      # [자리 잡기] 점수 (sim/siting.gd) — 고리 · 2~3채 뜸 · 시끄러운 일터와 떨어짐
+	return _street_spot_first(v, size, type)
+
+
+## (옛 방식 — 첫날 대본 동안) 광장 둘레 첫 고리 → 큰길 양쪽 안쪽부터 첫 빈 자리
+static func _street_spot_first(v: Village, size: float, type: String) -> Variant:
 	var pl := plan(v)
 	# 첫 고리: 광장 둘레 (창고·교회·집 — 마을의 얼굴)
 	if true:
@@ -256,6 +263,8 @@ static func _side_pt(pl: Dictionary, k: int, d: float, o: float) -> Vector2:
 ## 밭: 집들 너머 큰길가 — 볕·물기 좋은 곳 + 이미 있는 밭 곁 (가지런한 줄)
 static func _farm_spot(v: Village, size: float) -> Variant:
 	var pl := plan(v)
+	var on := Siting.active(v)
+	var tf: Dictionary = Siting.resource_field(v, Siting.fields(v), "tree") if on else {}
 	var off := HALF_W + 0.4 + size
 	var best: Variant = null
 	var bv := -INF
@@ -264,8 +273,10 @@ static func _farm_spot(v: Village, size: float) -> Variant:
 			var d := RP + FARM_FROM
 			while d < RP + FARM_FROM + 22.0:
 				var p := _side_pt(pl, k, d, side * off)
-				if v.is_free(p.x, p.y, size) and _spaced(v, p, size, 0.5):
+				if v.is_free(p.x, p.y, size) and _spaced(v, p, size, 0.5) and (not on or _house_clear(v, p, size)):
 					var val := v.farm_mult(p.x, p.y) - d * 0.025
+					if on:                                   # [자리 잡기] 평평한 땅 · 숲은 벌목장 몫
+						val -= Siting.SLOPE_W * Siting.slope_at(v, p) + 0.05 * Siting.trees_at(v, p, 2, tf)
 					for b in v.buildings:
 						if b.type == "농장" and Vector2(b.x, b.y).distance_to(p) < size * 2.0 + 1.6:
 							val += 0.25          # 밭 곁 → 밭이 모여 줄을 이룬다
@@ -275,6 +286,14 @@ static func _farm_spot(v: Village, size: float) -> Variant:
 						best = p
 				d += SCAN
 	return best
+
+
+## 밭이 집 마당을 파고들지 않게 (집과 벽 사이 GAP)
+static func _house_clear(v: Village, p: Vector2, size: float) -> bool:
+	for b in v.buildings:
+		if b.is_house() and Vector2(b.x, b.y).distance_to(p) < b.size() + size + GAP:
+			return false
+	return true
 
 
 ## 방앗간·맷돌간: 밭이 가장 많은 큰길에서 밭 바로 안쪽 (밭 → 방앗간 → 광장 화덕이 한 길로 이어지게)

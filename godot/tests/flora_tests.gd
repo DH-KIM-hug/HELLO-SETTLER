@@ -580,6 +580,11 @@ func test_blow() -> void:
 func test_ride() -> void:
 	var v := settled("온대", 4, 23)
 	v.advance(3.0 * H)
+	# 짓던 터는 다 지어 둔다 — 돌아오는 길에 터가 다 지어지면 모두 모여 기뻐하느라(ResidentAI.cancel) 돌아오는 일이 끊긴다.
+	# 언제 다 지어지는지는 마을 배치(자리 잡기 — sim/siting.gd)에 따라 달라 이 시험이 볼 것이 아니다
+	for b in v.buildings:
+		if not b.built:
+			b.built = true
 	var f := v.flora
 	f.trust = true
 	var kid: Resident = null
@@ -601,7 +606,8 @@ func test_ride() -> void:
 	var flew := Vector2(kid.x, kid.y).distance_to(from)
 	check(flew >= Balance.RIDE_DIST[0] * 0.5 and top > 3.0 and f.riders.is_empty(), "%.1f칸을 날아 내려앉음 (가장 높이 %.1f)" % [flew, top])
 	var t0 := v.t
-	while v.t - t0 < 2.0 * H and not v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("꽃씨를 타고")):
+	# 4시간까지 — 내려앉는 자리(꽃 자리·바람)에 따라 모닥불까지 20칸 넘게 걸어야 할 때가 있다 (돌아오면 바로 끝남)
+	while v.t - t0 < 4.0 * H and not v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("꽃씨를 타고")):
 		v.step(1.0)
 	var line: Array = v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("꽃씨를 타고"))
 	check(not line.is_empty() and Vector2(kid.x, kid.y).distance_to(v.fire) < 4.0, "걸어서 돌아옴 — %s" % (line[0]["text"] if not line.is_empty() else "-"))
