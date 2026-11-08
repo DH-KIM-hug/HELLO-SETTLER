@@ -2,7 +2,7 @@
 ## 발견한 것은 그림 · 처음 발견한 주민 · 날짜 · 한 줄, 못 한 것은 실루엣 + 한 줄 힌트 (숫자·확률 없음).
 ## ENTRIES = 발견 표 하나 (DISCOVERIES 8 '데이터 테이블'): 25종 + 곁가지 4종. 조건 판정·효과는 sim/discovery.gd (Discovery.make 한 곳에서 기록).
 ## 지금 시뮬레이션에 있는 발견 (live): W1 소금 · W2 진흙 · F2 약초 · F3 씨앗을 심다 · F5 효모 · S1 세상의 끝 · S2 세상 끝의 샘 ·
-##   S3 해의 길 · P1 글 · P4 장례 (DISCOVERIES 10종) + 곁가지 누룩 · 푸른 가루 · 얼룩버섯 · 물고기를 아끼는 지혜. 나머지는 힌트만.
+##   S3 해의 길 · P1 글 · P4 장례 · L5 땅속의 열 (뜨거운 별의 땅 흔들림 뒤 — sim/core_warmth.gd, A28b) (DISCOVERIES 11종) + 곁가지 누룩 · 푸른 가루 · 얼룩버섯 · 물고기를 아끼는 지혜. 나머지는 힌트만.
 ## 발견은 그 병의 것 (DISCOVERIES 1.4) → 넓은 세상이면 같은 병의 모든 무리를 합친다 (가장 먼저 발견한 무리·사람).
 class_name Codex
 extends RefCounted
@@ -61,8 +61,9 @@ const ENTRIES := [
 		"line": "", "say": "", "likes": {"job": ["농장"]}, "live": false},
 	{"id": "hot_spring", "doc": "L5", "cat": "땅과 바위", "size": "보통", "pts": 10.0, "name": "땅속의 열", "icon": "", "art": "disc_hot_spring",
 		"hint": "겨울에도 눈이 쌓이지 않는 땅", "found": "파 보니 따뜻한 물이 솟았다.",
-		"cond": "핵이 큰 병에서 따뜻한 땅이 드러남", "effect": "온천 (건강↑, 겨울 땔감↓)",
-		"line": "", "say": "", "likes": {}, "live": false},
+		"cond": "핵이 큰 병(뜨거운 별)에서 땅이 흔들린 뒤 따뜻한 땅이 드러남 (sim/core_warmth.gd — A28b)", "effect": "온천 (추위 ×0.85, 겨울 땔감 ×0.8)",
+		"line": "%s 땅이 흔들리고 난 자리에서 김이 오르는 것을 보았다. 파 보니 따뜻한 물이 솟았다. 사람들은 그 물에 언 손을 녹였다.",
+		"say": "따뜻해! 땅에서 따뜻한 물이 나와!", "likes": {"child": true}, "live": true},
 	# ── 3.3 숲과 생물 ──
 	{"id": "reed", "doc": "F1", "cat": "숲과 생물", "size": "작은", "pts": 5.0, "name": "갈대", "icon": "", "art": "disc_reed",
 		"hint": "강이 스며드는 습지의 키 큰 풀", "found": "습지의 키 큰 풀을 엮으니 바구니가 되었다.",

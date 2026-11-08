@@ -86,7 +86,7 @@ func test_table() -> void:
 	check(codes == ["W1", "W2", "W3", "W4", "W5", "W6", "L1", "L2", "L3", "L4", "L5", "F1", "F2", "F3", "F4", "F5", "S1", "S2", "S3", "S4", "S5", "P1", "P2", "P3", "P4"],
 		"DISCOVERIES 3장 순서")
 	var live := docs.filter(func(e: Dictionary) -> bool: return e["live"]).map(func(e: Dictionary) -> String: return e["doc"])
-	check(live.size() == 10, "25종 가운데 10종이 시뮬레이션에 있음 %s" % str(live))
+	check(live.size() == 11, "25종 가운데 11종이 시뮬레이션에 있음 (A28b L5 땅속의 열 — 뜨거운 별) %s" % str(live))
 	var keys := ["id", "doc", "cat", "size", "pts", "name", "icon", "art", "hint", "found", "cond", "effect", "line", "say", "likes", "live"]
 	check(Codex.ENTRIES.all(func(e: Dictionary) -> bool: return keys.all(func(k: String) -> bool: return e.has(k))), "모든 줄에 같은 칸 (%d칸)" % keys.size())
 	check(Codex.ENTRIES.all(func(e: Dictionary) -> bool: return String(e["hint"]) != "" and String(e["found"]) != ""), "모든 발견에 힌트 · 찾은 뒤 한 줄")

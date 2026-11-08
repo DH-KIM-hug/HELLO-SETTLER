@@ -179,7 +179,7 @@ func _on_dawn(v: Village) -> void:
 	_night_sum = 0.0
 	_night_n = 0
 	if v.t >= Balance.GROVE_FIRST and v.t - grove_last >= Balance.GROVE_REST and avg >= Balance.GROVE_HUMID:
-		var p := clampf(Balance.GROVE_P * (1.0 + (avg - Balance.GROVE_HUMID) / 0.15), 0.0, 0.95)
+		var p := clampf(Balance.GROVE_P * (1.0 + (avg - Balance.GROVE_HUMID) / 0.15) * CoreWarmth.shroom(v), 0.0, 0.95)     # [핵] 서늘한 별은 버섯이 잦음 (A28b)
 		if rng.randf() < p:
 			grove(v)
 	# 꽃차 (행복 +, 그날) · 남는 꽃잎 → 노란 물감
@@ -274,10 +274,11 @@ func add_shroom(v: Village, p: Vector2, kind: String, g := 0.02) -> Dictionary:
 
 ## 하나씩 천천히: 김이 높을 때만, 축축한 자리를 골라
 func _spawn_single(v: Village, dt: float, humid: float) -> void:
+	humid += CoreWarmth.shroom_damp(v)            # [핵] 서늘한 별: 이끼가 버섯 발치의 축축함을 붙듦 (A28b — 병의 김은 그대로, 보통 별은 0)
 	if v.t < Balance.SHROOM_FIRST or humid < Balance.SHROOM_HUMID_MIN or live_shrooms() >= Balance.SHROOM_MAX:
 		return
 	var f := clampf((humid - Balance.SHROOM_HUMID_MIN) / (Balance.SHROOM_HUMID_FULL - Balance.SHROOM_HUMID_MIN), 0.0, 1.0)
-	if rng.randf() >= Balance.SHROOM_RATE_DAY * f * dt / Balance.DAY:
+	if rng.randf() >= Balance.SHROOM_RATE_DAY * f * CoreWarmth.shroom(v) * dt / Balance.DAY:     # [핵] 서늘한 별 ×·뜨거운 별 × (A28b)
 		return
 	var kind := _roll_kind("w")
 	var best: Variant = null
@@ -378,6 +379,7 @@ func _near_trees(v: Village, p: Vector2, r: float) -> bool:
 func _grow_shrooms(v: Village, dt: float, humid: float) -> void:
 	if shrooms.is_empty():
 		return
+	humid += CoreWarmth.shroom_damp(v)            # [핵] (A28b — _spawn_single과 같게)
 	var any_gone := false
 	for s: Dictionary in shrooms:
 		if s["gone"]:
@@ -628,6 +630,8 @@ func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 				v.stock[k] = float(v.stock.get(k, 0.0)) + r.carry_amt
 				if k == "버섯":
 					stats["picked"] += r.carry_amt
+					if o["mode"] != "mix":
+						CoreWarmth.snail_bonus(v, r.carry_amt)     # [핵] 서늘한 별 — 버섯 갓 밑의 달팽이 덤 (A28b, 보통 별은 0)
 					if o["mode"] == "mix":
 						tainted += r.carry_amt
 						stats["mixed"] += 1

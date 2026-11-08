@@ -41,9 +41,9 @@ static func season_grow(v: Village) -> float:
 	var row := climate_row(v)
 	var c: Dictionary = v.created_date
 	var dd := float(doy(int(c["month"]), int(c["day"]))) + float(day) + 0.5
-	var ts := float(row[0]) - float(row[1]) * cos(TAU * (dd - Balance.COLDEST_DOY) / 365.0)
+	var ts := float(row[0]) + CoreWarmth.temp(v) - float(row[1]) * cos(TAU * (dd - Balance.COLDEST_DOY) / 365.0)   # [핵] 병의 따뜻함 (A28b)
 	v._sg_day = day
-	v._sg = clampf(1.0 + (ts - Balance.SEASON_GROW_T) * Balance.SEASON_GROW_K, Balance.SEASON_GROW_MIN, Balance.SEASON_GROW_MAX)
+	v._sg = clampf(1.0 + (ts - Balance.SEASON_GROW_T) * Balance.SEASON_GROW_K, Balance.SEASON_GROW_MIN, Balance.SEASON_GROW_MAX + CoreWarmth.grow_cap(v))
 	return v._sg
 
 
@@ -68,7 +68,7 @@ static func base_temp(v: Village, tt: float) -> float:
 	var dd := float(doy(int(c["month"]), int(c["day"]))) + (v.start_clock + tt) / Balance.DAY
 	var season := -float(row[1]) * cos(TAU * (dd - Balance.COLDEST_DOY) / 365.0)
 	var h := fmod(v.start_clock + tt, Balance.DAY) / Balance.HOUR
-	return float(row[0]) + season + float(row[2]) * day_curve(h)
+	return float(row[0]) + CoreWarmth.temp(v) + season + float(row[2]) * day_curve(h)     # [핵] 서늘한 별 −·뜨거운 별 + (A28b)
 
 
 static func temperature_at(v: Village, x: float, y: float) -> float:
@@ -107,6 +107,9 @@ static func protection(v: Village, r: Resident, heat_raw: float) -> Array:
 		mc *= Balance.COTTON_COLD                     # [하늘의 것] 솜을 넣은 옷 ×0.8 (입는 것이라 다른 것과 겹침 — WORLD_EVENTS 2.7)
 	if indoor and GiantPlants.quilt_on(v, r):
 		mc *= Balance.QUILT_COLD                      # 솜 이불 — 집 안 추위 ×0.75 (덮는 것이라 곱함, health.md 메인 판단 ①)
+	if indoor:
+		mc *= CoreWarmth.bed_cold(v)                  # [핵] 서늘한 별의 이끼 이불 (A28b — 보통 별은 1)
+	mc *= CoreWarmth.spring_cold(v)                   # [핵] 뜨거운 별의 온천을 알면 (발견 L5 — 아니면 1)
 	return [mc, mh]
 
 
@@ -306,7 +309,7 @@ static func _fuel(v: Village, dt: float, tb: float) -> void:
 				v.stats["cold_house_secs"] = float(v.stats.get("cold_house_secs", 0.0)) + dt
 				continue
 		b.fuel_on = true
-		b.fuel_acc = maxf(0.0, b.fuel_acc - dt * (Balance.FUEL_STONE if b.type == "석조주택" else 1.0) / Balance.FUEL_EVERY)
+		b.fuel_acc = maxf(0.0, b.fuel_acc - dt * (Balance.FUEL_STONE if b.type == "석조주택" else 1.0) * CoreWarmth.fuel_mult(v) / Balance.FUEL_EVERY)   # [핵] 온천 (A28b)
 
 
 ## 이 집에 땔감을 날라야 하나 — 몇 개까지
@@ -363,6 +366,7 @@ static func _hourly(v: Village, clinic: Array) -> void:
 		if hm != null and int(occ.get(hm.id, 0)) >= hm.cap():
 			p0 *= Balance.ILL_CROWDED
 		p0 *= age_mult(r)
+		p0 *= CoreWarmth.ill_mult(v)          # [핵] 서늘한 별: 추운 철엔 이끼 이불로 덜 앓음 (A28b — 보통 별은 1, 난수 흐름 그대로)
 		var u := v.health_rng.randf()
 		if wmax < 0.0:
 			wmax = _where_max(v.climate())
