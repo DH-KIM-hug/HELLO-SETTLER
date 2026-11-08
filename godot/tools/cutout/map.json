@@ -1,0 +1,54 @@
+{
+ "front": {
+  "0": "figure",
+  "1": "head",
+  "2": "drape",
+  "3": "braid",
+  "4": "torso",
+  "5": "sash",
+  "6": "skirt",
+  "7": "arm_l",
+  "8": "arm_r",
+  "9": "leg_l",
+  "10": "leg_r"
+ },
+ "q_front": {
+  "0": "figure",
+  "1": "head",
+  "2": "drape",
+  "3": "braid",
+  "4": "torso",
+  "5": "skirt",
+  "6": "sash",
+  "7": "arm_l",
+  "8": "arm_r",
+  "9": "leg_l",
+  "10": "leg_r"
+ },
+ "q_back": {
+  "0": "figure",
+  "1": "head",
+  "2": "drape",
+  "3": "braid",
+  "4": "torso",
+  "5": "skirt",
+  "6": "sash",
+  "7": "arm_l",
+  "8": "arm_r",
+  "9": "leg_l",
+  "10": "leg_r"
+ },
+ "back": {
+  "0": "figure",
+  "1": "head",
+  "2": "drape",
+  "3": "braid",
+  "4": "torso",
+  "5": "sash",
+  "6": "skirt",
+  "7": "arm_l",
+  "8": "arm_r",
+  "9": "leg_l",
+  "10": "leg_r"
+ }
+}

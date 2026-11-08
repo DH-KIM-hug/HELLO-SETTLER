@@ -1,0 +1,6 @@
+{
+ "front":   ["drape","leg_l","leg_r","skirt","torso","sash","arm_l","arm_r","head","braid"],
+ "q_front": ["drape","leg_r","arm_r","leg_l","skirt","torso","sash","head","braid","arm_l"],
+ "q_back":  ["drape","leg_l","leg_r","skirt","arm_l","torso","sash","head","braid","arm_r"],
+ "back":    ["drape","leg_l","leg_r","skirt","torso","sash","arm_l","arm_r","head","braid"]
+}
