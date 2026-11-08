@@ -1,6 +1,6 @@
 ## 밀 숲 터(A27-c) · 건물 멀리 LOD 캡처 — 5일째 마을의 밭을 자람 단계마다 (싹 · 푸른 줄기 · 익음) 가까이·기본 확대로,
 ## 그리고 마을을 기본 확대(ppu 16)에서 건물 가까이 모양 강제 / 멀리 LOD 강제로 나란히.
-## (ppu 40 · 16 — 16은 perf_probe의 village_far와 같은 기본 확대)
+## (ppu 64 · 32 · 16 — 16은 perf_probe의 village_far와 같은 기본 확대)
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot --resolution 1080x2340 -s res://tools/shot_wheat_forest.gd -- <접두어>
 ##   결과: godot_shots/<접두어>_wheat_<단계>_ppu<확대>.png · _lod_near.png · _lod_far.png
 extends SceneTree
@@ -78,7 +78,7 @@ func _process(_d: float) -> bool:
 			v.on_built(farm)
 		scene.refresh()
 		for st in 3:
-			for z in [40, 16]:
+			for z in [64, 32, 16]:
 				jobs.append(["stage", st, z])
 		jobs.append(["lod", 0])
 		jobs.append(["lod", 1])
