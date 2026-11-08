@@ -1,7 +1,9 @@
 ## 초거대 해바라기·씨앗비·목화 화면 (design/gdd/flower-forest.md Visual · R3·R4, ROADMAP F-2) — WorldWater.sunflowers·sf_seeds·cotton.
-## 마을 확대 (ppu ≥ FAR_PPU): 주민 대여섯 폭의 줄기 기둥 + 잎 — 6칸 위는 엷어지는 재질(render/toon_fade.gdshader, 아트 바이블 겹 2)로
-##   그 아래 마을이 보이게 — 와 땅 위 꽃판 그림자 (꽃잎 고리 + 씨앗 원판 실루엣 데칼) + 줄기·잎 그림자 (GD 3.0).
-## 멀리 (거인의 방·세상 전체): 멀리 LOD 줄기 + 밝은 꽃판 (하늘 쪽으로 74° 들어 등불 쪽으로 고개, 가을엔 숙임).
+## 마을 확대 (ppu ≥ VILLAGE_PPU, GD 3.0 "마을에선 줄기와 그림자만" 2026-11-08): 주민 대여섯 폭의 줄기 기둥 + 아래 잎 — 6칸 위는
+##   엷어지는 재질(render/toon_fade.gdshader, 아트 바이블 겹 2)로 그 아래 마을이 보이게, STRETCH_FROM 위는 늘여서 늘 화면 위로 빠져나감
+##   (꽃판은 화면 위 밖 — 숨김). 잎도 숨김 (디더된 판이 공중에 뜨지 않게) — 잎 그림자 데칼은 남음 — 와 땅 위 꽃판 그림자 (꽃잎 고리 + 씨앗 원판 실루엣 데칼) + 줄기·잎 그림자.
+## 물러나며 (VILLAGE_PPU → WORLD_PPU): 끊는 높이가 꽃판 위로 올라가고 엷어짐이 풀려 꽃판이 디더로 서서히 나타남.
+## 멀리 (거인의 방·세상 전체): 멀리 LOD 줄기 + 밝은 꽃판 (하늘 쪽으로 58° 들어 등불 쪽으로 고개, 가을엔 숙임).
 ## 그림자는 모두 데칼 — 시뮬레이션 F1 자리 (GiantPlants.shadow_center): 높이 h의 점은 줄기에서 −head_dir × SF_SHADOW_OFF × h/꽃판 높이.
 ##   (해바라기 몸은 진짜 그림자를 드리우지 않는다 — 시뮬 그늘과 어긋나지 않게. 몸은 SF_LAYER 층이라 자기 데칼을 받지 않음.)
 ## 씨앗비: 떨어지기 SEED_WARN 전부터 땅 위 작은 그림자가 커지고 → 씨앗이 내려와 박힘 + 먼지 → 땅 위 씨앗 (굴리면 굴러감).
@@ -13,16 +15,21 @@ const MODEL := "flora/giant_sunflower"
 const STALK_R := 4.0              # 모델 줄기 반지름 (그림자 띠 폭, build_sunflower STALK_R0~R1 사이)
 ## 잎 (build_sunflower.py LEAF_SPEC 거울): [높이 몫, 방위 (블렌더 XY, rad), 길이, 반폭] — 잎 그림자 자리
 const LEAVES := [[0.20, 0.4, 24.0, 9.0], [0.33, 2.6, 22.0, 8.4], [0.46, 4.6, 20.0, 7.6], [0.60, 1.4, 17.0, 6.6], [0.73, 3.6, 14.0, 5.4]]
-const FADE_FROM := 6.0            # 칸 (세상) — 여기서부터 엷어짐 (밀 숲과 같은 겹 2)
-const FADE_TO := 16.0
-const FADE_MIN := 0.4             # 줄기
-const FADE_MIN_LEAF := 0.2        # 잎·꽃판 — 넓어서 더 많이 비움
-const LEAF_FADE_FROM := 2.0
-const LEAF_FADE_TO := 8.0
-const RING_K := 2.6               # 꽃잎 끝 반지름 = 그늘 반지름(shadow_r) × 이것 (모델 꽃판 반지름 14.4 ≈ 5 × 2.6, 원판 ≈ 시뮬 그늘)
+const FADE_FROM := 4.0            # 칸 (세상) — 여기서부터 엷어짐 (밀 숲과 같은 겹 2), 길게 풀어 기둥이 그루터기처럼 끊겨 보이지 않게
+const FADE_TO := 20.0
+const FADE_MIN := 0.55            # 줄기 (디더 칸의 55% — 초록 위 초록이라 0.4는 기둥으로 안 읽힘)
+const RING_K := 3.9               # 꽃잎 끝 반지름 = 그늘 반지름(shadow_r) × 이것 (모델 꽃판 반지름 21.6 ≈ 5 × 3.9 — 꽃판을 1.5배로 키움 2026-11-08)
 const SF_LAYER := 1 << 10         # 해바라기 몸의 렌더 층 (층 11) — 그림자 데칼이 줄기에 번지지 않게
 const SF_SHADOW := Color(0.07, 0.14, 0.2, 0.68)   # 꽃판·줄기·잎 그림자 (원판은 텍스처 알파 1, 꽃잎 0.88)
 const FAR_PPU := 4.0
+const VILLAGE_PPU := 9.0          # 이보다 가까우면 마을 시점: 꽃판 숨김, 줄기는 CUT 높이에서 사라짐
+const WORLD_PPU := 6.0            # 이보다 멀면 세상 보기: 꽃판까지 다 보임, 엷어짐 없음 (주민이 점만 하니 가릴 걱정 없음)
+const STRETCH_FROM := 20.0        # 칸 (세상) — 마을 시점: 이 위의 줄기를 STRETCH배로 늘여 기둥이 늘 화면 위로 빠져나감
+const STRETCH := 5.0              #   (51칸 → 175칸, ppu 9 화면 높이보다 큼). 꽃판은 숨김이라 늘인 꼭대기는 보이지 않는다
+const LEAF_CUT := 4.0             # 칸 — 물러나는 동안 잎을 쓸어 내리는 높이. 마을 시점에선 잎을 다 숨김 (맨 아래 잎도 6~10칸 공중의 큰 판 —
+                                  #   마을을 통째로 가림). 잎은 땅 위 그림자로만 (2026-11-08 메인 검토)
+const HEAD_CUT := 30.0            # 칸 — 물러나는 동안 꽃판을 쓸어 내리는 높이
+const CUT_OFF := 70.0             # 세상 보기의 끊는 높이 — 꽃판 꼭대기(약 65칸) 위 = 끊지 않음
 const LOD_GAP := 0.5
 const FALL := 360.0               # 마지막 병 6분 (보통 배속 현실 1.25초)에 하늘에서 내려옴
 const DUST := 900.0               # 박힌 뒤 먼지 (병 15분)
@@ -43,8 +50,8 @@ static var _shadow_tex: Texture2D
 static var _ring_tex: Texture2D
 static var _band_tex: Texture2D
 static var _leaf_tex: Texture2D
-static var _fade_mat: ShaderMaterial
-static var _fade_leaf_mat: ShaderMaterial
+var _mats := {}                   # "stalk" · "leaf" · "head" · "head_dry" → ShaderMaterial (이 화면 것 — 확대 따라 값이 바뀜)
+var _blend := -1.0                # 1 = 마을 시점, 0 = 세상 보기
 static var _dust_mat: StandardMaterial3D
 
 
@@ -125,22 +132,61 @@ static func _part(parent: Node3D, model: String, pn: String, giant := false) -> 
 	return mi
 
 
-## 마을 확대의 줄기·잎·꽃판: 세상 높이 FADE_FROM 위로 디더로 엷어짐 (선은 남김 — 아트 바이블 겹 2). 셰이더 높이는 모델 칸이라 ÷SCALE.
-static func fade_mat(leaf := false) -> ShaderMaterial:
-	if _fade_mat == null:
-		var m := ShaderMaterial.new()
-		m.shader = load("res://render/toon_fade.gdshader")
-		Toon._light(m)
-		m.set_shader_parameter("view_fill", Style.VIEW_FILL)
-		m.set_shader_parameter("fade_from", FADE_FROM / SCALE)
-		m.set_shader_parameter("fade_to", FADE_TO / SCALE)
-		m.set_shader_parameter("min_alpha", FADE_MIN)
-		_fade_mat = m
-		_fade_leaf_mat = m.duplicate() as ShaderMaterial
-		_fade_leaf_mat.set_shader_parameter("min_alpha", FADE_MIN_LEAF)
-		_fade_leaf_mat.set_shader_parameter("fade_from", LEAF_FADE_FROM / SCALE)    # 잎은 넓은 덮개 — 맨 아래 잎(10칸)부터 엷게
-		_fade_leaf_mat.set_shader_parameter("fade_to", LEAF_FADE_TO / SCALE)
-	return _fade_leaf_mat if leaf else _fade_mat
+## 줄기·잎·꽃판 재질: 세상 높이 FADE_FROM 위로 디더로 엷어지고 (선은 화면 외곽선 — 아트 바이블 겹 2), 마을 시점에선 CUT 위로 사라짐.
+## 셰이더 높이는 모델 칸이라 ÷SCALE. y_off = 부품 원점의 모델 높이 (꽃판).
+func fade_mat(kind: String, y_off := 0.0) -> ShaderMaterial:
+	if _mats.has(kind):
+		return _mats[kind]
+	var m := ShaderMaterial.new()
+	m.shader = load("res://render/toon_fade.gdshader")
+	Toon._light(m)
+	m.set_shader_parameter("view_fill", Style.VIEW_FILL)
+	m.set_shader_parameter("y_offset", y_off)
+	var stalk := kind == "stalk"                      # 잎·꽃판은 높이 엷어짐 없음 (끊기만)
+	m.set_shader_parameter("fade_from", FADE_FROM / SCALE if stalk else 100000.0)
+	m.set_shader_parameter("fade_to", FADE_TO / SCALE if stalk else 100001.0)
+	_mats[kind] = m
+	_apply_blend(m, kind)
+	return m
+
+
+func _apply_blend(m: ShaderMaterial, kind: String) -> void:
+	var k := maxf(_blend, 0.0)
+	var head_k := smoothstep(0.0, 0.3, k)            # 다가갈 때: 먼저 꽃판·잎이 위에서부터 쓸려 사라지고 (k 0~0.3)
+	var up_k := smoothstep(0.3, 0.6, k)              #   그다음 줄기가 위로 늘어 화면 위로 빠져나가고 (k 0.3~0.6 — 맨 꼭대기가 보이지 않게)
+	var grow_k := smoothstep(0.6, 1.0, k)            #   마지막으로 가림 엷어짐이 들어온다 (k 0.6~1)
+	var cf := CUT_OFF
+	var band := 1.0
+	if kind == "stalk":
+		m.set_shader_parameter("min_alpha", lerpf(1.0, FADE_MIN, grow_k))
+		m.set_shader_parameter("stretch_from", STRETCH_FROM / SCALE)
+		m.set_shader_parameter("stretch", lerpf(1.0, STRETCH, up_k))
+	elif kind == "leaf":
+		m.set_shader_parameter("min_alpha", 1.0)    # 잎은 디더하지 않음 — 온전히 보이거나 숨거나
+		cf = lerpf(CUT_OFF, LEAF_CUT, head_k)
+		band = 0.6
+	else:
+		m.set_shader_parameter("min_alpha", 1.0)
+		cf = lerpf(CUT_OFF, HEAD_CUT, head_k)
+		band = 14.0
+	m.set_shader_parameter("cut_from", cf / SCALE)
+	m.set_shader_parameter("cut_to", (cf + band) / SCALE)
+
+
+## 마을 시점 ↔ 세상 보기 (ppu VILLAGE_PPU ~ WORLD_PPU 사이를 부드럽게). 1 = 마을 시점.
+func blend_check() -> void:
+	var k := 1.0
+	if force_lod == 1:
+		k = 0.0
+	elif force_lod != 0:
+		k = smoothstep(WORLD_PPU, VILLAGE_PPU, view_ppu())
+	if far_lod:
+		k = 0.0
+	if absf(k - _blend) < 0.002:
+		return
+	_blend = k
+	for kind: String in _mats:
+		_apply_blend(_mats[kind], kind)
 
 
 static func _aa(d: float, px: float) -> float:
@@ -154,7 +200,7 @@ static func ring_tex() -> Texture2D:
 		const DISC := 0.47
 		var img := Image.create(N, N, false, Image.FORMAT_RGBA8)
 		var px := 2.0 / N * 1.4
-		var rings := [[26, 1.0, 0.0, 0.5], [22, 0.86, 0.5, 0.56]]     # [꽃잎 수, 끝 반지름, 위상, 반폭 몫]
+		var rings := [[24, 1.0, 0.0, 0.5], [22, 0.82, 0.5, 0.56]]     # [꽃잎 수, 끝 반지름, 위상, 반폭 몫]
 		for y in N:
 			for x in N:
 				var q := Vector2((x + 0.5) / N * 2.0 - 1.0, (y + 0.5) / N * 2.0 - 1.0) / 0.98
@@ -166,7 +212,8 @@ static func ring_tex() -> Texture2D:
 						var sec: float = TAU / int(ring[0])
 						var ph: float = a / sec - float(ring[2])
 						var off: float = (ph - roundf(ph)) * sec
-						var t: float = (r - DISC * 0.8) / (float(ring[1]) - DISC * 0.8)
+						var tip: float = float(ring[1]) * (1.0 - 0.09 * fposmod(roundf(ph) * 0.618, 1.0))   # 꽃잎 길이가 제각각 (모델과 같이)
+						var t: float = (r - DISC * 0.8) / (tip - DISC * 0.8)
 						if t < 0.0 or t > 1.0:
 							continue
 						var hw: float = float(ring[3]) * sec * pow(sin(PI * clampf(t * 0.92 + 0.04, 0.0, 1.0)), 0.75)
@@ -256,23 +303,31 @@ func _build() -> void:
 		near.name = "near"
 		root.add_child(near)
 		var heads := {}
+		var leaf_mi: MeshInstance3D = null
 		for pn: String in ["stalk", "leaves", "head", "head_dry"]:
 			var mi := _part(near, MODEL, pn, true)
 			if mi != null:
-				mi.material_override = fade_mat(pn != "stalk")    # 6칸 위로 엷어짐 — 꽃판은 대개 화면 위 밖, 들어와도 엷게
+				var kind := pn if pn.begins_with("head") else ("stalk" if pn == "stalk" else "leaf")
+				var y_off := 0.0
+				if pn.begins_with("head"):
+					y_off = (Art.parts(MODEL)[pn]["origin"] as Vector3).y
+				mi.material_override = fade_mat(kind, y_off)
 				if pn.begins_with("head"):
 					heads[pn] = mi
+				elif pn == "leaves":
+					leaf_mi = mi
 		var far := Node3D.new()
 		far.name = "far"
 		root.add_child(far)
 		for pn: String in ["stalk__far", "leaves__far", "head__far", "head_dry__far"]:
 			var mi := _part(far, MODEL, pn, true)
 			if mi != null and pn.begins_with("head"):
+				mi.material_override = Art.flat_mat()          # 껍데기 외곽선 없음 — 멀리선 얇은 꽃잎이 선에 묻혀 거뭇해짐
 				heads[pn] = mi
 		var lv: Array = []
 		for k in LEAVES.size():
 			lv.append(_decal(1.0, leaf_tex(), SF_SHADOW))
-		_flowers.append({"root": root, "near": near, "far": far, "heads": heads, "id": int(sf["id"]),
+		_flowers.append({"root": root, "near": near, "far": far, "heads": heads, "id": int(sf["id"]), "leaf_mi": leaf_mi,
 			"band": _decal(1.0, band_tex(), SF_SHADOW), "leaves": lv, "shadow": _decal(1.0, ring_tex(), SF_SHADOW)})
 	_apply_lod()
 
@@ -302,6 +357,7 @@ func sync(_dt: float) -> void:
 	if _flowers.size() != ww.sunflowers.size():
 		_build()
 	lod_check()
+	blend_check()
 	var t := now()
 	for i in _flowers.size():
 		var f: Dictionary = _flowers[i]
@@ -310,9 +366,11 @@ func sync(_dt: float) -> void:
 		var st := String(sf.get("stage", "bloom"))
 		var dry := st == "droop" or st == "dry"
 		var yaw := atan2(d.x, d.y)
+		if f["leaf_mi"] != null:
+			(f["leaf_mi"] as MeshInstance3D).visible = _blend < 0.3   # 마을 시점: 잎은 그림자로만
 		for pn: String in f["heads"]:
 			var h: MeshInstance3D = f["heads"][pn]
-			h.visible = pn.begins_with("head_dry") == dry and st != "grow"
+			h.visible = pn.begins_with("head_dry") == dry and st != "grow" and _blend < 0.3   # 마을 시점: 꽃판은 화면 위 밖
 			h.rotation = Vector3(1.3 if dry else 0.0, yaw, 0.0)     # 가을엔 숙임 (얼굴이 땅 쪽으로)
 		_sync_shadow(f, sf, t, d, dry)
 	_sync_seeds(t)

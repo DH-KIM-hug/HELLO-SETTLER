@@ -11,6 +11,13 @@ uniform vec3 albedo : source_color = vec3(1.0);
 uniform float fade_from = 6.0;      // 모델 높이 (칸) — 여기서부터 엷어지기 시작
 uniform float fade_to = 9.0;        // 여기부터 min_alpha
 uniform float min_alpha = 0.35;     // 가장 엷을 때 남는 몫 (디더 칸의 비율)
+// 위쪽 끊기 (초거대 해바라기 마을 확대 — 줄기가 화면 위로 사라짐): cut_from~cut_to 사이에서 0까지 엷어짐. 기본값 = 끊지 않음
+uniform float cut_from = 100000.0;
+uniform float cut_to = 100001.0;
+uniform float y_offset = 0.0;       // 부품 원점의 모델 높이 (꽃판처럼 원점이 발이 아닌 부품)
+// 위로 늘이기 (초거대 해바라기 마을 시점): stretch_from 위의 꼭짓점을 stretch배로 위로 — 줄기가 늘 화면 위로 빠져나가게. 1 = 그대로
+uniform float stretch_from = 0.0;
+uniform float stretch = 1.0;
 varying float h;
 
 vec3 srgb_to_linear(vec3 c) {
@@ -18,11 +25,15 @@ vec3 srgb_to_linear(vec3 c) {
 }
 
 void vertex() {
-	h = VERTEX.y;
+	h = VERTEX.y + y_offset;
+	if (stretch > 1.0 && h > stretch_from) {
+		VERTEX.y += (h - stretch_from) * (stretch - 1.0);
+	}
 }
 
 void fragment() {
 	float a = mix(1.0, min_alpha, smoothstep(fade_from, fade_to, h));
+	a = min(a, 1.0 - smoothstep(cut_from, cut_to, h));
 	if (a < 0.999) {
 		const float BAYER[16] = float[16](0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0, 15.0, 7.0, 13.0, 5.0);
 		ivec2 p = ivec2(FRAGCOORD.xy) % 4;
