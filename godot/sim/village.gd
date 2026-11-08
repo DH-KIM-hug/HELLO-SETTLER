@@ -142,6 +142,7 @@ var dogs: Dogs                        # [강아지] 집 강아지·마을 강아
 var warmth: CoreWarmth                # [핵] 병의 따뜻함 캐시 (이끼 덮임·밭 이슬 배율 — sim/core_warmth.gd · 저장 안 함)
 var jar_notes: Array = []             # [핵] 별지기의 수첩 한 줄 — 처음 눈에 띈 병의 성질 {t, id, text} (A28b · OPENING v4.0-6, 저장됨)
 var lean: LeanSeasons                 # 빠듯한 철 캐시 (푸른 밀 고개·애벌레 많은 해 — docs/BALANCE.md B-1, sim/lean_seasons.gd · 저장 안 함)
+var kitchen: Kitchen                  # 우유·계란 없는 부엌 — 진딧물 목장·하늘의 큰 알·씨앗 방앗간 (E3-14 — sim/kitchen.gd)
 var caterpillars: Caterpillars        # 애벌레 → 고치 → 나비 · 애벌레 잡이 · 꿀방울 — 무리마다 (production-chain R7 — sim/caterpillars.gd)
 var direct_route := Balance.DIRECT_ROUTE   # 바로 보냄 (production-chain R3) — 시험이 끌 수 있게 (저장 안 함)
 var _stall: Dictionary = {}           # 건물 id → 막힘 판정 (Production.stall_tick — 저장 안 함, 불러온 첫 걸음엔 사건 없음)
@@ -278,6 +279,7 @@ func _init_health(seed_v: int) -> void:
 	hand = GiantHand.new()                # [거인의 손]
 	flora = Flora.new(seed_v)             # [하늘의 것]
 	caterpillars = Caterpillars.new()     # 애벌레 한살이 (production-chain R7-5)
+	kitchen = Kitchen.new()               # 우유·계란 없는 부엌 (E3-14)
 	dogs = Dogs.new(seed_v)               # [강아지] 처음 걸음에 마을 강아지 둘 (첫 병이면 꿀떡이도)
 	wild = Wildlife.new(seed_v)           # [들짐승] (넓은 세상의 다른 무리는 JarWorld.place_kit이 첫 무리 것으로 바꿈)
 	if not default_created.is_empty():
@@ -764,7 +766,7 @@ func food_total() -> float:
 
 func food_types() -> int:
 	var n := 0
-	for k in Balance.FOODS:
+	for k in Balance.FOODS_ALL:
 		if float(stock.get(k, 0.0)) >= 1.0:
 			n += 1
 	if Production.wheat_total(self) >= 1.0:
@@ -996,6 +998,7 @@ func step(dt: float) -> void:
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
 		GiantPlants.hourly(self)      # 해바라기 철·씨앗비 날·목화 (flower-forest R3·R4)
 		LeanSeasons.hourly(self)      # 빠듯한 철이 오고 감을 알림 · 애벌레 떼 (BALANCE B-1)
+		Kitchen.hourly(self)          # 우유·계란 없는 부엌 — 진딧물 목장·큰 알·씨앗 방앗간 (E3-14 — sim/kitchen.gd)
 		CoreWarmth.hourly(self)       # [핵] 병의 따뜻함 — 땅 흔들림 · 처음 보인 차이의 수첩 한 줄 (A28b, 보통 별은 아무것도 안 함)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
@@ -1432,6 +1435,7 @@ func _update_building(b: Building, dt: float) -> void:
 			harvest_check(w)
 		if b.type == "빵집" or b.type == "화덕":
 			Discovery.on_bake(self)
+			Kitchen.on_bake(self, b, w)               # 씨앗 반죽 빵 +5% · 단물·씨앗 우유·기름 = 좋은 빵 (E3-14)
 			if int(stats.get("first_bread", 0)) == 0:
 				stats["first_bread"] = 1
 				log_line("공용 화덕에서 처음으로 빵이 구워졌다. 고소한 냄새에 온 마을이 모여들었다.")                 # F5 효모: 첫 빵의 시각
@@ -3744,7 +3748,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
@@ -3762,6 +3766,8 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 		d["dogs"] = dogs.to_dict()    # [강아지]
 	if caterpillars != null:
 		d["caterpillars"] = caterpillars.to_dict()
+	if kitchen != null:
+		d["kitchen"] = kitchen.to_dict()
 	if owns_water and wild != null:
 		d["wild"] = wild.to_dict()    # [들짐승] 병 하나에 한 번 (다른 무리는 첫 무리 것을 함께 — JarWorld.from_dict)
 	var bl := []
@@ -3807,6 +3813,7 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	v.flora = Flora.from_dict(d["flora"])
 	v.dogs = Dogs.from_dict(d["dogs"]) if d.has("dogs") else Dogs.new(int(v.rng.seed % 100000))     # 옛 저장: 처음 걸음에서 강아지를 놓는다
 	v.caterpillars = Caterpillars.from_dict(d["caterpillars"]) if d.has("caterpillars") else Caterpillars.new()   # 옛 저장: 처음 걸음에서 꽃 무리를 놓는다
+	v.kitchen = Kitchen.from_dict(d["kitchen"]) if d.has("kitchen") else Kitchen.new()     # 옛 저장: 목장·알 없이 (E3-14)
 	v.wild = Wildlife.from_dict(d["wild"]) if d.has("wild") else Wildlife.new(int(v.rng.seed % 100000))   # 옛 저장: 처음 걸음에서 무리를 놓는다
 	for bd: Dictionary in d.get("buildings", []):
 		var b := Building.from_dict(bd)

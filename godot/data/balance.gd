@@ -1013,3 +1013,50 @@ const TREMOR_FEAR := 0.02               # 깨어 있는 사람마다 두려움 �
 const HOT_SPRING_P := 0.25              # 흔들린 뒤 발견 L5 '땅속의 열'(온천)이 될 몫
 const HOT_SPRING_COLD := 0.85           # 온천: 추위 노출 × (몸을 녹임)
 const HOT_SPRING_FUEL := 0.8            # 온천: 집 땔감이 타는 빠르기 ×
+
+
+# ───────────────────────── E3-14 우유·계란 없는 부엌 (GD 3.0 · docs/FOOD.md 5 · sim/kitchen.gd) ─────────────────────────
+## 메인 판단 (사용자 위임, 2026-11-08): 숫자는 작게 — 측정(tools/balance_v5_report.gd 6씨앗 × 60일)에서 인구·지폐·굶주림·빠듯함 ±10% 안.
+## 먹을 것 표: FOODS는 그대로 두고 (덧붙이기만) 부엌 것을 앞뒤에 붙인 FOODS_ALL을 sim이 먹을 때·셀 때 쓴다.
+const KITCHEN_FOODS_FIRST := ["알"]                 # 하늘의 큰 알 — 잔치라 다른 먹을 것보다 먼저 먹음
+const KITCHEN_FOODS_LAST := ["단물", "씨앗 우유"]    # 평소엔 빵 반죽에 들어가고, 다른 먹을 것이 모자랄 때만 그냥 먹음
+const FOODS_ALL := KITCHEN_FOODS_FIRST + FOODS + KITCHEN_FOODS_LAST
+const KITCHEN_SPOIL := {"단물": 0.5, "씨앗 우유": 0.25, "알": 0.08}   # 새벽마다 상하는 몫 (단물은 빨리 — village-economy R2-3 '반나절치')
+# 진딧물 목장 (village-economy D4 — 키 `목장` = 진딧물 목장 · 목장지기)
+const APHID_MONTHS := [3, 4, 5, 6, 7, 8, 9, 10, 11]   # 단물이 나는 달 (겨울엔 진딧물이 쉼 — village-economy 146)
+const APHID_FIND_MONTHS := [5, 6, 7, 8]  # 장미 줄기에서 진딧물 무리를 찾을 수 있는 달 (장미 덤불 — 여름 꽃)
+const APHID_FIND_AGE := 6.0 * DAY        # 첫 빵 뒤, 마을이 이만큼 지나야 (첫 여정의 숫자를 흔들지 않게)
+const APHID_FIND_P := 0.12               # 그 철 하루 한 번 (10시) 찾을 몫 — 마을 씨앗·날의 해시 (난수 흐름 안 씀)
+const APHID_FIND_HOUR := 10
+const APHID_FIND_R := 6.0                # 꽃 무리 이 안에 깨어 있는 어른이 있어야
+const APHID_START := 4                   # 찾은 무리
+const APHID_BUY := 6                     # 별지기가 내려 준 '진딧물 한 무리'
+const APHID_MAX := 12
+const APHID_GROW := 1                    # 철이면 하루에 한 마리씩 늚 (목장지기가 돌본 날)
+const HONEYDEW_PER := 3.0                # 진딧물 한 마리 = 하루 단물 (식량 단위) — 12마리 36 ≈ 열다섯 명 하루 필요의 2.5%
+const TEND_HOURS := [7, 11]              # 아침에 톡톡 (이 시각 안에 한가한 어른이 있으면 — 정시마다 봄)
+const TEND_TIME := 300.0                 # 톡톡 건드려 받는 시간 (병 5분)
+const LADYBUG_P := 0.1                   # 철이면 하루 이 몫으로 무당벌레가 옴 (해시)
+const LADYBUG_EAT := 2                   # 그때 잃는 진딧물
+# 하늘의 큰 알 (wallet-shop R6 — 메추리알 800지폐, 2일차부터, 병마다 3일에 하나)
+const EGG_COOLDOWN := 3.0 * DAY
+const EGG_DAYS := 3.0                    # 알 하나 = 떨어진 때 마을의 식량 이만큼 일치 (전부 거인 몫)
+const EGG_CREW := 3                      # 굴리는 사람 (모자라면 있는 만큼, 하나도 없으면 EGG_WAIT 뒤 그 자리에서 깸)
+const EGG_ROLL_TIME := 600.0             # 알을 흙에서 빼내 굴리기 시작 (병 10분)
+const EGG_WAIT := 0.5 * DAY
+const SHELL_WATER_R := 6.0               # 깬 자리 곁 이 안에 물이 있으면 껍데기 반쪽은 배, 아니면 큰 물통
+# 씨앗 우유 · 기름 · 씨앗 반죽 (맷돌간·방앗간 겸용 — 해바라기씨)
+const PRESS_HOUR := 14                   # 하루 한 번, 이 시각에 맷돌간 일꾼이
+const PRESS_SEEDS_DAY := 1.0             # 하루에 빻는 씨앗 수 (씨앗 하나 = SEED_FOOD)
+const PRESS_FOOD_DAYS := 1.0             # 먹을 것이 하루치 아래면 씨앗은 그냥 먹을 것으로 둠
+const MILK_YIELD := 1.1                  # 씨앗 1 → 씨앗 우유 1.1 (물에 갬)
+const BINDER_PER_SEED := 8.0             # 씨앗 하나 → 씨앗 반죽 8 (빵 여덟 판)
+const BINDER_KEEP := 8.0
+const OIL_PER_SEED := 3.0                # 씨앗 하나 → 씨앗 기름 3 (빵 판마다 OIL_PER_BAKE)
+const OIL_KEEP := 6.0
+# 빵에 넣기 (화덕·빵집이 한 판 구울 때마다)
+const BINDER_PER_BAKE := 1.0
+const BINDER_BONUS := 0.05               # 씨앗 반죽을 섞으면 그 판 빵 +5% (BREAD_YIELD에)
+const SWEET_PER_BAKE := 2.0              # 단물·씨앗 우유는 반죽에 들어가 그만큼 빵이 됨 (먹을 것 그대로)
+const OIL_PER_BAKE := 0.25
+const HAPPY_FINE_BREAD := 0.02           # 지난 하루 단물 빵·우유 빵·기름 빵을 먹었으면 행복 + (빵 행복에 더함)

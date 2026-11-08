@@ -45,6 +45,9 @@ const ITEMS := {
 		"kind": "food", "res": "밀", "days": 4.0, "size": 2.2},
 	"각설탕": {"tab": "먹을 것·재료", "price": 950, "giant": "각설탕 한 조각", "inside": "하얀 돌집 — 마을 사람들의 일주일 양식 (설탕)",
 		"kind": "food", "res": "설탕", "days": 7.0, "size": 1.7},
+	# (E3-14 · wallet-shop R6) 하늘의 큰 알 — 굴려 와 깨면 온 마을이 사흘 잔치 (sim/kitchen.gd). 병마다 3일에 하나 (Kitchen.egg_lock)
+	"메추리알": {"tab": "먹을 것·재료", "price": 800, "giant": "메추리알 하나", "inside": "허리 높이의 큰 알 — 온 마을이 사흘 잔치를 해요",
+		"kind": "egg", "size": 1.1},
 	"나무젓가락": {"tab": "먹을 것·재료", "price": 450, "giant": "나무젓가락 한 짝", "inside": "거대한 통나무 — 통나무 여든 개",
 		"kind": "stuff", "res": "통나무", "amt": 80, "size": 2.0},
 	"자갈 한 알": {"tab": "먹을 것·재료", "price": 300, "giant": "자갈 한 알", "inside": "바위산 — 돌 마흔 개",
@@ -79,6 +82,9 @@ const ITEMS := {
 	# 짐승 시뮬레이션(ROADMAP B3)이 아직 없어 모두 '곧' + 까닭 (wait)
 	"작은 강아지 한 쌍": {"tab": "생물", "price": 600, "giant": "작은 강아지 한 쌍", "inside": "사냥을 돕고 늑대·곰팡이에 짖어요. 아이들의 친구",
 		"lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
+	# (E3-14 · wallet-shop D2) 진딧물 한 무리 — 꽃줄기에 목장이 생기고 아침마다 단물 (sim/kitchen.gd). 목장이 가득하면 못 삼 (Kitchen.aphid_lock)
+	"진딧물 한 무리": {"tab": "생물", "price": 400, "giant": "진딧물 한 무리", "inside": "꽃줄기에 작은 목장 — 아침마다 달콤한 단물을 받아요",
+		"kind": "aphids", "n": Balance.APHID_BUY, "size": 1.0, "era": 1},
 	"작은 돼지 한 쌍": {"tab": "생물", "price": 900, "giant": "작은 돼지 한 쌍", "inside": "양돈장에서 고기", "lock": "곧", "wait": WAIT_ANIMAL, "era": 2},
 	"작은 양 한 쌍": {"tab": "생물", "price": 800, "giant": "작은 양 한 쌍", "inside": "목장의 양털과 고기", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
 	"작은 소 한 쌍": {"tab": "생물", "price": 1800, "giant": "작은 소 한 쌍", "inside": "우유 · 밭 갈기 · 수레", "lock": "곧", "wait": WAIT_ANIMAL, "era": 1},
@@ -119,6 +125,8 @@ static func update_unlocks(v: Village) -> PackedStringArray:
 		want["돌봄"] = true
 	if v.first_harvest_t >= 0.0 and day > v.cal_day(v.first_harvest_t):
 		want["땅"] = true
+	if v.era >= 1:
+		want["생물"] = true                     # (E3-14 · wallet-shop D2) 마을 시대 — 진딧물 한 무리
 	for k: String in ITEMS:
 		if wild_shown(v, k):
 			want["생물"] = true                 # 병의 짐승이 사라지거나 몹시 줄면 '생물' 탭이 열린다 (다시 넣기 카드)
@@ -218,6 +226,10 @@ static func card(v: Village, item: String) -> Dictionary:
 		lock2 = "손에 들고 있어요"
 	if lock2 == "" and item == Immigrants.ITEM and Immigrants.left_today() <= 0:
 		lock2 = "내일 또 와요"                # 하루 5번 (현실 하루)
+	if lock2 == "" and v.kitchen != null and String(d.get("kind", "")) == "egg":
+		lock2 = v.kitchen.egg_lock(v)          # 병마다 3일에 하나 (wallet-shop R6 · 한도 7)
+	if lock2 == "" and v.kitchen != null and String(d.get("kind", "")) == "aphids":
+		lock2 = v.kitchen.aphid_lock(v)
 	if lock2 == "" and int(d.get("era", 0)) > v.era:
 		lock2 = "%s 시대에" % Balance.ERAS[mini(int(d["era"]), Balance.ERAS.size() - 1)]
 	var inside2 := String(d["inside"])
