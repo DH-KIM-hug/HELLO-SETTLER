@@ -28,6 +28,15 @@ const BLD_FAR_IN := 22.0
 const BLD_FAR_OUT := 26.0
 var bld_far := false            # 지금 멀리 LOD인가
 var bld_force_lod := -1         # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (캡처·시험)
+## (P1 3차) 멀리 LOD 건물 묶음: 멀리에서는 건물마다 "far" 노드·짐 더미("piles") 대신, 가만히 선 건물 전부의 같은 (메시·재질·그림자)를
+## 메시 하나로 구워 합침 (건물 약 30채 × 2~3번 → 재질 수만큼). 노드는 그대로 두고 (시험·떨어지는 연출이 노드를 씀) 숨기기만 한다.
+## 움직이는 건물(하늘에서 떨어지는 중 — 노드 변환이 기록과 다름)은 묶음에서 빼고 제 노드로 그린다.
+var bld_batch := true           # false = 예전처럼 건물마다 (비교 측정)
+var _far_batch: Node3D
+var _far_items := {}            # 건물 id → [[메시, 재질 또는 null, 그림자 설정, 마을 기준 Transform3D]…]
+var _far_rest := {}             # 건물 id → 기록할 때의 노드 변환
+var _far_moving := {}           # 건물 id → true (움직이는 중 — 제 노드로)
+var _far_dirty := false
 ## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
 ## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
 const WHEAT_MODELS := ["buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_ripe"]
@@ -211,6 +220,8 @@ func _flora_lod() -> void:
 ## 건물 LOD는 sync와 따로 매 화면 (병 밖 보기처럼 sync가 멈춘 동안에도 축소를 따라가게)
 func _process(_dt: float) -> void:
 	_bld_lod()
+	if bld_far and bld_batch:
+		_check_far_moving()
 
 
 ## 건물 멀리 LOD 고르기 (매 화면 — 바뀔 때만 노드를 건드림)
@@ -235,8 +246,13 @@ func _bld_lod(force := false) -> void:
 	if want == bld_far and not force:
 		return
 	bld_far = want
-	for id in _blds:
-		_apply_bld_lod(_blds[id])
+	if bld_far and (_far_dirty or _far_batch == null):
+		_sync_far_batch()             # 안에서 _apply_bld_lod
+	else:
+		for id in _blds:
+			_apply_bld_lod(_blds[id])
+	if _far_batch != null:
+		_far_batch.visible = bld_far
 	if _yard != null:
 		_yard.visible = not bld_far
 
@@ -247,7 +263,11 @@ func _apply_bld_lod(n: Node3D) -> void:
 	if near == null or far == null:
 		return
 	near.visible = not bld_far or far.get_child_count() == 0       # 멀리 모양이 없는 모델은 가까이 그대로
-	far.visible = bld_far and far.get_child_count() > 0
+	var batched := bld_far and _batched(n)
+	far.visible = bld_far and far.get_child_count() > 0 and not batched
+	var piles := n.get_node_or_null("piles") as Node3D
+	if piles != null:
+		piles.visible = not batched
 
 
 ## 꽃숲 묶음 수 (시험·측정): {"total": 놓은 수, "drawn": 지금 그리는 수, "far": 멀리 덩이인가}
@@ -712,6 +732,9 @@ func _sync_buildings() -> void:
 				_build_shape(n, b)          # 개축 중: 옛 집 + 비계
 			_build_site(n, b)
 		_build_piles(n, b)
+		n.set_meta("bid", b.id)
+		_record_far(b.id, n)
+		_apply_bld_lod(n)
 	for id in _blds.keys():
 		if not seen.has(id):
 			(_blds[id] as Node3D).queue_free()
@@ -719,8 +742,94 @@ func _sync_buildings() -> void:
 			_bld_key.erase(id)
 			if _yard_xf.erase(id):
 				_yard_dirty = true
+			if _far_items.erase(id):
+				_far_dirty = true
+			_far_rest.erase(id)
+			_far_moving.erase(id)
 	if _yard_dirty:
 		_sync_yard()
+	if _far_dirty and bld_far:
+		_sync_far_batch()
+
+
+## (P1 3차) 이 건물의 멀리 모양("far" 노드)과 짐 더미("piles")를 묶음용으로 기록 — 멀리 모양이 없으면 묶지 않음
+func _record_far(id: int, n: Node3D) -> void:
+	_far_dirty = _far_items.erase(id) or _far_dirty
+	_far_moving.erase(id)
+	var far := n.get_node_or_null("far") as Node3D
+	if not bld_batch or far == null or far.get_child_count() == 0:
+		return
+	var items: Array = []
+	for root: Node3D in [far, n.get_node_or_null("piles") as Node3D]:
+		if root == null:
+			continue
+		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
+			if mi.mesh == null or not mi.visible:
+				continue
+			var xf := mi.transform
+			var p := mi.get_parent()
+			while p != null and p != n:
+				xf = (p as Node3D).transform * xf
+				p = p.get_parent()
+			items.append([mi.mesh, mi.material_override, mi.cast_shadow, xf])
+	_far_items[id] = items
+	_far_rest[id] = n.transform
+	_far_dirty = true
+
+
+func _sync_far_batch() -> void:
+	_far_dirty = false
+	if _far_batch != null:
+		_far_batch.queue_free()
+	_far_batch = _node(self)
+	_far_batch.name = "far_batch"
+	_far_batch.visible = bld_far
+	# 같은 (재질 · 그림자)끼리 한 메시로 구워 합침 — 모델마다 메시가 달라 MultiMesh로는 모델 수만큼 그려짐 (멀리 모양 약 6k 삼각형이라 굽기 값쌈)
+	var groups := {}                # [재질, 그림자] → SurfaceTool
+	for id in _far_items:
+		if _far_moving.has(id) or not _blds.has(id):
+			continue
+		var bx: Transform3D = _far_rest[id]
+		for it: Array in _far_items[id]:
+			var mesh: Mesh = it[0]
+			for si in mesh.get_surface_count():
+				var mat: Material = it[1] if it[1] != null else mesh.surface_get_material(si)
+				var k := [mat, it[2]]
+				if not groups.has(k):
+					groups[k] = SurfaceTool.new()
+				(groups[k] as SurfaceTool).append_from(mesh, si, bx * (it[3] as Transform3D))
+	for k: Array in groups:
+		var mi := MeshInstance3D.new()
+		mi.mesh = (groups[k] as SurfaceTool).commit()
+		mi.material_override = k[0]
+		mi.cast_shadow = k[1]
+		_far_batch.add_child(mi)
+	for id in _blds:
+		_apply_bld_lod(_blds[id])
+
+
+## 묶음에 든 건물인가 (멀리 모양 기록이 있고 지금 움직이지 않음)
+func _batched(n: Node3D) -> bool:
+	var id: int = n.get_meta("bid", -1)
+	return bld_batch and _far_items.has(id) and not _far_moving.has(id) and _far_batch != null and not _far_dirty
+
+
+## 매 화면 (멀리일 때만): 노드 변환이 기록과 달라진 건물(떨어지는 중)은 묶음에서 빼고, 제자리로 돌아오면 다시 넣음
+func _check_far_moving() -> void:
+	var changed := false
+	for id in _far_items:
+		var n: Node3D = _blds.get(id)
+		if n == null:
+			continue
+		var moving := not n.transform.is_equal_approx(_far_rest[id])
+		if moving != _far_moving.has(id):
+			changed = true
+			if moving:
+				_far_moving[id] = true
+			else:
+				_far_moving.erase(id)
+	if changed or _far_dirty:
+		_sync_far_batch()
 
 
 ## (P1 2차) 앞마당 소품을 모양마다 MultiMesh로 (집 15채 × 2 = 노드 30개 × 몸·껍데기·그림자 → 모양 3개). 낮은 것이라 그림자 끔.
@@ -994,7 +1103,10 @@ func _build_site(n: Node3D, b: Building) -> void:
 
 
 ## 건물 앞에 쌓인 산출물
-func _build_piles(n: Node3D, b: Building) -> void:
+func _build_piles(n0: Node3D, b: Building) -> void:
+	var n := Node3D.new()              # (P1 3차) 짐 더미는 "piles" 아래 — 멀리 묶음에 들면 숨김
+	n.name = "piles"
+	n0.add_child(n)
 	var i := 0
 	for k in b.out:
 		var cnt := mini(6, int(b.out[k]))

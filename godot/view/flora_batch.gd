@@ -6,9 +6,10 @@
 ##      + 키 큰 꽃 몫 TALL, 둘레 여유)에 든 칸만 버퍼에 담는다. 보는 땅이 REFRESH칸 넘게 움직일 때만 다시 담는다 (몇 화면에 한 번).
 ##      보이는 것이 없으면 그 모양은 그리지 않음. (사각형으로 자르면 기본 확대의 비스듬한 화면이 마을 장식 전체를 덮어 효과가 없었다.)
 ##      — 덩이를 칸마다 MultiMesh로 쪼개면 그리기 횟수가 칸 수 × 모양 수로 늘어난다 (예산 300번을 바로 넘음). 그래서 쪼개지 않는다.
-##   ② 거리 단계 (LOD): 확대가 FAR_PPU 아래면 모양마다 '멀리' 덩이 (높이 띠 4개 × 육각 기둥, 띠마다 그 높이의 평균 색 — 삼각형 약 64,
-##      껍데기 외곽선 그대로, 접힌 곳 선 없음). FAR_PPU + LOD_GAP 위로 돌아오면 가까이 (모바일은 visibility_range 페이드가 없어
-##      확대 값으로 바꾸고 틈을 둬서 경계에서 깜빡이지 않게). 아주 멀리(TINY_PPU 아래)는 납작한 것(이끼·클로버·풀 포기…)을 숨김.
+##   ② 거리 단계 (LOD, P1 3차): 모델의 "__far" 노드 (art/src/flora_far.py — 가까이 모양을 줄인 것, 삼각형 약 15~35%)를
+##      Art.model_far로 — 접힌 곳 선·껍데기 외곽선 없음 (화면 깊이 외곽선이 둘레를 그림). 땅에 붙은 잔것(CLUTTER: 덤불·클로버·
+##      버섯·고사리)은 ppu < LOW_FAR_PPU, 그 밖(꽃·장미 덤불·수국·이끼 둔덕…)은 ppu < BIG_FAR_PPU에서 바꾼다 (경계 ±FAR_GAP 이력 — 모바일은
+##      visibility_range 페이드가 없어 확대 값으로). 아주 멀리(TINY_PPU 아래)는 납작한 것(이끼·클로버·풀 포기…)을 숨김.
 ## 자식 MultiMeshInstance3D의 multimesh.mesh는 가까이 단계에서 Art.model(이름)["mesh"] 그대로 (시험이 모양을 확인함).
 class_name FloraBatch
 extends RefCounted
@@ -17,11 +18,13 @@ const CELL := 4.0                 # 미리 나눠 두는 격자 (칸)
 const REFRESH := 2.0              # 카메라가 보는 땅의 테두리가 이만큼(칸) 넘게 움직이면 다시 담음
 const MARGIN := 3.0               # 화면 둘레 여유 (칸, 칸의 반 대각선과 REFRESH 몫은 따로 더함) — 그림자가 화면 안으로 드리우는 몫
 const TALL := 13.0                # 키 큰 꽃이 화면 아래 밖에서 위로 솟아 들어오는 몫 (땅 위 칸, 화면 높이 14 × cos 48° / sin 48°)
-## 멀리 덩이는 아직 끔 (2026-11-08 캡처 perf_ta_after3_forest_5: 면 방향이 뒤집혀 껍데기 외곽선 색만 보이고, 육각 기둥이
-## 줄기 + 꽃 머리 실루엣을 못 살림 → '꽃숲'으로 안 읽힘). 블렌더에서 모양마다 "__far" 노드를 만들면 그것을 쓰도록 바꿀 자리.
-const FAR_LOD := false
-const FAR_PPU := 6.0              # 이보다 멀리 축소하면 멀리 덩이
-const LOD_GAP := 1.5
+## 멀리 모양으로 바꾸는 확대 (P1 3차 — 메인 판단 2026-11-08: 낮은 것은 24, 큰 꽃은 ppu 16에서 나란히 비교해 구별이 어려우면 24, 아니면 12)
+const LOW_FAR_PPU := 24.0
+const BIG_FAR_PPU := 8.0          # 12에서는 장미 소용돌이·데이지 꽃잎이 바뀌는 게 보였음 (p1c_fc2_village_ppu10_*)
+const FAR_GAP := 0.1              # 경계 ±10%
+## ppu 16에서 나란히 비교해 가까이와 구별이 안 되는 잔것만 (2026-11-08 p1c_fc_* 캡처 — 장미·수국·이끼 둔덕은 줄이면 티가 남)
+const CLUTTER := ["clover", "mushrooms", "bush", "bush_b", "bush_flower", "bush_berry", "fern", "flowers", "flowers_b",
+	"flora/clover_a", "flora/clover_b", "flora/clover_flower", "flora/fern_a", "flora/fern_b"]
 const TINY_PPU := 1.5             # 이보다 멀리: 납작한 것은 숨김 (1~2px도 안 됨)
 const TINY_GAP := 0.5
 ## (P1 2차) 아트 바이블 8.9: ppu < 24에서 꽃·풀의 접힌 곳 선(lines MultiMesh)을 끈다 — 경계 ±10% 이력.
@@ -38,16 +41,17 @@ const HULL_MIN_H := 2.0
 const TINY := ["tuft", "clover", "lily", "flora/moss_a", "flora/moss_c", "flora/clover_a", "flora/grass_b", "flora/twig_pile_a",
 	"flora/twig_pile_b", "flora/fallen_leaf_dry", "rock_small", "flowers", "flowers_b"]
 
-static var _proxies := {}         # 모델 이름 → 멀리 덩이 ArrayMesh
-
 var parent: Node3D
 var cull := true                  # false = 늘 전부 (캡처·시험)
-## 모양 → {"cells": {Vector2i: PackedFloat32Array}, "n": 전체 수, "near": [MMI…], "far": MMI 또는 null, "shadow": bool}
+## 모양 → {"cells": {Vector2i: PackedFloat32Array}, "n": 전체 수, "near": [MMI…], "far": MMI 또는 null (모델에 "__far"가 없으면 늘 null),
+##   "far_mesh": Mesh 또는 null, "big": 키 큰 꽃인가, "shadow": bool}
 var _kinds := {}
 var _rect := Rect2()              # 지금 담은 보는 땅의 테두리 사각형 (부모 좌표 xz)
 var _vis := {}                    # 지금 담은 칸 (Vector2i → true)
 var _all := true                  # 지금 전부 담겨 있나
-var far := false
+var far := false                  # 꽃(잔것 밖)이 멀리 모양인가
+var far_low := false              # 잔것(CLUTTER)이 멀리 모양인가
+var force_far := -1               # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (나란히 비교 캡처)
 var tiny_off := false
 var lines_off := false            # ppu < LINES_PPU: 접힌 곳 선 끔
 var n_total := 0                  # 놓은 인스턴스 수
@@ -90,7 +94,8 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 			near.append(mmi)
 			if key == "lines":
 				lines = mmi
-		_kinds[k] = {"cells": cells, "n": xfs.size(), "near": near, "lines": lines, "far": null, "shadow": shadow, "low": hgt < HULL_MIN_H}
+		_kinds[k] = {"cells": cells, "n": xfs.size(), "near": near, "lines": lines, "far": null, "shadow": shadow, "low": hgt < HULL_MIN_H,
+			"far_mesh": Art.model_far(k)["mesh"], "big": not (k in CLUTTER)}
 		n_total += xfs.size()
 	_all = true
 	_rect = Rect2()
@@ -123,13 +128,11 @@ func _mmi(mesh: Mesh, shadow: bool) -> MultiMeshInstance3D:
 func update(ppu: float, view: Dictionary) -> void:
 	var has_view := bool(view.get("ok", false))
 	var rect: Rect2 = view.get("rect", Rect2())
-	var want_far := far
-	if not FAR_LOD:
-		want_far = false
-	elif ppu < FAR_PPU:
-		want_far = true
-	elif ppu > FAR_PPU + LOD_GAP:
-		want_far = false
+	var want_far := _hyst(far, ppu, BIG_FAR_PPU, FAR_GAP)
+	var want_far_low := _hyst(far_low, ppu, LOW_FAR_PPU, FAR_GAP)
+	if force_far >= 0:
+		want_far = force_far == 1
+		want_far_low = want_far
 	var want_tiny := tiny_off
 	if ppu < TINY_PPU:
 		want_tiny = true
@@ -140,8 +143,9 @@ func update(ppu: float, view: Dictionary) -> void:
 		want_lines_off = true
 	elif ppu > LINES_PPU * (1.0 + LINES_GAP):
 		want_lines_off = false
-	var lod_changed := want_far != far or want_tiny != tiny_off or want_lines_off != lines_off
+	var lod_changed := want_far != far or want_far_low != far_low or want_tiny != tiny_off or want_lines_off != lines_off
 	far = want_far
+	far_low = want_far_low
 	tiny_off = want_tiny
 	lines_off = want_lines_off
 	var everything := not cull or not has_view
@@ -157,6 +161,15 @@ func update(ppu: float, view: Dictionary) -> void:
 		_rect = rect
 		_vis = visible_cells(view["poly"])
 	_fill(lod_changed)
+
+
+## 확대가 at×(1−gap) 아래면 멀리, at×(1+gap) 위면 가까이, 그 사이는 그대로
+static func _hyst(cur: bool, ppu: float, at: float, gap: float) -> bool:
+	if ppu < at * (1.0 - gap):
+		return true
+	if ppu > at * (1.0 + gap):
+		return false
+	return cur
 
 
 static func _near(a: Rect2, b: Rect2) -> bool:
@@ -211,9 +224,10 @@ func _fill(lod_changed: bool) -> void:
 			var want_mat: Material = Art.flat_mat() if lines_off and bool(e["low"]) else null
 			if body.material_override != want_mat:
 				body.material_override = want_mat
-		if far:
+		var kf := far if bool(e["big"]) else far_low
+		if kf and e["far_mesh"] != null:
 			if e["far"] == null:
-				e["far"] = _mmi(proxy(k), e["shadow"])
+				e["far"] = _mmi(e["far_mesh"], e["shadow"])
 			show = [e["far"]]
 			hide = e["near"]
 		elif e["far"] != null:
@@ -262,93 +276,3 @@ static func view_rect(cam: Camera3D, parent: Node3D, y0: float, y1: float) -> Di
 		for p in pts:
 			all.append(p + back)
 	return {"ok": true, "rect": r, "poly": Geometry2D.convex_hull(all)}
-
-
-## 멀리 덩이: 모델을 높이 띠 BANDS개로 나눠, 띠마다 그 띠 삼각형들의 넓이 가중 평균 색 · 축에서의 폭(넓이 가중 85% 지점)으로
-## 육각 기둥을 쌓는다 (옆 6면 + 윗면). 원점·축은 모델 그대로라 같은 Transform을 쓴다. 껍데기 외곽선용 CUSTOM0은 Art._Acc가 채움.
-const BANDS := 4
-const SIDES := 6
-
-
-static func proxy(name: String) -> Mesh:
-	if _proxies.has(name):
-		return _proxies[name]
-	var src: ArrayMesh = Art.model(name)["mesh"]
-	var a := src.surface_get_arrays(0)
-	var pv: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var pc: PackedColorArray = a[Mesh.ARRAY_COLOR]
-	var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-	var bb := src.get_aabb()
-	var h0 := bb.position.y
-	var hh := maxf(bb.size.y, 0.001)
-	var cx := (bb.position.x + bb.end.x) * 0.5
-	var cz := (bb.position.z + bb.end.z) * 0.5
-	var col_sum: Array = []
-	var w_sum: Array = []
-	var rads: Array = []          # 띠마다 [[반지름, 넓이]…]
-	for b in BANDS:
-		col_sum.append(Color(0, 0, 0, 0))
-		w_sum.append(0.0)
-		rads.append([])
-	for t in range(0, ix.size(), 3):
-		var p0 := pv[ix[t]]
-		var p1 := pv[ix[t + 1]]
-		var p2 := pv[ix[t + 2]]
-		var area := (p1 - p0).cross(p2 - p0).length() * 0.5 + 1e-6
-		var c := (p0 + p1 + p2) / 3.0
-		var b := clampi(int((c.y - h0) / hh * BANDS), 0, BANDS - 1)
-		var cc: Color = (pc[ix[t]] + pc[ix[t + 1]] + pc[ix[t + 2]]) / 3.0
-		col_sum[b] = (col_sum[b] as Color) + cc * area
-		w_sum[b] = float(w_sum[b]) + area
-		for p: Vector3 in [p0, p1, p2]:
-			(rads[b] as Array).append([Vector2(p.x - cx, p.z - cz).length(), area])
-	var st := SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var last_col := Color(0.4, 0.6, 0.3)
-	for b in BANDS:
-		var wb: float = w_sum[b]
-		if wb <= 1e-5:
-			continue
-		var col: Color = (col_sum[b] as Color) / wb
-		col.a = 1.0
-		last_col = col
-		var rl: Array = rads[b]
-		rl.sort_custom(func(x: Array, y: Array) -> bool: return x[0] < y[0])
-		var tot := 0.0
-		for e: Array in rl:
-			tot += e[1]
-		var acc := 0.0
-		var r := 0.05
-		for e: Array in rl:
-			acc += e[1]
-			r = e[0]
-			if acc >= tot * 0.85:
-				break
-		r = maxf(r, hh * 0.02)
-		var y_lo := h0 + hh * b / BANDS
-		var y_hi := h0 + hh * (b + 1) / BANDS
-		var lin := col.srgb_to_linear()          # Art._Acc가 sRGB로 되돌린다 (glTF 꼭짓점 색과 같게)
-		for s in SIDES:
-			var a0 := TAU * s / SIDES
-			var a1 := TAU * (s + 1) / SIDES
-			var q0 := Vector3(cx + cos(a0) * r, y_lo, cz + sin(a0) * r)
-			var q1 := Vector3(cx + cos(a1) * r, y_lo, cz + sin(a1) * r)
-			var q2 := Vector3(cx + cos(a1) * r, y_hi, cz + sin(a1) * r)
-			var q3 := Vector3(cx + cos(a0) * r, y_hi, cz + sin(a0) * r)
-			var nn := Vector3(cos((a0 + a1) * 0.5), 0.0, sin((a0 + a1) * 0.5))
-			for q: Vector3 in [q0, q2, q1, q0, q3, q2]:
-				st.set_color(lin)
-				st.set_normal(nn)
-				st.add_vertex(q)
-			var top := Vector3(cx, y_hi, cz)
-			for q: Vector3 in [top, q2, q3]:
-				st.set_color(lin)
-				st.set_normal(Vector3.UP)
-				st.add_vertex(q)
-	var raw := st.commit()
-	var acc2 := Art._Acc.new()
-	acc2.add(raw, Transform3D.IDENTITY, false, true)
-	var res: Dictionary = acc2.build(Art.body_mat(), Art.line_mat())
-	var mesh: Mesh = res["mesh"] if res["mesh"] != null else src
-	_proxies[name] = mesh
-	return mesh

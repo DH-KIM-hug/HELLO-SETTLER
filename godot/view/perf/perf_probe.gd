@@ -145,9 +145,14 @@ func _run() -> void:
 			n.visible = true
 		for id in scene.view._blds:                 # 건물만 끔 (buildings GDD 열린 질문 2 — 건물 몫 실측)
 			(scene.view._blds[id] as Node3D).visible = false
+		var fb: Node3D = scene.view._far_batch       # (P1 3차) 멀리 건물 묶음
+		if fb != null:
+			fb.visible = false
 		await _measure("no_buildings_" + zn, tog, true)
 		for id in scene.view._blds:
 			(scene.view._blds[id] as Node3D).visible = true
+		if fb != null and is_instance_valid(fb):
+			fb.visible = scene.view.bld_far
 		scene.view.visible = false
 		scene.great_view.visible = false
 		await _measure("terrain_only_" + zn, tog, true)
@@ -292,7 +297,7 @@ func _goto(ppu: float, v: Village, at := Vector2.INF) -> void:
 func _measure(name: String, secs: float, toggle := false) -> void:
 	for i in 20:                                   # 데움 (불러오기·셰이더 컴파일 흔적을 빼려고)
 		await get_tree().process_frame
-	_rec = {"ft": [], "cpu": [], "gpu": [], "draw": [],
+	_rec = {"ft": [], "cpu": [], "gpu": [], "draw": [], "draw_3d": [], "draw_shadow": [], "draw_ui": [],
 		"prim": [], "obj": [], "tp": [], "proc": []}
 	_last_us = 0
 	var t0 := Time.get_ticks_msec()
@@ -306,6 +311,7 @@ func _measure(name: String, secs: float, toggle := false) -> void:
 	var ft := _stats(rec["ft"])
 	var out := {"name": name, "frames": n, "secs": snappedf(wall, 0.1), "fps": snappedf(n / maxf(wall, 0.001), 0.1), "frame_ms": ft,
 		"render_cpu_ms": _stats(rec["cpu"]), "render_gpu_ms": _stats(rec["gpu"]), "draw_calls": _stats(rec["draw"]),
+		"draw_3d": _stats(rec["draw_3d"]), "draw_shadow": _stats(rec["draw_shadow"]), "draw_ui": _stats(rec["draw_ui"]),   # 그리기 패스별 (P1 3차)
 		"primitives": _stats(rec["prim"]), "objects": _stats(rec["obj"]), "time_process_ms": _stats(rec["tp"]),
 		"scene_proc_ms": _stats(rec["proc"]), "ppu": snappedf(scene.cam.ppu, 0.01), "mem": _mem(), "t_unix": Time.get_unix_time_from_system()}
 	if not toggle:
@@ -435,6 +441,9 @@ func _process(_dt: float) -> void:
 		(_rec["cpu"] as Array).append(RenderingServer.viewport_get_measured_render_time_cpu(_vp) + RenderingServer.get_frame_setup_time_cpu())
 		(_rec["gpu"] as Array).append(RenderingServer.viewport_get_measured_render_time_gpu(_vp))
 		(_rec["draw"] as Array).append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+		(_rec["draw_3d"] as Array).append(RenderingServer.viewport_get_render_info(_vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_VISIBLE, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+		(_rec["draw_shadow"] as Array).append(RenderingServer.viewport_get_render_info(_vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_SHADOW, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
+		(_rec["draw_ui"] as Array).append(RenderingServer.viewport_get_render_info(_vp, RenderingServer.VIEWPORT_RENDER_INFO_TYPE_CANVAS, RenderingServer.VIEWPORT_RENDER_INFO_DRAW_CALLS_IN_FRAME))
 		(_rec["prim"] as Array).append(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME))
 		(_rec["obj"] as Array).append(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
 		(_rec["tp"] as Array).append(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0)

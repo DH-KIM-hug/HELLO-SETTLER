@@ -231,7 +231,9 @@ class Model:
         return self._finish(bm, faces, color, False)
 
     # -- output --
-    def export(self, out_dir=OUT_DIR, name=None):
+    def export(self, out_dir=OUT_DIR, name=None, far=None):
+        """far = optional function(objs) called after the group objects exist and before export — it may link extra
+        objects (flora_far.decimated: a "body__far" far LOD node, P1 perf pass 3)."""
         name = name or self.name
         bpy.ops.wm.read_factory_settings(use_empty=True)
         objs = []
@@ -247,8 +249,9 @@ class Model:
             bpy.context.scene.collection.objects.link(ob)
             objs.append(ob)
         self.groups = {}
+        far_n = far(objs) if far is not None else 0
         _export_glb(os.path.join(out_dir, name + ".glb"))
-        print("  %-18s %5d tris" % (name, tris))
+        print("  %-18s %5d tris%s" % (name, tris, ("  far %d" % far_n) if far is not None else ""))
         return tris
 
 

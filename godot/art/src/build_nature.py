@@ -9,8 +9,19 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, Vector, shade, mix, out_dir_from_argv  # noqa: E402
+import flora_far  # noqa: E402
 
 OUT = out_dir_from_argv()
+
+## Far LOD of the small ground clutter ("body__far", flora_far.py — P1 perf pass 3): FloraBatch swaps it in below ppu 24.
+## Target triangles (near: bush 400, bush_b 320, bush_flower 520, bush_berry 420, mushrooms 1160, fern 288, clover 588,
+## flowers 328, flowers_b 328).
+FAR_TARGET = {"bush": 110, "bush_b": 96, "bush_flower": 130, "bush_berry": 110, "mushrooms": 180, "fern": 96,
+              "clover": 90, "flowers": 100, "flowers_b": 100}
+
+
+def export(m):
+    m.export(OUT, far=flora_far.decimated(FAR_TARGET[m.name]) if m.name in FAR_TARGET else None)
 
 
 def canopy_col(top_z, low_z):
@@ -81,7 +92,7 @@ def broadleaf(name, seed, blobs, height=1.9, spread=1.15, top=3.2, lift=0.75, ro
         m.ico(r, pos=(math.cos(a) * d, math.sin(a) * d, z), scl=(1, 1, 0.82),
               color=shade("LEAF_MID" if i % 3 == 0 else "LEAF_LOW", 1.0 + 0.04 * (i % 2)), subdiv=2, smooth=True,
               lumps=0.08, group="body_nl")
-    m.export(OUT)
+    export(m)
 
 
 def build_trees():
@@ -142,7 +153,7 @@ def build_conifer():
         def cf(f, lt=lt):
             return "LEAF_LOW" if f.normal.z < 0 else (lt if f.normal.z > 0.45 else "LEAF_LOW" if k == 0 else "LEAF_MID")
         m._finish(bm, faces, "LEAF_MID", True, cf)
-    m.export(OUT)
+    export(m)
 
 
 def _bush(name, seed, blobs, flowers=0, fcols=("LOTUS", "PLASTER", "FLAME2")):
@@ -163,7 +174,7 @@ def _bush(name, seed, blobs, flowers=0, fcols=("LOTUS", "PLASTER", "FLAME2")):
         if p.z < 0.15:
             continue
         m.sphere(0.075, pos=p, scl=(1, 1, 0.7), color=fcols[i % len(fcols)], seg=5, rings=3, group="body_nl")
-    m.export(OUT)
+    export(m)
 
 
 def build_bush():
@@ -198,7 +209,7 @@ def build_flowers():
             a = k * 1.7
             m.blade((math.cos(a) * 0.05, math.sin(a) * 0.05, 0), (math.cos(a) * 0.32, math.sin(a) * 0.32, 0.2), 0.1,
                     color="TUFT" if k % 2 else shade("TUFT", 1.1))
-        m.export(OUT)
+        export(m)
 
 
 def build_stump():
@@ -212,7 +223,7 @@ def build_stump():
               color="TRUNK", seg=5, smooth=True)
     m.cyl(0.035, 0.02, 0.25, pos=(0.15, 0.1, 0.4), rot=(0.4, 0.3, 0), color="TRUNK", seg=4)            # twig
     m.sphere(0.07, pos=(0.2, 0.06, 0.66), color="LEAF_YOUNG", seg=6, rings=3)
-    m.export(OUT)
+    export(m)
 
 
 def build_sapling():
@@ -221,7 +232,7 @@ def build_sapling():
     col = canopy_col(1.1, 0.5)
     for (x, y, z, r) in ((0, 0, 0.85, 0.32), (0.2, 0.1, 0.7, 0.22), (-0.18, -0.08, 0.72, 0.22)):
         m.ico(r, pos=(x, y, z), color="LEAF_YOUNG", subdiv=1, smooth=True, colfn=col, lumps=0.15, group="body_nl")
-    m.export(OUT)
+    export(m)
 
 
 def build_mushrooms():
@@ -235,7 +246,7 @@ def build_mushrooms():
             a = i * 2.1 + k * 3
             m.sphere(0.045 * k, pos=(x + math.cos(a) * 0.15 * k, y + math.sin(a) * 0.15 * k, 0.57 * k),
                      scl=(1, 1, 0.5), color="MUSHROOM_DOT", seg=6, rings=3)
-    m.export(OUT)
+    export(m)
 
 
 def build_rocks():
@@ -247,7 +258,7 @@ def build_rocks():
     m.ico(0.42, pos=(0.75, 0.3, 0.18), scl=(1.0, 1.0, 0.8), color="ROCK", subdiv=2, colfn=mossy, lumps=0.2, seed=2, smooth=True)
     m.ico(0.3, pos=(-0.62, 0.42, 0.1), scl=(1.0, 1.0, 0.75), color="ROCK", subdiv=2, colfn=mossy, lumps=0.2, seed=3, smooth=True)
     m.ico(0.18, pos=(0.35, -0.55, 0.05), color="ROCK_DARK", subdiv=2, lumps=0.2, seed=4, smooth=True)
-    m.export(OUT)
+    export(m)
 
 
 def build_rocks_b():
@@ -262,7 +273,7 @@ def build_rocks_b():
           lumps=0.14, seed=8, smooth=True)
     for (x, y, r) in ((0.85, 0.3, 0.13), (-0.7, -0.35, 0.11), (0.2, -0.6, 0.09)):
         m.ico(r, pos=(x, y, 0.03), scl=(1.2, 1, 0.7), color=shade("ROCK", 1.05), subdiv=1, smooth=True)
-    m.export(OUT)
+    export(m)
 
 
 def build_rock_small():
@@ -271,7 +282,7 @@ def build_rock_small():
     def mossy(f):
         return "MOSS" if f.normal.z > 0.82 else "ROCK"
     m.ico(0.4, pos=(0, 0, 0.12), scl=(1.2, 1.0, 0.75), color="ROCK", subdiv=2, colfn=mossy, lumps=0.2, seed=5, smooth=True)
-    m.export(OUT)
+    export(m)
 
 
 def build_fern():
@@ -301,7 +312,7 @@ def build_fern():
                 q = (vl[k], vr[k], vr[k + 1], vl[k + 1])
                 faces.append(bm.faces.new(tuple(reversed(q)) if flip else q))
             m._finish(bm, faces, col if not flip else shade(col, 0.85), False)
-    m.export(OUT)
+    export(m)
 
 
 def build_clover():
@@ -317,7 +328,7 @@ def build_clover():
             b = k * math.tau / 3 + a
             m.sphere(0.075, pos=(cx + math.cos(b) * 0.065, cy + math.sin(b) * 0.065, z), scl=(1, 1, 0.35), color=c,
                      seg=7, rings=3, group="body_nl")
-    m.export(OUT)
+    export(m)
 
 
 def build_tuft():
@@ -330,7 +341,7 @@ def build_tuft():
         base = Vector((math.cos(b) * 0.04, math.sin(b) * 0.04, 0))
         tip = base + Vector((math.sin(a) * 0.2, math.cos(b) * 0.06, h))
         m.blade(base, tip, 0.07, color="TUFT" if i % 2 else shade("TUFT", 1.12))
-    m.export(OUT)
+    export(m)
 
 
 def build_lily():
@@ -350,7 +361,7 @@ def build_lily():
             if f.normal.z < 0:
                 f.normal_flip()
         m._finish(bm, faces, c, False)
-    m.export(OUT)
+    export(m)
 
 
 def build_lotus():
@@ -362,7 +373,7 @@ def build_lotus():
             m.sphere(0.075, pos=(math.cos(a) * rr, math.sin(a) * rr, 0.12), scl=(1, 0.6, h / 0.15),
                      rot=(0, tilt, a), color=c, seg=6, rings=4)
     m.sphere(0.05, pos=(0, 0, 0.2), color="FLAME2", seg=6, rings=3)
-    m.export(OUT)
+    export(m)
 
 
 def build_log():
@@ -374,7 +385,7 @@ def build_log():
     for (x, s) in ((-0.3, 1.0), (0.35, 0.8)):
         m.sphere(0.2 * s, pos=(x, 0, r * 1.75), scl=(1.4, 1.0, 0.45), color="MOSS", seg=8, rings=4)
     m.sphere(0.07, pos=(0.62, 0.15, 0.38), scl=(1, 1, 0.6), color="MUSHROOM_CAP", seg=6, rings=3)
-    m.export(OUT)
+    export(m)
 
 
 def build_reeds():
@@ -389,7 +400,7 @@ def build_reeds():
         m.blade(base, base + lean, 0.05, color="REED" if i % 2 else shade("REED", 0.88))
         if i % 3 == 0:
             m.cyl(0.035, 0.035, 0.16, pos=base + lean * 0.86, color="REED_HEAD", seg=5, group="body_nl")
-    m.export(OUT)
+    export(m)
 
 
 if __name__ == "__main__":

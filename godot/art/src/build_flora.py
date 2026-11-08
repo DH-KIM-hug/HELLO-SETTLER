@@ -21,6 +21,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from lowpoly import Model, PartSet, Vector, shade, mix, out_dir_from_argv  # noqa: E402
 from flora_kit import V, bezier, tube, leaf, leaf_line, cup, pad, tri_count  # noqa: E402,F401
+import flora_far  # noqa: E402
 
 ROOT = out_dir_from_argv()
 OUT = os.path.join(ROOT, "flora")
@@ -54,8 +55,22 @@ def cg(col):
     return "center_%s_nl" % col
 
 
+## Far LOD ("body__far", flora_far.py — P1 perf pass 3): decimated copy, swapped in by FloraBatch below a ppu threshold
+## (clover / fern at ppu 24, everything else at ppu 8 — flora_batch.gd). Target triangles per model; others FAR_RATIO.
+## Lower targets (rose 520, daisy 200) lost the rose spiral and opened dark gaps between daisy petals (p1c_fc2_*).
+FAR_TARGET = {"rose_red": 1000, "rose_pink": 1000, "sunflower_a": 560, "sunflower_b": 560, "morning_glory_a": 480,
+              "morning_glory_b": 480, "hydrangea_blue": 360, "hydrangea_pink": 360, "daisy_a": 330, "daisy_b": 520,
+              "poppy_red": 260, "poppy_orange": 260, "poppy_white": 260,
+              "moss_a": 190, "moss_b": 150, "moss_c": 220}       # smooth mounds: fewer verts = visible facets
+FAR_RATIO = 0.4
+NO_FAR = ("twig_bundle",)                # carried prop (carry/), not placed flora
+
+
 def done(m):
-    t = m.export(OUT)
+    far = None
+    if m.name not in NO_FAR:
+        far = flora_far.decimated(FAR_TARGET.get(m.name, 0), FAR_RATIO)
+    t = m.export(OUT, far=far)
     BUILT.append((m.name, t))
 
 
