@@ -177,7 +177,8 @@ func _foot(se: String) -> void:
 			if not ww.inside(p.x, p.y, 2.0) or ww.depth(ww.idx(p.x, p.y)) > 0.002:
 				continue
 			var h := rng.randf()
-			var cl := FloraLook.clump(se, h * (1.0 if d > r * 1.3 else 1.8), rng.randf())     # 줄기 곁은 초록이 많게
+			var kk := ww.idx(p.x, p.y)       # (꽃 군락) 줄기 곁 = 그늘 (초록·그늘 꽃), 바깥 = 숲 가장자리
+			var cl := FloraLook.clump_at(se, p, h * (1.0 if d > r * 1.3 else 1.8), rng.randf(), Vector2(ww.wet_k(kk), 0.9 if d < r * 1.3 else 0.3), ww.seed_v)
 			var nm: String = cl[0]
 			if not groups.has(nm):
 				groups[nm] = [] as Array[Transform3D]
