@@ -4,6 +4,7 @@
 #   godot/art/src/build_all.sh nature     (build_nature.py만)
 #   flora = 소인의 세상 꽃·풀·가지·재료 (build_flora.py), bonsai = 큰 나무 다섯 + 거대한 열매 (build_bonsai.py) → models/flora/
 #   polyfork = polyfork.dev 소품을 우리 팔레트·크기로 (build_polyfork.py, 원본 ext/polyfork/, 출처 art/CREDITS.md) → models/props/
+#   kitchen = E3-14 부엌 소품 (진딧물·목장·메추리알·껍데기·잔치·씨앗 짜개, build_kitchen.py) → models/props/kit_*
 #   creatures = 소인 크기 생물·애벌레·고치 (build_creatures.py), puppy = 가축 강아지 털빛 넷 + 꿀떡이 (평상복·스웨터) (build_puppy.py) → models/critters/
 # 그다음 Godot에서 다시 가져오기: 에디터를 한 번 열거나
 #   godot --headless --path godot --editor --quit-after 900   (가져오기가 끝나면 끄기)
@@ -12,7 +13,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 OUT="$HERE/../models"
 BLENDER="${BLENDER:-blender}"
 mkdir -p "$OUT"
-for s in buildings pioneer village campfire ground water nature residents animals giants mold crises items room carry flora bonsai sunflower creatures puppy polyfork; do
+for s in buildings pioneer village campfire ground water nature residents animals giants mold crises items room carry flora bonsai sunflower creatures puppy polyfork kitchen; do
   if [ -n "$1" ] && [ "$1" != "$s" ]; then continue; fi
   "$BLENDER" -b --factory-startup --python "$HERE/build_$s.py" -- "$OUT" 2>&1 \
     | grep -E "^  |->|Error|Traceback|rror:" || true
