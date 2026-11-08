@@ -350,3 +350,12 @@ feeds = farms × FARM_FEEDS × yld / PORRIDGE_YIELD
 6. **나무 없는 세상의 후속 일 (결정은 끝남)**: 갈대·꽃대 무리를 시뮬에 어떻게 둘지(지금 `trees` 배열을 다시 쓸지 새 자료로 할지), 나무꾼·제재소·산림관의 모델·연대기 말맛은 건물 #13과 그림 몫으로 넘긴다.
 
 **Ownership**: 새 파일 `godot/sim/mayor.gd` (`class_name Mayor`, RefCounted, `Village.mayor` 인스턴스 하나, static 없음). 상태: `stuck`, `last_mayor_id`. 공개 함수: `chief(v)`, `round(v)`, `place_altar(v)`, `pick_worker(v, b)`, `to_dict/from_dict`(판 1). `Village.chief_build`·`chief`·`assign_jobs`·`_assign_jobs`·`_job_swap`·`find_spot`은 `Mayor`로 한 줄 위임. `awakening.gd`와 `production.gd:210`은 `Mayor`를 부른다. 남는 곳: 건물 짓기 #13, 창고 #16, 아기 돌봄 규칙 #15, 굶주림 판정 #10. 떼어 내기 전에 event-kinds.md에 kind 6개를 먼저 적는다.
+
+
+## 2026-11-09 갱신 (메인 판단, 사용자 위임)
+- F2 #6 → 집 없는 사람 > 0 ∧ (빈 침대 < 집 없는 사람 ∨ 집 없는 가족이 한 집에 다 못 들어감).
+- F2 #9 → 빈 침대 < 필요 ∨ (가임 가족의 집이 가득 ∧ 가족+1이 들어갈 집 없음 ∧ 기본 건물 있음 ∧ 먹을 것 부족 아님).
+- 오두막 대체는 기다리는 가족이 들어갈 수 있을 때만.
+- **F8 집 필요**: 빈 침대 = 침대(짓는 중 포함) − 사는 사람; 필요 = 집 없는 사람 + 곧 태어날 아기 + HOUSE_BUFFER(2, 1~3). 이주민은 집이 없어진 뒤에만 셈.
+- F4 밭 점수: farm_mult − FARM_DIST_W(0.06, 0.03~0.08)·거리 − SLOPE_W·비탈 − 0.05·나무.
+- 받아들이는 기준: 침대가 넉넉하면 새 집 없음 · 오두막은 그 가족이 못 들어가면 짓지 않음.
