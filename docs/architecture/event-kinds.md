@@ -48,3 +48,8 @@
 | `&"seed_landed"` | `GiantPlants._land` — 씨앗이 땅에 박힘 (먼지, 곁에 선 사람 작은 확률로 다침) | `{"id": int, "hurt": int}` | `at` = 자리 | `tests/plants_tests.gd` |
 | `&"seed_stored"` | `GiantPlants.run_op("gplant_seed_put")` — 어른이 굴려 와 창고에 `해바라기씨` | `{"amt": float}` | `who` = 굴린 사람 · `at` | `tests/plants_tests.gd` |
 | `&"cotton_burst"` | `GiantPlants._cotton_season` — 그 해 처음 목화 다래가 터짐 (9~11월) | `{"n": int}` | — | `tests/plants_tests.gd` |
+- 2026-11-08 (B-1 빠듯한 철 — docs/BALANCE.md B-1, `sim/lean_seasons.gd`): 아래 kind를 냄. 저장 순번 아니오 · 연대기는 `log_line` (시작·끝 한 줄씩). 날·해는 마을 씨앗 해시로 정하고 `emit` 앞뒤로 난수를 쓰지 않는다.
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"lean_season"` | `LeanSeasons.hourly` — 빠듯한 철이 오고 감 (그 해 한 번씩, 알린 해는 `Village.stats`) | `{"kind": &"green_wheat"·&"caterpillar_year", "on": bool}` | — | `tests/lean_tests.gd` (앞으로 #26 안내 · 연출) |
