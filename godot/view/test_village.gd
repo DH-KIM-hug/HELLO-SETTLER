@@ -9,6 +9,7 @@
 ## 개발 모드(휴대폰 기본 꺼짐 · F3): 상태 글 + +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델 · 곰팡이 · 버섯 숲. 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 ## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
 ## 건물을 누르면 건물 정보 카드(view/ui/building_info.gd, UI.md '건물 정보 카드') — 주민이 앞에 있으면 주민 먼저, 빈 땅·아래로 밀기 = 닫기.
+## 꽃·풀·고사리·이끼 덩이를 누르면 꽃 정보 카드(view/ui/flower_info.gd · view/flora_picks.gd, UI.md '꽃 정보 카드') — 제단 > 주민 > 건물 > 꽃.
 ## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
 extends Node3D
 
@@ -128,6 +129,7 @@ var _lid_close_in := -1.0            # 뚜껑을 닫을 때까지 남은 현실 
 var store_strip: StoreStrip            # [창고] 위 띠 아래 창고 띠 (view/ui/store_strip.gd)
 var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_sheet.gd)
 var bcard: BuildingInfo                # 건물 정보 카드 — 건물을 누르면 (UI.md '건물 정보 카드', view/ui/building_info.gd)
+var fcard: FlowerInfo                  # 꽃 정보 카드 — 꽃·풀·고사리·이끼 덩이를 누르면 (UI.md '꽃 정보 카드', view/ui/flower_info.gd)
 var bledger := BuildingLedger.new()    # 카드의 오늘 만든 양·지은 사람 (화면 쪽 장부 — 보기만)
 var _nudge_tw: Tween
 
@@ -206,7 +208,7 @@ func on_back() -> void:
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard, fcard]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -769,6 +771,8 @@ func _setup_ui() -> void:
 	bcard = BuildingInfo.new()            # 건물 정보 카드
 	dlayer.add_child(bcard)
 	bcard.resident_pressed.connect(_on_bcard_person)
+	fcard = FlowerInfo.new()              # 꽃 정보 카드
+	dlayer.add_child(fcard)
 	chronicle.people_requested.connect(open_people)
 	store_sheet = StoreSheet.new()          # [창고]
 	store_sheet.setup(store_strip.book, self)
@@ -815,7 +819,7 @@ func _setup_ui() -> void:
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
 func close_sheets(keep: Control = null) -> void:
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard, fcard]:
 		if sh != null and sh != keep and sh.visible:
 			sh.call("close")
 	if hand_ctl != null:
@@ -1156,7 +1160,7 @@ func popup_ok() -> bool:
 		return false
 	if hand_ctl != null and hand_ctl.aiming():
 		return false
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard, fcard]:
 		if sh != null and sh.visible:
 			return false
 	return true
@@ -1812,6 +1816,7 @@ func _on_tap(sp: Vector2) -> void:
 	if r != null:
 		altar_sheet.close()
 		bcard.close()
+		fcard.close()
 		detail.setup(_picked[0])
 		_follow_vv = _picked
 		detail.open(r)
@@ -1822,8 +1827,13 @@ func _on_tap(sp: Vector2) -> void:
 	if b != null:
 		open_building(_picked_b[0], b, _picked_b[1])
 		return
-	if bcard.visible:                       # 카드가 열려 있으면 빈 땅 누름 = 닫기 (유리 톡 아님)
+	var fl := FloraPicks.pick(cam.camera, village_views(), sp)    # 꽃 (제단 > 주민 > 건물 > 꽃 — UI.md '꽃 정보 카드')
+	if not fl.is_empty():
+		open_flower(fl)
+		return
+	if bcard.visible or fcard.visible:      # 카드가 열려 있으면 빈 땅 누름 = 닫기 (유리 톡 아님)
 		bcard.close()
+		fcard.close()
 	else:
 		tap_glass(false, screen_to_ground(sp))     # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움) · 매달린 물방울은 누른 쪽으로 떨어짐 (WORLD_EVENTS 2.2)
 
@@ -1897,12 +1907,25 @@ func open_building(q: Village, b: Building, vw: VillageView = null, instant := f
 	_nudge_to_free(n.global_position + Vector3(0, 0.5, 0), instant)
 
 
-## 건물이 카드(또는 위 띠)에 가려지면 카드 위 빈 곳 가운데로 0.3초 동안 옮김 — 이미 보이면 그대로
-func _nudge_to_free(at: Vector3, instant := false) -> void:
+## 꽃 정보 카드를 연다 (pick = FloraPicks.pick) + 카드가 꽃을 가리면 카메라를 살짝 비켜 줌 (건물 카드와 같게)
+func open_flower(pick: Dictionary, instant := false) -> void:
+	close_sheets(fcard)
+	_stop_follow()
+	fcard.open(pick["village"], pick)
+	if not instant and is_inside_tree():
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not fcard.is_open_for(pick):
+			return
+	_nudge_to_free(pick["top"], instant, fcard)
+
+
+## 건물·꽃이 카드(또는 위 띠)에 가려지면 카드 위 빈 곳 가운데로 0.3초 동안 옮김 — 이미 보이면 그대로
+func _nudge_to_free(at: Vector3, instant := false, card: Control = null) -> void:
 	if cam.camera.is_position_behind(at):
 		return
 	var p := cam.camera.unproject_position(at)
-	var fr := bcard.free_rect()
+	var fr: Rect2 = (card if card != null else bcard).call("free_rect")
 	fr.position.y += top_h
 	fr.size.y -= top_h
 	if fr.size.y < 40.0 or fr.grow(-24.0).has_point(p):
