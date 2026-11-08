@@ -55,14 +55,16 @@ const TASKS := [
 		"text": "다들 바쁘네. 무얼 나르고 짓는 걸까?\n일하는 사람 하나를 눌러 보자."},
 	{"id": "sky", "at": 250.0, "act": "aware", "watch": true, "area": "fire", "reward": 60,
 		"text": "아이들이 자꾸 하늘을 올려다보네…\n무슨 일이 생길 것 같아. 지켜보자."},
-	{"id": "chron", "at": 318.0, "act": "chronicle", "hl": "chronicle", "reward": 30, "need": "aware",
-		"text": "오늘 일이 연대기에 적혔을까?\n[연대기]를 펼쳐 보자."},
-	{"id": "child", "at": 345.0, "act": "child", "hl": "people", "area": "people", "reward": 30, "need": "aware",
-		"text": "하늘을 처음 가리킨 아이는 누구였을까?\n아이 하나를 눌러 만나 보자."},
-	{"id": "peek", "at": 372.0, "act": "shop_open", "hl": "shop", "reward": 30, "need": "aware",
-		"text": "곧 소원을 빌어 올 거야.\n하늘에서 무엇을 내려 줄 수 있는지 [상점]을 봐 두자."},
-	{"id": "altar", "at": 398.0, "act": "altar_built", "watch": true, "area": "altar", "reward": 60, "need": "aware",
+	# (2026-11-08 "지켜보자 쪽지인데 주민이 그 일을 안 함") 제단 쪽지는 깨달음 바로 뒤 — 돌을 모으기 시작할 때 떠서 다 쌓일 때까지 (예전엔 6:38에 떠 이미 58%였다).
+	# 그 뒤의 둘러보기 쪽지(연대기·아이·상점)는 마을에 보여 줄 결과가 없어 끝낸 뒤 느리게 하지 않음 (beat false — 첫 아기 오두막이 늦지 않게)
+	{"id": "altar", "at": 300.0, "act": "altar_built", "watch": true, "area": "altar", "reward": 60, "need": "aware",
 		"text": "사람들이 모닥불 곁에 돌을 모은다.\n무얼 짓는 걸까? 지켜보자."},
+	{"id": "chron", "at": 318.0, "act": "chronicle", "hl": "chronicle", "reward": 30, "need": "aware", "beat": false,
+		"text": "오늘 일이 연대기에 적혔을까?\n[연대기]를 펼쳐 보자."},
+	{"id": "child", "at": 345.0, "act": "child", "hl": "people", "area": "people", "reward": 30, "need": "aware", "beat": false,
+		"text": "하늘을 처음 가리킨 아이는 누구였을까?\n아이 하나를 눌러 만나 보자."},
+	{"id": "peek", "at": 372.0, "act": "shop_open", "hl": "shop", "reward": 30, "need": "aware", "beat": false,
+		"text": "곧 소원을 빌어 올 거야.\n하늘에서 무엇을 내려 줄 수 있는지 [상점]을 봐 두자."},
 	{"id": "take", "at": 455.0, "act": "take", "hl": "altar", "area": "altar", "reward": 30, "need": "offering",
 		"text": "제단에 통나무와 곡식을 올려 두었네.\n제단을 눌러 [모두 받기]."},
 	{"id": "wish", "at": 480.0, "act": "wish", "hl": "altar", "area": "altar", "reward": 80, "need": "wish",
@@ -243,6 +245,33 @@ static func _show(v: Village, tk: Dictionary) -> void:
 			Market.hand.append({"id": Market.hand_serial, "item": item, "paid": 0.0, "free": true})
 	(nb["log"] as Array).append({"id": String(tk["id"]), "shown": float(nb["real"]), "done": -1.0})
 	v.giant_acted()
+
+
+## 지켜보기 쪽지의 진행 (쪽지 아래 작은 한 줄 + 막대 — 화면이 읽기만). 지켜보기 쪽지가 아니면 {}.
+## sky: 아이들의 웅성임 (경이 + 깨달음까지 남은 때 — 뒤로 가지 않음) · 하늘을 보는 아이 수 / altar: 제단에 놓은 돌 n/N
+static func progress(v: Village) -> Dictionary:
+	var tk := shown(v)
+	if tk.is_empty() or not bool(tk.get("watch", false)):
+		return {}
+	match String(tk["id"]):
+		"sky":
+			var f := 1.0
+			if not v.aware:
+				var fw := clampf(v.wonder / Awakening.WONDER_NEED, 0.0, 1.0)
+				var fg := 0.0
+				if v.awaken_at >= 0.0:
+					fg = 1.0 - clampf((v.awaken_at - v.t) / Awakening.AWAKEN_DELAY, 0.0, 1.0)
+				var fr := clampf(real(v) / AWAKEN_REAL, 0.0, 1.0)
+				f = minf(0.99, 0.5 * fw + 0.5 * minf(fg, fr))
+			var kids := 0
+			for r in v.people:
+				if r.anim == "lookup" or (v.aware and r.anim == "pray" and r.is_child()):
+					kids += 1
+			return {"f": f, "text": "아이들의 웅성임 %d%%" % int(f * 100.0) + (" · 하늘 보는 아이 %d" % kids if kids > 0 else "")}
+		"altar":
+			var n := Awakening.altar_stones(v)
+			return {"f": float(n.x) / float(n.y), "text": "제단 돌 %d/%d" % [n.x, n.y]}
+	return {}
 
 
 static func _event_done(v: Village, act: String) -> bool:

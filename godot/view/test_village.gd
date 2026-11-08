@@ -2228,7 +2228,8 @@ func _nb_area(fv: Village) -> Variant:
 	return null
 
 
-const RING_WORDS := {"site": "짓는 터", "farm": "첫 밭", "altar": "제단", "glass": "여기를 톡톡"}
+const NOTE_AREA_DROP := 70.0         # 쪽지를 누르면 그 자리가 화면 가운데에서 이만큼(px) 아래에 오게
+const RING_WORDS := {"site": "짓는 터", "farm": "첫 밭", "altar": "제단", "glass": "여기를 톡톡", "fire": "모닥불 곁 아이들"}
 
 
 func _update_notebook() -> void:
@@ -2268,6 +2269,9 @@ func _update_notebook() -> void:
 					ring = Vector2(-1, -1)
 			var key := String(tk.get("area", "")) if String(tk.get("area", "")) != "" else String(tk.get("hl", ""))
 			word = String(RING_WORDS.get(key, ""))
+			if key == "altar" and Awakening.altar_site(fv) != null and not fv.altar_built:     # 지켜보기 쪽지의 진행 — 고리 말에 놓은 돌 수
+				var ns := Awakening.altar_stones(fv)
+				word = "제단 · 돌 %d/%d" % [ns.x, ns.y]
 	notebook_note.point(rect, ring, word)
 	for b: Button in [hand_ctl.spray_btn, hand_ctl.wipe_btn, chron_btn, shop_btn]:
 		_glow_button(b, b == btn)
@@ -2319,6 +2323,10 @@ func _on_note_pressed() -> void:
 	if area != null and String(tk.get("hl", "")) != "glass":
 		_stop_follow()
 		look_at_ground(area)
+		# 쪽지(왼쪽 위)에 가리지 않게 그 자리를 화면 가운데보다 조금 아래로 (2026-11-08 — 쪽지 7의 모닥불 곁 아이들이 쪽지 밑에 숨었다)
+		var c := get_viewport().get_visible_rect().size * 0.5
+		var d := screen_to_ground(c - Vector2(0.0, NOTE_AREA_DROP)) - screen_to_ground(c)
+		look_at_ground(area + d)
 	var hl := Notebook.highlight(fv)
 	if hl in ["slot", "spray", "wipe"] and not hand_ctl.is_open() and not hand_ctl.aiming():
 		toggle_hand()
@@ -2333,7 +2341,17 @@ func _site_progress(fv: Village) -> void:
 	var vs := get_viewport().get_visible_rect().size
 	var now := {}
 	for b in fv.buildings:
-		if not b.is_site() or b.site_type() == Awakening.ALTAR:
+		if not b.is_site():
+			continue
+		if b.site_type() == Awakening.ALTAR:     # 제단: 놓은 돌 n/N (쿵 소리는 AltarView가 단계마다) — 2026-11-08 지켜보기 쪽지의 진행 표시
+			if String(Notebook.shown(fv).get("area", "")) == "altar":
+				continue                         # 쪽지 고리가 제단을 가리키면 고리 말이 "제단 · 돌 n/N" (겹치지 않게)
+			var aw := Vector3(b.x, terrain.ground_y(b.x, b.y) + 1.7, b.y)
+			if not cam.camera.is_position_behind(aw):
+				var ap := cam.camera.unproject_position(aw)
+				if ap.y > top_h + 10.0 and ap.y < vs.y - bottom_h - 10.0 and ap.x > 0.0 and ap.x < vs.x:
+					var ns := Awakening.altar_stones(fv)
+					marks.append([ap, float(ns.x) / float(ns.y), "돌 %d/%d" % [ns.x, ns.y]])
 			continue
 		var st := VillageView.site_stage(b)
 		now[b.id] = st
@@ -2353,6 +2371,16 @@ func _site_progress(fv: Village) -> void:
 				GameAudio.fx("child_laugh", "Village", -4.0)
 				GameAudio.fx("chime", "Room", -8.0)
 	_site_seen = now
+	# (수첩 쪽지 7) 하늘을 올려다보는 아이 머리 위에 작은 "!" (몇 초마다 톡 튀어나옴 — 작은 아이가 멀리서도 읽히게)
+	for r in fv.people:
+		if r.anim != "lookup":
+			continue
+		var hw := Vector3(r.x, terrain.ground_y(r.x, r.y) + 1.05, r.y)
+		if cam.camera.is_position_behind(hw):
+			continue
+		var hp := cam.camera.unproject_position(hw)
+		if hp.y > top_h + 10.0 and hp.y < vs.y - bottom_h - 10.0 and hp.x > 0.0 and hp.x < vs.x:
+			marks.append([hp, -1.0, "!"])
 	_set_site_marks(marks)
 
 

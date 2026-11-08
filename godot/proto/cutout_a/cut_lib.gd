@@ -17,9 +17,10 @@ const NSLOT := 11
 ## travel = 아주 빠른 배속의 걸음 (2026-11-08 "아주 빠르게 할 때 주민들이 꼭 뒤로 가"): 걸음 주기를 땅 빠르기에 맞추면 한 장면에
 ## 반 주기 넘게 넘어가 거꾸로 걷는 것처럼 보이고(수레바퀴 착시), 빠르기 상한에 묶으면 발이 앞으로 미끄러져 뒷걸음질로 보였다 →
 ## 걸음을 멈춘 큰 보폭 자세에 작은 들썩임만 (CutoutResident.walk_rate가 고름)
-const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel"]
+## lookup = 서서 하늘을 올려다보고 한 팔로 위를 가리킴 (2026-11-08 수첩 쪽지 7 "아이들이 자꾸 하늘을 올려다보네" — 끝에 덧붙여 앞 번호는 그대로)
+const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup"]
 const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35, "sit": 0.3, "eat": 0.4, "sleep": 0.22,
-	"kneel": 0.16, "gather": 0.45, "travel": 2.2}
+	"kneel": 0.16, "gather": 0.45, "travel": 2.2, "lookup": 0.32}
 ## 지팡이를 내려놓는 동작 (앉기·눕기·무릎·숙이기 — 땅에 선 지팡이가 허공에 뜨지 않게)
 const NO_CANE := ["sit", "eat", "sleep", "kneel", "gather"]
 ## 동작 표 텍스처의 가로: 조각 슬롯 NSLOT칸 + 옷 묶음마다 한 칸 (SETS) = (소품 dx, dy, 몸 내림 dy, 지팡이 숨김) — 몸마다 다른 다리 길이·손 자리
@@ -577,6 +578,36 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 				var gy := 30.0 - hy * 150.0
 				_set_arm(a, "a", _ik(a, v, "a", Vector2(-120, 300).lerp(Vector2(-40, gy), u)))
 				_set_arm(a, "b", _ik(a, v, "b", Vector2(120, 300).lerp(Vector2(40, gy + 10.0), u)))
+		"lookup":
+			# 하늘 올려다보기 (수첩 쪽지 7): 고개를 젖혀 위를 보고 (0~0.2) → 가까운 팔을 들어 하늘을 가리킴 (0.2~0.35) →
+			# 가리킨 채 손끝을 조금 흔듦 (0.35~0.75) → 팔을 내림 (0.75~0.9) → 쉼. 몸은 살짝 뒤로 젖힘. 몇 초마다 다시 (CLIP_RATE)
+			var u := 0.0
+			if t < 0.2:
+				u = 0.0
+			elif t < 0.35:
+				u = smoothstep(0.2, 0.35, t)
+			elif t < 0.75:
+				u = 1.0
+			elif t < 0.9:
+				u = 1.0 - smoothstep(0.75, 0.9, t)
+			var wig := 0.5 + 0.5 * sin(w * 6.0) if t >= 0.35 and t < 0.75 else 0.5
+			if side:
+				a[1] = Vector4(0.06 + 0.015 * s, 0, 2.0 * s, 1)          # 뒤로 조금 젖힘
+				a[2] = Vector4(0.24, 0, 0, 1)                            # 고개를 젖혀 위로
+				# 가까운 팔: 앞으로 쭉 뻗어 비스듬히 위를 가리킴 (머리 높이로 올리면 큰 머리 뒤에 숨는다). 게임에선 lookup이
+				# 앞 보기로만 보이므로 (CutoutResident.FRONT_ONLY) 이 비스듬한 보기는 캡처·예비용
+				a[3] = Vector4(lerpf(rest_s.x, 1.3 + 0.08 * wig, u), 0, 0, 1)
+				a[5] = Vector4(lerpf(rest_f.x, 0.05, u), 0, 0, 1)
+				a[4] = Vector4(rest_s.y, 0, 0, 1)
+				a[6] = Vector4(rest_f.y, 0, 0, 1)
+			else:
+				a[1] = Vector4(0.01 * s, 0, 2.0 * s, 1)
+				a[2] = Vector4(0.03 * sin(w), 0, 6.0, 0.9)               # 앞·뒤 보기: 고개를 들어 (조금 위로 · 얼굴이 짧아 보임)
+				# 그림 왼쪽 팔(a): 바깥(−)으로 어깨 위까지 들고 아래팔을 위로 꺾어 하늘을 가리킴 (머리 위로 올리면 큰 머리·머리쓰개 뒤에 숨는다)
+				a[3] = Vector4(lerpf(rest_s.x, -1.75 - 0.1 * wig, u), 0, 0, 1)
+				a[5] = Vector4(lerpf(rest_f.x, -1.25, u), 0, 0, 1)
+				a[4] = Vector4(rest_s.y, 0, 0, 1)
+				a[6] = Vector4(rest_f.y, 0, 0, 1)
 	if clip in NO_CANE:
 		var f11: Vector4 = a[11]
 		a[11] = Vector4(f11.x, 0, 0, 1)

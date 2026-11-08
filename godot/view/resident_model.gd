@@ -157,7 +157,7 @@ const ANIMS := ["idle", "walk", "walk_elder", "run", "carry", "hold", "work_axe"
 	"pray", "sit", "eat", "sleep", "wave", "play", "fly",
 	"look", "stretch", "scratch", "shift", "chat", "sit_talk", "fish", "crouch", "clap", "pray_stand", "bow"]
 ## 시뮬레이션 동작(r.anim) → 기본 클립 — 그 밖의 이름은 클립 이름 그대로 (ANIMS에 있으면)
-const SIM_ANIMS := ["idle", "walk", "carry", "work", "torch", "pray", "sit", "eat", "sleep", "play", "fly", "wave"]
+const SIM_ANIMS := ["idle", "walk", "carry", "work", "torch", "pray", "sit", "eat", "sleep", "play", "fly", "wave", "lookup", "gather"]
 ## (v5) 사이사이 끼는 짧은 동작 — 기본 클립 → [[클립, 무게]]. 한 번 돌고 기본으로 돌아온다 (사람마다 다른 때에)
 const VARIETY := {
 	"idle": [["look", 3.0], ["shift", 3.0], ["scratch", 2.0], ["stretch", 1.0]],
@@ -1280,6 +1280,10 @@ func _clip(a: String) -> String:
 		"pray":
 			# 제단 앞: 반은 무릎 꿇고, 반은 서서 손 모으고 (가끔 깊이 절함)
 			return "pray_stand" if _style % 2 == 1 else "pray"
+		"lookup":                # (수첩 쪽지 7) 하늘을 올려다봄 — 3D는 두리번(look)
+			return "look"
+		"gather":                # (EVENTS_STAGING 2b) 제단 돌을 숙여 줍고 내려놓음 — 3D는 쪼그려 앉음(crouch)
+			return "crouch"
 		"sleep", "eat", "fly", "wave", "run", "hold":
 			return a
 	return a if a in ANIMS else "idle"

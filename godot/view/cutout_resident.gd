@@ -41,7 +41,8 @@ const BABY_SCALE := 0.45
 const CHILD_SCALE := Vector2(0.68, 0.8)    # 아이 몸 f의 키 배율 (어린 → 큰 아이)
 const ELDER_SCALE := 0.9
 ## 짐 이름 → 소품 (Lib.PROPS 번호): 빵 0 · 나뭇가지 1 · 바구니 2 · 밀 10 · 물통 11. 표에 없으면 바구니
-const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11, "씨앗": 12}
+## "돌" = 소품 없음 (제단 돌은 AltarView가 손에 둥근 돌을 따로 그림 — 바구니로 보이지 않게)
+const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11, "씨앗": 12, "돌": -1}
 const PROP_BASKET := 2
 ## 일 연장 → 내려찍는 일 동작(hoe)의 소품: 괭이 6 · 낫 7 · 나무망치 9. 표에 없는 연장(빈손·삽·약초·낚싯대) = 서서 (idle)
 const WORK_PROP := {"tool_hoe": 6, "tool_sickle": 7, "tool_hammer": 9, "tool_axe": 9, "tool_pick": 9}
@@ -50,7 +51,7 @@ const GATHER_TOOLS := ["tool_herbs"]
 const GATHER_JOBS := ["사냥꾼"]
 ## 비스듬한 보기로만 보이는 동작 (앞 → 비스듬한 앞, 뒤 → 비스듬한 뒤) · 늘 앞 보기 (누움)
 const SIDE_ONLY := ["sit", "eat", "gather"]
-const FRONT_ONLY := ["sleep"]
+const FRONT_ONLY := ["sleep", "lookup"]      # lookup (수첩 쪽지 7) — 하늘(거인 쪽)을 올려다보는 얼굴·가리키는 팔이 보이게
 ## 일 옷을 벗는 동작 (쉬기·먹기·자기·기도·놀기)
 const OFF_SHIFT := ["sit", "eat", "sleep", "pray", "play", "fly"]
 const SWAP_HIDE := 0.18          # 옷을 갈아입는 동안 사라지는 시간 (현실 초)
@@ -321,6 +322,10 @@ func doll_state() -> Dictionary:
 			clip = "sleep"
 		"pray":
 			clip = "kneel"
+		"gather":                              # (EVENTS_STAGING 2b) 제단 돌을 숙여 줍고 내려놓음
+			clip = "gather"
+		"lookup":                              # (수첩 쪽지 7) 하늘을 올려다보며 가리킴
+			clip = "lookup"
 		_:
 			clip = "idle"
 	if _baby:

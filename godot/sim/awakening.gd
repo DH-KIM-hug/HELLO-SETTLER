@@ -32,6 +32,15 @@ const STAGE_SCALE := Notebook.ALTAR_PACE
 const STAGE_MAX := 2.0 * Balance.HOUR    # 깨달음 뒤 이만큼 지나도 장면이 안 끝나면 (짓는 어른이 없는 병 등) 시계를 늦추지 않는다 (보통 ~1,350 병 초)
 const EVENING_RING := 300.0          # 저녁 기도 — 제단 둘레에 모여 (병 초)                  # 기도할 때 제단 둘레 고리 반지름 (칸)
 
+## (2026-11-08 사용자 "주민들이 지켜볼 때 그에 맞춰 행동을 안 함" — 수첩 쪽지 7 "아이들이 자꾸 하늘을 올려다보네… 지켜보자.")
+## 깨닫기 직전의 아이들: 모닥불 곁에 모여 멈춰 서서 하늘을 올려다보고 가리킨다 (동작 "lookup") — 몇 초마다 다시, 가끔 한마디.
+## 언제: 수첩이 펼쳐진 병은 그 쪽지('sky')가 떠 있는 동안 (쪽지가 약속한 것이 늘 보이게), 수첩이 없으면 경이가 차서 깨달음을 기다리는 동안 (awaken_at).
+## 배고프거나 끼니 때면 먹으러 간다. 난수를 쓰지 않는다 (자리·말은 id와 차례로 — 다른 흐름을 흔들지 않게).
+const SKY_LOOK := 80.0               # 한 번 올려다보며 가리키는 동작 (병 초 — 첫날 쪽지 빠르기 ×24로 현실 약 3초)
+const SKY_PAUSE := 30.0              # 그 사이 잠깐 서서 두리번 (병 초)
+const SKY_R := [2.5, 3.2]            # 모닥불에서 이만큼 (칸 — 걸상(1.85) 밖 트인 땅, 걸상에 가리지 않게)
+const SKY_SAY := 70.0                # 말풍선 (병 초 — 현실 약 3초)
+const LINES_SKY := ["저기 봐! 하늘이 반짝여", "하늘에 뭐가 있어…", "또 움직였어!", "하늘이 우릴 보는 것 같아"]
 const LINES_CHILD := ["하늘에 누가 있어!", "봤어? 하늘이 움직였어!", "하늘에 누가 있어! 진짜야!"]
 const LINES_ELDER := ["하늘이… 우리를 보고 있구나", "저 위에 누군가 계신 게야"]
 const LINES_ADULT := ["그냥 바람이야", "하늘이 원래 그렇지 뭐"]
@@ -117,6 +126,7 @@ static func _murmur(v: Village, ws: Array[Resident]) -> void:
 static func step(v: Village, dt: float) -> void:
 	if not v.aware:
 		_add(v, WONDER_DRIP_HOUR * dt / Balance.HOUR)
+		_call_children(v)
 		if v.awaken_at >= 0.0 and v.t >= v.awaken_at and Notebook.awaken_ok(v):     # [거인의 수첩] 첫 병은 현실 ~5:00 전에는 아님
 			awaken(v)
 		return
@@ -160,6 +170,86 @@ static func place_altar(v: Village) -> Building:
 		if p.is_adult() and p.action == "idle":
 			ResidentAI.cancel(v, p)
 	return b
+
+
+## 아이들이 하늘을 올려다볼 때인가 (위 SKY_* 설명)
+static func sky_curious(v: Village) -> bool:
+	if v.aware:
+		return false
+	if Notebook.active(v):
+		return String(Notebook.shown(v).get("id", "")) == "sky"
+	return v.awaken_at >= 0.0
+
+
+## 이 아이가 하늘을 보러 갈 수 있나 (깨어 있고 배고프지 않은 아이)
+static func sky_ok(v: Village, r: Resident) -> bool:
+	return r.is_child() and not r.is_baby() and r.age >= 2.5 and not r.sleeping and r.sick_left <= 0.0 \
+		and r.hunger < Balance.HUNGRY_AT and not v.is_night() and sky_curious(v)
+
+
+## 하늘을 볼 때가 되면 노는·쉬는·빈손으로 낟알 주우러 가던 아이는 하던 것을 놓고 모닥불 곁으로 (Awakening.step이 매 걸음 — 쪽지가 뜨자마자 보이게)
+const SKY_DROP := ["play", "idle", "rest", "social", "manna", ""]
+
+
+static func _call_children(v: Village) -> void:
+	for r in v.people:
+		if r.action in SKY_DROP and r.carry == "" and sky_ok(v, r):
+			ResidentAI.cancel(v, r)
+			r.action = "skywatch_wait"
+
+
+## ResidentAI.decide가 부름 — 아이 하나를 모닥불 곁으로 보내 하늘을 올려다보게 함. 했으면 true
+static func skywatch_task(v: Village, r: Resident, _h: float) -> bool:
+	if not sky_ok(v, r):
+		return false
+	var k := int(v.stats.get("skywatch", 0))
+	v.stats["skywatch"] = k + 1
+	var c := v.fire
+	var p := c
+	for j in 8:                          # 아이마다 다른 쪽 (물이면 다음 쪽)
+		var a := float((r.id * 5 + j * 3) % 12) * TAU / 12.0 + 0.2
+		var rr: float = lerpf(SKY_R[0], SKY_R[1], fposmod(r.id * 0.41 + j * 0.17, 1.0))
+		var q := c + Vector2(cos(a), sin(a)) * rr
+		if not v.water_at(q.x, q.y):
+			p = q
+			break
+	r.action = "skywatch"
+	r.last_action = "skywatch"
+	r.doing = "하늘을 올려다보는 중"
+	if Vector2(r.x, r.y).distance_to(p) > 0.6:
+		r.steps.append(ResidentAI.walk(p.x, p.y))
+	var up := p + (p - c).normalized() * 0.03     # 모닥불을 등지고 (하늘이 트인 쪽) — 걸음이 끝나면 그쪽을 바라봄
+	r.steps.append(ResidentAI.walk(up.x, up.y))
+	var say := (k + r.id) % 2 == 0
+	r.steps.append(ResidentAI.act(SKY_LOOK, "lookup", ResidentAI.op("aw_skysay", {"i": k}) if say else null))
+	r.steps.append(ResidentAI.act(SKY_PAUSE, "idle"))
+	return true
+
+
+## 하늘을 보던 아이의 한마디 (ResidentAI.run_op "aw_skysay")
+static func sky_say(v: Village, r: Resident, i: int) -> void:
+	if r.sleeping or v.aware:
+		return
+	var line := String(LINES_SKY[(i + r.id) % LINES_SKY.size()])
+	if v.awaken_at >= 0.0 and i % 3 == 2:
+		line = LINES_CHILD[2]
+	v.speak(r, line, SKY_SAY)
+
+
+## (2026-11-08 EVENTS_STAGING 2b — 제단 짓기가 보이게) 제단은 둥근 돌 ALTAR_STONES개를 하나씩 날라 쌓아 선다 — 한 번 나를 때마다
+## 정확히 한 개 (Balance 제단 time ÷ ALTAR_STONES만큼 — 진행 = 놓은 돌 수). 아이도 작은 돌을 하나씩 (같은 한 개).
+const ALTAR_STONES := 48
+
+
+## 제단에 놓은 돌 [놓은 수, 모두] — 제단 터가 없으면 [0, ALTAR_STONES] (다 지어졌으면 [모두, 모두])
+static func altar_stones(v: Village) -> Vector2i:
+	if v.altar_built:
+		return Vector2i(ALTAR_STONES, ALTAR_STONES)
+	var b := altar_site(v)
+	if b == null:
+		return Vector2i(0, ALTAR_STONES)
+	var per := float(Balance.B[ALTAR]["time"]) / ALTAR_STONES
+	return Vector2i(clampi(int(floor(b.prog / per + 1e-3)), 0, ALTAR_STONES), ALTAR_STONES)
 
 
 static func altar_site(v: Village) -> Building:
