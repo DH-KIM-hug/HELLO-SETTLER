@@ -353,12 +353,17 @@ void fragment() {
 			c = mix(c, salt_edge, scr * sa * near * smoothstep(0.58, 0.75, UV.y));
 		}
 		if (frost_amt > 0.001) {
-			// 서리 (온대 겨울 아침, 그늘에 오래): 그늘진 곳부터 하얗게 덮인 얼룩 + 반짝이는 서리 점 + 온 땅이 조금 희뿌옇게
+			// 서리 (온대 겨울 아침, 그늘에 오래): 그늘진 곳부터 엷게 희뿌연 얼룩 + 그 얼룩 안·둘레에만 작은 서리 알갱이 몇 개 + 온 땅이 아주 조금 희뿌옇게.
+			// 땅 전체(풀·흙·모래·그늘)에 고르게 찍힌 또렷한 흰 점은 쓰지 않음 — 눈 내린 듯 시끄러움 (2026-11-08 사용자 "바닥에 흰점 저거 어떻게해")
 			float fr = frost_amt * (0.55 + 0.45 * COLOR.a);
-			float frp = cover(COLOR.a * 0.55 + vnoise(p * 0.32 + 9.0) * 0.55 + wob * 0.4, 1.35 - fr * 0.55);
-			vec2 frd = dots(p + 1.1, 0.3, fr * 0.8, 0.26);
-			c = mix(c, mix(snow_col, snow_shade, 0.5), frp * 0.75);
-			c = mix(c, snow_col, frd.x * 0.85 + fr * 0.22);
+			float fm = COLOR.a * 0.55 + vnoise(p * 0.32 + 9.0) * 0.55 + wob * 0.4;
+			float fthr = 1.22 - fr * 0.55;
+			float frp = cover(fm, fthr);
+			float fedge = smoothstep(fthr - 0.22, fthr, fm);                    // 얼룩과 그 바로 둘레
+			vec2 frd = dots(p + 1.1, 0.42, fr * 0.6 * fedge, 0.13);
+			c = mix(c, mix(snow_col, snow_shade, 0.5), frp * 0.6);
+			c = mix(c, snow_col, fr * 0.12);
+			c = mix(c, mix(c, snow_col, 0.5), frd.x * near);                    // 알갱이도 땅빛에 반쯤 섞임
 		}
 		if (snow_amt > 0.001) {
 			// 눈 (냉대·툰드라 겨울): 그늘부터 덮임
