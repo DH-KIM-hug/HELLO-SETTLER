@@ -96,6 +96,9 @@ var _speed_long := false
 var _sparkle: Control
 var _hand_glow_t := 0.0
 var _tray_h := 0.0
+var _ui_shadow: Label
+var _sparkle_was := true
+var hud_batch: HudBatch            # (P1b) 화면 UI 그리기 묶기 — 띠·버튼 바탕·아이콘·직접 그린 도형을 한 번씩에 (view/ui/hud_batch.gd)
 var chronicle: ChronicleSheet
 var people_sheet: PeopleSheet          # [사람들 목록] 위 띠 "N명" · 연대기 [모두 보기] (view/ui/people_sheet.gd)
 var rev_show: RevelationShow
@@ -557,6 +560,8 @@ func _setup_ui() -> void:
 	bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bubbles)
+	hud_batch = HudBatch.new()            # 말풍선 위 · 띠보다 앞 (맡은 것들의 바탕·아이콘을 여기서 한 번에)
+	root.add_child(hud_batch)
 	# 위 띠
 	top_bar = PanelContainer.new()
 	top_bar.theme_type_variation = "TopBar"
@@ -568,7 +573,7 @@ func _setup_ui() -> void:
 	info_label = Label.new()               # 지구 이름 · 시대 · 인구
 	info_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	info_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	info_label.clip_text = true
+	info_label.text_overrun_behavior = TextServer.OVERRUN_TRIM_CHAR    # (P1b) clip_text는 그리기 묶음을 끊는다 — 넘치면 글자 단위로 자름
 	info_label.mouse_filter = Control.MOUSE_FILTER_STOP       # [사람들 목록] 누르면 사람들 목록
 	info_label.gui_input.connect(func(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and not (ev as InputEventMouseButton).pressed and (ev as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
@@ -588,11 +593,14 @@ func _setup_ui() -> void:
 	# 개발: 상태 글 (위 띠 아래)
 	ui_label = Label.new()
 	ui_label.add_theme_color_override("font_color", Color("ebe5db"))
-	ui_label.add_theme_color_override("font_shadow_color", Color("242121"))
-	ui_label.add_theme_constant_override("shadow_offset_x", 1)
-	ui_label.add_theme_constant_override("shadow_offset_y", 1)
 	ui_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(ui_label)
+	_ui_shadow = Label.new()               # 그림자 = 뒤에 같은 글 (글꼴 그림자는 줄마다 그리기를 끊는다 — P1b)
+	_ui_shadow.add_theme_color_override("font_color", Color("242121"))
+	_ui_shadow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ui_shadow.position = Vector2(1, 1)
+	_ui_shadow.show_behind_parent = true
+	ui_label.add_child(_ui_shadow)
 	# 아래 띠 위: 알림 한 줄 · 밤 건너뛰기 · (개발) 버튼 줄 — 아래에서 위로 쌓임
 	stack = VBoxContainer.new()
 	stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -774,6 +782,8 @@ func _setup_ui() -> void:
 	stack.add_child(guide_cap)
 	stack.move_child(guide_cap, 0)
 	_setup_notebook(root, dlayer)
+	for n: Control in [top_bar, stack, bottom_bar, speed_btn, speed_list, store_strip, lamp_ctl.badge]:     # 늘 떠 있는 것만 (펼치는 판·시트는 그대로 위에)
+		hud_batch.adopt(n)
 	for vv: Array in village_views():
 		_awake_seen[vv[0]] = (vv[0] as Village).awakened_t
 	GameSettings.get_current().apply()
@@ -972,6 +982,10 @@ func tool_buttons() -> Array:
 
 ## 상점 버튼 옆 반짝임: 작은 네 갈래 별 셋이 번갈아 (새 탭이 열렸을 때만)
 func _draw_sparkle() -> void:
+	var hb := HudBatch.of(_sparkle)
+	var g: HudBatch.Geo = HudBatch.Geo.new() if hb != null else null
+	if hb != null:
+		hb.put_shapes(_sparkle, g)           # (P1b) 바탕 겹에 함께 (없으면 빈 것)
 	if not Shop.has_new(focus_village()):
 		return
 	var sz := _sparkle.size
@@ -981,8 +995,12 @@ func _draw_sparkle() -> void:
 		var r := 3.0 + 4.5 * k
 		var c := Color(UiTheme.GLOW.lightened(0.25), 0.35 + 0.65 * k)
 		var p: Vector2 = pts[i]
-		_sparkle.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -r), p + Vector2(r * 0.28, -r * 0.28), p + Vector2(r, 0), p + Vector2(r * 0.28, r * 0.28),
-			p + Vector2(0, r), p + Vector2(-r * 0.28, r * 0.28), p + Vector2(-r, 0), p + Vector2(-r * 0.28, -r * 0.28)]), c)
+		var star := PackedVector2Array([p + Vector2(0, -r), p + Vector2(r * 0.28, -r * 0.28), p + Vector2(r, 0), p + Vector2(r * 0.28, r * 0.28),
+			p + Vector2(0, r), p + Vector2(-r * 0.28, r * 0.28), p + Vector2(-r, 0), p + Vector2(-r * 0.28, -r * 0.28)])
+		if g != null:
+			g.polygon(star, c)
+		else:
+			_sparkle.draw_colored_polygon(star, c)
 
 
 ## 연대기 (UI 07) — 넓은 세상은 카메라가 보는 무리 (최근·발견은 모든 무리). tab = −1이면 지난번 탭
@@ -1162,7 +1180,8 @@ func _glow_button(b: Button, on: bool) -> void:
 				b.remove_theme_stylebox_override(st)
 		return
 	var k := 0.5 + 0.5 * sin(_btn_glow_t * 2.6)
-	var sb := StyleBoxFlat.new()
+	var sb: StyleBoxFlat = b.get_meta("glow_sb") if b.has_meta("glow_sb") else StyleBoxFlat.new()     # 하나를 고쳐 씀 (화면마다 새로 만들지 않게)
+	b.set_meta("glow_sb", sb)
 	sb.bg_color = UiTheme.BUTTON.lerp(Color("fff1c4"), k)
 	sb.border_color = UiTheme.GLOW.darkened(0.2)
 	sb.set_border_width_all(2)
@@ -1170,8 +1189,9 @@ func _glow_button(b: Button, on: bool) -> void:
 	sb.set_content_margin_all(5)
 	sb.shadow_color = Color(UiTheme.GLOW, 0.3 + 0.4 * k)
 	sb.shadow_size = int(3 + 5 * k)
-	for st in ["normal", "hover", "pressed"]:
-		b.add_theme_stylebox_override(st, sb)
+	if not b.has_meta("glow"):
+		for st in ["normal", "hover", "pressed"]:
+			b.add_theme_stylebox_override(st, sb)
 	b.set_meta("glow", true)
 
 
@@ -1215,6 +1235,17 @@ func _gear_button() -> Button:
 	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.draw.connect(func() -> void:
 		var c := icon.size * 0.5
+		var hb := HudBatch.of(icon)
+		if hb != null:                          # (P1b) 바탕 겹에 함께
+			var g := HudBatch.Geo.new()
+			for i in 8:
+				var a := TAU * i / 8.0
+				var xf := Transform2D(a, c + Vector2(cos(a), sin(a)) * 8.5)
+				g.polygon(xf * PackedVector2Array([Vector2(-2.5, -2.5), Vector2(2.5, -2.5), Vector2(2.5, 2.5), Vector2(-2.5, 2.5)]), UiTheme.INK)
+			g.circle(c, 8.0, UiTheme.INK)
+			g.circle(c, 3.5, UiTheme.BUTTON)
+			hb.put_shapes(icon, g)
+			return
 		for i in 8:
 			var a := TAU * i / 8.0
 			var d := Vector2(cos(a), sin(a))
@@ -1450,6 +1481,7 @@ func _update_ui() -> void:
 	notes_label.text = AltarSheet._num(Market.notes)
 	if debug_mode:
 		ui_label.text = status_text()
+		_ui_shadow.text = ui_label.text
 	_layout_t += get_process_delta_time()
 	if _layout_t > 1.0:
 		_layout_t = 0.0
@@ -1466,7 +1498,10 @@ func _update_ui() -> void:
 	_hand_glow_t = maxf(0.0, _hand_glow_t - get_process_delta_time())
 	guide_cap.setup(fv)
 	_glow_button(hand_btn, _hand_glow_t > 0.0 or _nb_target() == hand_btn)     # [거인의 수첩]이 가리키는 단추도 숨 쉬듯 빛남
-	_sparkle.queue_redraw()
+	var sp_on := Shop.has_new(fv)
+	if sp_on or _sparkle_was:            # 반짝일 때만 다시 그림 (P1b — 화면 UI를 괜히 다시 묶지 않게)
+		_sparkle.queue_redraw()
+	_sparkle_was = sp_on
 	if hand_ctl.height() != _tray_h:     # 손 칸이 열리고 닫히면 알림 줄을 그 위로
 		_tray_h = hand_ctl.height()
 		layout_bars()

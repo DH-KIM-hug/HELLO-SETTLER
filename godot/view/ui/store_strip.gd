@@ -214,10 +214,21 @@ class TrendMark extends Control:
 
 	func _draw() -> void:
 		var c := size * 0.5
+		var pts := PackedVector2Array()
+		var col := UP
 		if dir > 0:
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -4), c + Vector2(3.5, 2.5), c + Vector2(-3.5, 2.5)]), UP)
+			pts = PackedVector2Array([c + Vector2(0, -4), c + Vector2(3.5, 2.5), c + Vector2(-3.5, 2.5)])
 		elif dir < 0:
-			draw_colored_polygon(PackedVector2Array([c + Vector2(0, 4), c + Vector2(3.5, -2.5), c + Vector2(-3.5, -2.5)]), DOWN)
+			pts = PackedVector2Array([c + Vector2(0, 4), c + Vector2(3.5, -2.5), c + Vector2(-3.5, -2.5)])
+			col = DOWN
+		var hb := HudBatch.of(self)
+		if hb != null:                       # (P1b) 화면 UI 바탕 겹에 함께
+			var g := HudBatch.Geo.new()
+			if not pts.is_empty():
+				g.polygon(pts, col)
+			hb.put_shapes(self, g)
+		elif not pts.is_empty():
+			draw_colored_polygon(pts, col)
 
 
 ## 접기 ◂ / 펼치기 ▸
@@ -233,4 +244,10 @@ class Caret extends Control:
 		var s := 3.5
 		var pts := PackedVector2Array([c + Vector2(s * 0.5, -s), c + Vector2(-s * 0.5, 0), c + Vector2(s * 0.5, s)]) if open \
 			else PackedVector2Array([c + Vector2(-s * 0.5, -s), c + Vector2(s * 0.5, 0), c + Vector2(-s * 0.5, s)])
+		var hb := HudBatch.of(self)
+		if hb != null:                       # (P1b) 화면 UI 바탕 겹에 함께
+			var g := HudBatch.Geo.new()
+			g.polyline(pts, UiTheme.INK_SOFT, 1.6, true)
+			hb.put_shapes(self, g)
+			return
 		draw_polyline(pts, UiTheme.INK_SOFT, 1.6, true)
