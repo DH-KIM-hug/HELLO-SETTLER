@@ -12,8 +12,7 @@ const FLOOR_Y := 0.42
 const ROCK_TOP := 1.7
 const Y_BASE := 1.95
 const Y_K := 4.0                        # 세상 높이 1 → 병 안 4cm (실제보다 과장 — 산·골짜기가 보이게)
-const RELIEF := 4.5                     # 병 안 그림에서 빚은 높낮이(땅 단추)를 이만큼 과장 — 세 모양이 한눈에 다르게 (세상 높이는 그대로)
-const BASE_K := 0.3                     # 미리보기의 시드 바탕 굴곡은 덜 (땅 단추의 모양이 먼저 보이게)
+const RELIEF := CreationPlan.SHOW_RELIEF      # 병 안 그림에서 빚은 높낮이(땅 단추)를 이만큼 과장 (세상 높이는 그대로 — 식은 CreationPlan.shown_h)
 const NUB_S := 3.6                      # 뚜껑 안쪽 돌기 자리 (u, v) → 코르크 아랫면 (cm)
 const SMALL_NUBS := 8                   # 메이슨 자의 저절로 난 작은 돌기 (가장자리 — 거인의 큰 돌기 셋은 거인이 찍음)
 const RINGS := 36
@@ -94,16 +93,7 @@ func setup(p: CreationPlan, time_of_day: String) -> void:
 	tod = time_of_day
 	R = p.size * 0.5
 	nzs = WorldGen.noises(p.seed_v)
-	var s := 0.0
-	var n := 0
-	for j in 9:
-		for i in 9:
-			var u := (i - 4) / 4.5
-			var v := (j - 4) / 4.5
-			if u * u + v * v <= 1.0:
-				s += WorldGen.base_h(nzs, u * R, v * R, R)
-				n += 1
-	_flat_h = s / maxf(1.0, n)
+	_flat_h = CreationPlan.flat_h(nzs, R)
 	_build_room()
 	_build_jar()
 	_dirty = true
@@ -582,10 +572,10 @@ func _apply_cam() -> void:
 
 
 # ───────────────────────── 땅 높이 ─────────────────────────
-## 병 안 그림의 미리보기 높이: 평평한 흙(shape 0) → 시드 바탕(덜) + 빚은 높낮이(과장 RELIEF). 세상 만들기는 CreationPlan.preview_h 그대로
+## 병 안 그림의 미리보기 높이: 평평한 흙(shape 0) → 시드 바탕(덜) + 빚은 높낮이(과장 RELIEF).
+## 세상 만들기도 같은 식(CreationPlan.shown_h)으로 거인이 본 호수를 그 자리에 판다 (WorldGen._shown_lakes)
 func preview_h(u: float, v: float) -> float:
-	var b := lerpf(_flat_h, WorldGen.base_h(nzs, u * R, v * R, R), BASE_K * shape)
-	return b + WorldGen.SCULPT_H * RELIEF * CreationPlan.sample(plan.sculpt, u, v)
+	return CreationPlan.shown_h(nzs, plan.sculpt, u, v, R, _flat_h, shape)
 
 
 ## 그림에서 더 얹은 높낮이 (세상 높이 위에도 같게 — 배양 뒤에도 산·골짜기가 그대로 보이게)
@@ -650,17 +640,7 @@ const Y_SCALE_WATER := 1.0
 
 ## 미리보기 물 높이를 다시 (붓는 양이 바뀌면)
 func update_water_level(w: float) -> void:
-	var hs := PackedFloat32Array()
-	var ins: Array[int] = []
-	var n := 0
-	for ri in range(1, RINGS + 1, 2):
-		for sj in range(0, SEGS, 3):
-			var rr := float(ri) / RINGS * 0.95
-			var a := TAU * sj / SEGS
-			hs.append(preview_h(cos(a) * rr, sin(a) * rr))
-			ins.append(n)
-			n += 1
-	_wl = CreationPlan.water_level(hs, ins, w)
+	_wl = CreationPlan.shown_level(nzs, plan.sculpt, R, _flat_h, w, shape)
 	_dirty = true
 
 

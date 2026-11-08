@@ -239,64 +239,60 @@ func seed_preset(i: int) -> void:
 				add_seed(kind, q.x, q.y)
 
 
-## 미리보기 높이 (세상 높이 단위): 시드의 바탕 + 빚은 높낮이 — 창조 화면의 흙과 세상 만들기가 같은 식
-static func preview_h(nzs: Array, g: PackedFloat32Array, u: float, v: float, R: float) -> float:
-	return WorldGen.base_h(nzs, u * R, v * R, R) + WorldGen.SCULPT_H * sample(g, u, v)
+## 병 안 그림(창조 화면)의 높이 · 물 — 창조 화면(CreationJar)과 세상 만들기(WorldGen._shown_lakes)가 이 식 하나를 같이 쓴다.
+## 거인이 물을 부을 때 본 호수(이 식의 물 높이 아래)가 그대로 세상의 큰 호수 자리가 된다 (OPENING 단계 4 '파낸 골짜기부터 물이 차오름'.
+## 2026-11-08 고침: 예전엔 세상이 과장 없는 높이로 따로 덩어리를 찾아 작은 분지 하나씩만 팠다 → 본 호수와 자리·크기가 달랐다)
+const SHOW_RELIEF := 4.5                # 그림에서 빚은 높낮이(땅 단추)를 이만큼 과장 — 세 모양이 한눈에 다르게 (세상 높이는 그대로)
+const SHOW_BASE_K := 0.3                # 그림의 시드 바탕 굴곡은 덜 (땅 단추의 모양이 먼저 보이게)
+const LEVEL_RINGS := 36                 # 물 높이를 재는 표본: 고리 · 고리마다 점 (창조 화면의 흙 메시와 같은 칸)
+const LEVEL_SEGS := 96
 
 
-## 부은 물이 고이는 곳 (미리보기 격자에서 물 높이 아래의 덩어리들) → [{u, v, n}] 큰 것부터 — 세상의 큰 분지(부은 호수) 자리
-static func water_blobs(cr: Dictionary, seed_v: int, size: int) -> Array:
-	var w := float(cr.get("water", 0.0))
-	if w <= 0.0:
-		return []
-	var g := sculpt_of(cr)
-	var nzs := WorldGen.noises(seed_v)
-	var N := 40
-	var R := size * 0.5
+## 평평한 흙 높이 (바탕의 평균 — 흙을 처음 부을 때)
+static func flat_h(nzs: Array, R: float) -> float:
+	var s := 0.0
+	var n := 0
+	for j in 9:
+		for i in 9:
+			var u := (i - 4) / 4.5
+			var v := (j - 4) / 4.5
+			if u * u + v * v <= 1.0:
+				s += WorldGen.base_h(nzs, u * R, v * R, R)
+				n += 1
+	return s / maxf(1.0, n)
+
+
+## 그림의 땅 높이 (세상 높이 단위): 평평한 흙(shape 0) → 시드 바탕(덜) + 빚은 높낮이(과장)
+static func shown_h(nzs: Array, g: PackedFloat32Array, u: float, v: float, R: float, flat: float, shape := 1.0) -> float:
+	var b := lerpf(flat, WorldGen.base_h(nzs, u * R, v * R, R), SHOW_BASE_K * shape)
+	return b + WorldGen.SCULPT_H * SHOW_RELIEF * sample(g, u, v)
+
+
+## 그림의 물 높이 (부은 양 w) — 고리 표본에서 낮은 칸부터
+static func shown_level(nzs: Array, g: PackedFloat32Array, R: float, flat: float, w: float, shape := 1.0) -> float:
 	var hs := PackedFloat32Array()
-	hs.resize(N * N)
-	var inside: Array[int] = []
-	for j in N:
-		for i in N:
-			var u := (i + 0.5) / N * 2.0 - 1.0
-			var v := (j + 0.5) / N * 2.0 - 1.0
-			if u * u + v * v > 0.85 * 0.85:
-				hs[j * N + i] = 1.0e9
-				continue
-			hs[j * N + i] = preview_h(nzs, g, u, v, R)
-			inside.append(j * N + i)
-	var lv := water_level(hs, inside, w)
-	var seen := PackedByteArray()
-	seen.resize(N * N)
-	var out: Array = []
-	for k0 in inside:
-		if seen[k0] == 1 or hs[k0] >= lv:
-			continue
-		var stack := [k0]
-		seen[k0] = 1
-		var su := 0.0
-		var sv := 0.0
-		var n := 0
-		while not stack.is_empty():
-			var k: int = stack.pop_back()
-			var i := k % N
-			var j := k / N
-			su += (i + 0.5) / N * 2.0 - 1.0
-			sv += (j + 0.5) / N * 2.0 - 1.0
+	var ins: Array[int] = []
+	var n := 0
+	for ri in range(1, LEVEL_RINGS + 1, 2):
+		for sj in range(0, LEVEL_SEGS, 3):
+			var rr := float(ri) / LEVEL_RINGS * 0.95
+			var a := TAU * sj / LEVEL_SEGS
+			hs.append(shown_h(nzs, g, cos(a) * rr, sin(a) * rr, R, flat, shape))
+			ins.append(n)
 			n += 1
-			for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
-				var ii := i + d.x
-				var jj := j + d.y
-				if ii < 0 or jj < 0 or ii >= N or jj >= N:
-					continue
-				var q := jj * N + ii
-				if seen[q] == 0 and hs[q] < lv:
-					seen[q] = 1
-					stack.append(q)
-		if n >= 3:
-			out.append({"u": _q(su / n), "v": _q(sv / n), "n": n})
-	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return int(a["n"]) > int(b["n"]) or (int(a["n"]) == int(b["n"]) and float(a["u"]) < float(b["u"])))
-	return out.slice(0, 4)
+	return water_level(hs, ins, w)
+
+
+## 거인이 본 물 (창조 4단계): {flat, level} — 물을 안 부었으면 빈 사전
+static func shown_water(cr: Dictionary, seed_v: int, size: int) -> Dictionary:
+	var w := float(cr.get("water", 0.0))
+	var g := sculpt_of(cr)
+	if w <= 0.0 or g.is_empty():
+		return {}
+	var nzs := WorldGen.noises(seed_v)
+	var R := size * 0.5
+	var flat := flat_h(nzs, R)
+	return {"flat": flat, "level": shown_level(nzs, g, R, flat, w)}
 
 
 ## 물 높이: 낮은 칸부터 부은 양만큼 (최대 원판의 28%가 잠김 — 마을 자리·땅이 남게)

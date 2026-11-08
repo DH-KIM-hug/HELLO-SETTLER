@@ -17,6 +17,14 @@ const VALLEY_R := 16.0                 # 골짜기 둘레 (완만한 비탈)
 
 
 const SCULPT_H := 0.24                  # 창조 3단계 흙 빚기: 손가락으로 올리고 판 높이 (빚기 값 ±1 → 높이 ±0.24)
+# 거인이 본 호수 (창조 4단계 물 붓기 — CreationPlan.shown_water): 그림의 물 높이 아래 덩어리를 세상에 그 모양대로 판다 (2026-11-08 고침)
+const SHOWN_MAX := 4                    # 거인이 본 호수 중 세상에 옮기는 수 (큰 것부터)
+const SHOWN_MIN_G := 24                 # 이보다 작은 덩어리(4칸 간격 칸 수 — 고운 칸 약 380)는 옮기지 않음
+const SHOWN_EDGE := 0.94                # 유리벽 곁(반지름 비율)은 호수로 옮기지 않음
+const SHOWN_DEPTH := [0.3, 0.45]        # 호수 가운데 깊이 (물 조금 → 넉넉히)
+const SHOWN_SHORE_K := 1.0              # 물가 비탈: 그림의 물 높이 위로 오른 만큼 × 이것 (그림의 비탈을 따라 완만하게)
+const SHOWN_BAND_G := 10                # 물가 비탈을 다듬는 띠 (4칸 간격 칸 — 고운 칸 약 40)
+const SHOWN_SPOT_CLEAR := 45.0          # 키트 자리는 거인이 본 물에서 이만큼 떨어지게 (고운 칸)
 const CORE_RICH := [0.65, 1.0, 1.45]    # 핵 크기 → 광물 풍부도
 const CORE_VEINS := [4, 6, 9]           # 핵 크기 → 광맥 수
 const VEIN_KINDS := ["iron", "iron", "coal", "iron", "coal", "gold", "coal", "iron", "coal"]
@@ -71,11 +79,19 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	var gs := size / st
 	var base := PackedFloat32Array()
 	base.resize(gs * gs)
+	var shw := CreationPlan.shown_water(cr, seed_v, size) if not cr.is_empty() else {}
+	var sd := PackedFloat32Array()          # 거인이 본 물의 깊이 (그림의 물 높이 − 그림의 땅, + 물 아래) — 4칸 간격
+	if not shw.is_empty():
+		sd.resize(gs * gs)
 	for gj in gs:
 		for gi in gs:
 			var x := -R + (gi + 0.5) * st
 			var y := -R + (gj + 0.5) * st
 			base[gj * gs + gi] = base_h(nzs, x, y, R) + (SCULPT_H * CreationPlan.sample(sculpt, x / R, y / R) if not sculpt.is_empty() else 0.0)
+			if not shw.is_empty():
+				var inr := Vector2(x, y).length() < R * SHOWN_EDGE
+				sd[gj * gs + gi] = float(shw["level"]) - CreationPlan.shown_h(nzs, sculpt, x / R, y / R, R, float(shw["flat"])) if inr else -1.0
+	var shown: Array = _shown_lakes(sd, gs) if not sd.is_empty() else []
 	var img := Image.create_from_data(gs, gs, false, Image.FORMAT_RF, base.to_byte_array())
 	img.resize(size, size, Image.INTERPOLATE_CUBIC)
 	ww.h = img.get_data().to_float32_array()
@@ -88,6 +104,9 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		var a := a0 + TAU * i / n_sp + rng.randf_range(-0.3, 0.3)
 		var rad := R * rng.randf_range(0.56, 0.74)
 		spots.append(Vector2(cos(a), sin(a)) * rad)
+	if not shown.is_empty():                       # 키트 자리는 거인이 본 물 밖으로 (둘레를 따라 비켜 둠 — 난수는 쓰지 않음)
+		for si in spots.size():
+			spots[si] = _dry_spot(spots, si, sd, gs, st, R)
 	var drips: Array[Dictionary] = []
 	var river_paths: Array = []
 	var orig := ww.h.duplicate()        # 강 골짜기는 판 적 없는 땅 높이를 기준으로 (겹쳐 파며 점점 깊어지지 않게)
@@ -143,33 +162,27 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	var n_p: int = o["pours"]
 	if not cr.is_empty():                          # 창조 4단계: 부은 물의 양 → 큰 분지 수 (물을 많이 부으면 호수가 많다)
 		n_p = int(round(lerpf(2.0, 5.0, wamt)))
-	var blobs: Array = CreationPlan.water_blobs(cr, seed_v, size) if not cr.is_empty() else []
+	# 4a) 거인이 본 호수 (창조 4단계 — 파낸 골짜기부터 물이 차오른 그 모양 그대로): 판 자리·수면 높이 → 9)에서 물을 채운다
+	var made: Array[Dictionary] = _carve_shown(ww, shown, sd, gs, st, lerpf(SHOWN_DEPTH[0], SHOWN_DEPTH[1], wamt))
 	tries = 0
-	while pours.size() < n_p and tries < 500:
+	while pours.size() + made.size() < maxi(n_p, made.size() + 1) and tries < 500:
 		tries += 1
 		var p := Vector2.ZERO
-		var mine := false
-		if not pours.is_empty() and not blobs.is_empty():   # 거인이 판 골짜기에 고인 물 → 그 자리가 큰 호수
-			var bl: Dictionary = blobs.pop_front()
-			p = Vector2(float(bl["u"]), float(bl["v"])) * R
-			mine = true
-			if not ww.inside(p.x, p.y, 40.0) or _near_any(p, spots, 60.0) or _near_drips(p, drips, 40.0) or _near_pours(p, pours, 60.0):
-				continue
-		elif pours.is_empty():
+		if pours.is_empty():                       # 첫 자리 곁 (암염 위)
 			var aa := rng.randf() * TAU
 			p = spots[0] + Vector2(cos(aa), sin(aa)) * rng.randf_range(52.0, 70.0)
-			if not ww.inside(p.x, p.y, 40.0) or _near_drips(p, drips, 35.0) or _near_any(p, spots, 45.0):
+			if not ww.inside(p.x, p.y, 40.0) or _near_drips(p, drips, 35.0) or _near_any(p, spots, 45.0) or _shown_wet_near(sd, gs, st, R, p, 25.0):
 				continue
 		else:
 			p = _rand_disc(rng, R * 0.8)
-			if _near_any(p, spots, 70.0) or _near_drips(p, drips, 45.0) or _near_pours(p, pours, 90.0):
+			if _near_any(p, spots, 70.0) or _near_drips(p, drips, 45.0) or _near_pours(p, pours, 90.0) or _shown_wet_near(sd, gs, st, R, p, 40.0):
 				continue
-		var gr := crng if mine else rng
+		var gr := rng
 		var sx := gr.randf_range(9.0, 15.0) if pours.is_empty() else gr.randf_range(10.0, 20.0)
 		var sy := sx * gr.randf_range(0.45, 0.8)
 		var dep := gr.randf_range(0.5, 0.62)
 		_dip(ww, p, sx, sy, gr.randf() * PI, dep)
-		var salty := pours.size() == 0 or gr.randf() < (0.25 if mine else 0.4)
+		var salty := pours.size() == 0 or gr.randf() < 0.4
 		var add := gr.randf_range(0.36, 0.44)
 		if not cr.is_empty():
 			add = lerpf(0.30, 0.47, wamt) + gr.randf_range(-0.03, 0.03)
@@ -237,6 +250,13 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		var c := Vector2(p["x"], p["y"])
 		_pour(ww, c, float(p["sx"]) * 1.6, H[ww.idx(c.x, c.y)] + float(p["add"]))
 		ww.basins.append({"name": p["name"], "x": c.x, "y": c.y, "r": float(p["sx"]) * 1.4, "area0": 0})
+	for lk: Dictionary in made:
+		lk["name"] = _name(crng, used_names, NAME_LAKE)
+		_pour_coarse(ww, lk["coarse"], float(lk["L"]))
+		ww.basins.append({"name": lk["name"], "x": float(lk["x"]), "y": float(lk["y"]), "r": float(lk["r"]), "area0": 0})
+		if crng.randf() < 0.25:                    # 거인이 본 호수 넷에 하나쯤은 밑에 암염 (마르면 소금 들판)
+			var sm := {"x": float(lk["x"]), "y": float(lk["y"]), "r": clampf(float(lk["re"]) * 0.5, 6.0, 15.0), "amt": 0.03}
+			ww.seams.append(sm)                    # (녹이기는 아래 _seam에서 함께)
 	for sm: Dictionary in ww.seams:
 		_seam(ww, sm)
 	# 10) 발견할 것 (안개 칸에 걸어 둠)
@@ -244,6 +264,8 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 		ww.add_feature("lake", d["name"], [Vector2(d["x"], d["y"])], 9.0)
 	for p: Dictionary in pours:
 		ww.add_feature("lake", p["name"], [Vector2(p["x"], p["y"])], float(p["sx"]))
+	for lk: Dictionary in made:
+		ww.add_feature("lake", lk["name"], [Vector2(float(lk["x"]), float(lk["y"]))], float(lk["re"]))
 	for rp: Dictionary in river_paths:
 		var sample: Array = []
 		var pts: Array = rp["pts"]
@@ -268,6 +290,8 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	var days: float = o["settle_days"]
 	if days > 0.0:
 		ww.advance(days * JarWater.DAY)
+	for lk: Dictionary in made:                     # 타임랩스 동안 (뚜껑이 닫히기 전) 날아간 만큼 거인이 본 수면까지 다시
+		_pour_coarse(ww, lk["coarse"], float(lk["L"]))
 	ww.t = 0.0
 	ww._hydro_acc = 0.0
 	ww.offline = false
@@ -279,6 +303,232 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	GreatTrees.place(ww)                # 큰 나무 다섯 (GD 3.0) — 물이 자리 잡은 뒤, 서로·키트 자리·물가에서 멀리
 	FoundObjects.bury(ww)               # 떨어진 물건 (E3-16) — 키트 자리마다 둘레에 2~3개, 따로 쓰는 난수
 	return ww
+
+
+# ───────────────────────── 거인이 본 호수 (창조 4단계 물 붓기, OPENING 단계 4) ─────────────────────────
+## 그림의 물 아래 덩어리들 (4칸 간격 표 sd > 0 — 8방향으로 이음): [{cells, ring, dmax}] 큰 것부터, SHOWN_MAX개까지
+static func _shown_lakes(sd: PackedFloat32Array, gs: int) -> Array:
+	var seen := PackedByteArray()
+	seen.resize(gs * gs)
+	var out: Array = []
+	for k0 in gs * gs:
+		if seen[k0] == 1 or sd[k0] <= 0.0:
+			continue
+		var cells := PackedInt32Array()
+		var ringd := {}
+		var dmax := 0.0
+		var stack := [k0]
+		seen[k0] = 1
+		while not stack.is_empty():
+			var k: int = stack.pop_back()
+			cells.append(k)
+			dmax = maxf(dmax, sd[k])
+			var i := k % gs
+			var j := k / gs
+			for dj in range(-1, 2):
+				for di in range(-1, 2):
+					var ii := i + di
+					var jj := j + dj
+					if (di == 0 and dj == 0) or ii < 0 or jj < 0 or ii >= gs or jj >= gs:
+						continue
+					var q := jj * gs + ii
+					if sd[q] > 0.0:
+						if seen[q] == 0:
+							seen[q] = 1
+							stack.append(q)
+					else:
+						ringd[q] = true
+		if cells.size() >= SHOWN_MIN_G:
+			var ring := PackedInt32Array()
+			for q: int in ringd:
+				ring.append(q)
+			ring.sort()
+			cells.sort()
+			out.append({"cells": cells, "ring": ring, "dmax": dmax})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		var na := (a["cells"] as PackedInt32Array).size()
+		var nb := (b["cells"] as PackedInt32Array).size()
+		return na > nb or (na == nb and (a["cells"] as PackedInt32Array)[0] < (b["cells"] as PackedInt32Array)[0]))
+	return out.slice(0, SHOWN_MAX)
+
+
+## 그 점의 거인이 본 물 깊이 (4칸 간격 표를 쌍선형으로 — 밖은 −1)
+static func _shown_d(sd: PackedFloat32Array, gs: int, st: int, R: float, p: Vector2) -> float:
+	var fx := (p.x + R) / st - 0.5
+	var fy := (p.y + R) / st - 0.5
+	if fx < 0.0 or fy < 0.0 or fx >= gs - 1 or fy >= gs - 1:
+		return -1.0
+	var i := int(fx)
+	var j := int(fy)
+	var tx := fx - i
+	var ty := fy - j
+	var a := lerpf(sd[j * gs + i], sd[j * gs + i + 1], tx)
+	var b := lerpf(sd[(j + 1) * gs + i], sd[(j + 1) * gs + i + 1], tx)
+	return lerpf(a, b, ty)
+
+
+## p 둘레 r 안에 거인이 본 물이 있나 (가운데 + 두 고리 16점)
+static func _shown_wet_near(sd: PackedFloat32Array, gs: int, st: int, R: float, p: Vector2, r: float) -> bool:
+	if sd.is_empty():
+		return false
+	if _shown_d(sd, gs, st, R, p) > 0.0:
+		return true
+	for ring: float in [r * 0.5, r]:
+		for a in 8:
+			if _shown_d(sd, gs, st, R, p + Vector2.from_angle(TAU * a / 8.0) * ring) > 0.0:
+				return true
+	return false
+
+
+## 키트 자리 si를 거인이 본 물 밖으로: 같은 반지름에서 둘레를 따라 번갈아 비켜 본다 (다른 자리와 100칸 넘게) — 못 찾으면 그대로
+static func _dry_spot(spots: Array[Vector2], si: int, sd: PackedFloat32Array, gs: int, st: int, R: float) -> Vector2:
+	var S: Vector2 = spots[si]
+	if not _shown_wet_near(sd, gs, st, R, S, SHOWN_SPOT_CLEAR):
+		return S
+	var a0 := atan2(S.y, S.x)
+	for rad: float in [S.length(), R * 0.7, R * 0.6, R * 0.76]:
+		for t in range(1, 40):
+			var a := a0 + 0.08 * ceili(t / 2.0) * (1.0 if t % 2 == 1 else -1.0)
+			var p := Vector2(cos(a), sin(a)) * rad
+			if _shown_wet_near(sd, gs, st, R, p, SHOWN_SPOT_CLEAR):
+				continue
+			var ok := true
+			for sj in spots.size():
+				if sj != si and spots[sj].distance_to(p) < 100.0:
+					ok = false
+			if ok:
+				return p
+	return S
+
+
+## 거인이 본 호수를 판다: 수면 L = 둘레(물 밖 첫 칸들)의 가장 낮은 땅 바로 아래 (넘치지 않게) → 물 아래는 L보다 깊게
+## (그림의 깊이를 따라 가운데가 dep만큼), 물가 띠는 L 위로 그림의 비탈을 따라 완만하게. 높이는 낮추기만 한다 (둑을 쌓지 않음)
+## → [{L, coarse (물을 채울 거친 칸), x, y (가장 깊은 곳), r (호수를 덮는 반지름), re (같은 넓이 원의 반지름)}]
+static func _carve_shown(ww: WorldWater, lakes: Array, sd: PackedFloat32Array, gs: int, st: int, dep: float) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if lakes.is_empty():
+		return out
+	var R := ww.rr
+	var H := ww.h
+	var lab := PackedInt32Array()                 # 4칸 간격 칸 → 호수 번호 (물 아래) · 물가 띠는 가장 가까운 호수 (BFS)
+	lab.resize(gs * gs)
+	lab.fill(-1)
+	var dist := PackedInt32Array()
+	dist.resize(gs * gs)
+	dist.fill(1 << 20)
+	var queue := PackedInt32Array()
+	var Ls: Array[float] = []
+	for li in lakes.size():
+		var lk: Dictionary = lakes[li]
+		for k: int in lk["cells"]:
+			lab[k] = li
+			dist[k] = 0
+			queue.append(k)
+		var lo := 1.0e9
+		for q: int in lk["ring"]:
+			var qi := q % gs
+			var qj := q / gs
+			for fj in st:
+				for fi in st:
+					var x := -R + qi * st + fi + 0.5
+					var y := -R + qj * st + fj + 0.5
+					if ww.inside(x, y, 0.0):
+						lo = minf(lo, H[ww.idx(x, y)])
+		Ls.append(lo - 0.012)
+	# 둘레 칸은 맞닿은 호수 중 가장 높은 수면 위로 (한 호수의 물가를 다듬다 다른 호수가 넘치지 않게)
+	var ring_top := PackedFloat32Array()
+	ring_top.resize(gs * gs)
+	ring_top.fill(-1.0e9)
+	for li in lakes.size():
+		for q: int in lakes[li]["ring"]:
+			ring_top[q] = maxf(ring_top[q], Ls[li])
+	# 물가 띠: 가장 가까운 호수 (8방향 BFS, SHOWN_BAND_G까지)
+	var qh := 0
+	while qh < queue.size():
+		var k := queue[qh]
+		qh += 1
+		if dist[k] >= SHOWN_BAND_G:
+			continue
+		var i := k % gs
+		var j := k / gs
+		for dj in range(-1, 2):
+			for di in range(-1, 2):
+				var ii := i + di
+				var jj := j + dj
+				if ii < 0 or jj < 0 or ii >= gs or jj >= gs:
+					continue
+				var q := jj * gs + ii
+				if dist[q] > dist[k] + 1:
+					dist[q] = dist[k] + 1
+					lab[q] = lab[k]
+					queue.append(q)
+	var coarse: Array = []
+	var cnt: Array[int] = []
+	var deep: Array[float] = []
+	var deep_p: Array[Vector2] = []
+	for li in lakes.size():
+		coarse.append({})
+		cnt.append(0)
+		deep.append(-1.0)
+		deep_p.append(Vector2.ZERO)
+	for k in queue:
+		var li := lab[k]
+		var L: float = Ls[li]
+		var dmax: float = lakes[li]["dmax"]
+		var wet := dist[k] == 0
+		var top := maxf(L, ring_top[k])
+		var fade := smoothstep(SHOWN_BAND_G * 0.5, float(SHOWN_BAND_G), float(dist[k]))
+		var gi := k % gs
+		var gj := k / gs
+		for fj in st:
+			for fi in st:
+				var x := -R + gi * st + fi + 0.5
+				var y := -R + gj * st + fj + 0.5
+				if not ww.inside(x, y, 1.0):
+					continue
+				var p := Vector2(x, y)
+				var fk := ww.idx(x, y)
+				var d := _shown_d(sd, gs, st, R, p)
+				var h0 := H[fk]
+				if wet and d > 0.0:
+					H[fk] = minf(h0, L - 0.03 - dep * sqrt(clampf(d / maxf(dmax, 1e-4), 0.0, 1.0)))
+					cnt[li] += 1
+					(coarse[li] as Dictionary)[ww.coarse_of(fk)] = true
+					if d > deep[li]:
+						deep[li] = d
+						deep_p[li] = p
+				else:
+					H[fk] = lerpf(minf(h0, top + 0.02 + maxf(0.0, -d) * SHOWN_SHORE_K), h0, fade)
+	for li in lakes.size():
+		if cnt[li] == 0:
+			continue
+		var c := deep_p[li]
+		var r := 0.0
+		for k: int in lakes[li]["cells"]:
+			r = maxf(r, c.distance_to(Vector2(-R + (k % gs + 0.5) * st, -R + (k / gs + 0.5) * st)))
+		var cl := PackedInt32Array()
+		for q: int in coarse[li]:
+			cl.append(q)
+		cl.sort()
+		out.append({"L": Ls[li], "coarse": cl, "x": c.x, "y": c.y, "r": r + st * 2.0, "re": sqrt(cnt[li] / PI)})
+	ww.h = H
+	return out
+
+
+## 처음 물 (거친 칸 목록): 칸마다 수면 lv까지
+static func _pour_coarse(ww: WorldWater, cl: PackedInt32Array, lv: float) -> void:
+	for q in cl:
+		var a := ww.cA[q]
+		if a == 0:
+			continue
+		var base := q * 64
+		var k := 0
+		while k < a and ww.hs[base + k] < lv:
+			k += 1
+		var v := k * lv - ww.pre[q * 65 + k]
+		if v > ww.cV[q]:
+			ww.cV[q] = v
+			ww._relevel(q)
 
 
 ## 분지 (기울어진 타원 가우스)
