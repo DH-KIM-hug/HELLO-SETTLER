@@ -132,6 +132,7 @@ func _build_settings(body: VBoxContainer) -> void:
 	_section(body, "기기")
 	_toggle_row(body, "vibration", "진동")
 	_toggle_row(body, "notify", "알림")
+	_toggle_row(body, "picture_buildings", "건물을 그림으로")     # 2D 그림책 건물 (끄면 3D 모델 — 비교용) — VillageView가 다음 화면에 다시 그림
 	_toggle_row(body, "cutout_residents", "주민을 그림 인형으로 (시험)")     # 2D 컷아웃 주민 미리 보기 — 바로 바뀜 (VillageView가 다음 화면에)
 	var lang := _row(body, "언어")
 	var ll := _label(lang, GameSettings.LANGS.get(settings.language, "한국어"))
