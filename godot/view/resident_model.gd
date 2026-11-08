@@ -56,7 +56,7 @@ const SCARF_COLORS := ["b54023", "e2ded8", "d9a441", "4f86b8", "c96f6f", "7e68b5
 const FLOWERS := ["acc_flower", "acc_flower_w", "acc_flower_y"]
 ## 시대마다 꾸밈이 나올 몫 (0~10, 차림 취향 씨앗으로 사람마다 정해짐) — [개척기, 마을, 읍내 이후]
 const ERA_PETAL := [3, 5, 6]       # 여자·여자아이 꽃잎 치마
-const ERA_BUTTONS := [0, 5, 8]     # 튜닉 씨앗 여밈 (주민 세계엔 단추가 없음 — STORY 1, 2026-11-08)
+const ERA_BUTTONS := [0, 5, 8]     # 튜닉 씨앗 단추
 const ERA_CAPE := [4, 2, 2]        # 잎 망토
 const ERA_SCARF := [1, 2, 3]       # 목수건
 const ERA_ACORN := [1, 2, 3]       # 도토리 깍정이 모자 (모자 없는 사람)
@@ -645,7 +645,7 @@ static func body_list(lk_parts: Dictionary, job: Dictionary, cues := PackedStrin
 		out.append(hat)
 	if "apron" in cues and str(lk_parts["torso"]) == "torso_tunic" and not robe:
 		out.append("apron_job")
-	# (A20 2차) 꾸밈: 잎 망토 · 목수건 · 씨앗 여밈 · 꽃 (긴 옷엔 망토·여밈 없음, 모자를 쓰면 꽃 없음)
+	# (A20 2차) 꾸밈: 잎 망토 · 목수건 · 씨앗 단추 · 꽃 (긴 옷엔 망토·단추 없음, 모자를 쓰면 꽃 없음)
 	for a: String in lk_parts.get("acc", []):
 		if robe and a in ["cape_leaf", "buttons_seed"]:
 			continue
