@@ -23,7 +23,7 @@ PARTS = os.path.join(ART, "parts")
 VIEWS = ["front", "q_front", "q_back", "back"]
 SETS = ["a", "b", "c", "d"]
 FIG = 920.0                 # rig units: every figure normalised to 920 tall (feet = 0, y up)
-ATLAS_K = 0.45              # atlas px per rig unit (figure ~414 px tall in the atlas; 2048x1024 holds all 4 sets x 4 views + props)
+ATLAS_K = 0.42              # atlas px per rig unit (figure ~386 px tall; 2048x1024 holds all 4 sets x 4 views + necks + props)
 ATLAS_W = 2048
 PAD = 4
 SLOTS = {"skin": 0, "hair": 1, "main": 2, "second": 3, "trim": 4, "hat": 5, "legwear": 6, "shoe": 7}
@@ -49,16 +49,76 @@ LEG3 = {"d": "second"}                        # set d: cream leg wraps are the 3
 
 # draw order per view (back -> front). far side in 3/4 views = image-right (_b) (measured: lower match score = hidden)
 ORDER = {
-    "front": ["leg_a", "leg_b", "tail", "knot", "body", "prop", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "hat"],
-    "q_front": ["tail", "knot", "arm_b", "sleeve_b", "leg_b", "leg_a", "body", "prop", "arm_a", "sleeve_a", "head", "hat"],
-    "q_back": ["prop", "arm_b", "sleeve_b", "leg_b", "leg_a", "body", "arm_a", "sleeve_a", "head", "tail", "knot", "hat"],
-    "back": ["prop", "leg_a", "leg_b", "body", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "tail", "knot", "hat"],
+    "front": ["leg_a", "leg_b", "tail", "knot", "neck", "body", "prop", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "hat"],
+    "q_front": ["tail", "knot", "arm_b", "sleeve_b", "leg_b", "leg_a", "neck", "body", "prop", "arm_a", "sleeve_a", "head", "hat"],
+    "q_back": ["prop", "arm_b", "sleeve_b", "leg_b", "leg_a", "neck", "body", "arm_a", "sleeve_a", "head", "tail", "knot", "hat"],
+    "back": ["prop", "leg_a", "leg_b", "neck", "body", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "tail", "knot", "hat"],
 }
 # anim slots (shader): 0 root 1 body 2 head 3 sleeve_a 4 sleeve_b 5 arm_a 6 arm_b 7 leg_a 8 leg_b 9 accessory 10 prop
 SLOT_OF = {"body": 1, "head": 2, "sleeve_a": 3, "sleeve_b": 4, "arm_a": 5, "arm_b": 6, "leg_a": 7, "leg_b": 8,
            "tail": 9, "knot": 9, "hat": 2, "prop": 10}
 # groups: 0 outfit (body set S, rig frame) 1 head (head set T, frame = its head pivot) 2 headwear (set U, frame = U's head pivot) 3 prop
 PROPS = ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket"]
+
+
+# concept A (res_A.png, adult woman front, 456 px tall): chin -> collar top 12 px = 2.6 % -> 24 rig units;
+# top of the scarf -> chin 123 px = 27 % -> 248 rig units. Bare heads (no scarf) are a little lower on top.
+NECK_VIS = 24.0
+HEAD_H = {"a": 248.0, "bare": 232.0}
+
+
+def find_chin(p, skin):
+    """head piece (sheet px) -> chin. The drawn neck stub = the LOWEST skin-coloured blob of the piece (braids / hair may
+    hang lower, so not simply the bottom rows). Walk up the stub's middle columns until they stop being skin: that row is the
+    chin line (front / 3/4) or the nape (back). Returns x (stub centre), y (chin), x0..x1 (stub columns)."""
+    a = p[..., 3] > 128
+    rgb = p[..., :3].astype(np.float32) / 255.0
+    l = np.maximum(lum(rgb), 1e-3)
+    ls = float(lum(skin))
+    d = np.abs(rgb / l[..., None] - skin / ls).sum(-1)
+    r = l / ls
+    sk = a & (d < 0.3) & (r > 0.7) & (r < 1.25)
+    # lowest row with a stub-wide run of skin (>= 12 % of the piece width) — braid ties / ears are narrower
+    def maxrun(row):
+        if not row.any():
+            return 0
+        dd = np.diff(np.concatenate([[0], row.astype(np.int8), [0]]))
+        return int((np.nonzero(dd == -1)[0] - np.nonzero(dd == 1)[0]).max())
+    runs = np.array([maxrun(sk[y]) for y in range(p.shape[0])])
+    rows = np.nonzero(runs >= 0.12 * p.shape[1])[0]
+    yb = int(rows.max())
+    xs = np.nonzero(sk[max(0, yb - 8): yb - 3].any(0))[0]
+    if len(xs) == 0:
+        xs = np.nonzero(sk[yb])[0]
+    x0, x1 = int(xs.min()), int(xs.max())
+    xc = (x0 + x1) // 2
+    q = 2      # narrow: a slanted jaw line in 3/4 must still stop the walk
+    y = yb - 4
+    sw = x1 - x0 + 1
+    # stop at the chin line, or where the skin suddenly widens into the face (3/4 views: no line between jaw and neck)
+    while y > 0 and sk[y, xc - q: xc + q + 1].mean() > 0.6 and runs[y] < 1.5 * sw:
+        y -= 1
+    return {"x": xc, "y": int(y), "x0": x0, "x1": x1, "yb": yb}
+
+
+def neck_image(w_rig, h_rig, skin):
+    """generated neck: skin tube with the ink side lines, a cel shade step under the chin (like the concept)"""
+    w = max(4, int(round(w_rig * ATLAS_K)))
+    h = max(4, int(round(h_rig * ATLAS_K)))
+    ink = np.array([0x3A, 0x2A, 0x22], np.float32) / 255.0
+    lw = max(1.5, 5.5 * ATLAS_K)
+    xx = np.arange(w)[None, :] + 0.5
+    yy = np.arange(h)[:, None] + 0.5
+    edge = np.minimum(xx, w - xx)
+    col = np.where((yy < 0.45 * h)[..., None], skin * 0.84, skin)              # shade under the chin
+    a_ink = np.clip(lw - edge + 0.5, 0, 1) * np.ones((h, 1))
+    rgb = col * (1 - a_ink[..., None]) + ink * a_ink[..., None]
+    out = np.zeros((h, w, 4), np.uint8)
+    out[..., :3] = (rgb * 255).astype(np.uint8)
+    out[..., 3] = 255
+    m = np.zeros((h, w, 3), np.float32)
+    m[..., 0] = 1.0 - a_ink
+    return out, m
 
 
 def hexrgb(h):
@@ -113,6 +173,7 @@ def main():
     items = []     # (img, mask, meta)
     head_socket = {}
     head_top = {}
+    head_scale = {}
     for s in SETS:
         for v in VIEWS:
             d = os.path.join(PARTS, s, v)
@@ -128,42 +189,77 @@ def main():
                 y0 = (fy - q["y"] - q["h"]) * k
                 return [x0, y0, x1, y1]
 
-            hr = rig_rect(pl["head"])
-            hp = [(hr[0] + hr[2]) / 2, hr[1] + 0.06 * (hr[3] - hr[1])]     # neck point = head pivot
-            head_socket["%s_%s" % (s, v)] = hp
+            # --- head on a NECK SOCKET (2026-11-08 review: "residents look neckless") ---
+            # head pivot = CHIN (found on the head piece), the drawn neck stub below the chin is erased and replaced by a
+            # generated neck piece; every head set is scaled to the concept-A head size; the socket = body collar top + concept neck.
+            hq = pl["head"]
+            hpng = np.asarray(Image.open(os.path.join(d, "head.png")).convert("RGBA"))
+            ch = find_chin(hpng, hexrgb(BASE[s]["skin"]))
+            chin = [(hq["x"] + ch["x"] * hq["sx"] - cx) * k, (fy - (hq["y"] + ch["y"] * hq["sy"])) * k]
+            hr = rig_rect(hq)
+            hp = chin
+            f_head = HEAD_H.get(s, HEAD_H["bare"]) / max(hr[3] - chin[1], 1.0)
+            head_scale["%s_%s" % (s, v)] = round(f_head, 3)
+            # collar top of THIS set's body under the chin -> neck socket
+            bq = pl["body"]
+            bpng = np.asarray(Image.open(os.path.join(d, "body.png")).convert("RGBA"))
+            bx = int(round((hq["x"] + ch["x"] * hq["sx"] - bq["x"]) / bq["sx"]))
+            band = bpng[:, max(0, bx - 6): bx + 7, 3].max(axis=1) > 128
+            by = int(np.argmax(band)) if band.any() else 0
+            collar_y = (fy - (bq["y"] + by * bq["sy"])) * k
+            head_socket["%s_%s" % (s, v)] = [chin[0], collar_y + NECK_VIS]
             ht = [(hr[0] + hr[2]) / 2, hr[3]]                               # top of the (bare) head
-            head_top["%s_%s" % (s, v)] = [ht[0] - hp[0], ht[1] - hp[1]]
+            head_top["%s_%s" % (s, v)] = [(ht[0] - hp[0]) * f_head, (ht[1] - hp[1]) * f_head]
+            # generated neck (skin, dyed with the skin channel), drawn behind the body's collar and behind the head
+            nw = (ch["x1"] - ch["x0"]) * hq["sx"] * k * f_head
+            nimg, nmask = neck_image(nw, NECK_VIS + 70.0, hexrgb(BASE[s]["skin"]))
+            items.append((nimg, nmask, {
+                "set": s, "view": VIEWS.index(v), "part": "neck", "group": 1, "slot": 2,
+                "rect": [-nw / 2, -(NECK_VIS + 55.0), nw / 2, 15.0], "pivot": [0.0, 0.0], "parent_pivot": [0.0, 0.0],
+                "layer": ORDER[v].index("neck"), "dye": [SLOTS["skin"], -1, -1],
+                "base": [list(map(float, hexrgb(BASE[s]["skin"]))), [1, 1, 1], [1, 1, 1]]}))
             for name, q in pl.items():
                 if name == "figure":
                     continue
                 kind = name.split("_")[0]
                 r = rig_rect(q)
                 pname = "hat" if (name == "knot" and s != "a") else name
+                scale = 1.0
                 if pname in ("head", "tail") or (pname == "knot"):
-                    group, frame = 1, hp
+                    group, frame, scale = 1, hp, f_head
                 elif pname == "hat":
-                    group, frame = 2, ht        # headwear sits on the head TOP (any head shape/height)
+                    group, frame, scale = 2, ht, f_head    # headwear sits on the head TOP (any head shape/height)
                 else:
                     group, frame = 0, [0.0, 0.0]
-                rr = [r[0] - frame[0], r[1] - frame[1], r[2] - frame[0], r[3] - frame[1]]
+                rr = [(r[0] - frame[0]) * scale, (r[1] - frame[1]) * scale, (r[2] - frame[0]) * scale, (r[3] - frame[1]) * scale]
                 if kind == "head":
                     piv = [0.0, 0.0]
                 elif kind in ("sleeve", "arm"):
                     sr = rig_rect(pl["sleeve" + name[-2:]]) if ("sleeve" + name[-2:]) in pl else r
                     shoulder = [(sr[0] + sr[2]) / 2, sr[3] - 0.15 * (sr[3] - sr[1])]
-                    # arm = forearm: bends at the ELBOW (inside the bottom of the sleeve puff) and follows the sleeve (shoulder)
-                    piv = shoulder if kind == "sleeve" else [(sr[0] + sr[2]) / 2, sr[1] + 0.3 * (sr[3] - sr[1])]
+                    # forearm turns about the CENTRE of the sleeve puff (its stub stays inside the puff) and follows the shoulder
+                    piv = shoulder if kind == "sleeve" else [(sr[0] + sr[2]) / 2, (sr[1] + sr[3]) / 2]
                 elif kind == "leg":
                     piv = [(r[0] + r[2]) / 2, r[3] - 0.1 * (r[3] - r[1])]           # hip
                 elif kind == "body":
                     piv = [(r[0] + r[2]) / 2, r[1] + 0.55 * (r[3] - r[1])]          # waist
                 else:   # tail / knot / hat: hangs from its top
                     piv = [(rr[0] + rr[2]) / 2, rr[3]]
-                if group == 0 and kind not in ("head",):
-                    pass
                 img = Image.open(os.path.join(d, name + ".png")).convert("RGBA")
-                w = max(2, int(round((r[2] - r[0]) * ATLAS_K)))
-                h = max(2, int(round((r[3] - r[1]) * ATLAS_K)))
+                if kind == "head":
+                    a = np.asarray(img).copy()
+                    # erase the drawn neck stub only: rows below the chin whose opaque run is stub-narrow (3/4 views: the
+                    # jaw beside the neck can hang lower than the chin point and must stay)
+                    sw = ch["x1"] - ch["x0"] + 1
+                    lo = max(0, ch["x0"] - 18)
+                    for yy in range(ch["y"] + 3, min(a.shape[0], ch["yb"] + 6)):
+                        row = a[yy, lo: ch["x1"] + 19, 3] > 128
+                        xs_ = np.nonzero(row)[0]
+                        if len(xs_) and (xs_.max() - xs_.min() + 1) <= sw + 10:      # nothing but the stub in this row
+                            a[yy, max(0, ch["x0"] - 4): ch["x1"] + 5, 3] = 0
+                    img = Image.fromarray(a)
+                w = max(2, int(round((rr[2] - rr[0]) * ATLAS_K)))
+                h = max(2, int(round((rr[3] - rr[1]) * ATLAS_K)))
                 img = np.asarray(img.resize((w, h), Image.LANCZOS))
                 chans = list(CHANNELS[kind if pname != "hat" else "knot"])
                 if kind == "head" and s != "a":
@@ -227,7 +323,7 @@ def main():
     Image.fromarray(atlas).save(os.path.join(ART, "doll_atlas.png"))
     Image.fromarray(mask).save(os.path.join(ART, "doll_mask.png"))
     json.dump({"fig": FIG, "atlas": [ATLAS_W, H], "sets": SETS, "views": VIEWS, "props": PROPS,
-               "slots": SLOTS, "head_socket": head_socket, "head_top": head_top, "base": BASE, "quads": quads},
+               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "head_socket": head_socket, "head_top": head_top, "head_scale": head_scale, "base": BASE, "quads": quads},
               open(os.path.join(ART, "doll_lib.json"), "w"), indent=0)
     print("atlas", ATLAS_W, "x", H, "quads", len(quads))
 
