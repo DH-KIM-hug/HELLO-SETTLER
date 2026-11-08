@@ -12,8 +12,8 @@ const LIB_DIR := "res://art/cutout/woman_a/"
 const FRAMES := 16
 const NSLOT := 11
 ## 0 root 1 body 2 head 3 sleeve_a 4 sleeve_b 5 arm_a 6 arm_b 7 leg_a 8 leg_b 9 accessory 10 prop
-const CLIPS := ["idle", "walk", "carry", "hoe"]
-const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6}   # 주기/초 (걷기 한 주기 = 두 걸음)
+const CLIPS := ["idle", "walk", "carry", "hoe", "hold"]     # hold = 짐을 안고 서 있기 (나르기 팔 + 쉬는 다리, 2026-11-08 게임 연결)
+const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35}   # 주기/초 (걷기 한 주기 = 두 걸음)
 const SETS := ["a", "b", "c", "d"]
 const PROPS := ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket"]
 
@@ -41,10 +41,10 @@ static func lib() -> Dictionary:
 	return _lib
 
 
-static func _tex(name: String) -> ImageTexture:
-	var img := Image.load_from_file(ProjectSettings.globalize_path(LIB_DIR + name))
-	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
+## 가져온(import) 텍스처 — 내보낸 안드로이드 빌드에서도 읽힌다 (원본 PNG는 APK에 없음). 가져오기 설정: 무손실 + 밉맵
+## (doll_atlas.png.import · doll_mask.png.import). 값은 sRGB 그대로 (셰이더가 물감을 곱한 뒤 한 번만 선형으로)
+static func _tex(name: String) -> Texture2D:
+	return load(LIB_DIR + name) as Texture2D
 
 
 static func palette() -> PackedVector3Array:
@@ -272,6 +272,17 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 				else:
 					hp = Vector2(0, 430) + Vector2(0, bob)
 				a[10] = Vector4(0, hp.x, hp.y, 1)
+		"hold":
+			# 짐을 안고 서 있기: 나르기의 팔·소품 자리(걸음 위상 0 = 흔들림 없음) + 다리는 그대로 + 숨쉬기 (윗몸과 짐이 함께)
+			a = _pose("carry", v, 0.0)
+			a[7] = Vector4(0, 0, 0, 1)
+			a[8] = Vector4(0, 0, 0, 1)
+			var br := 3.0 * s
+			var b1: Vector4 = a[1]
+			a[1] = Vector4(b1.x, b1.y, b1.z + br, b1.w)
+			var p10: Vector4 = a[10]
+			a[10] = Vector4(p10.x, p10.y, p10.z + br, p10.w)
+			a[9] = Vector4(0.05 * sin(w + 0.6), 0, 0, 1)
 		"hoe":
 			# 괭이질 (일 옷 d 전용 일 동작): 들어 올림(0~0.45) → 내려찍음(0.45~0.6) → 멈춤
 			var u := 0.0

@@ -15,6 +15,7 @@ var v: Village
 var terrain: JarTerrain
 var residents := {}             # id → ResidentModel
 var _res_key := {}              # id → 나이 단계 (바뀌면 모델을 다시 만듦)
+var cut_shadows: CutoutShadows  # 종이 인형 주민의 발밑 그림자 (CutoutResident.enabled일 때만)
 var _blds := {}                 # id → Node3D
 var _bld_key := {}
 var _live := {}                 # 건물 id → {"stone": 맷돌 윗돌 · "glow": 화덕 불} (_animate_live)
@@ -360,16 +361,18 @@ func _sync_residents(dt: float) -> void:
 	var seen := {}
 	var chief := v.chief()
 	var lod_close := _resident_lod_close()
+	var cut := CutoutResident.enabled()
 	fish_pair = fish_pairs(v.people)
 	for r in v.people:
 		seen[r.id] = true
 		var m: ResidentModel = residents.get(r.id)
 		var key := ResidentModel.look_key(r)      # 나이·대머리·흰머리 단계가 바뀌면 다시 만든다 (7단계)
-		var fresh: bool = m == null or _res_key.get(r.id, -1) != key
+		# (2026-11-08) 종이 인형 주민 미리 보기 — 설정이 바뀌면 그 자리에서 다시 만든다 (화면만)
+		var fresh: bool = m == null or _res_key.get(r.id, -1) != key or (m is CutoutResident) != cut
 		if fresh:
 			if m != null:
 				m.queue_free()
-			m = ResidentModel.new()
+			m = CutoutResident.new() if cut else ResidentModel.new()
 			add_child(m)
 			m.setup_from(r)
 			residents[r.id] = m
@@ -452,6 +455,13 @@ func _sync_residents(dt: float) -> void:
 			(residents[id] as Node3D).queue_free()
 			residents.erase(id)
 			_res_key.erase(id)
+	if cut and cut_shadows == null:
+		cut_shadows = CutoutShadows.new()
+		add_child(cut_shadows)
+	if cut_shadows != null:
+		cut_shadows.visible = cut
+		if cut:
+			cut_shadows.refresh(residents)
 	for id in _rafts.keys():
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()

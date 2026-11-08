@@ -50,7 +50,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd", "social": "res://tests/social_tests.gd",
 	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd", "touch": "res://tests/touch_tests.gd",
 	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
-	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd"}
+	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "cutout": "res://tests/cutout_tests.gd"}
 
 
 func _initialize() -> void:
@@ -67,6 +67,8 @@ func _initialize() -> void:
 	Village.start_aware = true
 	# 기존 묶음은 '비운 시간 = 병 시간' (v4.2 따라잡기 배율 1)으로 쓴다. 자리를 비운 동안 배율(v4.3, 기본 ×6)은 test_away_rate가 따로
 	CatchUp.rate_override = 1.0
+	# 기존 묶음은 3D 주민 모델(ResidentModel의 뼈·부품)을 본다 — 종이 인형 미리 보기(설정 기본 켜짐)는 cutout 묶음이 따로 켬
+	CutoutResident.override = 0
 	CatchUp.step_override = Balance.STEP
 	var one := ""
 	for k: String in SUITES:
@@ -81,7 +83,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth", "cutout"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()

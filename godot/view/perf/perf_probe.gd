@@ -4,7 +4,7 @@
 ## 켜는 법 (안드로이드 디버그 APK):
 ##   1) adb shell am start -n com.ddoystory.najakji/com.godot.game.GodotApp --esa command_line_params "--perf,scale=0.75"
 ##   2) 안 되면 깃발 파일: echo "perf scale=0.75" | adb shell run-as com.ddoystory.najakji sh -c 'cat > files/perf_probe.cfg'  (한 번 읽고 지워진다)
-## 옵션 (key=value): dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
+## 옵션 (key=value): cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
 ##   · flora=old (꽃숲 자르기·멀리 덩이 끔 — 이전과 비교) · shots=1 (데스크톱: 장면마다 화면을 godot_shots/perf_<tag>_<장면>.png로 — 창이 필요)
 ##
 ## 하는 일: 넓은 세상(world.tscn, 본 게임 장면)에 마을 시대 건물 + 주민 30명을 세우고 →
@@ -81,6 +81,8 @@ func _run() -> void:
 	var only := String(_opt("only", ""))
 	_vp = get_tree().root.get_viewport_rid()
 	RenderingServer.viewport_set_measure_render_time(_vp, true)
+	if _opt("cut", "") != "":                  # cut=1 종이 인형 주민 · cut=0 3D 주민 (없으면 설정을 따름 — CutoutResident.enabled)
+		CutoutResident.override = int(_opt("cut", "-1"))
 	var sc := float(_opt("scale", 1.0))
 	get_tree().root.scaling_3d_scale = sc
 	results["tag"] = tag
