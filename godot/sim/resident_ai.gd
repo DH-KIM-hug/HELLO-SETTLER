@@ -178,13 +178,18 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 		"carry_set":                              # (E1-2) 제단에 쌓을 돌을 안음 / 내려놓음 (보이는 것만 — 창고와 상관없음)
 			r.carry = String(d["item"])
 			r.carry_amt = 0.0
+		"aw_skysay":                                # (수첩 쪽지 7) 하늘을 보던 아이의 한마디
+			Awakening.sky_say(v, r, int(d.get("i", 0)))
 		"build":
 			var b: Building = d["b"]
 			if bool(d.get("drop", false)):
 				r.carry = ""
 			if not b.is_site():
 				return
-			b.prog += float(d["chunk"]) * v.build_mult(b) * v.opening_build(b)    # 들어준 소원 ×1.5 (기획서 6.7) · 첫 한 시간의 터는 천천히
+			if bool(d.get("stone", false)):       # 제단: 돌 하나 = 정확히 한 칸 (Awakening.ALTAR_STONES — 진행 = 놓은 돌 수)
+				b.prog = minf(float(Balance.B[b.site_type()]["time"]), b.prog + float(Balance.B[b.site_type()]["time"]) / Awakening.ALTAR_STONES)
+			else:
+				b.prog += float(d["chunk"]) * v.build_mult(b) * v.opening_build(b)    # 들어준 소원 ×1.5 (기획서 6.7) · 첫 한 시간의 터는 천천히
 			if b.prog >= float(Balance.B[b.site_type()]["time"]) - 1e-3:
 				v.on_built(b)
 				v.speak(r, "%s 완성!" % b.label(), 5)
@@ -303,6 +308,8 @@ static func decide(v: Village, r: Resident) -> void:
 	if Wildlife.decide(v, r):          # [들짐승] 쉬는 아이·노인이 물가에서 낚싯대 (WILDLIFE 2)
 		return
 	var night := v.is_night()
+	if not night and Awakening.skywatch_task(v, r, h):     # (수첩 쪽지 7) 깨닫기 직전: 아이들이 모닥불 곁에서 하늘을 올려다보고 가리킴
+		return
 	var late := r.f("wake_late", 0.0)        # 혈통 '잠꾸러기': 아침에 1시간 늦게
 	if late > 0.0 and h >= Balance.NIGHT_TO and h < Balance.NIGHT_TO + late:
 		night = true
@@ -348,6 +355,11 @@ static func decide(v: Village, r: Resident) -> void:
 		cand["social"] = Balance.ACT_BASE["social"] * (Balance.W_EVENING_SOCIAL if h >= Balance.WORK_TO else 1.0)
 	if r.is_child() and work_t:
 		cand["play"] = Balance.ACT_BASE["play"]
+		# (EVENTS_STAGING 2b) 제단 짓기: 아이도 작은 돌을 하나씩 안고 와 쌓는다 (제단 터만 — 집 터는 어른이)
+		if r.age >= 2.5 and not hurt and v.aware and not v.altar_built:
+			var asite := _ready_site(v)
+			if asite != null and asite.site_type() == Awakening.ALTAR:
+				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK
 	if work_t and r.is_adult() and r.home >= 0 and not opening:      # v5: 일 없는 낮 — 텃밭·집 손보기·아이와 놀기·집 앞에서 쉬기
 		cand["chores"] = Balance.ACT_BASE["chores"]
 	if r.is_elder() and not night:
@@ -1049,6 +1061,8 @@ static func build_task(v: Village, r: Resident) -> bool:
 		return false
 	var total: float = Balance.B[b.site_type()]["time"]
 	var ch0 := 30.0 if (v.in_opening() or v.staged()) else Balance.BUILD_CHUNK     # 첫 한 시간·제단 장면은 예전처럼 잘게 (짓는 모습이 자주 바뀜)
+	if ch0 > FIRST_DAY_CHUNK and Notebook.first_day(v):
+		ch0 = FIRST_DAY_CHUNK             # (2026-11-08) 수첩의 첫날: 병 30분 덩이(현실 75초)가 끝날 때 한꺼번에 뛰지 않고 몇 초마다 오르게
 	var chunk := minf(ch0, (total - b.prog) / (v.build_mult(b) * v.opening_build(b)))    # 남은 만큼만 (일하는 초 — v5 한 번에 병 30분)
 	if chunk <= 1.0:
 		chunk = 1.0
@@ -1062,13 +1076,19 @@ static func build_task(v: Village, r: Resident) -> bool:
 	return true
 
 
+const FIRST_DAY_CHUNK := 30.0        # 수첩의 첫날 짓기 한 덩이 (병 초 — 첫 한 시간·제단 장면과 같게. 쪽지 빠르기 ×24로 현실 약 1.3초 — 덩이마다 터 둘레 다른 자리로)
+
+
 ## (E1-2 · EVENTS_STAGING 2b) 제단: 둘레에서 둥근 돌을 하나 주워 안고 와서 쌓는다 — 돌을 안은 모습이 보이게 (r.carry "돌").
 ## 주우러 가는 길도 짓는 일로 친다 (제단이 서는 때는 그대로 — 첫 병 ~7:30). 난수를 쓰지 않는다 (다른 흐름을 흔들지 않게)
+## (2026-11-08 "지켜보자 쪽지인데 주민이 그 일을 안 함") 줍기·놓기는 숙여 줍는 동작("gather")으로 몇 초씩 보이게 — 예전엔 줍기가 일 동작(×채집 배율)이라
+## 눈 깜짝할 새 끝나고 놓기는 망치질로 보였다. 한 번 나르면 돌 하나 (build op "stone" — 진행 = 놓은 돌 수, Awakening.altar_stones)
 const ALTAR_PICK_R := [2.8, 4.2]     # 돌을 줍는 곳 (제단에서 칸)
-const ALTAR_PICK := 4.0              # 줍는 동작 (병 초)
+const ALTAR_PICK := 16.0             # 숙여 줍는 동작 (병 초 — 제단 장면 빠르기 ×8로 현실 약 2초)
+const ALTAR_SET := 16.0              # 제단에 숙여 내려놓는 동작 (병 초)
 
 
-static func _altar_task(v: Village, r: Resident, b: Building, chunk: float, sp: Vector2) -> bool:
+static func _altar_task(v: Village, r: Resident, b: Building, _chunk: float, sp: Vector2) -> bool:
 	var c := Vector2(b.x, b.y)
 	var pick := c
 	for k in 6:                                  # 사람마다 다른 쪽 (물이면 다음 쪽)
@@ -1078,11 +1098,12 @@ static func _altar_task(v: Village, r: Resident, b: Building, chunk: float, sp: 
 		if not v.water_at(q.x, q.y):
 			pick = q
 			break
-	var walk_s := (Vector2(r.x, r.y).distance_to(pick) + pick.distance_to(sp)) / maxf(0.05, Balance.WALK * v.pace_walk())
-	var credit := chunk + 0.3 * minf(walk_s + ALTAR_PICK, chunk)     # 오가는 길의 몫 (제단이 서는 때 — 첫 병 ~7:30에 맞춤)
-	r.doing = "제단에 쌓을 돌을 줍는 중" if v.aware else "둥근 돌을 줍는 중"
+	if r.is_child():
+		r.doing = "제단에 쌓을 작은 돌을 줍는 중" if v.aware else "작은 돌을 줍는 중"
+	else:
+		r.doing = "제단에 쌓을 돌을 줍는 중" if v.aware else "둥근 돌을 줍는 중"
 	r.steps.append(walk(pick.x, pick.y))
-	r.steps.append(act(ALTAR_PICK, "work", op("carry_set", {"item": "돌"}), true, op("carry_set", {"item": ""})))
+	r.steps.append(act(ALTAR_PICK, "gather", op("carry_set", {"item": "돌"}), false, op("carry_set", {"item": ""})))
 	r.steps.append(walk(sp.x, sp.y))
-	r.steps.append(act(chunk, "work", op("build", {"b": b, "chunk": credit, "drop": true}), true, op("carry_set", {"item": ""})))
+	r.steps.append(act(ALTAR_SET, "gather", op("build", {"b": b, "chunk": 0.0, "drop": true, "stone": true}), false, op("carry_set", {"item": ""})))
 	return true

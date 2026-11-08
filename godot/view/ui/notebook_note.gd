@@ -13,6 +13,8 @@ var village: Village
 var title_l: Label
 var text_l: Label
 var step_l: Label
+var prog_l: Label                    # 지켜보기 쪽지의 진행 한 줄 ("제단 돌 6/24" — Notebook.progress) + 아래 작은 막대
+var prog_f := -1.0                   # 막대 (0~1, −1 = 없음)
 var pointer: Control                 # 화살표·고리 (부모의 맨 위 — 쪽지와 같은 층)
 var _shown := ""                     # 지금 보이는 쪽지 id
 var _t := 0.0
@@ -73,6 +75,14 @@ func _init() -> void:
 	text_l.add_theme_constant_override("line_spacing", -2)
 	text_l.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	col.add_child(text_l)
+	prog_l = Label.new()
+	prog_l.name = "Progress"
+	prog_l.visible = false
+	prog_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL - 1)
+	prog_l.add_theme_color_override("font_color", UiTheme.INK_SOFT)
+	prog_l.custom_minimum_size.y = 22.0              # 아래 6px은 막대 자리
+	prog_l.vertical_alignment = VERTICAL_ALIGNMENT_TOP
+	col.add_child(prog_l)
 	gui_input.connect(_on_input)
 	draw.connect(_draw_sparkle)
 
@@ -124,6 +134,7 @@ func _process(dt: float) -> void:
 		text_l.text = String(tk.get("text", ""))
 		step_l.text = "%d / %d" % [i + 1, Notebook.TASKS.size()] if id != "" else ""
 		reset_size()
+	_update_progress(id)
 	visible = (id != "" or _reward_t > 0.0) and not hidden_by_sheet
 	if id == "" and _reward_t > 0.0 and text_l.text != _done_text:
 		text_l.text = _done_text
@@ -142,8 +153,24 @@ func _process(dt: float) -> void:
 		ground_layer.queue_redraw()
 
 
-## 모서리의 작은 별 (반짝임만 — 빨간 점 금지) + 떠오르는 보상
+## 지켜보기 쪽지의 진행 한 줄 (바뀔 때만 크기를 다시)
+func _update_progress(id: String) -> void:
+	var pg: Dictionary = Notebook.progress(village) if village != null and id != "" else {}
+	var tx := String(pg.get("text", ""))
+	prog_f = float(pg.get("f", -1.0)) if not pg.is_empty() else -1.0
+	if tx != prog_l.text or prog_l.visible != (tx != ""):
+		prog_l.text = tx
+		prog_l.visible = tx != ""
+		reset_size()
+
+
+## 모서리의 작은 별 (반짝임만 — 빨간 점 금지) + 떠오르는 보상 + 진행 막대
 func _draw_sparkle() -> void:
+	if prog_l.visible and prog_f >= 0.0:
+		var r := Rect2(prog_l.position + Vector2(0, prog_l.size.y - 6.0), Vector2(W - 22.0, 4.0))
+		r.position += (prog_l.get_parent() as Control).position
+		draw_rect(r, Color(UiTheme.INK_BROWN, 0.18))
+		draw_rect(Rect2(r.position, Vector2(r.size.x * clampf(prog_f, 0.0, 1.0), r.size.y)), UiTheme.PRIMARY)
 	var p := Vector2(size.x - 6.0, 4.0)
 	var k := 0.5 + 0.5 * sin(_t * 3.2)
 	var r := 3.0 + 3.5 * k
@@ -157,14 +184,32 @@ func _draw_sparkle() -> void:
 		draw_string(f, Vector2(size.x - 70.0, size.y + 14.0 - 18.0 * u), _reward, HORIZONTAL_ALIGNMENT_RIGHT, 66.0, UiTheme.SIZE, col)
 
 
-## 짓는 터 위 진행 고리 [[화면 점, 0~1]] (첫 병 첫날). 장면의 화면 층(띠·시트 아래)에 그린다 — 이 쪽지 층(시트 위)이 아니라.
+## 짓는 터 위 진행 고리 [[화면 점, 0~1, (짧은 말)]] (첫 병 첫날 · 제단 "6/24"). 장면의 화면 층(띠·시트 아래)에 그린다 — 이 쪽지 층(시트 위)이 아니라.
 static func draw_site_marks(ci: CanvasItem, marks: Array) -> void:
 	for m: Array in marks:
 		var c: Vector2 = m[0]
 		var f: float = m[1]
+		if f < 0.0:                       # 작은 말풍선 "!" (하늘을 올려다보는 아이 — 몇 초마다 톡)
+			var k := fposmod(Time.get_ticks_msec() / 1000.0 + c.x * 0.013, 2.4)
+			var pop := clampf(k / 0.18, 0.0, 1.0) * (1.0 if k < 1.8 else clampf((2.4 - k) / 0.3, 0.0, 1.0))
+			if pop > 0.01:
+				var r := 7.5 * pop
+				ci.draw_circle(c, r, Color(1, 0.98, 0.9, 0.95))
+				ci.draw_arc(c, r, 0.0, TAU, 18, Color(UiTheme.INK_BROWN, 0.6), 1.2)
+				ci.draw_colored_polygon(PackedVector2Array([c + Vector2(-2.5, r - 1.0), c + Vector2(2.5, r - 1.0), c + Vector2(-1.0, r + 4.0)]), Color(1, 0.98, 0.9, 0.95))
+				ci.draw_rect(Rect2(c + Vector2(-1.1, -4.6) * pop, Vector2(2.2, 5.6) * pop), UiTheme.INK_BROWN)
+				ci.draw_rect(Rect2(c + Vector2(-1.1, 2.2) * pop, Vector2(2.2, 2.0) * pop), UiTheme.INK_BROWN)
+			continue
 		ci.draw_circle(c, 11.0, Color(1, 0.98, 0.9, 0.85))
 		ci.draw_arc(c, 9.0, 0.0, TAU, 28, Color(UiTheme.INK_BROWN, 0.25), 3.0)
 		ci.draw_arc(c, 9.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(f, 0.0, 1.0), 28, UiTheme.PRIMARY, 3.0)
+		if m.size() > 2 and String(m[2]) != "":
+			var fnt := UiTheme.font(true)
+			var fs := UiTheme.SIZE_SMALL - 2
+			var w := fnt.get_string_size(String(m[2]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+			var at := c + Vector2(-w * 0.5, 13.0 + fs)          # 고리 바로 아래 가운데 (화면 가장자리에서 잘리지 않게)
+			ci.draw_rect(Rect2(at + Vector2(-3, -fs - 1), Vector2(w + 6, fs + 6)), Color(1, 0.98, 0.9, 0.85))
+			ci.draw_string(fnt, at, String(m[2]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs, UiTheme.INK_BROWN)
 
 
 ## 가리키기: 단추 위에서 통통 뛰는 화살표 + 금빛 테두리 (땅 자리 고리는 draw_ground_ring — 낮은 층)

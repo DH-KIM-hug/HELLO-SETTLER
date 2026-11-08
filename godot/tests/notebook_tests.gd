@@ -30,7 +30,7 @@ func all() -> void:
 	_old_aware = Village.start_aware
 	Village.start_aware = false
 	run.timed(self, ["test_first_ten_minutes", "test_order_and_rewards", "test_real_actions", "test_ignored", "test_save_resume",
-		"test_second_jar", "test_words", "test_scene"])
+		"test_second_jar", "test_words", "test_watch_notes", "test_scene"])
 	Village.start_aware = _old_aware
 	Market.reset()
 
@@ -411,6 +411,117 @@ func test_second_jar() -> void:
 
 
 ## 말 규칙: 쪽지·주민 말·연대기에 금지어 없음 · 쪽지는 거인의 메모 (주민이 거인을 모름 — 깨닫기 전 주민 말에 '거인' 없음)
+## (2026-11-08 사용자 "주민들이 지켜볼 때 그에 맞춰 행동을 안 함 … 프로그레스도 안 보이고") 지켜보기 쪽지마다 약속한 행동이
+## 쪽지가 가리키는 자리 곁에서 N초 안에 시작되어 쪽지가 떠 있는 동안 이어지고, 진행 한 줄이 바뀐다
+const SKY_START := 20.0                # 쪽지 7이 뜨고 이만큼(현실 초) 안에 모닥불 곁 아이가 하늘을 올려다봄 (멀리 있던 아이가 걸어오는 길 포함)
+const SKY_NEAR := 4.0                  # 모닥불에서 (칸)
+const ALTAR_START := 25.0              # 제단 쪽지가 뜨고 이만큼 안에 제단 곁에서 돌을 줍거나 나름
+const ALTAR_NEAR := 6.0
+
+
+func test_watch_notes() -> void:
+	Market.reset()
+	var v := proto()
+	var c := JarClock.new(v)
+	c.start_creation_day()
+	Notebook.begin(v)
+	var real := 0.0
+	var acted := ""
+	var sky := {"shown": -1.0, "first": -1.0, "samples": 0, "ok": 0, "said": false, "f_back": false, "f_last": -1.0, "texts": {}}
+	var alt := {"shown": -1.0, "first": -1.0, "n0": -1, "vals": {}, "back": false, "last": -1, "kid_stone": false, "gather": false, "aware_at": -1.0, "texts": {}}
+	var last_s := -1.0
+	while real < 560.0 and c.creation and not Notebook.is_done(v, "altar"):
+		c.tick(DT)
+		real += DT
+		if v.aware and float(alt["aware_at"]) < 0.0:
+			alt["aware_at"] = real
+		var tk := Notebook.shown(v)
+		var id := String(tk.get("id", ""))
+		if id == "sky":
+			if float(sky["shown"]) < 0.0:
+				sky["shown"] = real
+			var looking := false
+			for r in v.people:
+				if r.is_child() and r.action == "skywatch" and Vector2(r.x, r.y).distance_to(v.fire) < SKY_NEAR:
+					if r.anim == "lookup":
+						looking = true
+						if float(sky["first"]) < 0.0:
+							sky["first"] = real
+					if r.say in Awakening.LINES_SKY or r.say == Awakening.LINES_CHILD[2]:
+						sky["said"] = true
+			if real - last_s >= 1.0:
+				last_s = real
+				var pg := Notebook.progress(v)
+				(sky["texts"] as Dictionary)[String(pg.get("text", ""))] = true
+				if float(pg.get("f", -1.0)) + 1e-6 < float(sky["f_last"]):
+					sky["f_back"] = true
+				sky["f_last"] = float(pg.get("f", -1.0))
+				if real - float(sky["shown"]) >= SKY_START:
+					sky["samples"] = int(sky["samples"]) + 1
+					var near_kid := false
+					for r in v.people:
+						if r.is_child() and r.action == "skywatch" and Vector2(r.x, r.y).distance_to(v.fire) < SKY_NEAR:
+							near_kid = true
+					if near_kid:
+						sky["ok"] = int(sky["ok"]) + 1
+		elif id == "altar":
+			if float(alt["shown"]) < 0.0:
+				alt["shown"] = real
+				alt["n0"] = Awakening.altar_stones(v).x
+			for r in v.people:
+				if Vector2(r.x, r.y).distance_to(v.altar_pos) < ALTAR_NEAR and r.action == "build" and (r.carry == "돌" or r.anim == "gather"):
+					if float(alt["first"]) < 0.0:
+						alt["first"] = real
+					if r.anim == "gather":
+						alt["gather"] = true
+				if r.is_child() and r.carry == "돌":
+					alt["kid_stone"] = true
+			var n := Awakening.altar_stones(v).x
+			(alt["vals"] as Dictionary)[n] = true
+			(alt["texts"] as Dictionary)[String(Notebook.progress(v).get("text", ""))] = true
+			if n < int(alt["last"]):
+				alt["back"] = true
+			alt["last"] = n
+		if tk.is_empty() or bool(tk.get("watch", false)):
+			continue
+		if Notebook.real(v) - float(v.notebook["shown"]) < REACT or acted == "%s@%.1f" % [id, float(v.notebook["shown"])]:
+			continue
+		acted = "%s@%.1f" % [id, float(v.notebook["shown"])]
+		do_task(v, id)
+	# 쪽지 7 — 아이들이 하늘을 올려다봄
+	var s0 := float(sky["shown"])
+	check(s0 > 0.0 and float(sky["first"]) >= 0.0 and float(sky["first"]) - s0 <= SKY_START,
+		"쪽지 7: 뜨고 %.1f초 만에 모닥불 곁 아이가 하늘을 올려다봄 (≤%.0f초)" % [float(sky["first"]) - s0, SKY_START])
+	var frac := float(sky["ok"]) / maxf(1.0, float(sky["samples"]))
+	check(frac >= 0.9, "쪽지 7: 떠 있는 동안 늘 모닥불 곁에 하늘을 보는 아이 (%.0f%% · %d초)" % [frac * 100.0, int(sky["samples"])])
+	check(bool(sky["said"]), "쪽지 7: 하늘을 보던 아이가 한마디 (\"저기 봐!…\")")
+	check(not bool(sky["f_back"]) and (sky["texts"] as Dictionary).size() >= 5 and not (sky["texts"] as Dictionary).has(""),
+		"쪽지 7: 진행 줄이 바뀜 · 뒤로 가지 않음 (%d가지 — 예: %s)" % [(sky["texts"] as Dictionary).size(), str((sky["texts"] as Dictionary).keys().slice(-1))])
+	# 제단 쪽지 — 돌을 줍고 나르고 쌓음, 놓은 돌 n/N
+	var a0 := float(alt["shown"])
+	check(a0 > 0.0 and a0 - float(alt["aware_at"]) <= 20.0 and int(alt["n0"]) <= 2,
+		"제단 쪽지: 깨달음 %.0f초 뒤에 뜸 — 돌 모으기가 막 시작될 때 (뜰 때 놓은 돌 %d개)" % [a0 - float(alt["aware_at"]), int(alt["n0"])])
+	check(float(alt["first"]) >= 0.0 and float(alt["first"]) - a0 <= ALTAR_START,
+		"제단 쪽지: 뜨고 %.1f초 만에 제단 곁에서 돌을 줍거나 안고 옴 (≤%.0f초)" % [float(alt["first"]) - a0, ALTAR_START])
+	check(bool(alt["gather"]) and bool(alt["kid_stone"]), "제단 쪽지: 숙여 줍고·내려놓는 동작 + 아이도 작은 돌을 나름")
+	check(not bool(alt["back"]) and (alt["vals"] as Dictionary).size() >= Awakening.ALTAR_STONES * 0.6 and Notebook.is_done(v, "altar") and v.altar_built,
+		"제단 쪽지: \"제단 돌 n/%d\"가 하나씩 오름 (%d가지 값) → 제단이 서면 쪽지 끝" % [Awakening.ALTAR_STONES, (alt["vals"] as Dictionary).size()])
+	# 화면 대응 (종이 인형): 하늘 보기 → lookup 클립 · 줍기 → gather · 돌을 안음 → 바구니 대신 소품 없음 (AltarView가 둥근 돌을 그림)
+	var rr := v.people[0]
+	var m := CutoutResident.new()
+	m.setup_from(rr)
+	var bad := PackedStringArray()
+	for cs: Array in [["lookup", "", "lookup", -1], ["gather", "", "gather", -1], ["carry", "돌", "carry", -1], ["idle", "돌", "hold", -1]]:
+		m.set_item(cs[1])
+		m.set_anim(cs[0])
+		m.tick(0.0)
+		var st := m.doll_state()
+		if String(st["clip"]) != String(cs[2]) or int(st["prop"]) != int(cs[3]):
+			bad.append("%s/%s → %s %d" % [cs[0], cs[1], st["clip"], int(st["prop"])])
+	check(bad.is_empty() and CutoutResident.FRONT_ONLY.has("lookup"), "종이 인형: 하늘 보기·줍기·돌 안기 동작 대응 %s" % [bad])
+	m.free()
+
+
 func test_words() -> void:
 	var bad := PackedStringArray()
 	for tk: Dictionary in Notebook.TASKS:

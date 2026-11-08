@@ -36,6 +36,12 @@ var thuds := 0                       # (시험) 단계가 바뀌어 쿵 한 횟�
 var _dust: Array = []                # 단계가 바뀔 때 피어오르는 흙먼지 [MeshInstance3D, 남은 초]
 var _pile_key := ""
 var _t := 0.0
+## (2026-11-08 EVENTS_STAGING 2b) 제단 돌을 나르는 사람 손의 둥근 돌 — 종이 인형엔 돌 소품이 없어 여기서 따로 (화면만, 읽기만).
+## 줍는 동안(숙임)은 발 앞 땅 위, 나르는 동안은 가슴 앞 손에, 제단 곁에서 숙여 내려놓는 동안은 다시 발 앞. 아이 돌은 작게
+var _stones: Dictionary = {}         # 주민 id → MeshInstance3D
+var _stone_root: Node3D
+const STONE_R := 0.13
+const STONE_R_CHILD := 0.085
 static var _glow_m: ShaderMaterial
 
 
@@ -96,6 +102,7 @@ func sync(dt: float) -> void:
 		if was >= -1 and st > was and st >= 1:          # 단계가 바뀌면 쿵 (+ 흙먼지)
 			_thud()
 	_tick_dust(dt)
+	_sync_stones()
 	var items := v.altar_items() if v.altar_built else {}
 	var pk := str(items)
 	if pk != _pile_key:
@@ -292,6 +299,61 @@ func _rebuild(st: int, f: float) -> void:
 			_peb(_body, Vector3(cos(a) * r, 0.1 + (i / 5) * 0.14, sin(a) * r), Vector3(0.26, 0.18, 0.22), _stone_c(i + 200), i * 0.7)
 		if st <= 2:
 			_peb(_body, Vector3(cos(1.6) * (RING_R + 0.75), 0.06, sin(1.6) * (RING_R + 0.75)), Vector3(0.6, 0.16, 0.5), CLAY)
+
+
+## 제단 돌을 줍고·나르고·내려놓는 사람의 돌 (위 _stones 설명). 사람 그림은 VillageView.residents (부모)
+func _sync_stones() -> void:
+	var vv := get_parent()
+	var models: Dictionary = vv.get("residents") if vv != null and vv.get("residents") is Dictionary else {}
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var toward := Vector3(0, 0, 1)
+	if cam != null:
+		var bz := cam.global_transform.basis.z
+		toward = Vector3(bz.x, 0.0, bz.z).normalized() if Vector2(bz.x, bz.z).length() > 0.01 else Vector3(0, 0, 1)
+	var site := Awakening.altar_site(v) != null and not v.altar_built
+	var seen := {}
+	for r in v.people:
+		var picking := site and r.anim == "gather" and r.action == "build"
+		if r.carry != "돌" and not picking:
+			continue
+		var m: Node3D = models.get(r.id)
+		if m == null or not m.visible:
+			continue
+		if _stone_root == null:
+			_stone_root = Node3D.new()
+			_stone_root.top_level = true
+			add_child(_stone_root)
+		var st: MeshInstance3D = _stones.get(r.id)
+		if st == null:
+			st = MeshInstance3D.new()
+			var sm := SphereMesh.new()
+			sm.radius = 0.5
+			sm.height = 1.0
+			sm.radial_segments = 9
+			sm.rings = 5
+			st.mesh = sm
+			st.material_override = Toon.mat(_stone_c(r.id))
+			st.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			_stone_root.add_child(st)
+			_stones[r.id] = st
+		seen[r.id] = true
+		var rad := STONE_R_CHILD if r.is_child() else STONE_R
+		st.scale = Vector3(rad * 2.3, rad * 1.6, rad * 2.0)
+		var feet := m.global_position
+		if r.anim == "gather":           # 숙여 줍기·내려놓기: 발 앞 땅 위
+			st.global_position = feet + toward * 0.14 + Vector3(0, rad * 0.75, 0)
+		else:                            # 안고 나름: 가슴 앞 손에
+			st.global_position = feet + toward * 0.09 + Vector3(0, CutoutResident.DOLL_H * m.scale.y * 0.42, 0)
+		st.visible = true
+	for id: int in _stones.keys():
+		if not seen.has(id):
+			(_stones[id] as Node3D).queue_free()
+			_stones.erase(id)
+
+
+## 지금 손에 그린 돌 수 (시험)
+func carried_stones() -> int:
+	return _stones.size()
 
 
 ## 단계가 바뀜: 쿵 + 흙먼지 고리
