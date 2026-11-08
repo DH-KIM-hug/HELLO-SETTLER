@@ -928,7 +928,7 @@ const SHADE_HEAT := 0.6                 # 그늘 지도 (꽃숲 1.5칸 · 큰 �
 const GREAT_SHADE_K := 1.4              # 큰 나무 잎 아래 = 줄기 둘레 TRUNK_R × 이만큼
 const SF_COUNT := 2                     # 병마다 해바라기 (소형 병엔 없음)
 const SF_SHADOW_OFF := 8.0              # 꽃판 그림자가 줄기에서 빛 반대쪽으로 밀리는 거리 (칸, F1)
-const SF_HEAD_R := 5.0                  # 그림자 반지름 (칸)
+const SF_HEAD_R := 7.5                  # 그림자 반지름 (칸) — 2026-11-08 꽃판 1.5배에 맞춤 (메인 판단, 사용자 위임)
 const SF_TURN := 2.0 * HOUR             # 등불을 옮기면 꽃판이 이 동안 천천히 돌아감
 const SF_TRUNK_R := 3.0                 # 줄기 둘레 — 짓지 않고 숲이 나지 않음
 const SF_SITE_R := 12.0                 # 첫 마을 터 (키트 건물들) 반지름 — 해바라기는 이 가장자리 밖 SF_NEAR 안에

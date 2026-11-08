@@ -258,7 +258,7 @@ func _init_prototype(seed_v: int) -> void:
 		ids[4].grade = 1
 	_arrive_fed()
 	Awakening.start(self)
-	log_line("어느 새벽, 우리 조상 열 명이 숲 가장자리에 처음으로 불을 피웠다.")
+	log_line("어느 새벽, 우리 조상 열 명이 꽃숲 가장자리에 처음으로 불을 피웠다.")
 	log_line("하늘의 두 점에서 거대한 물방울이 똑, 똑 떨어진다. 그 아래 호수는 마르지 않는다. 강은 그늘진 세상 끝 벽에서 흘러내려 낮은 곳으로 간다. 서쪽의 큰 호수에는 흘러드는 강이 없다.")
 
 
