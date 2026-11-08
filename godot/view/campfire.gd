@@ -72,7 +72,48 @@ func _ready() -> void:
 	embers = _make_embers()
 	smoke = _make_smoke()
 	steam = _make_steam()
+	if Flora2D.enabled():
+		_make_2d()
 	_apply(true)
+
+
+## (2D 그림책 — view/flora2d, RENDERING.md 확정 2026-11-08) 돌 고리·장작 = 그림 판 (3D는 그림자 대역), 불꽃 = 그린 여섯 장을
+## 넘기는 그림 (view/flora2d/flora_flame.gdshader — 반투명 패스라 밤에도 제 색), 연기·불티 = 그린 연기 구름·불티 그림 (입자 그대로)
+func _make_2d() -> void:
+	Flora2D.dress(body, "campfire")
+	Flora2D.dress(extra, "campfire_extra")
+	flame.visible = false
+	flame.queue_free()
+	var mi := MeshInstance3D.new()
+	mi.name = "Flame2D"
+	mi.mesh = Flora2D.quad()
+	var m := ShaderMaterial.new()
+	m.shader = load("res://view/flora2d/flora_flame.gdshader")
+	var f0 := Flora2D.info("flame_0")
+	m.set_shader_parameter("tex", Flora2D.texture("common"))
+	m.set_shader_parameter("geo", Vector4(f0.get("w", 0.9), f0.get("h", 1.0), 0.0, 0.0))
+	var fr := PackedVector4Array()
+	for i in 6:
+		var r: Rect2 = Flora2D.info("flame_%d" % i).get("uv", Rect2(0, 0, 1, 1))
+		fr.append(Vector4(r.position.x, r.position.y, r.size.x, r.size.y))
+	m.set_shader_parameter("frame_uv", fr)
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.custom_aabb = AABB(Vector3(-2, -1, -2), Vector3(4, 4, 4))
+	add_child(mi)
+	flame = mi
+	_mat = m
+	for pair: Array in [[smoke, "smoke_a"], [embers, "ember"], [steam, "smoke_b"]]:
+		var p: GPUParticles3D = pair[0]
+		var dm := (p.draw_pass_1 as QuadMesh).material as StandardMaterial3D
+		if dm == null:
+			continue
+		var r: Rect2 = Flora2D.info(pair[1]).get("uv", Rect2(0, 0, 1, 1))
+		dm.albedo_texture = Flora2D.texture("common")
+		dm.uv1_scale = Vector3(r.size.x, r.size.y, 1.0)
+		dm.uv1_offset = Vector3(r.position.x, r.position.y, 0.0)
+		dm.alpha_scissor_threshold = 0.5
+		dm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR if pair[1] == "ember" else BaseMaterial3D.TRANSPARENCY_ALPHA
 
 
 # ───────────────────────── 불꽃 ─────────────────────────
@@ -351,6 +392,8 @@ func _sync_seats(v: Village) -> void:
 		var xf := Transform3D(Basis(Vector3.UP, -a + PI * 0.5), Vector3(cos(a) * sr, dy, sin(a) * sr))
 		var s := Art.instance(seats, seat_model, xf)
 		s.name = "Seat%d" % used.size()
+		if Flora2D.enabled():
+			Flora2D.dress(s, seat_model)
 
 
 ## 화면 마무리 셰이더에 불빛 웅덩이를 넣는다 (test_village.update_night가 매 화면). 보이는 불 4개까지.

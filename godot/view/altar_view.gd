@@ -405,6 +405,24 @@ func _rebuild_pile(items: Dictionary) -> void:
 	if items.is_empty():
 		return
 	var top := TOP_Y
+	if Flora2D.enabled():            # (2D 그림책 — view/flora2d) 제물 더미 그림: 윗돌 위 하나 + 많으면 앞쪽 단에 하나 더 (많을수록 크게)
+		var total := 0
+		for item: String in items:
+			total += int(items[item])
+		var pile := Node3D.new()
+		pile.position = Vector3(0, top + 0.02, 0)
+		_pile.add_child(pile)
+		# 제단 그림 판(앞쪽 발자리에 섬) 앞에 그려지게: 카메라 쪽으로 F 당기고 그만큼 올림 → 화면 자리는 그대로, 깊이만 앞으로
+		var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG)
+		var f := 1.8
+		pile.global_position += Vector3(sin(yaw), 0, cos(yaw)) * f + Vector3(0, f * tan(deg_to_rad(JarCamera.PITCH_DEG)), 0)
+		pile.add_child(Flora2D.card("pile_offering", 0.55 + 0.05 * minf(total, 8.0)))
+		if total > 6:
+			var front := Node3D.new()
+			front.position = Vector3(0.35, FLOOR_H + DRUM_H, 0.7)
+			_pile.add_child(front)
+			front.add_child(Flora2D.card("pile_offering", 0.45 + 0.03 * minf(total - 6, 10.0), true))
+		return
 	var i := 0
 	for item: String in items:
 		var c: Color = Style.ITEM_COLORS.get(item, Style.GRAIN)

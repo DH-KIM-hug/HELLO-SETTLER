@@ -146,7 +146,7 @@ func _sync_ranch(_dt: float, still: bool) -> void:
 		_ranch = Node3D.new()
 		_ranch.name = "ranch"
 		add_child(_ranch)
-		Art.instance(_ranch, M_RANCH)
+		_dress(Art.instance(_ranch, M_RANCH), M_RANCH)
 		_make_aphids()
 	_ranch_yaw = atan2(KEEPER_SPOT.x, KEEPER_SPOT.y)
 	_ranch.position = Vector3(_ranch_at.x, _gy(_ranch_at.x, _ranch_at.y), _ranch_at.y)
@@ -162,14 +162,36 @@ func _sync_ranch(_dt: float, still: bool) -> void:
 	var active := Kitchen.month_of(v) in Balance.APHID_MONTHS
 	if show > 0 and (not still or _t < 0.1):
 		for i in show:
+			if mm.use_custom_data:          # (2D) 그림 진딧물 — 아래에서 버퍼 하나로 (자리만, 그림이 늘 카메라를 봄)
+				break
 			var xf := _slot_xf(i, _t if active else 0.0)
 			mm.set_instance_transform(i, xf)
 			if _aphid_lines != null:
 				_aphid_lines.multimesh.set_instance_transform(i, xf)
+	if mm.use_custom_data and show > 0 and (not still or _t < 0.1):
+		var b2 := PackedFloat32Array()
+		for i in show:
+			var xf := _slot_xf(i, _t if active else 0.0)
+			b2.append_array(Flora2D.inst_floats("kit_aphid", xf.origin, xf.basis.y.length(), i % 2 == 1, float(i)))
+		b2.resize(mm.instance_count * 20)
+		mm.buffer = b2
 	_keeper_pose()
 
 
+## (2D 그림책 — view/flora2d) 부엌 소품 = 그림 판 + 3D는 그림자 대역. 진딧물은 그림 MultiMesh 하나
+func _dress(n: Node3D, model: String) -> Node3D:
+	if Flora2D.enabled():
+		Flora2D.dress(n, model)
+	return n
+
+
 func _make_aphids() -> void:
+	if Flora2D.enabled():
+		_aphids = Flora2D.new_multi("common", "aphids2d")
+		_aphids.multimesh.instance_count = SLOTS.size()
+		_aphids.multimesh.visible_instance_count = 0
+		_ranch.add_child(_aphids)
+		return
 	var m := Art.model(M_APHID)
 	for key: String in ["mesh", "lines"]:
 		if m[key] == null:
@@ -241,7 +263,7 @@ func _dew(who: int) -> void:
 		return
 	var n := Node3D.new()
 	add_child(n)
-	Art.instance(n, M_DEW)
+	_dress(Art.instance(n, M_DEW), M_DEW)
 	var from := _ranch.transform * Vector3(-0.15, 0.12, 0.42)
 	n.position = from
 	_dews.append({"node": n, "from": from, "who": who, "t": 0.0})
@@ -385,7 +407,7 @@ func _sync_eggs(dt: float, still: bool) -> void:
 			add_child(root)
 			var spin := Node3D.new()
 			root.add_child(spin)
-			Art.instance(spin, M_EGG)
+			_dress(Art.instance(spin, M_EGG), M_EGG)
 			g = {"root": root, "spin": spin, "pos": home, "yaw": fposmod(id * 1.3, TAU), "roll": 0.0}
 			_eggs[id] = g
 			root.position = Vector3(home.x, _gy(home.x, home.y) + EGG_R, home.y)
@@ -500,10 +522,10 @@ func _feast(s: Dictionary, key: String, dt: float) -> void:
 		add_child(n)
 		n.position = Vector3(at.x, _gy(at.x, at.y), at.y)
 		n.rotation.y = fposmod(float(s["t"]) * 0.37, TAU)
-		Art.instance(n, M_FEAST)
+		_dress(Art.instance(n, M_FEAST), M_FEAST)
 		var halves: Array = []
 		for j in 2:
-			var h := Art.instance(n, M_HALF)
+			var h := _dress(Art.instance(n, M_HALF), M_HALF)
 			halves.append(h)
 		var fresh := v.t - float(s["t"]) < 120.0
 		f = {"node": n, "halves": halves, "t": 0.0 if fresh else CRACK_OPEN}
@@ -540,7 +562,7 @@ func _place_decor(decor: Array) -> void:
 					var n := Node3D.new()
 					n.name = "shell_boat"
 					add_child(n)
-					Art.instance(n, M_BOAT)
+					_dress(Art.instance(n, M_BOAT), M_BOAT)
 					b = {"node": n}
 					_boats[key] = b
 				b["at"] = Vector2(wp.x, wp.y)
@@ -564,6 +586,12 @@ func _place_decor(decor: Array) -> void:
 	_basin_mm = Node3D.new()
 	_basin_mm.name = "basins"
 	add_child(_basin_mm)
+	if Flora2D.enabled():                # (2D) 빗물 통 그림 (그리기 1번 + 접촉 그림자)
+		var items: Array = []
+		for x: Transform3D in xfs:
+			items.append(["kit_shell_basin", x.origin, x.basis.y.length(), false])
+		_basin_mm.add_child(Flora2D.multi(items))
+		return
 	Art.multi(_basin_mm, M_BASIN, xfs, false)
 
 
@@ -652,11 +680,11 @@ func _sync_presses(_dt: float, still: bool) -> void:
 			var n := Node3D.new()
 			n.name = "seed_press"
 			add_child(n)
-			Art.instance(n, M_PRESS)
+			_dress(Art.instance(n, M_PRESS), M_PRESS)
 			var lever := Node3D.new()
 			n.add_child(lever)
 			lever.position = PRESS_PIVOT
-			Art.instance(lever, M_LEVER)
+			_dress(Art.instance(lever, M_LEVER), M_LEVER)
 			p = {"node": n, "lever": lever}
 			_presses[b.id] = p
 		var n: Node3D = p["node"]
