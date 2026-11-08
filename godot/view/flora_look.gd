@@ -12,6 +12,9 @@ const W_MAX := 7.0                # 꽃 폭 상한 (칸)
 const W_MAX_GREEN := 5.5          # 풀·고사리·이끼 폭 상한
 const GREAT_SCALE := 0.6          # 큰 나무 다섯 (은행나무 높이 약 92 → 55칸)
 const FRUIT_SCALE := 0.9          # 떨어진 거대한 열매
+## 폭 상한을 따로 두는 것 (2026-11-08 "이끼, 고사리 크기") — 고사리는 키보다 넓게 펼쳐지는 풀이라 W_MAX로 누르면 무릎 높이 덤불이 된다.
+##   props/pf_fern: 진짜 키 9 (45cm) → 화면 약 6.9 · 폭 약 9.4 (주민이 그 아래를 걷는 거대한 고사리 — 숲 가장자리에만)
+const W_MAX_BY := {"props/pf_fern": 10.0}
 
 ## 철마다 꽃 (GD 3.0 꽃 표) — 앞쪽일수록 자주
 const FLOWERS := {
@@ -50,12 +53,13 @@ static func base_scale(name: String) -> float:
 		var green := name in GREEN or name in SPROUTS or name in FAR_GREEN
 		var h := maxf(sz.y, 0.5)
 		s = K * sqrt(h) / h
-		s = minf(s, (W_MAX_GREEN if green else W_MAX) / maxf(0.5, maxf(sz.x, sz.z)))
+		var w_max: float = W_MAX_BY.get(name, W_MAX_GREEN if green else W_MAX)
+		s = minf(s, w_max / maxf(0.5, maxf(sz.x, sz.z)))
 		s = minf(s, 1.0)
 		if name in TWIGS:
-			s = 0.42                # 나뭇가지 더미 폭 약 2.2칸 (그루터기 자리)
+			s = 0.42                # 나뭇가지 더미 폭 약 2.2칸 (그루터기 자리 — 잔가지 하나 10cm = 주민 2명 길이)
 		elif name.contains("fallen_leaf"):
-			s = 0.3                 # 떨어진 큰 잎 (폭 약 2.2칸)
+			s = 0.3                 # 떨어진 큰 잎 (폭 약 2.2칸 — 잎 한 장이 주민보다 큰 깔개)
 	_base[name] = s
 	return s
 

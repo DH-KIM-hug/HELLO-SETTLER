@@ -392,7 +392,7 @@ func _process(dt: float) -> void:
 
 # ───────────────────────── 크레딧 ─────────────────────────
 ## 남이 만든 3D 모델 (art/CREDITS.md — CC BY 4.0이라 게임 안에도 출처를 적는다)
-const ART_CREDITS := "3D 소품 일부: Polyfork (polyfork.dev) — CC BY 4.0, 색·크기를 고쳐 씀"
+const ART_CREDITS := "3D 소품 일부 (바구니·단지·돌무더기·이끼·고사리): Polyfork (polyfork.dev) — CC BY 4.0, 색·크기를 고쳐 씀"
 
 
 ## audio/LICENSES.csv (file,title,author,pixabay_url,download_date,content_id) → '소리: 제목 — 지은이 (Pixabay)'. 줄이 없으면 ""

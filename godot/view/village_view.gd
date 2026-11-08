@@ -119,16 +119,18 @@ func _init(village: Village, t: JarTerrain) -> void:
 const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "house_timber", "house_timber_b", "house_stone", "house_stone_b", "storehouse", "forester", "quarry", "sawmill",
 	"well", "windmill", "bakery", "saltpan", "buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_green_top", "buildings/wheat_forest_ripe", "buildings/wheat_forest_ripe_top", "woodpile", "chopblock", "planter", "pier", "bridge", "bridge_stones", "raft_reed", "boat_leaf", "mushroom_hut",
 	"bush", "bush_b", "bush_flower", "bush_berry",
-	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
+	"rocks", "rocks_b", "rock_small", "mushrooms", "flora/clover_a", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
 	"campfire", "campfire_extra", "campfire_seat", PF_JARS, PF_FENCE, PF_CORDWOOD, PF_BENCH, PF_CAIRN, PF_MOSS, PF_FERN]
 ## polyfork.dev 소품 (CC BY 4.0, 우리 팔레트·크기로 고침 — art/src/build_polyfork.py, 출처 art/CREDITS.md)
+## (2026-11-08) 울타리·걸상·장작은 polyfork 대신 우리 잔가지 조각 (같은 이름·자리 — 사람 세상의 켠 통나무처럼 보여서)
 const PF_JARS := "props/pf_yard_jars"       # 옹기 단지 둘 + 바구니 (집·창고 마당)
-const PF_FENCE := "props/pf_fence"          # 가름대 울타리 한 칸 (길이 1칸, 높이 0.6)
-const PF_CORDWOOD := "props/pf_cordwood"    # 쌓은 장작 (나무꾼 마당)
-const PF_BENCH := "props/pf_bench"          # 통나무 걸상 (모닥불 둘레 — view/campfire.gd)
+const PF_FENCE := "props/pf_fence"          # 잔가지 울타리 한 칸 (기둥 둘·가름대 둘을 풀끈으로 묶음, 길이 1칸, 높이 0.6)
+const PF_CORDWOOD := "props/pf_cordwood"    # 쌓은 잔가지 토막 (나무꾼 마당)
+const PF_BENCH := "props/pf_bench"          # 반으로 쪼갠 잔가지 걸상 (모닥불 둘레 — view/campfire.gd)
 const PF_CAIRN := "props/pf_cairn"
 const PF_MOSS := "props/pf_moss"
 const PF_FERN := "props/pf_fern"
+const FERN_CLEAR := 3.5           # 거대한 고사리 (폭 약 9칸) 둘레 비움 — 집·모닥불·제단·길 가운데에서 이만큼
 
 
 func _ready() -> void:
@@ -1403,7 +1405,7 @@ func _sync_props() -> void:
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
-	_flush(_props, groups, ["tuft", "clover", "lily", "lotus", "reeds", "flowers", "flowers_b", "flora/fallen_leaf_dry"] + FloraLook.NO_SHADOW)
+	_flush(_props, groups, ["tuft", "lily", "lotus", "reeds", "flowers", "flowers_b", "flora/fallen_leaf_dry"] + FloraLook.NO_SHADOW)
 	_sync_lilies(true)
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
@@ -1442,10 +1444,30 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 			n_decor_trees += 1
 
 
-## 소품 무리: 숲 가장자리엔 덤불·고사리·버섯·이끼 돌·쓰러진 통나무, 빈 풀밭엔 드문드문 클로버·풀 포기·꽃 덤불
-## (2026-11-08) 숲 가장자리에 polyfork 돌무더기·이끼 둔덕·고사리 (예전 rocks_b · 고사리 두 칸 자리 — 모양 수는 +2)
-const FRINGE := ["bush", "bush_b", "fern", PF_FERN, "mushrooms", "rocks", "flora/twig_pile_a", "flora/fallen_leaf_dry", "bush_flower", PF_MOSS, PF_CAIRN, "bush_berry"]
-const OPEN := ["clover", "clover", "tuft", "tuft", "flowers", "rock_small", "bush_flower", "mushrooms", "flowers_b", "fern", "bush_b", "tuft"]
+## 소품 무리: 숲 가장자리엔 덤불·거대한 고사리·버섯·이끼 둔덕·돌·나뭇가지 더미·떨어진 큰 잎, 빈 풀밭엔 드문드문 클로버·풀 포기·꽃 덤불
+## (2026-11-08) 숲 가장자리에 polyfork 돌무더기·이끼 둔덕·고사리
+## (2026-11-08 "이끼, 고사리 크기가 어때야 하는지 알지?") 진짜 크기 (주민 5cm = 1칸, GAME_DESIGN 3.0):
+##   풀·꽃·고사리·이끼·클로버는 진짜 크기 모델 × FloraLook.base_scale (K·√키 — 5칸 넘는 것만 줄임) — 큰 나무 자리 꽃숲과 같은 규칙.
+##   거대한 고사리(진짜 30~60cm → 화면 약 6~8칸)는 숲 가장자리에만, 한 포기씩, 건물에서 떨어져 (빈 풀밭·마당엔 두지 않음).
+##   옛 사람 크기 소품 모델(build_nature)은 CLUTTER_SCALE로 진짜 크기에 맞춤.
+const FRINGE := ["bush", "bush_b", PF_MOSS, PF_FERN, "mushrooms", "rocks", "flora/twig_pile_a", "flora/fallen_leaf_dry", "bush_flower", PF_MOSS, PF_CAIRN, "bush_berry"]
+const OPEN := ["flora/clover_a", "flora/clover_a", "tuft", "tuft", "flowers", "rock_small", "bush_flower", "mushrooms", "flowers_b", "rock_small", "bush_b", "tuft"]
+## 한 자리에 하나만 (나머지는 1~3포기 무리)
+const CLUTTER_ONE := ["flora/twig_pile_a", "flora/fallen_leaf_dry", "rocks", "rocks_b", PF_CAIRN, PF_MOSS, PF_FERN, "flora/clover_a"]
+## 옛 사람 크기 모델 → 진짜 크기 배율 (모델 키 × 배율 = 화면 칸, 무리마다 ×0.75~1.25):
+##   덤불(작은 잎 풀 포기, 진짜 5~10cm) 0.64~0.86 → 1.1~1.5 · 버섯(3~10cm) 0.61 → 1.1 · 풀 포기(마을의 밟힌 풀 5~8cm) 0.4 → 1.2
+##   작은 들꽃 포기(5~15cm) 0.55 → 1.7. 돌(1.07 = 5cm 돌, 주민에겐 바위)·조약돌(0.59)은 그대로.
+## 진짜 크기 모델에 곱하는 몫: 마을 빈터의 클로버는 밟히고 깎인 낮은 포기 (진짜 10~20cm → 화면 약 2칸, 폭 2.6)
+const CLUTTER_SCALE := {"bush": 1.7, "bush_b": 1.7, "bush_flower": 1.7, "bush_berry": 1.7, "mushrooms": 1.8, "tuft": 3.0,
+	"flowers": 3.0, "flowers_b": 3.0, "flora/clover_a": 0.5}
+
+
+## 땅 위 잔것 하나의 기본 배율 (무리마다 흔들기 전)
+static func clutter_scale(kind: String) -> float:
+	var s := float(CLUTTER_SCALE.get(kind, 1.0))
+	if kind.begins_with("flora/") or kind in [PF_FERN, PF_MOSS]:
+		s *= FloraLook.base_scale(kind)
+	return s
 
 
 func _decor_clusters(groups: Dictionary) -> void:
@@ -1464,7 +1486,9 @@ func _decor_clusters(groups: Dictionary) -> void:
 				continue
 			var table: Array = FRINGE if fringe or f >= 0.9 else OPEN
 			var kind: String = table[int(_hash(gi, gj, 6.0) * table.size()) % table.size()]
-			var cnt := 1 if kind in ["flora/twig_pile_a", "flora/fallen_leaf_dry", "rocks", "rocks_b", PF_CAIRN, PF_MOSS] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
+			if kind == PF_FERN and not _prop_ok(c.x, c.y, FERN_CLEAR):
+				continue                    # 거대한 고사리 잎이 집·길·모닥불 위로 덮이지 않게
+			var cnt := 1 if kind in CLUTTER_ONE else 1 + int(_hash(gi, gj, 7.0) * 3.0)
 			for i in cnt:
 				var a := _hash(gi, gj, 10.0 + i) * TAU
 				var d := (0.35 + 0.8 * _hash(gi, gj, 20.0 + i)) if i > 0 else 0.0
@@ -1472,17 +1496,19 @@ func _decor_clusters(groups: Dictionary) -> void:
 				var z := c.y + sin(a) * d
 				if not _prop_ok(x, z, 0.3):
 					continue
-				var s := (0.75 + 0.5 * _hash(gi, gj, 30.0 + i)) * (FloraLook.base_scale(kind) * 0.7 if kind.begins_with("flora/") else 1.0)
+				var jig := (0.85 + 0.3 * _hash(gi, gj, 30.0 + i)) if kind == PF_FERN else (0.75 + 0.5 * _hash(gi, gj, 30.0 + i))
+				var s := jig * clutter_scale(kind)
 				var k2 := kind
-				if i > 0 and kind in ["bush", "fern"] and _hash(gi, gj, 40.0 + i) < 0.4:
+				if i > 0 and kind == "bush" and _hash(gi, gj, 40.0 + i) < 0.4:
 					k2 = "tuft"
+					s *= clutter_scale("tuft") / clutter_scale("bush")
 				_put(groups, k2, x, z, s, a * 3.0)
 			# 흩어진 풀 포기 (빈 풀밭에 아주 드문드문)
 			if _hash(gi, gj, 50.0) < 0.3:
 				var x := c.x + (_hash(gi, gj, 51.0) - 0.5) * PROP_STEP
 				var z := c.y + (_hash(gi, gj, 52.0) - 0.5) * PROP_STEP
 				if _prop_ok(x, z, 0.0):
-					_put(groups, "tuft", x, z, 1.0, _hash(x, z) * TAU)
+					_put(groups, "tuft", x, z, clutter_scale("tuft") * (0.8 + 0.4 * _hash(gi, gj, 53.0)), _hash(x, z) * TAU)
 
 
 ## 물가: 호숫가 칸을 따라 이끼 돌·갈대, 수면에 연잎·연꽃 (기준 그림)

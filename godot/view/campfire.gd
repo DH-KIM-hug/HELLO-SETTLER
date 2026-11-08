@@ -11,7 +11,7 @@ extends Node3D
 const STATES := ["unlit", "small", "normal", "big", "smudge", "out"]
 const HEAT := {"unlit": 0.0, "small": 0.62, "normal": 1.0, "big": 1.42, "smudge": 0.4, "out": 0.0}
 const GLOW := {"unlit": 0.0, "small": 0.7, "normal": 1.0, "big": 1.25, "smudge": 0.35, "out": 0.0}
-## 걸상 모델: polyfork 통나무 걸상 (art/src/build_polyfork.py, CC BY 4.0 — art/CREDITS.md), 없으면 예전 campfire_seat
+## 걸상 모델: 반으로 쪼갠 잔가지 걸상 props/pf_bench (art/src/build_polyfork.py TWIG_PROPS — 우리 모델), 없으면 예전 campfire_seat
 const SEAT_MODEL := "props/pf_bench"
 const SEAT_R := 1.85                  # 통나무 의자 거리 (주민은 불에서 1.0~2.5 사이에 앉는다 — ResidentAI.near)
 const GLOW_R := 4.2                   # 불빛 반지름 (보통 불)
