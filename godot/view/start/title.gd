@@ -12,6 +12,7 @@ const WAVE_EVERY := 8.0
 const WAVE_TIME := 2.6
 const ZOOM_TIME := 0.55
 const HANDOFF := 0.62                 # 넓은 세상 장면이 이어받는 beyond (WorldVillage.TITLE_HANDOFF와 같음)
+const FUR_SIDE := 24.0                 # 털 한 가닥이 붙은 방위 — 카메라 정면에서 이만큼 (도) 옆 (병 가운데를 가리지 않게)
 const RR_CM := GiantRoom.JAR_IN       # 타이틀 방은 1단위 = 1cm (s = 1) — 넓은 세상과 같은 비율의 카메라 길
 
 var room: GiantRoom
@@ -108,6 +109,8 @@ func _build_room() -> void:
 	cam.target = Vector3(0, GiantRoom.SOIL_TOP, 0)
 	cam.set_ext_zoom(cam.ext_min())
 	cam.camera.current = true
+	var cp := room.root.global_transform.affine_inverse() * cam.camera.global_position     # (OPENING v4.0-2 암시) 유리에 털 한 가닥 — 카메라 쪽 조금 옆, 설명 없음
+	room.add_fur(rad_to_deg(atan2(cp.x, cp.z)) + FUR_SIDE)
 	post = OutlinePost.attach(cam.camera)
 	post.set_shader_parameter("use_glass", false)
 	post.set_shader_parameter("use_outline", false)

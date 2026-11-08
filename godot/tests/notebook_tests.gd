@@ -361,6 +361,10 @@ func test_ignored() -> void:
 	while v.t < t_end and not v.aware:
 		v.advance(600.0)
 	check(v.aware, "그 뒤 며칠 안에 저절로 깨닫는다 (%.1f일째)" % (v.awakened_t / Balance.DAY))
+	# (A28 후속) 첫날 밖의 깨달음 → 제단 → 첫 기도 장면 동안은 시계가 일부러 늦춰진다 (Awakening.stage_scale) — 장면이 끝난 뒤의 빠르기를 본다
+	var t_cap := v.t + Awakening.STAGE_MAX
+	while v.staged() and v.t < t_cap:
+		v.advance(600.0)
 	check(absf(c.speed() - JarClock.normal_speed()) < 0.01, "둘째 날부터 보통 (1일=5분)")
 
 

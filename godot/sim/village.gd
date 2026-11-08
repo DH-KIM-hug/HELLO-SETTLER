@@ -299,9 +299,7 @@ func in_opening() -> bool:
 func pace_walk() -> float:
 	if Notebook.first_day(self):
 		return 1.0 / maxf(0.01, Notebook.day_scale(self, Notebook.real(self)))
-	if staged():                          # 첫날 밖의 깨달음·제단·첫 기도 장면: 첫날 제단 장면의 병 시계 빠르기(ALTAR_PACE)로 짠 장면 — 그만큼 되돌림
-		return 1.0 / Notebook.ALTAR_PACE      # (화면 0.7칸/초가 되려면 JarClock이 이 장면을 첫날처럼 느리게 돌려야 함 — 남은 일)
-	return 1.0
+	return 1.0 / Awakening.stage_scale(self)     # 첫날 밖의 깨달음·제단·첫 기도 장면: JarClock이 늦춘 병 시계만큼만 되돌림 (A28 후속 — 시계 보정, 덤 없음)
 
 
 ## 깨달음 → 제단 → 첫 기도 장면 중 (EVENTS_STAGING 1 · 2 — JarClock이 병 시계를 느리게 돌리는 동안)

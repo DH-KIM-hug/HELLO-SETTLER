@@ -24,7 +24,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 사건 연출 · 안내 창 · 손 도구 (E1-0~2 · 6b · 6c)")
 	_old_aware = Village.start_aware
-	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow",
+	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow", "test_stage_clock",
 		"test_popup_scene", "test_words"])
 	Village.start_aware = _old_aware
 	fs.reset()
@@ -379,6 +379,42 @@ func test_skip_and_slow() -> void:
 	scene.free()
 	Village.start_aware = _old_aware
 	fs.reset()
+
+
+## (A28 후속) 첫날 밖의 깨달음 → 제단 → 첫 기도: 병 시계가 첫날 제단 장면처럼 늦춰져 걸음이 화면 0.7칸/초 (옛 임시 걸음 덤 ×36을 시계가 받침).
+## 늦추는 건 화면 빠르기뿐 — 지켜보며 흘린 결과 = 몰아서(따라잡기처럼) 흘린 결과 (ADR-0001)
+func test_stage_clock() -> void:
+	Village.start_aware = false
+	var span := 1800.0                        # 깨달음 뒤 병 30분 (장면 ~1,350초 + 그 뒤 보통 빠르기)
+	var va := proto(7)
+	va.advance(Balance.HOUR)
+	Awakening.awaken(va)
+	var c := JarClock.new(va)
+	c.auto_slow = false
+	var sp := c.speed()
+	var walk_screen := Balance.WALK * va.pace_walk() * sp
+	check(va.staged() and absf(sp - Notebook.ALTAR_PACE * JarClock.normal_speed()) < 1e-6,
+		"깨달음 장면 동안 병 시계가 늦춰짐 (현실 1초 = 병 %.0f초 — 첫날 제단 장면과 같게)" % sp)
+	check(absf(walk_screen - Balance.WALK_SCREEN) < 1e-6, "걸음은 화면 %.2f칸/초 (보통과 같음 — 덤 없음)" % walk_screen)
+	var steps := int(span / Balance.STEP)
+	var real := 0.0
+	var slow_seen := false
+	var normal_after := false
+	while c.steps_done < steps:
+		var dt := minf(1.0 / 30.0, ((steps - c.steps_done) * Balance.STEP - c.acc) / c.speed())
+		c.tick(dt)
+		real += dt
+		slow_seen = slow_seen or c.speed() < JarClock.normal_speed() * 0.5
+		normal_after = not va.staged() and absf(c.speed() - JarClock.normal_speed()) < 1e-6 and va.pace_walk() == 1.0
+	check(slow_seen and normal_after and va.altar_built, "제단이 서고 첫 기도가 끝나면 보통 빠르기 · 걸음 배율 1 (현실 %.0f초)" % real)
+	check(real > 150.0 and real < 260.0, "장면이 현실 약 %d:%02d (병 초로 짠 장면 — 첫날과 비슷하게 보임)" % [int(real) / 60, int(real) % 60])
+	check(c.dropped == 0.0 and c.behind == 0.0, "버린 병 시간 없음")
+	var vb := proto(7)
+	vb.advance(Balance.HOUR)
+	Awakening.awaken(vb)
+	vb.advance(span)
+	check(run.clock_sig(va) == run.clock_sig(vb), "지켜보며 흘림 = 몰아서 흘림 (보든 말든 같은 결과)")
+	Village.start_aware = _old_aware
 
 
 ## 장면: 안내 창은 연출이 끝난 뒤 · 한 번에 하나 · [보러 가기] · 닫으면 다음 · 다시 안 뜸
