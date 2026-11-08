@@ -182,6 +182,8 @@ var shop_seen: Array = []             # 거인이 들여다본 탭 (상점 버�
 var shop_bought: Dictionary = {}      # 이 병에 사 준 건물 수 (또 사면 ×1.5)
 # BALANCE v5 (sim/production.gd · sim/altar.gd)
 var blueprints: Dictionary = {}       # 거인이 내려 준 설계도 — 건물 종류 → 받은 병 시각 (그 병 주민이 그 건물을 지을 줄 앎)
+var era_t := 0.0                      # 지금 시대가 열린 병 시각 (계시) — 새로 배워야 하는 건물은 이로부터 MUST_LEARN_SELF_DAYS 뒤 스스로 깨침
+var self_learned: Dictionary = {}     # 주민이 스스로 깨친 새로 배워야 하는 건물 → 병 시각 (연대기 한 줄을 한 번만)
 var gift: Dictionary = {}             # 창고의 물건 중 거인이 준 몫 (하늘에서 내려온 것 — 제물로 되돌아가지 않는다. 가공하면 가공품으로 옮겨 감)
 var altar_level := 0                  # 제단 단계 0~3 (Balance.ALTAR_NAMES — 돌무더기 · 판석 · 꽃 · 작은 사당)
 var altar_rebuild_until := -1.0       # 넓힌 제단을 주민이 다시 짓는 중 (이때까지)
@@ -1157,10 +1159,15 @@ func revelation_pending() -> bool:
 
 
 ## 이 시대에 새로 열리는 건물 (Balance.B의 era가 e인 것)
+## 계시가 시대 e를 열 때 주민이 새로 알게 되는 건물 — 그 시대 기본 + 앞 시대에 새로 배워야 했던 것 (Balance.MUST_LEARN — 다음 계시가 가르침).
+## 그 시대의 새로 배워야 하는 건물은 빠진다 (설계도로 먼저 · 다음 계시에)
 static func era_unlocks(e: int) -> PackedStringArray:
 	var out := PackedStringArray()
 	for ty: String in Balance.B:
-		if int(Balance.B[ty].get("era", 0)) == e:
+		var be := int(Balance.B[ty].get("era", 0))
+		if ty in Balance.KNOWN_FROM_START:
+			continue
+		if (be == e and not ty in Balance.MUST_LEARN) or (be == e - 1 and ty in Balance.MUST_LEARN):
 			out.append(ty)
 	return out
 
@@ -1209,6 +1216,7 @@ func reveal(line := "") -> bool:
 	if not era_full():
 		return false
 	era += 1
+	era_t = t
 	era_pts = 0.0
 	revelation = {}
 	bless_all(0.15)
@@ -1223,6 +1231,7 @@ func giant_reveal() -> bool:
 		return false
 	begin_giant()
 	var nx: String = Balance.ERAS[era + 1]
+	var un := Array(era_unlocks(era + 1)).filter(func(ty: String) -> bool: return not Production.knows(self, ty))   # 이미 아는 것 (설계도 · 스스로 깨침)은 빼고
 	log_line("{w:이/가} 새 시대를 열었다 — %s" % nx)
 	reveal("하늘에서 한 줄기 빛이 광장으로 내려왔다. 사람들은 무릎을 꿇고 하늘을 올려다보았다. 이제 우리는 '%s'%s." % [nx, josa(nx, "이다", "다")])
 	festival_t = t
@@ -1234,9 +1243,8 @@ func giant_reveal() -> bool:
 		if spoke < 3 and r.age >= 2.5:
 			speak(r, ["빛이다…!", "{w:이/가} 길을 여셨다", "새 시대가 왔어!"][spoke], 8)
 			spoke += 1
-	var un := era_unlocks(era)
 	if not un.is_empty():
-		log_line("이제 %s%s 지을 수 있게 되었다." % ["·".join(Array(un.slice(0, 6)).map(Balance.label)), josa(Balance.label(un[mini(5, un.size() - 1)]), "을", "를")])
+		log_line("이제 %s%s 지을 수 있게 되었다." % ["·".join(un.slice(0, 6).map(Balance.label)), josa(Balance.label(un[mini(5, un.size() - 1)]), "을", "를")])
 	end_giant()
 	return true
 
@@ -2134,6 +2142,7 @@ func _fav_want() -> String:
 
 
 func chief_build() -> void:
+	Production.self_learn(self)          # 새로 배워야 하는 건물을 스스로 깨쳤나 (시대가 열린 지 MUST_LEARN_SELF_DAYS — 연대기 한 줄)
 	var pending := 0
 	for b in buildings:
 		if b.is_site():

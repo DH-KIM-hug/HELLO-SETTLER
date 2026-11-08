@@ -313,7 +313,7 @@ func test_revelation_flow() -> void:
 	var kneel := v.people.filter(func(r: Resident) -> bool: return not r.steps.is_empty() and r.steps[0].get("anim", "") == "pray").size()
 	check(kneel >= 5, "깨어 있는 사람 %d명이 그 자리에서 무릎 꿇고 하늘을 봄" % kneel)
 	var un := Village.era_unlocks(1)
-	check("목조주택" in un and "방앗간" in un and "빵집" in Village.era_unlocks(2), "새로 열린 건물: %s (v5: 빵집은 읍내 — 공용 화덕을 넓힘)" % ", ".join(un))
+	check("목조주택" in un and not "방앗간" in un and "방앗간" in Village.era_unlocks(2), "새로 열린 건물: %s (방앗간·어부는 설계도로 먼저 · 다음 계시에 — 2026-11-08)" % ", ".join(un))
 	check(not v.giant_reveal(), "점수가 다시 찰 때까지 또 계시 없음")
 	var c := through_bytes(v)
 	check(c.era == 1 and has_line(c, "새 시대를 열었다"), "저장/불러오기: 시대 1 · 연대기 줄")

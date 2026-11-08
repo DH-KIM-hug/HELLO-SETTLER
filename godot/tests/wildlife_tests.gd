@@ -178,6 +178,7 @@ func test_extinct_readd() -> void:
 func lake_village(seed_v: int) -> Village:
 	var v := proto(seed_v)
 	v.era = 1
+	v.blueprints["어부"] = 0.0             # 어부는 새로 배워야 하는 건물 (설계도 — 2026-11-08)
 	rich(v)
 	settled(v)
 	return v
@@ -308,7 +309,10 @@ func test_spoil() -> void:
 # ───────────────────────── 건물 · 촌장 ─────────────────────────
 func test_unlocked() -> void:
 	var v := lake_village(42)
-	check(VillageEra.can_build(v, "어부") and not Balance.B_LOCKED.has("어부"), "어부: 마을 시대에 지을 수 있다")
+	v.blueprints.erase("어부")
+	check(not VillageEra.can_build(v, "어부"), "어부: 마을 시대에도 설계도 전엔 못 짓는다 (새로 배워야 — 2026-11-08)")
+	v.blueprints["어부"] = v.t
+	check(VillageEra.can_build(v, "어부") and not Balance.B_LOCKED.has("어부"), "어부: 설계도를 받은 마을 시대에 지을 수 있다")
 	v.era = 0
 	check(not VillageEra.can_build(v, "어부"), "개척기엔 아직")
 	v.era = 1
