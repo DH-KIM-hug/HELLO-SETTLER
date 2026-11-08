@@ -16,6 +16,7 @@ extends RefCounted
 
 const CELL := 4.0                 # 미리 나눠 두는 격자 (칸)
 const REFRESH := 2.0              # 카메라가 보는 땅의 테두리가 이만큼(칸) 넘게 움직이면 다시 담음
+const PAD_K := 0.06               # 다시 담는 문턱·여유 = max(REFRESH, 보는 땅 폭 × PAD_K) — 멀리 볼수록 덜 자주 (6%는 화면 몇 px)
 const MARGIN := 3.0               # 화면 둘레 여유 (칸, 칸의 반 대각선과 REFRESH 몫은 따로 더함) — 그림자가 화면 안으로 드리우는 몫
 const TALL := 13.0                # 키 큰 꽃이 화면 아래 밖에서 위로 솟아 들어오는 몫 (땅 위 칸, 화면 높이 14 × cos 48° / sin 48°)
 ## 멀리 모양으로 바꾸는 확대 (P1 3차 — 메인 판단 2026-11-08: 낮은 것은 24, 큰 꽃은 ppu 16에서 나란히 비교해 구별이 어려우면 24, 아니면 12)
@@ -56,6 +57,9 @@ var far_low := false              # 잔것(CLUTTER)이 멀리 모양인가
 var force_far := -1               # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (나란히 비교 캡처)
 var tiny_off := false
 var lines_off := false            # ppu < LINES_PPU: 접힌 곳 선 끔
+var _occ := {}                    # 인스턴스가 하나라도 있는 칸 (모든 모양) — 보이는 칸은 이 안에서만 찾는다
+var _occ_bb := Rect2()            # 그 칸들의 테두리 (부모 좌표 xz)
+var _pad := REFRESH               # 지금 담은 여유 (확대가 멀수록 넓게 — 아래 update)
 var n_total := 0                  # 놓은 인스턴스 수
 var n_drawn := 0                  # 지금 버퍼에 담긴 수 (시험·측정용)
 
@@ -69,6 +73,8 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 	for c in parent.get_children():
 		c.queue_free()
 	_kinds.clear()
+	_occ.clear()
+	_occ_bb = Rect2()
 	n_total = 0
 	for k: String in groups:
 		var xfs: Array = groups[k]
@@ -85,6 +91,10 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 			var arr: PackedFloat32Array = cells.get(key, PackedFloat32Array())     # 묶음 배열은 값 복사 — 붙인 뒤 다시 넣는다
 			arr.append_array(PackedFloat32Array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z]))
 			cells[key] = arr
+			if not _occ.has(key):
+				_occ[key] = true
+				var cr := Rect2(Vector2(key) * CELL, Vector2(CELL, CELL))
+				_occ_bb = cr if _occ.size() == 1 else _occ_bb.merge(cr)
 		var hgt := shown_height(m["mesh"], xfs)
 		var shadow := not (k in no_shadow) and hgt >= SHADOW_MIN_H
 		var near: Array = []
@@ -151,17 +161,25 @@ func update(ppu: float, view: Dictionary) -> void:
 	tiny_off = want_tiny
 	lines_off = want_lines_off
 	var everything := not cull or not has_view
+	# (끊김 — 2026-11-08 병 밖 → 병 안 오므림) 멀리 볼수록 다시 담는 문턱·여유를 화면 크기에 맞춰 넓힘: 예전엔 늘 2칸이라
+	# 세상 전체에서 확대하는 동안 매 화면 다시 담았고, 한 번에 화면 다각형의 테두리 칸 수만 개(세상 전체 ≈ 수만)를 시험해 30~200ms.
+	var pad := REFRESH
+	if has_view:
+		pad = maxf(REFRESH, maxf(rect.size.x, rect.size.y) * PAD_K)
+	if not everything and _occ_bb.size != Vector2.ZERO and rect.grow(MARGIN).encloses(_occ_bb):
+		everything = true            # 화면이 묶음 전체를 덮음 — 칸 시험 없이 전부
 	if not lod_changed:
 		if everything and _all:
 			return
-		if not everything and not _all and _near(_rect, rect):
+		if not everything and not _all and _near(_rect, rect, _pad):
 			return
 	if everything:
 		_all = true
 	else:
 		_all = false
 		_rect = rect
-		_vis = visible_cells(view["poly"])
+		_pad = pad
+		_vis = visible_cells(view["poly"], _occ, _pad)
 	_fill(lod_changed)
 
 
@@ -174,21 +192,29 @@ static func _hyst(cur: bool, ppu: float, at: float, gap: float) -> bool:
 	return cur
 
 
-static func _near(a: Rect2, b: Rect2) -> bool:
-	return absf(a.position.x - b.position.x) < REFRESH and absf(a.position.y - b.position.y) < REFRESH \
-		and absf(a.end.x - b.end.x) < REFRESH and absf(a.end.y - b.end.y) < REFRESH
+static func _near(a: Rect2, b: Rect2, pad := REFRESH) -> bool:
+	return absf(a.position.x - b.position.x) < pad and absf(a.position.y - b.position.y) < pad \
+		and absf(a.end.x - b.end.x) < pad and absf(a.end.y - b.end.y) < pad
 
 
-## 볼록 다각형(부모 좌표 xz)에 걸치는 격자 칸 — 칸 가운데가 (다각형 + 반 대각선 + REFRESH + MARGIN) 안이면
-static func visible_cells(poly: PackedVector2Array) -> Dictionary:
+## 볼록 다각형(부모 좌표 xz)에 걸치는 격자 칸 — 칸 가운데가 (다각형 + 반 대각선 + pad + MARGIN) 안이면.
+## occ(인스턴스가 있는 칸)를 주면 그 칸만 시험한다 (다각형 테두리 안 칸을 다 훑지 않음 — 세상 전체 화면에서 수만 칸)
+static func visible_cells(poly: PackedVector2Array, occ: Dictionary = {}, pad := REFRESH) -> Dictionary:
 	var out := {}
-	var grown := Geometry2D.offset_polygon(poly, CELL * 0.71 + REFRESH + MARGIN)
+	var grown := Geometry2D.offset_polygon(poly, CELL * 0.71 + pad + MARGIN)
 	if grown.is_empty():
 		return out
 	var g: PackedVector2Array = grown[0]
 	var bb := Rect2(g[0], Vector2.ZERO)
 	for p in g:
 		bb = bb.expand(p)
+	var span := (floori(bb.end.y / CELL) - floori(bb.position.y / CELL) + 1) * (floori(bb.end.x / CELL) - floori(bb.position.x / CELL) + 1)
+	if not occ.is_empty() and occ.size() < span:
+		for key: Vector2i in occ:
+			var c := Vector2((key.x + 0.5) * CELL, (key.y + 0.5) * CELL)
+			if bb.has_point(c) and Geometry2D.is_point_in_polygon(c, g):
+				out[key] = true
+		return out
 	for cy in range(floori(bb.position.y / CELL), floori(bb.end.y / CELL) + 1):
 		for cx in range(floori(bb.position.x / CELL), floori(bb.end.x / CELL) + 1):
 			if Geometry2D.is_point_in_polygon(Vector2((cx + 0.5) * CELL, (cy + 0.5) * CELL), g):

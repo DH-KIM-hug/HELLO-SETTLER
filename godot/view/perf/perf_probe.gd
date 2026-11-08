@@ -5,6 +5,7 @@
 ##   1) adb shell am start -n com.ddoystory.najakji/com.godot.game.GodotApp --esa command_line_params "--perf,scale=0.75"
 ##   2) 안 되면 깃발 파일: echo "perf scale=0.75" | adb shell run-as com.ddoystory.najakji sh -c 'cat > files/perf_probe.cfg'  (한 번 읽고 지워진다)
 ## 옵션 (key=value): shproxy=0 (P1 4차 건물 그림자 대역 끔 — 비교) · shcmp=1 (shots=1과 함께: 가까이에서 멈춘 채 대역 켬·끔·켬 + 멀리 모양 그림) · cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
+##   · only=trans (끊김만) · trans=0 (방 → 마을 오므림 끊김 재기 끔) · trans_secs=2.5 · world_only=1 (세상 전체·방 장면만) · census=1 (보이는 메시 경로별)
 ##   · flora=old (꽃숲 자르기·멀리 덩이 끔 — 이전과 비교) · shots=1 (데스크톱: 장면마다 화면을 godot_shots/perf_<tag>_<장면>.png로 — 창이 필요)
 ##
 ## 하는 일: 넓은 세상(world.tscn, 본 게임 장면)에 마을 시대 건물 + 주민 30명을 세우고 →
@@ -23,7 +24,7 @@ const RESIDENTS := 30
 
 var opts: Dictionary = {}
 var scene: Node
-var results: Dictionary = {"scenarios": [], "catchup": [], "toggles": []}
+var results: Dictionary = {"scenarios": [], "catchup": [], "toggles": [], "transitions": []}
 var _rec: Dictionary = {}            # 지금 기록 중인 장면의 표본
 var _last_us := 0
 var _vp: RID
@@ -102,7 +103,7 @@ func _run() -> void:
 	for i in 5:
 		await get_tree().process_frame
 	await _build_village()
-	if only != "frames":
+	if only != "frames" and only != "trans":
 		await _catchup_runs(4)
 	if only == "catchup":
 		_finish()
@@ -115,10 +116,17 @@ func _run() -> void:
 	if _opt("flora", "") == "old":             # 비교용: 꽃숲 자르기·멀리 덩이 끔 (P1 이전과 같은 그림·같은 양)
 		scene.view.flora_cull = false
 		scene.view.flora_force_near = true
-	await _goto(16.0, v)
-	await _measure("village_far", dur)
-	await _goto(32.0, v)
-	await _measure("village_close", dur)
+	if _opt("trans", "1") == "1":              # (끊김 회귀) 방 → 마을 오므림: 처음 한 번 · 나갔다가 다시 한 번
+		await _transition("room_to_village_1", float(_opt("trans_secs", 2.5)))
+		await _transition("room_to_village_2", float(_opt("trans_secs", 2.5)))
+		if only == "trans":
+			_finish()
+			return
+	if _opt("world_only", "0") != "1":         # world_only=1: 세상 전체 · 방 장면만 (조사용)
+		await _goto(16.0, v)
+		await _measure("village_far", dur)
+		await _goto(32.0, v)
+		await _measure("village_close", dur)
 	if _opt("shcmp", "0") == "1":              # (P1 4차) 그림자 대역 켜고/끄고 같은 순간 그림 비교 (멈춘 채)
 		var kp: bool = scene.paused
 		scene.paused = true
@@ -142,10 +150,22 @@ func _run() -> void:
 	await _goto(-1.0, v)
 	await _measure("world_zoom", dur)
 	scene.wterrain.reveal_all = true
+	scene.wterrain.set_fog_visible(true)            # reveal_all은 안개 덩이를 다시 만들 때만 감춤 — 지금 있는 안개 메시도 감춤 (2026-11-08 전엔 안개가 그대로 그려졌음)
 	scene.wterrain.update_now()
 	await _measure("world_zoom_revealed", dur * 0.5)
 	scene.wterrain.reveal_all = false
+	scene.wterrain.set_fog_visible(true)
 	scene.wterrain.update_now()
+	# 병 밖 (안개 그대로 — 평소 놀이): 방 ⑤ · 유리병 전체 ④ · 병 안 ③ 끝 (유리 너머 방이 보임 — 방 · 세상 전체 · 해 그림자 모두)
+	await _goto_room()
+	await _measure("room", dur * 0.5)
+	await _goto_room((scene.cam.b_glass + JarCamera.B_ROOM) * 0.5)
+	await _measure("jar_outside", dur * 0.5)
+	await _goto_room(scene.cam.b_glass * 0.7)
+	await _measure("jar_inside_room", dur * 0.5)
+	if _opt("world_only", "0") == "1":
+		_finish()
+		return
 	if _opt("shots", "0") == "1":              # 꽃숲 그림 비교 (캡처만): 마을 곁 숲 한가운데 — 기본 확대 · 멀리 덩이 경계 아래 · 넓은 땅
 		var fp := _forest_spot(v)
 		for z in [16.0, 9.0, 5.0, 2.0]:
@@ -330,13 +350,72 @@ func _catchup_runs(n: int) -> void:
 ## ppu < 0 = 세상 전체 (카메라가 허락하는 가장 멀리)
 func _goto(ppu: float, v: Village, at := Vector2.INF) -> void:
 	var cam: JarCamera = scene.cam
+	_calm()
 	var goal := cam.ppu_min if ppu < 0.0 else ppu
-	cam.ppu = goal
-	cam.ppu_goal = goal
+	cam.set_ext_zoom(log(goal) / log(2.0))       # 병 안 (beyond 0) — 예전엔 beyond를 두고 ppu만 바꿔 '세상 전체'가 방 보기로 재지기도 했다
 	scene.look_at_ground(v.center + Vector2(1.0, 1.0) if at == Vector2.INF else at)
 	cam._apply()
 	for i in 45:
 		await get_tree().process_frame
+
+
+## 재기 전에 카메라를 알려진 상태로: 사건 연출(StageDirector — 카메라를 잡음 cam.hold)을 건너뛰고, 날아가기를 멈춤
+func _calm() -> void:
+	var d: Variant = scene.get("director")
+	if d is StageDirector and (d as StageDirector).playing():
+		(d as StageDirector).skip()
+	var cam: JarCamera = scene.cam
+	cam.hold = {}
+	if cam.flying:
+		cam.stop_fly()
+	cam.flying = false
+
+
+## 병 밖: beyond b (1 = 거인의 방 ⑤, b_glass~B_ROOM = 유리병 전체 ④)
+func _goto_room(b := 1.0) -> void:
+	var cam: JarCamera = scene.cam
+	_calm()
+	cam.set_ext_zoom(log(cam.ppu_min) / log(2.0) - b * JarCamera.BEYOND_SPAN)
+	for i in 45:
+		await get_tree().process_frame
+
+
+## (끊김 회귀) 거인의 방 → 병 안 → 마을(ppu 16)까지 손가락 오므림처럼 secs초 동안 매 화면 zoom_by.
+## 결과: 화면 시간 최대·p95 · 33ms 넘는 화면 (단계·확대·그 화면의 마을 화면 sync 단계별 ms)
+func _transition(name: String, secs: float) -> void:
+	var cam: JarCamera = scene.cam
+	await _goto_room()
+	var e0 := cam.ext_zoom()
+	var e1 := 4.0
+	var rate := (e1 - e0) / secs
+	var fts: Array = []
+	var slow: Array = []
+	var last := Time.get_ticks_usec()
+	var t := 0.0
+	var tail := 0.0
+	while tail < 1.0:
+		_calm()
+		await get_tree().process_frame
+		var now := Time.get_ticks_usec()
+		var ms := (now - last) / 1000.0
+		last = now
+		fts.append(ms)
+		t += ms / 1000.0
+		if cam.ext_zoom() < e1 - 0.02 and t < secs * 3.0:
+			var want := e0 + rate * t
+			cam.zoom_by(pow(2.0, maxf(0.0, want - (log(cam.ppu_goal) / log(2.0) - cam.beyond_goal * JarCamera.BEYOND_SPAN))))
+		else:
+			tail += ms / 1000.0
+		if ms > 33.0:
+			var sp: Dictionary = scene.view.sync_prof
+			var pp: Variant = scene.get("proc_prof")
+			slow.append({"ms": snappedf(ms, 0.1), "t": snappedf(t, 0.01), "stage": cam.stage(), "ext": snappedf(cam.ext_zoom(), 0.01),
+				"sync": sp if int(sp.get("frame", -9)) >= Engine.get_process_frames() - 1 else {},
+				"proc": pp if pp is Dictionary else {}, "lod": scene.view.lod_prof,
+				"render_cpu": snappedf(RenderingServer.viewport_get_measured_render_time_cpu(_vp) + RenderingServer.get_frame_setup_time_cpu(), 0.1)})
+	var out := {"name": name, "frames": fts.size(), "frame_ms": _stats(fts), "max_ms": _stats(fts).get("max", 0.0), "slow": slow}
+	(results["transitions"] as Array).append(out)
+	_log("transition " + JSON.stringify(out))
 
 
 func _measure(name: String, secs: float, toggle := false) -> void:
@@ -358,10 +437,13 @@ func _measure(name: String, secs: float, toggle := false) -> void:
 		"render_cpu_ms": _stats(rec["cpu"]), "render_gpu_ms": _stats(rec["gpu"]), "draw_calls": _stats(rec["draw"]),
 		"draw_3d": _stats(rec["draw_3d"]), "draw_shadow": _stats(rec["draw_shadow"]), "draw_ui": _stats(rec["draw_ui"]),   # 그리기 패스별 (P1 3차)
 		"primitives": _stats(rec["prim"]), "objects": _stats(rec["obj"]), "time_process_ms": _stats(rec["tp"]),
-		"scene_proc_ms": _stats(rec["proc"]), "ppu": snappedf(scene.cam.ppu, 0.01), "mem": _mem(), "t_unix": Time.get_unix_time_from_system()}
+		"scene_proc_ms": _stats(rec["proc"]), "ppu": snappedf(scene.cam.ppu, 0.01), "beyond": snappedf(scene.cam.beyond, 0.01),
+		"stage": scene.cam.stage(), "held": not scene.cam.hold.is_empty(), "mem": _mem(), "t_unix": Time.get_unix_time_from_system()}
 	if not toggle:
 		out["breakdown"] = breakdown(scene)
 		out["bld_far"] = scene.view.bld_far          # 건물 멀리 LOD였나 (village_view.gd _bld_lod)
+		if _opt("census", "0") == "1":
+			out["census"] = census(scene)
 		if _opt("shots", "0") == "1":
 			await _shot(name)
 	((results["toggles"] if toggle else results["scenarios"]) as Array).append(out)
@@ -442,6 +524,64 @@ static func breakdown(sc: Node) -> Dictionary:
 	return out
 
 
+## (census=1) 화면 절두체 안 보이는 메시 노드를 부모 경로(장면 아래 3단)별로: 노드 수 · 재질 패스 수 · 반투명 패스 수 · 삼각형
+static func census(sc: Node) -> Dictionary:
+	var out := {}
+	var cam := sc.get_viewport().get_camera_3d()
+	var planes: Array[Plane] = cam.get_frustum() if cam != null else []
+	for gi: GeometryInstance3D in sc.find_children("*", "GeometryInstance3D", true, false):
+		if not gi.is_visible_in_tree():
+			continue
+		var bb := gi.global_transform * gi.get_aabb()
+		var inside := true
+		for pl in planes:
+			var c := bb.get_center()
+			var e := bb.size * 0.5
+			var r := absf(pl.normal.x) * e.x + absf(pl.normal.y) * e.y + absf(pl.normal.z) * e.z
+			if pl.distance_to(c) > r:
+				inside = false
+				break
+		if not inside:
+			continue
+		var rel := String(sc.get_path_to(gi)).split("/")
+		var key := "/".join(rel.slice(0, mini(3, rel.size() - 1)))
+		var mesh: Mesh = null
+		var inst := 1
+		if gi is MeshInstance3D:
+			mesh = (gi as MeshInstance3D).mesh
+		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var mm := (gi as MultiMeshInstance3D).multimesh
+			mesh = mm.mesh
+			inst = mm.instance_count if mm.visible_instance_count < 0 else mm.visible_instance_count
+		var e: Dictionary = out.get(key, {"nodes": 0, "passes": 0, "alpha": 0, "tris": 0, "shadow": 0})
+		e["nodes"] += 1
+		if mesh != null and inst > 0:
+			for s in mesh.get_surface_count():
+				var mat: Material = gi.material_override if gi.material_override != null else mesh.surface_get_material(s)
+				var tri: int = (mesh as ArrayMesh).surface_get_array_index_len(s) / 3 if mesh is ArrayMesh else 0
+				while mat != null:
+					e["passes"] += 1
+					e["tris"] += tri * inst
+					var tr := false
+					if mat is BaseMaterial3D:
+						tr = (mat as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED
+					elif mat is ShaderMaterial and (mat as ShaderMaterial).shader != null:
+						var code := (mat as ShaderMaterial).shader.code
+						tr = code.contains("blend_mix") or code.contains("blend_add") or code.contains("ALPHA =") or code.contains("ALPHA=")
+					if tr:
+						e["alpha"] += 1
+						var sk := "alpha:" + (((mat as ShaderMaterial).shader.resource_path.get_file() if (mat as ShaderMaterial).shader.resource_path != "" else "inline:" + str((mat as ShaderMaterial).shader.code.length())) if mat is ShaderMaterial else "std:" + gi.name)
+						var se: Dictionary = out.get(sk, {"nodes": 0, "passes": 0, "alpha": 0, "tris": 0, "shadow": 0})
+						se["alpha"] += 1
+						se["tris"] += tri * inst
+						out[sk] = se
+					mat = mat.next_pass
+			if gi.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+				e["shadow"] += 1
+		out[key] = e
+	return out
+
+
 ## 데스크톱 비교용: 저장소 맨 위 godot_shots/perf_<tag>_<장면>.png (화면 위 UI는 잠깐 숨김)
 func _shot(name: String) -> void:
 	var hid: Array = []
@@ -480,6 +620,8 @@ func _forest_spot(v: Village) -> Vector2:
 func _process(_dt: float) -> void:
 	if _rec.is_empty():
 		return
+	if scene != null:
+		_calm()                                    # 재는 동안 사건 연출이 카메라를 잡지 않게
 	var now := Time.get_ticks_usec()
 	if _last_us > 0:
 		(_rec["ft"] as Array).append((now - _last_us) / 1000.0)

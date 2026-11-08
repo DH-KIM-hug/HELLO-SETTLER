@@ -31,6 +31,7 @@ signal zoom_beyond_world(amount: float)   # 거인의 방보다 더 오므림 (l
 var room_zoom: RoomZoom
 var out_btn: Button                  # [병 밖으로] (UI 09 — 방까지 지름길)
 var _tap_gate := DoubleTapGate.new(DOUBLE_TAP)   # 병 밖에서 병 두 번 톡 = 들어가기 — 첫 누름은 미뤄 둠 (giant-touch E5)
+var proc_prof := {}                 # (성능 탐침) 마지막 _process 단계별 ms — base = 시뮬·마을 화면(TestVillage), terrain = 넓은 땅 조각
 var _proc_ms := 0.0                  # 이 장면 _process 시간 (시뮬레이션 + 화면 갱신, 평균 — 성능 측정용)
 var _enter_fly := false              # 타이틀 [이어하기] → 방에서 마을로 날아 들어오는 중 (따라잡기가 끝나면)
 var _last_letter: Dictionary = {}     # 마지막 '자리를 비운 동안' 편지 (유리에 붙은 편지로 다시 읽기)
@@ -817,17 +818,21 @@ func _process(dt: float) -> void:
 	super(dt)
 	if catching:
 		return
+	var t1 := Time.get_ticks_usec()
 	if 1 + extra_views.size() < world.settlements.size():
 		_sync_views()
 	_update_focus(dt)
 	_update_limits()
 	_lamp_anim(dt)                    # 등불을 옮기면 해(그림자·언덕 명암·폭포)가 3초 동안 돈다 (A11)
+	var t2 := Time.get_ticks_usec()
 	wterrain.set_focus(ground_at_camera(), cam.view_radius())
 	wterrain.zoom_ppu(cam.ppu)
+	var t3 := Time.get_ticks_usec()
 	far_outline_check()
 	_rim_check()
 	_lid_follow()
 	_room_tap_flush(Time.get_ticks_msec() / 1000.0)
+	var t4 := Time.get_ticks_usec()
 	if room_zoom != null:
 		room_zoom.update(dt)
 		_shelf_process(dt)
@@ -836,6 +841,8 @@ func _process(dt: float) -> void:
 			fly_to_settlement(village)
 		if out_btn != null:
 			out_btn.visible = goto_btn.visible and cam.stage() < 4
+	proc_prof = {"frame": Engine.get_process_frames(), "base": (t1 - t0) / 1000.0, "focus": (t2 - t1) / 1000.0,
+		"terrain": (t3 - t2) / 1000.0, "misc": (t4 - t3) / 1000.0, "room": (Time.get_ticks_usec() - t4) / 1000.0}
 	if minimap != null:
 		minimap.update_view(ground_at_camera(), cam.view_radius(), _map_angle(), focus_village())
 	_proc_ms = lerpf(_proc_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.1)

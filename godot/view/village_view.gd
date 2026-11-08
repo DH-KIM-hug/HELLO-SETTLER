@@ -88,6 +88,7 @@ var _far_season := ""
 var _far_t := -1.0e9
 var n_far_trees := 0
 var far_ms := 0.0
+var sync_prof := {}               # (성능 탐침) 마지막 sync의 단계별 ms — all · flora_lod · live, 점검한 화면이면 bld·trees·props·lilies·far(먼 숲을 다시 놓았으면)
 var _wf: Array[Dictionary] = [] # 마을 둘레에 걸친 세상 숲 무리 (장식 숲 짙기용)
 var _check_t := 0.0
 var decor_ms := 0.0             # 장식을 마지막으로 다시 놓는 데 든 시간 (표시·측정용)
@@ -223,6 +224,7 @@ func gy(x: float, z: float) -> float:
 
 # ───────────────────────── 매 화면 ─────────────────────────
 func sync(dt: float, force := false) -> void:
+	var s0 := Time.get_ticks_usec()
 	_anim_t += dt
 	if fast and not force:          # 빠른 흐름: 움직이는 것들은 FAST_EVERY초마다 한 번 (그동안 쌓인 dt로)
 		_fast_t += dt
@@ -239,19 +241,32 @@ func sync(dt: float, force := false) -> void:
 		_check_t = 0.0
 		if force:
 			_far_t = -1.0e9           # 안개만 바뀐 먼 숲도 바로 다시
+		var t0 := Time.get_ticks_usec()
+		var f0 := far_ms
 		_sync_buildings()
+		var t1 := Time.get_ticks_usec()
 		_sync_graves()
 		_sync_trees()
+		var t2 := Time.get_ticks_usec()
 		_sync_rocks()
 		_sync_manna()
 		_sync_props()
+		var t3 := Time.get_ticks_usec()
 		_lily_t += 0.25
 		if force or _lily_t >= 1.0:
 			_lily_t = 0.0
 			_sync_lilies(false)
+		var t4 := Time.get_ticks_usec()
+		sync_prof = {"force": force, "bld": (t1 - t0) / 1000.0, "trees": (t2 - t1) / 1000.0, "props": (t3 - t2) / 1000.0,
+			"lilies": (t4 - t3) / 1000.0, "far": far_ms if far_ms != f0 else 0.0, "bp": bld_prof}
+	else:
+		sync_prof = {}
+	var s1 := Time.get_ticks_usec()
 	_flora_lod()
+	var s2 := Time.get_ticks_usec()
 	_animate_fire()
 	_animate_live(dt)
+	var s3 := Time.get_ticks_usec()
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
@@ -261,6 +276,10 @@ func sync(dt: float, force := false) -> void:
 			_yard.position = tremor_fx.wobble()
 	if fireflies != null:
 		fireflies.sync(dt)
+	sync_prof["frame"] = Engine.get_process_frames()
+	sync_prof["all"] = (Time.get_ticks_usec() - s0) / 1000.0
+	sync_prof["flora_lod"] = (s2 - s1) / 1000.0
+	sync_prof["live"] = (s3 - s2) / 1000.0
 
 
 ## (P1 성능) 꽃숲 묶음: 확대에 따라 멀리 덩이 · 화면 밖 자르기 (view/flora_batch.gd)
@@ -282,9 +301,16 @@ func _flora_lod() -> void:
 
 ## 건물 LOD는 sync와 따로 매 화면 (병 밖 보기처럼 sync가 멈춘 동안에도 축소를 따라가게)
 func _process(_dt: float) -> void:
+	if not _far_job.is_empty():
+		_far_step(FAR_BUDGET_MS)
+	if not _far_bake.is_empty():
+		_far_bake_step(FAR_BUDGET_MS)
+	var t0 := Time.get_ticks_usec()
 	_bld_lod()
+	var t1 := Time.get_ticks_usec()
 	if bld_batch and (bld_far or bld_shadow_proxy):
 		_check_far_moving()
+	lod_prof = {"frame": Engine.get_process_frames(), "bld_lod": (t1 - t0) / 1000.0, "far_moving": (Time.get_ticks_usec() - t1) / 1000.0}
 
 
 ## 건물 멀리 LOD 고르기 (매 화면 — 바뀔 때만 노드를 건드림)
@@ -803,6 +829,7 @@ func _sync_buildings() -> void:
 		if _bld_key.get(b.id, "") == key:
 			continue
 		_bld_key[b.id] = key
+		_n_rebuilt += 1
 		if _yard_xf.erase(b.id):             # 다시 만들 때 _build_shape가 다시 넣는다
 			_yard_dirty = true
 		if _blds.has(b.id):
@@ -874,12 +901,22 @@ func _sync_buildings() -> void:
 				_shadow_dirty = true
 			_far_rest.erase(id)
 			_far_moving.erase(id)
+	var b0 := Time.get_ticks_usec()
 	if _yard_dirty:
 		_sync_yard()
+	var b1 := Time.get_ticks_usec()
 	if _far_dirty and bld_far:
 		_sync_far_batch()
+	var b2 := Time.get_ticks_usec()
 	if _shadow_dirty and not bld_far:
 		_sync_near_shadow()
+	bld_prof = {"rebuilt": _n_rebuilt, "yard": (b1 - b0) / 1000.0, "far_batch": (b2 - b1) / 1000.0, "shadow": (Time.get_ticks_usec() - b2) / 1000.0}
+	_n_rebuilt = 0
+
+
+var lod_prof := {}                # (성능 탐침) 마지막 _process: 건물 LOD 바꾸기 · 움직임 점검 ms
+var bld_prof := {}                # (성능 탐침) 마지막 _sync_buildings: 다시 만든 건물 수 · 마당 · 멀리 묶음 · 그림자 대역 ms
+var _n_rebuilt := 0
 
 
 ## 장식 노드 목록: [{id(음수), model, pos, yaw, s, key}] — 흙 화분 집 (마을 가장자리, 화면만) + 떨어진 물건 (FoundObjects.shown).
@@ -979,17 +1016,29 @@ func _record_far(id: int, n: Node3D) -> void:
 	_far_dirty = true
 
 
-func _sync_far_batch() -> void:
+func _sync_far_batch(now := false) -> void:
 	_far_dirty = false
-	if _far_batch != null:
-		_far_batch.queue_free()
-	_far_batch = _node(self)
-	_far_batch.name = "far_batch"
-	_far_batch.visible = bld_far
+	# (끊김 — 2026-11-08) 다시 굽기는 한 화면에 FAR_BUDGET_MS까지 나눠서 (_process가 이어 감) — 다 구울 때까지 옛 묶음이 그대로 보인다.
+	# 예전엔 짐 더미 하나만 바뀌어도 한 화면에 전부 다시 구워 약 50ms (병 밖 → 병 안으로 들어오는 순간 멈칫). 처음 한 번 · now는 한 번에.
+	_far_bake = {"ids": _far_items.keys(), "i": 0, "groups": {}}
+	_far_bake_step(INF if _far_batch == null or now else FAR_BUDGET_MS)
+
+
+var _far_bake := {}               # 굽는 중인 멀리 묶음 {ids, i, groups}
+
+
+func _far_bake_step(budget_ms: float) -> void:
+	if _far_bake.is_empty():
+		return
+	var t0 := Time.get_ticks_usec()
+	var ids: Array = _far_bake["ids"]
+	var i: int = _far_bake["i"]
+	var groups: Dictionary = _far_bake["groups"]      # [재질, 그림자] → SurfaceTool
 	# 같은 (재질 · 그림자)끼리 한 메시로 구워 합침 — 모델마다 메시가 달라 MultiMesh로는 모델 수만큼 그려짐 (멀리 모양 약 6k 삼각형이라 굽기 값쌈)
-	var groups := {}                # [재질, 그림자] → SurfaceTool
-	for id in _far_items:
-		if _far_moving.has(id) or not _blds.has(id):
+	while i < ids.size():
+		var id: int = ids[i]
+		i += 1
+		if _far_moving.has(id) or not _blds.has(id) or not _far_items.has(id):
 			continue
 		var bx: Transform3D = _far_rest[id]
 		for it: Array in _far_items[id]:
@@ -1000,6 +1049,17 @@ func _sync_far_batch() -> void:
 				if not groups.has(k):
 					groups[k] = SurfaceTool.new()
 				(groups[k] as SurfaceTool).append_from(mesh, si, bx * (it[3] as Transform3D))
+		if (Time.get_ticks_usec() - t0) / 1000.0 > budget_ms:
+			break
+	_far_bake["i"] = i
+	if i < ids.size():
+		return
+	_far_bake = {}
+	if _far_batch != null:
+		_far_batch.queue_free()
+	_far_batch = _node(self)
+	_far_batch.name = "far_batch"
+	_far_batch.visible = bld_far
 	for k: Array in groups:
 		var mi := MeshInstance3D.new()
 		mi.mesh = (groups[k] as SurfaceTool).commit()
@@ -1110,7 +1170,7 @@ func _check_far_moving() -> void:
 				_far_moving.erase(id)
 	if bld_far:
 		if changed or _far_dirty:
-			_sync_far_batch()
+			_sync_far_batch(changed)      # 움직이는 건물은 옛 묶음에도 남아 둘로 보이므로 바로 굽기
 		if changed:
 			_shadow_dirty = true          # 가까이 그림자 묶음도 다음에 가까이로 갈 때 다시
 	else:
@@ -2062,51 +2122,110 @@ func _sync_far() -> void:
 	_far_key = ww.fog_version
 	_far_season = season
 	_far_t = now
-	var t0 := Time.get_ticks_usec()
-	var nz := _forest_noise()
-	var lim := v.view_r + 2.0
+	# (끊김 — 2026-11-08) 안개 칸마다 놓을 덩이를 기억해 두고(_far_cells) 새로 걷힌 칸만 셈 + 한 화면에 FAR_BUDGET_MS까지만 (_process가 이어 감).
+	# 예전엔 걷힐 때마다 반지름 200칸을 한 화면에 다시 셈 (clump_at 수천 번 — 병 밖에서 들어올 때 약 200ms 멈춤).
+	# 6시간마다 새로 (물·강이 바뀌면 그 자리 덩이가 빠지게 — 예전처럼 다시 셈, 다만 나눠서)
+	var key := "%s|%d|%.1f,%.1f|%d|%d|%d" % [season, flora_seed(), v.center.x, v.center.y, v.peers.size(), v.water.rot, int(v.t / 21600.0)]
+	if key != _far_cells_key:
+		_far_cells.clear()
+		_far_cells_key = key
 	var c := v.center
+	var fs := float(WorldWater.FOG)
 	var fl: Array[Dictionary] = []
 	for f: Dictionary in ww.forests:
 		if Vector2(f["x"], f["y"]).distance_to(c) < FAR_MAX + float(f["r"]) * 1.6:
 			fl.append(f)
+	_far_job = {"q0": Vector2i(clampi(floori((c.x - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1)),
+		"q1": Vector2i(clampi(floori((c.x + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1)),
+		"i": 0, "fl": fl, "nz": _forest_noise(), "ms": 0.0}
+	_far_step(INF if not _far_built else FAR_BUDGET_MS)
+
+
+const FAR_BUDGET_MS := 3.0        # 먼 숲 다시 놓기: 한 화면에 이만큼까지 (그 뒤는 다음 화면 — 그동안은 옛 먼 숲이 보임)
+var _far_cells := {}              # 안개 칸 Vector2i → [[모양, Transform3D], …] (걷혔는지와 상관없는 후보 — 놓을 때 revealed로 거름)
+var _far_cells_key := ""
+var _far_job := {}
+var _far_built := false           # 처음 한 번은 한 번에 (장면을 열 때 — 시험·캡처도 바로 보이게)
+
+
+func _far_step(budget_ms: float) -> void:
+	if _far_job.is_empty():
+		return
+	var ww := v.water as WorldWater
+	var t0 := Time.get_ticks_usec()
+	var q0: Vector2i = _far_job["q0"]
+	var q1: Vector2i = _far_job["q1"]
+	var w := q1.x - q0.x + 1
+	var n := w * (q1.y - q0.y + 1)
+	var i: int = _far_job["i"]
+	var c := v.center
+	var lim := v.view_r + 2.0
+	var fs := float(WorldWater.FOG)
+	while i < n:
+		var qx := q0.x + i % w
+		var qy := q0.y + i / w
+		i += 1
+		if ww.fog[qy * ww.fn + qx] == 0:
+			continue
+		var q := Vector2i(qx, qy)
+		if _far_cells.has(q):
+			continue
+		var x0 := -ww.rr + qx * fs
+		var y0 := -ww.rr + qy * fs
+		var out: Array = []
+		if Vector2(x0 + fs * 0.5, y0 + fs * 0.5).distance_to(c) >= lim - 4.0:
+			_far_cell(out, x0, y0, fs, c, lim, _far_job["nz"], _far_job["fl"])
+		_far_cells[q] = out
+		if (Time.get_ticks_usec() - t0) / 1000.0 > budget_ms:
+			break
+	_far_job["i"] = i
+	_far_job["ms"] = float(_far_job["ms"]) + (Time.get_ticks_usec() - t0) / 1000.0
+	if i < n:
+		return
+	# 다 셈 → 걷힌 곳만 모아 한 번에 놓음
+	var t1 := Time.get_ticks_usec()
 	var groups := {}
 	n_far_trees = 0
-	_rec = FloraPicks.new()
-	# 안개 칸(4칸)마다: 걷혔으면 그 안에 기준점이 있는 장식 숲 격자점들을 본다 (마을 둘레 장식과 같은 격자·해시)
-	var fs := float(WorldWater.FOG)
-	var q0 := Vector2i(clampi(floori((c.x - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1))
-	var q1 := Vector2i(clampi(floori((c.x + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y + FAR_MAX + ww.rr) / fs), 0, ww.fn - 1))
-	for qy in range(q0.y, q1.y + 1):
-		for qx in range(q0.x, q1.x + 1):
-			if ww.fog[qy * ww.fn + qx] == 0:
+	var rec := FloraPicks.new()
+	for q: Vector2i in _far_cells:
+		if ww.fog[q.y * ww.fn + q.x] == 0:
+			continue
+		for e: Array in _far_cells[q]:
+			var xf: Transform3D = e[1]
+			if not ww.revealed(xf.origin.x, xf.origin.z):
 				continue
-			var x0 := -ww.rr + qx * fs
-			var y0 := -ww.rr + qy * fs
-			if Vector2(x0 + fs * 0.5, y0 + fs * 0.5).distance_to(c) < lim - 4.0:
-				continue
-			for gj in range(ceili(y0 / FOREST_STEP), ceili((y0 + fs) / FOREST_STEP)):
-				for gi in range(ceili(x0 / FOREST_STEP), ceili((x0 + fs) / FOREST_STEP)):
-					var p := Vector2(gi + _hash(gi, gj, 1.0) * 0.8 - 0.4, gj + _hash(gi, gj, 2.0) * 0.8 - 0.4) * FOREST_STEP
-					if p.distance_to(c) < lim or p.distance_to(c) > FAR_MAX or not ww.revealed(p.x, p.y):
-						continue
-					if _other_closer(p, c):
-						continue
-					var fd := _world_forest(p, nz.get_noise_2d(p.x, p.y) * 0.5 + 0.5, fl)
-					if fd <= 0.0 or _hash(gi, gj, 3.0) > 0.25 + 0.75 * fd:
-						continue
-					if not ww.inside(p.x, p.y, 1.5):
-						continue
-					var k := ww.idx(p.x, p.y)
-					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015 or GreatTrees.blocks(ww, p.x, p.y, 1.0):
-						continue
-					var fc := FloraLook.clump_at(season, p, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), Vector2(ww.wet_k(k), fd), flora_seed(), true)
-					_put(groups, fc[0], p.x, p.y, float(fc[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
-					n_far_trees += 1
-	flora_picks["_far"] = _rec
-	_rec = null
+			_add(groups, e[0], xf)
+			if FloraPicks.pickable(e[0]):
+				rec.add(e[0], xf.origin, xf.basis.get_scale().x, false)
+			n_far_trees += 1
+	flora_picks["_far"] = rec
 	_flush(_far, groups, FloraLook.NO_SHADOW)
-	far_ms = (Time.get_ticks_usec() - t0) / 1000.0
+	far_ms = float(_far_job["ms"]) + (Time.get_ticks_usec() - t1) / 1000.0
+	_far_job = {}
+	_far_built = true
+
+
+## 안개 칸 하나(x0, y0, 폭 fs)의 먼 숲 후보 → out ([모양, Transform3D]) — 마을 둘레 장식과 같은 격자·해시
+func _far_cell(out: Array, x0: float, y0: float, fs: float, c: Vector2, lim: float, nz: FastNoiseLite, fl: Array[Dictionary]) -> void:
+	var ww := v.water as WorldWater
+	for gj in range(ceili(y0 / FOREST_STEP), ceili((y0 + fs) / FOREST_STEP)):
+		for gi in range(ceili(x0 / FOREST_STEP), ceili((x0 + fs) / FOREST_STEP)):
+			var p := Vector2(gi + _hash(gi, gj, 1.0) * 0.8 - 0.4, gj + _hash(gi, gj, 2.0) * 0.8 - 0.4) * FOREST_STEP
+			if p.distance_to(c) < lim or p.distance_to(c) > FAR_MAX:
+				continue
+			if _other_closer(p, c):
+				continue
+			var fd := _world_forest(p, nz.get_noise_2d(p.x, p.y) * 0.5 + 0.5, fl)
+			if fd <= 0.0 or _hash(gi, gj, 3.0) > 0.25 + 0.75 * fd:
+				continue
+			if not ww.inside(p.x, p.y, 1.5):
+				continue
+			var k := ww.idx(p.x, p.y)
+			if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015 or GreatTrees.blocks(ww, p.x, p.y, 1.0):
+				continue
+			var fc := FloraLook.clump_at(season, p, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), Vector2(ww.wet_k(k), fd), flora_seed(), true)
+			var sc := float(fc[1]) * TREE_SCALE
+			out.append([fc[0], Transform3D(Basis(Vector3.UP, _hash(gi, gj, 6.0) * TAU).scaled(Vector3.ONE * sc), Vector3(p.x, gy(p.x, p.y), p.y))])
 
 
 ## (넓은 세상 · 무리가 여럿) 먼 숲은 가장 가까운 무리의 화면이 맡는다 — 다른 무리 마을 둘레(장식 숲·건물)와 겹치지 않게
