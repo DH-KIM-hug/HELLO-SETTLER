@@ -27,6 +27,7 @@ uniform vec3 lit_tint : source_color = vec3(1.0);
 uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;      // 그늘 속에서도 이만큼 원래 밝기 쪽으로 (R5)
 uniform float alpha_cut = 0.5;
+uniform float far_shade = 0.84;    // 비스듬한 보기의 먼 다리(leg_b)를 조금 어둡게 — 두 다리가 겹쳐도 둘로 읽힘 (2026-11-08)
 uniform ivec4 prop_layer = ivec4(5, 7, 0, 0);    // 보기마다 소품의 겹 (앞: 몸과 팔 사이, 뒤: 몸 뒤)
 
 instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // 옷 묶음 S, 머리 묶음 T, 모자 묶음 U(-1 없음), 소품(-1 없음)
@@ -37,6 +38,7 @@ instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계)
 
 varying flat vec4 v_dye;     // xyz = 이 조각의 물감 슬롯 0·1·2 (-1 없음), w = 묶음
 varying flat float v_show;
+varying flat float v_far;    // 1 = 비스듬한 보기의 먼 다리
 
 vec4 anim(int slot, int row0, float f) {
 	int fa = int(floor(f)) % frames;
@@ -77,6 +79,7 @@ void vertex() {
 		show = pid >= 0.0 && abs(set_i - pid) < 0.5;
 	}
 	v_show = show ? 1.0 : 0.0;
+	v_far = (group == 0 && slot == 8 && kind == 1) ? 1.0 : 0.0;
 	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 3 ? 99.0 : set_i);
 	if (!show) {
 		VERTEX = vec3(0.0);
@@ -179,6 +182,7 @@ void fragment() {
 		o += m.b * dyed(c, v_dye.z, v_dye.w);
 		c = o;
 	}
+	c *= mix(1.0, far_shade, v_far);
 	ALBEDO = srgb_to_linear(clamp(c, 0.0, 1.0));
 	ROUGHNESS = 1.0;
 }

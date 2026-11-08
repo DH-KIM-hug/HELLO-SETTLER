@@ -123,6 +123,47 @@ DESKEW_FRONT_LEVEL = 3.0   # front axis must be this level (deg)
 DESKEW_MIN_RATIO = 1.7     # principal-axis variance ratio = brim-like (front and this view)
 
 
+# HEADWEAR DEPTH (2026-11-08 user: "the straw hat is still floating" — perched on the hair, crown empty). The hat drawings
+# were placed where they sat on the concept figure, so the brim line landed anywhere from 30 units ABOVE the head top
+# (e back) to 110 below it; and the hair above the face differs a lot between heads (tall curls vs flat hair), so no
+# single depth below the hair top fits every wearer. Now:
+#   * every head has a hat SEAT = its brow line (find_brow; back views reuse the front view's depth) and head_top in
+#     doll_lib = chin -> seat (the shader puts any hat U on head T's seat — still one quad per hat, any head);
+#   * every brim / cap is centred on the head by its OPENING LINE (widest row: brim centre line / knit cuff) and moved so
+#     its lowest point under the opening centre (front edge of a brim / lower edge of a cuff — a brim drawn more from
+#     above or a thick cuff hangs lower, so the opening line alone would cover the eyes) sits HAT_SINK x head height
+#     above (+) / below (-) the brow: the cuff on the brow, the brim edge just over the eyes; the hair top inside the crown
+# Wraps (d: a kerchief that frames the face) keep the drawn placement (relative to the seat).
+HAT_KIND = {"b": "brim", "c": "cap", "d": "wrap", "e": "brim", "f": "cap", "g": "cap"}
+HAT_SINK = {"brim": {"fb": -0.08, "q": -0.08}, "cap": {"fb": 0.0, "q": 0.0}}     # x HEAD_H, + = above the brow
+BROW_DEFAULT = 0.33        # brow depth below the head top (x HEAD_H) when a front face has no readable brow
+BROW_MAX_DIFF = 0.12       # a 3/4 brow further than this from the front's (x HEAD_H) is a misread (white brows -> eyes)
+
+
+def hat_opening(img):
+    """widest opaque row of a hat drawing -> (row index, x centre of that row's span, lowest opaque row under that
+    centre), image px"""
+    a = np.asarray(img.convert("RGBA"))[..., 3] > 128
+    best, yb, xc = -1, 0, a.shape[1] / 2
+    for y in range(a.shape[0]):
+        xs = np.nonzero(a[y])[0]
+        if len(xs) and xs[-1] - xs[0] > best:
+            best, yb, xc = xs[-1] - xs[0], y, (xs[0] + xs[-1] + 1) / 2
+    col = np.nonzero(a[:, min(int(xc), a.shape[1] - 1)])[0]
+    return yb, xc, int(col.max()) if len(col) else yb
+
+
+def sink_hat(img, rr, kind, v):
+    """move the hat rect (frame = the seat / brow line) so its anchor line sits HAT_SINK above the brow, centred on x = 0"""
+    w0, h0 = img.size
+    yb, xc, ye = hat_opening(img)
+    line = rr[3] - (ye + 0.5) * (rr[3] - rr[1]) / h0
+    mid = rr[0] + xc * (rr[2] - rr[0]) / w0
+    target = HAT_SINK[kind]["fb" if v in ("front", "back") else "q"] * HEAD_H["bare"]
+    dx, dy = -mid, target - line
+    return [rr[0] + dx, rr[1] + dy, rr[2] + dx, rr[3] + dy], "dx %.0f dy %.0f" % (dx, dy)
+
+
 def hat_axis(png):
     """principal axis of the opaque pixels: (degrees in image space, y down; elongation ratio)"""
     a = np.asarray(Image.open(png).convert("RGBA"))[..., 3] > 128
@@ -153,6 +194,66 @@ def deskew(img, rr, deg):
     W, H = r.size
     out = [cx + (x0 - W / 2) * sx, cy + (H / 2 - y1) * sy, cx + (x1 - W / 2) * sx, cy + (H / 2 - y0) * sy]
     return r.crop((x0, y0, x1, y1)), out
+
+
+# STACKED LEGS (2026-11-08 user: "when they turn, why is one leg missing?"): in the 3/4-back sheets of set a (woman) and
+# f (child) the concept showed one leg hidden behind the other, so cut_sheets placed BOTH cut legs on the same hip (hip gap
+# -8 / 2 rig units vs 125..190 everywhere else) — whenever the doll turned into that view one leg vanished, in every pose.
+# A view whose two hips are closer than LEG_MIN_GAP x foot width gets the hip gap of the same set's other 3/4 view (legs
+# moved apart symmetrically about their middle; rect, hip pivot and parent pivot move together).
+LEG_MIN_GAP = 0.5
+
+
+def spread_stacked_legs(items):
+    legs = {}
+    for _img, _m, meta in items:
+        if meta["group"] == 0 and meta["part"] in ("leg_a", "leg_b"):
+            legs.setdefault((meta["set"], meta["view"]), {})[meta["part"]] = meta
+
+    def gap(pair):
+        return pair["leg_b"]["pivot"][0] - pair["leg_a"]["pivot"][0]
+
+    for (s, v), pair in legs.items():
+        if len(pair) < 2:
+            continue
+        fw = pair["leg_a"]["rect"][2] - pair["leg_a"]["rect"][0]
+        g = gap(pair)
+        if g >= LEG_MIN_GAP * fw:
+            continue
+        twin = {1: 2, 2: 1, 0: 3, 3: 0}[v]
+        ref = legs.get((s, twin))
+        want = gap(ref) if ref and len(ref) == 2 and gap(ref) >= LEG_MIN_GAP * fw else 1.4 * fw
+        d = (want - g) / 2
+        for part, sgn in (("leg_a", -1.0), ("leg_b", 1.0)):
+            m = pair[part]
+            m["rect"] = [round(m["rect"][0] + sgn * d, 2), m["rect"][1], round(m["rect"][2] + sgn * d, 2), m["rect"][3]]
+            m["pivot"] = [round(m["pivot"][0] + sgn * d, 2), m["pivot"][1]]
+        print("spread legs", s, VIEWS[v], "gap %.0f -> %.0f" % (g, want))
+
+
+def find_brow(p, skin):
+    """head piece (sheet px) -> the BROW line: topmost row of dark ink (brows, else eyes) with face skin on all four
+    sides. None for faceless (back) views. Hats sit on this line (head_top = seat), not on the hair top — hair volume
+    above the face differs a lot between heads (tall curls vs flat hair)."""
+    a = p[..., 3] > 128
+    rgb = p[..., :3].astype(np.float32) / 255.0
+    l = np.maximum(lum(rgb), 1e-3)
+    ls = float(lum(skin))
+    d = np.abs(rgb / l[..., None] - skin / ls).sum(-1)
+    r = l / ls
+    sk = a & (d < 0.3) & (r > 0.7) & (r < 1.3)
+    dark = a & (l < 0.45 * ls)
+    g = max(4, sk.shape[1] // 25)
+    near = {k: np.zeros_like(sk) for k in "lrud"}
+    for k in range(1, 3 * g):
+        near["l"][:, k:] |= sk[:, :-k]
+        near["r"][:, :-k] |= sk[:, k:]
+    for k in range(1, 2 * g):
+        near["u"][k:] |= sk[:-k]
+        near["d"][:-k] |= sk[k:]
+    feat = dark & near["l"] & near["r"] & near["u"] & near["d"]
+    rows = np.nonzero(feat.sum(1) >= 2)[0]
+    return int(rows.min()) if len(rows) else None
 
 
 def find_chin(p, skin):
@@ -266,6 +367,8 @@ def main():
     head_socket = {}
     head_top = {}
     head_scale = {}
+    head_brow = {}
+    brow_depth = {}
     for s in EXPECT:
         BASE[s] = auto_base(s)
         print("base", s, BASE[s])
@@ -307,7 +410,19 @@ def main():
             fwd = bt.get("head_fwd", 0.0) if v in ("q_front", "q_back") else 0.0     # stoop: head forward (3/4 views face image-right)
             head_socket["%s_%s" % (s, v)] = [chin[0] * bt["bs"] + fwd, collar_y * bt["bs"] * bt["bsy"] + bt["neck"]]
             ht = [(hr[0] + hr[2]) / 2, hr[3]]                               # top of the (bare) head
-            head_top["%s_%s" % (s, v)] = [(ht[0] - hp[0]) * f_head, (ht[1] - hp[1]) * f_head]
+            # hat SEAT = brow line below the head top (front / 3/4-front measured on the face; the back views have no face
+            # and use the depth of the matching front view; a 3/4 reading far from the front's (white brows -> eyes) too)
+            by_ = find_brow(hpng, hexrgb(BASE[s]["skin"]))
+            meas = by_ * hq["sy"] * k * f_head if by_ is not None else None
+            bd = brow_depth.setdefault(s, {})
+            if v == "front":
+                bd[v] = meas if meas is not None else BROW_DEFAULT * HEAD_H["bare"]
+            elif v == "q_front":
+                bd[v] = meas if meas is not None and abs(meas - bd["front"]) < BROW_MAX_DIFF * HEAD_H["bare"] else bd["front"]
+            else:
+                bd[v] = bd["q_front" if v == "q_back" else "front"]
+            head_brow["%s_%s" % (s, v)] = round(bd[v], 2)
+            head_top["%s_%s" % (s, v)] = [(ht[0] - hp[0]) * f_head, (ht[1] - hp[1]) * f_head - bd[v]]
             # generated neck (skin, dyed with the skin channel), drawn behind the body's collar and behind the head
             nw = (ch["x1"] - ch["x0"]) * hq["sx"] * k * f_head
             nimg, nmask = neck_image(nw, NECK_VIS + 70.0, hexrgb(BASE[s]["skin"]))
@@ -330,6 +445,8 @@ def main():
                 else:
                     group, frame = 0, [0.0, 0.0]
                 rr = [(r[0] - frame[0]) * scale, (r[1] - frame[1]) * scale, (r[2] - frame[0]) * scale, (r[3] - frame[1]) * scale]
+                if pname == "hat":      # frame = the seat (brow line), bd[v] below the head top
+                    rr = [rr[0], rr[1] + bd[v], rr[2], rr[3] + bd[v]]
                 if kind == "head":
                     piv = [0.0, 0.0]
                 elif kind in ("sleeve", "arm"):
@@ -364,6 +481,10 @@ def main():
                         img, rr = deskew(img, rr, tilt)
                         piv = [(rr[0] + rr[2]) / 2, rr[3]]
                         print("deskew hat", s, v, round(tilt, 1))
+                    if HAT_KIND.get(s, "wrap") != "wrap":
+                        rr, info = sink_hat(img, rr, HAT_KIND[s], v)
+                        piv = [(rr[0] + rr[2]) / 2, rr[3]]
+                        print("sink hat", s, v, info)
                 if kind == "head":
                     a = np.asarray(img).copy()
                     # erase the drawn neck stub only: rows below the chin whose opaque run is stub-narrow (3/4 views: the
@@ -409,6 +530,7 @@ def main():
                     "dye": [SLOTS[c] for c in chans] + [-1] * (3 - len(chans)),
                     "base": [list(map(float, hexrgb(BASE[s][c]))) for c in chans] + [[1, 1, 1]] * (3 - len(chans)),
                 }))
+    spread_stacked_legs(items)
     # props: drawn at ~sheet scale; rig size = 0.55 of drawn px (a loaf ~ 1/4 of her width)
     pd = os.path.join(PARTS, "props")
     for p in PROPS:
@@ -456,7 +578,7 @@ def main():
     Image.fromarray(atlas).save(os.path.join(ART, "doll_atlas.png"))
     Image.fromarray(mask).save(os.path.join(ART, "doll_mask.png"))
     json.dump({"fig": FIG, "atlas": [ATLAS_W, H], "sets": SETS, "views": VIEWS, "props": PROPS,
-               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "body_types": {s: BODY[s] for s in SETS}, "head_k": [BODY[s]["head_k"] for s in SETS], "head_socket": head_socket, "head_top": head_top, "head_scale": head_scale, "base": BASE, "quads": quads},
+               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "body_types": {s: BODY[s] for s in SETS}, "head_k": [BODY[s]["head_k"] for s in SETS], "head_socket": head_socket, "head_top": head_top, "head_brow": head_brow, "hat_kind": HAT_KIND, "hat_sink": HAT_SINK, "head_scale": head_scale, "base": BASE, "quads": quads},
               open(os.path.join(ART, "doll_lib.json"), "w"), indent=0)
     print("atlas", ATLAS_W, "x", H, "quads", len(quads))
 

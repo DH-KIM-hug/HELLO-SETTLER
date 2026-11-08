@@ -13,7 +13,13 @@ const FRAMES := 16
 const NSLOT := 11
 ## 0 root 1 body 2 head 3 sleeve_a 4 sleeve_b 5 arm_a 6 arm_b 7 leg_a 8 leg_b 9 accessory 10 prop
 const CLIPS := ["idle", "walk", "carry", "hoe", "hold"]     # hold = 짐을 안고 서 있기 (나르기 팔 + 쉬는 다리, 2026-11-08 게임 연결)
-const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35}   # 주기/초 (걷기 한 주기 = 두 걸음)
+const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35}   # 주기/초 (걷기 한 주기 = 두 걸음) — 걷기·나르기는 기본값일 뿐, 게임에선 땅 빠르기 ÷ stride_rig
+## 비스듬한 보기 걸음 (2026-11-08 걷기 점검): 다리 흔들기(rad), 먼 다리를 위로(rig), 앞뒤로 간 발의 위아래(다리 길이 배율),
+## 두 발 벌리기(rad)
+const SWING := {"walk": 0.55, "carry": 0.36}
+const LEG_FAR_UP := 10.0
+const LEG_DEPTH := 0.28
+const LEG_SPLAY := 0.05
 const SETS := ["a", "b", "c", "d", "e", "f", "g"]   # e 남자 · f 아이 · g 노인 (시안 A 넷, 2026-11-08) — 몸 종류는 lib "body_types"
 const PROPS := ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket", "seed"]
 
@@ -240,7 +246,9 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 			a[6] = Vector4(rest_f.y, 0, 0, 1)
 		"walk", "carry":
 			var carry := clip == "carry"
-			var bob := (12.0 if not carry else 8.0) * absf(s)
+			# 몸 들썩임: 두 발이 다 땅에 닿은 순간(다리가 가장 벌어짐, |s| = 1)이 가장 낮고, 발이 엇갈려 지나가는 순간(s = 0)이 가장 높음
+			# (2026-11-08 걷기 점검 — 전에는 거꾸로 벌어질 때 솟았음)
+			var bob := (12.0 if not carry else 8.0) * (1.0 - absf(s))
 			if not side:
 				# 다가오는/멀어지는 걸음: 앞발은 화면에서 아래로·조금 크게, 뒷발은 위로·작게 + 넘기는 발은 들림
 				var lift := 40.0 if not carry else 28.0
@@ -262,9 +270,18 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 					a[5] = Vector4(rest_f.x, 0, 0, 1)
 					a[6] = Vector4(rest_f.y, 0, 0, 1)
 			else:
-				var sw := 0.42 if not carry else 0.26
-				a[7] = Vector4(sw * s, 0, 14.0 * maxf(0.0, cos(w)), 1)
-				a[8] = Vector4(-sw * s, 0, 14.0 * maxf(0.0, -cos(w)), 1)
+				# 비스듬한 보기 (2026-11-08 "돌 때 왜 다리가 하나 없어"): 두 엉덩이가 그림에서 나란해서, 가까운 다리(a)가 앞(오른쪽)으로
+				# 먼 다리(b)가 뒤로 가는 반 주기 동안 두 발이 같은 높이에서 겹쳐 다리 하나로 보였다. 깊이 단서를 줌:
+				#   · 먼 다리는 조금 위 (더 멀리 = 화면 위, LEG_FAR_UP) + 셰이더가 조금 어둡게 (far_shade)
+				#   · 걸음은 화면에서 비스듬한 선: 비스듬한 앞이면 앞으로 간 발이 카메라 쪽 = 화면 아래, 뒤로 간 발은 위
+				#     (비스듬한 뒤는 반대) — 발이 앞뒤로 간 만큼(s) 위아래로도: 다리를 엉덩이 기준 세로로 늘이고/줄임 (LEG_DEPTH ×
+				#     다리 길이 — 엉덩이는 몸에 붙은 채, 짧은 아이 다리도 제 길이만큼) → 엇갈려도 두 발이 위아래로 갈림
+				#   · 두 발을 조금 벌림 (LEG_SPLAY) — 지나갈 때도 틈이 남음
+				# 보폭(sw)은 stride_rig()가 읽어 걷기 빠르기를 땅 빠르기에 맞춤 (발이 미끄러지지 않게)
+				var sw: float = SWING[clip]
+				var toward := 1.0 if v == 1 else -1.0     # 비스듬한 앞: 앞 = 카메라 쪽 (화면 아래) · 비스듬한 뒤: 앞 = 화면 위
+				a[7] = Vector4(sw * s - LEG_SPLAY, 0, 14.0 * maxf(0.0, cos(w)), 1.0 + LEG_DEPTH * s * toward)       # 가까운 다리: 앞으로 s
+				a[8] = Vector4(-sw * s + LEG_SPLAY, 0, 14.0 * maxf(0.0, -cos(w)) + LEG_FAR_UP, 1.0 - LEG_DEPTH * s * toward)   # 먼 다리: -s
 				a[1] = Vector4(-0.03 if not carry else -0.087, 0, bob, 1)      # 앞으로 조금 숙임 (짐 = 5°)
 				a[2] = Vector4(0.02 * s, 0, 0, 1)
 				if carry:
@@ -409,6 +426,28 @@ static func prop_offsets() -> Array:
 			var h := _pose("hoe", v, 0.0)
 			ph[si * 4 + v] = _hands_mid(h, v, SETS[si]) - _hands_mid(h, v, "d")
 	return [po, ph]
+
+
+## 걷기 한 주기(두 걸음)에 땅에 디딘 발이 몸에 대해 뒤로 쓸고 가는 길이 (rig 단위) — 옷 묶음 sn의 다리, 비스듬한 보기 둘의 평균.
+## 디딘 발은 반 주기 동안 +sw → -sw로 돌아 2·L·sin(sw)를 가고, 한 주기엔 두 발이 번갈아 → 4·L·sin(sw).
+## 게임: 주기/초 = 땅 빠르기(세계/초) ÷ (stride_rig × 화면 키 / fig) → 발이 땅에서 미끄러지지 않음 (2026-11-08 걷기 점검)
+static var _stride := {}
+
+
+static func stride_rig(sn: String, clip: String) -> float:
+	var key := sn + clip
+	if _stride.has(key):
+		return _stride[key]
+	var sum := 0.0
+	var n := 0
+	for q: Dictionary in lib()["quads"]:
+		if q["set"] == sn and (int(q["view"]) == 1 or int(q["view"]) == 2) and String(q["part"]).begins_with("leg"):
+			sum += float(q["pivot"][1]) - float(q["rect"][1])      # 엉덩이 → 발끝
+			n += 1
+	var leg := sum / maxf(1.0, float(n)) if n > 0 else 180.0
+	var r := 4.0 * leg * sin(float(SWING.get(clip, SWING["walk"])))
+	_stride[key] = r
+	return r
 
 
 static func _hands_mid(a: Array, v: int, sn: String) -> Vector2:
