@@ -577,27 +577,34 @@ def build_field(name, ripe):
 # ───────────────────────── wheat forest (A27-c) ─────────────────────────
 # 밀 숲 터 (농장): the sim farm drawn as 5 towering wheat stalks (~20x a resident, 1 unit = adult height) on a ring of
 # tilled soil; sim footprint (Balance size 1.8) and recipe unchanged. Three growth stages = three models:
-#   buildings/wheat_forest_sprout  - grain mounds with young blades (~3 tall), no top
-#   buildings/wheat_forest_green   - full stalks, green ears          + buildings/wheat_forest_green_top
+#   buildings/wheat_forest_sprout  - grain mounds with fresh-green seedling blades (~2-3 tall), no top
+#   buildings/wheat_forest_green   - yellow-green stalks, green ears        + buildings/wheat_forest_green_top
 #   buildings/wheat_forest_ripe    - straw-gold stalks, nodding gold ears + a grass-rope ladder + ..._ripe_top
-# Split at WHEAT_CUT (art bible occlusion layer 1 - "thin stalks, ears above the frame"): the base model (< 6 units,
-# outlined, shadows) and the *_top model (everything above, no outline groups) which godot/view/village_view.gd draws
-# with the dithered fade material (render/toon_fade.gdshader) + a shadow-only twin, so the tall part never hides the
-# residents and paths under it but still throws its long shadow. Both carry a "body__far" node (far LOD, ppu < 24).
-# Budget (buildings GDD Visual): base + top <= 1,500 near, far base + far top <= 600.
+# Split at WHEAT_CUT (buildings GDD: "줄기는 가늘게, 이삭은 위로 벗어나 그늘만"): the base model (< 6 units, outlined,
+# shadows) and the *_top model (everything above, no outline groups) which godot/view/village_view.gd draws with the
+# dithered fade material (render/toon_fade.gdshader) + a shadow-only twin, so the tall part never hides the residents
+# and paths under it but still throws its long shadow (ear + awn silhouettes on the ground).
+# Wheat read (2026-11-08 user: "밀밭 대나무숲같음" -> redo): thin smooth stalks (no node rings), narrow ribbon leaves that
+# peel off and droop, big two-row ears with fanned awns (ripe ears nod), and 3 short tillers (곁줄기) whose ears sit
+# below the cut - opaque, outlined, at eye level - so the field reads as wheat even where the tall ears are faded.
+# Budget (buildings GDD Visual / P1): base + top ~1,700 tris near (< 3k with hull), far base / far top <= 600 each.
 WHEAT_CUT = 6.0
-WHEAT_STALKS = ((-0.95, 0.6, 19.5, 0.3), (0.8, 0.9, 21.0, 1.9), (0.2, -0.2, 20.2, 3.6), (-0.6, -1.0, 18.2, 5.0),
-                (1.1, -0.75, 20.6, 0.9))                       # x, y, height, leaf turn
-WHEAT_COL = {"green": {"stalk": REED_GREEN, "node": REED_GREEN_NODE, "leaf": "8fb85e", "leaf_dark": "6f9a4c",
-                       "ear": "a9c070", "ear_dark": "8aa65a"},
-             "ripe": {"stalk": "d9c27a", "node": "b89a52", "leaf": "cdb468", "leaf_dark": "b39a55",
-                      "ear": "CROP_RIPE", "ear_dark": "d4a536"}}
+WHEAT_STALKS = ((-0.95, 0.6, 19.0, 0.3), (0.8, 0.9, 21.0, 1.9), (0.2, -0.2, 20.0, 3.6), (-0.6, -1.0, 17.2, 5.0),
+                (1.1, -0.75, 18.4, 0.9))                       # x, y, height (ear tip), leaf turn
+WHEAT_TILLERS = ((-1.4, 0.05, 3.2, 2.6), (0.15, 1.35, 4.3, 4.4), (1.42, 0.25, 3.7, 0.2))   # x, y, ear-base height, turn
+WHEAT_SIDE = Vector((1.0, 1.0, 0.0)).normalized()             # screen-horizontal (camera looks from +x,-y): ears face it
+WHEAT_COL = {"green": {"stalk": "a7c45f", "stalk_lo": "8db552", "leaf": "93bd58", "leaf_dark": "6f9a44",
+                       "ear": "b4c968", "ear_dark": "93ad4f", "awn": "c9d68a"},
+             "ripe": {"stalk": "e4c876", "stalk_lo": "c9ab5e", "leaf": "dbbd6a", "leaf_dark": "b39450",
+                      "ear": "CROP_RIPE", "ear_dark": "d39a33", "awn": "f2d993"}}
+WHEAT_YOUNG = {"leaf": "8fcb5c", "leaf_dark": "6aa346"}
+UP = Vector((0, 0, 1))
 
 
 def _wheat_soil(m, sprout):
     m.cyl(1.72, 1.5, 0.09, pos=(0, 0, 0.0), color=shade("FIELD_SOIL", 0.86), seg=14, cap="FIELD_SOIL")
     for (x, y, h, _) in WHEAT_STALKS:
-        m.cyl(0.42, 0.18, 0.22, pos=(x, y, 0.05), color=shade("FIELD_SOIL", 0.92), seg=6)
+        m.cyl(0.36, 0.14, 0.18, pos=(x, y, 0.05), color=shade("FIELD_SOIL", 0.92), seg=6)
         if sprout:                                  # the big grain, half-buried (as big as a resident's body)
             m.sphere(0.32, pos=(x + 0.12, y - 0.1, 0.24), scl=(0.75, 1.0, 0.6), rot=(0, 0.5, 0.3), color="c99a52",
                      seg=7, rings=4)
@@ -605,7 +612,7 @@ def _wheat_soil(m, sprout):
 
 def _wheat_ladder(m, x, y, top):
     """Grass-rope ladder hung on the front stalk: two green cords + twig rungs, foot pegged to the soil."""
-    a, b = Vector((x - 0.55, y - 0.85, 0.06)), Vector((x, y - 0.2, top))
+    a, b = Vector((x - 0.55, y - 0.85, 0.06)), Vector((x, y, top))
     d = b - a
     side = d.cross(Vector((0, 0, 1))).normalized() * 0.17
     for s in (-1, 1):
@@ -616,21 +623,106 @@ def _wheat_ladder(m, x, y, top):
         m.box((0.42, 0.05, 0.05), pos=p, rot=(0, 0, math.atan2(side.y, side.x)), color=TWIG)
 
 
-def _wheat_ear(m, top, h, cols, ripe, group):
-    """Ear: a 5-sided spindle of plump spikelets (bumpy rings) + a few awns; ripe ears nod over."""
-    nod = Vector((0.55, -0.3, -0.25)) if ripe else Vector((0.12, -0.05, 0.0))
-    L = 2.3 if ripe else 2.0
-    axis = (Vector((0, 0, 1)) + nod).normalized()
-    pts = [top + axis * L * t for t in (0.0, 0.25, 0.55, 0.85, 1.0)]
-    radii = [0.16, 0.3, 0.32, 0.24, 0.05]
-    tube(m, pts, radii, seg=5, color=cols["ear"], group=group, smooth=False,
-         colfn=lambda f: cols["ear_dark"] if (int(f.calc_center_median().z * 3.0) % 2) else cols["ear"],
-         wobble=lambda i, k: 1.0 + 0.18 * ((i + k) % 2))
-    for k in range(3):                                 # awns: thin spikes out of the top half
-        a = k * math.tau / 3 + 0.3
-        p = pts[2 + k % 2]
-        out = Vector((math.cos(a), math.sin(a), 0)) * 0.3 + axis * 0.9
-        m.blade(p, p + out * 1.1, 0.04, color=cols["ear_dark"], group="ear_nh")
+def _spikelet(m, c, d, s, ln, r, col, col_dark, group):
+    """One plump grain spikelet: a 4-sided bipyramid along d (tip 60% up), wide across s. 8 tris."""
+    nrm = d.cross(s).normalized()
+    bm = m._bm(group)
+    tip, bot = bm.verts.new(c + d * ln * 0.6), bm.verts.new(c - d * ln * 0.4)
+    eq = [bm.verts.new(c + v) for v in (s * r, nrm * r * 0.95, -s * r, -nrm * r * 0.95)]
+    fs = []
+    for k in range(4):
+        a, b = eq[k], eq[(k + 1) % 4]
+        fs.append(bm.faces.new((a, b, tip)))
+        fs.append(bm.faces.new((b, a, bot)))
+    bm.normal_update()
+    for f in fs:
+        if f.normal.dot(f.calc_center_median() - c) < 0:
+            f.normal_flip()
+    m._finish(bm, fs[0::2], col, False)
+    m._finish(bm, fs[1::2], col_dark, False)
+
+
+def _wheat_ear(m, base, axis, cols, k=1.0, levels=7, awns=True, group="body", awn_group="body_nh"):
+    """Wheat ear from base along axis (unit): `levels` pairs of plump spikelets alternating left/right of the rachis
+    (the zigzag two-row ear), fullest low-middle, a pointed tip spikelet, long awns fanning up and out."""
+    s = WHEAT_SIDE - axis * WHEAT_SIDE.dot(axis)
+    if s.length < 1e-4:
+        s = Vector((1, 0, 0))
+    s.normalize()
+    L = 2.6 * k
+    tube(m, [base - axis * 0.1 * k, base + axis * L * 0.92], [0.09 * k, 0.05 * k], seg=4, color=cols["ear_dark"],
+         group=group, smooth=False)
+    for i in range(levels):
+        for sg in (-1, 1):
+            t = (i + (0.25 if sg < 0 else 0.75)) / levels * 0.86 + 0.04
+            w = (0.9 - 0.45 * t * t) * (0.75 + 0.25 * math.sin(min(1.0, t * 1.6) * math.pi * 0.5))
+            d = (axis + s * sg * 0.62).normalized()
+            c = base + axis * L * t + s * sg * 0.26 * k * w
+            col = cols["ear"] if (i + (sg > 0)) % 2 else shade(cols["ear"], 0.94)
+            _spikelet(m, c, d, s, 0.85 * k * w, 0.29 * k * w, col, cols["ear_dark"], group)
+            if awns:
+                tip = c + d * 0.85 * k * w * 0.6
+                aw = (axis * 1.0 + s * sg * (0.22 + 0.25 * t)).normalized()
+                _awn(m, tip, tip + aw * (1.1 + 0.5 * t) * k, 0.08 * k, cols["awn"], awn_group)
+    tip = base + axis * L * 0.97
+    _spikelet(m, tip, axis, s, 0.4 * k, 0.12 * k, cols["ear"], cols["ear_dark"], group)
+    if awns:
+        _awn(m, tip + axis * 0.1 * k, tip + axis * 1.9 * k, 0.08 * k, cols["awn"], awn_group)
+
+
+def _awn(m, a, b, w, col, group):
+    """One awn (bristle): a sliver triangle, both faces (2 tris), turned to face WHEAT_SIDE."""
+    d = b - a
+    sd = d.cross(WHEAT_SIDE).cross(d)
+    sd = (sd.normalized() if sd.length > 1e-6 else WHEAT_SIDE) * (w / 2)
+    bm = m._bm(group)
+    v = [bm.verts.new(p) for p in (a - sd, a + sd, b)]
+    u = [bm.verts.new(p) for p in (a + sd, a - sd, b)]
+    fs = [bm.faces.new(v), bm.faces.new(u)]
+    bm.normal_update()
+    m._finish(bm, fs, col, False)
+
+
+def _ribbon(m, p0, d, ln, lift, droop, w, cols, group, twist=0.9):
+    """Long narrow wheat leaf: hugs the stalk a moment (sheath), peels off, rises, droops, and twists along."""
+    d = Vector((d.x, d.y, 0)).normalized()
+    n = 4
+    pts, ws, nrm = [], [], []
+    side = d.cross(UP)
+    for i in range(n + 1):
+        t = i / n
+        q = p0 + d * ln * t ** 1.25 + UP * (lift * math.sin(t * math.pi * 0.5) - droop * t * t + 0.35 * min(t * 4, 1.0))
+        q.z = max(q.z, 0.25 + 0.3 * t)               # tips droop toward the soil but never into it
+        pts.append(q)
+        ws.append(w * (0.55 + 0.45 * math.sin(min(1.0, t * 1.7) * math.pi * 0.5)) * (1.0 - t ** 2.2))
+        a = twist * t
+        nrm.append(UP * math.cos(a) + side * math.sin(a))
+    ws[-1] = 0.0
+    leaf(m, pts, ws, nrm, thick=0.03, color=cols["leaf"], color_under=cols["leaf_dark"], group=group, keel=False)
+
+
+def _ear_pose(stage, sign):
+    """(axis, neck offset) of an ear: green ears stand nearly upright, ripe ears nod over sideways (across the screen)."""
+    nod = WHEAT_SIDE * sign
+    if stage == "ripe":
+        return (nod * 0.8 - UP * 0.6).normalized(), nod * 0.55 + UP * 0.25
+    return (UP + nod * 0.22).normalized(), nod * 0.05
+
+
+def _stalk_line(m, pts, r0, r1, cols, group, seg=5):
+    radii = [r0 + (r1 - r0) * i / (len(pts) - 1) for i in range(len(pts))]
+    lo = cols["stalk_lo"]
+    tube(m, pts, radii, seg=seg, color=cols["stalk"], group=group, smooth=True,
+         colfn=lambda f: lo if f.calc_center_median().z < 1.2 else cols["stalk"])
+
+
+def _bez(a, c, b, n):
+    return [a * (1 - t) ** 2 + c * 2 * t * (1 - t) + b * t * t for t in (i / n for i in range(n + 1))]
+
+
+def _wheat_at(x, y, turn, z):
+    """Point on a tall stalk: a gentle bow, leaning more the higher it goes."""
+    return Vector((x, y, z)) + Vector((math.cos(turn), math.sin(turn), 0)) * (0.008 * z + 0.0007 * z * z)
 
 
 def build_wheat_forest(stage):
@@ -640,62 +732,79 @@ def build_wheat_forest(stage):
     _wheat_soil(base, sprout)
     top = None if sprout else Model("wheat_forest_" + stage + "_top", 126)
     cols = WHEAT_COL["ripe" if stage == "ripe" else "green"]
+    ears = []                                          # (ear base, axis, scale) for the far LOD
     for i, (x, y, h, turn) in enumerate(WHEAT_STALKS):
-        if sprout:                                     # 2-3 young blades out of the grain
-            for k in range(3 if i % 2 else 2):
-                a = turn + k * 2.2
+        if sprout:                                     # 3-4 narrow seedling blades out of the grain, arching apart
+            nb = 4 if i % 2 else 3
+            for k in range(nb):
+                a = turn + k * math.tau / nb
                 d = Vector((math.cos(a), math.sin(a), 0))
-                ln = 2.3 + 0.35 * ((i + k) % 3)
-                pts = [Vector((x, y, 0.2)), Vector((x, y, 0.2)) + d * 0.15 + Vector((0, 0, ln * 0.55)),
-                       Vector((x, y, 0.2)) + d * 0.55 + Vector((0, 0, ln * 0.9)), Vector((x, y, 0.2)) + d * 0.95 + Vector((0, 0, ln))]
-                leaf(base, pts, [0.16, 0.2, 0.14, 0.0], d.cross(Vector((0, 0, 1))), thick=0.05, color=LEAF_C,
-                     color_under=LEAF_A)
+                ln = 1.0 + 0.3 * ((i + k) % 3)
+                _ribbon(base, Vector((x, y, 0.2)) + d * 0.05, d, ln, 1.8 + 0.4 * ((i + k) % 2), 1.0, 0.11,
+                        WHEAT_YOUNG, "body_nl", twist=0.6)
             continue
-        lean = Vector((0.012 * math.cos(turn), 0.012 * math.sin(turn), 0))   # stalks lean a touch, not ruler-straight
-        def at(z, x=x, y=y, lean=lean):
-            return Vector((x, y, z)) + lean * z
-        # base part: thick bottom with two node rings + one long blade leaf arching out and down
-        tube(base, [at(0.1), at(1.8), at(3.9), at(WHEAT_CUT + 0.05)], [0.19, 0.17, 0.16, 0.15], seg=6,
-             color=cols["stalk"], smooth=True)
-        base.cyl(0.19, 0.19, 0.12, pos=at(1.74), color=cols["node"], seg=6)
-        d = Vector((math.cos(turn), math.sin(turn), 0))
-        p0 = at(1.85)
-        pts = [p0, p0 + d * 0.7 + Vector((0, 0, 1.0)), p0 + d * 1.7 + Vector((0, 0, 1.2)), p0 + d * 2.6 + Vector((0, 0, 0.3))]
-        leaf(base, pts, [0.12, 0.26, 0.2, 0.0], Vector((0, 0, 1)), thick=0.05, color=cols["leaf"],
-             color_under=cols["leaf_dark"])
-        # top part: thinner stalk, one node + flag leaf, the ear
-        ear_z = h - (2.0 if stage == "ripe" else 2.2)
-        tube(top, [at(WHEAT_CUT), at(10.5), at(ear_z)], [0.15, 0.13, 0.1], seg=5, color=cols["stalk"],
-             smooth=True, group="body_nl")
-        top.cyl(0.16, 0.16, 0.12, pos=at(10.4), color=cols["node"], seg=5, group="body_nl")
-        d2 = Vector((math.cos(turn + 2.4), math.sin(turn + 2.4), 0))
-        q0 = at(10.5)
-        pts = [q0, q0 + d2 * 0.4 + Vector((0, 0, 1.4)), q0 + d2 * 1.3 + Vector((0, 0, 2.4)), q0 + d2 * 2.2 + Vector((0, 0, 2.2))]
-        leaf(top, pts, [0.1, 0.22, 0.16, 0.0], d2.cross(Vector((0, 0, 1))), thick=0.04, color=cols["leaf"],
-             color_under=cols["leaf_dark"], group="leaf_nh")
-        _wheat_ear(top, at(ear_z), h, cols, stage == "ripe", "ear_nl")
-    if stage != "sprout":
+        def at(z, x=x, y=y, turn=turn):
+            return _wheat_at(x, y, turn, z)
+        sign = 1 if i % 2 else -1
+        axis, neck = _ear_pose(stage, sign)
+        ez = h - 2.9                                  # top of the straight stalk
+        eb = at(ez) + neck                            # ear base
+        # base: thin smooth stalk, two ribbon leaves low on it
+        _stalk_line(base, [at(0.1), at(2.0), at(4.0), at(WHEAT_CUT + 0.05)], 0.12, 0.1, cols, "body")
+        for k, (z, ln) in enumerate(((1.2, 3.0), (3.3, 2.6))[:1 + (i % 3 != 1)]):
+            a = turn + k * math.pi + 0.3
+            _ribbon(base, at(z), Vector((math.cos(a), math.sin(a), 0)), ln, 1.3, 2.4, 0.13, cols, "body_nl",
+                    twist=0.8 * (1 if k else -1))
+        # top: the rest of the stalk (bending into the neck when ripe), one flag leaf, the ear
+        pts = [at(WHEAT_CUT), at(ez - 1.0)] + _bez(at(ez - 1.0), at(ez) + UP * 0.2, eb, 3)[1:]
+        _stalk_line(top, pts, 0.1, 0.075, cols, "body_nl", seg=4)
+        _wheat_ear(top, eb, axis, cols, 1.0, 5, True, "ear_nl", "ear_nh")
+        ears.append((eb, axis, 1.0))
+    if not sprout:
+        for j, (x, y, ezb, turn) in enumerate(WHEAT_TILLERS):    # short side stalks: ears at eye level (opaque)
+            sign = -1 if j % 2 else 1
+            axis, neck = _ear_pose(stage, sign)
+            k = 0.8
+            lean = Vector((math.cos(turn), math.sin(turn), 0)) * 0.05
+            p = [Vector((x, y, 0.08)), Vector((x, y, ezb * 0.5)) + lean * ezb * 0.5, Vector((x, y, ezb)) + lean * ezb]
+            eb = p[-1] + neck * k
+            _stalk_line(base, p[:-1] + _bez(p[-2], p[-1] + UP * 0.1, eb, 2)[1:], 0.07, 0.05, cols, "body_nl", seg=4)
+            _wheat_ear(base, eb, axis, cols, k, 4, True, "body_nl", "body_nh")
+            ears.append((eb, axis, k))
         sx, sy, _, _ = WHEAT_STALKS[2]
         _wheat_ladder(base, sx, sy, WHEAT_CUT - 0.6)
-    # far LOD: soil disc + stalk posts (base) / thin posts + ear blobs (top)
-    from far_kit import fcyl, fpost, fblob, add_far
+        if stage == "ripe":                            # a cut ear lying on the soil by the ladder foot (harvest under way)
+            _wheat_ear(base, Vector((-0.95, -1.05, 0.2)), Vector((0.97, -0.05, 0.22)).normalized(), cols, 0.55, 3,
+                       True, "body_nl", "body_nh")
+    # far LOD (ppu < 24 - the default village zoom): soil disc + thin stalk posts (base) / posts + chunky ears (top)
+    from far_kit import fcyl, fpost, fblob, add_far, FAR
+    def far_ear(m, eb, axis, k):
+        _wheat_ear(m, eb, axis, cols, k * 1.1, 3, False, FAR, FAR)
+        tip = eb + axis * 2.4 * k
+        _awn(m, tip, tip + axis * 1.6 * k, 0.5 * k, cols["awn"], FAR)
     def far_base(m):
         fcyl(m, 0, 0, 0, 1.72, 0.09, "FIELD_SOIL", seg=10)
         for (x, y, h, turn) in WHEAT_STALKS:
             if sprout:
                 fblob(m, x, y, 0.2, 0.32, "c99a52")
-                fpost(m, (x, y, 0.2), (x + 0.4 * math.cos(turn), y + 0.4 * math.sin(turn), 2.6), 0.18, LEAF_C)
+                for k in range(2):
+                    a = turn + k * math.pi
+                    fpost(m, (x, y, 0.2), (x + 0.7 * math.cos(a), y + 0.7 * math.sin(a), 2.0), 0.1, WHEAT_YOUNG["leaf"])
             else:
-                fpost(m, (x, y, 0.0), (x, y, WHEAT_CUT + 0.05), 0.18, cols["stalk"])
+                fpost(m, (x, y, 0.0), _wheat_at(x, y, turn, WHEAT_CUT + 0.05), 0.1, shade(cols["stalk"], 1.08))
+        if not sprout:
+            for (eb, axis, k) in ears[len(WHEAT_STALKS):]:
+                far_ear(m, eb, axis, k)
+            for (x, y, ezb, turn), (eb, axis, k) in zip(WHEAT_TILLERS, ears[len(WHEAT_STALKS):]):
+                fpost(m, (x, y, 0.0), (x, y, ezb), 0.07, shade(cols["stalk"], 1.08))
+                fpost(m, (x, y, ezb), eb, 0.06, shade(cols["stalk"], 1.08))
     def far_top(m):
-        for (x, y, h, turn) in WHEAT_STALKS:
-            lean = Vector((0.012 * math.cos(turn), 0.012 * math.sin(turn), 0))
-            ez = h - (2.0 if stage == "ripe" else 2.2)
-            a, b = Vector((x, y, WHEAT_CUT)) + lean * WHEAT_CUT, Vector((x, y, ez)) + lean * ez
-            fpost(m, a, b, 0.13, cols["stalk"])
-            nod = Vector((0.55, -0.3, -0.25)) if stage == "ripe" else Vector((0.12, -0.05, 0.0))
-            c = b + (Vector((0, 0, 1)) + nod).normalized() * 1.1
-            fblob(m, c.x, c.y, c.z, 0.3, cols["ear"], scl=(1, 1, 3.2) if stage != "ripe" else (1.6, 1.2, 2.2))
+        for (x, y, h, turn), (eb, axis, k) in zip(WHEAT_STALKS, ears):
+            ez = h - 2.9
+            b = _wheat_at(x, y, turn, ez)
+            fpost(m, _wheat_at(x, y, turn, WHEAT_CUT), b, 0.09, cols["stalk"])
+            fpost(m, b, eb, 0.08, cols["stalk"])
+            far_ear(m, eb, axis, k)
     nb = add_far(base, far_base)
     base.export(os.path.join(OUT, "buildings"))
     nt = 0
