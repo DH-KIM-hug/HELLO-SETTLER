@@ -27,6 +27,7 @@ func _initialize() -> void:
 
 
 func _save(name: String) -> void:
+	name = OS.get_environment("SHOT_PREFIX") + name          # (A28) 예: SHOT_PREFIX=a28_ → godot_shots/a28_kit_climb_a.png
 	root.get_texture().get_image().save_png(out_dir.path_join(name + ".png"))
 	print("saved ", name, " t=", snappedf(t, 0.01))
 
@@ -50,9 +51,8 @@ func _process(dt: float) -> bool:
 			c = load(StartFlow.CREATION_SCENE).instantiate()
 			c.set("instant", true)
 			root.add_child(c)
-			c.call("jump", "wildlife")
-			for i in 3:
-				c.call("next")
+			c.call("jump", "life")
+			c.call("next")
 			root.remove_child(c)
 			c.free()
 			StartFlow.take()

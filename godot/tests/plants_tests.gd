@@ -150,12 +150,12 @@ func test_seed_rain() -> void:
 	print("  씨앗 하나: 아이 %d명 달려감 (아이 %d명 중) · 굴리러 간 어른 %d명" % [kids.size(), n_kids, rollers.size()])
 	check(kids.size() >= mini(1, n_kids) and rollers.size() >= 1, "아이들이 달려가고 어른이 굴리러 간다")
 	var food0 := float(v.stock.get("해바라기씨", 0.0))
-	for i in 200:
+	for i in 400:                            # (A28) 걸음 0.7칸/초 그대로 — 먼 씨앗은 오가는 데 반나절 넘게
 		jw.advance(300.0)
 		if float(v.stock.get("해바라기씨", 0.0)) > food0:
 			break
 	var got := float(v.stock.get("해바라기씨", 0.0)) - food0
-	check(got >= Balance.SEED_FOOD - 0.01, "어른이 굴려 와 창고에 해바라기씨 +%.0f" % got)
+	check(got >= Balance.SEED_FOOD * 0.8, "어른이 굴려 와 창고에 해바라기씨 +%.0f" % got)     # (A28) 굴려 오는 데 오래 걸려 그 사이 조금 먹음
 	check(v.book.any(func(b: Dictionary) -> bool: return String(b["text"]) == GiantPlants.SEED_LINE), "연대기 첫 줄")
 	check(_count(jw, &"seed_stored", cur) >= 1, "seed_stored 사건")
 	check(not GiantPlants.SEED_LINE.contains("거인") and not GiantPlants.SEED_LINE.contains("하늘의 분"), "연대기에 거인 이야기 없음")
@@ -179,7 +179,7 @@ func test_cotton() -> void:
 	GiantPlants._cotton_season(v, ww, Health.jar_date(v))
 	check(_count(jw, &"cotton_burst", cur) == 1, "같은 해엔 cotton_burst 한 번만")
 	var sent := GiantPlants.boll_fetch(v)
-	for i in 60:
+	for i in 24 * 60:                        # (A28) 걸음 덤 없이 굴려 오는 데 몇 시간
 		jw.advance(60.0)
 		if float(v.stock.get("솜", 0.0)) > 0.0:
 			break

@@ -20,6 +20,9 @@ const RINGS := 36
 const SEGS := 96
 const NECK_Y := 13.4
 const CORK_C := 15.4                    # 코르크 가운데 높이
+const ODD_BIG := 1.45                   # (v4.0 암시) 방 물건 크기 배율 — 병에 견줘 이상하게 큼
+const FUR_C := Color("b08058")          # 털 한 가닥 (따뜻한 밤색 — STORY 1, 파란색 아님)
+const FUR_R := 5.6                      # 유리 바깥 면 (병 몸통)
 const WALL := {"morning": Color("e9dcc4"), "sunset": Color("e6b896"), "night": Color("3b3a58")}
 const SOIL_C := Color("9a6a46")
 const SOIL_DAMP := Color("7d5639")
@@ -74,7 +77,11 @@ var dust_fx: CPUParticles3D             # 땅이 솟고 꺼질 때 흙먼지
 var nub_nodes: Array[Node3D] = []       # 거인의 돌기 (plan.drips 순서) — 뚜껑 안쪽
 var marks: Array[Node3D] = []           # 그 아래 흙 위 표시 (물방울이 떨어져 호수가 생길 곳)
 var small_root: Node3D                  # 저절로 난 작은 돌기
-var release: CreationRelease           # 들짐승·물고기 풀기 (build_kit)
+var release: CreationRelease           # 7b 작은 생명이 깨어남 (build_kit)
+var egg_mm: MultiMeshInstance3D         # ③ 물에 섞여 온 송사리 알 (작은 은빛 점 — 빛 걸기 배양에서 사라짐)
+var room_env: Environment
+var room_sky: ShaderMaterial
+var fur: Node3D                         # (v4.0 첫 화면 암시) 유리에 붙은 털 한 가닥 — 설명 없음
 var _wl := -1.0e9                       # 미리보기 물 높이 (세상 단위)
 var _dirty := true
 var _t := 0.0
@@ -105,6 +112,7 @@ func setup(p: CreationPlan, time_of_day: String) -> void:
 # ───────────────────────── 방 · 병 ─────────────────────────
 func _build_room() -> void:
 	var env := Environment.new()
+	room_env = env
 	env.background_mode = Environment.BG_COLOR
 	env.background_color = WALL.get(tod, WALL["morning"])
 	env.tonemap_mode = Environment.TONE_MAPPER_LINEAR
@@ -125,16 +133,19 @@ func _build_room() -> void:
 	sky.mesh = Art.model(ROOM + "window_sky")["mesh"]
 	sky.transform = Transform3D(y, Vector3(-7, 9, -9.18))
 	var sky_mat := ShaderMaterial.new()
+	room_sky = sky_mat
 	GiantRoom.paint_sky(sky_mat, tod)
 	sky.material_override = sky_mat
 	add_child(sky)
 	Art.instance(self, ROOM + "curtain", Transform3D(y, Vector3(-22, 9, -12.5)))
 	Art.instance(self, ROOM + "oil_lamp", Transform3D(y, Vector3(11.5, 0, -2.5)))
 	Art.instance(self, ROOM + "oil_lamp_flame", Transform3D(y, Vector3(11.5, 0, -2.5)))
-	Art.instance(self, ROOM + "flowerpot", Transform3D(Basis(Vector3.UP, 0.3), Vector3(-12.5, 0, -1.5)))
-	Art.instance(self, ROOM + "watering_can", Transform3D(Basis(Vector3.UP, 0.4), Vector3(-17.0, 0, -6.5)))
-	Art.instance(self, ROOM + "sugar_bowl", Transform3D(y, Vector3(-15.5, 0, 9.5)))
-	Art.instance(self, ROOM + "tweezers", Transform3D(Basis(Vector3.UP, 2.8), Vector3(13.5, 0, 6.5)))
+	# (OPENING v4.0 첫 화면 — 아주 옅은 암시) 방 물건이 병에 견줘 이상하게 크다 (ODD_BIG). 설명·자막 없음
+	var big := Basis.IDENTITY.scaled(Vector3.ONE * ODD_BIG)
+	Art.instance(self, ROOM + "flowerpot", Transform3D(Basis(Vector3.UP, 0.3) * big, Vector3(-15.5, 0, -4.5)))
+	Art.instance(self, ROOM + "watering_can", Transform3D(Basis(Vector3.UP, 0.4) * big, Vector3(-24.0, 0, -9.5)))
+	Art.instance(self, ROOM + "sugar_bowl", Transform3D(y * big, Vector3(-19.5, 0, 9.0)))
+	Art.instance(self, ROOM + "tweezers", Transform3D(Basis(Vector3.UP, 2.8) * big, Vector3(16.0, 0, 7.5)))
 	cam = Camera3D.new()
 	cam.fov = 34.0
 	cam.keep_aspect = Camera3D.KEEP_WIDTH
@@ -145,6 +156,15 @@ func _build_room() -> void:
 	_apply_cam()
 	post = OutlinePost.attach(cam)
 	post.set_shader_parameter("use_glass", false)
+
+
+## (OPENING v4.0 첫 화면) 어두운 방 — 창밖은 밤, 볕은 옅은 달빛. off면 지금 시각의 방으로 (핵 단계부터)
+func set_dark_room(on: bool) -> void:
+	var t := "night" if on else tod
+	room_env.background_color = WALL.get(t, WALL["morning"])
+	GiantRoom.paint_sky(room_sky, t)
+	sun.light_energy = 0.35 if on else 1.0
+	sun.light_color = Color(0.7, 0.78, 1.0) if on else Color.WHITE
 
 
 func _set_sun(phase: float) -> void:
@@ -381,6 +401,8 @@ func _build_jar() -> void:
 	dmat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	dust_fx.material_override = dmat
 	add_child(dust_fx)
+	_build_fur()
+	_build_eggs()
 	small_root = Node3D.new()
 	nubs_root.add_child(small_root)
 	var nr := RandomNumberGenerator.new()
@@ -392,6 +414,88 @@ func _build_jar() -> void:
 		var sn := _nub_node(0.55)
 		sn.position = nub_local(cos(a) * d, sin(a) * d)
 		small_root.add_child(sn)
+
+
+## 유리 바깥에 붙은 털 한 가닥 (가늘게 휜 선 — 병 몸통 앞쪽 조금 옆). 무엇인지 말하지 않는다 (STORY 1 암시)
+func _build_fur() -> void:
+	fur = Node3D.new()
+	fur.name = "Fur"
+	add_child(fur)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(FUR_C, 0.85)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.render_priority = 4
+	var pts: Array[Vector3] = []
+	for i in 9:
+		var k := i / 8.0
+		var a := PI * 0.5 - 0.42 + 0.22 * k + 0.05 * sin(k * 5.0)          # 몸통 앞쪽 (카메라 = +Z) 조금 오른쪽
+		var r := FUR_R + 0.02 * sin(k * 3.0)
+		pts.append(Vector3(cos(a) * r, 4.6 + 3.1 * k + 0.35 * sin(k * PI * 1.3), sin(a) * r))
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var cm := CylinderMesh.new()
+		cm.top_radius = 0.034 * (1.0 - 0.6 * (i + 1) / 8.0)
+		cm.bottom_radius = 0.034 * (1.0 - 0.6 * i / 8.0)
+		cm.height = a.distance_to(b)
+		cm.radial_segments = 4
+		cm.rings = 1
+		var mi := MeshInstance3D.new()
+		mi.mesh = cm
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var up := (b - a).normalized()
+		var side := up.cross(Vector3(a.x, 0, a.z).normalized()).normalized()
+		mi.transform = Transform3D(Basis(side, up, side.cross(up)), (a + b) * 0.5)
+		fur.add_child(mi)
+
+
+## 물에 섞여 온 송사리 알 (작은 은빛 점 몇 십 — 미리보기 물 위에 떠 있음)
+func _build_eggs() -> void:
+	egg_mm = MultiMeshInstance3D.new()
+	egg_mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color("eef6f4")
+	egg_mm.material_override = m
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	var sm := SphereMesh.new()
+	sm.radius = 0.06
+	sm.height = 0.12
+	sm.radial_segments = 6
+	sm.rings = 3
+	mm.mesh = sm
+	egg_mm.multimesh = mm
+	egg_mm.visible = false
+	add_child(egg_mm)
+
+
+## 알을 보임 (물 붓기 · 빛 걸기) — 지금 미리보기 물이 있는 곳에만
+func show_eggs(on: bool) -> void:
+	if not on:
+		egg_mm.visible = false
+		return
+	var r := RandomNumberGenerator.new()
+	r.seed = plan.seed_v * 7 + 3
+	var pts: Array[Vector3] = []
+	for i in 400:
+		if pts.size() >= 36:
+			break
+		var a := r.randf() * TAU
+		var d := sqrt(r.randf()) * 0.9
+		var u := cos(a) * d
+		var v := sin(a) * d
+		var wy := water_h(u, v, ground_h(u, v))
+		if wy == -INF:
+			continue
+		pts.append(Vector3(u * RIN, wy - 0.05, v * RIN))
+	var mm := egg_mm.multimesh
+	mm.instance_count = pts.size()
+	for i in pts.size():
+		mm.set_instance_transform(i, Transform3D(Basis.IDENTITY, pts[i]))
+	egg_mm.visible = not pts.is_empty()
 
 
 ## 툰 재질 (카메라 쪽 면을 밝히는 view_fill 없이 — 병 안 흙·바위 옆면이 하얗게 바래지 않게)
@@ -1162,49 +1266,25 @@ func plant_trees() -> void:
 			_trees.append({"node": nd, "at": 0.5 + r.randf() * 0.35, "s": s})
 
 
-# ───────────────────────── 들짐승 · 물고기 (view/start/creation_release.gd) ─────────────────────────
-## 상자 · 물고기 유리병 · 거인의 손가락 · 짐승 · 물고기 연출 묶음
+# ───────────────────────── 7b 작은 생명 (view/start/creation_release.gd) ─────────────────────────
+## 꽃숲의 작은 생물 · 호수의 송사리 연출 묶음
 func build_kit() -> void:
 	release = CreationRelease.new()
 	add_child(release)
 	release.setup(self)
 
 
-## 상자를 놓을 마른 땅 (병 입구 안쪽 — 반지름 0.5 안): 짐승들의 집에서 가장 먼 곳 (상자가 서식지를 가리지 않고, 뛰어나가는 게 보이게)
-func crate_spot(groups: Array) -> Vector2:
-	var best := Vector2.ZERO
-	var bs := -INF
-	for j in range(-5, 6):
-		for i in range(-5, 6):
-			var q := Vector2(i, j) * 0.1
-			if q.length() > 0.5 or water_h(q.x, q.y, ground_h(q.x, q.y)) != -INF:
-				continue
-			var m := INF
-			for g: Dictionary in groups:
-				m = minf(m, q.distance_to(Vector2(float(g["x"]), float(g["y"])) / R))
-			var sc := m - q.length() * 0.3              # 비슷하면 가운데 쪽
-			if sc > bs:
-				bs = sc
-				best = q
-	return best
-
-
-## 물고기를 풀 호수 그림 (세상 자리 p에서 가장 가까운 민물 수면 원판): {p: 수면 가운데 3D, rad}. 없으면 {}
-func lake_near(p: Vector2) -> Dictionary:
-	var best: Dictionary = {}
-	var bd := INF
-	for l: Dictionary in _lakes:
-		if bool(l["salty"]):
+## 꽃숲의 꽃 자리 (배양 뒤 — 작은 생명이 깨어나는 곳): [{base: 땅 위 3D, top: 꽃 위 3D}]
+func flower_spots() -> Array:
+	var out: Array = []
+	for tr: Dictionary in _trees:
+		var nd: Node3D = tr["node"]
+		if not is_instance_valid(nd):
 			continue
-		var d := (l["uv"] as Vector2).distance_to(p / R)
-		if d < bd:
-			bd = d
-			best = l
-	if best.is_empty():
-		return {}
-	var mi: MeshInstance3D = best["node"]
-	var uv: Vector2 = best["uv"]
-	return {"p": Vector3(uv.x * RIN, lake_y(best) + 0.05, uv.y * RIN), "rad": (mi.mesh as CylinderMesh).top_radius}
+		var bb := CreationRelease._aabb(nd)
+		var h := maxf(0.4, bb.end.y * float(tr["s"]))
+		out.append({"base": nd.position, "top": nd.position + Vector3(0, h, 0)})
+	return out
 
 
 ## 민물 호수 그림 모두 (배양 — 가끔 뛰는 물고기)

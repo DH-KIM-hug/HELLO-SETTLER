@@ -198,9 +198,11 @@ static func _haul_secs(direct: bool, seed_v: int, days: float) -> float:
 	v.add_building("맷돌간", v.center.x - 4.0, v.center.y + 9.0, true)
 	v.add_building("화덕", v.center.x + 6.0, v.center.y + 7.0, true)
 	var secs := 0.0
-	var n := int(days * Balance.DAY / v.step_dt)
+	var n := int((days + 1.0) * Balance.DAY / v.step_dt)
 	for i in n:
 		v.step(v.step_dt)
+		if v.t < Balance.DAY:                # (A28) 첫날은 세지 않음 — 걸음 덤 없이 첫 터들로 나르는 짐이 사슬과 섞임
+			continue
 		for r in v.people:
 			if r.doing.contains("나르는 중") and (r.carry == "밀" or r.carry == "밀가루" or r.carry == "빵" or r.doing.contains("밀") or r.doing.contains("빵")):
 				secs += v.step_dt
@@ -213,7 +215,7 @@ static func _haul_secs(direct: bool, seed_v: int, days: float) -> float:
 # 확인은 같은 걸음에서 바로 보냄이 옛 방식보다 적은지.
 func test_haul_time() -> void:
 	print("== 생산 사슬 — 나르기 시간 (AC11)")
-	var days := 1.0 if quick else 2.0
+	var days := 2.0                       # (A28) 첫날 다음부터 이틀을 셈 (_haul_secs) — 하루로는 사슬이 덜 돌아 비가 흔들림
 	var on := _haul_secs(true, 45, days)
 	var off := _haul_secs(false, 45, days)
 	var ref := off * Balance.WALK_SCREEN / 1.0

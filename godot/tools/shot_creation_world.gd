@@ -39,10 +39,8 @@ func _process(dt: float) -> bool:
 			c = load(StartFlow.CREATION_SCENE).instantiate()
 			c.set("instant", true)
 			root.add_child(c)
-			c.call("jump", "wildlife")
-			c.call("next")                  # 들짐승 풀어 주기
-			c.call("next")                  # 물고기 풀어 주기
-			c.call("next")                  # 배양 끝 → 키트 자리
+			c.call("jump", "life")
+			c.call("next")                  # 작은 생명이 깨어난 뒤 → 키트 자리
 			root.remove_child(c)
 			c.free()
 			StartFlow.take()

@@ -290,12 +290,13 @@ func in_opening() -> bool:
 	return int(stats.get("thanks", 0)) == 0 and t < Balance.OPENING_END and not chief_off     # 촌장이 없으면(시험) 대본도 없다
 
 
-## v5 걸음 배율 — 보통 1. 첫 한 시간 대본·제단 장면은 병 시계로 짠 옛 대본 걸음 (A28에서 다시), 수첩의 첫날은 느린 병 시계 보정뿐 (화면에선 보통과 같은 0.7칸/초 — ×1.25 덤 없앰, A29)
+## v5 걸음 배율 — 보통 1. (A28 2026-11-08) 첫날 걸음 덤(옛 WALK_OPENING)은 없앰: 걸음은 어디서나 화면 0.7칸/초 —
+## 수첩의 첫날은 병 시계가 느리게·빠르게 흐르는 만큼만 되돌린다 (Notebook.day_scale의 역수 — 시계 보정뿐, 덤 없음)
 func pace_walk() -> float:
-	if in_opening() or staged():
-		return Balance.WALK_OPENING / Balance.WALK
 	if Notebook.first_day(self):
-		return Balance.PACE_FIRST_DAY
+		return 1.0 / maxf(0.01, Notebook.day_scale(self, Notebook.real(self)))
+	if staged():                          # 첫날 밖의 깨달음·제단·첫 기도 장면: 첫날 제단 장면의 병 시계 빠르기(ALTAR_PACE)로 짠 장면 — 그만큼 되돌림
+		return 1.0 / Notebook.ALTAR_PACE      # (화면 0.7칸/초가 되려면 JarClock이 이 장면을 첫날처럼 느리게 돌려야 함 — 남은 일)
 	return 1.0
 
 
@@ -1500,7 +1501,7 @@ func on_built(b: Building) -> void:
 	else:
 		log_line("%s%s 다 지어졌다." % [b.label(), josa(b.label(), "이", "가")])
 	VillageEra.on_built(self, b)          # 망루 안개·세상 끝 · 묘지·교회·광장·나루터 한 줄 (A6)
-	if in_opening():
+	if in_opening() or (int(stats.get("thanks", 0)) == 0 and t < Balance.THANKS_END and not chief_off and b.type != Awakening.ALTAR):     # (A28) 첫 한 시간 뒤에 선 첫 건물도
 		thanksgiving(b)
 
 

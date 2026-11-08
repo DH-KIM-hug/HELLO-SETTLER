@@ -1,4 +1,4 @@
-## 들짐승 수 보고 (헤드리스): godot --headless --path godot -s res://tools/wildlife_report.gd [-- small|world] [일 수]
+## 물고기 무리 수 보고 (헤드리스 — E3-12·A28: 큰 짐승 없음, 물고기만): godot --headless --path godot -s res://tools/wildlife_report.gd [-- small|world] [일 수]
 ## 무리마다 상한·수를 날마다 찍는다 (B3 — 균형 맞추기용)
 extends SceneTree
 
@@ -18,12 +18,6 @@ func _initialize() -> void:
 		v.water.offline = true
 	var w := v.wild
 	w.settle(v)
-	if mode == "small":
-		for h: Dictionary in w.herds:
-			if h["kind"] == "rabbit":
-				h["n"] = 20
-				w.add_herd("wolf", float(h["x"]) + 10.0, float(h["y"]), 4)
-				break
 	for h: Dictionary in w.herds:
 		print("%d %s (%.0f, %.0f) n=%d cap=%d hab=%.0f %s" % [h["id"], h["kind"], h["x"], h["y"], h["n"], h["cap"], h["hab"], h["name"]])
 	for d in days:
