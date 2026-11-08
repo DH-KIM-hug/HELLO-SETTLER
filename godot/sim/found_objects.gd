@@ -1,56 +1,72 @@
-## 떨어진 물건 — 큰 세상의 잡동사니 (GAME_DESIGN 3.0 표 · ROADMAP E3-16 · STORY 1).
-## 병 흙에 처음부터 몇 개 묻혀 있다 (창조 때 섞여 옴): 단추·유리구슬·병뚜껑·각설탕·성냥개비.
-## 주민은 그게 무엇인지 안다 (지구에서 온 사람들) — 놀라는 것은 정체가 아니라 **크기**. 큰 존재·하늘은 말하지 않는다.
+## 떨어진 물건 — 신의 물건 (GAME_DESIGN 3.0 표 '떨어진 물건 — 신의 물건' · ROADMAP E3-16 · STORY 1, 2026-11-08 다시 정함).
+## 병 흙에 처음부터 몇 개 묻혀 있다 (창조 때 섞여 옴). 병 안이 세상의 전부인 주민은 그게 **무엇인지 모른다** —
+## 하늘이 내린 신의 물건으로 받아들여 이름을 붙인다: 하늘 방패 · 빛 알 · 물 그릇 · 단 돌 · 불 막대 (DIVINE).
+## 주민 말·연대기에 바깥 이름(NAMES)을 쓰지 않는다. 깨닫기 전엔 경이뿐 ('하늘에서 떨어졌다' — 누가 줬다는 말 없음),
+## 깨달은 뒤엔 마을이 부르는 말({w})의 선물로 잇는다. 지구의 흔적은 초암시 한 줄뿐 (아이 하나가 "왠지 낯익어…" — 병마다 많아야 한 번).
 ##
 ## 묻기: 넓은 세상은 WorldGen.generate 끝에 bury(ww) — 좋은 키트 자리(ww.spots)마다 둘레 고리(FIND_RING)에 2~3개.
 ##        작은 시험 병(Village.new_prototype)은 bury_local(v) — 마을 둘레에.
 ##        결정론: 세상 씨앗에서 나온 따로 쓰는 난수 (마을 rng·다른 흐름을 건드리지 않음). static 상태 없음 (ADR-0001).
 ## 찾기: 매시간(hourly) 묻힌 물건 둘레 NEAR_R 안에서 일하던·돌아다니던 사람이 있으면 그 시간이 쌓이고,
 ##        NOTICE_HOURS가 차거나 누가 DIG_R 안에 있으면 그 사람이 찾는다 (사람 id 순 — 난수 없음).
-##        사건 &"found_object" + 연대기 한 줄 + 말풍선 하나.
-## 쓰임: MOVE_AFTER 뒤 마을 쪽으로 옮겨 장식이 된다 — 단추 = 모닥불 곁 마을 탁자 · 구슬 = 광장 표지 (제단이 서면 제단 곁으로) ·
-##        병뚜껑 = 집 곁 목욕통 · 각설탕 = 창고 곁 잔치 (날마다 갉아 먹음, 아이 행복 조금, 물 뿌림·짙은 이슬에 녹음) ·
-##        성냥개비 = 가까운 개울을 건너는 다리 (없으면 창고 곁 대들보).
+##        사건 &"found_object" + 연대기 한 줄 + 말풍선 하나 (깨달음 앞뒤로 갈라 씀).
+## 쓰임: MOVE_AFTER 뒤 마을 쪽으로 옮겨 장식이 된다 — 하늘 방패(단추) = 모닥불 곁 마을 탁자 · 빛 알(구슬) = 광장 표지 (제단이 서면 제단 곁으로) ·
+##        물 그릇(병뚜껑) = 집 곁 목욕통 · 단 돌(각설탕) = 창고 곁 잔치 (날마다 갉아 먹음, 아이 행복 조금, 물 뿌림·짙은 이슬에 녹음) ·
+##        불 막대(성냥개비) = 가까운 개울을 건너는 다리 (없으면 창고 곁 대들보).
+## 낯익음 (초암시): 날마다 FAMILIAR_HOUR에 이 마을이 찾은·쓰는 물건 곁(NEAR_R)에 깨어 있는 아이가 있으면 Balance.FOUND_FAMILIAR_P로 한 번 —
+##        마을 씨앗 해시(WatcherName.key_of — 난수 흐름을 쓰지 않음, 보는지 여부와 상관없음)로 굴리고, 물건 사전의 "familiar"로 병마다 한 번만.
 ## 상태는 목록의 사전에 (넓은 세상 = WorldWater.found, 작은 병 = Village.found) — SaveCodec이 그대로 저장.
 class_name FoundObjects
 extends RefCounted
 
 const KINDS := ["button", "marble", "cap", "sugar", "match"]
+## 바깥 이름 — 거인 쪽 화면·주석에서만 (주민 말·연대기엔 쓰지 않는다)
 const NAMES := {"button": "단추", "marble": "유리구슬", "cap": "병뚜껑", "sugar": "각설탕", "match": "성냥개비"}
+## 주민이 붙인 이름 (GD 3.0 표 — 성냥갑 '하늘 집'은 랜드마크 집으로 따로, 아직 묻지 않음)
+const DIVINE := {"button": "하늘 방패", "marble": "빛 알", "cap": "물 그릇", "sugar": "단 돌", "match": "불 막대"}
 ## 상태
 const BURIED := 0
 const FOUND := 1        # 찾은 자리에 놓여 있음 (사람들이 둘러봄)
 const USED := 2         # 마을 쪽으로 옮겨 쓰임
-const GONE := 3         # 다 먹음·녹음 (각설탕)
+const GONE := 3         # 다 먹음·녹음 (단 돌)
 
-## 말풍선 (GD 3.0 표 그대로)
+## 말풍선 [깨달은 뒤, 깨닫기 전] (GD 3.0 표의 말투). 깨닫기 전엔 경이만 — {w}·누가 줬다는 말 없음
 const SAY := {
-	"button": "탁자만 한 단추야. 누구 옷에서 떨어졌을까?",
-	"marble": "구슬 속에 빛이 갇혀 있어.",
-	"cap": "뚜껑 하나가 통만 하네.",
-	"sugar": "설탕이다! 무릎까지 오는 설탕 덩어리야!",
-	"match": "성냥이 대들보만 해.",
+	"button": ["{w}께서 하늘 방패를 내리셨어! 구멍이 넷이야.", "구멍 넷 뚫린 둥근 방패야! 누가 이런 걸 들 수 있을까."],
+	"marble": ["{w}의 빛 알이다! 알 속에 빛이 갇혀 있어.", "알 속에 빛이 갇혀 있어."],
+	"cap": ["{w}께서 물 그릇을 내려 주셨어!", "하늘에서 물 그릇이 떨어졌어."],
+	"sugar": ["{w}께서 단 돌을 주셨어! 혀가 녹을 것 같아!", "돌이 달아! 혀가 녹을 것 같아!"],
+	"match": ["{w}의 불 막대다! 머리에 붉은 흙이 붙었어.", "머리에 붉은 흙이 붙은 큰 막대야. 문지르니 불이 났어!"],
 }
-## 연대기 — 찾음 (%s = 찾은 사람 이름 + 조사). 큰 존재를 말하지 않고 물음으로 끝낸다
+## 연대기 — 찾음 [깨달은 뒤, 깨닫기 전] (%s = 찾은 사람 이름 + 조사). 이름을 붙이는 데서 끝낸다
 const FOUND_LINE := {
-	"button": "%s 땅을 고르다 탁자만 한 단추를 캐냈다. 이렇게 큰 옷을 입는 이가 있을까, 사람들은 밤늦도록 이야기했다.",
-	"marble": "%s 풀숲에서 무릎만 한 유리구슬을 굴려 냈다. 이렇게 큰 구슬로는 누가 놀았을까, 아이들은 그 앞을 떠나지 못했다.",
-	"cap": "%s 흙 속에서 통만 한 병뚜껑을 파냈다. 이 뚜껑에 맞는 병은 얼마나 클까, 사람들은 고개를 갸웃했다.",
-	"sugar": "%s 무릎까지 오는 각설탕을 찾아냈다. 이렇게 큰 설탕 덩어리가 어디서 왔을까, 그날 밤 아이들은 단맛 생각에 잠을 설쳤다.",
-	"match": "%s 대들보만 한 성냥개비를 끌어냈다. 이런 성냥으로 붙인 불은 얼마나 컸을까, 아무도 답하지 못했다.",
+	"button": ["%s 땅을 고르다 구멍 넷 뚫린 둥근 방패를 캐냈다. 사람들은 {w:이/가} 내려 주신 하늘 방패라며 그 둘레에 모였다.",
+		"%s 땅을 고르다 구멍 넷 뚫린 둥근 방패를 캐냈다. 사람들은 하늘에서 떨어진 그것을 하늘 방패라 불렀다."],
+	"marble": ["%s 풀숲에서 속에 빛이 갇힌 둥근 알을 굴려 냈다. 사람들은 {w}의 빛 알이라 부르며 그 앞에 고개를 숙였다.",
+		"%s 풀숲에서 속에 빛이 갇힌 둥근 알을 굴려 냈다. 사람들은 그것을 빛 알이라 불렀고, 아이들은 그 앞을 떠나지 못했다."],
+	"cap": ["%s 흙 속에서 가장자리가 오글오글한 큰 그릇을 파냈다. 사람들은 {w:이/가} 내려 주신 물 그릇이라 했다.",
+		"%s 흙 속에서 가장자리가 오글오글한 큰 그릇을 파냈다. 사람들은 하늘에서 떨어진 그것을 물 그릇이라 불렀다."],
+	"sugar": ["%s 무릎까지 오는 하얀 돌을 찾아냈다. 핥아 보니 달았다. 사람들은 {w}의 단 돌이라 부르며 기뻐했다.",
+		"%s 무릎까지 오는 하얀 돌을 찾아냈다. 핥아 보니 달았다. 사람들은 그것을 단 돌이라 불렀고, 그날 밤 아이들은 단맛 생각에 잠을 설쳤다."],
+	"match": ["%s 대들보만 한 막대를 끌어냈다. 머리에 붉은 흙이 붙어 있었다. 사람들은 {w:이/가} 내려 주신 불 막대라 했다.",
+		"%s 대들보만 한 막대를 끌어냈다. 머리에 붉은 흙이 붙어 있었다. 사람들은 하늘에서 떨어진 그것을 불 막대라 불렀다."],
 }
 ## 연대기 — 쓰임 (옮긴 날)
 const USE_LINE := {
-	"button": "큰 단추에 잔가지 다리를 달아 모닥불 곁 마을 탁자로 삼았다.",
-	"marble": "유리구슬을 마을 가운데 세워 표지로 삼았다. 밤이면 불빛을 모아 은은하게 빛났다.",
-	"cap": "병뚜껑을 집 곁에 엎어 놓고 물을 채웠다. 마을의 첫 목욕통이 되었다.",
-	"sugar": "각설탕을 창고 곁에 두고 잔치를 열었다. 아이들이 날마다 조금씩 갉아 먹었다.",
-	"match_bridge": "성냥개비를 개울에 걸쳐 다리로 삼았다. 붉은 머리는 떼어 불씨로 아껴 두었다.",
-	"match_beam": "성냥개비를 창고 곁에 눕혀 대들보로 아껴 두었다. 붉은 머리는 떼어 불씨로 썼다.",
+	"button": "하늘 방패에 잔가지 다리를 달아 모닥불 곁 마을 탁자로 삼았다.",
+	"marble": "빛 알을 마을 가운데 세워 표지로 삼았다. 밤이면 불빛을 모아 은은하게 빛났다.",
+	"cap": "물 그릇을 집 곁에 놓고 물을 채웠다. 마을의 첫 목욕통이 되었다.",
+	"sugar": "단 돌을 창고 곁에 두고 잔치를 열었다. 아이들이 날마다 조금씩 갉아 먹었다.",
+	"match_bridge": "불 막대를 개울에 걸쳐 다리로 삼았다. 붉은 머리는 떼어 불씨로 아껴 두었다.",
+	"match_beam": "불 막대를 창고 곁에 눕혀 대들보로 아껴 두었다. 붉은 머리는 떼어 불씨로 썼다.",
 }
-const ALTAR_LINE := "유리구슬을 제단 곁으로 옮겨 모셨다. 밤이면 등불 빛을 모아 반짝였다."
-const SUGAR_GONE_LINE := "각설탕이 다 없어졌다. 아이들은 한동안 그 자리를 맴돌았다."
-const SUGAR_MELT_LINE := "물에 젖은 각설탕이 녹아내렸다. 아이들은 남은 단물을 손가락으로 찍어 먹었다."
+const ALTAR_LINE := "빛 알을 {w}의 제단 곁으로 옮겨 모셨다. 밤이면 등불 빛을 모아 반짝였다."     # 제단은 깨달은 뒤에만 선다
+const SUGAR_GONE_LINE := "단 돌이 다 없어졌다. 아이들은 한동안 그 자리를 맴돌았다."
+const SUGAR_MELT_LINE := "물에 젖은 단 돌이 녹아내렸다. 아이들은 남은 단물을 손가락으로 찍어 먹었다."
+## 낯익음 (초암시 — STORY 1 · GD 3.0 연대기 예). 아무것도 확정하지 않는다
+const FAMILIAR_SAY := "왠지 낯익어…"
+const FAMILIAR_LINE := "한 아이가 %s 보고 왠지 낯익다고 했다. 아무도 까닭을 몰랐다."     # %s = 이름 + 을/를
+const FAMILIAR_HOUR := 15.0                # 낮참 지나 아이들이 노는 때 (이 시간에 하루 한 번 굴림)
 
 ## 묻는 자리
 const FIND_RING := Vector2(12.0, 28.0)     # 키트 자리에서 (칸)
@@ -138,6 +154,7 @@ static func hourly(v: Village) -> void:
 	if objs.is_empty():
 		return
 	var day := v.day_no()
+	_familiar(v, objs, day)
 	for o: Dictionary in objs:
 		match int(o["st"]):
 			BURIED:
@@ -189,8 +206,9 @@ static func discover(v: Village, o: Dictionary, who: Resident) -> void:
 	o["t"] = v.t
 	var kind: String = o["kind"]
 	v.emit(&"found_object", {"who": who.id, "at": Vector2(float(o["x"]), float(o["y"])), "v": {"kind": StringName(kind), "id": int(o["id"])}})
-	v.log_line(FOUND_LINE[kind] % (who.name + Village.josa(who.name, "이", "가")))
-	v.speak(who, SAY[kind], 8.0)
+	var k := 0 if v.aware else 1                  # [깨달은 뒤, 깨닫기 전]
+	v.log_line(String(FOUND_LINE[kind][k]) % (who.name + Village.josa(who.name, "이", "가")))
+	v.speak(who, SAY[kind][k], 8.0)
 
 
 ## 마을 쪽으로 옮겨 쓰임 (자리는 이때 한 번 정함 — 구슬만 제단이 서면 다시)
@@ -317,7 +335,38 @@ static func _bridge_spot(v: Village) -> Array:
 	return best
 
 
-# ───────────────────────── 각설탕 ─────────────────────────
+# ───────────────────────── 낯익음 (초암시) ─────────────────────────
+## 하루 한 번 (FAMILIAR_HOUR): 이 마을이 찾은·쓰는 물건 곁에 깨어 있는 아이가 있으면 아주 드물게 "왠지 낯익어…" — 병마다 많아야 한 번.
+## 굴림은 마을 씨앗 해시 (WatcherName.key_of: 시드·무리·날) — 난수 흐름을 쓰지 않아 다른 결과가 바뀌지 않고, 보는지 여부와 상관없다.
+static func _familiar(v: Village, objs: Array[Dictionary], day: int) -> void:
+	var hr := v.hour_now()
+	if hr < FAMILIAR_HOUR or hr >= FAMILIAR_HOUR + 1.0:
+		return
+	for o: Dictionary in objs:
+		if bool(o.get("familiar", false)):
+			return                                   # 이 병에서 이미 한 번
+	var k := WatcherName.key_of(v, day * 31 + 977)
+	if float(k % 10000) / 10000.0 >= Balance.FOUND_FAMILIAR_P:
+		return
+	for o: Dictionary in objs:
+		var st := int(o["st"])
+		if (st != FOUND and st != USED) or int(o["by"]) != v.sid:
+			continue
+		var used := st == USED
+		var at := Vector2(float(o["ux"]) if used else float(o["x"]), float(o["uy"]) if used else float(o["y"]))
+		for p in v.people:                       # id 순
+			if not p.is_child() or p.sleeping or p.age < 2.5:
+				continue
+			if Vector2(p.x, p.y).distance_to(at) >= NEAR_R:
+				continue
+			o["familiar"] = true
+			var nm: String = DIVINE[o["kind"]]
+			v.speak(p, FAMILIAR_SAY, 6.0)
+			v.log_line(FAMILIAR_LINE % (nm + Village.josa(nm, "을", "를")))
+			return
+
+
+# ───────────────────────── 단 돌 (각설탕) ─────────────────────────
 static func _sugar_hour(v: Village, o: Dictionary, day: int) -> void:
 	var hr := v.hour_now()
 	if hr >= 12.0 and hr < 13.0 and int(o.get("eat_day", -1)) != day:        # 낮참에 아이들이 갉아 먹음

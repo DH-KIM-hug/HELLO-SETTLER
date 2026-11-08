@@ -170,7 +170,7 @@ func test_hints() -> void:
 			order.append(String(ev["v"]["hint"]))
 	var carriers := made.filter(func(r: Resident) -> bool: return r.hint != "")
 	var ratio := float(carriers.size()) / n
-	check(absf(ratio - Balance.HINT_P) <= 0.05 + 1e-6 and order.size() == carriers.size(), "어른 이주민 %d명 중 조각 %d명 (%.3f, 목표 0.25 ± 0.05) · 사건 %d" % [n, carriers.size(), ratio, order.size()])
+	check(absf(ratio - Balance.HINT_P) <= Balance.HINT_P * 0.5 + 1e-6 and order.size() == carriers.size(), "어른 이주민 %d명 중 조각 %d명 (%.3f, 목표 %.2f ± %.3f) · 사건 %d" % [n, carriers.size(), ratio, Balance.HINT_P, Balance.HINT_P * 0.5, order.size()])
 	var once := true
 	for i in range(0, order.size() - order.size() % 4, 4):
 		var blk := {}

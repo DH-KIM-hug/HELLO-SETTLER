@@ -119,7 +119,7 @@ const GRIEF_DAYS := 3.0                 # 가족이 죽으면 며칠 행복↓
 ## 어른 이주민마다 HINT_P로 조각 하나 — 네 가지가 병마다 한 번씩 다 나온 뒤에야 다시 섞어서 (Village.pop_rng · hint_bag).
 ## 주민 말·연대기(book·say)에는 '지구'·'거인'·숫자 없음 — "꿈에서 본 곳". label·desc는 거인 UI(사람 상세)에만.
 ## {n} = 그 사람 이름 · {n:은/는} = 이름 + 조사 (Immigrants.hint_text)
-const HINT_P := 0.25
+const HINT_P := 0.05                    # 초암시 (STORY 1, 2026-11-08 사용자: 0.25 → 0.05)
 const IMMIGRANT_HINTS := {
 	"word": {"label": "낯선 말 한마디", "desc": "가끔 아무도 모르는 말을 중얼거려요",
 		"book": "{n:은/는} 가끔 아무도 모르는 말을 한마디씩 중얼거렸다. 무슨 뜻이냐고 물으면 그저 고개를 저었다.",
@@ -972,7 +972,7 @@ const CAT_BLIGHT_SPREAD := 8            # … 0~이만큼 날 늦게
 const CAT_BLIGHT_DAYS := 3              # 떼가 밀밭을 갉는 날 수 (그동안 꽃 무리 상한 CAT_BLIGHT_MAX)
 const CAT_BLIGHT_MAX := 5               # 떼가 깬 동안 꽃 무리마다 애벌레 상한 (알 포함)
 const CAT_BLIGHT_K := 0.6               # 떼가 꽉 차면 밭이 거두는 몫 = 하루 필요의 (1 − 이만큼)까지 — 잡을수록 줄어듦
-# ═══════════════ 떨어진 물건 — 큰 세상의 잡동사니 (GAME_DESIGN 3.0 표 · ROADMAP E3-16, sim/found_objects.gd — 메인 판단 2026-11-08) ═══════════════
+# ═══════════════ 떨어진 물건 — 신의 물건 (GAME_DESIGN 3.0 표 · ROADMAP E3-16, sim/found_objects.gd — 메인 판단 2026-11-08) ═══════════════
 const FOUND_MOVE_AFTER := 6.0 * HOUR    # 찾은 뒤 이만큼 그 자리에 두고 둘러본 다음 마을 쪽으로 옮겨 씀
 const FOUND_BRIDGE_REACH := 14.0        # 성냥개비 다리: 모닥불에서 이 안의 개울 (없으면 창고 곁 대들보)
 const FOUND_SUGAR_EAT := 0.25           # 각설탕: 날마다 아이들이 갉아 먹는 몫 (약 나흘)
@@ -980,6 +980,7 @@ const FOUND_SUGAR_MELT := 0.5           # 물 뿌림·짙은 이슬 한 번에 �
 const FOUND_SUGAR_MELT_R := 2.0         # 물 뿌림이 이 안이면 녹음 (칸)
 const FOUND_DEW_HEAVY := 0.8            # 새벽 이슬이 DEW_FULL × 이만큼 넘으면 '짙은 이슬'
 const FOUND_SUGAR_HAPPY := 0.04         # 잔치 각설탕이 있는 동안 아이 행복 +
+const FOUND_FAMILIAR_P := 0.02          # 낯익음 초암시: 찾은 물건 곁에 아이가 있는 날 하루 이만큼 — 병마다 많아야 한 번 (STORY 1 · GD 3.0, 2026-11-08)
 # ═══════════════ 핵 크기 = 병의 따뜻함 (OPENING v4.0-6 · ROADMAP A28b · docs/BALANCE.md A28b, sim/core_warmth.gd — 메인 판단 사용자 위임 2026-11-08) ═══════════════
 # 핵마다 [0 서늘한 별 · 1 따뜻한 별(기준 — 1의 값은 늘 중립으로 둘 것) · 2 뜨거운 별]
 const CORE_TEMP := [-1.5, 0.0, 1.5]     # 병 바탕 기온에 더함 (°C) → 겨울이 길거나 짧아짐은 기온에서
