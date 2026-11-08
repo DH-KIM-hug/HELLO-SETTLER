@@ -203,6 +203,12 @@ def deskew(img, rr, deg):
 # moved apart symmetrically about their middle; rect, hip pivot and parent pivot move together).
 LEG_MIN_GAP = 0.5
 
+# CHILD BRAIDS FROM BEHIND (2026-11-08 A23 stage 3: "the child's big braids and hands cover the body" in back / q_back): the
+# concept's back-view braids were cut with the parting arch and placed 1.7-2x larger than the front braids, drawn over the
+# body, so the tufts at their ends read as two big hands and hid the dress and legs. Per (set, view): scale the braid piece
+# about the centre of its top edge (k) and move it (dx, dy, rig units in the head frame) — ends now sit at the shoulders.
+TAIL_FIX = {("f", "q_back"): (0.64, 6.0, -34.0), ("f", "back"): (0.66, 0.0, -38.0)}
+
 
 def spread_stacked_legs(items):
     legs = {}
@@ -447,6 +453,11 @@ def main():
                 rr = [(r[0] - frame[0]) * scale, (r[1] - frame[1]) * scale, (r[2] - frame[0]) * scale, (r[3] - frame[1]) * scale]
                 if pname == "hat":      # frame = the seat (brow line), bd[v] below the head top
                     rr = [rr[0], rr[1] + bd[v], rr[2], rr[3] + bd[v]]
+                if pname == "tail" and (s, v) in TAIL_FIX:
+                    tk, tdx, tdy = TAIL_FIX[(s, v)]
+                    tcx = (rr[0] + rr[2]) / 2
+                    rr = [tcx + (rr[0] - tcx) * tk + tdx, rr[3] - (rr[3] - rr[1]) * tk + tdy, tcx + (rr[2] - tcx) * tk + tdx, rr[3] + tdy]
+                    print("braid fix", s, v, [round(x) for x in rr])
                 if kind == "head":
                     piv = [0.0, 0.0]
                 elif kind in ("sleeve", "arm"):

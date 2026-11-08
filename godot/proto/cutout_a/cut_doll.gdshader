@@ -18,8 +18,8 @@ uniform vec3 base_col[64];         // 그린 바탕색 [묶음 × 8 + 물감 슬
 uniform vec2 head_socket[32];      // 옷 묶음 S의 목 자리 [S × 4 + 보기] (rig 단위, 몸 종류 배율 반영)
 uniform vec2 head_top[32];         // 머리 묶음 T의 정수리 - 목 [T × 4 + 보기] — 모자는 고른 머리의 정수리에
 uniform float head_k[8];           // 몸 종류(옷 묶음 S)마다 머리 배율 — 시안 A 작은 화면처럼 큰 머리 (build_atlas BODY)
-uniform vec2 prop_off[32];         // 옷 묶음 S·보기마다 손 자리 차이 (나르기·안기: 묶음 a 기준, 괭이질: 묶음 d 기준) — 몸이 다르면 소품도 그 손에
-uniform vec2 prop_off_hoe[32];
+uniform int set_col = 11;          // 동작 표의 묶음 칸 시작: 옷 묶음 S마다 (소품 dx, dy, 몸 내림 dy, 지팡이 숨김) — 몸이 다르면 소품도 그 손에,
+                                   // 앉기·무릎은 그 몸의 다리 길이만큼 내림 (cut_lib.bake_anim)
 uniform float fig = 920.0;         // rig 단위로 그림 키
 uniform vec2 body_pivot = vec2(0.0, 380.0);
 uniform float layer_eps = 0.004;   // 겹 순서: 겹 하나마다 카메라 쪽으로 (세계 단위)
@@ -81,19 +81,27 @@ void vertex() {
 	v_show = show ? 1.0 : 0.0;
 	v_far = (group == 0 && slot == 8 && kind == 1) ? 1.0 : 0.0;
 	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 3 ? 99.0 : set_i);
+	int row0 = (int(st.z + 0.5) * 4 + cur_view) * frames;
+	float f = fract(TIME * misc.z + st.w) * float(frames);
+	vec4 ps = vec4(0.0);
+	if (show) {
+		ps = anim(set_col + int(sel.x + 0.5), row0, f);
+		if (CUSTOM3.z > 0.5 && ps.w > 0.5) {
+			show = false;      // 앉기·눕기·무릎·숙이기: 지팡이는 내려놓음
+			v_show = 0.0;
+		}
+	}
 	if (!show) {
 		VERTEX = vec3(0.0);
 		POSITION = vec4(2.0, 2.0, 2.0, 1.0);    // 화면 밖 한 점으로 접기
 	} else {
-		int row0 = (int(st.z + 0.5) * 4 + cur_view) * frames;
-		float f = fract(TIME * misc.z + st.w) * float(frames);
 		vec2 p = VERTEX.xy;
 		vec4 a_own = anim(slot, row0, f);
 		int so = int(sel.x + 0.5) * 4 + cur_view;
 		if (group == 3) {
 			// 소품: 원점 둘레 그림 → 회전·배율 → (dx, dy) 자리 (몸 틀) + 이 몸의 손 자리 차이
 			p = xf(p, vec2(0.0), vec4(a_own.x, 0.0, 0.0, 1.0)) * a_own.w + a_own.yz;
-			p += int(st.z + 0.5) == 3 ? prop_off_hoe[so] : prop_off[so];
+			p += ps.xy;
 		} else if (CUSTOM3.z > 0.5) {
 			// 지팡이: 손(CUSTOM3.xy)이 움직인 만큼만 옮김 — 돌지 않고 곧게 섬
 			vec2 g = xf(CUSTOM3.xy, piv, a_own);
@@ -119,6 +127,7 @@ void vertex() {
 			p = xf(p, body_pivot, anim(1, row0, f));       // 몸이 흔들리면 윗몸 전체가 따라
 		}
 		p = xf(p, vec2(0.0), anim(0, row0, f));
+		p.y += ps.z;                                   // 엉덩이 내림 (걸음 들썩임·앉기·무릎 — 이 몸의 다리 길이만큼)
 		p.x *= st.y * misc.y;
 		// 카메라를 보는 세로 판: 오른쪽 = 카메라 오른쪽(수평), 위 = 세계 위. 정사영에서 세로 길이는 cam_up.y 만큼 줄어 보이므로 늘려 줌
 		vec3 right = INV_VIEW_MATRIX[0].xyz;

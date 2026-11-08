@@ -15,6 +15,7 @@ var screen_h := 0.88         # 화면에 보이는 키 (세계 단위) — 3D �
 var view := 0
 var mirror := 1.0
 var _cam_yaw := INF
+var view_lock := ""          # "" 걷는 쪽대로 · "front" 늘 앞 (누움) · "side" 앞·뒤를 비스듬한 보기로 (앉기 — 2026-11-08 A23 ③)
 
 
 func _init() -> void:
@@ -80,6 +81,10 @@ func update_view(cam: Camera3D, force := false) -> void:
 	else:
 		v = 3
 	var m := 1.0 if deg >= 0.0 else -1.0
+	if view_lock == "front":
+		v = 0
+	elif view_lock == "side":
+		v = 1 if v == 0 else (2 if v == 3 else v)
 	if v == 0 or v == 3:
 		m = mirror if not force else 1.0
 	if v != view or m != mirror or force:

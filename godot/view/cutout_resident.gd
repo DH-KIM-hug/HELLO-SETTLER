@@ -3,10 +3,18 @@
 ## ResidentModel을 이어받아 VillageView·말풍선·누르기·따라가기·연출(social_stage·뗏목·횃불)이 쓰는 자리·이름을 그대로 둔다:
 ##   position(발) · rotation.y(바라보는 쪽 = r.facing) · scale(나이 배율 — 말풍선·누르기 높이가 읽음) · tool(횃불이 붙는 빈 자리).
 ## 그림은 proto/cutout_a (cut_lib · cut_doll · cut_doll.gdshader) — 한 사람 = MeshInstance3D 하나 = 그리기 1번 (가까이·멀리 LOD 같음).
-## 동작 대응 (컷아웃 클립 idle·walk·carry·hold·hoe):
-##   walk → walk (아이 = 같은 걸음을 더 빨리 = 뛰기, 노인 = 느린 걸음 — 빠르기는 실제 땅 빠르기에서) · 짐 든 walk/carry → carry ·
-##   짐 든 idle → hold · work/torch → 연장이 괭이·낫이면 괭이질(hoe + 그 연장), 망치·도끼·곡괭이면 같은 내려찍기 + 나무망치, 그 밖 → idle ·
-##   그 밖(sit·sleep·eat·pray·play·fly·wave·chat·사이 동작…) → idle. 일하는 동안엔 농부 옷(지금은 모든 일), 아니면 평상복.
+## 동작 대응 (컷아웃 클립 — cut_lib.CLIPS, CLIP_OF 표):
+##   walk → walk (아이 = 같은 걸음을 더 빨리 = 뛰기, 노인 = 느린 걸음 — 빠르기는 실제 땅 빠르기에서) · 짐(또는 아기) 든 walk/carry → carry ·
+##   짐(또는 아기) 든 idle → hold · work/torch → 연장이 괭이·낫이면 괭이질(hoe + 그 연장), 망치·도끼·곡괭이면 같은 내려찍기 + 나무망치,
+##   약초·빈손 채집(GATHER_TOOLS)·사냥꾼 → gather (숙여 줍기), 그 밖 → idle ·
+##   sit → sit · eat → eat (빵 — 먹을거리를 들었으면 그것) · sleep → sleep (누움, 앞 보기) · pray → kneel (제단 기도 · 깨달음 KNEEL) ·
+##   그 밖(play·fly·wave·chat·사이 동작…) → idle. 앉기·먹기·줍기는 비스듬한 보기로만 (앞·뒤 보기에선 앉은 다리가 안 읽힘).
+## 일 옷 (A23 ③, art-bible 5.2 직업 옷): 일터에서 일을 시작하는 순간(work 동작) 일 옷으로 갈아입고 — 일터 문 앞에서 작은 연기와 함께
+##   잠깐 사라졌다 나타남 (SWAP_HIDE) — 그 일(같은 행동)을 하는 동안은 일감을 나르러 걸어도 일 옷, 행동이 바뀌거나 쉬기·먹기·자기·기도로
+##   가면 평상복으로 (같은 연기). 지금 일 옷은 모든 일이 농부 옷 하나 (look_from jobs).
+## 아기 (2026-11-08 "아이가 태어났다 했는데 아기가 없음" — 시뮬레이션은 아기를 집 자리에 재워 두어 VillageView가 '집 안'으로 숨겼다):
+##   place_babies()가 화면에서만 — 젖먹이(1살 아래)는 걷거나 서 있는 부모가 품에 안고(부모 인형 = 안기 팔), 아니면 집 문 옆 요람에 누움,
+##   걸음마 아기(1~2.4살)는 부모 곁에서 아장아장 따라 걷거나 앉아 놀고, 부모가 없으면 문 옆에서 논다.
 ## 아이·노인: 제 몸 (2026-11-08 시안 A 넷 — 아이 몸 f · 노인 몸 g + 지팡이, cut_lib.look_from body). 아기는 아이 몸을 0.45로 (강보는 아직 없음).
 ## 낮엔 모자(R6 머리쓰개 문화), 저녁엔 벗음. 발밑 접촉 그림자는 VillageView의 CutoutShadows (MultiMesh 하나).
 class_name CutoutResident
@@ -19,8 +27,16 @@ const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
 ## 옛 고정값 0.78칸은 짧은 인형 다리가 실제로 딛는 길(0.2~0.3)의 2.5배라 발이 땅에서 미끄러졌다
 const RATE_MIN := 0.35
-const RATE_MAX := 4.0
+const RATE_MAX := 6.0
 const RATE_STEP := 0.05          # 빠르기를 이만큼씩만 바꿈 (GPU에 보내는 일을 줄이고 위상 이음을 덜 함)
+## 아주 빠른 배속 (2026-11-08 "아주 빠르게 할 때 주민들이 꼭 뒤로 가"): 발이 땅에 맞는 걸음 빠르기가 RATE_TRAVEL을 넘거나 한 장면에
+## TRAVEL_STEP 주기 넘게 넘어가면 걸음 대신 travel (멈춘 큰 보폭 + 들썩임). 어떤 동작이든 한 장면에 MAX_FRAME_STEP 주기를 넘지 않음
+## (반 주기를 넘으면 거꾸로 도는 것처럼 보임). 장면 길이는 지금 FPS (낮게 잡아 24)
+## 걸음 한 주기 = 두 걸음 (좌우가 거의 같은 모양) → 보이는 주기는 반 주기라, 한 장면에 0.25 주기를 넘으면 벌써 거꾸로 보이기 시작함
+const RATE_TRAVEL := 7.0
+const TRAVEL_STEP := 0.25
+const MAX_FRAME_STEP := 0.45
+const MIN_FPS := 24.0
 const BABY_SCALE := 0.45
 const CHILD_SCALE := Vector2(0.68, 0.8)    # 아이 몸 f의 키 배율 (어린 → 큰 아이)
 const ELDER_SCALE := 0.9
@@ -29,6 +45,21 @@ const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11
 const PROP_BASKET := 2
 ## 일 연장 → 내려찍는 일 동작(hoe)의 소품: 괭이 6 · 낫 7 · 나무망치 9. 표에 없는 연장(빈손·삽·약초·낚싯대) = 서서 (idle)
 const WORK_PROP := {"tool_hoe": 6, "tool_sickle": 7, "tool_hammer": 9, "tool_axe": 9, "tool_pick": 9}
+## 숙여 줍는 일 (약초 · 빈손 일터) · 그렇게 일하는 일터 (사냥꾼: 웅크려 살핌)
+const GATHER_TOOLS := ["tool_herbs"]
+const GATHER_JOBS := ["사냥꾼"]
+## 비스듬한 보기로만 보이는 동작 (앞 → 비스듬한 앞, 뒤 → 비스듬한 뒤) · 늘 앞 보기 (누움)
+const SIDE_ONLY := ["sit", "eat", "gather"]
+const FRONT_ONLY := ["sleep"]
+## 일 옷을 벗는 동작 (쉬기·먹기·자기·기도·놀기)
+const OFF_SHIFT := ["sit", "eat", "sleep", "pray", "play", "fly"]
+const SWAP_HIDE := 0.18          # 옷을 갈아입는 동안 사라지는 시간 (현실 초)
+const SWAP_PUFF := 0.5           # 연기가 퍼졌다 사라지는 시간
+## 아기: 젖먹이 = 1살 아래 (나이 일 < 1/2.4), 그 밖의 아기(AGE_BABY 아래) = 걸음마
+const INFANT_AGE := 1.0 / 2.4
+const INFANT_H := 0.4            # 젖먹이의 화면 키 (누운 인형의 길이 쪽) — 부모 품·요람에
+const HOLD_RIG := 400.0          # 부모 품 높이 (rig 단위 — 안기 소품 자리와 같은 쪽)
+const CRADLE_OFF := Vector2(0.4, 0.55)   # 집 문 옆 요람: 집 가운데에서 (옆, 앞) + 집 크기 × 0.5 앞
 
 ## -1 = 설정(GameSettings.cutout_residents)을 따름 · 0 = 늘 3D · 1 = 늘 컷아웃 (시험·캡처·성능 비교)
 static var override := -1
@@ -44,6 +75,16 @@ var _d_clip := ""
 var _d_rate := -1.0
 var _d_phase := 0.0
 var _doll_h := DOLL_H
+var _infant := false
+## 화면만의 아기 자리 (place_babies): "" 스스로 · carried 부모 품 · cradle 요람 · toddle 부모 곁 걸음마
+var baby_mode := ""
+var toddle_clip := "idle"
+var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기 팔, 소품 없음)
+var cradle: MeshInstance3D
+## 일 옷 차림 (shift): 일을 시작한 행동 — 그 행동이 이어지는 동안 일 옷
+var on_shift := false
+var _shift_action := ""
+var swaps := 0                   # 옷을 갈아입은 횟수 (시험)
 
 
 static func enabled() -> bool:
@@ -148,6 +189,7 @@ func build_look(lk: Dictionary) -> void:
 	_baby = look["baby"]
 	_child = age < Balance.AGE_ADULT and not _baby
 	_female = String(lk.get("sex", "m")) == "f"
+	_infant = _baby and age < INFANT_AGE
 	if _baby:
 		_base_scale = BABY_SCALE
 	elif _child:
@@ -181,8 +223,13 @@ func build_look(lk: Dictionary) -> void:
 	doll.material_override = game_material()
 	add_child(doll)
 	doll.set_look(dlook)
-	_doll_h = DOLL_H * _base_scale
+	_doll_h = INFANT_H if _infant else DOLL_H * _base_scale
 	doll.screen_h = _doll_h
+	if _infant:                 # 젖먹이: 크림 강보 (옷 물감을 크림으로)
+		var dd: Array = dlook["dye"]
+		dd[2] = Lib.OFF["cream"]
+		dd[3] = Lib.OFF["cream"] + 1
+		doll.set_look(dlook)
 	_d_outfit = -2
 	_d_hat = -2
 	_d_prop = -2
@@ -243,16 +290,17 @@ func tick(dt: float) -> void:
 
 
 # ───────────────────────── 인형에 입히기 ─────────────────────────
-## 지금 틀 인형 동작 + 소품 + 옷 (바뀔 때만 GPU에 보냄)
+## 지금 틀 인형 동작 + 소품 + 일 옷 차림인지 (데이터만 — 바뀔 때만 GPU에 보내는 건 _refresh_doll)
 func doll_state() -> Dictionary:
 	var a := anim
 	var carrying := _item_kind != "" and _item_kind != "해바라기씨"     # (F-2) 굴리는 씨앗은 땅 위에 따로
+	var arms := carrying or carry_baby
 	var clip := "idle"
 	var prop := -1
 	var work := false
 	match a:
 		"walk", "run", "carry":
-			clip = "carry" if carrying else "walk"
+			clip = "carry" if arms else "walk"
 		"work", "torch":
 			work = true
 			if _tool_kind == "?":
@@ -260,25 +308,60 @@ func doll_state() -> Dictionary:
 			if a == "work" and WORK_PROP.has(_tool_kind) and not _baby:
 				clip = "hoe"
 				prop = WORK_PROP[_tool_kind]
+			elif a == "work" and (GATHER_TOOLS.has(_tool_kind) or GATHER_JOBS.has(_job_name)):
+				clip = "gather"
 		"idle":
-			clip = "hold" if carrying else "idle"
+			clip = "hold" if arms else "idle"
+		"sit":
+			clip = "sit"
+		"eat":
+			clip = "eat"
+			prop = int(CARRY_PROP.get(_item_kind.split(":")[0], 0)) if carrying and _item_kind.split(":")[0] == "빵" else 0
+		"sleep":
+			clip = "sleep"
+		"pray":
+			clip = "kneel"
 		_:
 			clip = "idle"
 	if _baby:
-		clip = "idle"
 		carrying = false
+		work = false
+		prop = -1
+		if _infant or baby_mode == "carried" or baby_mode == "cradle":
+			clip = "sleep"
+		elif baby_mode == "toddle":
+			clip = toddle_clip
+		elif clip != "sleep":
+			clip = "sit" if clip == "sit" else "idle"
 	if carrying and (clip == "carry" or clip == "hold"):
 		prop = int(CARRY_PROP.get(_item_kind.split(":")[0], PROP_BASKET))
 	return {"clip": clip, "prop": prop, "work": work}
+
+
+## 일 옷 차림: 일(work 동작)을 시작하면 입고, 행동이 바뀌거나 쉬기·먹기·자기·기도로 가면 벗음 (아기는 없음)
+func _update_shift(work_now: bool) -> void:
+	if _baby:
+		on_shift = false
+		return
+	if not on_shift:
+		if work_now:
+			on_shift = true
+			_shift_action = _action
+	elif _action != _shift_action or OFF_SHIFT.has(anim):
+		on_shift = work_now and not OFF_SHIFT.has(anim)
+		_shift_action = _action
 
 
 func _refresh_doll() -> void:
 	if doll == null:
 		return
 	var s := doll_state()
-	var outfit := int(dlook["jobs"]["farmer"]) if bool(s["work"]) and not _baby else int(dlook["personal"])
-	var hat := int(dlook["hat"]) if daylight else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
+	_update_shift(bool(s["work"]))
+	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
+	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
 	if outfit != _d_outfit or hat != _d_hat:
+		if _d_outfit >= 0 and outfit != _d_outfit:
+			_swap_puff()
 		_d_outfit = outfit
 		_d_hat = hat
 		doll.look = dlook
@@ -296,8 +379,11 @@ func _refresh_doll() -> void:
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else 1.0)
 		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], clip) * _doll_h / float(Lib.lib()["fig"])
-		rate = clampf(g / maxf(stride, 0.01), RATE_MIN, RATE_MAX)
-		rate = snappedf(rate, RATE_STEP)
+		var wr := walk_rate(g / maxf(stride, 0.01), frame_dt())
+		if bool(wr["travel"]):
+			clip = "travel" if clip == "walk" else "hold"
+		rate = float(wr["rate"]) if not bool(wr["travel"]) else Lib.CLIP_RATE[clip]
+	rate = minf(rate, MAX_FRAME_STEP / frame_dt())
 	if clip != _d_clip or not is_equal_approx(rate, _d_rate):
 		var now := _shader_time()
 		if clip == _d_clip and _d_rate > 0.0:
@@ -312,6 +398,51 @@ func _refresh_doll() -> void:
 	_update_view()
 
 
+## 땅에 맞는 걸음 빠르기 want(주기/초) · 장면 길이 fdt(초) → {travel: 걸음 대신 멈춘 보폭인가, rate: 걸음 빠르기 (상·하한·계단)}
+static func walk_rate(want: float, fdt: float) -> Dictionary:
+	if want > RATE_TRAVEL or want * fdt > TRAVEL_STEP:
+		return {"travel": true, "rate": Lib.CLIP_RATE["travel"]}
+	var r := snappedf(clampf(want, RATE_MIN, RATE_MAX), RATE_STEP)
+	return {"travel": false, "rate": minf(r, MAX_FRAME_STEP / fdt)}
+
+
+## 지금 한 장면의 길이 (초) — FPS를 모르거나 너무 높으면 낮게 잡음 (느린 폰에서도 넘어가지 않게)
+static func frame_dt() -> float:
+	return 1.0 / clampf(Engine.get_frames_per_second(), MIN_FPS, 60.0)
+
+
+## 빠른 흐름(VillageView.fast)에선 tick이 불리지 않고 자리만 순간이동 → 땅 빠르기를 잰 김에 인형도 맞춤 (아주 빠르면 travel)
+func move_to(p: Vector3, dt: float) -> void:
+	super(p, dt)
+	if doll != null and dt > 0.0:
+		_refresh_doll()
+
+
+## 옷 갈아입기: 인형을 잠깐 숨기고 크림 연기 몇 덩이가 퍼졌다 사라짐 (화면만, 제 시계로 — 빠른 흐름에서도 끝남)
+static var _puff_mesh: SphereMesh
+static var _puff_mat: StandardMaterial3D
+
+
+func _swap_puff() -> void:
+	swaps += 1
+	if _puff_mesh == null:
+		_puff_mesh = SphereMesh.new()
+		_puff_mesh.radius = 0.06
+		_puff_mesh.height = 0.12
+		_puff_mesh.radial_segments = 8
+		_puff_mesh.rings = 4
+		_puff_mat = StandardMaterial3D.new()
+		_puff_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_puff_mat.albedo_color = Style.CREAM
+		_puff_mesh.material = _puff_mat
+	var puff := SwapPuff.new()
+	puff.doll = doll
+	puff.mesh_ref = _puff_mesh
+	puff.height = _doll_h
+	doll.visible = false
+	add_child(puff)
+
+
 ## 바라보는 쪽(rotation.y — 걸을 땐 걷는 쪽, 서면 마지막 쪽 · 일할 땐 일감 쪽)과 카메라로 앞·비스듬·뒤 고르기
 func _update_view() -> void:
 	if not is_inside_tree():
@@ -323,6 +454,7 @@ func _update_view() -> void:
 	doll.move_dir = Vector3(f.x, 0.0, f.z)
 	var v0: int = doll.view
 	var m0: float = doll.mirror
+	doll.view_lock = "front" if FRONT_ONLY.has(_d_clip) else ("side" if SIDE_ONLY.has(_d_clip) else "")
 	doll.update_view(cam)
 	if doll.view != v0 or doll.mirror != m0:
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
@@ -332,3 +464,176 @@ func _update_view() -> void:
 static func _shader_time() -> float:
 	var ro := float(ProjectSettings.get_setting("rendering/limits/time/time_rollover_secs", 3600.0))
 	return fposmod(Time.get_ticks_usec() / 1.0e6, ro)
+
+
+# ───────────────────────── 아기 자리 (화면만) ─────────────────────────
+## VillageView가 매 장면 부름 (종이 인형일 때). 시뮬레이션은 아기를 집 자리에 재워 두므로 (resident_ai._baby — GD 7.3) 화면에서만:
+##   · 젖먹이(1살 아래): 깨어서 걷거나 서 있는(짐 없는) 부모가 품에 안음 → 부모 인형 = 안기 팔(carry_baby), 아기 = 가슴 앞에 누운 작은 인형.
+##     안을 부모가 없으면(일·잠·짐) 집 문 옆 요람에 누움 — 부모가 앉아 있으면 그 곁의 요람
+##   · 걸음마 아기: 부모 곁(뒤 옆)에서 따라 걷거나(부모가 걸으면) 앉아 놂, 부모가 없으면 문 옆에 앉아 놂
+## 돌려줌: 아기 id → 정한 자리 (시험) {mode, pos, carrier}
+static func place_babies(v: Village, people: Array, models: Dictionary) -> Dictionary:
+	var out := {}
+	var taken := {}
+	for m: Variant in models.values():
+		if m is CutoutResident:
+			(m as CutoutResident).carry_baby = false
+	var cam: Camera3D = null
+	for r: Resident in people:
+		if not r.is_baby() or r.dead:
+			continue
+		var bm := models.get(r.id) as CutoutResident
+		if bm == null:
+			continue
+		var infant := r.age < INFANT_AGE
+		var best: Resident = null
+		for pid in r.parents:
+			var p := _find(people, pid)
+			if p == null or p.dead or p.sleeping or p.anim == "sleep" or p.is_baby():
+				continue
+			var pm0 := models.get(p.id) as CutoutResident
+			if pm0 == null or not pm0.visible:
+				continue
+			if best == null or (p.sex == "f" and best.sex != "f"):
+				best = p
+		var mode := "cradle"
+		var pos := Vector3.INF
+		var yaw := bm.rotation.y
+		var carrier := -1
+		if best != null:
+			var pm: CutoutResident = models[best.id]
+			if cam == null and pm.is_inside_tree():
+				cam = pm.get_viewport().get_camera_3d()
+			var light := best.carry == "" and (best.anim == "walk" or best.anim == "idle" or best.anim == "carry")
+			var f := Vector3(sin(pm.rotation.y), 0, cos(pm.rotation.y))
+			var side := Vector3(f.z, 0, -f.x)
+			if infant and light and not taken.has(best.id):
+				mode = "carried"
+				carrier = best.id
+				taken[best.id] = true
+				pm.carry_baby = true
+				pm._refresh_doll()
+				pos = pm.position
+				yaw = pm.rotation.y
+			elif not infant:
+				mode = "toddle"
+				carrier = best.id
+				pos = pm.position - f * 0.22 + side * 0.24      # 부모 곁: 바라보는 쪽 기준 옆 뒤 (걸으면 따라오는 모양)
+				yaw = pm.rotation.y
+				var walking := best.anim == "walk" or best.anim == "carry"
+				bm.toddle_clip = "walk" if walking else ("sit" if best.anim == "sit" or best.anim == "eat" else "idle")
+				bm._ground = pm._ground
+			elif best.anim == "sit" or best.anim == "eat":
+				carrier = best.id
+				pos = pm.position + side * 0.32 + f * 0.06        # 앉은 부모 곁의 요람
+				yaw = pm.rotation.y
+		if pos == Vector3.INF:
+			pos = _door(v, r, bm)
+			if not infant:
+				mode = "toddle"
+				bm.toddle_clip = "sit"
+		bm.set_baby_mode(mode, pos, yaw, cam)
+		out[r.id] = {"mode": mode, "pos": pos, "carrier": carrier}
+	return out
+
+
+static func _find(people: Array, id: int) -> Resident:
+	for q: Resident in people:
+		if q.id == id:
+			return q
+	return null
+
+
+## 집 문 옆 (집 가운데에서 앞(+y)으로 집 크기의 반 + 조금, 옆으로 조금) — 집이 없으면 모닥불 곁. 땅 높이는 지금 자리 그대로
+static func _door(v: Village, r: Resident, bm: CutoutResident) -> Vector3:
+	var hm := v.bld(r.home)
+	var c := Vector2(hm.x, hm.y) if hm != null else Vector2(v.fire.x, v.fire.y)
+	var front := (hm.size() * 0.5 if hm != null else 0.6) + CRADLE_OFF.y
+	return Vector3(c.x + CRADLE_OFF.x + float(r.id % 3) * 0.12, bm.position.y, c.y + front)
+
+
+## 아기 자리 입히기: 품 = 부모 가슴 앞(카메라 쪽 조금, 품 높이), 요람 = 요람 위에 누움, 걸음마 = 그 자리에 서서·걸어서
+func set_baby_mode(mode: String, pos: Vector3, yaw: float, cam: Camera3D = null) -> void:
+	baby_mode = mode
+	visible = true
+	rotation.y = yaw
+	if mode == "carried":
+		var cu := 0.7
+		var back := Vector3(0, 0, 1)
+		if cam != null:
+			cu = maxf(cam.global_transform.basis.y.y, 0.3)
+			var bz := cam.global_transform.basis.z
+			back = Vector3(bz.x, 0, bz.z).normalized()
+		# 부모 인형의 품 높이 (rig HOLD_RIG) → 세계: 인형은 세로를 1/cu 늘려 그리므로 같게 맞춤. 누운 인형은 SLEEP_LIFT만큼 떠 있음
+		var fig := float(Lib.lib()["fig"])
+		var lift := (HOLD_RIG * DOLL_H / fig - Lib.SLEEP_LIFT * _doll_h / fig) / cu
+		position = pos + Vector3(0, lift, 0) + back * 0.06
+	elif mode == "cradle":
+		position = pos + Vector3(0, 0.03, 0)
+	else:
+		move_to(pos, get_process_delta_time())
+	if mode == "cradle":
+		if cradle == null:
+			cradle = _make_cradle()
+			add_child(cradle)
+		cradle.visible = true
+	elif cradle != null:
+		cradle.visible = false
+	_refresh_doll()
+
+
+## 요람: 마른 나무색 낮은 타원 바구니 (3D, 그리기 1번 — 아기 하나에 하나)
+static var _cradle_mesh: CylinderMesh
+
+
+static func _make_cradle() -> MeshInstance3D:
+	if _cradle_mesh == null:
+		_cradle_mesh = CylinderMesh.new()
+		_cradle_mesh.top_radius = 0.22
+		_cradle_mesh.bottom_radius = 0.16
+		_cradle_mesh.height = 0.1
+		_cradle_mesh.radial_segments = 12
+		_cradle_mesh.rings = 1
+		var mt := StandardMaterial3D.new()
+		mt.albedo_color = Style.DRIED
+		mt.roughness = 1.0
+		_cradle_mesh.material = mt
+	var c := MeshInstance3D.new()
+	c.mesh = _cradle_mesh
+	c.position = Vector3(0, 0.0, 0)
+	c.scale = Vector3(1.0, 1.0, 0.62)
+	c.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return c
+
+
+## 옷 갈아입기 연기: 처음 SWAP_HIDE초 인형을 숨기고, 크림 덩이 다섯이 퍼지며 옅어짐 → 스스로 사라짐
+class SwapPuff extends Node3D:
+	var doll: MeshInstance3D
+	var mesh_ref: Mesh
+	var height := 0.88
+	var t := 0.0
+	var balls: Array[MeshInstance3D] = []
+
+	func _ready() -> void:
+		for i in 5:
+			var b := MeshInstance3D.new()
+			b.mesh = mesh_ref
+			b.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var a := TAU * float(i) / 5.0
+			b.set_meta("dir", Vector3(cos(a), 0.35 + 0.25 * float(i % 2), sin(a)))
+			b.position = Vector3(0, height * 0.35, 0)
+			add_child(b)
+			balls.append(b)
+
+	func _process(dt: float) -> void:
+		t += dt
+		var u := clampf(t / SWAP_PUFF, 0.0, 1.0)
+		for b: MeshInstance3D in balls:
+			var d: Vector3 = b.get_meta("dir")
+			b.position = Vector3(0, height * 0.35, 0) + d * (0.06 + 0.22 * u) * height
+			b.scale = Vector3.ONE * (0.7 + 1.1 * u) * height
+			b.transparency = u
+		if doll != null and t >= SWAP_HIDE:
+			doll.visible = true
+		if t >= SWAP_PUFF:
+			queue_free()
