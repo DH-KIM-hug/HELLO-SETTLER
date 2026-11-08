@@ -9,11 +9,15 @@ var frame := 0
 var step := 0
 var out_dir := ""
 var _wait := 0
+var prefix := "sunf2_"            # -- <접두어> 로 바꿀 수 있음 (전후 비교 캡처)
 
 
 func _initialize() -> void:
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	var ua := OS.get_cmdline_user_args()
+	if ua.size() > 0:
+		prefix = ua[0]
 	Village.default_created = {"year": 2026, "month": 8, "day": 24}
 	root.size = Vector2i(720, 1280)
 	scene = load("res://scenes/world.tscn").instantiate()
@@ -88,37 +92,37 @@ func _process(_dt: float) -> bool:
 			_settle()
 			_wait = 45
 		1:
-			_save("sunf2_village_ppu16")
+			_save(prefix + "village_ppu16")
 			_zoom(16.0)
 			_look(v.center)
 			_settle()
 			_wait = 30
 		2:
-			_save("sunf2_village_center_ppu16")
+			_save(prefix + "village_center_ppu16")
 			_zoom(24.0)
 			_look(foot.lerp(GiantPlants.shadow_center(sf, v.t), 0.35))
 			_settle()
 			_wait = 30
 		3:
-			_save("sunf2_village_ppu24")
+			_save(prefix + "village_ppu24")
 			_zoom(7.5)
 			_look(foot, 30.0)
 			_settle()
 			_wait = 30
 		4:
-			_save("sunf2_transition_ppu7")
+			_save(prefix + "transition_ppu7")
 			_zoom(5.0)
 			_look(foot, 48.0)
 			_settle()
 			_wait = 30
 		5:
-			_save("sunf2_world_head_ppu5")
+			_save(prefix + "world_head_ppu5")
 			_zoom(2.5)
 			_look(v.center)
 			_settle()
 			_wait = 40
 		6:
-			_save("sunf2_world")
+			_save(prefix + "world")
 			# 등불을 옮긴 뒤 (꽃판이 다 돈 순간)
 			ww.light = ww.light.rotated(deg_to_rad(110.0))
 			for f: Dictionary in ww.sunflowers:
@@ -133,13 +137,13 @@ func _process(_dt: float) -> bool:
 			_settle()
 			_wait = 30
 		7:
-			_save("sunf2_village_lamp")
+			_save(prefix + "village_lamp")
 			_zoom(5.0)
 			_look(foot, 48.0)
 			_settle()
 			_wait = 30
 		8:
-			_save("sunf2_world_lamp")
+			_save(prefix + "world_lamp")
 			return true
 	step += 1
 	return false
