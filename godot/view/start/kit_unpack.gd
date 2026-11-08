@@ -1,15 +1,19 @@
-## 스타터킷 풀기 (OPENING 단계 8 v3.9 — 2026-11-07 사용자 결정) — 넓은 세상 장면(world_village)이 키트 자리를 정한 뒤 붙인다.
+## 스타터킷 풀기 (OPENING 단계 8 v3.9 + 2026-11-08 사용자 "처음 스타터킷 터부터 짓고 사람들 나오는 거로 하자") —
+## 넓은 세상 장면(world_village)이 키트 자리를 정한 뒤 붙인다. 순서: 상자가 놓임 → 거인이 터를 꾸밈 → 사람들이 나와 새 터를 둘러봄.
 ##   fly    카메라가 고른 자리 위로 날아감 (상자는 하늘 높이 옅은 반짝임 속에 떠 있고, 땅엔 옅은 그림자)
 ##   drop   상자가 내려앉음 (그림자가 커지고 짙어짐) — 쿵 · 흙먼지 · 안개가 나머지 세상을 덮음
 ##          (A24 2026-11-08 그림 원칙: 거인의 손은 화면에 나오지 않는다 — view/sky_descent.gd)
-##   rush   카메라가 상자 바로 앞까지 확 다가감 (주민 키 높이 — 정사영 그대로 낮은 각)
-##   open   뚜껑이 열림
-##   climb  주민이 한 명씩 상자 가장자리를 넘어 기어 나와 폴짝 내려서고 두리번거림. 한 아이는 하늘을 올려다보며 갸웃 (아직 거인을 모름)
-##   pull   카메라가 물러나 상자 둘레가 보이는 높이로
+##   settle 카메라가 상자 둘레가 보이는 놓는 높이로 (뚜껑은 닫힌 채 — 사람들은 아직 상자 안에서 잠듦)
 ##   tray   아래 칸에 상자에 든 것 (모닥불·창고·오두막·산 업그레이드 건물) — 하나 골라 땅을 누르면 그림자 미리보기 (초록 = 놓을 수 있음,
 ##          빨강 = 없음 + 까닭) → 놓으면 위에서 내려앉아 (자라는 그림자) 톡 · 흙먼지 · 쿵. [알아서 놓기] = 지금의 자동 배치. 상자 곁 Village.KIT_PLACE_R 안에서만
+##   wait   마지막 건물이 내려앉을 때까지
+##   rush   카메라가 상자 바로 앞까지 확 다가감 (주민 키 높이 — 정사영 그대로 낮은 각)
+##   open   뚜껑이 열림
+##   climb  주민이 한 명씩 상자 가장자리를 넘어 기어 나와 폴짝 내려서고 기지개 · 새 터를 두리번 ("어…?" — 한 아이는 하늘을 올려다보며 갸웃, 아직 거인을 모름)
+##   gather 카메라가 물러나 새 터 전체가 보이고, 사람들이 건물을 비켜 모닥불 곁으로 걸어가 불을 바라보며 모임 (gather_layout — 결정적)
 ##   end    빈 상자의 뚜껑이 닫히고 반짝임 속에 하늘로 떠올라 감 → finished (장면이 첫 주민 소개 → 이름)
-## 놓은 자리는 곧바로 시뮬레이션 자리 (Village.move_kit_building · move_fire) + creation.json의 placed (앱이 꺼지면 여기서 다시).
+## 놓은 자리는 곧바로 시뮬레이션 자리 (Village.move_kit_building · move_fire) + creation.json의 placed (앱이 꺼지면 여기서 다시 —
+## 상자는 닫힌 채, 사람들은 상자 안, 남은 것만 칸에). 연출이 없으면(시험) 다 놓는 즉시 모닥불 곁에 모인 자리로.
 ## 병 시간은 이름을 지을 때까지 멈춰 있다 (장면의 paused).
 class_name KitUnpack
 extends Node
@@ -29,7 +33,14 @@ const OPEN_T := 0.45
 const CLIMB_GAP := 0.4                  # 주민 사이 (잠이 덜 깨 느릿느릿)
 const CLIMB_T := 2.3                    # 한 명이 기어 나와 제자리까지
 const LINGER_T := 2.6                   # 기지개 + 두리번 (WAKE_T 포함)
-const PULL_T := 1.3
+const SETTLE_T := 1.2                   # 내려앉은 뒤 놓는 높이로
+const WAIT_T := 0.5                     # 다 놓은 뒤 숨 한 번
+const GATHER_SPEED := 1.25              # 모닥불 곁으로 걷는 빠르기 (칸/초 — 연출, 시뮬레이션 걸음과 따로)
+const GATHER_MAX_T := 7.0               # 가장 먼 사람도 이 안에 (멀면 모두 조금 서두름)
+const GATHER_PULL_T := 2.4              # 카메라가 상자 앞에서 새 터 전체로
+const GATHER_LINGER := 2.0              # 모두 모인 뒤 불을 바라보는 동안
+const FIRE_RING := [1.75, 2.6, 3.4]     # 모닥불 둘레 고리 (칸)
+const GATHER_GAP := 0.95                # 고리 위 사람 사이
 const OK_COL := Color(0.36, 0.86, 0.42)
 const BAD_COL := Color(0.92, 0.24, 0.2)
 const FIRE_SIZE := 0.9
@@ -54,8 +65,13 @@ var glint: CPUParticles3D               # (A24) 떠 있는 상자 둘레의 반�
 var box_shadow: MeshInstance3D          # (A24) 상자가 내려앉을 자리의 그림자 (내려올수록 커짐)
 var _rush_from := {}
 var _rush_to := {}
-var _pull_to := {}
-var climb: Array = []                   # [{r, t0, a, b, c, d, stand: Vector2, rot, baby_of}]
+var _settle_from := {}
+var _settle_to := {}
+var _gather_to := {}
+var _et := 0.0                          # 기어 나오기·모이기 시간 (climb · gather)
+var _walk0 := 0.0                       # 각자 걷기 시작 (기어 나온 뒤)
+var _speed := GATHER_SPEED
+var climb: Array = []                   # [{r, t0, a, b, c, d, stand: Vector2, rot, babies, path, len, goal}]
 var kid: Resident = null
 var items: Array = []                   # [{key, type, label, b: Building | null, size, placed}]
 var sel := -1
@@ -224,7 +240,7 @@ func _part(parent: Node3D, size: Vector3, pos: Vector3, m: Material) -> MeshInst
 
 
 # ───────────────────────── 연출 ─────────────────────────
-## 처음부터 (창조에서 막 왔을 때): 날아가기 → 내려놓기 → 초확대 → 기어 나오기 → 물러남 → 칸
+## 처음부터 (창조에서 막 왔을 때): 날아가기 → 내려놓기 → 놓는 높이로 → 칸 (터 꾸미기) → 초확대 → 기어 나오기 → 모닥불 곁으로
 func play() -> void:
 	phase = "fly"
 	t = 0.0
@@ -237,24 +253,33 @@ func play() -> void:
 	root.add_child(box_shadow)
 	box.position.y = HOLD_H
 	SkyDescent.set_shadow(box_shadow, 0.15)
-	for r in v.people:
-		vw.staged[r.id] = {"vis": false}
+	_hide_people()
 	caption.say("상자 안에서 사람들이 잠들어 있어요.")
 	var cam: JarCamera = sc.cam
 	cam.fly_to(Vector3(spot.x, gy0, spot.y), FLY_PPU)
 
 
-## 앱을 다시 켬 (놓던 중): 상자는 열린 채, 주민은 상자 앞에, 카메라는 놓는 높이 — 바로 칸
+## 앱을 다시 켬 (놓던 중): 상자는 닫힌 채 그 자리에, 주민은 아직 상자 안, 카메라는 놓는 높이 — 바로 칸
 func open_tray_now() -> void:
-	_lid_pose(1.0)
+	_lid_pose(0.0)
+	_hide_people()
+	_cam_place()
+	_begin_tray()
+
+
+## (2026-11-08 사용자) 터를 다 꾸밀 때까지 사람들은 상자 안 — 보이지 않음
+func _hide_people() -> void:
+	for r in v.people:
+		vw.staged[r.id] = {"vis": false}
+
+
+func _cam_place() -> void:
 	var cam: JarCamera = sc.cam
 	cam.hold = {}
 	cam.ppu = PLACE_PPU
 	cam.ppu_goal = PLACE_PPU
 	cam.target = Vector3(spot.x, gy0, spot.y)
 	cam._apply()
-	_stand_all()
-	_begin_tray()
 
 
 func _process(dt: float) -> void:
@@ -277,6 +302,20 @@ func _process(dt: float) -> void:
 				var sh := box_shadow
 				var tw := create_tween()
 				tw.tween_method(func(a: float) -> void: SkyDescent.set_shadow(sh, 1.0, a), 1.0, 0.0, 0.5)
+				phase = "settle"
+				t = 0.0
+				_settle_from = _cam_pose()
+				_settle_to = _place_pose()
+		"settle":                                       # 상자 둘레가 보이는 놓는 높이로 (건물부터 놓는다)
+			var u := clampf(t / SETTLE_T, 0.0, 1.0)
+			(sc.cam as JarCamera).hold = _blend(_settle_from, _settle_to, u * u * (3.0 - 2.0 * u))
+			if u >= 1.0:
+				_cam_place()
+				_begin_tray()
+		"tray":
+			_tray_step()
+		"wait":                                         # 마지막 건물이 내려앉을 때까지 → 상자 앞으로
+			if _busy <= 0.0 and t >= WAIT_T:
 				_start_rush()
 		"rush":
 			var u := clampf(t / RUSH_T, 0.0, 1.0)
@@ -292,22 +331,29 @@ func _process(dt: float) -> void:
 				caption.say("사람들이 막 잠에서 깼어요.")
 				phase = "climb"
 				t = 0.0
+				_et = 0.0
 				_plan_climb()
 		"climb":
+			_et += dt
 			_climb_step()
-		"pull":
-			var u := clampf(t / PULL_T, 0.0, 1.0)
-			(sc.cam as JarCamera).hold = _blend(_rush_to, _pull_to, u * u * (3.0 - 2.0 * u))
-			if u >= 1.0:
+			if _et >= _walk0:                           # 첫 사람이 걷기 시작 → 카메라가 물러나 새 터 전체를 보여 줌
+				caption.say("새 터를 둘러보고 모닥불 곁으로 모여요.")
+				phase = "gather"
+				t = 0.0
+				_gather_to = _gather_pose()
+		"gather":
+			_et += dt
+			var u := clampf(t / GATHER_PULL_T, 0.0, 1.0)
+			(sc.cam as JarCamera).hold = _blend(_rush_to, _gather_to, u * u * (3.0 - 2.0 * u))
+			if _climb_step() and u >= 1.0:
+				_stand_all()
 				var cam: JarCamera = sc.cam
 				cam.hold = {}
-				cam.ppu = PLACE_PPU
-				cam.ppu_goal = PLACE_PPU
-				cam.target = Vector3(spot.x, gy0, spot.y)
+				cam.ppu = cam.view_height_px() / float(_gather_to["size"])
+				cam.ppu_goal = cam.ppu
+				cam.target = _gather_to["target"]
 				cam._apply()
-				_begin_tray()
-		"tray":
-			_tray_step()
+				_end_box()
 	_layout()
 
 
@@ -337,15 +383,29 @@ func _cam_pose() -> Dictionary:
 	return {"target": cam.target, "size": size, "pitch": pitch, "yaw": cam._yaw_deg, "dist": JarCamera.inside_dist(size, deg_to_rad(pitch)), "near": 1.0}
 
 
+## 건물을 놓는 높이 (상자 둘레 KIT_PLACE_R가 화면에 듦 — 보통 각)
+func _place_pose() -> Dictionary:
+	var cam: JarCamera = sc.cam
+	var size := cam.view_height_px() / PLACE_PPU
+	return {"target": Vector3(spot.x, gy0, spot.y), "size": size, "pitch": JarCamera.PITCH_DEG, "yaw": cam._yaw_deg,
+		"dist": JarCamera.inside_dist(size, deg_to_rad(JarCamera.PITCH_DEG)), "near": 1.0}
+
+
+## 모닥불 곁에 모인 모습 — 상자와 모닥불이 함께 들게 (보통 각 · 지금 방위, 끝나면 그대로 보통 카메라로 넘김)
+func _gather_pose() -> Dictionary:
+	var cam: JarCamera = sc.cam
+	var mid := (spot + v.fire) * 0.5
+	var size := clampf(spot.distance_to(v.fire) * 1.5 + 8.0, CLOSE_SIZE + 2.0, cam.view_height_px() / PLACE_PPU)
+	var tg := Vector3(mid.x, (sc.terrain as JarTerrain).ground_y(mid.x, mid.y), mid.y)
+	return {"target": tg, "size": size, "pitch": JarCamera.PITCH_DEG, "yaw": cam._yaw_deg,
+		"dist": JarCamera.inside_dist(size, deg_to_rad(JarCamera.PITCH_DEG)), "near": 1.0}
+
+
 func _start_rush() -> void:
 	phase = "rush"
 	t = 0.0
 	_rush_from = _cam_pose()
 	_rush_to = close_pose()
-	var cam: JarCamera = sc.cam
-	var size := cam.view_height_px() / PLACE_PPU
-	var tg := Vector3(spot.x, gy0, spot.y)
-	_pull_to = {"target": tg, "size": size, "pitch": JarCamera.PITCH_DEG, "yaw": cam._yaw_deg, "dist": JarCamera.inside_dist(size, deg_to_rad(JarCamera.PITCH_DEG)), "near": 1.0}
 	GameAudio.fx("fly_whoosh", "Room", -8.0)
 
 
@@ -412,7 +472,135 @@ static func _blend(a: Dictionary, b: Dictionary, u: float) -> Dictionary:
 		"yaw": lerpf(a["yaw"], b["yaw"], u), "dist": lerpf(a["dist"], b["dist"], u), "near": lerpf(a.get("near", 1.0), b.get("near", 1.0), u)}
 
 
-# ───────────────────────── 기어 나오기 ─────────────────────────
+# ───────────────────────── 모닥불 곁 (모이는 자리) ─────────────────────────
+## 모닥불 둘레 고리 (FIRE_RING) — 상자 쪽부터 양옆으로 번갈아. 건물·상자·물·바위·벽을 피함. 같은 마을이면 늘 같은 자리 (ADR-0001 결정적)
+static func gather_spots(village: Village, box_spot: Vector2, n: int) -> Array:
+	var obs: Array = [[box_spot, maxf(BOX.x, BOX.z) * 0.6]]
+	for b in village.buildings:
+		if b.site_type() != Awakening.ALTAR:
+			obs.append([Vector2(b.x, b.y), b.size()])
+	var f := village.fire
+	var base := box_spot - f
+	var a0 := atan2(base.y, base.x) if base.length() > 0.01 else PI * 0.5
+	var out: Array = []
+	for rr: float in FIRE_RING:
+		var cnt := maxi(4, floori(TAU * rr / GATHER_GAP))
+		var step := TAU / cnt
+		for k in cnt:
+			if out.size() >= n:
+				return out
+			var off := ceilf(k / 2.0) * step * (1.0 if k % 2 == 1 else -1.0)
+			var p := f + Vector2(cos(a0 + off), sin(a0 + off)) * rr
+			if _spot_free(village, p, obs):
+				out.append(p)
+	var rad: float = FIRE_RING[FIRE_RING.size() - 1] + GATHER_GAP       # 고리가 모자라면 바깥으로 (드묾)
+	var k2 := 0
+	while out.size() < n and k2 < 400:
+		var p := f + Vector2(cos(a0 + k2 * 0.7), sin(a0 + k2 * 0.7)) * (rad + k2 * 0.05)
+		if _spot_free(village, p, obs) or k2 >= 300:
+			out.append(p)
+		k2 += 1
+	while out.size() < n:
+		out.append(f + Vector2(rad, 0.0))
+	return out
+
+
+static func _spot_free(village: Village, p: Vector2, obs: Array) -> bool:
+	if village.water == null or not village.water.inside(p.x, p.y, 0.8) or village.water_at(p.x, p.y):
+		return false
+	for r: Dictionary in village.rocks:
+		if Vector2(r["x"] - p.x, r["y"] - p.y).length() < 0.9:
+			return false
+	for o: Array in obs:
+		if (o[0] as Vector2).distance_to(p) < float(o[1]) + 0.45:
+			return false
+	return true
+
+
+## 모닥불 곁에 모인 자리 — {id: Vector2}. 아이·어른 (아기 빼고) v.people 순서대로 고리에, 아기는 엄마(없으면 첫 사람) 곁
+static func gather_layout(village: Village, box_spot: Vector2) -> Dictionary:
+	var ppl: Array[Resident] = []
+	for r in village.people:
+		if not r.is_baby():
+			ppl.append(r)
+	var spots := gather_spots(village, box_spot, ppl.size())
+	var out := {}
+	for i in ppl.size():
+		out[ppl[i].id] = spots[i]
+	for r in village.people:
+		if r.is_baby():
+			var host: Vector2 = out.get(r.parents[0] if r.parents.size() > 0 else -1, spots[0] if not spots.is_empty() else village.fire + Vector2(2, 0))
+			var d := host - village.fire
+			out[r.id] = host + (d.normalized().rotated(PI * 0.5) * 0.45 if d.length() > 0.01 else Vector2(0.45, 0.0))
+	return out
+
+
+## 모두 모닥불 곁 자리에 (시뮬레이션 자리) — 모닥불을 바라봄. 앱을 다시 켰을 때·연출 없을 때도 같은 자리
+static func gather_people(village: Village, box_spot: Vector2) -> void:
+	var lay := gather_layout(village, box_spot)
+	for r in village.people:
+		var p: Vector2 = lay.get(r.id, village.fire + Vector2(2, 0))
+		var d := village.fire - p
+		_set_pos(r, p, atan2(d.x, d.y) if d.length() > 0.01 else 0.0)
+
+
+## 상자 → 모닥불 곁: 건물·상자·불을 비켜 가는 꺾인 길 (곧은 줄이 가로막히면 옆으로 한 번씩 — 셋까지)
+func _path(a: Vector2, b: Vector2) -> Array:
+	var pts: Array = [a]
+	var cur := a
+	var obs: Array = [[spot, maxf(BOX.x, BOX.z) * 0.6], [v.fire, 1.0]]       # 모닥불 한가운데도 비켜 감
+	for it: Dictionary in items:
+		if String(it["key"]) != "fire":
+			var bb: Building = it["b"]
+			obs.append([Vector2(bb.x, bb.y), bb.size()])
+	for _i in 3:
+		var hit: Array = []
+		var best := 1.0e9
+		for o: Array in obs:
+			var c: Vector2 = o[0]
+			var need := float(o[1]) + 0.35
+			if c.distance_to(b) < need or c.distance_to(cur) < need:
+				continue
+			var seg := b - cur
+			var u := clampf((c - cur).dot(seg) / maxf(seg.length_squared(), 0.0001), 0.0, 1.0)
+			var q := cur + seg * u
+			if q.distance_to(c) < need and u < best:
+				best = u
+				hit = o
+		if hit.is_empty():
+			break
+		var c2: Vector2 = hit[0]
+		var seg2 := (b - cur).normalized()
+		var side := Vector2(-seg2.y, seg2.x)
+		if (c2 - cur).dot(side) > 0.0:
+			side = -side
+		var w := c2 + side * (float(hit[1]) + 0.8)
+		pts.append(w)
+		cur = w
+	pts.append(b)
+	return pts
+
+
+static func _path_len(pts: Array) -> float:
+	var n := 0.0
+	for i in range(1, pts.size()):
+		n += (pts[i] as Vector2).distance_to(pts[i - 1])
+	return n
+
+
+static func _path_at(pts: Array, s: float) -> Dictionary:
+	for i in range(1, pts.size()):
+		var a: Vector2 = pts[i - 1]
+		var b: Vector2 = pts[i]
+		var l := a.distance_to(b)
+		if s <= l or i == pts.size() - 1:
+			var d := b - a
+			return {"p": a.lerp(b, clampf(s / maxf(l, 0.0001), 0.0, 1.0)), "rot": atan2(d.x, d.y) if d.length() > 0.001 else 0.0}
+		s -= l
+	return {"p": pts[pts.size() - 1], "rot": 0.0}
+
+
+# ───────────────────────── 기어 나오기 → 모닥불 곁으로 ─────────────────────────
 func _plan_climb() -> void:
 	climb.clear()
 	var yr := deg_to_rad(yaw_deg)
@@ -427,21 +615,38 @@ func _plan_climb() -> void:
 	for r in kids:
 		if r.is_child():
 			kid = r
+	if kid == null:                                  # 소개할 셋에 아이가 없으면 맨 처음 아이
+		for r in ppl:
+			if r.is_child():
+				kid = r
+				break
 	if kid != null and ppl.has(kid):                 # 하늘을 올려다볼 아이는 맨 앞 가운데에
 		ppl.erase(kid)
 		ppl.insert(ceili(ppl.size() / 3.0) / 2, kid)
 	var stands := stand_spots(v, spot, yr, ppl.size())
+	for i in stands.size():                          # 건물을 먼저 놓았으니 상자 앞에 모닥불이 있을 수 있음 — 불 위에 서지 않게
+		var sp: Vector2 = stands[i]
+		var df := sp - v.fire
+		if df.length() < FIRE_RING[0] - 0.1:
+			stands[i] = v.fire + (df.normalized() if df.length() > 0.01 else Vector2(sin(yr), cos(yr))) * (FIRE_RING[0] - 0.1)
+	var lay := gather_layout(v, spot)
 	var xf := Transform3D(Basis(Vector3.UP, yr), Vector3(spot.x, gy0, spot.y))
+	var longest := 0.0
 	for i in ppl.size():
 		var r := ppl[i]
 		var lx := lerpf(-BOX.x * 0.3, BOX.x * 0.3, fposmod(i * 0.618, 1.0))
+		var goal: Vector2 = lay[r.id]
+		var path := _path(stands[i], goal)
+		longest = maxf(longest, _path_len(path))
 		var e := {"r": r, "t0": i * CLIMB_GAP,
 			"a": xf * Vector3(lx, 0.0, -0.1),                                   # 상자 안 바닥
 			"b": xf * Vector3(lx, BOX.y - 0.75, BOX.z * 0.5 - 0.32),             # 앞벽 안쪽에서 머리가 올라옴
 			"c": xf * Vector3(lx, BOX.y, BOX.z * 0.5 + 0.02),                   # 가장자리 위
 			"d": xf * Vector3(lx * 1.1, 0.0, BOX.z * 0.5 + 0.85),               # 폴짝 내려선 곳
-			"stand": stands[i], "rot": yr, "babies": []}
+			"stand": stands[i], "rot": yr, "babies": [], "path": path, "len": _path_len(path), "goal": goal}
 		climb.append(e)
+	_speed = maxf(GATHER_SPEED, longest / GATHER_MAX_T)       # 모두 같은 걸음 (멀면 조금 서두름)
+	_walk0 = CLIMB_T + LINGER_T
 	for bb in babies:                       # 아기는 엄마(없으면 어른 아무나) 품에서 — 엄마가 내려서면 곁에
 		var host: Dictionary = {}
 		for e: Dictionary in climb:
@@ -459,11 +664,13 @@ func _plan_climb() -> void:
 			(host["babies"] as Array).append(bb)
 
 
-func _climb_step() -> void:
+## 한 명씩: 기어 나옴 → 폴짝 → 상자 앞 자리 → 기지개 → 두리번 (아이 갸웃 "어…?") → 모닥불 곁으로 걸어감 → 불을 바라봄. 모두 끝나면 true
+func _climb_step() -> bool:
 	var done := true
+	var ter: JarTerrain = sc.terrain
 	for e: Dictionary in climb:
 		var r: Resident = e["r"]
-		var lt := t - float(e["t0"])
+		var lt := _et - float(e["t0"])
 		var st := {"vis": lt >= 0.0, "rot": float(e["rot"]), "anim": "idle"}
 		if lt < 0.0:
 			vw.staged[r.id] = st
@@ -474,8 +681,9 @@ func _climb_step() -> void:
 		var c: Vector3 = e["c"]
 		var d: Vector3 = e["d"]
 		var sp: Vector2 = e["stand"]
-		var s3 := Vector3(sp.x, (sc.terrain as JarTerrain).ground_y(sp.x, sp.y), sp.y)
-		d.y = (sc.terrain as JarTerrain).ground_y(d.x, d.z)
+		var s3 := Vector3(sp.x, ter.ground_y(sp.x, sp.y), sp.y)
+		d.y = ter.ground_y(d.x, d.z)
+		var walk_t := float(e["len"]) / _speed
 		if lt < 0.55:                                   # 안에서 가장자리로 기어오름
 			var u := lt / 0.55
 			st["pos"] = a.lerp(b, u * (2.0 - u))
@@ -496,7 +704,7 @@ func _climb_step() -> void:
 		elif lt < 1.4:                                  # 내려섬 (살짝 웅크림)
 			st["pos"] = d
 			st["anim"] = "crouch"
-		elif lt < CLIMB_T:                              # 제자리로 걸어감
+		elif lt < CLIMB_T:                              # 상자 앞 자리로 몇 걸음
 			var u := (lt - 1.4) / (CLIMB_T - 1.4)
 			st["pos"] = d.lerp(s3, u)
 			var dv := s3 - d
@@ -507,9 +715,9 @@ func _climb_step() -> void:
 			st["rot"] = float(e["rot"])
 			st["anim"] = "stretch"
 			st["face"] = "sleep"                     # 눈을 감은 채
-		else:                                           # 두리번거림 (아이 하나는 하늘을 올려다보며 갸웃)
+		elif lt < _walk0:                               # 새 터를 두리번거림 (아이 하나는 하늘을 올려다보며 갸웃)
 			st["pos"] = s3
-			st["rot"] = float(e["rot"]) + sin(lt * 0.9 + r.id) * 0.5
+			st["rot"] = float(e["rot"]) + sin(lt * 0.9 + r.id) * 0.6
 			st["anim"] = "look"
 			st["face"] = "surprised" if lt < CLIMB_T + WAKE_T + 0.8 else ""
 			if r == kid:
@@ -521,46 +729,36 @@ func _climb_step() -> void:
 					e["wonder"] = true
 					r.say = "어…?"
 					r.say_t = 2.2
+		elif lt < _walk0 + walk_t:                      # 모닥불 곁으로 (건물을 비켜)
+			var at := _path_at(e["path"], (lt - _walk0) * _speed)
+			var q: Vector2 = at["p"]
+			st["pos"] = Vector3(q.x, ter.ground_y(q.x, q.y), q.y)
+			st["rot"] = float(at["rot"])
+			st["anim"] = "run" if _speed > 1.7 else "walk"
+			if r == kid and lt < _walk0 + 0.8:          # 아이는 걸으면서도 잠깐 하늘을
+				st["tilt"] = Vector2(0.75, 0.32).lerp(Vector2.ZERO, (lt - _walk0) / 0.8)
+		else:                                           # 모닥불을 바라보며 섬
+			var g: Vector2 = e["goal"]
+			st["pos"] = Vector3(g.x, ter.ground_y(g.x, g.y), g.y)
+			var df := v.fire - g
+			st["rot"] = atan2(df.x, df.y)
+			st["anim"] = "idle"
 		vw.staged[r.id] = st
 		for i in (e["babies"] as Array).size():
 			var bb: Resident = e["babies"][i]
-			var bs: Dictionary = {"vis": lt >= 1.25, "anim": "idle", "rot": float(e["rot"])}
+			var bs: Dictionary = {"vis": lt >= 1.25, "anim": "idle", "rot": float(st["rot"])}
 			var bp: Vector3 = st["pos"]
-			bs["pos"] = bp + Vector3(0.45 + 0.35 * i, 0.0, 0.3).rotated(Vector3.UP, float(e["rot"]))
+			bs["pos"] = bp + Vector3(0.45 + 0.35 * i, 0.0, 0.3).rotated(Vector3.UP, float(st["rot"]))
 			vw.staged[bb.id] = bs
-		if lt < CLIMB_T + LINGER_T:
+		if lt < _walk0 + walk_t + GATHER_LINGER:
 			done = false
-	if done:
-		_stand_all()
-		phase = "pull"
-		t = 0.0
+	return done
 
 
-## 모두 제자리에 (시뮬레이션 자리 = 서 있는 자리) — 연출 끝
+## 모두 모닥불 곁 자리에 (시뮬레이션 자리 = 모인 자리) — 연출 끝
 func _stand_all() -> void:
-	var yr := deg_to_rad(yaw_deg)
-	var ppl: Array[Resident] = []
-	for e: Dictionary in climb:
-		ppl.append(e["r"])
-	if ppl.is_empty():
-		for r in v.people:
-			if not r.is_baby():
-				ppl.append(r)
-	var stands := stand_spots(v, spot, yr, ppl.size())
-	var host := {}
-	for i in ppl.size():
-		var r := ppl[i]
-		var sp: Vector2 = stands[i]
-		_set_pos(r, sp, yr)
-		host[r.id] = sp
-	for r in v.people:
-		if r.is_baby():
-			var sp: Vector2 = host.get(r.parents[0] if r.parents.size() > 0 else -1, stands[0] if not stands.is_empty() else spot)
-			_set_pos(r, sp + Vector2(0.5, 0.3).rotated(-yr), yr)
+	gather_people(v, spot)
 	vw.staged.clear()
-	if kid != null:                         # 하늘을 올려다보던 아이는 한동안 그대로
-		var kp := Vector3(kid.x, (sc.terrain as JarTerrain).ground_y(kid.x, kid.y), kid.y)
-		vw.staged[kid.id] = {"pos": kp, "rot": yr, "anim": "idle", "tilt": Vector2(0.75, 0.32), "until": 3.5}
 
 
 static func _set_pos(r: Resident, p: Vector2, rot: float) -> void:
@@ -674,7 +872,7 @@ func _begin_tray() -> void:
 		(sc.jar as Node3D).add_child(ring)
 		ring.position = Vector3(spot.x, gy0 + 0.12, spot.y)
 	ring.visible = true
-	caption.say("상자에 든 것을 이 땅에 놓아 주세요.", true)
+	caption.say("사람들이 깨기 전에, 상자에 든 것으로 터를 꾸며 주세요.", true)
 	tray.visible = true
 	_refresh_tray()
 	if remaining() == 0:
@@ -835,7 +1033,6 @@ func _put(it: Dictionary, p: Vector2, fx: bool) -> void:
 		v.move_kit_building(it["b"], p)
 	it["placed"] = true
 	_hide_item(it, false)
-	_nudge_people(p, float(it["size"]))
 	if plan != null:
 		plan.placed[key] = [p.x, p.y]
 	if fx:
@@ -863,18 +1060,6 @@ func _hide_item(it: Dictionary, on: bool) -> void:
 		vw.hidden_blds[(it["b"] as Building).id] = true
 	else:
 		vw.hidden_blds.erase((it["b"] as Building).id)
-
-
-## 놓은 자리 위에 서 있던 사람은 살짝 비켜섬
-func _nudge_people(p: Vector2, size: float) -> void:
-	for r in v.people:
-		var d := Vector2(r.x, r.y) - p
-		var need := size + 0.5
-		if d.length() < need:
-			var dir := d.normalized() if d.length() > 0.01 else Vector2(1, 0)
-			var q := p + dir * (need + 0.1)
-			_set_pos(r, q, r.facing)
-	vw.staged.erase(kid.id if kid != null else -1)
 
 
 func _drop_fx(it: Dictionary, p: Vector2) -> void:
@@ -931,6 +1116,7 @@ func auto_place() -> void:
 			_hide_item(it, false)
 			_drop_fx(it, pp))
 		k += 1
+	_busy = maxf(_busy, 0.12 * k + SkyDropView.FALL_SECS + 0.2)
 	sel = -1
 	if ghost != null:
 		ghost.queue_free()
@@ -938,24 +1124,32 @@ func auto_place() -> void:
 	_after_put()
 
 
+## 다 놓음 → (연출) 상자 앞으로 · 열림 · 사람들이 나와 모닥불 곁으로 → 상자가 떠나감. 연출 없음(시험) = 바로 모닥불 곁에 모인 자리로
 func _finish() -> void:
-	phase = "end"
-	t = 0.0
 	tray.visible = false
 	if ring != null:
 		ring.visible = false
-	caption.visible = false
 	if plan != null:
 		plan.save(StartFlow.save_dir())
 	if not bool(sc.get("kit_anim")):                # 시험 (연출 없이): 바로
+		caption.visible = false
 		if box != null:
 			box.visible = false
+		_stand_all()
 		phase = "done"
-		vw.staged.clear()
 		finished.emit()
 		return
+	caption.say("터가 다 꾸며졌어요.")
+	phase = "wait"
+	t = 0.0
+
+
+func _end_box() -> void:
+	phase = "end"
+	t = 0.0
 	var tw := create_tween()
 	tw.tween_interval(0.9)
+	tw.tween_callback(func() -> void: caption.visible = false)
 	if box != null and is_instance_valid(box) and box.is_inside_tree():      # (A24) 빈 상자는 뚜껑이 닫히고 반짝임 속에 떠올라 감 (손 없이)
 		tw.tween_method(_lid_pose, 1.0, 0.0, 0.3)
 		tw.tween_callback(func() -> void:
@@ -963,12 +1157,15 @@ func _finish() -> void:
 			g.position.y = BOX.y * 0.5
 			box.add_child(g))
 		tw.tween_interval(0.35)
-		tw.tween_method(func(k: float) -> void: SkyDescent.set_shadow(box_shadow, 1.0 - k, 1.0 - k), 0.0, 1.0, 0.9)
-		tw.parallel().tween_property(box, "position:y", 70.0, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		if box_shadow != null:
+			var sh := box_shadow
+			tw.tween_method(func(k: float) -> void: SkyDescent.set_shadow(sh, 1.0 - k, 1.0 - k), 0.0, 1.0, 0.9)
+			tw.parallel().tween_property(box, "position:y", 70.0, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+		else:
+			tw.tween_property(box, "position:y", 70.0, 0.9).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
 		tw.tween_callback(func() -> void: box.visible = false)
 	tw.tween_callback(func() -> void:
 		phase = "done"
-		vw.staged.clear()
 		finished.emit())
 
 
@@ -1026,11 +1223,6 @@ func _ground(sp: Vector2, touch: bool) -> Vector2:
 
 
 func _tray_step() -> void:
-	if kid != null and vw.staged.has(kid.id):
-		var st: Dictionary = vw.staged[kid.id]
-		st["until"] = float(st.get("until", 0.0)) - get_process_delta_time()
-		if float(st["until"]) <= 0.0:
-			vw.staged.erase(kid.id)
 	if ghost != null:
 		var ov := ghost_ring.material_override as StandardMaterial3D
 		if ov != null:

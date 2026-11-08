@@ -1,7 +1,8 @@
-## 스타터킷 풀기 캡처 (OPENING 단계 8 v3.9) — 창이 필요: godot --path godot -s res://tools/shot_kit_unpack.gd
-## 창조(연출 없이)로 세상을 만든 뒤 아무 데나 누름 → 특성 쪽지 → [여기에 내려놓기] → 손이 상자를 내려놓음 → 초확대 · 주민이 기어 나옴 →
-## 건물 놓기 칸 (초록 · 빨강 그림자) → 하나 놓음 → [알아서 놓기] → 다 놓인 마을.
-## 결과 godot_shots/: kit_pick_note · kit_pick_bad · kit_drop · kit_climb_a · kit_climb_b · kit_kid_sky · kit_tray_green · kit_tray_red · kit_placed_one · kit_placed
+## 스타터킷 풀기 캡처 (OPENING 단계 8 v3.9 + 2026-11-08 터부터 짓고 사람들 나옴) — 창이 필요: godot --path godot -s res://tools/shot_kit_unpack.gd
+## 창조(연출 없이)로 세상을 만든 뒤 아무 데나 누름 → 특성 쪽지 → [여기에 내려놓기] → 상자가 내려앉음 → 건물 놓기 칸 (초록 · 빨강 그림자)
+## → 하나 놓음 → [알아서 놓기] → 다 꾸민 터 (사람은 아직 상자 안) → 초확대 · 주민이 기어 나옴 → 모닥불 곁으로 모임 → 첫 주민 소개.
+## 결과 godot_shots/: kit_pick_note · kit_pick_bad · kit_drop · kit_tray_green · kit_tray_red · kit_placed_one · kit_site_ready ·
+##   kit_climb_a · kit_climb_b · kit_kid_sky · kit_gather_walk · kit_gather_fire · kit_placed
 extends SceneTree
 
 const SAVE_DIR := "user://shot_kit_save"
@@ -104,13 +105,22 @@ func _process(dt: float) -> bool:
 				"drop":
 					if _phase_t > 0.45 and _once("drop"):
 						_save("kit_drop")
+				"wait":
+					if un._busy < 0.12 and _phase_t > 0.35 and _once("site"):
+						_save("kit_site_ready")
 				"climb":
 					if _phase_t > 1.1 and _once("ca"):
 						_save("kit_climb_a")
 					if _phase_t > 2.6 and _once("cb"):
 						_save("kit_climb_b")
-					if _phase_t > un.climb.size() * KitUnpack.CLIMB_GAP + KitUnpack.CLIMB_T + 1.2 and _once("kid"):
+					if _phase_t > KitUnpack.CLIMB_T + KitUnpack.WAKE_T + 0.9 and _once("kid"):
 						_save("kit_kid_sky")
+				"gather":
+					if _phase_t > 2.2 and _once("gw"):
+						_save("kit_gather_walk")
+				"end":
+					if _phase_t > 0.05 and _once("gf"):
+						_save("kit_gather_fire")
 				"tray":
 					if _phase_t > 0.3 and _once("tray_sel"):
 						var hut := ""
@@ -135,7 +145,7 @@ func _process(dt: float) -> bool:
 					if _phase_t > 2.2 and _once("one"):
 						_save("kit_placed_one")
 						un.auto_place()
-				"end", "done":
+				"done":
 					pass
 		3:
 			if t > 2.0 and _once("placed"):
