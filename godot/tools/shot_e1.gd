@@ -1,6 +1,6 @@
 ## E1-0~2 사건 연출 · 6b 안내 창 · 6c 손 도구 캡처 (390×844 — 넓은 세상 world.tscn, 시드 20261106).
 ## 실행 (창이 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_e1.gd
-## 결과 (godot_shots/): e1_awaken_up (아이가 하늘을 가리키고 모두 올려다봄) · e1_awaken_kneel (빛 한 줄기·무릎) · e1_awaken_card (자막) ·
+## 결과 (godot_shots/): e1_awaken_up (어두워지고 큰 그림자 — 깨달음 2026-11-08 판 타이밍) · e1_awaken_kneel (빛기둥·무릎) · e1_awaken_card (연대기 한 쪽) ·
 ##   e1_altar_1 · e1_altar_3 · e1_altar_5 (제단 짓기 단계 ①③⑤) · e1_prayer (첫 기도) · e1_prayer_card · e1_popup_altar (제단 알림 창 2c) ·
 ##   e1_popup_awakening (안내 창 6b) · e1_hand_locked (처음 [손]) · e1_popup_tool (도구가 열림) · e1_hand_unlocked · e1_chronicle_card · e1_sheet (모아 보기)
 extends SceneTree
@@ -27,8 +27,8 @@ func _initialize() -> void:
 	scene.world_seed = 20261106
 	root.add_child(scene)
 	scene.firsts.reset()
-	steps = [_s_start, _s_awaken, _w_dir.bind(3.9), _s_shot.bind("e1_awaken_up"), _w_dir.bind(7.4), _s_shot.bind("e1_awaken_kneel"),
-		_w_dir.bind(9.3), _s_shot.bind("e1_awaken_card"), _w_end, _w_popup.bind("awakening"), _s_shot.bind("e1_popup_awakening"), _s_close_popup,
+	steps = [_s_start, _s_awaken, _w_dir.bind(5.2), _s_shot.bind("e1_awaken_up"), _w_dir.bind(19.2), _s_shot.bind("e1_awaken_kneel"),
+		_w_dir.bind(22.4), _s_shot.bind("e1_awaken_card"), _w_end, _w_popup.bind("awakening"), _s_shot.bind("e1_popup_awakening"), _s_close_popup,
 		_s_build.bind(0.17), _w_dir.bind(2.4), _s_shot.bind("e1_altar_1"), _s_build.bind(0.57), _s_shot.bind("e1_altar_3"),
 		_s_build.bind(0.95), _s_shot.bind("e1_altar_5"), _s_built, _w_pray, _s_shot.bind("e1_prayer_close"), _w_dir.bind(7.2),
 		_s_shot.bind("e1_prayer"), _w_dir.bind(8.9), _s_shot.bind("e1_prayer_card"), _w_end, _w_popup.bind("altar"), _s_shot.bind("e1_popup_altar"),

@@ -134,6 +134,21 @@ var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
+                                     #   (E1-1) hold: true = 두 팔로 안음 (종이 인형 안기 팔) · to: 주민 id = 그 사람 곁으로 다가가 안김 (화면 자리만, 1초에 걸쳐)
+var stage_say: Dictionary = {}       # (E1-1) 화면 말풍선만 — 주민 id → [글, 기분, 남은 초]. 시뮬레이션(r.say)에 쓰지 않음 (staging.md R4)
+var _stage_w: Dictionary = {}        # 'to' 다가감 정도 0~1
+## (E1-1 조짐 — EVENTS_STAGING 1-1) 깨닫기 전, 경이(Village.wonder)가 찰수록 아이들이 자주 멈춰 서서 하늘 이야기를 한다 (화면만 — 경이를 읽기만)
+const HINT_FROM := 0.3               # 경이가 WONDER_NEED의 이만큼부터
+const HINT_EVERY := Vector2(40.0, 9.0)   # 조짐 사이 (현실 초): 경이가 막 찼을 때 → 가득
+const HINT_SECS := 4.0               # 말풍선·멈춤 (현실 초)
+const HINT_KIDS := [["저기 봐! 하늘이 반짝였어", "하늘이 이상해!"], ["방금 하늘이 움직였어!", "위에 뭐가 있나 봐…"], ["또 봤어! 저 위에!", "하늘이 우리를 봐!"]]
+const HINT_ADULTS := ["애들이 자꾸 하늘을 봐", "요즘 하늘이 좀 이상하지?", "쉿, 바람이겠지"]
+var hint_pose: Dictionary = {}       # 주민 id → {anim, left: 남은 초} (연출 몸짓이 없을 때만)
+var hint_log: Array = []             # (시험) 띄운 조짐 [현실 시각, 주민 id, 글]
+var _hint_t := 6.0
+var _hint_n := 0
+var _hint_clock := 0.0
+var _hint_rng := RandomNumberGenerator.new()
 
 
 func _init(village: Village, t: JarTerrain) -> void:
@@ -511,8 +526,8 @@ func _sync_residents(dt: float) -> void:
 			_face_partner(r, m)
 		if social != null and not fast:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
-		var po: Dictionary = pose_over.get(r.id, {})
-		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함
+		var po: Dictionary = pose_over.get(r.id, {}) if not pose_over.is_empty() else hint_pose.get(r.id, {})
+		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함 · (E1-1) 조짐: 멈춰 서서 하늘을 봄
 			if po.has("face"):
 				m.set_face(String(po["face"]))
 			if po.has("anim") and r.anim != "walk":
@@ -536,6 +551,8 @@ func _sync_residents(dt: float) -> void:
 	_pair_follow(dt)
 	if cut:
 		_place_babies()
+	_stage_after(dt)
+	_wonder_hints(dt)
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):
 			_torches.erase(id)
@@ -559,6 +576,84 @@ func _sync_residents(dt: float) -> void:
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()
 			_rafts.erase(id)
+
+
+## (E1-1) 연출 몸짓 중 자리·팔을 건드리는 것 (아기 품기 뒤에 — place_babies가 안기 팔을 매번 다시 정하므로):
+## hold = 두 팔로 안음 · to = 그 사람 곁으로 다가감 (화면 자리만 — 시뮬레이션 자리는 그대로). 화면 말풍선 시간도 여기서 줄임
+func _stage_after(dt: float) -> void:
+	for id: int in stage_say.keys():
+		var s: Array = stage_say[id]
+		s[2] = float(s[2]) - dt
+		if float(s[2]) <= 0.0:
+			stage_say.erase(id)
+	if pose_over.is_empty():
+		_stage_w.clear()
+		return
+	for id: int in pose_over:
+		var po: Dictionary = pose_over[id]
+		var m: ResidentModel = residents.get(id)
+		if m == null or not m.visible:
+			continue
+		if po.has("to"):
+			var tm: ResidentModel = residents.get(int(po["to"]))
+			if tm != null and tm.visible:
+				var w := minf(1.0, float(_stage_w.get(id, 0.0)) + (dt if dt > 0.0 else 1.0))
+				_stage_w[id] = w
+				var side := Vector3(cos(tm.rotation.y), 0.0, -sin(tm.rotation.y))      # 안는 사람의 옆 (앞에서 보면 오른쪽)
+				var goal := tm.position + side * 0.3 * tm.scale.x
+				goal.y = gy(goal.x, goal.z)
+				m.position = m.position.lerp(goal, w * w * (3.0 - 2.0 * w))
+				m.rotation.y = tm.rotation.y
+		if bool(po.get("hold", false)) and m is CutoutResident:
+			(m as CutoutResident).carry_baby = true
+			(m as CutoutResident)._refresh_doll()
+
+
+## (E1-1 조짐) 깨닫기 전 경이가 찰수록 아이들이 더 자주 하늘 이야기 (화면 말풍선 + 서 있던 아이는 잠깐 멈춤). 경이가 가득 차면 어른도 수군거림.
+## 시뮬레이션은 읽기만 (v.wonder · aware) — 화면 난수(_hint_rng)만 씀
+func _wonder_hints(dt: float) -> void:
+	_hint_clock += dt
+	for id: int in hint_pose.keys():
+		var hp: Dictionary = hint_pose[id]
+		hp["left"] = float(hp["left"]) - dt
+		if float(hp["left"]) <= 0.0:
+			hint_pose.erase(id)
+	var k := v.wonder / Awakening.WONDER_NEED
+	if v.aware or fast or k < HINT_FROM or not pose_over.is_empty():
+		return
+	_hint_t -= dt
+	if _hint_t > 0.0:
+		return
+	_hint_t = hint_every(k) * _hint_rng.randf_range(0.75, 1.25)
+	var kids: Array[Resident] = []
+	var adults: Array[Resident] = []
+	for r in Awakening.witnesses(v):
+		if stage_say.has(r.id) or r.say_t > 0.0:
+			continue
+		if r.is_child():
+			kids.append(r)
+		elif r.is_adult():
+			adults.append(r)
+	_hint_n += 1
+	var murmur := k >= 0.8 and not adults.is_empty() and (_hint_n % 3 == 0 or kids.is_empty())
+	if kids.is_empty() and not murmur:
+		return
+	var who: Resident = adults[_hint_rng.randi() % adults.size()] if murmur else kids[_hint_rng.randi() % kids.size()]
+	var text := ""
+	if murmur:
+		text = String(HINT_ADULTS[_hint_n % HINT_ADULTS.size()])
+	else:
+		var band: Array = HINT_KIDS[clampi(int((k - HINT_FROM) / ((1.0 - HINT_FROM) / 3.0)), 0, HINT_KIDS.size() - 1)]
+		text = String(band[_hint_n % band.size()])
+		hint_pose[who.id] = {"anim": "idle", "face": "surprised", "up": 0.6, "left": HINT_SECS}
+	stage_say[who.id] = [text, "" if murmur else "cheer", HINT_SECS]
+	hint_log.append([_hint_clock, who.id, text])
+
+
+## 조짐 사이 (현실 초) — 경이 몫 k (HINT_FROM → 1)에 따라 HINT_EVERY.x → y
+static func hint_every(k: float) -> float:
+	var u := clampf((k - HINT_FROM) / (1.0 - HINT_FROM), 0.0, 1.0)
+	return lerpf(HINT_EVERY.x, HINT_EVERY.y, u * u * (3.0 - 2.0 * u))
 
 
 ## 종이 인형 아기: 부모 품 · 문 옆 요람 · 부모 곁 걸음마 (화면만 — CutoutResident.place_babies). 요람·걸음마의 땅 높이는 여기서

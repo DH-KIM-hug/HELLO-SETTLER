@@ -144,6 +144,8 @@ static func awaken(v: Village) -> void:
 	v.event_serial += 1
 	v.log_line(LINE_AWAKEN)
 	WatcherName.on_awaken(v)           # N2: 부르는 말을 정함 — "그날부터 사람들은 그를 ○○이라 불렀다."
+	# 사건 (ADR-0001 · event-kinds.md): 연출(view/stage_director.gd)이 이것을 구독해 EVENTS_STAGING 1을 튼다 — 난수 없음
+	v.emit(&"awakened", {"v": {"name_idx": (Balance.WATCHER_NAMES as Array).find(v.watcher)}})
 	for r in v.people:
 		r.belief = maxf(r.belief, BELIEF_AWAKEN if not r.is_baby() else BELIEF_AWAKEN * 0.6)
 		if not r.sleeping and not r.is_baby() and r.sick_left <= 0.0:

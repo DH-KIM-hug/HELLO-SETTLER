@@ -24,7 +24,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 사건 연출 · 안내 창 · 손 도구 (E1-0~2 · 6b · 6c)")
 	_old_aware = Village.start_aware
-	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_baby_card_needs_baby", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow", "test_stage_clock",
+	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_baby_card_needs_baby", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow", "test_awaken_sim_same", "test_wonder_hints", "test_stage_clock",
 		"test_popup_scene", "test_words"])
 	Village.start_aware = _old_aware
 	fs.reset()
@@ -362,13 +362,41 @@ func test_flow_scene() -> void:
 	check(clock.stage_rate > 0.0 and clock.speed() <= clock.stage_rate + 1e-6, "연출 동안 병 시간이 느림 (현실 1초 = 병 %.0f초)" % clock.speed())
 	check(not cam.hold.is_empty(), "카메라가 사건 자리로 (붙잡음)")
 	var vw: VillageView = scene.get("view")
+	var says0: Array = v.people.map(func(r: Resident) -> String: return r.say)
 	_run(d, 1.5)
 	check(not vw.pose_over.is_empty(), "주민 몸짓을 연출이 정함 (%d명)" % vw.pose_over.size())
-	_run(d, 7.0)
-	check(d._cap_on and d._cap_l.text == Awakening.LINE_AWAKEN, "손글씨 자막: \"%s\"" % d._cap_l.text)
+	# (E1-1 2026-11-08 극적인 판) ② 세상이 멈춤 — 어두워지고 큰 그림자가 지나감
+	_run(d, 3.4)
+	var sh0 := d.shadow_param()
+	check(d.dark > 0.6 and sh0.w > 0.3, "② 어두워짐 %.2f · 큰 그림자 세기 %.2f" % [d.dark, sh0.w])
+	_run(d, 2.0)
+	var sh1 := d.shadow_param()
+	check(Vector2(sh1.x, sh1.y).distance_to(Vector2(sh0.x, sh0.y)) > 3.0 or JarCamera.reduce_motion(), "그림자가 마을 위를 지나감 (%.1f칸 움직임)" % Vector2(sh1.x, sh1.y).distance_to(Vector2(sh0.x, sh0.y)))
+	_run(d, 5.6)
+	check(d.shadow_param().w == 0.0 and d.light_param().w > 0.3 and d._beam != null and is_instance_valid(d._beam), "③ 그림자가 걷히고 빛기둥 · 따뜻한 웅덩이 %.2f" % d.light_param().w)
+	check(d._gift != null and is_instance_valid(d._gift) and d._gift.progress() > 0.0 and d._gift.progress() < 0.9, "빛을 타고 선물이 천천히 내려옴 (%.0f%%)" % (d._gift.progress() * 100.0 if d._gift != null else -1.0))
+	_run(d, 6.2)                                     # t ≈ 18.7 — 한 사람씩 무릎 · 노인의 부르는 말
+	var kneel := 0
+	for rid: int in vw.pose_over:
+		if String((vw.pose_over[rid] as Dictionary).get("anim", "")) == "pray":
+			kneel += 1
+	var el: Array = d._roles.get("elder", [])
+	var el_say: Array = vw.stage_say.get(int(el[0]), []) if not el.is_empty() else []
+	check(kneel >= 2, "④ 한 사람씩 무릎 (%d명)" % kneel)
+	check(not el_say.is_empty() and String(el_say[0]).contains(WatcherName.of(v)) and String(el_say[0]).contains("시여"),
+		"⑤ 노인이 처음 부르는 말: \"%s\"" % (String(el_say[0]) if not el_say.is_empty() else "(없음)"))
+	check(v.people.map(func(r: Resident) -> String: return r.say) == says0 and not v.people.any(func(r: Resident) -> bool:
+			return r.say.contains("시여") or r.say.contains("괜찮아") or r.say.contains("흐윽") or r.say.contains("하늘이…")),
+		"연출의 말은 화면 말풍선만 (시뮬레이션의 r.say에 쓰지 않음 — R4)")
+	_run(d, 2.8)                                     # t ≈ 21.5 — 연대기 한 쪽
+	var pg := d.page_text()
+	check(d.page_shown() and pg.contains(Awakening.LINE_AWAKEN) and pg.contains(Social.fill("{w:을/를} 알게 된 날", {"w": WatcherName.of(v)})) and pg.contains(WatcherName.of(v)),
+		"⑥ 화면 가득 손글씨 연대기 한 쪽: %s" % pg.replace("\n", " / "))
 	check(float((d._vignette.material as ShaderMaterial).get_shader_parameter("strength")) > 0.3, "테두리 어둠")
-	_run(d, 3.0)
-	check(not d.playing() and cam.hold.is_empty() and clock.stage_rate < 0.0 and vw.pose_over.is_empty(), "끝나면 카메라·병 시간·몸짓이 제자리")
+	check(d.t >= 20.0 and d.playing(), "20초가 넘게 이어짐 (%.1f초)" % d.t)
+	_run(d, 7.5)
+	check(not d.playing() and cam.hold.is_empty() and clock.stage_rate < 0.0 and vw.pose_over.is_empty() and d.dark == 0.0 and not d._page.visible,
+		"끝나면 카메라·병 시간·몸짓·어둠·연대기 한 쪽이 제자리")
 	var e := StageDirector._entry(v, Awakening.LINE_AWAKEN)
 	check(String(e.get("card", "")) == "awakening", "연대기에 그림 카드로 남음 (그림: %s)" % ("있음" if String(e.get("pic", "")) != "" else "헤드리스라 없음"))
 	check("awakening" in fs.queue, "끝나면 깨달음 안내 창이 줄 섬")
@@ -420,20 +448,123 @@ func test_skip_and_slow() -> void:
 	var ev := InputEventMouseButton.new()
 	ev.button_index = MOUSE_BUTTON_LEFT
 	ev.pressed = true
+	check(not d.skip_shown(), "처음엔 [건너뛰기]가 없음 (화면을 가리지 않게)")
 	d._gui_input(ev)
-	check(not d.playing() and d.skipped and cam.hold.is_empty(), "화면을 톡 → 건너뜀 (카메라 제자리)")
+	check(d.playing() and d.skip_shown(), "첫 톡 → 계속 재생 + [건너뛰기]가 뜸 (R5 — 두 번 누름)")
+	_run(d, 3.2)
+	check(d.playing() and not d.skip_shown(), "%.0f초 안에 다시 누르지 않으면 [건너뛰기]가 사라짐 · 연출은 그대로" % StageDirector.SKIP_HOLD)
+	d._last_press_ms -= 1000
+	d._gui_input(ev)
+	_run(d, 1.0)
+	d._last_press_ms -= 1000
+	check(d.playing(), "다시 첫 톡 (1초 지남) → 아직 재생")
+	d._gui_input(ev)
+	check(not d.playing() and d.skipped and cam.hold.is_empty(), "두 번째 톡 → 건너뜀 (카메라 제자리)")
+	var vw: VillageView = scene.get("view")
+	check(d.dark == 0.0 and d.shadow_param().w == 0.0 and d.light_param().w == 0.0 and not d._page.visible and vw.stage_say.is_empty() and vw.pose_over.is_empty(),
+		"건너뛰면 어둠·그림자·빛·연대기 한 쪽·말풍선·몸짓이 곧바로 제자리")
 	check(clock.speed_i == FAST_I and clock.stage_rate < 0.0, "끝나면 원래 빠르기로 (1초=10분)")
 	check("awakening" in fs.queue and String(StageDirector._entry(v, Awakening.LINE_AWAKEN).get("card", "")) == "awakening", "건너뛰어도 안내 창 · 그림 카드")
 	check(fs.play_count("awakening") == 1, "본 횟수 1")
 	# 두 번째 (다른 병) — 짧은 판
 	d.play("awakening", v)
 	check(d.k < 1.0, "두 번째부터 짧은 판 (시간 ×%.1f)" % d.k)
-	_run(d, 6.5)
-	check(not d.playing(), "짧은 판은 %.1f초 안에 끝" % (float(Stagings.SCENES["awakening"]["dur"]) * d.k))
+	var short := float(Stagings.SCENES["awakening"]["dur"]) * d.k
+	_run(d, short - 0.5)
+	var mid := d.playing()
+	_run(d, 0.8)
+	check(mid and not d.playing(), "짧은 판은 %.1f초 (± 0.5)" % short)
 	run.root.remove_child(scene)
 	scene.free()
 	Village.start_aware = _old_aware
 	fs.reset()
+
+
+## (E1-1 · ADR-0001) 깨달음 연출은 시뮬레이션을 바꾸지 않는다: 같은 병 둘 — 하나는 연출을 처음부터 끝까지 (화면도 매번 맞춤 · 조짐·말풍선·몸짓),
+## 하나는 연출 없이. 같은 병 시간을 같은 걸음으로 흘리면 결과(자리·믿음·연대기·난수 상태)가 같다. 연출은 그 사건에 한 번만
+func test_awaken_sim_same() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var sigs: Array = []
+	var aw_plays := 0
+	for staged: bool in [true, false]:
+		var scene := _scene()
+		var v: Village = scene.get("village")
+		var d: StageDirector = scene.get("director")
+		var vw: VillageView = scene.get("view")
+		(scene.get("clock") as JarClock).creation = false
+		v.advance(Balance.HOUR)
+		var pre: String = run.clock_sig(v)
+		Awakening.awaken(v)
+		if staged:
+			d.watch(v, true)
+			check(d.playing() and d.id == "awakening", "사건 &\"awakened\" → 깨달음 연출 시작")
+		for i in 330:                              # 현실 33초 (연출 28.6초 + 끝난 뒤)
+			if staged:
+				d.step(0.1)
+				vw.sync(0.1)
+				if not d.playing():
+					d.watch(v, true)               # 끝난 뒤 다시 봐도 깨달음은 다시 틀지 않음 (제단 짓기는 이어질 수 있음)
+			if i % 10 == 9:
+				v.advance(Balance.STEP)
+		if staged:
+			for e: Dictionary in d.log:
+				if String(e["id"]) == "awakening":
+					aw_plays += 1
+			if d.playing():
+				d.skip()
+		sigs.append([pre, run.clock_sig(v) + "|%s|%d|%s" % [str(v.wonder), v.book.size(), v.watcher]])
+		run.root.remove_child(scene)
+		scene.free()
+	check(sigs[0][0] == sigs[1][0], "두 병은 깨닫기 전 같음 (시험의 바탕)")
+	check(sigs[0][1] == sigs[1][1], "연출을 본 병 = 연출 없는 병 (병 33걸음 뒤 자리·믿음·연대기·난수 상태 같음)")
+	check(aw_plays == 1, "깨달음 연출은 한 번만 (%d번)" % aw_plays)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## (E1-1 ① 조짐 쌓기) 깨닫기 전 경이가 찰수록 아이들이 더 자주 하늘 이야기 (화면만 — 경이·말·자리를 쓰지 않음). 깨달은 뒤엔 없음
+func test_wonder_hints() -> void:
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var vw: VillageView = scene.get("view")
+	var kids := Awakening.witnesses(v).filter(func(r: Resident) -> bool: return r.is_child())
+	if kids.is_empty():                             # 아이가 없는 병이면 하나를 아이로 (시험 바탕)
+		for r in v.people:
+			if r.is_adult() and not r.sleeping:
+				r.age = 8.0
+				break
+	var count := func(wonder: float, secs: float) -> int:
+		v.wonder = wonder
+		vw.hint_log.clear()
+		vw._hint_t = 0.0
+		for i in int(secs / 0.5):
+			vw._wonder_hints(0.5)
+			vw._stage_after(0.5)
+		return vw.hint_log.size()
+	var sig0: String = run.clock_sig(v)
+	var says0: Array = v.people.map(func(r: Resident) -> String: return r.say)
+	var n0: int = count.call(0.0, 120.0)
+	var n1: int = count.call(Awakening.WONDER_NEED * 0.5, 240.0)
+	var n2: int = count.call(Awakening.WONDER_NEED, 240.0)
+	check(n0 == 0, "경이가 적으면 조짐 없음 (%d)" % n0)
+	check(n1 > 0 and n2 > n1 * 2, "경이가 찰수록 조짐이 잦아짐 (경이 반 %d번 → 가득 %d번 / 현실 4분)" % [n1, n2])
+	var kid_n := 0
+	for h: Array in vw.hint_log:
+		var r := v.person(int(h[1]))
+		if r != null and r.is_child():
+			kid_n += 1
+	check(kid_n * 2 >= vw.hint_log.size(), "조짐은 주로 아이들 (%d/%d) — 경이가 가득하면 어른도 수군거림" % [kid_n, vw.hint_log.size()])
+	check(run.clock_sig(v) == sig0 and v.people.map(func(r: Resident) -> String: return r.say) == says0,
+		"조짐은 화면만 (시뮬레이션 값·말 기록 그대로)")
+	v.aware = true
+	var n3: int = count.call(Awakening.WONDER_NEED, 120.0)
+	v.aware = false
+	check(n3 == 0, "깨달은 뒤엔 조짐 없음")
+	run.root.remove_child(scene)
+	scene.free()
+	Village.start_aware = _old_aware
 
 
 ## (A28 후속) 첫날 밖의 깨달음 → 제단 → 첫 기도: 병 시계가 첫날 제단 장면처럼 늦춰져 걸음이 화면 0.7칸/초 (옛 임시 걸음 덤 ×36을 시계가 받침).
@@ -544,4 +675,24 @@ func test_words() -> void:
 	check(run.words_ok(said) == "" and not said.any(func(s: String) -> bool: return s.contains("지폐") or s.contains("상점") or s.contains("사다")),
 		"연출의 자막·주민 말에 금지어 없음 (%d줄) %s" % [said.size(), run.words_ok(said)])
 	var cap := " ".join(PackedStringArray(said))
-	check(cap.contains("하늘 너머에 누군가") and cap.contains("{w}께 드릴 자리") and not cap.contains("하늘의 분"), "콘티의 자막 (깨달음 · 첫 기도)")
+	var page := []
+	for b: Dictionary in Stagings.SCENES["awakening"]["beats"]:
+		if b.has("page"):
+			page.append(String(b["page"]["sub"]))
+			page.append_array(b["page"]["lines"])
+	var pt := " ".join(PackedStringArray(page))
+	check(run.words_ok(page) == "" and pt.contains("하늘 너머에 누군가") and pt.contains("{w:을/를} 알게 된 날") and pt.contains("{w:"),
+		"깨달음의 연대기 한 쪽: 금지어 없음 · 그날의 두 줄 · \"{부르는 말}을/를 알게 된 날\"")
+	check(cap.contains("{w:이시여/시여}") and cap.contains("{w}께 드릴 자리") and not cap.contains("하늘의 분") and not cap.contains("거인"),
+		"콘티의 말 (노인의 부르는 말 · 첫 기도) — '거인' 없음")
+	var hints: Array = VillageView.HINT_ADULTS.duplicate()
+	for band: Array in VillageView.HINT_KIDS:
+		hints.append_array(band)
+	var ht := " ".join(PackedStringArray(hints))
+	check(run.words_ok(hints) == "" and not ht.contains("{w") and not ht.contains("거인") and not ht.contains("기도") and not ht.contains("제단"),
+		"조짐(깨닫기 전)의 말: 금지어·부르는 말·기도·제단 없음 (%d줄)" % hints.size())
+	var digits := false
+	for s: String in said + page + hints:
+		for ch in "0123456789":
+			digits = digits or s.contains(ch)
+	check(not digits, "연출·조짐의 말에 숫자 없음")

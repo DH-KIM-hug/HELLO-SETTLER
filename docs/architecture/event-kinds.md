@@ -32,6 +32,7 @@
 | `&"cocoon_taken"` | `Caterpillars.take_cocoon` (산 고치 따기·빈 고치 줍기 → 비단 실) | `{"live": bool}` | `who` = 딴 사람 · `at` | 아니오 | 아니오 | `tests/production_tests.gd` |
 | `&"found_object"` | `FoundObjects.discover` (매시간 `FoundObjects.hourly` — 묻힌 물건 곁에서 일하던·돌아다니던 사람, id 순, 난수 없음 · E3-16 / GD 3.0) | `{"kind": StringName (&"button"·&"marble"·&"cap"·&"sugar"·&"match"), "id": int}` | `who` = 찾은 사람 · `at` = 묻혀 있던 자리 | 아니오 | 아니오 (연대기는 `log_line` — 찾음·쓰임 한 줄씩) | `tests/found_tests.gd` (화면은 `FoundObjects.shown`을 직접 읽음) |
 | `&"butterfly_out"` | `Caterpillars._tick` (고치 → 나비 + 빈 고치) | `{"patch": int (꽃 무리 id)}` | `at` = 고치 자리 | 아니오 | 아니오 | `tests/production_tests.gd` (앞으로 #33 작은 장면) |
+| `&"awakened"` | `Awakening.awaken` (깨달음 — 한 번, 부르는 말을 정한 바로 뒤, awakening-altar R2) | `{"name_idx": int (Balance.WATCHER_NAMES 번호, 없으면 -1)}` | — | 아니오 (연대기 두 줄이 이미 올림) | 아니오 (연대기는 log_line 두 줄) | `view/stage_director.gd` (커서 — 보고 있는 무리면 깨달음 연출 EVENTS_STAGING 1, 2026-11-09) |
 
 ## 메모
 - 저장 순번은 위 표의 "예"인 kind와, 사건 없이 올리는 곳(`notebook.gd`·`awakening.gd`)에서만 오른다 — 10초 걸음마다 저장되지 않게.

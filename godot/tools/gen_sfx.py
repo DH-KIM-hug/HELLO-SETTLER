@@ -62,7 +62,13 @@ SFX = {
     "funeral":         (5.0, -31, False, "one soft low church bell toll far away, solemn and gentle, long natural ring-out decaying to silence"),
     # B3 들짐승 — 밤에 깊은 숲에서 (멀리, 무섭지 않게)
     "wolf_howl":       (2.8, -30, False, "a single lone wolf howling softly very far away across a quiet night valley, gentle and melancholic, not scary, long soft fade into silence"),
+    # E1-1 깨달음 (EVENTS_STAGING 1 — 2026-11-08 극적인 판): 큰 그림자가 지나갈 때 땅울림 · 빛이 돌아올 때 음악이 크게
+    "deep_rumble":     (6.0, -22, False, "a deep low soft earth rumble, slow heavy vibration as if something enormous passes far overhead, swelling in and fading out, no thunder crack"),
+    "awaken_swell":    (8.0, -20, False, "a warm tender cinematic swell of soft strings and wordless airy pads rising slowly into one bright hopeful major chord that rings out, sacred and gentle"),
 }
+# 음악 한 마디 — 'no music' 꼬리말 대신
+MUSICAL = {"awaken_swell"}
+STYLE_MUSIC = "cinematic underscore, a single musical phrase, no voice, no lyrics, no drums, no background noise"
 # 멀리서 들리는 소리 — 'close-up' 꼬리말 대신
 FAR = {"wolf_howl"}
 STYLE_FAR = "distant natural outdoor recording, single sound, no music, no voice, no background noise"
@@ -122,7 +128,7 @@ def gen(sid, force=False):
     dst = os.path.join(OUT, f"{sid}.mp3")
     if os.path.exists(dst) and not force:
         return
-    body = {"text": f"{prompt}. {STYLE_FAR if sid in FAR else STYLE}", "duration_seconds": secs, "prompt_influence": 0.5}
+    body = {"text": f"{prompt}. {STYLE_MUSIC if sid in MUSICAL else (STYLE_FAR if sid in FAR else STYLE)}", "duration_seconds": secs, "prompt_influence": 0.5}
     if loop:
         body["loop"] = True
     data = api("/v1/sound-generation?output_format=mp3_44100_128", body)

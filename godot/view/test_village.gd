@@ -470,11 +470,25 @@ func update_night() -> void:
 	night = Style.night_amount(village.hour_now())
 	if clock.skipping:
 		night = minf(night, 1.0 - smoothstep(0.45, 1.0, clock.skip_progress))
+	_stage_light()
 	post_mat.set_shader_parameter("night_amount", night)
 	ToonFade.set_night(night)          # 엷어지는 윗부분 (반투명 — 화면 셰이더 뒤)
 	Campfire.apply_glow(post_mat, night)   # [모닥불] 불빛 웅덩이 (view/campfire.gd)
 	glass.set_night(night)
 	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
+
+
+## (E1-1 깨달음 연출) 세상이 어두워지고(밤 색 + 해가 가려짐) · 큰 그림자가 지나가고 · 빛기둥의 따뜻한 웅덩이 — 화면만 (StageDirector가 정함)
+func _stage_light() -> void:
+	var dk := director.dark if director != null else 0.0
+	night = maxf(night, dk)
+	if sun != null:
+		sun.light_energy = lerpf(1.0, 0.25, dk)
+	var sh := director.shadow_param() if director != null else Vector4(0, 0, 1, 0)
+	post_mat.set_shader_parameter("stage_shadow", sh)
+	if director != null and sh.w > 0.0:
+		post_mat.set_shader_parameter("stage_shadow_dir", director.shadow_dir)
+	post_mat.set_shader_parameter("stage_light", director.light_param() if director != null else Vector4(0, 0, 1, 0))
 
 
 ## (B1 — GIANT_ROOM 4·5) 병 밖 ④⑤: 주민·건물 화면을 감추고 멈춘다 (시뮬레이션은 계속). 다시 켜면 지금 상태로 한 번에 맞춤
@@ -1609,7 +1623,13 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		var text := ""
 		var mood := ""
 		var sc: Array = vw.social.say_of(r.id) if vw.social != null and close_enough else []
-		if not sc.is_empty():
+		var ss: Array = vw.stage_say.get(r.id, [])        # (E1-1) 연출·조짐의 화면 말풍선 (시뮬레이션 말이 아님) — 먼저
+		if not ss.is_empty():
+			text = String(ss[0])
+			mood = String(ss[1])
+		elif director != null and director.hush_bubbles():
+			continue                  # 깨달음 연출 동안엔 연출의 말만 (촌장의 말 등 시뮬레이션 말풍선은 연출 뒤에)
+		elif not sc.is_empty():
 			text = String(sc[0])
 			mood = String(sc[1])
 		elif r.say_t > 0.0 and r.say != "":

@@ -6,9 +6,15 @@
 ##   - 카메라: 사건 자리로 미끄러져 가서 머물고 (JarCamera.hold — 크기·각·방위를 섞음), 끝나면 원래 자리로 돌아온다.
 ##   - 테두리 어둠 (레터박스 없음 — 세로 화면이 좁아지지 않게) · 손글씨 자막 카드 (나눔손글씨 펜)
 ##   - 연대기 그림 카드: 정한 순간의 화면 한 장을 찍어 (자막 전에) 그 사건의 연대기 줄에 붙인다 (user://chron_pics/ — ChronicleSheet가 그림으로)
-##   - 건너뛰기: 화면 아무 데나 톡 · [건너뛰기]. 두 번째부터는 짧은 판 (Stagings 'short' — Firsts.plays에 본 횟수)
+##   - 건너뛰기 (staging.md R5 · 아트 바이블 7.6 · A26): 두 번 누름 — 첫 톡은 [건너뛰기]를 SKIP_HOLD초 띄우기만, 그동안 한 번 더 톡(또는 그 단추) = 건너뜀.
+##     두 번째부터는 짧은 판 (Stagings 'short' — Firsts.plays에 본 횟수)
 ##   - 끝나면 그 사건의 안내 창을 줄 세움 (_firsts().fire(after) — 장면이 연출이 끝난 뒤 하나씩 띄움)
-## 사건이 일어나는 때는 watch()가 본다 (깨달음 · 제단 짓기 · 제단 완성 → 첫 기도). 보고 있지 않던 무리·자리를 비운 동안의 일은 연출 없이 안내 창만.
+##   - (E1-1 깨달음 2026-11-08 극적인 판) 세상이 어두워짐(dark — 장면의 밤 색·해 세기) · 마을 소리 잦아듦(GameAudio.set_hush) · 큰 그림자
+##     (shadow_param — 화면 셰이더가 세계 자리로 칠함) · 빛기둥 웅덩이(light_param) · 빛을 타고 내려오는 선물(AwakenGift) · 화면 가득 연대기 한 쪽(page).
+##     주민의 말은 화면 말풍선(VillageView.stage_say)에만 — 시뮬레이션의 r.say를 쓰지 않는다 (R4). 움직임 줄이기 설정: 카메라 기울기 없음 ·
+##     그림자는 지나가지 않고 그 자리에서 짙어졌다 옅어짐 · 흔들림 없음 (JarCamera.reduce_motion).
+## 사건이 일어나는 때는 watch()가 본다: 깨달음은 사건 &"awakened" 구독 (ADR-0001 — 커서), 제단 짓기 · 제단 완성 → 첫 기도는 상태.
+## 보고 있지 않던 무리·자리를 비운 동안의 일은 연출 없이 안내 창만.
 ## 새 사건을 붙이려면: Stagings.SCENES에 칸 하나 + watch()에 한 줄 (또는 장면이 play(id, village)를 부름).
 ## 6d(소원 들어주기 — 첫 기적)는 play("miracle", v)를 부를 자리만 — 콘티는 그때 Stagings에.
 class_name StageDirector
@@ -22,6 +28,33 @@ const JUST := 120.0                  # 처음 보는 무리에서 이만큼(병 
 const PIC_DIR := "user://chron_pics"
 const PIC_W := 360                   # 연대기 그림 카드 폭 (px)
 const CAP_FADE := 0.6
+const SKIP_HOLD := 3.0               # 첫 톡 뒤 [건너뛰기]가 떠 있는 시간 (staging.md 튜닝 SKIP_HOLD)
+const PAGE_FADE := 1.0               # 연대기 한 쪽이 떠오르는 시간
+const SHADOW_R := 9.0                # 큰 그림자 반지름 (칸 — 마을 한 무리를 덮을 만큼)
+const SHADOW_RUN := 26.0             # 그림자가 지나가는 길의 반 (칸)
+const LIGHT_R := 4.5                 # 빛기둥 웅덩이 반지름 (칸)
+const HUG_R := 4.0                   # 아이를 끌어안는 사람: 아이와 이만큼 안 (칸)
+
+var dark := 0.0                      # (장면이 읽음) 세상이 어두워진 정도 0~1
+var shadow_dir := Vector2(1, 0)      # (장면이 읽음) 그림자가 지나가는 쪽 (세계 xz)
+var _tw: Dictionary = {}             # 값 이름("dark"·"hush"·"light") → [지금, 목표, 1초에 바뀌는 양]
+var _shadow_t := -1.0                # 그림자 시작 (연출 초) — 음수면 없음
+var _shadow_dur := 0.0
+var _shadow_c := Vector2.ZERO        # 그림자 길의 가운데 (세계 xz)
+var _beam: SkyBeam
+var _gift: AwakenGift
+var _skip_arm := 0.0                 # 첫 톡 뒤 남은 초 (0 = 아직)
+var _last_press_ms := -100000
+var _page: PanelContainer
+var _page_title: Label
+var _page_sub: Label
+var _page_body: Label
+var _page_a := 0.0
+var _page_goal := 0.0
+var _page_rate := 1.0
+var _said: Array = []                # 이 연출이 띄운 말풍선 주민 id (끝나면 지움)
+var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" 구독)
+var _aw_ev: Dictionary = {}          # 무리 → 사건으로 받은 깨달음 시각
 
 var sc: Node                         # 장면 (TestVillage 계열)
 var id := ""                         # 지금 연출 (없으면 "")
@@ -125,6 +158,62 @@ void fragment() {
 	_skip_btn.custom_minimum_size = Vector2(UiTheme.TOUCH * 2, UiTheme.TOUCH)
 	_skip_btn.pressed.connect(skip)
 	add_child(_skip_btn)
+	_build_page()
+
+
+## (E1-1 ⑥) 화면 가득 손글씨 연대기 한 쪽 — 양피지 위 마을 이름 · "그분을 알게 된 날" · 그날의 연대기 줄 (숫자 없음)
+func _build_page() -> void:
+	_page = PanelContainer.new()
+	_page.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = UiTheme.PARCHMENT
+	sb.border_color = UiTheme.PARCHMENT_EDGE
+	sb.set_border_width_all(3)
+	sb.set_corner_radius_all(6)
+	sb.content_margin_left = 30
+	sb.content_margin_right = 30
+	sb.content_margin_top = 40
+	sb.content_margin_bottom = 40
+	sb.shadow_color = Color(0.12, 0.07, 0.02, 0.5)
+	sb.shadow_size = 18
+	_page.add_theme_stylebox_override("panel", sb)
+	add_child(_page)
+	move_child(_page, 1)                      # 테두리 어둠 위, 자막·[건너뛰기] 아래
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 14)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_page.add_child(col)
+	var mk := func(sz: int, c: Color) -> Label:
+		var l := Label.new()
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		l.add_theme_font_override("font", UiTheme.hand_font())
+		l.add_theme_font_size_override("font_size", sz)
+		l.add_theme_color_override("font_color", c)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		col.add_child(l)
+		return l
+	_page_title = mk.call(34, UiTheme.INK_BROWN)
+	_page_sub = mk.call(24, Color(UiTheme.INK_BROWN, 0.82))
+	var rule := ColorRect.new()                # 손으로 그은 듯한 짧은 줄
+	rule.color = Color(UiTheme.PARCHMENT_EDGE, 0.8)
+	rule.custom_minimum_size = Vector2(120, 2)
+	rule.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	rule.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(rule)
+	_page_body = mk.call(23, UiTheme.INK_BROWN)
+	_page_body.add_theme_constant_override("line_spacing", 10)
+	_page.modulate.a = 0.0
+	_page.visible = false
+
+
+func page_shown() -> bool:
+	return _page.visible and _page_a > 0.5
+
+
+func page_text() -> String:
+	return "%s\n%s\n%s" % [_page_title.text, _page_sub.text, _page_body.text]
 
 
 func _ready() -> void:
@@ -151,6 +240,12 @@ func _layout() -> void:
 	_chip.size = _chip.get_combined_minimum_size()
 	_chip.position = Vector2(10.0, roundf(row_y + (_skip_btn.size.y - _chip.size.y) * 0.5))
 	_cap.position = Vector2(roundf((vs.x - w) * 0.5), roundf(row_y - _cap.size.y - 10.0))
+	var m := Vector2(minf(18.0, vs.x * 0.05), minf(40.0, vs.y * 0.05))     # 화면 가득 (가장자리 조금 — 종이 그림자가 보이게)
+	var lw := maxf(80.0, vs.x - m.x * 2.0 - 60.0)     # 감기는 글은 폭을 정해 줘야 한 글자씩 세로로 늘어나지 않음
+	for l: Label in [_page_title, _page_sub, _page_body]:
+		l.custom_minimum_size.x = lw
+	_page.position = m
+	_page.size = vs - m * 2.0
 	var _unused := top
 
 
@@ -196,6 +291,21 @@ func watch(q: Village, can_stage := true) -> void:
 	play(due, q)
 
 
+## 사건 줄에서 이 무리의 &"awakened"를 읽는다 (ADR-0001 — 구독은 커서로, 시뮬레이션은 구독자를 모른다)
+func _read_events(q: Village) -> void:
+	if q.events == null:
+		return
+	for e: Dictionary in q.events.since(int(_ev_cur.get(q, 0))):
+		if e["kind"] == &"awakened" and int(e["village"]) == q.sid:
+			_aw_ev[q] = float(e["t"])
+	_ev_cur[q] = q.events.serial
+
+
+## 깨달음 연출을 틀어야 하나: 사건으로 받았고 (또는 막 연 병에서 방금 일어남) 아직 보지 않음
+func _aw_due(q: Village) -> bool:
+	return q.awakened_t >= 0.0 and _aw_ev.has(q) and is_equal_approx(float(_aw_ev[q]), q.awakened_t) and float(_seen_aw.get(q, -1.0)) != q.awakened_t
+
+
 ## 이 무리에서 다음에 연출할 일 ("" = 없음)
 func _due(q: Village) -> String:
 	if not _seen_aw.has(q):                # 처음 보는 무리 — 지금 상태를 '본 것'으로 (불러온 병은 지난 일을 다시 하지 않음 — 방금 일어난 일만 연출)
@@ -203,10 +313,15 @@ func _due(q: Village) -> String:
 		var ab := Awakening.altar_site(q)
 		var al_new := q.altar_built and ab != null and ab.built_t >= 0.0 and q.t - ab.built_t < JUST
 		_seen_aw[q] = -1.0 if aw_new else q.awakened_t
+		if aw_new:
+			_aw_ev[q] = q.awakened_t           # 사건 줄은 저장되지 않으므로 — 막 연 병의 방금 깨달음은 사건을 받은 것으로
 		_seen_altar[q] = q.altar_built and not al_new
 		_built_staged[q] = q.altar_built or (q.awakened_t >= 0.0 and q.t - q.awakened_t > STALE)
-	if q.awakened_t >= 0.0 and float(_seen_aw[q]) != q.awakened_t:
+	_read_events(q)
+	if _aw_due(q):
 		return "awakening"
+	if q.awakened_t >= 0.0 and float(_seen_aw[q]) != q.awakened_t and not _aw_ev.has(q):
+		_seen_aw[q] = q.awakened_t             # 사건 없이 알게 된 무리 (분가·옛 저장) — 연출하지 않음
 	if q.altar_built and not bool(_seen_altar[q]):
 		if q.awakened_t >= 0.0:
 			return "first_prayer"
@@ -226,7 +341,8 @@ func _next_due() -> String:
 	var q: Village = sc.focus_village()
 	if q == null or not _seen_aw.has(q):
 		return ""
-	if q.awakened_t >= 0.0 and float(_seen_aw[q]) != q.awakened_t:
+	_read_events(q)
+	if _aw_due(q):
 		return "awakening"
 	if q.altar_built and not bool(_seen_altar[q]) and q.awakened_t >= 0.0:
 		return "first_prayer"
@@ -254,6 +370,17 @@ func play(stage_id: String, q: Village) -> bool:
 	_later.clear()
 	_cam_dur = 0.0
 	_yaw_off = NAN
+	_tw.clear()
+	dark = 0.0
+	_shadow_t = -1.0
+	_skip_arm = 0.0
+	_page_a = 0.0
+	_page_goal = 0.0
+	_page.visible = false
+	_said.clear()
+	_light_c = Vector2.INF
+	_beam = null
+	_gift = null
 	if sc != null:
 		if sc.has_method("close_sheets"):
 			sc.close_sheets()
@@ -270,15 +397,16 @@ func play(stage_id: String, q: Village) -> bool:
 	_chip_l.text = "천천히 — %s" % String(spec.get("reason", ""))
 	_chip.visible = String(spec.get("reason", "")) != ""
 	visible = true
-	# 짧은 장면은 화면 아무 데나 톡 = 건너뛰기. 길고 조용한 장면(popups)은 아래 띠를 그대로 쓰게 — [건너뛰기]만
+	# 짧은 장면은 화면 두 번 톡 = 건너뛰기 (첫 톡은 [건너뛰기]를 띄우기만). 길고 조용한 장면(popups)은 아래 띠를 그대로 쓰게 — [건너뛰기]가 늘 떠 있음
 	mouse_filter = Control.MOUSE_FILTER_IGNORE if bool(spec.get("popups", false)) else Control.MOUSE_FILTER_STOP
+	_skip_btn.visible = bool(spec.get("popups", false))
 	_layout()
 	_apply()
 	started.emit(id)
 	return true
 
 
-## 건너뛰기 (화면 톡 · [건너뛰기]) — 카메라·몸짓은 곧바로 제자리, 그림 카드는 지금 화면으로, 안내 창은 그대로
+## 건너뛰기 (두 번째 톡 · [건너뛰기]) — 카메라·몸짓은 곧바로 제자리, 그림 카드는 지금 화면으로, 안내 창은 그대로
 func skip() -> void:
 	if not playing():
 		return
@@ -289,13 +417,33 @@ func skip() -> void:
 	_end()
 
 
+## 화면 톡 (staging.md R5 — 두 번 누름): 첫 톡 = [건너뛰기]를 SKIP_HOLD초 띄움, 그 안에 한 번 더 = 건너뜀
+func tap() -> void:
+	if not playing():
+		return
+	if _skip_arm > 0.0:
+		skip()
+		return
+	_skip_arm = SKIP_HOLD
+	_skip_btn.visible = true
+	_layout()
+
+
+func skip_shown() -> bool:
+	return _skip_btn.visible
+
+
 func _gui_input(e: InputEvent) -> void:
 	if not playing():
 		return
 	if (e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT) \
 			or (e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed):
 		accept_event()
-		skip()
+		var now := Time.get_ticks_msec()
+		if now - _last_press_ms < 120:        # 손가락 한 번 = ScreenTouch + 흉내 낸 마우스 — 한 톡으로 (두 번으로 세면 곧바로 건너뜀)
+			return
+		_last_press_ms = now
+		tap()
 
 
 func _process(dt: float) -> void:
@@ -328,6 +476,18 @@ func step(dt: float) -> void:
 		cam.hold = blend(_cam_a, _cam_b, u * u * (3.0 - 2.0 * u))
 	_vig = move_toward(_vig, _vig_goal, dt * 1.2)
 	_cap_a = move_toward(_cap_a, 1.0 if _cap_on else 0.0, dt / CAP_FADE)
+	for key: String in _tw:
+		var tw: Array = _tw[key]
+		tw[0] = move_toward(float(tw[0]), float(tw[1]), float(tw[2]) * dt)
+	dark = tw_val("dark")
+	GameAudio.set_hush(tw_val("hush"))
+	_page_a = move_toward(_page_a, _page_goal, _page_rate * dt)
+	if _gift != null and is_instance_valid(_gift) and not _gift.is_queued_for_deletion():
+		_gift.step(dt)
+	if _skip_arm > 0.0:
+		_skip_arm -= dt
+		if _skip_arm <= 0.0 and not bool(spec.get("popups", false)):
+			_skip_btn.visible = false
 	_apply()
 	if _closing >= 0.0:
 		_closing -= dt
@@ -346,6 +506,9 @@ func _apply() -> void:
 	(_vignette.material as ShaderMaterial).set_shader_parameter("strength", _vig)
 	_cap.modulate.a = _cap_a
 	_cap.visible = _cap_a > 0.001
+	_page.modulate.a = _page_a
+	_page.visible = _page_a > 0.001
+	_chip.modulate.a = 1.0 - _page_a                  # 연대기 한 쪽 위에 '천천히' 띠를 겹치지 않게
 	var view := _view()
 	if view != null:
 		view.pose_over = _poses
@@ -363,16 +526,41 @@ func _beat(b: Dictionary) -> void:
 		_cap_on = true
 		_layout()
 	if b.has("beam") and sc != null and sc.has_method("beam_at"):
-		sc.beam_at(v, float(b["beam"]) * maxf(k, 0.6))
+		_beam = sc.beam_at(v, float(b["beam"]) * maxf(k, 0.6))
+		if _beam != null and b.has("beam_rise"):
+			_beam.rise = maxf(0.6, float(b["beam_rise"]) * maxf(k, 0.6))    # 움직임 줄이기: 0.5초 넘게 (늘 넘음)
+		if _beam != null:
+			_beam.peak = float(b.get("beam_peak", 1.0))
+			_beam.width = float(b.get("beam_width", 1.0))
 	if b.has("fx"):
 		var fx: Array = b["fx"]
-		GameAudio.fx(String(fx[0]), "Village", float(fx[1]) if fx.size() > 1 else 0.0)
+		GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0)
+	for key: String in ["dark", "hush", "light"]:
+		if b.has(key):
+			var g: Array = b[key]
+			var cur := tw_val(key)
+			_tw[key] = [cur, float(g[0]), absf(float(g[0]) - cur) / maxf(0.05, float(g[1]) * k)]
+	if b.has("shadow"):
+		_start_shadow(float(b["shadow"]) * k)
+	if b.has("shake"):
+		var cam0 := _cam()
+		if cam0 != null:
+			cam0.shake(float(b["shake"][0]), float(b["shake"][1]) * k)    # 움직임 줄이기면 JarCamera가 떨지 않음
+	if b.has("gift") and _beam != null and is_instance_valid(_beam) and _beam.get_parent() is Node3D:
+		_gift = AwakenGift.spawn(_beam.get_parent(), _beam.position, float(b["gift"]) * maxf(k, 0.6))
+		_gift.driven = true
+	if b.has("page"):
+		_show_page(b["page"])
+	if b.has("page_off"):
+		_page_goal = 0.0
+		_page_rate = 1.0 / maxf(0.1, float(b["page_off"]) * k)
 	if b.has("say"):
 		var sy: Dictionary = b["say"]
+		var view := _view()
 		for rid: int in _roles.get(String(sy.get("who", "")), []):
-			var r := v.person(rid)
-			if r != null:
-				v.speak(r, String(sy["text"]), float(sy.get("secs", 5.0)))
+			if view != null and v.person(rid) != null:      # 화면 말풍선만 (R4 — 시뮬레이션의 말 기록 v.speak를 쓰지 않음)
+				view.stage_say[rid] = [WatcherName.fill(v, String(sy["text"])), String(sy.get("mood", "")), float(sy.get("secs", 5.0)) * maxf(k, 0.6)]
+				_said.append(rid)
 			break
 	if b.has("pose"):
 		var po: Dictionary = (b["pose"] as Dictionary).duplicate()
@@ -380,6 +568,12 @@ func _beat(b: Dictionary) -> void:
 		var stg := float(po.get("stagger", 0.0)) * k
 		po.erase("who")
 		po.erase("stagger")
+		if po.has("to"):                     # 역할 이름 → 그 사람 id (없으면 다가가지 않음)
+			var tl: Array = _roles.get(String(po["to"]), [])
+			if tl.is_empty():
+				po.erase("to")
+			else:
+				po["to"] = int(tl[0])
 		var i := 0
 		for rid: int in _roles.get(who, []):
 			if stg > 0.0 and i > 0:
@@ -406,10 +600,26 @@ func _end() -> void:
 	var view := _view()
 	if view != null:
 		view.pose_over = {}
+		for rid: int in _said:
+			view.stage_say.erase(rid)
+	_said.clear()
 	_vig = 0.0
 	_vig_goal = 0.0
 	_cap_on = false
 	_cap_a = 0.0
+	_tw.clear()
+	dark = 0.0
+	_shadow_t = -1.0
+	GameAudio.set_hush(0.0)
+	_page_a = 0.0
+	_page_goal = 0.0
+	_skip_arm = 0.0
+	if _beam != null and is_instance_valid(_beam) and skipped:
+		_beam.queue_free()
+	if _gift != null and is_instance_valid(_gift):
+		_gift.queue_free()
+	_beam = null
+	_gift = null
 	_apply()
 	t = -1.0
 	visible = false
@@ -420,6 +630,77 @@ func _end() -> void:
 		_firsts().fire(after)
 	id = ""
 	finished.emit(was, skipped)
+
+
+# ───────────────────────── (E1-1) 어둠 · 그림자 · 빛 · 연대기 한 쪽 ─────────────────────────
+## (장면이 읽음) 이 연출 동안엔 연출의 말풍선만 — 시뮬레이션 말풍선(촌장의 말 등)은 감춤 (콘티의 hush 값이 있는 연출)
+func hush_bubbles() -> bool:
+	return playing() and _tw.has("hush") and tw_val("hush") > 0.05
+
+
+func tw_val(key: String) -> float:
+	return float((_tw[key] as Array)[0]) if _tw.has(key) else 0.0
+
+
+## 큰 그림자: 카메라의 오른쪽(약간 앞으로)으로 마을 위를 천천히 지나감. 움직임 줄이기면 그 자리에서 짙어졌다 옅어짐
+func _start_shadow(secs: float) -> void:
+	_shadow_t = t
+	_shadow_dur = maxf(0.5, secs)
+	var p := _focus_point(v)
+	var w: Vector3 = sc.ground_point(p) if sc != null and sc.has_method("ground_point") else Vector3(p.x, 0, p.y)
+	_shadow_c = Vector2(w.x, w.z)
+	var cam := _cam()
+	if cam != null and cam.camera != null:
+		var bs := cam.camera.global_transform.basis
+		var right := Vector2(bs.x.x, bs.x.z)
+		var fwd := Vector2(-bs.z.x, -bs.z.z)
+		if right.length() > 0.01:
+			shadow_dir = (right.normalized() + (fwd.normalized() if fwd.length() > 0.01 else Vector2.ZERO) * 0.35).normalized()
+
+
+## 화면 셰이더의 그림자 (세계 x, z, 반지름, 세기) — 없으면 세기 0
+func shadow_param() -> Vector4:
+	if not playing() or _shadow_t < 0.0:
+		return Vector4(0, 0, 1, 0)
+	var u := (t - _shadow_t) / _shadow_dur
+	if u < 0.0 or u > 1.0:
+		return Vector4(0, 0, 1, 0)
+	var still := JarCamera.reduce_motion()
+	var s := sin(PI * u)
+	var c := _shadow_c if still else _shadow_c + shadow_dir * lerpf(-SHADOW_RUN, SHADOW_RUN, u)
+	var strength := (s * s if still else clampf(s * 1.6, 0.0, 1.0))
+	return Vector4(c.x, c.y, SHADOW_R, strength)
+
+
+## 화면 셰이더의 빛기둥 웅덩이 (세계 x, z, 반지름, 세기)
+func light_param() -> Vector4:
+	var k0 := tw_val("light")
+	if not playing() or k0 <= 0.001:
+		return Vector4(0, 0, 1, 0)
+	var c := _shadow_c
+	if _beam != null and is_instance_valid(_beam) and _beam.is_inside_tree():
+		var g := _beam.global_position
+		c = Vector2(g.x, g.z)
+		_light_c = c
+	elif _light_c != Vector2.INF:
+		c = _light_c
+	return Vector4(c.x, c.y, LIGHT_R, k0)
+
+
+var _light_c := Vector2.INF
+
+
+func _show_page(pg: Dictionary) -> void:
+	var nm := v.settlement_name if v != null and v.settlement_name != "" else "우리 마을"
+	_page_title.text = nm
+	_page_sub.text = WatcherName.fill(v, String(pg.get("sub", "")))
+	var lines := PackedStringArray()
+	for s: String in pg.get("lines", []):
+		lines.append(WatcherName.fill(v, s))
+	_page_body.text = "\n".join(lines)
+	_page_goal = 1.0
+	_page_rate = 1.0 / maxf(0.1, PAGE_FADE * maxf(k, 0.6))
+	_layout()
 
 
 # ───────────────────────── 병 시간 ─────────────────────────
@@ -507,6 +788,8 @@ func _go_to(c: Dictionary) -> void:
 	tg.y += float(c.get("lift", 0.0))
 	var size := float(c.get("size", 14.0))
 	var pitch := float(c.get("pitch", JarCamera.PITCH_DEG))
+	if JarCamera.reduce_motion():            # 움직임 줄이기 (staging.md 엣지 8): 카메라 기울기 없음 — 지금 각 그대로
+		pitch = float(_home.get("pitch", pitch))
 	var base_yaw := float(_home.get("yaw", cam._yaw_deg))
 	if is_nan(_yaw_off):                     # 이 연출 동안 같은 방위 — 사건 자리를 집·큰 꽃이 가리지 않는 쪽
 		_yaw_off = clear_yaw(tg, base_yaw, pitch)
@@ -598,8 +881,37 @@ static func roles(q: Village, at: Vector2) -> Dictionary:
 	for rid: int in all:
 		if not rid in child and not rid in elders and not rid in elder:
 			others.append(rid)
+	# (E1-1 ④) 사람마다 다른 반응 — 난수 없이 자리(사건 자리에서 가까운 차례)로만 정함
+	var pos := {}
+	for r in ws:
+		pos[r.id] = Vector2(r.x, r.y)
+	var hugger: Array = []
+	var hugged: Array = []
+	var best_d := HUG_R
+	for aid: int in others:                     # 아이와 가장 가까운 어른 = 아이를 끌어안는 사람
+		if aid in kids or not q.person(aid).is_adult():
+			continue
+		for cid: int in kids:
+			var dd: float = (pos[aid] as Vector2).distance_to(pos[cid])
+			if dd < best_d:
+				best_d = dd
+				hugger = [aid]
+				hugged = [cid]
+	var rest: Array = others.filter(func(x: int) -> bool: return not x in hugger and not x in hugged)
+	var stander: Array = []
+	var crier: Array = []
+	var adults_left: Array = rest.filter(func(x: int) -> bool: return q.person(x).is_adult())
+	if adults_left.size() >= 3:                 # 끝까지 서서 멍하니 보는 사람 — 가장 먼 어른 (사람이 적으면 없음)
+		stander = [adults_left[adults_left.size() - 1]]
+	if adults_left.size() >= 2:                 # 우는 사람 — 가장 가까운 어른
+		crier = [adults_left[0]]
+	var kneelers: Array = rest.filter(func(x: int) -> bool: return not x in stander and not x in crier)
+	for cid: int in child:                      # 처음 가리킨 아이는 안기지 않으면 맨 나중에 무릎
+		if not cid in hugged:
+			kneelers.append(cid)
 	return {"all": all, "child": child, "elder": elder, "elders": elders if not elders.is_empty() else elder, "others": others,
-		"chief": [c.id] if c != null and not c.sleeping else []}
+		"chief": [c.id] if c != null and not c.sleeping else [], "kids": kids,
+		"kneelers": kneelers, "crier": crier, "hugger": hugger, "hugged": hugged, "stander": stander}
 
 
 # ───────────────────────── 연대기 그림 카드 ─────────────────────────
@@ -610,13 +922,14 @@ func _capture() -> void:
 		e0["card"] = id                      # 그림이 없어도 카드로 (그림은 다음 화면에 찍어 붙임)
 	_cap.visible = false
 	_chip.visible = false
+	var skip_was := _skip_btn.visible
 	_skip_btn.visible = false
 	var who := v
 	var sid := id
 	var find := String(spec.get("card", {}).get("find", ""))
 	await RenderingServer.frame_post_draw
 	_save_pic(who, sid, find)
-	_skip_btn.visible = true
+	_skip_btn.visible = skip_was and playing() and (_skip_arm > 0.0 or bool(spec.get("popups", false)))
 	_chip.visible = playing() and _chip_l.text != "천천히 — "
 
 
