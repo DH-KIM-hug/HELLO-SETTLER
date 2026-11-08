@@ -8,6 +8,7 @@
 ##   아래 띠 = 거인의 도구 5개: 제단 · 상점 · 손 · 연대기 · 선반. [손] = 열린 도구(물 뿌리기·핀셋 — 끌어 겨누기, 유리 닦기·등불) + 손에 든 물건 떨어뜨리기 (view/giant_hand_ctl.gd).
 ## 개발 모드(휴대폰 기본 꺼짐 · F3): 상태 글 + +1일 · 병 돌리기 · 확대 −/+ · 외곽선 · 모델 · 곰팡이 · 버섯 숲. 끌어서 이동, 휠·두 손가락으로 확대. 스페이스 = 멈춤.
 ## 주민을 누르면 주민 상세(view/ui/resident_detail.gd, UI.md 03) — 손가락 둘레 넉넉히, 가장 가까운 주민. [따라가 보기] = 카메라가 따라감 (끌면 풀림).
+## 건물을 누르면 건물 정보 카드(view/ui/building_info.gd, UI.md '건물 정보 카드') — 주민이 앞에 있으면 주민 먼저, 빈 땅·아래로 밀기 = 닫기.
 ## 화면 비율은 넓히기(EXPAND): 기준 360×640 그대로, 세로로 긴 휴대폰은 위아래가, 가로 창은 좌우가 넓어진다 (상세 패널이 가로 창에선 오른쪽에).
 extends Node3D
 
@@ -124,6 +125,9 @@ const LID_IDLE := 20.0               # 손짓 없이 열린 채 (거절·그만)
 var _lid_close_in := -1.0            # 뚜껑을 닫을 때까지 남은 현실 초 (−1 = 없음). (jar-time E7) 시뮬의 현실 시간 자동 닫힘 대신
 var store_strip: StoreStrip            # [창고] 위 띠 아래 창고 띠 (view/ui/store_strip.gd)
 var store_sheet: StoreSheet            # [창고] 창고 시트 (view/ui/store_sheet.gd)
+var bcard: BuildingInfo                # 건물 정보 카드 — 건물을 누르면 (UI.md '건물 정보 카드', view/ui/building_info.gd)
+var bledger := BuildingLedger.new()    # 카드의 오늘 만든 양·지은 사람 (화면 쪽 장부 — 보기만)
+var _nudge_tw: Tween
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
@@ -200,7 +204,7 @@ func on_back() -> void:
 	if speed_list != null and speed_list.visible:
 		speed_list.visible = false
 		return
-	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
+	for sheet: Control in [detail, altar_sheet, settings_sheet, return_letter, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
 		if sheet != null and sheet.visible:
 			sheet.call("close")
 			return
@@ -414,6 +418,8 @@ func _process(dt: float) -> void:
 		var was_skipping := clock.skipping
 		clock.tick(dt)
 		_sim_ms = lerpf(_sim_ms, (Time.get_ticks_usec() - t0) / 1000.0, 0.05)
+		for vv: Array in village_views():     # 건물 정보 카드의 장부 (읽기만)
+			bledger.sample(vv[0])
 		var vfast := clock.view_fast()
 		# [마을의 삶] 말풍선 장면은 보통 이하 빠르기에서만 (주민이 제 걸음일 때) — 화면 상태라 SocialStage 인스턴스에 (시뮬은 늘 같음, ADR-0001)
 		var talk_on := not vfast and not clock.skipping and not clock.fast and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
@@ -748,6 +754,9 @@ func _setup_ui() -> void:
 	dlayer.add_child(people_sheet)
 	people_sheet.resident_pressed.connect(_on_people_person.bind(false))
 	people_sheet.follow_requested.connect(_on_people_person.bind(true))
+	bcard = BuildingInfo.new()            # 건물 정보 카드
+	dlayer.add_child(bcard)
+	bcard.resident_pressed.connect(_on_bcard_person)
 	chronicle.people_requested.connect(open_people)
 	store_sheet = StoreSheet.new()          # [창고]
 	store_sheet.setup(store_strip.book, self)
@@ -794,7 +803,7 @@ func _setup_ui() -> void:
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
 func close_sheets(keep: Control = null) -> void:
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
 		if sh != null and sh != keep and sh.visible:
 			sh.call("close")
 	if hand_ctl != null:
@@ -1132,7 +1141,7 @@ func popup_ok() -> bool:
 		return false
 	if hand_ctl != null and hand_ctl.aiming():
 		return false
-	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet]:
+	for sh: Control in [detail, altar_sheet, settings_sheet, chronicle, shop_sheet, shelf_sheet, people_sheet, store_sheet, bcard]:
 		if sh != null and sh.visible:
 			return false
 	return true
@@ -1787,13 +1796,125 @@ func _on_tap(sp: Vector2) -> void:
 	var r := pick_resident(sp)
 	if r != null:
 		altar_sheet.close()
+		bcard.close()
 		detail.setup(_picked[0])
 		_follow_vv = _picked
 		detail.open(r)
 		Notebook.on_detail(_picked[0], r)     # [거인의 수첩] 아이 하나를 눌러 보기
 		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
+		return
+	var b := pick_building(sp)              # 건물 (주민이 앞에 있으면 위에서 주민이 먼저)
+	if b != null:
+		open_building(_picked_b[0], b, _picked_b[1])
+		return
+	if bcard.visible:                       # 카드가 열려 있으면 빈 땅 누름 = 닫기 (유리 톡 아님)
+		bcard.close()
 	else:
 		tap_glass(false, screen_to_ground(sp))     # 빈 곳 = 유리 톡 (HEALTH.md 4 — 그날 4번째부터 두려움) · 매달린 물방울은 누른 쪽으로 떨어짐 (WORLD_EVENTS 2.2)
+
+
+# ───────────────────────── 건물 누르기 · 건물 정보 카드 (UI.md '건물 정보 카드') ─────────────────────────
+const BLD_PICK_PAD := 6.0             # 건물 둘레 화면 여유 (px)
+var _picked_b: Array = []             # pick_building이 고른 건물의 [Village, VillageView]
+
+
+## 누른 곳의 건물 — 건물 자리(Building.size 반지름 · 높이)를 화면에 투영한 사각형 안, 여럿이면 가운데가 가장 가까운 것. 없으면 null.
+## 제단(AltarView)과 그리지 않는 건물(hidden_blds)은 빼고, 화면의 건물 노드 자리(VillageView._blds)를 읽기만 한다
+func pick_building(sp: Vector2) -> Building:
+	var best: Building = null
+	var best_d := INF
+	for vv: Array in village_views():
+		var q: Village = vv[0]
+		var vw: VillageView = vv[1]
+		for b in q.buildings:
+			if b.site_type() == Awakening.ALTAR or vw.hidden_blds.has(b.id):
+				continue
+			var n: Node3D = vw._blds.get(b.id)
+			if n == null or not n.is_visible_in_tree():
+				continue
+			var r := building_screen_rect(n.global_position, b)
+			if r.size == Vector2.ZERO or not r.grow(BLD_PICK_PAD).has_point(sp):
+				continue
+			var d := (sp - r.get_center()).length() / maxf(8.0, r.size.length())
+			if d < best_d:
+				best_d = d
+				best = b
+				_picked_b = vv
+	return best
+
+
+## 건물이 화면에서 차지하는 사각형 (땅 위 반지름 0.8 × size 상자 + 높이) — 카메라 뒤면 빈 사각형
+func building_screen_rect(at: Vector3, b: Building) -> Rect2:
+	var s := b.size() * 0.8
+	var flat := b.type == "농장" or b.type == "광장" or b.type == "묘지"
+	var h := 0.35 if flat else (0.6 if not b.built else 0.9 + b.size() * 0.9)
+	var lo := Vector2(INF, INF)
+	var hi := Vector2(-INF, -INF)
+	for cx: float in [-s, s]:
+		for cz: float in [-s, s]:
+			for cy: float in [0.0, h]:
+				var p := at + Vector3(cx, cy, cz)
+				if cam.camera.is_position_behind(p):
+					return Rect2()
+				var q := cam.camera.unproject_position(p)
+				lo = lo.min(q)
+				hi = hi.max(q)
+	return Rect2(lo, hi - lo)
+
+
+## 건물 정보 카드를 연다 + 카드가 건물을 가리면 카메라를 살짝 비켜 줌 (A26 시트 규칙)
+func open_building(q: Village, b: Building, vw: VillageView = null, instant := false) -> void:
+	close_sheets(bcard)
+	_stop_follow()
+	bcard.open(q, b, bledger)
+	if vw == null:
+		for vv: Array in village_views():
+			if vv[0] == q:
+				vw = vv[1]
+	var n: Node3D = vw._blds.get(b.id) if vw != null else null
+	if n == null:
+		return
+	if not instant and is_inside_tree():      # 카드 높이가 자리 잡은 뒤 (글자 줄바꿈이 한 화면 늦음)
+		await get_tree().process_frame
+		await get_tree().process_frame
+		if not bcard.is_open_for(b) or not is_instance_valid(n):
+			return
+	_nudge_to_free(n.global_position + Vector3(0, 0.5, 0), instant)
+
+
+## 건물이 카드(또는 위 띠)에 가려지면 카드 위 빈 곳 가운데로 0.3초 동안 옮김 — 이미 보이면 그대로
+func _nudge_to_free(at: Vector3, instant := false) -> void:
+	if cam.camera.is_position_behind(at):
+		return
+	var p := cam.camera.unproject_position(at)
+	var fr := bcard.free_rect()
+	fr.position.y += top_h
+	fr.size.y -= top_h
+	if fr.size.y < 40.0 or fr.grow(-24.0).has_point(p):
+		return
+	var goal := Vector2(clampf(p.x, fr.position.x + 40.0, fr.end.x - 40.0), fr.get_center().y)
+	var dlt := goal - p
+	if _nudge_tw != null and _nudge_tw.is_valid():
+		_nudge_tw.kill()
+	if instant or not is_inside_tree():
+		cam.pan_pixels(dlt)
+		return
+	var st := {"f": 0.0}
+	_nudge_tw = create_tween()
+	_nudge_tw.tween_method(func(f: float) -> void:
+		cam.pan_pixels(dlt * (f - float(st["f"])))
+		st["f"] = f, 0.0, 1.0, 0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
+## 카드의 얼굴을 누름 → 그 주민 상세
+func _on_bcard_person(q: Village, r: Resident) -> void:
+	bcard.close()
+	close_sheets(detail)
+	detail.setup(q)
+	for vv: Array in village_views():
+		if vv[0] == q:
+			_follow_vv = vv
+	detail.open(r)
 
 
 ## 누른 곳이 제단(돌 단 가운데)이면 그 무리 — 제단이 서 있거나 짓는 중일 때만. 아니면 null
