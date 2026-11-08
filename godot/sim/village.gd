@@ -138,6 +138,7 @@ var hand: GiantHand                   # [거인의 손] 물 뿌리기·감싸기
 var smalls: SmallCrises                # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2 — sim/small_crises.gd, 난수도 따로)
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var dogs: Dogs                        # [강아지] 집 강아지·마을 강아지·꿀떡이 — 무리마다 (GD 3.0 · E3-13 — sim/dogs.gd, 난수도 따로)
+var lean: LeanSeasons                 # 빠듯한 철 캐시 (푸른 밀 고개·애벌레 많은 해 — docs/BALANCE.md B-1, sim/lean_seasons.gd · 저장 안 함)
 var caterpillars: Caterpillars        # 애벌레 → 고치 → 나비 · 애벌레 잡이 · 꿀방울 — 무리마다 (production-chain R7 — sim/caterpillars.gd)
 var direct_route := Balance.DIRECT_ROUTE   # 바로 보냄 (production-chain R3) — 시험이 끌 수 있게 (저장 안 함)
 var _stall: Dictionary = {}           # 건물 id → 막힘 판정 (Production.stall_tick — 저장 안 함, 불러온 첫 걸음엔 사건 없음)
@@ -989,6 +990,7 @@ func step(dt: float) -> void:
 			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
 		GiantPlants.hourly(self)      # 해바라기 철·씨앗비 날·목화 (flower-forest R3·R4)
+		LeanSeasons.hourly(self)      # 빠듯한 철이 오고 감을 알림 · 애벌레 떼 (BALANCE B-1)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
@@ -1394,6 +1396,7 @@ func _update_building(b: Building, dt: float) -> void:
 		place *= SmallCrises.farm_mult(self, b)          # [작은 위기] 먼지 뭉치가 덮은 밭은 자람이 멈춤 (WORLD_EVENTS 2.2)
 		place *= GiantHand.farm_mult(self, b)            # [거인의 손] 커튼·유리의 먼지막·물을 반긴 마른 밭·냉해 (GD 6.4 · WE 4.2)
 		place *= Health.season_grow(self)                # [철] 추운 철엔 밀이 더디 자람 (BALANCE v5-0 — 겨울의 빠듯함)
+		place *= LeanSeasons.farm_mult(self)             # [빠듯한 철] 푸른 밀 고개·애벌레 많은 해 (BALANCE B-1)
 	if (b.type == "빵집" or b.type == "화덕") and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	if b.type == "빵집" or b.type == "화덕":
@@ -3733,7 +3736,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "lean", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 

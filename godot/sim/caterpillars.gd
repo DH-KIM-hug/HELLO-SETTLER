@@ -8,6 +8,7 @@
 ##  · 잡기: 애벌레 잡이(사냥꾼 키 — 저장 호환) 일꾼이 조장, 한가한 어른 1~2명을 부름 (조 2~3명, 모자라면 잡지 않음). 한 마리 = 고기 CAT_MEAT를 나눠 멤.
 ##  · 고치: 빈 고치 = 비단 실 SILK_EMPTY, 산 고치 = SILK_LIVE (그 나비는 없음 — 비단 실이 넉넉하지 않을 때만 땀).
 ##  · 꿀방울: 여름(HONEY_MONTHS) 반나절마다, 그동안 성한 꽃 무리 둘레(HONEY_R)에 있었던 어른마다 (id 순) 마을 rng로 HONEY_P → 꿀 HONEY_FOOD.
+##  · 애벌레 많은 해 (BALANCE B-1, sim/lean_seasons.gd): 떼가 깨는 동안 상한 CAT_BLIGHT_MAX (swarm · cap), 고기가 넉넉해도 잡으러 감.
 ## 이 파일 밖의 고리: Village.step (step) · ResidentAI.work_task (사냥꾼 → work_task) · ResidentAI.run_op ("cat_*") ·
 ##   Wildlife._place_bugs (live_cats — 강아지가 짖는 상대·화면) · Village.to_dict/from_dict.
 class_name Caterpillars
@@ -28,7 +29,7 @@ var month := 0                        # 그날의 병 달 (하루에 한 번 셈
 var year := 0
 var half_i := -1                      # 꿀방울 반나절 번호
 var near: Dictionary = {}             # 이 반나절에 성한 꽃 무리 둘레에 있었던 어른 id → true
-var stats := {"hatched": 0, "caught": 0, "pupated": 0, "flown": 0, "silk_live": 0, "silk_empty": 0, "honey": 0, "seeded": 0}
+var stats := {"hatched": 0, "caught": 0, "pupated": 0, "flown": 0, "silk_live": 0, "silk_empty": 0, "honey": 0, "seeded": 0, "swarms": 0}
 
 
 # ───────────────────────── 읽기 ─────────────────────────
@@ -121,7 +122,7 @@ func _tick(v: Village, dt: float) -> void:
 	var keep_eggs: Array = []
 	for e: Dictionary in eggs:
 		if t - float(e["t"]) >= Balance.CAT_HATCH:
-			if cats_in(int(e["p"])) < Balance.CAT_MAX:
+			if cats_in(int(e["p"])) < cap(v):
 				_hatch(v, int(e["p"]), float(e["t"]) + Balance.CAT_HATCH)
 				changed = true
 		else:
@@ -160,7 +161,7 @@ func _tick(v: Village, dt: float) -> void:
 		if not bool(f["laid"]) and t - float(f["t"]) >= Balance.BUTTERFLY_LAY:
 			f["laid"] = true
 			if in_season(month):
-				_lay(int(f["p"]), Balance.CAT_EGGS, float(f["t"]) + Balance.BUTTERFLY_LAY)
+				_lay(int(f["p"]), Balance.CAT_EGGS, float(f["t"]) + Balance.BUTTERFLY_LAY, cap(v))
 		if t - float(f["t"]) < Balance.BUTTERFLY_DAYS:
 			keep_flies.append(f)
 	flies = keep_flies
@@ -190,8 +191,26 @@ func _hatch(v: Village, pid: int, born: float) -> void:
 	stats["hatched"] = int(stats["hatched"]) + 1
 
 
-## 알 n개를 from 무리에서 가까운 꽃 무리부터 (무리마다 애벌레 + 알이 CAT_MAX까지)
-func _lay(from_pid: int, n: int, t: float) -> void:
+## 꽃 무리마다 애벌레 상한 — 애벌레 많은 해의 떼가 깨어 있는 동안은 CAT_BLIGHT_MAX (sim/lean_seasons.gd · BALANCE B-1)
+func cap(v: Village) -> int:
+	return Balance.CAT_BLIGHT_MAX if LeanSeasons.blight_now(v) else Balance.CAT_MAX
+
+
+## 애벌레 많은 해 — 떼가 깸: 꽃 무리마다 알을 CAT_BLIGHT_MAX까지 (나이를 조금씩 다르게, 자리는 해시 · 난수 흐름 안 씀)
+func swarm(v: Village) -> void:
+	if patches.is_empty():
+		setup(v)
+	for i in patches.size():
+		var pid := int(patches[i]["id"])
+		var k := 0
+		while cats_in(pid) + eggs_in(pid) < Balance.CAT_BLIGHT_MAX:
+			eggs.append({"p": pid, "t": v.t - Balance.CAT_HATCH + (i + k) * 0.05 * Balance.DAY})
+			k += 1
+	stats["swarms"] = int(stats.get("swarms", 0)) + 1
+
+
+## 알 n개를 from 무리에서 가까운 꽃 무리부터 (무리마다 애벌레 + 알이 mx까지 — 보통 CAT_MAX)
+func _lay(from_pid: int, n: int, t: float, mx: int = Balance.CAT_MAX) -> void:
 	var src := patch(from_pid)
 	if src.is_empty():
 		return
@@ -203,7 +222,7 @@ func _lay(from_pid: int, n: int, t: float) -> void:
 		return da < db or (da == db and int(a["id"]) < int(b["id"])))
 	for p: Dictionary in order:
 		var pid := int(p["id"])
-		while n > 0 and cats_in(pid) + eggs_in(pid) < Balance.CAT_MAX:
+		while n > 0 and cats_in(pid) + eggs_in(pid) < mx:
 			eggs.append({"p": pid, "t": t})
 			n -= 1
 		if n <= 0:
@@ -266,7 +285,7 @@ static func has_work(v: Village, r: Resident, b: Building) -> bool:
 		return false
 	if b.out_total() >= 4.0:
 		return true
-	if c._target_cat(v, b, r).size() > 0 and float(v.stock.get("고기", 0.0)) < v.enough("고기") and c._crew(v, r).size() >= Balance.CAT_CREW_MIN - 1:
+	if c._target_cat(v, b, r).size() > 0 and (float(v.stock.get("고기", 0.0)) < v.enough("고기") or LeanSeasons.blight_now(v)) and c._crew(v, r).size() >= Balance.CAT_CREW_MIN - 1:
 		return true
 	return not c._target_cocoon(v, b).is_empty()
 
@@ -277,7 +296,7 @@ static func work_task(v: Village, r: Resident, b: Building) -> bool:
 	if c == null:
 		return false
 	var s := v.store()
-	if float(v.stock.get("고기", 0.0)) < v.enough("고기"):
+	if float(v.stock.get("고기", 0.0)) < v.enough("고기") or LeanSeasons.blight_now(v):     # 애벌레 많은 해엔 밀밭을 지키러 (BALANCE B-1)
 		var cat := c._target_cat(v, b, r)
 		if not cat.is_empty():
 			var crew := c._crew(v, r)

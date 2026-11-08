@@ -960,3 +960,15 @@ const QUILT_PER := 2.0                  # (정함) 옷 몫(COTTON_PER)을 넘는
 # 물 보존 (design/gdd/water.md — 증발·스며듦 → 병 안의 김 → 이슬·유리벽 골. 병 밖으로는 뚜껑으로만)
 const VAPOUR_DAYS := 3.0                # 뚜껑을 닫을 때(세상 만들기 끝) 공기에 든 김 = 하루 들어오는 물 × 이만큼
 const VAPOUR_MAX_K := 2.0               # 김이 많이 쌓여도 이슬·골은 보통의 이만큼까지 (김 / (하루 들어오는 물 × VAPOUR_DAYS))
+# ═══════════════ 빠듯한 철 — 푸른 밀 고개·애벌레 많은 해 (docs/BALANCE.md B-1 · ROADMAP B-1, sim/lean_seasons.gd — 메인 판단 사용자 위임 2026-11-08) ═══════════════
+const LEAN_MIN_AGE := 7.0 * DAY         # 마을이 이보다 어리면 빠듯한 철이 오지 않음 (첫 정착을 흔들지 않게 · 첫 빵 전에도 없음)
+const GREEN_START_DOY := 124            # 푸른 밀 고개 — 5월 5일 (1월 1일 = 0)부터 …
+const GREEN_SPREAD := 10                # … 0~이만큼 날 늦게 (마을·해의 해시)
+const GREEN_DAYS := 3                   # 이 날 수 동안
+const GREEN_SHARE := 0.35               # 그동안 밭이 거두는 먹을 것 = 하루 필요의 이만큼까지 (밭 수와 상관없이 — 밀이 아직 푸름)
+const CAT_BLIGHT_P := 0.5               # 애벌레 많은 해가 될 몫 (해마다, 마을·해의 해시)
+const CAT_BLIGHT_START_DOY := 152       # 떼가 깨는 날 — 6월 2일부터 …
+const CAT_BLIGHT_SPREAD := 8            # … 0~이만큼 날 늦게
+const CAT_BLIGHT_DAYS := 3              # 떼가 밀밭을 갉는 날 수 (그동안 꽃 무리 상한 CAT_BLIGHT_MAX)
+const CAT_BLIGHT_MAX := 5               # 떼가 깬 동안 꽃 무리마다 애벌레 상한 (알 포함)
+const CAT_BLIGHT_K := 0.6               # 떼가 꽉 차면 밭이 거두는 몫 = 하루 필요의 (1 − 이만큼)까지 — 잡을수록 줄어듦
