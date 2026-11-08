@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 작은 생물·강아지 (E3-12 · E3-13)")
 	run.timed(self, ["test_no_deer_after_load", "test_start_dogs", "test_kkultteok_first_jar", "test_gene_mix", "test_breed_cap",
-		"test_adopt", "test_food", "test_death_grief", "test_bark", "test_save_roundtrip", "test_words", "test_follow_sleep"])
+		"test_adopt", "test_food", "test_death_grief", "test_bark", "test_save_roundtrip", "test_words", "test_follow_sleep", "test_critter_view_alive"])
 
 
 func proto(seed_v := 20261105) -> Village:
@@ -295,3 +295,72 @@ func test_follow_sleep() -> void:
 	check(String(k["state"]) == "sleep" and Vector2(k["x"], k["y"]).distance_to(door) < 0.5, "밤: 집 앞에서 잠 (%s, %.1f칸)" % [k["state"], Vector2(k["x"], k["y"]).distance_to(door)])
 	var vd: Dictionary = v.dogs.village_dogs(v)[0]
 	check(String(vd["state"]) == "sleep" and Vector2(vd["x"], vd["y"]).distance_to(v.fire) < 2.5, "밤: 마을 강아지는 모닥불 곁")
+
+
+# ───────────────────────── 화면: 작은 생물이 살아 움직임 (나비 날갯짓 · 되풀이 클립 · sim은 그대로) ─────────────────────────
+func test_critter_view_alive() -> void:
+	var v := proto(78)
+	v.advance(Balance.HOUR)
+	var guard := 0
+	while (v.is_night() or FloraLook.season_of(v) == "겨울") and guard < 400:
+		v.advance(Balance.HOUR)
+		guard += 1
+	var before := SaveCodec.digest(v.to_dict())
+	var fv := FaunaView.new(v, null)       # 장면 밖 (헤드리스 _initialize 안에서는 _ready가 안 옴) — 둘레 생물은 직접 뿌림
+	fv._seed_ambient()
+	var loops := true
+	var bad := ""
+	for k: String in FaunaView.AMBIENT + ["caterpillar"] + FaunaView.COATS:
+		if not FaunaView.has_model(k):
+			continue
+		var ap := FaunaView._ap(FaunaView.template(k)["node"] as Node3D)
+		if ap == null:
+			continue
+		for nm: StringName in ap.get_animation_list():
+			if String(nm) != "RESET" and ap.get_animation(nm).loop_mode != Animation.LOOP_LINEAR:
+				loops = false
+				bad = "%s/%s" % [k, nm]
+	check(loops, "생물·강아지 클립이 모두 되풀이 (한 번 돌고 멈추지 않음) %s" % bad)
+	check(bool(FaunaView.template("butterfly")["flap"]), "나비 멀리 메시에 날개 표시 (셰이더 퍼덕임)")
+	# 멀리 (기본 확대 근처) — 보는 반지름 20 = MultiMesh
+	fv.view_override = [v.center, 20.0]
+	var crit: Array = fv._crit
+	var start: Array = []
+	for e: Dictionary in crit:
+		start.append([e["p"], e["st"]])
+	var wings: Array = []
+	wings.resize(crit.size())
+	for i in 240:
+		fv.sync(1.0 / 30.0)
+		for j in crit.size():
+			var e: Dictionary = crit[j]
+			if e["kind"] in FaunaView.FLYERS:
+				if wings[j] == null:
+					wings[j] = {}
+				(wings[j] as Dictionary)[snappedf(float(e["wing"]), 0.05)] = true
+	var moved := {}
+	for j in mini(start.size(), crit.size()):
+		var e: Dictionary = crit[j]
+		if (e["p"] as Vector2).distance_to(start[j][0]) > 0.02 or String(e["st"]) != String(start[j][1]):
+			moved[e["kind"]] = true
+	var fl: Array = wings.filter(func(w: Variant) -> bool: return w != null)
+	var flapping := fl.filter(func(w: Dictionary) -> bool: return w.size() >= 2).size()     # 꿀벌은 위·아래 두 각만 오감 (흐릿한 떨림)
+	check(moved.has("butterfly") and moved.has("bee") and (moved.has("ladybug") or moved.has("beetle")) and moved.has("grasshopper"),
+		"8초 동안 나비·꿀벌·기는 것·메뚜기가 움직임 (%s)" % str(moved.keys()))
+	check(flapping >= 2 and flapping == fl.size(), "나는 것마다 날개 각이 바뀜 (%d / %d)" % [flapping, fl.size()])
+	var mmi: MultiMeshInstance3D = fv._mm.get("butterfly")
+	var ok_mm := mmi != null and mmi.visible and mmi.multimesh.use_custom_data and mmi.multimesh.instance_count > 0 and mmi.material_override is ShaderMaterial
+	var set_cd := ok_mm and (mmi.material_override as ShaderMaterial).shader.resource_path.ends_with("critter_flap.gdshader")
+	if ok_mm and DisplayServer.get_name() != "headless":      # 헤드리스 (가짜 그리개)는 사용자 자료를 돌려주지 않음 — 창이 있을 때만 읽어 봄
+		for i in mmi.multimesh.instance_count:
+			if mmi.multimesh.get_instance_custom_data(i).r < 0.05:     # 나비 날개 각은 0.15 넘게 — 0이면 안 넣은 것
+				set_cd = false
+	check(ok_mm and set_cd, "나비는 멀리 MultiMesh (날개 각 = 사용자 자료 · 퍼덕임 셰이더) — %d마리" % (mmi.multimesh.instance_count if mmi != null else 0))
+	check(fv.shown_far > 0 and fv.shown_near == 0, "보는 반지름 20: 멀리만 (가까이 노드 0)")
+	# 가까이 — 노드·클립
+	fv.view_override = [v.center, 6.0]
+	for i in 30:
+		fv.sync(1.0 / 30.0)
+	check(fv.shown_far == 0, "보는 반지름 6: 멀리 MultiMesh 없음 (가까이 %d)" % fv.shown_near)
+	check(SaveCodec.digest(v.to_dict()) == before, "화면을 아무리 돌려도 마을 (sim) 저장은 그대로 (결정론)")
+	fv.free()
