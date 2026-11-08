@@ -74,6 +74,8 @@ var menu := false                    # 메뉴·선반 화면 → theme
 var room_view := false               # (B1) 병 밖 ④⑤ — 거인의 방 음악(theme)이 앞, 마을 소리는 그대로 (먹먹하게 — outside)
 var speed := 1.0                     # 지금 배속 (밤 건너뛰기 중이면 아주 큼)
 var outside := 0.0                   # 병 밖 시점 정도 0~1 (카메라 확대로)
+var hush := 0.0                      # (E1-1) 연출의 고요 0~1 — set_hush
+const HUSH_DB := -34.0
 var listener := Vector2.ZERO         # 듣는 자리 (카메라가 보는 땅 위의 점)
 var screen_residents := Callable()   # () -> Array[Resident] 화면 안의 주민 (없으면 모든 주민)
 var clock_override := -1.0           # 시험용: 0 이상이면 이 현실 시각(초)을 씀
@@ -375,17 +377,24 @@ func _update_muffle(dt: float) -> void:
 	var goal := 0.0 if (lid or menu) else outside
 	var rate := 1.0 / LID_SWEEP if goal < _muffle else 1.0
 	_muffle = move_toward(_muffle, goal, rate * dt)
-	apply_muffle(_muffle)
+	apply_muffle(_muffle, hush)
 
 
-## 0 = 열림 (20kHz, 0dB) ~ 1 = 유리 너머 (800Hz, −8dB). 주파수는 로그로 섞는다
-static func apply_muffle(m: float) -> void:
+## (E1-1 깨달음) 세상이 멈춤: 마을 소리·바람·물·새·마을 음악을 잦아들게 — 0 = 그대로 ~ 1 = 거의 고요 (연출이 매 화면 정함, 끝나면 0)
+static func set_hush(k: float) -> void:
+	var a := get_instance()
+	if a != null:
+		a.hush = clampf(k, 0.0, 1.0)
+
+
+## 0 = 열림 (20kHz, 0dB) ~ 1 = 유리 너머 (800Hz, −8dB). 주파수는 로그로 섞는다. hush = 연출의 고요 (마을 버스를 HUSH_DB만큼 더 낮춤)
+static func apply_muffle(m: float, hush_k := 0.0) -> void:
 	var hz := exp(lerpf(log(OPEN_HZ), log(MUFFLE_HZ), m))
 	for b: String in MUFFLED:
 		var i := AudioServer.get_bus_index(b)
 		if i < 0:
 			continue
-		AudioServer.set_bus_volume_db(i, MUFFLE_DB * m)
+		AudioServer.set_bus_volume_db(i, MUFFLE_DB * m + HUSH_DB * hush_k)
 		var e := AudioServer.get_bus_effect(i, 0) as AudioEffectLowPassFilter
 		if e != null:
 			e.cutoff_hz = hz
@@ -687,7 +696,7 @@ func _update_ambient(dt: float) -> void:
 				_play(p)
 		if p == null:
 			continue
-		var goal: float = want.get(id, -60.0)
+		var goal: float = want.get(id, -60.0) + HUSH_DB * hush
 		p.volume_db = move_toward(p.volume_db, goal, 20.0 * dt)
 		if not on and p.volume_db <= -59.0:
 			p.queue_free()

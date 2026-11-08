@@ -143,7 +143,7 @@ func shaking() -> bool:
 ## 설정 '움직임 줄이기'·'흔들림' (ROADMAP A26 — 아직 없으면 늘 false)
 static func reduce_motion() -> bool:
 	var s := GameSettings.get_current()
-	return s.get("reduce_motion") == true or s.get("screen_shake") == false
+	return s.get("reduce_motion") == true or s.get("screen_shake") == false or s.get_meta("reduce_motion", false) == true    # meta = 캡처 도구(shot_awaken -- reduce)
 
 
 func _shake_step(dt: float) -> void:

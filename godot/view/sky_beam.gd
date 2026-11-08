@@ -7,6 +7,9 @@ const HEIGHT := 46.0
 
 var dur := 6.0
 var color := Color(1.0, 0.86, 0.5)
+var rise := 0.8                        # 켜지는 시간 (초) — 깨달음은 천천히 (EVENTS_STAGING 1, 2026-11-08 극적인 판)
+var peak := 1.0                        # 밝기 배율 — 깨달음은 낮춰 무릎 꿇은 주민이 빛에 묻히지 않게
+var width := 1.0                       # 굵기 배율
 var _t := 0.0
 var _beam: MeshInstance3D
 var _pool: MeshInstance3D
@@ -67,17 +70,19 @@ func _process(dt: float) -> void:
 		queue_free()
 
 
-## 0~1 세기 (켜짐 0.8초 · 끝 1.2초 동안 사라짐)
+## 0~1 세기 (켜짐 rise초 · 끝 1.2초 동안 사라짐)
 func strength(t: float) -> float:
-	return clampf(t / 0.8, 0.0, 1.0) * clampf((dur - t) / 1.2, 0.0, 1.0)
+	return clampf(t / rise, 0.0, 1.0) * clampf((dur - t) / 1.2, 0.0, 1.0)
 
 
 func _apply(t: float) -> void:
 	var k := strength(t)
 	var w := 0.9 + 0.1 * sin(t * 5.0)
-	_mat.set_shader_parameter("strength", k * w)
-	_pool_mat.set_shader_parameter("strength", k)
-	_beam.scale = Vector3(lerpf(0.4, 1.0, clampf(t / 0.8, 0.0, 1.0)), 1.0, lerpf(0.4, 1.0, clampf(t / 0.8, 0.0, 1.0)))
+	_mat.set_shader_parameter("strength", k * w * peak)
+	_pool_mat.set_shader_parameter("strength", k * peak)
+	var g := lerpf(0.4, 1.0, clampf(t / rise, 0.0, 1.0)) * width
+	_beam.scale = Vector3(g, 1.0, g)
+	_pool.scale = Vector3(width, 1.0, width)
 	for i in _motes.size():
 		var m := _motes[i]
 		var a := i * 2.39 + t * 0.7

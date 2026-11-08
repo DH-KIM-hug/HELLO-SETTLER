@@ -42,6 +42,11 @@ uniform int fire_count = 0;                 // 모닥불 빛 (0 = 없음 — 계
 uniform vec4 fire_glow[4];                  // xyz = 세계 자리 (불꽃 밑동 조금 위), w = 반지름
 uniform float fire_k[4];                    // 세기 (일렁임 포함, 0~1.4)
 uniform vec3 fire_tint : source_color = vec3(1.0, 0.62, 0.3);
+// (E1-1 깨달음 연출 — view/stage_director.gd) 마을 위를 지나가는 거대한 그림자 · 유리 천장에서 내려온 빛기둥의 따뜻한 웅덩이.
+// 화면만: 세계 자리(xz)로 칠하므로 그림자 밑의 땅·집·사람이 함께 어두워진다. w = 0이면 계산을 건너뜀
+uniform vec4 stage_shadow = vec4(0.0, 0.0, 1.0, 0.0);     // 세계 x, z, 반지름, 세기
+uniform vec2 stage_shadow_dir = vec2(1.0, 0.0);           // 긴 축 (지나가는 쪽)
+uniform vec4 stage_light = vec4(0.0, 0.0, 1.0, 0.0);      // 세계 x, z, 반지름, 세기
 
 void vertex() {
 	// 카메라 바로 앞 화면 전체 (역방향 깊이: 1.0 = 가장 가까움)
@@ -92,7 +97,9 @@ void fragment() {
 	}
 
 	float fire_g = 0.0;
-	if (inside && fire_count > 0) {
+	float shade_g = 0.0;
+	float light_g = 0.0;
+	if (inside && (fire_count > 0 || stage_shadow.w > 0.001 || stage_light.w > 0.001)) {
 		float d0 = texture(depth_tex, uv).r;
 		vec4 vp = INV_PROJECTION_MATRIX * vec4(uv * 2.0 - 1.0, d0, 1.0);
 		vec3 wp = (INV_VIEW_MATRIX * vec4(vp.xyz / vp.w, 1.0)).xyz;
@@ -102,11 +109,26 @@ void fragment() {
 			fire_g += fire_k[i] * q * (2.0 - q) * (0.55 + 0.45 * q);
 		}
 		fire_g = clamp(fire_g, 0.0, 1.0);
+		if (stage_shadow.w > 0.001) {
+			vec2 rel = wp.xz - stage_shadow.xy;
+			vec2 ax = normalize(stage_shadow_dir);
+			vec2 e = vec2(dot(rel, ax) / 1.7, dot(rel, vec2(-ax.y, ax.x))) / max(stage_shadow.z, 0.01);
+			float ang = atan(e.y, e.x);
+			float dd = length(e) * (1.0 + 0.07 * sin(ang * 3.0 + 1.3) + 0.04 * sin(ang * 5.0));   // 둥글고 고르지 않은 가장자리 (손 모양 아님)
+			shade_g = (1.0 - smoothstep(0.35, 1.0, dd)) * stage_shadow.w;
+		}
+		if (stage_light.w > 0.001) {
+			float q = clamp(1.0 - length(wp.xz - stage_light.xy) / max(stage_light.z, 0.01), 0.0, 1.0);
+			light_g = q * q * (3.0 - 2.0 * q) * stage_light.w;
+		}
 	}
 	if (inside) {
-		col = mix(col, col * night_mul + night_add, night_amount * (1.0 - fire_g * 0.82));
+		float lift = max(fire_g * 0.82, light_g * 0.9);
+		col = mix(col, col * night_mul + night_add, night_amount * (1.0 - lift));
 		vec3 warm = col * (vec3(1.0) + fire_tint * 0.55) + fire_tint * 0.05;
 		col = mix(col, warm, fire_g * (0.18 + 0.82 * night_amount));
+		col = mix(col, col * vec3(1.18, 1.08, 0.86) + vec3(0.07, 0.05, 0.01), light_g * 0.75);
+		col = mix(col, col * vec3(0.12, 0.13, 0.2), shade_g * 0.92);
 	} else {
 		col *= room_mul;
 	}
