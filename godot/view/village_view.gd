@@ -38,6 +38,16 @@ var _far_items := {}            # 건물 id → [[메시, 재질 또는 null, �
 var _far_rest := {}             # 건물 id → 기록할 때의 노드 변환
 var _far_moving := {}           # 건물 id → true (움직이는 중 — 제 노드로)
 var _far_dirty := false
+## (P1 4차) 가까이 건물 그림자 대역: 가까이 LOD에서 건물 본 모델(수천 삼각형)은 그림자를 드리우지 않고, 같은 자리의 멀리 모양
+## (52~600 삼각형, 선·껍데기 없음)을 그림자 전용(SHADOWS_ONLY)으로 묶어 한 메시로 구워 드리운다 → 그림자 패스 삼각형 약 19만 → 약 1만,
+## 그림자 그리기 건물마다 1번 → 1번 (양면 재질 하나). 보이는 모델은 그대로. 짝: 본 모델 노드에 SH_DST, 멀리 모양 노드에 SH_SRC 표시.
+## 움직이는(떨어지는 중)·숨긴 건물은 묶음에서 빼고 제 본 모델이 그림자를 드리운다 (_far_moving 공유).
+const SH_SRC := &"shadow_src"
+const SH_DST := &"shadow_dst"
+var bld_shadow_proxy := true    # false = 예전처럼 본 모델이 그림자 (비교 측정)
+var _near_shadow: Node3D        # 그림자 전용 묶음 (가까이 LOD일 때만 보임)
+var _shadow_items := {}         # 건물 id → [노드 변환, [[메시, 재질, 건물 기준 Transform3D]…]]
+var _shadow_dirty := false
 ## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
 ## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
 const WHEAT_MODELS := ["buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_ripe"]
@@ -265,7 +275,7 @@ func _flora_lod() -> void:
 ## 건물 LOD는 sync와 따로 매 화면 (병 밖 보기처럼 sync가 멈춘 동안에도 축소를 따라가게)
 func _process(_dt: float) -> void:
 	_bld_lod()
-	if bld_far and bld_batch:
+	if bld_batch and (bld_far or bld_shadow_proxy):
 		_check_far_moving()
 
 
@@ -293,11 +303,15 @@ func _bld_lod(force := false) -> void:
 	bld_far = want
 	if bld_far and (_far_dirty or _far_batch == null):
 		_sync_far_batch()             # 안에서 _apply_bld_lod
+	elif not bld_far and _shadow_dirty:
+		_sync_near_shadow()           # 안에서 _apply_bld_lod
 	else:
 		for id in _blds:
 			_apply_bld_lod(_blds[id])
 	if _far_batch != null:
 		_far_batch.visible = bld_far
+	if _near_shadow != null:
+		_near_shadow.visible = not bld_far
 	if _yard != null:
 		_yard.visible = not bld_far
 
@@ -313,6 +327,21 @@ func _apply_bld_lod(n: Node3D) -> void:
 	var piles := n.get_node_or_null("piles") as Node3D
 	if piles != null:
 		piles.visible = not batched
+	_set_near_shadows(near, not bld_far and _shadow_batched(n))
+
+
+## (P1 4차) 본 모델(SH_DST 표시) 그림자 끄기/되돌리기 — off = 그림자 대역 묶음이 대신 드리움. 처음 설정은 메타 "cs0"에 둠
+func _set_near_shadows(near: Node3D, off: bool) -> void:
+	for c: Node in near.get_children():
+		if not c.has_meta(SH_DST):
+			continue
+		var list: Array = c.find_children("*", "GeometryInstance3D", true, false)
+		if c is GeometryInstance3D:
+			list.append(c)
+		for g: GeometryInstance3D in list:
+			if not g.has_meta(&"cs0"):
+				g.set_meta(&"cs0", g.cast_shadow)
+			g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF if off else g.get_meta(&"cs0")
 
 
 ## 꽃숲 묶음 수 (시험·측정): {"total": 놓은 수, "drawn": 지금 그리는 수, "far": 멀리 덩이인가}
@@ -810,9 +839,10 @@ func _sync_buildings() -> void:
 		var far := Node3D.new()
 		far.name = "far"
 		n.add_child(far)
-		Art.instance(near, it["model"])
+		var dm := Art.instance(near, it["model"])
 		if Art.has_far(it["model"]):
-			Art.instance(far, it["model"], Transform3D.IDENTITY, true)
+			Art.instance(far, it["model"], Transform3D.IDENTITY, true).set_meta(SH_SRC, true)
+			dm.set_meta(SH_DST, true)
 		n.set_meta("bid", id)
 		_record_far(id, n)
 		_apply_bld_lod(n)
@@ -825,12 +855,16 @@ func _sync_buildings() -> void:
 				_yard_dirty = true
 			if _far_items.erase(id):
 				_far_dirty = true
+			if _shadow_items.erase(id):
+				_shadow_dirty = true
 			_far_rest.erase(id)
 			_far_moving.erase(id)
 	if _yard_dirty:
 		_sync_yard()
 	if _far_dirty and bld_far:
 		_sync_far_batch()
+	if _shadow_dirty and not bld_far:
+		_sync_near_shadow()
 
 
 ## 장식 노드 목록: [{id(음수), model, pos, yaw, s, key}] — 흙 화분 집 (마을 가장자리, 화면만) + 떨어진 물건 (FoundObjects.shown).
@@ -908,7 +942,10 @@ func _record_far(id: int, n: Node3D) -> void:
 	_far_moving.erase(id)
 	var far := n.get_node_or_null("far") as Node3D
 	if not bld_batch or far == null or far.get_child_count() == 0:
+		if _shadow_items.erase(id):
+			_shadow_dirty = true
 		return
+	_record_shadow(id, n, far)
 	var items: Array = []
 	for root: Node3D in [far, n.get_node_or_null("piles") as Node3D]:
 		if root == null:
@@ -958,28 +995,114 @@ func _sync_far_batch() -> void:
 		_apply_bld_lod(_blds[id])
 
 
+## (P1 4차) 그림자 대역 기록: "far" 아래 SH_SRC 표시 노드의 메시 (그림자를 드리우는 것만). 모양·자리가 그대로면 다시 굽지 않음 —
+## 짐 더미가 바뀌어 건물 노드를 다시 만들어도 (메시는 Art 캐시라 같은 것) 묶음은 그대로
+func _record_shadow(id: int, n: Node3D, far: Node3D) -> void:
+	var items: Array = []
+	for c: Node in far.get_children():
+		if not c.has_meta(SH_SRC):
+			continue
+		var list: Array = c.find_children("*", "MeshInstance3D", true, false)
+		if c is MeshInstance3D:
+			list.append(c)
+		for mi: MeshInstance3D in list:
+			if mi.mesh == null or mi.cast_shadow == GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+				continue
+			var xf := mi.transform
+			var p := mi.get_parent()
+			while p != null and p != n:
+				xf = (p as Node3D).transform * xf
+				p = p.get_parent()
+			items.append([mi.mesh, mi.material_override, xf])
+	if items.is_empty():
+		if _shadow_items.erase(id):
+			_shadow_dirty = true
+		return
+	var rec := [n.transform, items]
+	if _shadow_items.get(id, []) != rec:
+		_shadow_items[id] = rec
+		_shadow_dirty = true
+
+
+## (P1 4차) 가까이 그림자 대역 묶음 굽기: 가만히 선 건물 전부의 멀리 모양을 한 메시로 (양면 재질), 그림자만 드리움
+func _sync_near_shadow() -> void:
+	_shadow_dirty = false
+	if _near_shadow != null:
+		_near_shadow.queue_free()
+	_near_shadow = _node(self)
+	_near_shadow.name = "near_shadow"
+	_near_shadow.visible = not bld_far
+	var groups := {}                # 0 → SurfaceTool (하나)
+	if bld_shadow_proxy:
+		for id in _shadow_items:
+			if _far_moving.has(id) or not _blds.has(id):
+				continue
+			var rec: Array = _shadow_items[id]
+			var bx: Transform3D = rec[0]
+			for it: Array in rec[1]:
+				var mesh: Mesh = it[0]
+				for si in mesh.get_surface_count():
+					if not groups.has(0):            # 재질은 상관없음 (그림자 대역 재질 하나) — 메시 하나로
+						groups[0] = SurfaceTool.new()
+					(groups[0] as SurfaceTool).append_from(mesh, si, bx * (it[2] as Transform3D))
+	for k: int in groups:
+		var mi := MeshInstance3D.new()
+		mi.mesh = (groups[k] as SurfaceTool).commit()
+		mi.material_override = shadow_proxy_mat()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		_near_shadow.add_child(mi)
+	for id in _blds:
+		_apply_bld_lod(_blds[id])
+
+
+## 그림자 대역 재질: 양면 (멀리 모양은 카메라 쪽만 다듬은 낮은 모양이라 뒷면이 빠진 곳이 있을 수 있음 — 어느 면이든 빛을 막게).
+## 그림자 패스 깊이만 쓰므로 빛 계산 없음. 재질이 하나라 묶음 = 그림자 그리기 1번
+static var _shadow_mat: ShaderMaterial
+static func shadow_proxy_mat() -> ShaderMaterial:
+	if _shadow_mat == null:
+		var sh := Shader.new()
+		sh.code = "shader_type spatial;\nrender_mode unshaded, cull_disabled;\nvoid fragment() { ALBEDO = vec3(0.0); }\n"
+		_shadow_mat = ShaderMaterial.new()
+		_shadow_mat.shader = sh
+	return _shadow_mat
+
+
+## 그림자 대역 묶음에 든 건물인가 (가까이 LOD에서 본 모델 그림자를 끔)
+func _shadow_batched(n: Node3D) -> bool:
+	var id: int = n.get_meta("bid", -1)
+	return bld_shadow_proxy and _shadow_items.has(id) and not _far_moving.has(id) and _near_shadow != null and not _shadow_dirty
+
+
 ## 묶음에 든 건물인가 (멀리 모양 기록이 있고 지금 움직이지 않음)
 func _batched(n: Node3D) -> bool:
 	var id: int = n.get_meta("bid", -1)
 	return bld_batch and _far_items.has(id) and not _far_moving.has(id) and _far_batch != null and not _far_dirty
 
 
-## 매 화면 (멀리일 때만): 노드 변환이 기록과 달라진 건물(떨어지는 중)은 묶음에서 빼고, 제자리로 돌아오면 다시 넣음
+## 매 화면 (멀리 · 또는 가까이 그림자 대역이 켜졌을 때): 노드 변환이 기록과 달라진 건물(떨어지는 중)·숨긴 건물은 묶음에서 빼고, 제자리로 돌아오면 다시 넣음
 func _check_far_moving() -> void:
 	var changed := false
 	for id in _far_items:
 		var n: Node3D = _blds.get(id)
 		if n == null:
 			continue
-		var moving := not n.transform.is_equal_approx(_far_rest[id])
+		var moving := not n.visible or not n.transform.is_equal_approx(_far_rest[id])    # 숨긴 건물도 묶음에서 뺌
 		if moving != _far_moving.has(id):
 			changed = true
 			if moving:
 				_far_moving[id] = true
 			else:
 				_far_moving.erase(id)
-	if changed or _far_dirty:
-		_sync_far_batch()
+	if bld_far:
+		if changed or _far_dirty:
+			_sync_far_batch()
+		if changed:
+			_shadow_dirty = true          # 가까이 그림자 묶음도 다음에 가까이로 갈 때 다시
+	else:
+		if changed or _shadow_dirty:
+			_sync_near_shadow()
+		if changed:
+			_far_dirty = true             # 멀리 묶음도 다음에 멀리로 갈 때 다시
 
 
 ## (P1 2차) 앞마당 소품을 모양마다 MultiMesh로 (집 15채 × 2 = 노드 30개 × 몸·껍데기·그림자 → 모양 3개). 낮은 것이라 그림자 끔.
@@ -1057,9 +1180,10 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	var nm: String = names[b.id % names.size()]
 	if nm == "ferry" and v.era == 0 and Art.exists("ferry_raft"):
 		nm = "ferry_raft"
-	Art.instance(near, nm)
+	var main := Art.instance(near, nm)
 	if Art.has_far(nm):
-		Art.instance(far, nm, Transform3D.IDENTITY, true)
+		Art.instance(far, nm, Transform3D.IDENTITY, true).set_meta(SH_SRC, true)     # (P1 4차) 가까이 그림자 대역
+		main.set_meta(SH_DST, true)
 	if nm == "quern_house" and Art.exists(QUERN_STONE):
 		_live[b.id] = {"stone": Art.instance(near, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
 	elif nm == "oven" and Art.exists(OVEN_GLOW):
@@ -1143,9 +1267,11 @@ static func wheat_stage(b: Building, t: float) -> int:
 ## 밀 숲: 밑동(선·그림자 그대로) + 윗부분(엷어지는 재질, 그림자는 쌍둥이가) — 가까이·멀리 같은 짜임
 func _build_wheat(near: Node3D, far: Node3D, b: Building) -> void:
 	var nm: String = WHEAT_MODELS[wheat_stage(b, v.t)]
-	Art.instance(near, nm)
+	var main := Art.instance(near, nm)
 	if Art.has_far(nm):
-		Art.instance(far, nm, Transform3D.IDENTITY, true)
+		Art.instance(far, nm, Transform3D.IDENTITY, true).set_meta(SH_SRC, true)     # (P1 4차) 가까이 그림자 대역
+		main.set_meta(SH_DST, true)
+	var top_far := Art.exists(nm + "_top") and Art.model_far(nm + "_top")["mesh"] != null
 	var top := nm + "_top"
 	if not Art.exists(top):
 		return
@@ -1165,6 +1291,8 @@ func _build_wheat(near: Node3D, far: Node3D, b: Building) -> void:
 		sh.mesh = mesh
 		sh.material_override = Art.flat_mat()
 		sh.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		if top_far:                                  # (P1 4차) 가까이 윗부분 그림자도 멀리 모양이 대신
+			sh.set_meta(SH_SRC if is_far else SH_DST, true)
 		parent.add_child(sh)
 
 

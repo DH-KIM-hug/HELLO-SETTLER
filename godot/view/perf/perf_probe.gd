@@ -4,7 +4,7 @@
 ## 켜는 법 (안드로이드 디버그 APK):
 ##   1) adb shell am start -n com.ddoystory.najakji/com.godot.game.GodotApp --esa command_line_params "--perf,scale=0.75"
 ##   2) 안 되면 깃발 파일: echo "perf scale=0.75" | adb shell run-as com.ddoystory.najakji sh -c 'cat > files/perf_probe.cfg'  (한 번 읽고 지워진다)
-## 옵션 (key=value): cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
+## 옵션 (key=value): shproxy=0 (P1 4차 건물 그림자 대역 끔 — 비교) · shcmp=1 (shots=1과 함께: 가까이에서 멈춘 채 대역 켬·끔·켬 + 멀리 모양 그림) · cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
 ##   · flora=old (꽃숲 자르기·멀리 덩이 끔 — 이전과 비교) · shots=1 (데스크톱: 장면마다 화면을 godot_shots/perf_<tag>_<장면>.png로 — 창이 필요)
 ##
 ## 하는 일: 넓은 세상(world.tscn, 본 게임 장면)에 마을 시대 건물 + 주민 30명을 세우고 →
@@ -109,6 +109,9 @@ func _run() -> void:
 		return
 	# 장면
 	var v: Village = scene.village
+	if _opt("shproxy", "") == "0":            # (P1 4차) 비교용: 가까이 건물 그림자 대역 끔 (본 모델이 그림자)
+		scene.view.bld_shadow_proxy = false
+		scene.view._shadow_dirty = true
 	if _opt("flora", "") == "old":             # 비교용: 꽃숲 자르기·멀리 덩이 끔 (P1 이전과 같은 그림·같은 양)
 		scene.view.flora_cull = false
 		scene.view.flora_force_near = true
@@ -116,6 +119,26 @@ func _run() -> void:
 	await _measure("village_far", dur)
 	await _goto(32.0, v)
 	await _measure("village_close", dur)
+	if _opt("shcmp", "0") == "1":              # (P1 4차) 그림자 대역 켜고/끄고 같은 순간 그림 비교 (멈춘 채)
+		var kp: bool = scene.paused
+		scene.paused = true
+		for k in 3:
+			var on := k != 1
+			scene.view.bld_shadow_proxy = on
+			scene.view._sync_near_shadow()
+			for i in 3:
+				await get_tree().process_frame
+			await _shot("shproxy_%d%s" % [int(on), "b" if k == 2 else ""])
+		scene.view.bld_shadow_proxy = true
+		scene.view._sync_near_shadow()
+		scene.view.bld_force_lod = 1                # 멀리 모양을 가까이에서 (대역이 무엇을 드리우는지)
+		for i in 3:
+			await get_tree().process_frame
+		await _shot("shproxy_farlod")
+		scene.view.bld_force_lod = -1
+		for i in 3:
+			await get_tree().process_frame
+		scene.paused = kp
 	await _goto(-1.0, v)
 	await _measure("world_zoom", dur)
 	scene.wterrain.reveal_all = true
@@ -150,11 +173,31 @@ func _run() -> void:
 		var fb: Node3D = scene.view._far_batch       # (P1 3차) 멀리 건물 묶음
 		if fb != null:
 			fb.visible = false
+		var ns: Node3D = scene.view._near_shadow     # (P1 4차) 가까이 건물 그림자 대역
+		if ns != null:
+			ns.visible = false
 		await _measure("no_buildings_" + zn, tog, true)
 		for id in scene.view._blds:
 			(scene.view._blds[id] as Node3D).visible = true
 		if fb != null and is_instance_valid(fb):
 			fb.visible = scene.view.bld_far
+		if ns != null and is_instance_valid(ns):
+			ns.visible = not scene.view.bld_far
+		for id in scene.view.residents:             # (P1 4차) 주민만 끔 (종이 인형이면 묶음 + 발밑 그림자도)
+			(scene.view.residents[id] as Node3D).visible = false
+		for k in ["cut_shadows"]:
+			var cn: Variant = scene.view.get(k)
+			if cn is Node3D:
+				(cn as Node3D).visible = false
+		scene.views_live = false                     # sync가 주민을 다시 보이게 하지 않게 (마을 화면 멈춤)
+		await _measure("no_residents_" + zn, tog, true)
+		scene.views_live = true
+		for id in scene.view.residents:
+			(scene.view.residents[id] as Node3D).visible = true
+		for k in ["cut_shadows"]:
+			var cn: Variant = scene.view.get(k)
+			if cn is Node3D:
+				(cn as Node3D).visible = true
 		scene.view.visible = false
 		scene.great_view.visible = false
 		await _measure("terrain_only_" + zn, tog, true)
