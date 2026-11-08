@@ -148,6 +148,8 @@ static func material() -> ShaderMaterial:
 			ht.append(Vector2(p[0], p[1]))
 	_mat.set_shader_parameter("head_top", ht)
 	_mat.set_shader_parameter("fig", float(L["fig"]))
+	var pl: Array = L["prop_layer"]
+	_mat.set_shader_parameter("prop_layer", Vector4i(int(pl[0]), int(pl[1]), int(pl[2]), int(pl[3])))     # 보기마다 소품의 겹 (ORDER)
 	_mat.set_shader_parameter("lit_tint", Style.LIT_TINT)
 	_mat.set_shader_parameter("shade_tint", Style.SHADE_TINT)
 	return _mat
@@ -206,13 +208,19 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 	var s := sin(w)
 	var side := v == 1 or v == 2
 	a[10] = Vector4(0, 0, 0, 0)     # 소품은 기본으로 숨김
+	# 쉬는 팔 (시안 A): 소매에서 몸 가까이 내려오고, 손은 엉덩이 높이에서 살짝 안쪽으로 굽음.
+	# 앞·뒤 보기: 그림의 왼쪽 팔(a)은 + 가 안쪽, 오른쪽(b)은 - . 비스듬한 보기: 살짝 앞으로 굽힘.
+	var rest_s := Vector2(0.06, -0.06) if not side else Vector2(0.0, 0.0)
+	var rest_f := Vector2(0.24, -0.24) if not side else Vector2(0.14, -0.14)    # 3/4: 먼 팔(b)은 몸 뒤로 붙임
 	match clip:
 		"idle":
 			a[1] = Vector4(0.012 * s, 0, 4.0 * s, 1)
 			a[2] = Vector4(0.025 * sin(w + 1.0), 0, 0, 1)
 			a[9] = Vector4(0.05 * sin(w + 0.6), 0, 0, 1)
-			a[3] = Vector4(0.025 * s, 0, 0, 1)
-			a[4] = Vector4(-0.025 * s, 0, 0, 1)
+			a[3] = Vector4(rest_s.x + 0.025 * s, 0, 0, 1)
+			a[4] = Vector4(rest_s.y - 0.025 * s, 0, 0, 1)
+			a[5] = Vector4(rest_f.x, 0, 0, 1)
+			a[6] = Vector4(rest_f.y, 0, 0, 1)
 		"walk", "carry":
 			var carry := clip == "carry"
 			var bob := (12.0 if not carry else 8.0) * absf(s)
@@ -232,8 +240,10 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 					a[5] = Vector4(bend, 0, 0, 1)
 					a[6] = Vector4(-bend, 0, 0, 1)
 				else:
-					a[3] = Vector4(0.1 * s, 0, 0, 1.0 - 0.1 * s)
-					a[4] = Vector4(0.1 * s, 0, 0, 1.0 + 0.1 * s)
+					a[3] = Vector4(rest_s.x + 0.1 * s, 0, 0, 1.0 - 0.1 * s)
+					a[4] = Vector4(rest_s.y + 0.1 * s, 0, 0, 1.0 + 0.1 * s)
+					a[5] = Vector4(rest_f.x, 0, 0, 1)
+					a[6] = Vector4(rest_f.y, 0, 0, 1)
 			else:
 				var sw := 0.42 if not carry else 0.26
 				a[7] = Vector4(sw * s, 0, 14.0 * maxf(0.0, cos(w)), 1)

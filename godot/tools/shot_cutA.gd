@@ -141,7 +141,7 @@ func _carry() -> void:
 
 ## 4) 다양성: 씨앗 하나 → 생김새 기록 (머리·모자·옷 묶음 + 물감 8개) → 24명
 func _variety() -> void:
-	var w := _stage(Vector2i(1800, 900), 300.0, _toward() * 0.25)
+	var w := _stage(Vector2i(1800, 900), 300.0, _toward() * -0.15)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 42
 	for i in 24:
