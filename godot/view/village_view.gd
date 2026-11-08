@@ -77,6 +77,10 @@ var _lily_t := 0.0
 var _far: Node3D                # (6단계) 넓은 세상: 마을 둘레 밖, 안개가 걷힌 숲 무리 (ww.forests)
 ## (P1 성능) 꽃숲·소품·먼 숲 묶음 — 화면 자르기 + 멀리 덩이 (view/flora_batch.gd). 부모 노드 → FloraBatch
 var _batches := {}
+## (꽃 정보 카드 — docs/UI.md) 그린 꽃숲 덩이의 가벼운 기록, 층 노드 이름 ("_trees"·"_props"·"_far") → FloraPicks. 묶음을 다시 만들 때 새로
+var flora_picks := {}
+var _rec: FloraPicks              # 지금 채우는 기록 (_put이 누를 수 있는 모양만 적음) — 묶음 만들기 밖에서는 null
+var _rec_sim := false
 var flora_cull := true          # false = 화면 밖도 늘 그림 (캡처·시험)
 var flora_force_near := false  # true = 늘 가까이 모양 (예전 그림과 비교하는 캡처용)
 var _far_key := -1
@@ -1595,7 +1599,10 @@ func _add(groups: Dictionary, key: String, xf: Transform3D) -> void:
 
 
 func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: float, dy := 0.0) -> void:
-	_add(groups, key, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * s), Vector3(x, gy(x, z) + dy, z)))
+	var y := gy(x, z) + dy
+	_add(groups, key, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * s), Vector3(x, y, z)))
+	if _rec != null and FloraPicks.pickable(key):
+		_rec.add(key, Vector3(x, y, z), s, _rec_sim)
 
 
 func _flush(parent: Node3D, groups: Dictionary, no_shadow: Array = []) -> void:
@@ -1625,12 +1632,14 @@ func _sync_trees() -> void:
 	# (E3-3 소인의 세상) 나무 = 꽃숲 덩이 · 벤 자리 = 나뭇가지 더미 · 묘목 = 클로버·풀 싹 (view/flora_look.gd)
 	var groups := {}
 	n_flora = 0
+	_rec = FloraPicks.new()
 	for tr: Dictionary in v.trees:
 		var x: float = tr["x"]
 		var z: float = tr["y"]
 		var h := _hash(x, z)
 		var yaw := _hash(z, x, 1.0) * TAU
 		var c: Array
+		_rec_sim = tr["s"] == "tree"
 		match String(tr["s"]):
 			"tree":
 				var o := _to_orig(Vector2(x, z))
@@ -1641,6 +1650,9 @@ func _sync_trees() -> void:
 			_:
 				c = FloraLook.sprout(h)
 		_put(groups, c[0], x, z, float(c[1]) * TREE_SCALE, yaw)
+	flora_picks["_trees"] = _rec
+	_rec = null
+	_rec_sim = false
 	_flush(_trees, groups, FloraLook.NO_SHADOW)
 
 
@@ -1708,12 +1720,15 @@ func _sync_props() -> void:
 		sim_pts.append(Vector2(tr["x"], tr["y"]))
 	for r: Dictionary in v.rocks:
 		sim_pts.append(Vector2(r["x"], r["y"]))
+	_rec = FloraPicks.new()
 	_decor_forest(groups, sim_pts)
 	_decor_clusters(groups)
 	_lilies.clear()
 	_decor_water(groups)
 	_decor_yards(groups)
 	_decor_crossings(groups)
+	flora_picks["_props"] = _rec
+	_rec = null
 	_flush(_props, groups, ["tuft", "lily", "lotus", "reeds", PF_REEDS, PF_MUSHROOMS, "flowers", "flowers_b", "flora/fallen_leaf_dry"] + FLAT_LITTER + FloraLook.NO_SHADOW)
 	_sync_lilies(true)
 	decor_ms = (Time.get_ticks_usec() - t0) / 1000.0
@@ -2052,6 +2067,7 @@ func _sync_far() -> void:
 			fl.append(f)
 	var groups := {}
 	n_far_trees = 0
+	_rec = FloraPicks.new()
 	# 안개 칸(4칸)마다: 걷혔으면 그 안에 기준점이 있는 장식 숲 격자점들을 본다 (마을 둘레 장식과 같은 격자·해시)
 	var fs := float(WorldWater.FOG)
 	var q0 := Vector2i(clampi(floori((c.x - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1), clampi(floori((c.y - FAR_MAX + ww.rr) / fs), 0, ww.fn - 1))
@@ -2082,6 +2098,8 @@ func _sync_far() -> void:
 					var fc := FloraLook.clump_at(season, p, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), Vector2(ww.wet_k(k), fd), flora_seed(), true)
 					_put(groups, fc[0], p.x, p.y, float(fc[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 					n_far_trees += 1
+	flora_picks["_far"] = _rec
+	_rec = null
 	_flush(_far, groups, FloraLook.NO_SHADOW)
 	far_ms = (Time.get_ticks_usec() - t0) / 1000.0
 
