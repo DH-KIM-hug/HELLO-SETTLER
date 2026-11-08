@@ -150,7 +150,7 @@ def _import(spec):
                 cols.append(tuple(ca.data[me.loops[p.loop_start].vertex_index].color_srgb[:3]))
         tmp = me.copy()
         tmp.transform(ob.matrix_world)
-        out.append((tmp, cols))
+        out.append((tmp, cols, ob.name))
     return out
 
 
@@ -159,15 +159,18 @@ def _bmesh_of(spec):
     bm = bmesh.new()
     lay = bm.loops.layers.float_color.new("Color")
     fn = spec["col"]
+    ext = getattr(fn, "ext", False)                  # 2차 묶음의 색 함수는 (색, 법선, 부품 이름)을 받음
     smooth = spec.get("smooth", False)
-    for me, cols in _import(spec):
+    rx, ry, rz = spec.get("rot", (0.0, 0.0, 0.0))
+    R = (Matrix.Rotation(rz, 3, "Z") @ Matrix.Rotation(ry, 3, "Y") @ Matrix.Rotation(rx, 3, "X"))
+    for me, cols, obn in _import(spec):
         for p, c in zip(me.polygons, cols):
-            vs = [bm.verts.new(me.vertices[i].co * spec["scale"]) for i in p.vertices]
+            vs = [bm.verts.new(R @ me.vertices[i].co * spec["scale"]) for i in p.vertices]
             try:
                 f = bm.faces.new(vs)
             except ValueError:
                 continue
-            lc = _lin(fn(c)) + (1.0,)
+            lc = _lin(fn(c, R @ p.normal, obn) if ext else fn(c)) + (1.0,)
             for lo in f.loops:
                 lo[lay] = lc
             f.smooth = smooth
@@ -224,6 +227,8 @@ def build_one(name):
     spec = SPECS[name]
     bm = _bmesh_of(spec)
     bm = _decimate(bm, spec.get("near", 0))
+    if spec.get("extra"):
+        spec["extra"](bm)
     if spec.get("double"):
         _double(bm)
     return bm
@@ -251,12 +256,17 @@ def _export(name, groups, far, out_dir):
 
 def build_set(name, parts):
     groups = {}
-    for part, (x, y), rz, s in parts:
-        spec = SPECS[part]
-        bm = build_one(part)
+    for e in parts:
+        part, (x, y), rz, s = e[:4]
+        z = e[4] if len(e) > 4 else 0.0
+        if callable(part):                           # 우리가 만든 부품 (잔가지 다리 등) — bmesh를 돌려줌
+            bm, g = part(), "body"
+        else:
+            spec = SPECS[part]
+            bm = build_one(part)
+            g = spec.get("group", "body")
         bmesh.ops.transform(bm, verts=bm.verts[:],
-                            matrix=Matrix.Translation((x, y, 0)) @ Matrix.Rotation(rz, 4, "Z") @ Matrix.Scale(s, 4))
-        g = spec.get("group", "body")
+                            matrix=Matrix.Translation((x, y, z)) @ Matrix.Rotation(rz, 4, "Z") @ Matrix.Scale(s, 4))
         if g in groups:
             me = bpy.data.meshes.new("tmp")
             bm.to_mesh(me)
@@ -452,11 +462,228 @@ def twig_cordwood():
 TWIG_PROPS = {"pf_fence": (twig_fence, 72), "pf_bench": (twig_bench, 96), "pf_cordwood": (twig_cordwood, 150)}
 
 
+# ───────────── 2차 묶음 (2026-11-08 — ROADMAP E3-16 떨어진 물건 · E3-17 Insect World 재료·빵 사슬·물가 풀) ─────────────
+# Scales (src units -> cells; 1 cell = an adult resident = 5 cm real):
+#   Insect World kit is built 100x real (src 1 m = 1 real cm)            -> IW  = 0.2
+#   human-world crafts (quern, oven, racks ... built for a 1.7 m person)  -> MAN = 1 / 1.7  (our folk build their own)
+#   real-size plants (1 m = 20 cells; FloraLook squeezes them at placement like art/models/flora)
+IW = 0.2
+MAN = 1.0 / 1.7
+REAL = 20.0
+PUDDLE = "78b9c2"                                     # style.gd PUDDLE — standing water in a basin / trough
+CAP_GREY = "a89f8f"                                   # bottle cap: dull warm grey (no tin blue) + onggi rim
+CAP_GREY_LIGHT = "c4b8a2"
+CAP_LINER = "d9c49c"
+
+
+def _hexs(c):
+    return "%02x%02x%02x" % tuple(int(x * 255) for x in c[:3])
+
+
+def natural(c, n=None, ob=""):
+    """Generic snap of a source colour to our palette: greys / blue-greys -> warm stone, greens -> moss / fern,
+    reds -> clay, straw yellows -> dry weave, browns -> twig / bark (no metal or modern colours)."""
+    r, g, b = _rgb(c)
+    L = _lum(c)
+    sat = max(r, g, b) - min(r, g, b)
+    if sat < 26 or b > r + 6:
+        if L > 205:
+            return "f4efe2"
+        if L > 160:
+            return STONE_LIGHT
+        if L > 120:
+            return STONE_MID
+        if L > 80:
+            return STONE_LOW
+        return "5b4a40"
+    if g > r + 8 and g >= b:
+        if L > 150:
+            return mix("MOSS", "f0f5c8", 0.18)
+        if L > 105:
+            return "MOSS"
+        if L > 70:
+            return mix("FERN", "MOSS", 0.4)
+        return mix("FERN", "LEAF_MID", 0.6)
+    if r > g + 55 and r > b + 55 and g < 120:
+        return CLAY if L > 110 else CLAY_DARK
+    if g > r * 0.74 and L > 140:
+        return WEAVE if L > 175 else WEAVE_DARK
+    if L > 175:
+        return TWIG_PALE
+    if L > 125:
+        return BARK_LIGHT
+    if L > 88:
+        return TWIG
+    if L > 58:
+        return TWIG_DARK
+    return "4f3c30"
+
+
+def remap(table=None, fallback=natural, by_obj=None):
+    """-> colour fn(c, n, ob): object-name rules first, then the exact source hex, then fallback."""
+    table = table or {}
+    by_obj = by_obj or {}
+
+    def fn(c, n=None, ob=""):
+        for sub, col in by_obj.items():
+            if sub in ob:
+                return col(c, n, ob) if callable(col) else col
+        v = table.get(_hexs(c))
+        if v is not None:
+            return v(c, n, ob) if callable(v) else v
+        return fallback(c, n, ob)
+    fn.ext = True
+    return fn
+
+
+def two_tone(top, side, k=0.55):
+    """Up-facing faces one colour, the rest another (a one-colour source reads flat in the toon shader)."""
+    def fn(c, n=None, ob=""):
+        return top if (n is not None and n.z > k) else side
+    return fn
+
+
+def _fern_ext(c, n=None, ob=""):
+    return col_fern(c)
+
+
+def _disc(z, r, col, seg=14):
+    """extra(bm): a flat water disc at height z (after scale + origin) — standing water in a basin."""
+    def fn(bm):
+        lay = bm.loops.layers.float_color["Color"]
+        vs = [bm.verts.new((math.cos(a) * r, math.sin(a) * r, z)) for a in (k * math.tau / seg for k in range(seg))]
+        f = bm.faces.new(vs)
+        lc = _lin(col) + (1.0,)
+        for lo in f.loops:
+            lo[lay] = lc
+    return fn
+
+
+def _twig_legs():
+    """Three lashed twig legs (0.31 high) under the found button -> the village table (GD 3.0)."""
+    m = Model("legs", 71)
+    for k in range(3):
+        a = k * math.tau / 3 + 0.3
+        x, y = math.cos(a) * 0.12, math.sin(a) * 0.12
+        knobby(m, [(x * 1.25, y * 1.25, -0.02), (x * 1.08, y * 1.08, 0.16), (x * 0.92, y * 0.92, 0.31)], 0.026, 0.021,
+               TB_DARK if k else TB, seg=4, knob=(1,), seed=71 + k)
+        band(m, (x * 0.94, y * 0.94, 0.27), (0, 0, 1), 0.022, 1)
+    return m.groups["body"]
+
+
+def _marble_glass(c, n=None, ob=""):
+    """Opaque toon glass hides the inner vane -> paint a muted swirl band on the shell (cream glass, sage + honey streaks)."""
+    if n is None:
+        return "CREAM"
+    s = math.sin(2.0 * math.atan2(n.y, n.x) + 3.0 * n.z)
+    if s > 0.78:
+        return "a9c9b8"
+    if s < -0.88:
+        return "e6c98e"
+    return "CREAM" if n.z > 0.15 else "e8dcc0"
+
+
+def _stump_col(c, n=None, ob=""):
+    """Moss on the stump: muted (a bright faceted cap read as a green crystal in pf2_lineup)."""
+    return mix("MOSS", "FERN", 0.35) if _lum(c) > 95 else mix("FERN", "LEAF_MID", 0.45)
+
+
+SPECS.update({
+    # ── Insect World 재료 (IW) — fallen litter; part=True: only inside the pf_litter_* sets ──
+    "iw_twig": dict(src="fallen-twig-4c64de.glb", scale=IW, near=260, part=True,
+                    col=remap({"5e4835": TB, "4b372b": TB_DARK, "d6b793": CUT, "c3a172": TB_LIGHT})),
+    "iw_oak_leaf": dict(src="fallen-oak-leaf-5b15fe.glb", scale=IW, near=220, part=True, double=True,
+                        col=remap({"b76d43": "c99a52", "a4323f": mix("LEAF_RED", "c99a52", 0.35), "c3a172": "DRIED",
+                                   "777d4d": "9a8f5a"})),
+    "iw_petal": dict(src="fallen-rose-petal-8b0c24.glb", scale=IW, near=130, part=True, double=True,
+                     col=remap({"a4323f": mix("LOTUS", "ROOF_RED", 0.45), "ce5f6a": "LOTUS", "d6b793": "CREAM"})),
+    "iw_sunseed": dict(src="sunflower-seed-b4fbbd.glb", scale=IW, near=120, part=True,
+                       col=remap({"2c252a": "4a3e36", "edebe7": "d9cfb8"})),
+    "iw_sycamore": dict(src="sycamore-seed-24e5a2.glb", scale=IW, near=140, part=True, double=True,
+                        col=remap({"938c4c": "a89a5e", "b76d43": "c99a52", "c3a172": "DRIED"})),
+    "pf_eggshell": dict(src="eggshell-half-d30a1c.glb", scale=IW, near=320, far=90,
+                        col=remap({"2c252a": "9c7a58", "f9f6ef": "f4efe2", "aac9c2": "e6dcc4"})),
+    "pf_acorn_basin": dict(src="acorn-cup-0ed13c.glb", scale=IW, near=520, far=120,
+                           col=remap({"938c4c": "9a7448", "c3a172": ACORN_IN, "d6b793": "ecdcb4", "8a5930": "7a5838",
+                                      "5e4835": TWIG_DARK}),
+                           extra=_disc(0.29, 0.17, PUDDLE)),
+    "pf_pot_house": dict(src="upturned-clay-flowerpot-de9221.glb", scale=IW, far=320,
+                         col=remap({"b76d43": "b97a55", "78a751": "MOSS", "4b372b": "DOOR", "5e4835": TWIG_DARK,
+                                    "2c252a": "WINDOW", "c3a172": "d9c49c"})),
+    # ── 떨어진 물건 (E3-16, GD 3.0) — residents know what they are; only the size is strange ──
+    "iw_button": dict(src="lost-button-46f22a.glb", scale=IW, near=420, part=True,
+                      col=remap(fallback=two_tone("cfa766", "a8834c"))),
+    "pf_found_marble": dict(src="glass-marble-4772bb.glb", scale=IW, near=420, far=90,
+                            col=remap({"5b82b0": "8fb9b4", "efcc4f": "e3c27a", "698435": "9cbf6a", "2c252a": "6b5a50"},
+                                      by_obj={"glass": _marble_glass})),
+    "pf_found_cap": dict(src="bottle-cap-cd96db.glb", scale=IW, rot=(math.pi, 0.0, 0.0), near=520, far=110,
+                         col=remap({"5b82b0": CAP_GREY, "8a5930": ONGGI, "c3a172": CAP_GREY_LIGHT, "e3dfdb": CAP_LINER}),
+                         extra=_disc(0.1, 0.27, PUDDLE)),
+    "pf_found_sugar": dict(src="sugar-cube-4a50a5.glb", scale=IW, near=300, far=40,
+                           col=remap({"f9f6ef": "f4efe2", "edebe7": "CREAM"})),
+    "pf_found_match": dict(src="matchstick-b3147f.glb", scale=IW, near=360, far=60,
+                           col=remap({"d6b793": TWIG_PALE, "c3a172": "d9c49c", "a4323f": "b5523f", "2c252a": "5a4136",
+                                      "8a5930": TWIG})),
+    "pf_matchbox_house": dict(src="matchbox-house-2d2689.glb", scale=IW, far=360,       # import only (special house later)
+                              col=remap({"4b372b": "b5523f", "c3a172": "d9c49c", "d6b793": TWIG_PALE,
+                                         "b28961": BARK_LIGHT, "f9f6ef": "CREAM", "a4323f": "ROOF_RED"})),
+    # ── 빵 사슬·실 일 마당 소품 (MAN — our folk build these themselves) ──
+    "pf_quern": dict(src="saddle-quern-food-mill-8e3657.glb", scale=MAN, near=520, far=110,
+                     col=remap({"788f8a": STONE_MID, "88a89d": STONE_LIGHT, "d8b067": "GRAIN"})),
+    "pf_oven": dict(src="clay-bread-oven-860b06.glb", scale=MAN, far=140,
+                    col=remap({"9a9897": "d3a96c", "bdbbba": "e7c48a", "a55c4f": CLAY_DARK, "dbcfb2": "ecdcb8",
+                               "bdaa93": "d9c49c", "856850": TWIG, "251d19": "3e2c24", "7b3730": "a0482f"})),
+    "pf_granary": dict(src="stilted-granary-3e7d7d.glb", scale=MAN, near=980, far=220,
+                       col=remap({"473427": TB_DARK, "bdbbba": "THATCH", "31333b": "THATCH_DARK"})),
+    "pf_retting": dict(src="plant-fibre-retting-trough-0e8969.glb", scale=MAN, near=640, far=120,
+                       col=remap({"d8b067": "cdbb84", "a78952": "a8935e"}, by_obj={"water": PUDDLE})),
+    "pf_weave_jig": dict(src="wattle-panel-weaving-jig-d1aa1c.glb", scale=MAN, near=600, far=120,
+                         col=remap({"d8b067": WEAVE, "c99163": WEAVE_DARK})),
+    "pf_rack_hasa": dict(src="hasa-rice-drying-rack-d545bc.glb", scale=MAN, near=600, far=110,
+                         col=remap({"d9a441": WEAVE, "d9c89a": "DRIED", "544537": TB_DARK, "9c825c": TB, "8c6a2f": CORD})),
+    "pf_rack_net": dict(src="drying-net-rack-93ec3b.glb", scale=MAN, near=520, far=110,
+                        col=remap({"dccba6": "d9c49c", "6b4526": TB_DARK, "4a2e1b": TB_DARK, "c9975c": WEAVE_DARK,
+                                   "9c6b3c": TB})),
+    # ── 숲 가장자리·물가 풀 ──
+    # moss stump: a small broken-stem base ~1.6 cells (2026-11-08 main: not a 24-cell real stump), bark in twig tones
+    "pf_stump": dict(src="moss-covered-stump-7253ab.glb", scale=1.6 / 1.15, near=420, far=110, smooth=True,
+                     col=remap({"8c5a32": TWIG, "5e4431": TWIG_DARK, "c7a56c": TWIG_PALE, "553a28": TWIG_DARK,
+                                "62422c": TWIG_DARK, "4f3726": TWIG_DARK, "5b3d2a": TWIG_DARK, "483224": TWIG_DARK},
+                               by_obj={"fern": _fern_ext}, fallback=_stump_col)),
+    # mushroom cluster: real ~5 cm (about one resident tall) — replaces build_nature "mushrooms" in the clutter tables;
+    # the soil pad is dropped (a dark disc under the caps read as a bread dome in pf2_lineup)
+    "pf_mushrooms": dict(src="mushroom-cluster-f2e3ba.glb", scale=4.4, near=300, far=80, drop=("soil",),
+                         col=remap({"c25d44": "MUSHROOM_CAP", "dedad7": "MUSHROOM_STEM", "a59e89": "MUSHROOM_DOT",
+                                    "593c2a": "SOIL_DARK", "cea772": "STUMP_TOP"})),
+    # giant horsetail: real ~50 cm -> 10 cells; FloraLook draws it ~7 tall (forest edge only, like the fern)
+    "pf_horsetail": dict(src="giant-horsetail-stand-3a4f94.glb", scale=2.0, group="body_nl", near=640, far=160,
+                         col=remap(fallback=_fern_ext)),
+    # shore: reed bed + cattails (parts of pf_reeds) at half real size (shore reeds trodden / cut near the village)
+    "iw_reed_bed": dict(src="reed-bed-bbbefb.glb", scale=REAL * 0.5, near=260, part=True, group="body_nh", double=True,
+                        col=remap({"767c49": mix("REED", "DRIED", 0.3), "4e573c": "7a9f52", "988b74": "DRIED",
+                                   "9f8a47": "cdbb84"})),
+    "iw_cattail": dict(src="cattail-reed-6abbb3.glb", scale=REAL * 0.5, near=200, part=True, group="body_nh",
+                       col=remap({"75563b": "REED_HEAD", "3d6b34": mix("REED", "FERN", 0.5), "4c8140": "REED",
+                                  "93c46a": "9cbf6a"})),
+})
+SETS.update({
+    "pf_litter_a": [("iw_twig", (0.0, 0.0), 0.25, 1.0), ("iw_oak_leaf", (0.9, 0.95), -0.6, 1.0)],
+    "pf_litter_b": [("iw_petal", (0.0, 0.0), 0.4, 1.0), ("iw_sunseed", (0.55, -0.2), 1.1, 1.0),
+                    ("iw_sunseed", (0.62, 0.12), 2.3, 0.9), ("iw_sycamore", (-0.6, 0.45), -0.9, 1.0)],
+    "pf_reeds": [("iw_reed_bed", (0.0, 0.0), 0.0, 1.0), ("iw_cattail", (0.35, 0.1), 0.4, 1.0),
+                 ("iw_cattail", (-0.5, -0.05), 1.7, 0.85)],
+    "pf_found_table": [("iw_button", (0.0, 0.0), 0.0, 1.0, 0.3), (_twig_legs, (0.0, 0.0), 0.0, 1.0)],
+})
+SET_FAR = {"pf_litter_a": 120, "pf_litter_b": 110, "pf_reeds": 160, "pf_found_table": 110}
+
+
 def main():
     out_dir = out_dir_from_argv()
     os.makedirs(os.path.join(out_dir, "props"), exist_ok=True)
     only = [a for a in sys.argv[sys.argv.index("--") + 1:] if not os.path.isdir(a)] if "--" in sys.argv else []
     for name, spec in SPECS.items():
+        if spec.get("part"):                         # only used inside SETS
+            continue
         if not only or name in only:
             _export(name, {spec.get("group", "body"): build_one(name)}, spec["far"], out_dir)
     for name, (fn, far) in TWIG_PROPS.items():
@@ -464,7 +691,7 @@ def main():
             fn().export(out_dir=os.path.join(out_dir, "props"), far=flora_far.decimated(target=far))
     for name, parts in SETS.items():
         if not only or name in only:
-            _export(name, build_set(name, parts), 96, out_dir)
+            _export(name, build_set(name, parts), SET_FAR.get(name, 96), out_dir)
 
 
 main()

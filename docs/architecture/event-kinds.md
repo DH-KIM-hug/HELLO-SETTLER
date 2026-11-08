@@ -30,6 +30,7 @@
 | `&"honey_found"` | `Caterpillars._honey` (여름 반나절마다 성한 꽃 무리 곁 어른 — 마을 `rng`, id 순) | `{}` (null) | `who` = 주운 사람 · `at` = 그 자리 | 아니오 | 아니오 | (앞으로 #38 맑은 한 음) |
 | `&"caterpillar_caught"` | `Caterpillars.catch_now` (조에서 처음 끝낸 사람이 잡음) | `{"crew": int}` | `who` = 조장 id · `at` = 애벌레 자리 | 아니오 | 아니오 | `tests/production_tests.gd` |
 | `&"cocoon_taken"` | `Caterpillars.take_cocoon` (산 고치 따기·빈 고치 줍기 → 비단 실) | `{"live": bool}` | `who` = 딴 사람 · `at` | 아니오 | 아니오 | `tests/production_tests.gd` |
+| `&"found_object"` | `FoundObjects.discover` (매시간 `FoundObjects.hourly` — 묻힌 물건 곁에서 일하던·돌아다니던 사람, id 순, 난수 없음 · E3-16 / GD 3.0) | `{"kind": StringName (&"button"·&"marble"·&"cap"·&"sugar"·&"match"), "id": int}` | `who` = 찾은 사람 · `at` = 묻혀 있던 자리 | 아니오 | 아니오 (연대기는 `log_line` — 찾음·쓰임 한 줄씩) | `tests/found_tests.gd` (화면은 `FoundObjects.shown`을 직접 읽음) |
 | `&"butterfly_out"` | `Caterpillars._tick` (고치 → 나비 + 빈 고치) | `{"patch": int (꽃 무리 id)}` | `at` = 고치 자리 | 아니오 | 아니오 | `tests/production_tests.gd` (앞으로 #33 작은 장면) |
 
 ## 메모

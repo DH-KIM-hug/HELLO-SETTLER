@@ -25,7 +25,8 @@ const FAR_GAP := 0.1              # 경계 ±10%
 ## ppu 16에서 나란히 비교해 가까이와 구별이 안 되는 잔것만 (2026-11-08 p1c_fc_* 캡처 — 장미·수국·이끼 둔덕은 줄이면 티가 남)
 const CLUTTER := ["clover", "mushrooms", "bush", "bush_b", "bush_flower", "bush_berry", "fern", "flowers", "flowers_b",
 	"flora/clover_a", "flora/clover_b", "flora/clover_flower", "flora/fern_a", "flora/fern_b",
-	"props/pf_cairn", "props/pf_moss"]          # polyfork 잔것 (2026-11-08 — ppu 16에서 멀리 모양 하나만 그림. 거대한 고사리는 큰 꽃처럼 BIG_FAR_PPU)
+	"props/pf_cairn", "props/pf_moss",
+	"props/pf_mushrooms", "props/pf_litter_a", "props/pf_litter_b", "props/pf_eggshell", "props/pf_stump"]          # polyfork 잔것 (2차 묶음 E3-17 포함) (2026-11-08 — ppu 16에서 멀리 모양 하나만 그림. 거대한 고사리는 큰 꽃처럼 BIG_FAR_PPU)
 const TINY_PPU := 1.5             # 이보다 멀리: 납작한 것은 숨김 (1~2px도 안 됨)
 const TINY_GAP := 0.5
 ## (P1 2차) 아트 바이블 8.9: ppu < 24에서 꽃·풀의 접힌 곳 선(lines MultiMesh)을 끈다 — 경계 ±10% 이력.
@@ -40,7 +41,7 @@ const SHADOW_MIN_H := 9.0
 const HULL_MIN_H := 2.0
 ## 아주 멀리서 숨기는 납작한 것
 const TINY := ["tuft", "clover", "lily", "flora/moss_a", "flora/moss_c", "flora/clover_a", "flora/grass_b", "flora/twig_pile_a",
-	"flora/twig_pile_b", "flora/fallen_leaf_dry", "rock_small", "flowers", "flowers_b"]
+	"flora/twig_pile_b", "flora/fallen_leaf_dry", "rock_small", "flowers", "flowers_b", "props/pf_litter_a", "props/pf_litter_b"]
 
 var parent: Node3D
 var cull := true                  # false = 늘 전부 (캡처·시험)

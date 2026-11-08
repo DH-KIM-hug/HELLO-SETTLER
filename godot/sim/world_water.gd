@@ -104,6 +104,7 @@ var wildlife: Array[Dictionary] = []    # (옛 — 늘 비어 있음, A28) 창�
 var fish: Array[Dictionary] = []        # 물고기 {name, x, y, n} — 민물 호수만
 var great_trees: Array[Dictionary] = [] # 큰 나무 다섯 {kind, name, x, y, r, yaw} — 한 그루씩, 베지 않음 (sim/great_trees.gd · GD 3.0)
 var giant_fruits: Array[Dictionary] = [] # 과일나무가 떨어뜨린 거대한 열매 {x, y, t, yaw, food}
+var found: Array[Dictionary] = []        # 떨어진 물건 — 흙에 묻힌 큰 세상의 잡동사니 (sim/found_objects.gd · GD 3.0 · E3-16)
 # 거대 식물 (sim/giant_plants.gd · design/gdd/flower-forest.md R3·R4) — 병 하나의 것
 var sunflowers: Array[Dictionary] = []  # 초거대 해바라기 {id, x, y, lx, ly (빛 방향), fx, fy (돌기 전), t0 (돌기 시작, −1 = 멈춤), stage, yaw}
 var sf_seeds: Array[Dictionary] = []    # 씨앗비 {id, sf, x, y, t_land, st: sky/ground/roll, food, roller, landed}

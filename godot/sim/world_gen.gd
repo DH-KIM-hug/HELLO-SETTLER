@@ -277,6 +277,7 @@ static func generate(seed_v: int, size := 1024, opts: Dictionary = {}) -> WorldW
 	for b: Dictionary in ww.basins:
 		b["area0"] = ww.basin_area(b)
 	GreatTrees.place(ww)                # 큰 나무 다섯 (GD 3.0) — 물이 자리 잡은 뒤, 서로·키트 자리·물가에서 멀리
+	FoundObjects.bury(ww)               # 떨어진 물건 (E3-16) — 키트 자리마다 둘레에 2~3개, 따로 쓰는 난수
 	return ww
 
 

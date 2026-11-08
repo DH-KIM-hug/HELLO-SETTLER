@@ -392,7 +392,7 @@ func _process(dt: float) -> void:
 
 # ───────────────────────── 크레딧 ─────────────────────────
 ## 남이 만든 3D 모델 (art/CREDITS.md — CC BY 4.0이라 게임 안에도 출처를 적는다)
-const ART_CREDITS := "3D 소품 일부 (바구니·단지·돌무더기·이끼·고사리): Polyfork (polyfork.dev) — CC BY 4.0, 색·크기를 고쳐 씀"
+const ART_CREDITS := "3D 소품 일부 (바구니·단지·돌무더기·이끼·고사리·화분·도토리 깍정이·잔가지·잎·꽃잎·씨앗·알껍데기·맷돌·화덕·곡식 창고·불림 통·엮기 틀·건조대·이끼 밑동·버섯·쇠뜨기·갈대·부들·단추·유리구슬·병뚜껑·각설탕·성냥개비·성냥갑): Polyfork (polyfork.dev) — CC BY 4.0, 색·크기를 고쳐 씀"
 
 
 ## audio/LICENSES.csv (file,title,author,pixabay_url,download_date,content_id) → '소리: 제목 — 지은이 (Pixabay)'. 줄이 없으면 ""

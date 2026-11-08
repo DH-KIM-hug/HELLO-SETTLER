@@ -972,3 +972,11 @@ const CAT_BLIGHT_SPREAD := 8            # … 0~이만큼 날 늦게
 const CAT_BLIGHT_DAYS := 3              # 떼가 밀밭을 갉는 날 수 (그동안 꽃 무리 상한 CAT_BLIGHT_MAX)
 const CAT_BLIGHT_MAX := 5               # 떼가 깬 동안 꽃 무리마다 애벌레 상한 (알 포함)
 const CAT_BLIGHT_K := 0.6               # 떼가 꽉 차면 밭이 거두는 몫 = 하루 필요의 (1 − 이만큼)까지 — 잡을수록 줄어듦
+# ═══════════════ 떨어진 물건 — 큰 세상의 잡동사니 (GAME_DESIGN 3.0 표 · ROADMAP E3-16, sim/found_objects.gd — 메인 판단 2026-11-08) ═══════════════
+const FOUND_MOVE_AFTER := 6.0 * HOUR    # 찾은 뒤 이만큼 그 자리에 두고 둘러본 다음 마을 쪽으로 옮겨 씀
+const FOUND_BRIDGE_REACH := 14.0        # 성냥개비 다리: 모닥불에서 이 안의 개울 (없으면 창고 곁 대들보)
+const FOUND_SUGAR_EAT := 0.25           # 각설탕: 날마다 아이들이 갉아 먹는 몫 (약 나흘)
+const FOUND_SUGAR_MELT := 0.5           # 물 뿌림·짙은 이슬 한 번에 녹는 몫
+const FOUND_SUGAR_MELT_R := 2.0         # 물 뿌림이 이 안이면 녹음 (칸)
+const FOUND_DEW_HEAVY := 0.8            # 새벽 이슬이 DEW_FULL × 이만큼 넘으면 '짙은 이슬'
+const FOUND_SUGAR_HAPPY := 0.04         # 잔치 각설탕이 있는 동안 아이 행복 +
