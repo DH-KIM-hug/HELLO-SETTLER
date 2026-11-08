@@ -145,7 +145,8 @@ func _build_settings(body: VBoxContainer) -> void:
 		notebook_requested.emit())
 	var ask := _button(body, "문의하기")
 	ask.pressed.connect(func() -> void: show_page("inquiry"))
-	credit_l = _label(body, credits_text(), "Small")
+	var snd := credits_text()
+	credit_l = _label(body, (snd + "\n" if snd != "" else "") + ART_CREDITS, "Small")
 	credit_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	credit_l.visible = credit_l.text != ""
 	# 처음부터 다시 시작 (맨 아래) — 두 번 묻고, 저장 폴더를 모두 지우고 지폐·장터를 처음으로 → 타이틀 [시작하기]. 설정(소리 등)은 그대로
@@ -390,6 +391,10 @@ func _process(dt: float) -> void:
 
 
 # ───────────────────────── 크레딧 ─────────────────────────
+## 남이 만든 3D 모델 (art/CREDITS.md — CC BY 4.0이라 게임 안에도 출처를 적는다)
+const ART_CREDITS := "3D 소품 일부: Polyfork (polyfork.dev) — CC BY 4.0, 색·크기를 고쳐 씀"
+
+
 ## audio/LICENSES.csv (file,title,author,pixabay_url,download_date,content_id) → '소리: 제목 — 지은이 (Pixabay)'. 줄이 없으면 ""
 static func credits_text(p := LICENSES) -> String:
 	if not FileAccess.file_exists(p):

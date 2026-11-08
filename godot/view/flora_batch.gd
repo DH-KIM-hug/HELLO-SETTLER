@@ -24,7 +24,8 @@ const BIG_FAR_PPU := 8.0          # 12에서는 장미 소용돌이·데이지 �
 const FAR_GAP := 0.1              # 경계 ±10%
 ## ppu 16에서 나란히 비교해 가까이와 구별이 안 되는 잔것만 (2026-11-08 p1c_fc_* 캡처 — 장미·수국·이끼 둔덕은 줄이면 티가 남)
 const CLUTTER := ["clover", "mushrooms", "bush", "bush_b", "bush_flower", "bush_berry", "fern", "flowers", "flowers_b",
-	"flora/clover_a", "flora/clover_b", "flora/clover_flower", "flora/fern_a", "flora/fern_b"]
+	"flora/clover_a", "flora/clover_b", "flora/clover_flower", "flora/fern_a", "flora/fern_b",
+	"props/pf_cairn", "props/pf_moss", "props/pf_fern"]          # polyfork 잔것 (2026-11-08 — ppu 16에서 멀리 모양 하나만 그림)
 const TINY_PPU := 1.5             # 이보다 멀리: 납작한 것은 숨김 (1~2px도 안 됨)
 const TINY_GAP := 0.5
 ## (P1 2차) 아트 바이블 8.9: ppu < 24에서 꽃·풀의 접힌 곳 선(lines MultiMesh)을 끈다 — 경계 ±10% 이력.

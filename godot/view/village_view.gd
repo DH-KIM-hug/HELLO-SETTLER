@@ -120,7 +120,15 @@ const PRELOAD := ["cottage_a", "cottage_b", "cottage_c", "cottage_d", "hut", "ho
 	"well", "windmill", "bakery", "saltpan", "buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_green_top", "buildings/wheat_forest_ripe", "buildings/wheat_forest_ripe_top", "woodpile", "chopblock", "planter", "pier", "bridge", "bridge_stones", "raft_reed", "boat_leaf", "mushroom_hut",
 	"bush", "bush_b", "bush_flower", "bush_berry",
 	"rocks", "rocks_b", "rock_small", "mushrooms", "fern", "clover", "tuft", "flowers", "flowers_b", "lily", "lotus", "reeds", "altar",
-	"campfire", "campfire_extra", "campfire_seat"]
+	"campfire", "campfire_extra", "campfire_seat", PF_JARS, PF_FENCE, PF_CORDWOOD, PF_BENCH, PF_CAIRN, PF_MOSS, PF_FERN]
+## polyfork.dev 소품 (CC BY 4.0, 우리 팔레트·크기로 고침 — art/src/build_polyfork.py, 출처 art/CREDITS.md)
+const PF_JARS := "props/pf_yard_jars"       # 옹기 단지 둘 + 바구니 (집·창고 마당)
+const PF_FENCE := "props/pf_fence"          # 가름대 울타리 한 칸 (길이 1칸, 높이 0.6)
+const PF_CORDWOOD := "props/pf_cordwood"    # 쌓은 장작 (나무꾼 마당)
+const PF_BENCH := "props/pf_bench"          # 통나무 걸상 (모닥불 둘레 — view/campfire.gd)
+const PF_CAIRN := "props/pf_cairn"
+const PF_MOSS := "props/pf_moss"
+const PF_FERN := "props/pf_fern"
 
 
 func _ready() -> void:
@@ -900,6 +908,7 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	n.add_child(far)
 	if b.type == "농장":
 		_build_wheat(near, far, b)
+		_set_yard(far, b, far.get_child_count() > 0)
 		_apply_bld_lod(n)
 		return
 	var names: Array = BUILDING_MODELS.get(b.type, ["hut"])
@@ -915,15 +924,49 @@ func _build_shape(n: Node3D, b: Building) -> void:
 		_live[b.id] = {"glow": _oven_glow(n)}
 	for y: Array in YARD.get(b.type, []):
 		Art.instance(near, y[0], Transform3D(Basis(Vector3.UP, y[2]).scaled(Vector3.ONE * float(y[3]) if y.size() > 3 else Vector3.ONE), y[1]))
-	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN) — 멀리에선 숨김 (_sync_yard)
-		var s := b.size()
-		var m := 1.0 if b.id % 2 == 0 else -1.0
-		_yard_xf[b.id] = [["flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s))],
-			["bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s))]]
-		_yard_dirty = true
-	elif _yard_xf.erase(b.id):
-		_yard_dirty = true
+	_set_yard(far, b, Art.has_far(nm))
 	_apply_bld_lod(n)
+
+
+## 마당 소품 (가까이: _sync_yard가 모양마다 MultiMesh · 멀리: PF_FAR_YARD의 멀리 모양을 건물 "far" 노드에 넣어 건물 멀리 묶음에 함께 구움 →
+## 기본 확대(ppu 16)에서 그리기 횟수가 늘지 않는다). bake_far = 이 건물에 멀리 모양이 있을 때만 (없으면 far 노드가 비어 있어야 가까이가 남는다)
+const PF_FAR_YARD := [PF_JARS, PF_FENCE, PF_CORDWOOD]
+
+
+func _set_yard(far: Node3D, b: Building, bake_far: bool) -> void:
+	var items := _yard_items(b)
+	if items.is_empty():
+		if _yard_xf.erase(b.id):
+			_yard_dirty = true
+		return
+	_yard_xf[b.id] = items
+	_yard_dirty = true
+	if bake_far:
+		for e: Array in items:
+			if e[0] in PF_FAR_YARD and Art.has_far(e[0]):
+				Art.instance(far, e[0], e[1], true)
+
+
+## [모델, 건물 기준 Transform3D] — 건물 앞 = +z
+func _yard_items(b: Building) -> Array:
+	var out: Array = []
+	var s := b.size()
+	var m := 1.0 if b.id % 2 == 0 else -1.0
+	if b.is_house():          # [배치] 길 쪽 앞마당 — 문 앞 골목 양옆에 꽃·꽃덤불 (sim/village_plan.gd GARDEN) + 옆벽에 단지·바구니
+		out.append(["flowers" if b.id % 3 != 0 else "flowers_b", Transform3D(Basis(Vector3.UP, b.id * 0.9), Vector3(0.7 * m * s, 0, 1.45 * s))])
+		out.append(["bush_flower", Transform3D(Basis(Vector3.UP, b.id * 1.3), Vector3(-0.85 * m * s, 0, 1.35 * s))])
+		out.append([PF_JARS, Transform3D(Basis(Vector3.UP, 0.4 * m + b.id * 0.7), Vector3(1.25 * m * s, 0, 0.75 * s))])
+	elif b.type == "창고":    # 창고 앞 양 귀퉁이에 단지·바구니
+		out.append([PF_JARS, Transform3D(Basis(Vector3.UP, 0.3), Vector3(-1.45, 0, 1.25))])
+		out.append([PF_JARS, Transform3D(Basis(Vector3.UP, 2.6), Vector3(1.35, 0, 1.2))])
+	elif b.type == "나무꾼":  # 나뭇가지 줍는 터: 옆벽에 쌓은 장작
+		out.append([PF_CORDWOOD, Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(1.6, 0, 0.1))])
+	elif b.type == "농장":    # 밀 숲 앞쪽에 울타리 (가운데는 드나드는 틈) + 앞 귀퉁이 옆으로 한 칸씩
+		for x in [-1.55, -0.6, 0.6, 1.55]:
+			out.append([PF_FENCE, Transform3D(Basis(Vector3.UP, (_hash(b.x + x, b.y, 91.0) - 0.5) * 0.12), Vector3(x, 0, 2.15))])
+		for x in [-2.1, 2.1]:
+			out.append([PF_FENCE, Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(x, 0, 1.55))])
+	return out
 
 
 ## 밀 숲 자람 단계 (보기만 — 시뮬 숫자는 그대로): 0 싹 · 1 자란 푸른 줄기 · 2 익은 금빛 이삭.
@@ -1400,7 +1443,8 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 
 
 ## 소품 무리: 숲 가장자리엔 덤불·고사리·버섯·이끼 돌·쓰러진 통나무, 빈 풀밭엔 드문드문 클로버·풀 포기·꽃 덤불
-const FRINGE := ["bush", "bush_b", "fern", "fern", "mushrooms", "rocks", "flora/twig_pile_a", "flora/fallen_leaf_dry", "bush_flower", "fern", "rocks_b", "bush_berry"]
+## (2026-11-08) 숲 가장자리에 polyfork 돌무더기·이끼 둔덕·고사리 (예전 rocks_b · 고사리 두 칸 자리 — 모양 수는 +2)
+const FRINGE := ["bush", "bush_b", "fern", PF_FERN, "mushrooms", "rocks", "flora/twig_pile_a", "flora/fallen_leaf_dry", "bush_flower", PF_MOSS, PF_CAIRN, "bush_berry"]
 const OPEN := ["clover", "clover", "tuft", "tuft", "flowers", "rock_small", "bush_flower", "mushrooms", "flowers_b", "fern", "bush_b", "tuft"]
 
 
@@ -1420,7 +1464,7 @@ func _decor_clusters(groups: Dictionary) -> void:
 				continue
 			var table: Array = FRINGE if fringe or f >= 0.9 else OPEN
 			var kind: String = table[int(_hash(gi, gj, 6.0) * table.size()) % table.size()]
-			var cnt := 1 if kind in ["flora/twig_pile_a", "flora/fallen_leaf_dry", "rocks", "rocks_b"] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
+			var cnt := 1 if kind in ["flora/twig_pile_a", "flora/fallen_leaf_dry", "rocks", "rocks_b", PF_CAIRN, PF_MOSS] else 1 + int(_hash(gi, gj, 7.0) * 3.0)
 			for i in cnt:
 				var a := _hash(gi, gj, 10.0 + i) * TAU
 				var d := (0.35 + 0.8 * _hash(gi, gj, 20.0 + i)) if i > 0 else 0.0
