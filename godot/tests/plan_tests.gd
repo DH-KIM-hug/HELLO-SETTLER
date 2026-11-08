@@ -61,13 +61,15 @@ func test_plan_layout() -> void:
 		var to := ((np["pt"] as Vector2) - Vector2(b.x, b.y)).normalized()
 		facing_ok = facing_ok and f.dot(to) > 0.99
 		var want := VillagePlan.HALF_W + VillagePlan.GARDEN + b.size()
-		if np["kind"] == "street":
+		if np["kind"] == "street" and float(np["dist"]) < want + 1.0:     # 큰길 앞줄 (뒷줄 = 큰길 사이 고리 집은 골목으로 — sim/siting.gd)
 			offset_ok = offset_ok and absf(float(np["dist"]) - want) < 0.3
+		if np["kind"] == "street":
+			offset_ok = offset_ok and float(np["dist"]) >= want - 0.3     # 큰길가 어떤 집도 앞마당보다 길에 붙지 않는다
 		var d := Vector2(b.x, b.y).distance_to(v.fire)
 		outward = outward and d >= prev_d - 3.5
 		prev_d = maxf(prev_d, d)
 	check(facing_ok, "집은 모두 가장 가까운 길(광장·큰길)을 바라본다 (마구잡이 각도 없음)")
-	check(offset_ok, "큰길가 집은 길에서 같은 거리 (반폭 + 앞마당 + 집)")
+	check(offset_ok, "큰길 앞줄 집은 길에서 같은 거리 (반폭 + 앞마당 + 집), 뒷줄도 앞마당보다 가깝지 않다")
 	check(outward, "안쪽부터 바깥으로 고리 지어 선다")
 	var gap_ok := true
 	for i in placed.size():

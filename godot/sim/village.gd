@@ -167,6 +167,7 @@ var _pnz := PackedInt32Array()        # (저장 안 함) 밟힌 적 있는 오�
 var _pnz_in := PackedByteArray()
 var _pnz_ok := false
 var _tr_fix := -1.0                   # (저장 안 함) find_spot 동안 고정한 영역 반지름 (<0 = 늘 새로 셈)
+var _site_cache := {}                 # (저장 안 함) 자리 고르기 자원 지도 (sim/siting.gd — 한 시간마다 한 번 다시)
 var _homes_sig := PackedInt64Array()  # (저장 안 함) 집 배정이 아무것도 바꾸지 않았던 상태 — 같으면 다시 볼 것이 없다 (assign_homes)
 var _homes_types := PackedStringArray()
 var _opening_chief := 0               # 첫 한 시간에 촌장이 터를 잡은 횟수 (OPENING_CHIEF_AT)
@@ -2394,6 +2395,11 @@ func _find_spot(type: String) -> Variant:
 		if fp != null:
 			_clear_trees(fp, size)
 		return fp
+	if Siting.is_resource_type(type) and Siting.active(self):          # [자리 잡기] 일터는 재료 곁 — 점수로 고름 (sim/siting.gd · BUILDINGS.md '자리 잡기 다시')
+		var rs: Variant = Siting.resource_spot(self, type)
+		if rs != null:
+			_clear_trees(rs, size)
+			return rs
 	var ec: Variant = VillageEra.spot_center(self, type)     # 약초꾼 = 습한 숲가 · 묘지 = 마을 끝 · 망루 = 안개 쪽
 	if ec != null:
 		c = ec
