@@ -159,7 +159,11 @@ func sync(dt: float, fast := false) -> void:
 	var cv := _view()
 	var c: Vector2 = cv[0]
 	var vr: float = cv[1]
-	_sync_dogs(dt, c, vr, fast)
+	if CutoutDogs.enabled():          # 강아지 = 2D 종이 인형 (view/cutout_dogs.gd — 주민 인형과 같은 스위치)
+		CutoutDogs.sync_into(self, dt, c, vr, fast)
+	else:
+		CutoutDogs.release(self)
+		_sync_dogs(dt, c, vr, fast)
 	_sync_critters(dt, c, vr, fast)
 
 
