@@ -11,6 +11,8 @@ extends Node3D
 const STATES := ["unlit", "small", "normal", "big", "smudge", "out"]
 const HEAT := {"unlit": 0.0, "small": 0.62, "normal": 1.0, "big": 1.42, "smudge": 0.4, "out": 0.0}
 const GLOW := {"unlit": 0.0, "small": 0.7, "normal": 1.0, "big": 1.25, "smudge": 0.35, "out": 0.0}
+## 걸상 모델: polyfork 통나무 걸상 (art/src/build_polyfork.py, CC BY 4.0 — art/CREDITS.md), 없으면 예전 campfire_seat
+const SEAT_MODEL := "props/pf_bench"
 const SEAT_R := 1.85                  # 통나무 의자 거리 (주민은 불에서 1.0~2.5 사이에 앉는다 — ResidentAI.near)
 const GLOW_R := 4.2                   # 불빛 반지름 (보통 불)
 const PARTICLE_PPU := 12.0            # 이보다 멀리 축소하면 불티·연기 끔 (기본 확대 16)
@@ -319,7 +321,8 @@ func _sync_seats(v: Village) -> void:
 	_seat_key = key
 	for c in seats.get_children():
 		c.free()
-	if not Art.exists("campfire_seat"):
+	var seat_model := SEAT_MODEL if Art.exists(SEAT_MODEL) else "campfire_seat"
+	if not Art.exists(seat_model):
 		return
 	var away := v.altar_pos - v.fire
 	var a0 := atan2(away.y, away.x) + PI if away.length() > 0.1 else 0.6
@@ -346,7 +349,7 @@ func _sync_seats(v: Village) -> void:
 		used.append(a)
 		var dy := terrain.ground_y(p.x, p.y) - terrain.ground_y(v.fire.x, v.fire.y) if terrain != null else 0.0
 		var xf := Transform3D(Basis(Vector3.UP, -a + PI * 0.5), Vector3(cos(a) * sr, dy, sin(a) * sr))
-		var s := Art.instance(seats, "campfire_seat", xf)
+		var s := Art.instance(seats, seat_model, xf)
 		s.name = "Seat%d" % used.size()
 
 
