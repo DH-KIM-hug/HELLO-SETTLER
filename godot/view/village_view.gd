@@ -96,6 +96,7 @@ var crisis_view: CrisisView    # [작은 위기] 날벌레·떠돌이 물방울�
 var flora_view: FloraView      # [하늘의 것] 큰 버섯·큰 민들레·꽃씨 (view/flora_view.gd)
 var drop_view: SkyDropView     # [상점] 하늘에서 내려온 것·앰플 탑·녹조 (view/sky_drop_view.gd)
 var fauna_view: FaunaView      # [강아지·작은 생물] 집 강아지·마을 강아지·꿀떡이 + 무당벌레·나비… (view/fauna_view.gd — E3-12 · E3-13)
+var kitchen_view: KitchenView  # [부엌] 진딧물 목장·하늘의 큰 알·껍데기·씨앗 짜개 (view/kitchen_view.gd — E3-14)
 var animal_view: AnimalView    # [들짐승] 카메라 곁 무리의 대표·물고기·메고 오는 사슴·올무·울타리 (view/animal_view.gd)
 var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 사람)
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
@@ -198,6 +199,8 @@ func _ready() -> void:
 	add_child(animal_view)
 	fauna_view = FaunaView.new(v, self)     # [강아지·작은 생물]
 	add_child(fauna_view)
+	kitchen_view = KitchenView.new(v, self)  # [부엌]
+	add_child(kitchen_view)
 	social = SocialStage.new(v, self)   # [마을의 삶]
 	add_child(social)
 	_build_fire()
@@ -380,6 +383,8 @@ func _sync_moving(dt: float) -> void:
 	if fauna_view != null:
 		fauna_view.alpha = alpha    # [강아지·작은 생물]
 		fauna_view.sync(dt, fast)
+	if kitchen_view != null:
+		kitchen_view.sync(dt)       # [부엌] (주민 몸짓 뒤 — 굴리는 팔·목장지기)
 
 
 static func age_stage(r: Resident) -> int:
