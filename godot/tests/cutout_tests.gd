@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 종이 인형 주민: 겉모습 기록 · 동작 대응 · 에셋")
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
-		"test_assets_imported", "test_view_only", "test_switch", "test_body_types"])
+		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -254,3 +254,86 @@ func test_body_types() -> void:
 	check(cane, "노인 몸에 지팡이 (손을 따라감)")
 	var c := Lib.concept_look("child")
 	check(int(c["personal"]) == 5 and int(c["dye"][0]) == -1, "시안 그대로의 아이 (그린 색 그대로)")
+
+
+## 2026-11-08 버그 "모자를 비스듬히 쓰고 있음": 모자(묶음 종류 2)는 머리와 한 덩어리로 움직여야 한다.
+## 옛 셰이더는 모자를 제 꼭대기 기준으로 돌려(머리는 턱 기준) 머리가 돌면 모자가 옆으로 떨어졌다.
+## 셰이더는 화면 없이 돌려 볼 수 없으므로 소스의 순서를 확인 + 모든 모자 조각이 머리 동작 슬롯(2)을 씀.
+## 눈으로 보는 확인: tools/shot_cuthat.gd (cuthat_after_stress.png = 머리 돌림 0.45 rad).
+func test_hat_follows_head() -> void:
+	var src := FileAccess.get_file_as_string("res://proto/cutout_a/cut_doll.gdshader")
+	check(src.find("} else if (group != 2) {\n\t\t\tp = xf(p, piv, a_own);") >= 0, "셰이더: 모자는 제 꼭대기 기준으로 돌지 않음")
+	var top := src.find("p += head_top[")
+	var follow := src.find("if (slot != 2 || group == 2) {")
+	var scale := src.find("p = p * head_k[")
+	check(top >= 0 and follow > top and scale > follow, "셰이더: 모자 = 정수리에 놓은 뒤 머리 동작(턱 기준)으로 돌림 → 머리 배율")
+	var ok := true
+	var n := 0
+	for q: Dictionary in Lib.lib()["quads"]:
+		if q["part"] == "hat":
+			n += 1
+			ok = ok and int(q["group"]) == 2 and int(q["slot"]) == 2
+	check(n >= 24 and ok, "모자 조각 %d개 모두 머리 동작 슬롯 (묶음 종류 2, 슬롯 2)" % n)
+
+
+## 비스듬한 보기의 챙 모자가 기울어 그려졌던 것 (b·c·e 3/4 ±18~30°) → build_atlas가 수평으로 세움.
+## 앞모습이 수평인 챙 모양 모자는 비스듬한 보기에서도 앞모습과 10° 안 (아틀라스 조각의 불투명 화소 주축).
+func test_hat_level() -> void:
+	var L := Lib.lib()
+	var img: Image = (Lib.material().get_shader_parameter("atlas") as Texture2D).get_image()
+	if img.is_compressed():
+		img.decompress()
+	var checked := 0
+	var bad := PackedStringArray()
+	for s: String in ["b", "c", "d", "e", "f", "g"]:
+		var ax := {}
+		for q: Dictionary in L["quads"]:
+			if q["set"] == s and q["part"] == "hat":
+				ax[int(q["view"])] = _alpha_axis(img, q["uv"])
+		var fa: Vector2 = ax[0]
+		if absf(fa.x) > 3.0 or fa.y < 1.7:
+			continue     # 앞모습부터 기운 모양(뾰족 모자 f)이나 챙 없는 두건(d)은 그린 그대로
+		for v: int in [1, 2]:
+			var va: Vector2 = ax[v]
+			if va.y < 1.7:
+				continue
+			checked += 1
+			if absf(va.x - fa.x) > 10.0:
+				bad.append("%s/%d %.1f°" % [s, v, va.x - fa.x])
+	check(checked >= 4 and bad.is_empty(), "비스듬한 보기의 챙 모자가 수평 (%d개 확인, 기운 것: %s)" % [checked, ", ".join(bad)])
+
+
+## 아틀라스 uv 칸의 불투명 화소 주축: (각도°, 길쭉함 = 큰/작은 분산)
+static func _alpha_axis(img: Image, uv: Array) -> Vector2:
+	var x0 := int(float(uv[0]) * img.get_width())
+	var y0 := int(float(uv[1]) * img.get_height())
+	var x1 := int(float(uv[2]) * img.get_width())
+	var y1 := int(float(uv[3]) * img.get_height())
+	var n := 0.0
+	var sx := 0.0
+	var sy := 0.0
+	var sxx := 0.0
+	var syy := 0.0
+	var sxy := 0.0
+	for y in range(y0, y1):
+		for x in range(x0, x1):
+			if img.get_pixel(x, y).a > 0.5:
+				var fx := float(x - x0)
+				var fy := float(y - y0)
+				n += 1.0
+				sx += fx
+				sy += fy
+				sxx += fx * fx
+				syy += fy * fy
+				sxy += fx * fy
+	if n < 10.0:
+		return Vector2(0.0, 1.0)
+	var mx := sx / n
+	var my := sy / n
+	var cxx := sxx / n - mx * mx
+	var cyy := syy / n - my * my
+	var cxy := sxy / n - mx * my
+	var ang := rad_to_deg(0.5 * atan2(2.0 * cxy, cxx - cyy))
+	var h := (cxx + cyy) * 0.5
+	var d := sqrt(maxf(0.0, (cxx - cyy) * (cxx - cyy) * 0.25 + cxy * cxy))
+	return Vector2(ang, (h + d) / maxf(h - d, 1e-6))

@@ -96,18 +96,19 @@ void vertex() {
 			vec2 g = xf(CUSTOM3.xy, piv, a_own);
 			g = xf(g, CUSTOM2.yz, anim(slot - 2, row0, f));
 			p += g - CUSTOM3.xy;
-		} else {
+		} else if (group != 2) {
 			p = xf(p, piv, a_own);
 		}
 		if ((slot == 5 || slot == 6) && CUSTOM3.z < 0.5) {
 			p = xf(p, CUSTOM2.yz, anim(slot - 2, row0, f));   // 아래팔은 소매(어깨)를 따라
 		}
 		if (group == 1 || group == 2) {
-			if (slot != 2) {
-				p = xf(p, vec2(0.0), anim(2, row0, f));    // 매듭·머리꼬리는 머리를 따라
-			}
 			if (group == 2) {
+				// 모자 = 머리와 한 덩어리: 고른 머리의 정수리에 놓은 뒤 머리와 똑같이 (턱 기준) 돌림 — 제 꼭대기 기준으로 돌면 머리에서 떨어짐
 				p += head_top[int(sel.y + 0.5) * 4 + cur_view];
+			}
+			if (slot != 2 || group == 2) {
+				p = xf(p, vec2(0.0), anim(2, row0, f));    // 매듭·머리꼬리·모자는 머리를 따라
 			}
 			p = p * head_k[int(sel.x + 0.5)] + head_socket[so];     // 몸 종류의 머리 배율 (턱 = 목 자리 기준)
 		}

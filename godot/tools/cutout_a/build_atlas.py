@@ -113,6 +113,48 @@ NECK_VIS = 24.0
 HEAD_H = {"a": 248.0, "bare": 232.0}
 
 
+# HEADWEAR DESKEW (2026-11-08 bug "caps worn crooked"): the 3/4-view hat drawings came out of the sheets tilted ~20-30 deg
+# (the figure wore it at a jaunty angle), while front/back are level. A brim seen from any side on a level head is level, so
+# a brim-like hat (long principal axis, level in the front view) whose 3/4 axis differs from the front's is rotated level
+# about its centre. Hats whose tilt is part of the design (pointed cap f: tilted in every view) and wraps that are not
+# brim-like (d) are left alone.
+DESKEW_MIN_DEG = 10.0      # 3/4 axis vs front axis
+DESKEW_FRONT_LEVEL = 3.0   # front axis must be this level (deg)
+DESKEW_MIN_RATIO = 1.7     # principal-axis variance ratio = brim-like (front and this view)
+
+
+def hat_axis(png):
+    """principal axis of the opaque pixels: (degrees in image space, y down; elongation ratio)"""
+    a = np.asarray(Image.open(png).convert("RGBA"))[..., 3] > 128
+    ys, xs = np.nonzero(a)
+    w, vec = np.linalg.eigh(np.cov(np.vstack([xs - xs.mean(), ys - ys.mean()])))
+    ang = (np.degrees(np.arctan2(vec[1, 1], vec[0, 1])) + 90.0) % 180.0 - 90.0
+    return float(ang), float(w[1] / max(w[0], 1e-6))
+
+
+def hat_tilt(s, v):
+    """degrees to rotate set s / view v's hat drawing counter-clockwise to level it (0 = keep)"""
+    if v in ("front", "back"):
+        return 0.0
+    fa, fr = hat_axis(os.path.join(PARTS, s, "front", "knot.png"))
+    va, vr = hat_axis(os.path.join(PARTS, s, v, "knot.png"))
+    if abs(fa) > DESKEW_FRONT_LEVEL or fr < DESKEW_MIN_RATIO or vr < DESKEW_MIN_RATIO or abs(va - fa) < DESKEW_MIN_DEG:
+        return 0.0
+    return va - fa
+
+
+def deskew(img, rr, deg):
+    """rotate the part image by deg (CCW) about the centre of its rig rect, crop to the opaque box -> (img, rr)"""
+    w0, h0 = img.size
+    sx, sy = (rr[2] - rr[0]) / w0, (rr[3] - rr[1]) / h0      # rig units per image px
+    cx, cy = (rr[0] + rr[2]) / 2, (rr[1] + rr[3]) / 2
+    r = img.rotate(deg, resample=Image.BICUBIC, expand=True)
+    x0, y0, x1, y1 = r.getchannel("A").point(lambda a: 255 if a > 8 else 0).getbbox()
+    W, H = r.size
+    out = [cx + (x0 - W / 2) * sx, cy + (H / 2 - y1) * sy, cx + (x1 - W / 2) * sx, cy + (H / 2 - y0) * sy]
+    return r.crop((x0, y0, x1, y1)), out
+
+
 def find_chin(p, skin):
     """head piece (sheet px) -> chin. The drawn neck stub = the LOWEST skin-coloured blob of the piece (braids / hair may
     hang lower, so not simply the bottom rows). Walk up the stub's middle columns until they stop being skin: that row is the
@@ -316,6 +358,12 @@ def main():
                 else:   # tail / knot / hat: hangs from its top
                     piv = [(rr[0] + rr[2]) / 2, rr[3]]
                 img = Image.open(os.path.join(d, name + ".png")).convert("RGBA")
+                if pname == "hat":
+                    tilt = hat_tilt(s, v)
+                    if tilt != 0.0:
+                        img, rr = deskew(img, rr, tilt)
+                        piv = [(rr[0] + rr[2]) / 2, rr[3]]
+                        print("deskew hat", s, v, round(tilt, 1))
                 if kind == "head":
                     a = np.asarray(img).copy()
                     # erase the drawn neck stub only: rows below the chin whose opaque run is stub-narrow (3/4 views: the
