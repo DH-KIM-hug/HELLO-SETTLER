@@ -3,7 +3,8 @@
 ## 소리·개발 모드·뒤로 가기·저장·따라잡기·편지)을 그대로 물려받고, 땅만 넓은 세상으로 바꾼다:
 ##   - 새 세상(무작위 시드 — world_seed가 0이 아니면 그 시드). 짧은 창조에서 들어온 새 병(StartFlow "new")이면 먼저 키트 자리 고르기
 ##     (OPENING 단계 8 v3.9 — 안개 없는 세상 전체에서 아무 데나 누름 → 그 자리의 특성 쪽지 → [여기에 내려놓기] → 상자가 내려앉고 (A24 손 없이)
-##     카메라가 상자 앞까지 → 주민이 기어 나옴 → 거인이 키트 건물을 놓음 (view/start/kit_unpack.gd) → 첫 주민 소개 → 이름).
+##     거인이 키트 건물을 놓아 터를 꾸밈 → 카메라가 상자 앞까지 → 주민이 기어 나와 모닥불 곁으로 (2026-11-08 사용자 순서 — view/start/kit_unpack.gd)
+##     → 첫 주민 소개 → 이름).
 ##     그 밖(캡처·시험·pick_spot = false)은 첫 추천 자리에 바로 키트.
 ##   - 무리가 여럿이면 무리마다 VillageView. 제단·유리 톡·불기·소리·위 띠 = 카메라가 보고 있는 무리 (focus_village)
 ##   - 뚜껑은 병 하나에 하나 → 모든 무리가 함께. 병 돌리기(빛)는 세상 전체 (JarWorld.rotate_jar)
@@ -407,7 +408,7 @@ func _drop_kit(p: Vector2) -> void:
 
 
 
-## 키트를 놓는다 → 병 안 장면을 만들고 → (창조에서 왔으면) 상자 풀기 (KitUnpack: 상자가 내려앉고 · 초확대 · 기어 나옴 · 건물 놓기) →
+## 키트를 놓는다 → 병 안 장면을 만들고 → (창조에서 왔으면) 상자 풀기 (KitUnpack: 상자가 내려앉고 · 건물 놓기 · 초확대 · 기어 나와 모닥불 곁으로) →
 ## 첫 주민 소개. 시험·개발(_plan 없음)은 멀리서 그 빈터로 날아 내려감. resume = 앱을 다시 켬 (creation.json build · name)
 func _place_first_kit(p: Vector2, resume := false) -> void:
 	var far_ppu: float = (_pick["cam"] as JarCamera).ppu
@@ -420,16 +421,8 @@ func _place_first_kit(p: Vector2, resume := false) -> void:
 			_plan.placed = {}
 			_plan.stage = "build" if trayed else "name"
 			_plan.save(StartFlow.save_dir())
-		var ppl: Array[Resident] = []
-		for q in v.people:
-			if not q.is_baby():
-				ppl.append(q)
-		var stands := KitUnpack.stand_spots(v, p, deg_to_rad(JarCamera.BASE_YAW_DEG), ppl.size())
-		for i in v.people.size():
-			var q := v.people[i]
-			var sp: Vector2 = stands[mini(ppl.find(q), stands.size() - 1)] if ppl.has(q) else stands[0] + Vector2(0.5, 0.3)
-			KitUnpack._set_pos(q, sp, deg_to_rad(JarCamera.BASE_YAW_DEG))
 		KitUnpack.apply_placed(v, _plan)
+		KitUnpack.gather_people(v, p)            # 모닥불 곁에 모인 자리 (터를 꾸미는 동안엔 상자 안 — 보이지 않음 · 이름 짓기부터 다시 켜도 같은 자리)
 	(_pick["root"] as Node).queue_free()
 	(_pick["layer"] as Node).queue_free()
 	_pick = {}

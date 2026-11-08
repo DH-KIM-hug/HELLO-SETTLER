@@ -27,7 +27,7 @@ func all() -> void:
 	StartFlow.navigate = false
 	var old_plan := StartFlow.plan
 	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick", "test_kit_place_by_hand",
-		"test_creation_stages", "test_creation_land_morph", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
+		"test_kit_unpack_order", "test_creation_stages", "test_creation_land_morph", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
 	StartFlow.plan = old_plan
 	StartFlow.pending_world = null
 	_clean()
@@ -307,6 +307,8 @@ func test_kit_place_by_hand() -> void:
 	var v: Village = s.get("village")
 	check(un != null and un.phase == "tray" and s.get("arrival") == null and bool(s.get("paused")) and un.remaining() == un.items.size() and un.items.size() >= 4,
 		"내려놓으면 상자에 든 것 칸 (모닥불·창고·오두막 %d개) — 다 놓기 전엔 소개도 병 시간도 없음" % (un.items.size() if un != null else 0))
+	var vw: VillageView = s.get("view")
+	check(_all_hidden(vw, v), "(2026-11-08 사용자) 터를 꾸미는 동안 사람들은 아직 상자 안 (보이지 않음)")
 	var hut: Dictionary = {}
 	for it: Dictionary in un.items:
 		if String(it["type"]) == "오두막":
@@ -351,6 +353,7 @@ func test_kit_place_by_hand() -> void:
 	var b2 := v2.bld(b.id) if v2 != null else null
 	check(un2 != null and un2.phase == "tray" and b2 != null and Vector2(b2.x, b2.y).distance_to(q) < 0.01 and un2.remaining() == un2.items.size() - 1,
 		"이어서: 놓은 오두막은 그 자리 · 남은 %d개만 칸에" % (un2.remaining() if un2 != null else -1))
+	check(_all_hidden(s2.get("view"), v2) and un2.lid.position.distance_to(Vector3(0, KitUnpack.BOX.y, 0)) < 0.01, "이어서: 상자는 닫힌 채 · 사람들은 아직 상자 안")
 	un2.select("fire")
 	var fq := Vector2.INF
 	for i in 24:
@@ -364,6 +367,7 @@ func test_kit_place_by_hand() -> void:
 	var pl2 := CreationPlan.load_from(sm.dir)
 	check(s2.get("unpack") == null and arr != null and pl2 != null and pl2.stage == "name" and pl2.placed.size() == un2.items.size(),
 		"[알아서 놓기] → 남은 것을 자동 배치로 → 첫 주민 소개 (creation.json name)")
+	check(_gathered(v2, (s2.get("view") as VillageView)), "다 놓은 뒤에야 사람들이 나와 모닥불 곁에 모임 (건물과 겹치지 않음 · 불을 바라봄)")
 	var b3 := v2.bld(b.id)
 	check(Vector2(b3.x, b3.y).distance_to(q) < 0.01 and v2.altar_pos.distance_to(v2.fire) < 5.0, "자동으로 놓아도 거인이 놓은 것은 그대로 · 제단 자리는 새 모닥불 곁")
 	var home_ok := false
@@ -384,6 +388,86 @@ func test_kit_place_by_hand() -> void:
 	var lb: Building = lv.bld(b.id) if lv != null else null
 	check(lb != null and Vector2(lb.x, lb.y).distance_to(q) < 0.01 and lv.fire.distance_to(fq) < 0.01, "저장에도 거인이 놓은 자리 (오두막 %s · 모닥불)" % [Vector2(lb.x, lb.y) if lb != null else "-"])
 	sm2.free()
+	StartFlow.take()
+	StartFlow.plan = null
+	StartFlow.pending_world = null
+	drop(sm)
+
+
+func _all_hidden(vw: VillageView, v: Village) -> bool:
+	for r in v.people:
+		if not vw.staged.has(r.id) or bool((vw.staged[r.id] as Dictionary).get("vis", true)):
+			return false
+	return true
+
+
+## 모두 모닥불 곁 (고리 안) · 건물 위가 아님 · 보는 그림도 연출에서 풀림
+func _gathered(v: Village, vw: VillageView) -> bool:
+	if not vw.staged.is_empty():
+		return false
+	var lay := KitUnpack.gather_layout(v, v.center)
+	for r in v.people:
+		var p := Vector2(r.x, r.y)
+		if p.distance_to(v.fire) > float(KitUnpack.FIRE_RING[KitUnpack.FIRE_RING.size() - 1]) + 1.0 or p.distance_to(lay[r.id]) > 0.01:
+			return false
+		for b in v.buildings:
+			if b.site_type() != Awakening.ALTAR and Vector2(b.x, b.y).distance_to(p) < b.size() + 0.3:
+				return false
+	return true
+
+
+## (2026-11-08 사용자 "처음 스타터킷 터부터 짓고 사람들 나오는 거로 하자") 연출 순서: 상자 → 칸 (사람들은 상자 안) → 다 놓음 →
+## 상자 앞 → 열림 → 한 명씩 기어 나와 두리번 ("어…?") → 모닥불 곁으로 → 상자가 떠나감. 주민 말에 상자·키트 없음. 같은 세상 = 같은 모인 자리
+func test_kit_unpack_order() -> void:
+	var sm := manager()
+	var c := creation(CreationPlan.make(5, WorldCfg.SMALL_SIZE))
+	c.call("jump", "life")
+	c.call("next")
+	remove(c)
+	var s: Node = load(StartFlow.GAME_SCENE).instantiate()
+	s.set("kit_anim", false)
+	s.set("kit_tray", true)
+	run.root.add_child(s)
+	var w: JarWorld = s.get("world")
+	var p: Vector2 = w.spot_choices(1)[0]["p"]
+	s.call("show_spot", p)
+	s.call("put_here")
+	var un: KitUnpack = s.get("unpack")
+	var v: Village = s.get("village")
+	var vw: VillageView = s.get("view")
+	check(un != null and un.phase == "tray" and _all_hidden(vw, v), "칸이 먼저 — 사람들은 상자 안")
+	s.set("kit_anim", true)                       # 여기부터 연출 (시험이 _process를 직접 돌림)
+	un.auto_place()
+	var seen: Array = [un.phase]
+	var hidden_till_climb := true
+	var walked := false
+	var said := []
+	for i in 1200:
+		un._process(0.05)
+		if seen[seen.size() - 1] != un.phase:
+			seen.append(un.phase)
+		if un.phase in ["wait", "rush", "open"]:
+			hidden_till_climb = hidden_till_climb and _all_hidden(vw, v)
+		if un.phase == "gather":
+			for r in v.people:
+				var st: Dictionary = vw.staged.get(r.id, {})
+				walked = walked or String(st.get("anim", "")) in ["walk", "run"]
+		for r in v.people:
+			if r.say != "" and not said.has(r.say):
+				said.append(r.say)
+		if un.phase in ["end", "done"]:
+			break
+	check(seen == ["wait", "rush", "open", "climb", "gather", "end"], "다 놓은 뒤에야: 상자 앞 → 열림 → 기어 나옴 → 모닥불 곁으로 → 상자 떠남 (%s)" % [seen])
+	check(hidden_till_climb, "상자가 열리기 전엔 아무도 보이지 않음")
+	var bad := false
+	for l: String in said:
+		bad = bad or l.contains("상자") or l.contains("키트")
+	check(walked and said.has("어…?") and not bad, "기어 나와 두리번 (\"어…?\") · 모닥불 곁으로 걸어감 · 주민 말에 상자·키트 없음 (%s)" % [said])
+	check(_gathered(v, vw), "모두 모닥불 곁 모인 자리 (= 연출 없는 자리 · 결정적)")
+	var lay := KitUnpack.gather_layout(v, un.spot)
+	var lay2 := KitUnpack.gather_layout(v, un.spot)
+	check(lay == lay2 and lay.size() == v.people.size(), "모이는 자리는 같은 마을이면 늘 같음 (%d명)" % lay.size())
+	remove(s)
 	StartFlow.take()
 	StartFlow.plan = null
 	StartFlow.pending_world = null
