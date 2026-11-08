@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	run.timed(self, ["test_lumber_by_forest", "test_quarry_and_fisher", "test_houses_village_like", "test_houses_avoid_noise_and_roads",
-		"test_siting_determinism", "test_siting_fast_and_static_free"])
+		"test_siting_determinism", "test_siting_fast_and_static_free", "test_opening_with_scored_siting"])
 
 
 static func _village(seed_v: int) -> Village:
@@ -26,7 +26,7 @@ static func _village(seed_v: int) -> Village:
 	var rec := jw.recommended_kit_spots()
 	var v := jw.place_kit(rec[0].x, rec[0].y)
 	v.water.offline = true
-	v.t = Balance.DAY                 # 첫날(대본) 뒤 — 점수 자리 잡기가 켜진다 (Siting.active)
+	v.t = Balance.DAY                 # 첫날 뒤 (자원 지도·안개가 자리 잡힌 때)
 	for k in ["판자", "돌"]:
 		v.stock[k] = 500.0
 	return v
@@ -163,7 +163,8 @@ func test_houses_avoid_noise_and_roads() -> void:
 	v.buildings.erase(saw)
 	# 발길: 첫 자리를 흙길로 만들면 다른 곳
 	var v2 := _village(3)
-	check(Siting.active(v2) and not Siting.active(world_day0()), "첫날은 옛 자리 잡기 (대본), 그 뒤 점수")
+	var d0 := world_day0()
+	check(Siting.active(v2) and Siting.active(d0), "첫 순간부터 점수 자리 잡기 (첫날도)")
 	var a: Variant = v2.find_spot("오두막")
 	for k in 40:
 		v2.mark_path((a as Vector2).x + (k % 5 - 2) * 0.4, (a as Vector2).y + (k / 5 - 4) * 0.4, 20.0)
@@ -212,3 +213,33 @@ func test_siting_fast_and_static_free() -> void:
 		if line.strip_edges().begins_with("static var"):
 			bad = true
 	check(src != "" and not bad, "sim/siting.gd에 static var 없음 (ADR-0001)")
+
+
+## 첫날도 점수 자리 잡기 (2026-11-09 1.2): 작은 시험 병 여러 씨앗에서 첫 오두막·밭·벌목장이 첫날에 서고, 첫 아기가 첫날 안에 (OPENING 3장).
+## 벌목장은 숲 가장자리 (하루 벤 뒤 나무 4칸 안). 첫 집 환호가 짐꾼의 판자 예약을 풀지 않음 · 새 집이 서면 아이 낳을 가족이 먼저 (Village.on_built)
+func test_opening_with_scored_siting() -> void:
+	print("== 자리 잡기: 첫날 (점수 자리 + 첫 아기)")
+	var rows: Array = []
+	var ok := true
+	for sd: int in ([1, 2, 3] if quick else [1, 2, 3, 4, 5, 6]):
+		var v := Village.new_prototype(sd)
+		v.auto_reveal = true
+		for hr in 24:
+			v.advance(Balance.HOUR)
+		var fb := -1.0
+		for e: Dictionary in v.birth_log:
+			fb = e["t"]
+			break
+		var hut := false
+		var farm := false
+		var lum: Building = null
+		for b in v.buildings:
+			hut = hut or (b.built and b.is_house())
+			farm = farm or (b.built and b.type == "농장")
+			if b.type == "나무꾼" and lum == null:
+				lum = b
+		var td: float = _trees_near(v, Vector2(lum.x, lum.y), 8.0)[0] if lum != null else INF
+		rows.append("%d: 아기 %s · 벌목장 나무 %.1f칸" % [sd, v.fmt_time(fb) if fb >= 0.0 else "-", td])
+		ok = ok and hut and farm and lum != null and lum.built and fb >= 0.0 and fb < Balance.DAY and td <= 4.0          # (하루 벤 뒤에 잼)
+	print("   ", ", ".join(rows))
+	check(ok, "씨앗마다 첫날 안에 오두막·밭·벌목장(숲 가) · 첫 아기")

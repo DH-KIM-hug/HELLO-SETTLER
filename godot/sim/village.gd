@@ -44,6 +44,8 @@ var water: JarWater                   # 소형 병(JarWater) 또는 넓은 세�
 # 6단계 — 넓은 세상: 마을은 세상 좌표의 한 자리(center)에 있다. 소형 병은 (0, 0)
 var center := Vector2.ZERO            # 마을 중심 (창고 자리)
 var sid := 0                          # 무리 번호 (키트마다 하나 — 안개·만남)
+var layout_seed := -1                 # 마을 길 모양 씨앗 (VillagePlan — 큰길 수·휨·광장 크기). 새 무리를 만들 때 세상 씨앗 + 무리 번호로 한 번 (2026-11-09 1.2).
+                                      #   -1 = 옛 저장·작은 시험 병: 옛 4갈래 모양 그대로 (이미 선 집이 길 위에 놓이지 않게)
 var settlement_name := ""
 var owns_water := true                # 이 마을이 물을 흘린다 (한 세상에 하나 — 나머지 무리는 others로 함께 걷는다)
 var others: Array = []                # 같은 세상의 다른 무리 (Village) — 이 마을의 걸음에 맞춰 함께 걷는다
@@ -346,6 +348,8 @@ func thanksgiving(b: Building) -> void:
 		for p in people:
 			if p.is_baby() or p.sleeping or p.sick_left > 0.0:
 				continue
+			if ResidentAI.hauling_to_site(p):
+				continue          # (2026-11-09 1.2) 다음 터(밭)로 판자를 나르던 짐꾼은 내려놓고 온다 — 예약이 풀려 첫날 밭·벌목장이 늦어지지 않게
 			ResidentAI.cancel(self, p)
 			var q := ResidentAI.near(self, fire.x, fire.y, 1.6 + rng.randf() * 1.0)
 			p.doing = "첫 집을 기뻐하는 중"
@@ -1523,6 +1527,9 @@ func on_built(b: Building) -> void:
 	VillageEra.on_built(self, b)          # 망루 안개·세상 끝 · 묘지·교회·광장·나루터 한 줄 (A6)
 	if in_opening() or (int(stats.get("thanks", 0)) == 0 and t < Balance.THANKS_END and not chief_off and b.type != Awakening.ALTAR):     # (A28) 첫 한 시간 뒤에 선 첫 건물도
 		thanksgiving(b)
+	if b.is_house() and not chief_off and Balance.FIRST_BIRTH_GUARANTEE and int(stats.get("born", 0)) == 0 and t >= Balance.FIRST_BIRTH_AT and t < 2.0 * DAY:
+		_births(0.0)      # (2026-11-09 1.2) 첫 아기 보장: 새 집이 서는 그 순간 아이 낳을 가족이 먼저 들어간다 — 집 배정(20초마다)이 먼저 돌면
+		#                   혼자 사는 어른이 빈자리를 채워 첫 아기가 하루를 넘기던 차례 경쟁 (첫 오두막 완공 시각이 자리에 따라 몇 분 달라지면 갈림)
 
 
 # ───────────────────────── 일자리·집 ─────────────────────────
@@ -1901,7 +1908,7 @@ func _births(dt: float) -> void:
 			h = to
 			stats["moves"] += 1
 			log_line("%s의 가족이 더 넓은 집으로 옮겼다." % w.name)
-		if guarantee or (fed and rng.randf() < day_rate_p(Balance.BIRTH_RATE * w.fert * env, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
+		if guarantee or (dt > 0.0 and fed and rng.randf() < day_rate_p(Balance.BIRTH_RATE * w.fert * env, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
 			guarantee = false
 			_give_birth(w, h)
 			occ[h.id] = int(occ.get(h.id, 0)) + 1     # 아기도 그 집에 산다
@@ -3406,6 +3413,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 	kit = kit_def
 	next_id = int(kit_def.get("id_base", 1))      # 분가: 옛 마을 사람 번호와 겹치지 않게
 	sid = sid_v
+	layout_seed = VillagePlan.make_layout_seed(seed_v, sid_v)     # 키트 건물을 광장 둘레로 옮기기(VillagePlan.found) 전에
 	center = spot
 	start_clock = ww.start_clock
 	path_r = 64.0

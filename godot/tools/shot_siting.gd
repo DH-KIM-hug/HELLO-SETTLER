@@ -1,5 +1,5 @@
-## 자리 잡기 캡처 — 창이 필요: godot --path godot -s res://tools/shot_siting.gd -- [이름=siting] [시드=1] [날=20] [ppu=16]
-## 새 넓은 세상 (시드) → 그 날 낮 11시 → ppu로 마을 한가운데 화면 + 위에서 본 배치 그림 (<이름>_map.png: 나무 초록 · 바위 회색 ·
+## 자리 잡기 캡처 — 창이 필요: godot --path godot -s res://tools/shot_siting.gd -- [이름=siting] [시드=1] [날=20] [ppu=16] [시=11]
+## 새 넓은 세상 (시드) → 그 날 낮 11시 (시 = 다른 때 — 첫날 저녁은 1 … 18) · 건물은 2D 그림 → ppu로 마을 한가운데 화면 + 위에서 본 배치 그림 (<이름>_map.png: 나무 초록 · 바위 회색 ·
 ## 물 파랑 · 집 주황 · 일터 갈색 · 밭 노랑 · 창고 파랑). 측정과 같게 거인이 지켜봄(auto_reveal).
 extends SceneTree
 
@@ -12,6 +12,7 @@ var shot := "siting"
 var seed_v := 1
 var day := 20
 var ppu := 16.0
+var hour := 11.0
 
 
 func _initialize() -> void:
@@ -27,6 +28,9 @@ func _initialize() -> void:
 		day = int(args[2])
 	if args.size() > 3:
 		ppu = float(args[3])
+	if args.size() > 4:
+		hour = float(args[4])
+	Bld2D.override = 1
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = seed_v
 	scene.world_size = WorldCfg.SIZE
@@ -44,7 +48,7 @@ func _process(_dt: float) -> bool:
 		var v: Village = scene.village
 		v.auto_reveal = true
 		v.water.offline = true
-		var goal := (day - 1) * Balance.DAY + 11.0 * Balance.HOUR
+		var goal := (day - 1) * Balance.DAY + hour * Balance.HOUR
 		var t0 := Time.get_ticks_msec()
 		var left := maxf(0.0, goal - (v.start_clock + v.t))
 		while left > 0.0:                       # 측정 도구와 같은 걸음 (분 단위)

@@ -17,7 +17,8 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_plan_layout", "test_graph_connects", "test_route_follows_roads", "test_roads_wear_and_fade", "test_plan_determinism", "test_plan_save_roundtrip"])
+	run.timed(self, ["test_plan_layout", "test_graph_connects", "test_route_follows_roads", "test_roads_wear_and_fade", "test_plan_determinism", "test_plan_save_roundtrip",
+		"test_layout_per_world", "test_layout_save_and_legacy"])
 
 
 ## 작은 넓은 세상 + 키트 하나를 n시간 흘린 마을
@@ -291,3 +292,82 @@ func test_plan_save_roundtrip() -> void:
 	old.stock["판자"] = 500.0
 	var sp: Variant = old.find_spot("오두막")
 	check(is_equal_approx(old.buildings[1].x, bx) and sp != null, "계획에 없던 자리의 옛 건물은 그대로, 새 집은 계획 자리")
+
+
+## 마을마다 다른 길 모양 (Village.layout_seed — 2026-11-09 1.2): 큰길 3~5갈래 · 휨 · 광장 크기가 세상마다 다르고, 보기 좋은 범위 안
+func test_layout_per_world() -> void:
+	print("== 마을마다 다른 길 모양")
+	var ns := {}
+	var keys := {}
+	var ok_range := true
+	var ok_gap := true
+	var ok_kit := true
+	var seeds := [1, 2, 3, 4, 5, 6, 7, 8] if quick else range(1, 17)
+	for sd: int in seeds:
+		var v := world_village(sd, 0.0)
+		var pl := VillagePlan.plan(v)
+		var n: int = pl["n"]
+		var rp: float = pl["rp"]
+		ns[n] = int(ns.get(n, 0)) + 1
+		keys["%d|%.2f|%.3f" % [n, rp, float((pl["streets"][0] as PackedVector2Array)[20].x - v.fire.x)]] = true
+		ok_range = ok_range and v.layout_seed >= 0 and n >= 3 and n <= 5 and rp >= VillagePlan.RP_MIN - 1e-3 and rp <= VillagePlan.RP_MAX + 1e-3
+		# 이웃한 큰길은 광장 가에서도, 멀리서도 서로 떨어져 있다 (겹치거나 엇갈리지 않음)
+		for d: float in [rp + 2.0, 12.0, 24.0, 40.0]:
+			var angs: Array = []
+			for k in n:
+				var q := VillagePlan.street_at(pl, k, d) - v.fire
+				angs.append(atan2(q.y, q.x))
+			angs.sort()
+			for k in n:
+				var ga: float = (float(angs[(k + 1) % n]) + (TAU if k == n - 1 else 0.0)) - float(angs[k])
+				ok_gap = ok_gap and ga >= 0.55 * TAU / n and ga * d >= 3.2
+		# 키트 창고·오두막은 광장 둘레, 큰길 위가 아님
+		for b in v.buildings:
+			if b.is_store or b.is_house():
+				var df := Vector2(b.x, b.y).distance_to(v.fire)
+				ok_kit = ok_kit and not VillagePlan.blocks(v, b.x, b.y, b.size()) and df > rp and df < rp + 4.5
+	print("   큰길 수: %s · 서로 다른 모양 %d/%d" % [str(ns), keys.size(), seeds.size()])
+	check(ok_range, "길 씨앗이 있고 큰길 3~5갈래 · 광장 반지름 %.1f~%.1f" % [VillagePlan.RP_MIN, VillagePlan.RP_MAX])
+	check(ns.size() >= 2 and keys.size() == seeds.size(), "세상마다 다른 길 모양 (큰길 수 %d가지 · 모양 %d/%d)" % [ns.size(), keys.size(), seeds.size()])
+	check(ok_gap, "이웃한 큰길 사이 각·거리가 넉넉 (겹치지 않음)")
+	check(ok_kit, "키트 창고·오두막은 광장 둘레 (큰길 위 아님)")
+	# 같은 씨앗 → 같은 길
+	var a := VillagePlan.plan(world_village(4, 0.0))
+	var b := VillagePlan.plan(world_village(4, 0.0))
+	var same: bool = a["n"] == b["n"] and is_equal_approx(float(a["rp"]), float(b["rp"]))
+	for k in int(a["n"]):
+		same = same and (a["streets"][k] as PackedVector2Array) == (b["streets"][k] as PackedVector2Array)
+	check(same, "같은 세상 씨앗 → 같은 길 모양 (%d갈래)" % int(a["n"]))
+
+
+## 길 씨앗은 저장·불러오기 왕복 · 옛 저장(길 씨앗 없음)은 옛 4갈래 그대로 (이미 선 집이 길 위에 놓이지 않게)
+func test_layout_save_and_legacy() -> void:
+	print("== 길 씨앗 저장 · 옛 저장")
+	var v := world_village(6, 3.0)
+	var d := v.to_dict()
+	var w := Village.from_dict(bytes_to_var(var_to_bytes(d)), v.water)
+	var pa := VillagePlan.plan(v)
+	var pb := VillagePlan.plan(w)
+	var same: bool = w.layout_seed == v.layout_seed and pa["n"] == pb["n"]
+	for k in int(pa["n"]):
+		same = same and (pa["streets"][k] as PackedVector2Array) == (pb["streets"][k] as PackedVector2Array)
+	check(d.has("layout_seed") and same, "저장 왕복: 길 씨앗 %d · 큰길 %d갈래 그대로" % [w.layout_seed, int(pb["n"])])
+	# 옛 저장: layout_seed가 없다 → -1 → 옛 모양 (큰길 4 · 광장 RP · 옛 각)
+	var od := d.duplicate()
+	od.erase("layout_seed")
+	var o := Village.from_dict(bytes_to_var(var_to_bytes(od)), v.water)
+	var po := VillagePlan.plan(o)
+	var base := VillagePlan.base_angle(o)
+	var legacy_ok: bool = o.layout_seed == -1 and int(po["n"]) == VillagePlan.STREETS and is_equal_approx(float(po["rp"]), VillagePlan.RP)
+	for k in VillagePlan.STREETS:
+		var q := (po["streets"][k] as PackedVector2Array)[int(VillagePlan.RP)] - o.fire
+		var want := base + PI / VillagePlan.STREETS + k * TAU / VillagePlan.STREETS + (VillagePlan._h(o.sid, k) - 0.5) * 0.3
+		legacy_ok = legacy_ok and absf(wrapf(atan2(q.y, q.x) - want, -PI, PI)) < 1e-3
+	check(legacy_ok, "옛 저장: 옛 4갈래 · 광장 %.1f · 옛 방향 그대로" % VillagePlan.RP)
+	# 옛 저장에서 다시 불러와도 같은 옛 모양 (결정적), 새 집 자리는 옛 길 위가 아님
+	var o2 := Village.from_dict(bytes_to_var(var_to_bytes(od)), v.water)
+	o2.stock["판자"] = 500.0
+	var sp: Variant = o2.find_spot("오두막")
+	check(sp != null and not VillagePlan.blocks(o2, (sp as Vector2).x, (sp as Vector2).y, 1.0), "옛 저장의 새 집도 옛 길 밖 자리")
+	# 작은 시험 병(개발 장면 · 첫 10분 대본 시험)은 옛 모양
+	check(Village.new_prototype().layout_seed == -1, "작은 시험 병은 옛 4갈래 (대본 시험 그대로)")

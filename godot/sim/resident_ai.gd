@@ -202,6 +202,15 @@ static func near(v: Village, x: float, y: float, r := 1.2) -> Vector2:
 	return Vector2(x + cos(a) * r, y + sin(a) * r)
 
 
+## 터로 자재를 나르는 중인가 (판자·돌을 들었거나 들러 가는 길 — 그만두면 터의 예약이 풀린다)
+static func hauling_to_site(r: Resident) -> bool:
+	for s: Dictionary in r.steps:
+		var c: Variant = s.get("cancel")
+		if c is Dictionary and String((c as Dictionary).get("op", "")) == "site_undo":
+			return true
+	return false
+
+
 ## 하던 일을 그만둔다 — 들고 있던 짐·예약은 되돌린다 (죽음 등)
 static func cancel(v: Village, r: Resident) -> void:
 	for s: Dictionary in r.steps:

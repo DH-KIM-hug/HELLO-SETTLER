@@ -40,10 +40,13 @@ static func is_resource_type(type: String) -> bool:
 	return RES.has(type)
 
 
-## 점수 자리 잡기를 쓰는가 — 첫날(OPENING 첫 10분 대본: 첫 오두막·밭·벌목장·제단까지의 걸음과 빠르기가 맞춰져 있음)은 옛 방식,
-## 첫날이 지나면 점수. (2026-11-09 자리 잡기 — 대본 시험 notebook이 옛 자리에 맞춰져 있어서)
-static func active(v: Village) -> bool:
-	return v.t >= Balance.DAY
+## 점수 자리 잡기를 쓰는가 — 첫 순간부터 늘 (2026-11-09 1.2: 첫날도 점수, 첫날만의 덤·거리 제한 없음).
+## 첫날 대본(첫 오두막 → 밭 → 벌목장 → 둘째 오두막 → 첫 아기)이 자리에 덜 흔들리게 고친 곳은 두 군데 (자리 잡기 밖):
+##   Village.thanksgiving — 첫 집 환호 때 다음 터로 판자를 나르던 짐꾼은 내려놓고 온다 (예약이 풀려 밭이 몇 시간 멈추던 것)
+##   Village.on_built — 첫 아기 보장 동안 새 집이 서는 순간 아이 낳을 가족이 먼저 들어감 (집 배정과의 차례 경쟁)
+## (false를 돌려주면 옛 나선·옛 길가 방식 — 비교용 문)
+static func active(_v: Village) -> bool:
+	return true
 
 
 # ───────────────────────── 자원 지도 ─────────────────────────
@@ -254,7 +257,7 @@ static func _hash(a: int, b: int, c: int) -> float:
 
 ## 집들이 이룬 마을 고리의 반지름 (모닥불에서 가장 먼 집 + 1, 광장 둘레보다는 크게) — 일터는 이 바깥 (마을 가)
 static func core_r(v: Village) -> float:
-	var r := VillagePlan.RP + 5.0
+	var r := VillagePlan.plaza_r(v) + 5.0
 	for b in v.buildings:
 		if b.is_house() or b.is_store:
 			r = maxf(r, Vector2(b.x, b.y).distance_to(v.fire) + b.size() + 1.0)
@@ -310,7 +313,7 @@ static func resource_spot(v: Village, type: String) -> Variant:
 				s -= 1.2 * maxf(0.0, FLOOD_R - wd[i])
 			if rule.has("wet"):
 				s += float(rule["wet"]) * v.wetness(p.x, p.y)
-			s += (_hash(v.sid, gx, gy) - 0.5) * 0.3          # 칸마다 작은 흔들림 (같은 마을 = 같은 값)
+			s += (_hash(VillagePlan.lseed(v), gx, gy) - 0.5) * 0.3          # 칸마다 작은 흔들림 (같은 마을 = 같은 값)
 			cands.append([s, p])
 	return _best(v, type, size, cands, func(p: Vector2) -> float: return _bld_terms(v, type, rule, p, size))
 
@@ -373,17 +376,18 @@ const RING_OPEN_HOUSES := 4    # 첫 집들(키트 둘 + 처음 지은 둘)은 �
 static func hamlet_slots(v: Village, pl: Dictionary, size: float) -> Array:
 	var out: Array = []
 	var off := VillagePlan.HALF_W + VillagePlan.GARDEN + size
-	for k in VillagePlan.STREETS:
+	var ls := VillagePlan.lseed(v)
+	for k in int(pl["n"]):
 		for si in 2:
 			var side := 1.0 if si == 0 else -1.0
-			var d := VillagePlan.RP + 1.2 + 1.2 + _hash(v.sid, k * 2 + si, 900) * 1.2
+			var d := float(pl["rp"]) + 1.2 + 1.2 + _hash(ls, k * 2 + si, 900) * 1.2
 			var g := 0
 			while d < VillagePlan.STREET_LEN - 2.0:
-				var gn := 2 if _hash(v.sid, k * 2 + si, g) < 0.55 else 3
+				var gn := 2 if _hash(ls, k * 2 + si, g) < 0.55 else 3
 				for j in gn:
 					out.append({"p": VillagePlan._side_pt(pl, k, d, side * off), "k": k, "side": si, "g": g, "d": d})
 					d += PITCH
-				d += YARD + _hash(v.sid, k * 2 + si, g + 500) * 1.6
+				d += YARD + _hash(ls, k * 2 + si, g + 500) * 1.6
 				g += 1
 	return out
 
@@ -397,9 +401,9 @@ static func wedge_slots(v: Village, pl: Dictionary, size: float) -> Array:
 	var fire: Vector2 = pl["fire"]
 	var clear := VillagePlan.HALF_W + VillagePlan.GARDEN + size + 0.6
 	for ri in WEDGE_R.size():
-		var r: float = float(WEDGE_R[ri]) + (_hash(v.sid, ri, 31) - 0.5) * 1.2
+		var r: float = float(WEDGE_R[ri]) + (float(pl["rp"]) - VillagePlan.RP) + (_hash(VillagePlan.lseed(v), ri, 31) - 0.5) * 1.2
 		var angs: Array = []
-		for k in VillagePlan.STREETS:
+		for k in int(pl["n"]):
 			var q := VillagePlan.street_at(pl, k, r) - fire
 			angs.append(atan2(q.y, q.x))
 		angs.sort()
@@ -438,7 +442,7 @@ static func street_spot(v: Village, size: float, type: String) -> Variant:
 	var rule: Dictionary = STREET_RULES.get(type, {})
 	var f := fields(v)
 	var wd: PackedFloat32Array = f["water_d"]
-	var core := maxf(core_r(v), VillagePlan.RP + RIM)       # 시끄러운 일터는 마을이 자랄 것까지 보고 가에
+	var core := maxf(core_r(v), float(pl["rp"]) + RIM)       # 시끄러운 일터는 마을이 자랄 것까지 보고 가에
 	var n_house := 0
 	for b in v.buildings:
 		if b.is_house():
@@ -456,9 +460,9 @@ static func street_spot(v: Village, size: float, type: String) -> Variant:
 		cands.append([0.3 + float(rule.get("civic", 0.0)) * 0.5, wr["p"], wr["key"], VillagePlan.GAP + 0.4])
 	# 큰길가 아무 자리 (뜸 자리가 다 막혔을 때) — 뜸 사이 마당을 메우지 않게 이웃과 더 떨어져야
 	var off := VillagePlan.HALF_W + VillagePlan.GARDEN + size
-	var d := VillagePlan.RP + size + 0.8
+	var d := float(pl["rp"]) + size + 0.8
 	while d < VillagePlan.STREET_LEN - 1.0:
-		for k in VillagePlan.STREETS:
+		for k in int(pl["n"]):
 			for side: float in [1.0, -1.0]:
 				cands.append([-2.0, VillagePlan._side_pt(pl, k, d, side * off), "", VillagePlan.GAP + YARD])
 		d += VillagePlan.SCAN * 2.0
@@ -493,7 +497,7 @@ static func street_spot(v: Village, size: float, type: String) -> Variant:
 		s -= SLOPE_W * slope(f, i)
 		s -= 1.0 * maxf(0.0, FLOOD_R - wd[i])
 		if hk != "ring":             # 광장 둘레 고리는 옛 차례 (같은 거리면 앞 자리부터)
-			s += (_hash(v.sid, int(p.x * 3.0), int(p.y * 3.0)) - 0.5) * 0.2
+			s += (_hash(VillagePlan.lseed(v), int(p.x * 3.0), int(p.y * 3.0)) - 0.5) * 0.2
 		scored.append([s, p, c[3]])
 	var near: Array = rule.get("near", [])
 	var extra := func(p: Vector2) -> float:

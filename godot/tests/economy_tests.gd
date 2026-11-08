@@ -227,7 +227,7 @@ func test_wish() -> void:
 	var l := w.write_wish("우물")
 	var f0 := w.faith
 	check(w.grant_wish(int(l["id"])) and l["state"] == "granted", "[들어준다]")
-	check(w.faith > f0 + 3.0, "믿음↑ (%.1f → %.1f)" % [f0, w.faith])
+	check(w.faith > f0 + 2.0, "믿음↑ (%.1f → %.1f)" % [f0, w.faith])      # (2026-11-09) 터를 끝낸 순간 첫 아기가 태어나 (Village.on_built) 평균이 조금 묽어짐 — 1.0에 닿은 믿음도 있음
 	w.chief_build()
 	var site: Building = null
 	for b in w.buildings:

@@ -1,10 +1,11 @@
 ## 마을 배치와 길 (기획서 6.7 '길은 발길이 만든다' + 촌장의 자리 고르기) — 순수 계산, 저장할 새 상태 없음.
 ##
-## 배치: 모닥불이 마을 한가운데 둥근 광장(반지름 RP). 광장에서 굽은 큰길 STREETS개가 바깥으로 뻗는다 (방향 = 창고 쪽을 기준으로
+## 배치: 모닥불이 마을 한가운데 둥근 광장(반지름 RP). 광장에서 굽은 큰길 n개(3~5)가 바깥으로 뻗는다 (방향 = 창고 쪽을 기준으로
 ##   45° 비켜서 — 창고·제단은 큰길 사이 광장 가에). 집은 광장 둘레(첫 고리)와 큰길 양쪽에 앞마당을 두고 길을 바라보며
 ##   안쪽부터 바깥으로 고리 지어 선다 (같은 간격). 밭은 집들 너머 큰길가에 가지런히 줄지어. 자원 일터(나무꾼·채석장 …)는
 ##   옛 방식대로 자원 곁이되 큰길 위는 피한다. 촌장이 고르는 자리일 뿐 — 시뮬레이션 규칙(영역·물·건물 간격)은 Village.is_free 그대로.
-##   옛 저장의 건물은 자리 그대로 (새 건물만 계획을 따른다). 계획은 (모닥불, 창고 방향, 무리 번호)만으로 정해진다 → 결정론.
+##   옛 저장의 건물은 자리 그대로 (새 건물만 계획을 따른다). 계획은 (모닥불, 창고 방향, 무리 번호, 저장된 길 씨앗 Village.layout_seed)만으로 정해진다 → 결정론.
+##   새 마을은 길 씨앗으로 큰길 3~5갈래·휨·광장 크기가 세상마다 다르다 (옛 저장 = 길 씨앗 -1 = 옛 4갈래).
 ##
 ## 길 그래프: 뿌리 = 광장. 큰길(쓰는 만큼만) · 건물 문 → 길 (짧은 골목) — 나무 모양 (고리 없음 → 경로 찾기가 거의 공짜).
 ##   주민의 걸음(4칸 넘게)은 길로 가는 게 많이 돌아가지 않으면 길을 따라 걷는다 (ResidentAI.update의 한 줄) → 발길이 선으로 모인다.
@@ -17,8 +18,15 @@
 class_name VillagePlan
 extends RefCounted
 
-const RP := 3.2                 # 광장 반지름 (모닥불 둘레 빈 땅)
-const STREETS := 4
+const RP := 3.2                 # 광장 반지름 (모닥불 둘레 빈 땅) — 옛 마을(길 씨앗 없음). 새 마을은 plan(v)["rp"] (RP_MIN~RP_MAX)
+const STREETS := 4              # 옛 마을의 큰길 수. 새 마을은 plan(v)["n"] (3~5)
+## 마을마다 다른 길 모양 (2026-11-09 1.2 — Village.layout_seed: 세상 씨앗 + 무리 번호로 처음 한 번 정해 저장. 옛 저장(-1) = 옛 4갈래 그대로)
+const RP_MIN := 2.8
+const RP_MAX := 4.0
+const BEND_MIN := 0.10
+const BEND_MAX := 0.34
+const STREET_W3 := 0.25         # 큰길 3갈래가 될 몫 (그다음 4갈래 STREET_W4까지, 나머지 5갈래)
+const STREET_W4 := 0.70
 const HALF_W := 1.0             # 큰길 반폭 (건물이 들어서지 않는 띠)
 const GARDEN := 0.9             # 앞마당 (길 가장자리 ~ 집 벽)
 const GAP := 1.1                # 길을 따라 이웃 건물 사이 (벽과 벽)
@@ -78,28 +86,120 @@ static func _h(seed_v: int, k: int) -> float:
 	return float(h & 0xFFFF) / 65535.0
 
 
-## 큰길 STREETS개 — 각각 1칸 간격 점 (0 = 모닥불, i = 모닥불에서 i칸). {"streets": [PackedVector2Array], "fire", "base"}
+## 길 모양 흔들림에 쓰는 씨앗 — 새 마을 = 저장된 길 씨앗, 옛 마을 = 무리 번호 (예전 그대로)
+static func lseed(v: Village) -> int:
+	return v.layout_seed if v.layout_seed >= 0 else v.sid
+
+
+## 세상 씨앗 + 무리 번호 → 길 씨앗 (0 이상, 30비트). Village._init_world가 한 번 정해 저장한다
+static func make_layout_seed(seed_v: int, sid_v: int) -> int:
+	var h := (seed_v * 2654435761 + sid_v * 40503 + 0x51ed27) & 0x7FFFFFFF
+	h = ((h ^ (h >> 15)) * 2246822519) & 0x7FFFFFFF
+	h = ((h ^ (h >> 13)) * 3266489917) & 0x7FFFFFFF
+	return (h ^ (h >> 16)) & 0x3FFFFFFF
+
+
+## 길 모양 (큰길 수 n · 광장 반지름 rp · 휨 bend · 굽이 길이 freq · 큰길 첫 방향 a0[]). 옛 마을(layout_seed < 0)은 옛 모양 그대로
+static func _shape(v: Village, base: float) -> Dictionary:
+	var a0s: Array = []
+	if v.layout_seed < 0:
+		for k in STREETS:
+			a0s.append(base + PI / STREETS + k * TAU / STREETS + (_h(v.sid, k) - 0.5) * 0.3)
+		return {"n": STREETS, "rp": RP, "freq": 11.0, "a0": a0s, "bends": [], "legacy": true}
+	var s := v.layout_seed
+	var u := _h(s, 101)
+	var n := 3 if u < STREET_W3 else (4 if u < STREET_W4 else 5)
+	var step := TAU / n
+	var rp := lerpf(RP_MIN, RP_MAX, _h(s, 102))
+	var bend_max := lerpf(BEND_MIN, BEND_MAX, _h(s, 103))
+	var freq := lerpf(8.5, 14.0, _h(s, 104))
+	var jit := lerpf(0.10, 0.30, _h(s, 105)) * step         # 큰길 사이 각이 고르지 않게 (±jit/2)
+	var phase := (0.5 + (_h(s, 106) - 0.5) * 0.16) * step    # 창고(base)는 큰길 사이 가운데쯤
+	var clear := 0.36 * step                                  # 창고 곁 두 큰길은 창고에서 이 각 이상 (광장 가 창고를 길이 막지 않게)
+	for k in n:
+		var a := phase + k * step + (_h(s, k) - 0.5) * jit
+		if k == 0:
+			a = maxf(a, clear)
+		elif k == n - 1:
+			a = minf(a, TAU - clear)
+		a0s.append(base + a)
+	var bends: Array = []
+	for k in n:
+		bends.append((_h(s, k + 10) - 0.5) * 2.0 * bend_max)
+	return {"n": n, "rp": rp, "freq": freq, "a0": a0s, "bends": bends, "legacy": false}
+
+
+## 큰길 n개 — 각각 1칸 간격 점 (0 = 모닥불, i = 모닥불에서 i칸).
+## {"streets": [PackedVector2Array], "fire", "base", "n", "rp", "mids" (큰길 사이 가운데 각 — 광장 둘레 고리), "gaps" (그 사이의 반각), "legacy"}
 static func plan(v: Village) -> Dictionary:
 	var base := base_angle(v)
-	var key := "%.3f,%.3f|%.4f|%d" % [v.fire.x, v.fire.y, base, v.sid]
+	var key := "%.3f,%.3f|%.4f|%d|%d" % [v.fire.x, v.fire.y, base, v.sid, v.layout_seed]
 	if _plans.has(key):
 		return _plans[key]
 	if _plans.size() > 32:
 		_plans.clear()
+	var sh := _shape(v, base)
+	var n: int = sh["n"]
+	var rp: float = sh["rp"]
+	var freq: float = sh["freq"]
+	var ls := lseed(v)
 	var streets: Array = []
-	for k in STREETS:
-		var a0 := base + PI / STREETS + k * TAU / STREETS + (_h(v.sid, k) - 0.5) * 0.3
-		var bend := (_h(v.sid, k + 10) - 0.5) * 2.0 * BEND
-		var ph := _h(v.sid, k + 20) * 6.0
-		var pts := PackedVector2Array()
-		for i in int(STREET_LEN) + 1:
-			var d := float(i)
-			var a := a0 + bend * (sin(maxf(0.0, d - RP) / 11.0 + ph) - sin(ph))
-			pts.append(v.fire + Vector2(cos(a), sin(a)) * d)
-		streets.append(pts)
-	var p := {"streets": streets, "fire": v.fire, "base": base}
+	var shrink := 1.0
+	for attempt in 8:                 # 새 마을: 이웃한 두 큰길이 마주 휘어 좁아지면 휨을 줄여 다시 (결정적)
+		streets = []
+		var angs: Array = []
+		for k in n:
+			var a0: float = sh["a0"][k]
+			var bend: float = (_h(v.sid, k + 10) - 0.5) * 2.0 * BEND if bool(sh["legacy"]) else float(sh["bends"][k]) * shrink
+			var ph := _h(ls, k + 20) * 6.0
+			var pts := PackedVector2Array()
+			var al := PackedFloat32Array()
+			for i in int(STREET_LEN) + 1:
+				var d := float(i)
+				var a := a0 + bend * (sin(maxf(0.0, d - rp) / freq + ph) - sin(ph))
+				pts.append(v.fire + Vector2(cos(a), sin(a)) * d)
+				al.append(a)
+			streets.append(pts)
+			angs.append(al)
+		if bool(sh["legacy"]) or _gaps_ok(angs, n):
+			break
+		shrink *= 0.7
+	# 광장 둘레 고리 자리의 기준 각 (큰길 사이 가운데). 옛 마을: base + q·90° (예전 그대로), 새 마을: 창고 쪽 사이부터 차례로
+	var mids: Array = []
+	var gaps: Array = []
+	if bool(sh["legacy"]):
+		for q in STREETS:
+			mids.append(base + q * TAU / STREETS)
+			gaps.append(PI / STREETS)
+	else:
+		var a0s: Array = sh["a0"]
+		for q in n:
+			var lo: float = float(a0s[q - 1]) - (TAU if q == 0 else 0.0)
+			var hi: float = a0s[q]
+			mids.append((lo + hi) * 0.5)
+			gaps.append((hi - lo) * 0.5)
+	var p := {"streets": streets, "fire": v.fire, "base": base, "n": n, "rp": rp, "mids": mids, "gaps": gaps, "legacy": bool(sh["legacy"])}
 	_plans[key] = p
 	return p
+
+
+## 이웃한 큰길 사이 각이 어디서나 MIN_GAP·(360°/n) 이상이고 광장 가 너머 거리도 STREET_CLEAR칸 이상인가 (angs[k][i] = 큰길 k의 i칸 자리 각)
+const MIN_GAP := 0.62
+const STREET_CLEAR := 3.6
+static func _gaps_ok(angs: Array, n: int) -> bool:
+	var m := (angs[0] as PackedFloat32Array).size()
+	for i in range(4, m, 2):
+		for k in n:
+			var a: float = (angs[k] as PackedFloat32Array)[i]
+			var b: float = (angs[(k + 1) % n] as PackedFloat32Array)[i] + (TAU if k == n - 1 else 0.0)
+			if b - a < MIN_GAP * TAU / n or (b - a) * i < STREET_CLEAR:
+				return false
+	return true
+
+
+## 광장 반지름 (마을마다)
+static func plaza_r(v: Village) -> float:
+	return float(plan(v)["rp"])
 
 
 ## 큰길 k의 매개 d (모닥불에서 칸) 자리
@@ -121,12 +221,13 @@ static func _seg_proj(p: Vector2, a: Vector2, b: Vector2) -> float:
 static func nearest_plan(pl: Dictionary, p: Vector2) -> Dictionary:
 	var fire: Vector2 = pl["fire"]
 	var to := p - fire
-	var pr := RP * 0.85
+	var rp: float = pl["rp"]
+	var pr := rp * 0.85
 	var best := {"kind": "plaza", "k": -1, "d": 0.0, "pt": fire + (to.normalized() if to.length() > 1e-4 else Vector2.RIGHT) * pr,
 		"dist": absf(to.length() - pr)}
 	for k in pl["streets"].size():
 		var pts: PackedVector2Array = pl["streets"][k]
-		for i in range(int(RP), pts.size() - 1):
+		for i in range(int(rp), pts.size() - 1):
 			var u := _seg_proj(p, pts[i], pts[i + 1])
 			var q := pts[i].lerp(pts[i + 1], u)
 			var dd := q.distance_to(p)
@@ -140,16 +241,17 @@ static func blocks(v: Village, x: float, y: float, size: float) -> bool:
 	if not enabled:
 		return false
 	var p := Vector2(x, y)
-	if p.distance_to(v.fire) < RP + size * 0.5:
-		return true
 	var pl := plan(v)
+	var rp: float = pl["rp"]
+	if p.distance_to(v.fire) < rp + size * 0.5:
+		return true
 	var lim := HALF_W + size * 0.75
 	for k in pl["streets"].size():
 		var pts: PackedVector2Array = pl["streets"][k]
 		# 큰길은 모닥불에서 곧게 뻗어 나가므로 거리로 먼저 거른다
 		var dd := p.distance_to(v.fire)
-		var i0 := clampi(floori(dd - lim - 2.0), int(RP), pts.size() - 2)
-		var i1 := clampi(ceili(dd + lim + 2.0), int(RP), pts.size() - 2)
+		var i0 := clampi(floori(dd - lim - 2.0), int(rp), pts.size() - 2)
+		var i1 := clampi(ceili(dd + lim + 2.0), int(rp), pts.size() - 2)
 		for i in range(i0, i1 + 1):
 			var q := pts[i].lerp(pts[i + 1], _seg_proj(p, pts[i], pts[i + 1]))
 			if q.distance_to(p) < lim:
@@ -212,12 +314,17 @@ static func _spaced(v: Village, p: Vector2, size: float, gap: float) -> bool:
 ## 광장 둘레 첫 고리 (큰길 사이마다 가운데 → 양옆) — 모닥불을 바라본다
 static func _ring_spots(v: Village, pl: Dictionary, size: float) -> Array:
 	var out: Array = []
-	var base: float = pl["base"]
-	var rr := RP + GARDEN * 0.7 + size
-	for q in STREETS:
-		var mid := base + q * TAU / STREETS
-		for off: float in [-0.3, 0.3]:
-			var a := mid + off * (RP + 2.0) / rr
+	var rp: float = pl["rp"]
+	var rr := rp + GARDEN * 0.7 + size
+	var step := 0.6 * (rp + 2.0) / rr              # 고리 위 이웃 자리 사이 각 (옛 마을: 사이마다 둘, ±0.3)
+	var margin := (HALF_W + size + 0.5) / rr        # 큰길 가에서 이만큼은 비움
+	for q in (pl["mids"] as Array).size():
+		var mid: float = pl["mids"][q]
+		var cnt := 2
+		if not bool(pl["legacy"]):                  # 넓은 사이(큰길 3갈래)는 셋, 좁은 사이(5갈래)는 하나까지
+			cnt = clampi(int(floor(2.0 * (float(pl["gaps"][q]) - margin) / step)) + 1, 1, 3)
+		for j in cnt:
+			var a := mid + (float(j) - (cnt - 1) * 0.5) * step
 			out.append(v.fire + Vector2(cos(a), sin(a)) * rr)
 	return out
 
@@ -231,6 +338,7 @@ static func _street_spot(v: Village, size: float, type: String) -> Variant:
 ## (옛 방식 — 첫날 대본 동안) 광장 둘레 첫 고리 → 큰길 양쪽 안쪽부터 첫 빈 자리
 static func _street_spot_first(v: Village, size: float, type: String) -> Variant:
 	var pl := plan(v)
+	var ns: int = pl["n"]
 	# 첫 고리: 광장 둘레 (창고·교회·집 — 마을의 얼굴)
 	if true:
 		for p: Vector2 in _ring_spots(v, pl, size):
@@ -238,11 +346,11 @@ static func _street_spot_first(v: Village, size: float, type: String) -> Variant
 				return p
 	# 큰길 양쪽, 안쪽부터 (고리 지어 바깥으로). 같은 거리면 큰길·쪽을 번갈아 (무리 번호로 시작을 비틈)
 	var off := HALF_W + GARDEN + size
-	var d := RP + size + 0.8
-	var start := int(_h(v.sid, 77) * STREETS * 2)
+	var d := float(pl["rp"]) + size + 0.8
+	var start := int(_h(lseed(v), 77) * ns * 2)
 	while d < STREET_LEN - 1.0:
-		for j in STREETS * 2:
-			var c := (start + j) % (STREETS * 2)
+		for j in ns * 2:
+			var c := (start + j) % (ns * 2)
 			var k := c / 2
 			var side := 1.0 if c % 2 == 0 else -1.0
 			var p := _side_pt(pl, k, d, side * off)
@@ -268,10 +376,11 @@ static func _farm_spot(v: Village, size: float) -> Variant:
 	var off := HALF_W + 0.4 + size
 	var best: Variant = null
 	var bv := -INF
-	for k in STREETS:
+	var rp: float = pl["rp"]
+	for k in int(pl["n"]):
 		for side: float in [1.0, -1.0]:
-			var d := RP + FARM_FROM
-			while d < RP + FARM_FROM + 22.0:
+			var d := rp + FARM_FROM
+			while d < rp + FARM_FROM + 22.0:
 				var p := _side_pt(pl, k, d, side * off)
 				if v.is_free(p.x, p.y, size) and _spaced(v, p, size, 0.5) and (not on or _house_clear(v, p, size)):
 					var val := v.farm_mult(p.x, p.y) - d * 0.025
@@ -311,25 +420,26 @@ static func _mill_spot(v: Village, size: float) -> Variant:
 			best_k = k
 	if best_k < 0:
 		return null
-	var off := HALF_W + GARDEN + size
-	var d := RP + FARM_FROM - 0.5
-	while d > RP + size + 0.8:
-		for side: float in [1.0, -1.0]:
-			var p := _side_pt(pl, best_k, d, side * off)
-			if v.is_free(p.x, p.y, size) and _spaced(v, p, size, GAP):
-				return p
-		d -= SCAN
+	# 앞줄(길가)이 집으로 찼으면 (큰길이 셋뿐인 마을) 한 줄 뒤 · 두 줄 뒤 — 그래도 같은 큰길을 바라본다
+	for back: float in [0.0, 1.8, 3.6]:
+		var off := HALF_W + GARDEN + size + back
+		var d := float(pl["rp"]) + FARM_FROM - 0.5
+		while d > float(pl["rp"]) + size + 0.8:
+			for side: float in [1.0, -1.0]:
+				var p := _side_pt(pl, best_k, d, side * off)
+				if v.is_free(p.x, p.y, size) and _spaced(v, p, size, GAP) and (back == 0.0 or int(nearest_plan(pl, p)["k"]) == best_k):
+					return p
+			d -= SCAN
 	return null
 
 
 ## 우물·공용 화덕: 광장 가 (큰길 사이)
 static func _plaza_edge_spot(v: Village, size: float) -> Variant:
 	var pl := plan(v)
-	var base: float = pl["base"]
-	var rr := RP + size * 0.55
-	for q in STREETS:
+	var rr := float(pl["rp"]) + size * 0.55
+	for q in (pl["mids"] as Array).size():
 		for off: float in [0.45, -0.45]:
-			var a := base + q * TAU / STREETS + off
+			var a: float = float(pl["mids"][q]) + off
 			var p := v.fire + Vector2(cos(a), sin(a)) * rr
 			if _well_free(v, p, size):
 				return p
@@ -349,7 +459,7 @@ static func _well_free(v: Village, p: Vector2, size: float) -> bool:
 		if Vector2(r["x"], r["y"]).distance_to(p) < size + 0.8:
 			return false
 	var pl := plan(v)
-	for k in STREETS:
+	for k in int(pl["n"]):
 		var q := street_at(pl, k, p.distance_to(v.fire))
 		if q.distance_to(p) < HALF_W + size:
 			return false
@@ -366,7 +476,7 @@ static func found(v: Village) -> void:
 	var dir := Vector2(st.x, st.y) - v.fire
 	if dir.length() < 0.1:
 		return
-	var rs := RP + GARDEN * 0.7 + st.size()
+	var rs := plaza_r(v) + GARDEN * 0.7 + st.size()
 	var sp := v.fire + dir.normalized() * rs
 	st.x = sp.x
 	st.y = sp.y
@@ -455,7 +565,7 @@ static func _build(v: Village) -> Dictionary:
 	for k: int in attach.keys():
 		var lst: Array = attach[k]
 		lst.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
-		var mouth_d := RP * 0.85
+		var mouth_d := float(pl["rp"]) * 0.85
 		var prev := 0
 		var prev_d := mouth_d
 		# 입구 노드 (부모 = 뿌리, 선은 입구 한 점)
@@ -505,7 +615,7 @@ static func _build(v: Village) -> Dictionary:
 					arr.append(si)
 					buckets[bk] = arr
 		nodes[n]["len"] = acc
-	return {"nodes": nodes, "sa": sa, "sb": sb, "sn": sn_, "s0": s0, "buckets": buckets, "doors": doors, "fire": v.fire}
+	return {"nodes": nodes, "sa": sa, "sb": sb, "sn": sn_, "s0": s0, "buckets": buckets, "doors": doors, "fire": v.fire, "rp": float(pl["rp"])}
 
 
 ## 문 → 길 골목: 살짝 휜 선 (건물마다 같은 휨)
@@ -624,7 +734,7 @@ static func path_between(g: Dictionary, na: int, sa: float, nb: int, sb: float) 
 		var from := out[out.size() - 1] if not out.is_empty() else (nodes[na]["pts"] as PackedVector2Array)[0]
 		var dn: PackedVector2Array = _down(g, up_b, nb, sb)
 		var first: Vector2 = _first_up(g, up_b)
-		out.append_array(_arc(g["fire"], from, first))
+		out.append_array(_arc(g["fire"], from, first, float(g.get("rp", RP))))
 		out.append_array(dn)
 	else:
 		out.append_array(_down(g, up_b, nb, sb))
@@ -668,13 +778,13 @@ static func _first_up(g: Dictionary, up_b: Array) -> Vector2:
 
 
 ## 광장 가를 도는 점들 (모닥불 둘레 RP*0.75) a → b
-static func _arc(fire: Vector2, a: Vector2, b: Vector2) -> PackedVector2Array:
+static func _arc(fire: Vector2, a: Vector2, b: Vector2, rp := RP) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	var a0 := (a - fire).angle()
 	var a1 := (b - fire).angle()
 	var da := wrapf(a1 - a0, -PI, PI)
 	var n := int(absf(da) / 0.45)
-	var rr := RP * 0.75
+	var rr := rp * 0.75
 	for i in range(1, n + 1):
 		var t := a0 + da * float(i) / (n + 1)
 		out.append(fire + Vector2(cos(t), sin(t)) * rr)
@@ -887,7 +997,7 @@ static func road_values(v: Village, sm: float) -> PackedFloat32Array:
 			plaza_w = maxf(plaza_w, w[w.size() - 1])
 	# 광장: 모이는 길들만큼 닳은 둥근 빈 땅 (광장이 서면·읍내면 자갈 — GroundLook.stone_roads)
 	var pz := VillageEra.first_built(v, "광장") != null
-	_stamp_disc(buf, n, o, cell, v.fire, RP * (1.05 if pz else 0.8), minf(1.0, plaza_w + (0.15 if pz else 0.03)))
+	_stamp_disc(buf, n, o, cell, v.fire, plaza_r(v) * (1.05 if pz else 0.8), minf(1.0, plaza_w + (0.15 if pz else 0.03)))
 	# 숲 오솔길 (안 다니면 발길이 옅어져 사라진다)
 	var m: Dictionary = _trails.get(v.get_instance_id(), {})
 	for ck: Vector2i in m.keys():
@@ -959,7 +1069,7 @@ static func debug_image(v: Village, ppu: int) -> Image:
 		var pts: PackedVector2Array = tr["pts"]
 		for i in pts.size() - 1:
 			_line(img, to_px.call(pts[i]), to_px.call(pts[i + 1]), Color(0.1, 0.55, 0.15), 1)
-	_circle(img, to_px.call(v.fire), int(RP * ppu), Color(0.5, 0.35, 0.2))
+	_circle(img, to_px.call(v.fire), int(plaza_r(v) * ppu), Color(0.5, 0.35, 0.2))
 	_dot(img, to_px.call(v.fire), 3, Color(1, 0.4, 0))
 	for b in v.buildings:
 		var c := Color(0.9, 0.55, 0.25) if b.is_house() else (Color(0.95, 0.85, 0.3) if b.type == "농장" else Color(0.55, 0.35, 0.25))
