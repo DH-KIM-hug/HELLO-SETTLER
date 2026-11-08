@@ -17,12 +17,16 @@ const AMPOULE_MAX := 2
 const VEIN_MAX := 2                     # 광맥 돌은 종류마다 한 병에 둘까지 (SHOP 2.4 — 세상이 광물 덩어리가 되지 않게)
 const WAIT_ANIMAL := "짐승이 병 안에 살 수 있어야 해요"
 
-## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 그 건물의 시대 (기획서 8.3 · 21장 '상점 건물 시대'):
-## 개척기 = 우물·창고·농장·나무꾼·채석장·제재소 · 마을 = 어부·방앗간·빵집·목조주택·사냥꾼·목장·방직소·대장간.
-## 어부·사냥꾼은 B3 (sim/wildlife.gd — 물고기·들짐승)부터 마을 시대에 1,500.
+## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 그 건물의 시대 (기획서 8.3 · 21장 '상점 건물 시대').
+## (2026-11-08 사용자: "창고 같은 건 기본적으로 있는데 왜 팔아?") 설계도는 **새로 배워야 하는 건물** (Balance.MUST_LEARN)만:
+## 개척기 = 우물 (이틀째엔 스스로 깨침) · 마을 = 어부·방앗간 (+ 목장·방직소·대장간은 '곧') · 읍내 = 빵집.
+## 진열은 Production.blueprint_offered — 그 시대가 열렸고 주민이 아직 모르는 것만 (이미 아는 건물·다음 시대 건물은 안 보임).
+## 창고·농장·나무꾼·채석장·제재소 (처음부터 앎) · 목조주택 (마을 시대 기본 — 계시가 가르침)은 더 팔지 않는다.
 ## 목장·방직소·대장간은 아직 못 짓는다 (Balance.B_LOCKED — 양털·철이 오면) → '곧' + 까닭.
 ## (E3-12 2026-11-07) 사냥꾼은 진열하지 않는다 — 사슴·토끼가 없는 세상. 열쇠(BUILDING_ERA · BUILDING_LINE · Balance)는 옛 저장 때문에 남김
-const BUILDINGS := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소", "어부", "방앗간", "빵집", "목조주택", "목장", "방직소", "대장간"]
+const BUILDINGS := ["우물", "어부", "방앗간", "빵집", "목장", "방직소", "대장간"]
+## 건물 탭에 내놓을 설계도가 없을 때 (모두 이미 지을 줄 앎) — 거인 UI 한 줄
+const NO_BLUEPRINT := "주민이 지금 지을 줄 아는 건물뿐이에요 — 새로 배울 건물은 새 시대에 들어와요"
 ## v5 (2026-11-07 사용자): 건물 카드는 **설계도** — 손에 든 그림 종이를 떨어뜨리면 촌장 곁에 내려앉고, 그 병 주민이 그 건물을 지을 줄 알게 된다
 ## (자기 자재로 몇 채든). 한 병에 종류마다 한 번 (Village.blueprints). 다 지은 건물이 내려오는 것은 소원의 [하늘에서 내려 주기]뿐 (Village.buy_building)
 const BUILDING_ERA := {"우물": 0, "창고": 0, "농장": 0, "나무꾼": 0, "채석장": 0, "제재소": 0, "어부": 1, "방앗간": 1, "빵집": 2, "목조주택": 1,
@@ -186,7 +190,8 @@ static func items_in(tab: String, v: Village = null) -> PackedStringArray:
 	var out := PackedStringArray()
 	if tab == "건물":
 		for b: String in BUILDINGS:
-			out.append(b)
+			if v == null or Production.blueprint_offered(v, b):     # 이미 아는 건물 · 아직 안 열린 시대 건물은 내놓지 않는다 (2026-11-08)
+				out.append(b)
 		return out
 	for k: String in ITEMS:
 		if String(ITEMS[k]["tab"]) == tab and (not is_wild(k) or wild_shown(v, k)):
@@ -194,8 +199,9 @@ static func items_in(tab: String, v: Village = null) -> PackedStringArray:
 	return out
 
 
+## 건물 설계도인가 — 진열 목록 밖 옛 이름 (창고·농장 … 옛 저장의 손에 든 설계도)도 건물로 (BUILDING_ERA)
 static func is_building(item: String) -> bool:
-	return item in BUILDINGS
+	return item in BUILDINGS or BUILDING_ERA.has(item)
 
 
 ## 물건 하나의 카드 값 {name, icon, giant, inside, price, ok(살 수 있음), lock(못 사는 까닭 — 비면 없음)}
@@ -209,6 +215,8 @@ static func card(v: Village, item: String) -> Dictionary:
 			lock = "%s 시대에" % Balance.ERAS[mini(int(BUILDING_ERA[item]), Balance.ERAS.size() - 1)]
 		elif v.blueprints.has(item) or hand_count(item) > 0:
 			lock = "이미 받았어요" if v.blueprints.has(item) else "손에 들고 있어요"
+		elif Production.knows(v, item):
+			lock = "이미 알아요"                 # 주민이 지을 줄 아는 건물은 팔지 않는다 (2026-11-08 사용자)
 		var inside := "커다란 두루마리 — 주민이 %s%s 지을 줄 알게 돼요 (%s)" % [lb, Village.josa(lb, "을", "를"), BUILDING_LINE.get(item, "")]
 		if Balance.B_LOCKED.has(item):
 			inside += " (아직은 %s)" % Balance.B_LOCKED[item]

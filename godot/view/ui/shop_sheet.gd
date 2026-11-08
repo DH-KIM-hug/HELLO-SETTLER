@@ -355,7 +355,7 @@ func _style_tabs() -> void:
 # ───────────────────────── 카드 ─────────────────────────
 func _state_sig() -> String:
 	var s := "%s|%d|%d|%s|%s|%d|%s" % [tab, int(Market.notes), Market.hand.size(), str(village.shop_open.keys()), str(village.shop_bought), village.era,
-		str(SkyDrops.active_towers(village))] + "|%d" % Immigrants.today_count()
+		str(SkyDrops.active_towers(village))] + "|%d|%s" % [Immigrants.today_count(), ",".join(Shop.items_in("건물", village))]   # 주민이 스스로 깨치면 진열이 바뀜
 	return s
 
 
@@ -397,7 +397,12 @@ func _refresh() -> void:
 			nl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			nl.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		return
-	for it: String in Shop.items_in(tab, village):
+	var shown := Shop.items_in(tab, village)
+	if shown.is_empty() and tab == "건물":
+		var el := _label(locked_box, Shop.NO_BLUEPRINT, "Small")      # 모두 이미 지을 줄 앎 (2026-11-08 사용자)
+		el.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		el.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	for it: String in shown:
 		_card(it)
 
 

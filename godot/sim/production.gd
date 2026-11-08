@@ -302,18 +302,43 @@ static func own_stock(v: Village, k: String) -> float:
 
 
 # ───────────────────────── 설계도 ─────────────────────────
-## 이 병 주민이 그 건물을 지을 줄 아나 — 처음부터 아는 것 · 계시로 배운 시대 건물 (마을 시대부터) · 설계도 · 스스로 깨친 것
+## 이 병 주민이 그 건물을 지을 줄 아나 — 하나뿐인 기준 (상점 진열 · 촌장 · 어부 … 모두 이것을 본다. Balance.MUST_LEARN 위 설명):
+## 처음부터 아는 것 · 설계도 · 시대 기본 (그 시대가 열렸으면) · 새로 배워야 하는 건물은 다음 계시가 오거나 스스로 깨쳤을 때
 static func knows(v: Village, type: String) -> bool:
 	if v.blueprints.has(type) or type in Balance.KNOWN_FROM_START:
 		return true
 	if not Balance.B.has(type):
 		return false
-	if int(Balance.B[type]["era"]) >= 1:
-		return true                     # 계시가 가르쳐 준 시대 건물 (지금은 시대가 열리면 그 시대 건물을 모두 안다)
-	return v.t >= float(Balance.LEARN_LATE.get(type, 0.0))
+	var e := int(Balance.B[type]["era"])
+	if type in Balance.MUST_LEARN:
+		if v.era > e or v.self_learned.has(type):
+			return true                 # 다음 계시가 가르쳐 줌 (3b — 막히지 않음) · 스스로 깨침
+		if v.era == e and self_learn_due(v, type):
+			return true                 # 시대가 열린 지 MUST_LEARN_SELF_DAYS (연대기 한 줄은 self_learn)
+		return Balance.LEARN_LATE.has(type) and v.t >= float(Balance.LEARN_LATE[type])
+	return e <= v.era                   # 시대 기본 — 계시가 그 시대를 열면 바로 안다
 
 
-## 설계도를 살 수 있는 건물인가 (그 시대가 열렸고, 아직 이 병에 없고, 처음부터 아는 것이 아님)
+## 새로 배워야 하는 건물을 스스로 깨칠 때가 됐나 — 그 시대가 열린 지 MUST_LEARN_SELF_DAYS (줄이 있는 건물만, 아직 못 짓는 것은 아님)
+static func self_learn_due(v: Village, type: String) -> bool:
+	if not Balance.SELF_LEARN_LINE.has(type) or Balance.B_LOCKED.has(type) or not Balance.B.has(type):
+		return false
+	if int(Balance.B[type]["era"]) != v.era:
+		return false
+	return v.t - v.era_t >= Balance.MUST_LEARN_SELF_DAYS * Balance.DAY
+
+
+## 스스로 깨친 건물을 적어 두고 연대기 한 줄 (촌장이 터를 볼 때마다 — Village.chief_build). 설계도로 이미 안 것은 조용히
+static func self_learn(v: Village) -> void:
+	for ty: String in Balance.SELF_LEARN_LINE:
+		if v.self_learned.has(ty) or not self_learn_due(v, ty):
+			continue
+		v.self_learned[ty] = v.t
+		if not v.blueprints.has(ty):
+			v.log_line(String(Balance.SELF_LEARN_LINE[ty]))
+
+
+## 설계도를 살 수 있는 건물인가 (새로 배워야 하는 건물이고, 그 시대가 열렸고, 아직 모름) — 까닭 (비면 살 수 있음)
 static func blueprint_lock(v: Village, type: String) -> String:
 	if not Balance.SHOP.has(type) or not Balance.B.has(type):
 		return "곧"
@@ -321,9 +346,18 @@ static func blueprint_lock(v: Village, type: String) -> String:
 		return String(Balance.B_LOCKED[type])
 	if int(Balance.B[type]["era"]) > v.era:
 		return "곧"
-	if v.blueprints.has(type):
+	if knows(v, type):
 		return "이미 알아요"
 	return ""
+
+
+## 상점 건물 탭에 내놓나 — 새로 배워야 하는 건물 중 그 시대가 열렸고 주민이 아직 모르는 것만 (2026-11-08 사용자).
+## 아직 못 짓는 것 (목장·방직소·대장간 — B_LOCKED)은 '곧'으로 보인다
+static func blueprint_offered(v: Village, type: String) -> bool:
+	if not type in Balance.MUST_LEARN or knows(v, type):
+		return false
+	var e := int(Balance.B[type]["era"]) if Balance.B.has(type) else int(Shop.BUILDING_ERA.get(type, 0))
+	return e <= v.era
 
 
 ## 설계도를 내려 준다 (지폐는 부르는 쪽이 이미 냄) — 주민이 지을 줄 알게 되고 촌장이 곧바로 첫 터를 잡는다. 잡은 터 (없으면 null)

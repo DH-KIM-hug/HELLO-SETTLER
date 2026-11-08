@@ -32,7 +32,7 @@ func all() -> void:
 	Village.start_aware = true
 	run.timed(self, ["test_unlocks", "test_buy_and_hand", "test_hand_saved", "test_lid_rule", "test_drop_and_haul", "test_haul_saved_midway",
 		"test_crush", "test_care_items", "test_salt_pinch", "test_ampoule", "test_bought_building", "test_wonder_unaware",
-		"test_words", "test_shop_tables", "test_vein_stones", "test_ui"])
+		"test_words", "test_shop_tables", "test_known_not_sold", "test_vein_stones", "test_ui"])
 	Village.start_aware = _old_aware
 	Market.reset(_old_notes)
 	Market.hand = _old_hand
@@ -43,6 +43,10 @@ func lab(seed_v := 3) -> Village:
 	v.water.offline = true
 	v.step_dt = 30.0
 	return v
+
+
+static func through(v: Village) -> Village:
+	return Village.from_dict(bytes_to_var(var_to_bytes(v.to_dict())))
 
 
 func world_lab(seed_v := 20261105) -> Village:
@@ -130,8 +134,12 @@ func test_buy_and_hand() -> void:
 	var nb := Shop.can_buy(v, "우물")
 	check(not bool(nb["ok"]) and String(nb["why"]) == "손에 들고 있어요", "같은 설계도는 한 번 — 못 사면 \"%s\"" % nb["why"])
 	Market.notes = 0.0
-	var nb2 := Shop.can_buy(v, "창고")
-	check(not bool(nb2["ok"]) and String(nb2["why"]) == "지폐가 %.0f 모자라요" % float(Balance.SHOP["창고"]), "지폐가 모자라면 \"%s\"" % nb2["why"])
+	var kn := Shop.can_buy(v, "창고")
+	check(not bool(kn["ok"]) and String(kn["why"]) == "이미 알아요", "주민이 지을 줄 아는 창고는 못 산다 (\"%s\" — 2026-11-08 사용자)" % kn["why"])
+	v.era = 1
+	var nb2 := Shop.can_buy(v, "방앗간")
+	check(not bool(nb2["ok"]) and String(nb2["why"]) == "지폐가 %.0f 모자라요" % float(Balance.SHOP["방앗간"]), "지폐가 모자라면 \"%s\"" % nb2["why"])
+	v.era = 0
 	var f := Shop.can_buy(v, "방앗간")
 	check(not bool(f["ok"]) and String(f["why"]).contains("시대"), "마을 시대 건물은 개척기에 못 산다 (%s)" % f["why"])
 	Market.notes = 10000.0
@@ -516,6 +524,74 @@ func test_wonder_unaware() -> void:
 	Market.reset()
 
 
+# ───────────────────────── 아는 건물은 팔지 않는다 (SHOP 맨 위 2026-11-08 사용자) ─────────────────────────
+## 진열 = 새로 배워야 하는 건물 중 그 시대에 열렸고 아직 모르는 것 · 모르는 건물은 설계도를 받기 전엔 짓지 않는다 · 다음 계시가 가르침
+func test_known_not_sold() -> void:
+	Market.reset(100000.0)
+	var v := lab(53)
+	Shop.update_unlocks(v)
+	var ok := true
+	var bad := ""
+	for e in 3:
+		v.era = e
+		for b: String in Shop.items_in("건물", v):
+			if Production.knows(v, b) or int(Shop.BUILDING_ERA.get(b, 0)) > e:
+				ok = false
+				bad += "%d:%s " % [e, b]
+	v.era = 0
+	check(ok, "어느 시대에도 아는 건물·다음 시대 건물은 진열 안 함 %s" % bad)
+	var s0 := Shop.items_in("건물", v)
+	check(Array(s0) == ["우물"], "개척기 첫날 진열: 우물 설계도만 (%s)" % ", ".join(s0))
+	for b: String in ["창고", "농장", "나무꾼", "채석장", "제재소", "오두막"]:
+		check(Production.knows(v, b) and VillageEra.can_build(v, b), "%s: 처음부터 지을 줄 앎 (설계도 없음)" % b)
+	v.t = Balance.LEARN_LATE["우물"] + 1.0
+	check(Production.knows(v, "우물") and Shop.items_in("건물", v).is_empty() and String(Shop.can_buy(v, "우물")["why"]) == "이미 알아요",
+		"이틀째 스스로 우물을 깨치면 진열에서 빠짐 (건물 탭 빔 — \"%s\")" % Shop.NO_BLUEPRINT)
+	# 마을 시대: 목조주택은 시대 기본 (계시가 가르침) · 방앗간·어부는 설계도로
+	v.era = 1
+	var s1 := Shop.items_in("건물", v)
+	check(Production.knows(v, "목조주택") and not "목조주택" in s1 and "방앗간" in s1 and "어부" in s1, "마을 시대 진열: %s (목조주택은 이미 앎)" % ", ".join(s1))
+	check(not Production.knows(v, "방앗간") and not VillageEra.can_build(v, "방앗간") and not VillageEra.can_build(v, "어부"), "설계도 전엔 방앗간·어부를 짓지 못함")
+	v.era_t = v.t                                  # 마을 시대가 방금 열림
+	var self_at := v.era_t + Balance.MUST_LEARN_SELF_DAYS * Balance.DAY
+	while v.t < self_at - 0.25 * Balance.DAY:
+		v.advance(600.0)
+	var none := true
+	for bd in v.buildings:
+		if bd.site_type() in ["방앗간", "어부", "빵집"]:
+			none = false
+	check(none and not Production.knows(v, "방앗간") and not Production.knows(v, "어부"),
+		"%.0f일이 되기 전엔 설계도 없이 방앗간·어부를 모름 (터도 잡지 않음)" % Balance.MUST_LEARN_SELF_DAYS)
+	# 설계도는 더 빨리 — 어부만 사서 내려 줌
+	Production.give_blueprint(v, "어부")
+	check(VillageEra.can_build(v, "어부") and not "어부" in Shop.items_in("건물", v) and not Production.knows(v, "방앗간"), "어부 설계도 → 곧바로 지을 줄 앎 (방앗간은 아직)")
+	while v.t < self_at + Balance.CHIEF_EVERY + 60.0:
+		v.advance(300.0)
+	var mill_line := v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]) == Balance.SELF_LEARN_LINE["방앗간"]).size()
+	var fish_line := v.book.filter(func(e: Dictionary) -> bool: return String(e["text"]) == Balance.SELF_LEARN_LINE["어부"]).size()
+	check(Production.knows(v, "방앗간") and VillageEra.can_build(v, "방앗간") and not "방앗간" in Shop.items_in("건물", v) and mill_line == 1 and fish_line == 0,
+		"%.0f일째 스스로 방앗간을 깨침 → 진열에서 빠짐 · 연대기 \"%s\" (설계도로 안 어부는 조용히)" % [Balance.MUST_LEARN_SELF_DAYS, Balance.SELF_LEARN_LINE["방앗간"]])
+	check(not Production.knows(v, "빵집"), "빵집은 읍내 시대 건물 — 마을 시대엔 스스로 깨치지 않음")
+	var w := lab(54)
+	w.era = 1
+	w.era_t = w.t
+	check(not Production.knows(w, "방앗간") and not Production.knows(w, "목장"), "다른 병: 마을 시대 첫날 방앗간 모름 · 목장은 양이 없어 못 깨침")
+	w.t = w.era_t + Balance.MUST_LEARN_SELF_DAYS * Balance.DAY
+	check(Production.knows(w, "방앗간") and not Production.knows(w, "목장") and through(w).era_t == w.era_t, "정확히 %.0f일째 깨침 · 시대가 열린 때는 저장됨" % Balance.MUST_LEARN_SELF_DAYS)
+	v = lab(55)
+	v.era = 1
+	v.era_t = v.t
+	Production.give_blueprint(v, "방앗간")
+	check(VillageEra.can_build(v, "방앗간") and not "방앗간" in Shop.items_in("건물", v), "설계도를 받으면 지을 줄 알고 진열에서 빠짐")
+	check(not Production.knows(v, "빵집") and not "빵집" in Shop.items_in("건물", v), "빵집은 읍내 시대 건물 — 마을 시대엔 진열 안 함")
+	v.era = 2
+	check(Production.knows(v, "어부") and not "어부" in Shop.items_in("건물", v) and "빵집" in Shop.items_in("건물", v),
+		"다음 계시(읍내)가 어부를 가르침 (막히지 않음) · 이제 빵집 설계도")
+	check("어부" in Village.era_unlocks(2) and not "빵집" in Village.era_unlocks(2) and "목조주택" in Village.era_unlocks(1) and not "방앗간" in Village.era_unlocks(1),
+		"계시가 여는 건물 = 그 시대 기본 + 앞 시대에 배워야 했던 것")
+	Market.reset()
+
+
 # ───────────────────────── 금지어 (SHOP 4) ─────────────────────────
 func test_words() -> void:
 	var texts: Array = []
@@ -551,18 +627,22 @@ func test_shop_tables() -> void:
 	var v := lab(51)
 	Shop.update_unlocks(v)
 	# 건물: 그 건물의 시대 (기획서 8.3 · 21장)
-	var pioneer := ["우물", "창고", "농장", "나무꾼", "채석장", "제재소"]
-	var village := ["어부", "방앗간", "목조주택", "목장", "방직소", "대장간"]     # (E3-12) 사냥꾼은 진열 안 함
+	# (2026-11-08 사용자) 설계도는 새로 배워야 하는 건물만: 개척기 우물 · 마을 어부·방앗간 (목장·방직소·대장간은 '곧') · 읍내 빵집
+	var pioneer := ["우물"]
+	var village := ["어부", "방앗간", "목장", "방직소", "대장간"]     # (E3-12) 사냥꾼은 진열 안 함 · 목조주택은 마을 시대 기본
 	var era_ok := true
 	for b: String in Shop.BUILDINGS:
-		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else (2 if b == "빵집" else 1))
-	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size() + 1, "건물 시대: 제재소까지 개척기 · 어부·방앗간·목조주택… 마을 · 빵집 읍내 (v5 — 개척기엔 공용 화덕)")
-	check(String(Shop.card(v, "제재소")["lock"]) == "" and String(Shop.card(v, "방앗간")["lock"]) == "마을 시대에", "개척기 마을: 제재소는 살 수 있고 방앗간은 \"마을 시대에\"")
+		era_ok = era_ok and Shop.BUILDING_ERA.has(b) and int(Shop.BUILDING_ERA[b]) == (0 if b in pioneer else (2 if b == "빵집" else 1)) and b in Balance.MUST_LEARN
+	check(era_ok and Shop.BUILDINGS.size() == pioneer.size() + village.size() + 1, "건물 시대: 우물 개척기 · 어부·방앗간… 마을 · 빵집 읍내 (모두 새로 배워야 하는 건물)")
+	check(String(Shop.card(v, "제재소")["lock"]) == "이미 알아요" and String(Shop.card(v, "방앗간")["lock"]) == "마을 시대에", "개척기 마을: 제재소는 이미 알고 방앗간은 \"마을 시대에\"")
+	v.era = 1                                      # 시대가 열려야 진열 — 카드 까닭은 마을 시대에 본다
+	var sh1 := Shop.items_in("건물", v)
 	var waits := true
 	for b: String in ["목장", "방직소", "대장간"]:
 		var c := Shop.card(v, b)
 		waits = waits and String(c["lock"]) == "곧" and String(c["inside"]).contains("아직은")
-	check(waits, "목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함)")
+	check(waits and "목장" in sh1 and not "목조주택" in sh1, "마을 시대: 목장·방직소·대장간은 '곧' + 까닭 (아직 짓지 못함) · 목조주택은 진열 안 함")
+	v.era = 0
 	var fh := not Shop.BUILDINGS.has("사냥꾼")        # B3: 어부는 마을 시대에 (1,500) · (E3-12) 사냥꾼은 진열 안 함
 	for b: String in ["어부"]:
 		var c := Shop.card(v, b)
