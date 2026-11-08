@@ -14,7 +14,7 @@
 ##   해롭진 않지만 성가심. 아이가 만져 보고 (아니면 노인이 옛말을 떠올려) 뜯어 실을 잣는다 → 먼지 실 (작은 세계의 자원). 거인: 입으로 불어 날림.
 ## 모두: 첫 3일 없음 · 곰팡이까지 합쳐 동시에 둘까지 · 끝나고 반나절 쉼 · 거인이 없을 때는 조짐에서 기다림 · 망루가 있으면 조짐이 먼저 ·
 ##   세 번 겪으면 피해 절반 · 아무도 죽지 않는다 (다치거나 앓을 뿐 — 게임 오버 없음). 깨닫기 전에는 '거인' 이야기를 하지 않는다.
-## 이 파일 밖의 고리: Village.step (step) · JarAir.open_lid (gnat_in) · Village.tap_glass (knock) · Village.blow_seeds (blow_dust) ·
+## 이 파일 밖의 고리: Village.step (step) · JarAir.open_lid (gnat_in) · Village.tap_glass (knock) · Village.lid_breeze (blow_dust — 뚜껑 바람) ·
 ##   Village.tweeze · ResidentAI.decide (decide) · ResidentAI.run_op ("crisis_*") · Village._update_building (farm_mult) · CatchUp (waiting_lines).
 class_name SmallCrises
 extends RefCounted
@@ -800,7 +800,7 @@ func _wash_under(v: Village, p: Vector2, rad: float, burst: bool) -> Array:
 	return hit
 
 
-## 터짐: 물바다 — 병의 물(호수)에서 덜어 와 그 자리에 붓는다 (닫힌 순환 — 물의 합은 그대로)
+## 터짐: 물바다 — 맺힌 김(모자라면 병의 물)에서 덜어 와 그 자리에 붓는다 (닫힌 순환 — 물 + 김의 합은 그대로)
 func _burst(v: Village) -> void:
 	var at := Vector2(drop_x, drop_y)
 	var rad := drop_radius()
@@ -855,37 +855,12 @@ func _burst(v: Village) -> void:
 		v.log_line("세 번을 겪은 마을은 이제 하늘에 물덩이가 맺히자마자 그 아래를 비웠다.")
 
 
-## 물을 붓는다 (가운데 깊고 가장자리 얕게). 병의 다른 물에서 같은 양을 고르게 덜어 온다 → 더한 물의 합
+## 물을 붓는다 (가운데 깊고 가장자리 얕게). 유리에 맺힌 물덩이 = 공기의 김 → 김에서, 모자라면 병의 다른 물에서 고르게
+## 덜어 온다 (JarWater.condense — 땅의 물 + 김 = 그대로, F-2 물 보존) → 더한 물의 합
 func _pour(v: Village, at: Vector2, rad: float, depth: float) -> float:
 	if v.water == null:
 		return 0.0
-	var w := v.water.w
-	var cells := v.water.cells_near(at, rad)
-	var add := {}
-	var total := 0.0
-	for k in cells:
-		var d := Vector2(v.water.cx(k) - at.x, v.water.cy(k) - at.y).length()
-		if d > rad:
-			continue
-		var a := depth * (1.0 - 0.6 * d / rad)
-		add[k] = a
-		total += a
-	if total <= 0.0:
-		return 0.0
-	var have := 0.0
-	for k in v.water.cells:
-		have += w[k]
-	if have <= total * 2.0:
-		return 0.0
-	var f := total / have
-	for k in v.water.cells:
-		var x := w[k]
-		if x > 0.0:
-			w[k] = x * (1.0 - f)
-	for k: int in add:
-		w[k] += float(add[k])
-	v.water.w = w
-	return total
+	return v.water.condense(at, rad, depth)
 
 
 # ═════════════════════════ 먼지 뭉치 ═════════════════════════

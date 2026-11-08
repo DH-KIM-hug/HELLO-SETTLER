@@ -290,7 +290,7 @@ static func _cold_ahead(v: Village, tt: float) -> bool:
 
 
 # ───────────────────────── 땔감 (1.3) ─────────────────────────
-## 사람이 사는 집마다: 그 자리의 추위 정도 > 0이면 10분마다 통나무 1개 (석조 주택 ×0.5). 땔감 = 집의 in_buf["통나무"] (운반 일이 창고에서 나른다)
+## 사람이 사는 집마다: 그 자리의 추위 정도 > 0이면 병 시계 4시간마다 통나무 1개 (Balance.FUEL_EVERY — design/gdd/health.md R3) (석조 주택 ×0.5). 땔감 = 집의 in_buf["통나무"] (운반 일이 창고에서 나른다)
 static func _fuel(v: Village, dt: float, tb: float) -> void:
 	var occ := v.occupancy()
 	for b in v.buildings:

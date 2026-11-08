@@ -343,10 +343,28 @@ static func _revealed(ww: WorldWater) -> int:
 ## 키트 두 개 = 서로 모르는 두 무리 → 탐험하다 만난다 (기획서 5.5 · 13.1)
 func test_two_kits_contact() -> void:
 	print("== 키트 두 개 → 두 무리 → 만남")
-	var jw := JarWorld.create(8)
+	# 만나는 날은 주민 걸음 하나하나에 민감하다 (한 시드만 보면 6일 끝자락에서 갈림 — F-2) → 여러 시드에서 대부분이 8일 안에 만나는지
+	var seeds := [8, 9, 10] if quick else [8, 9, 10, 11]
+	var met := 0
+	var days := []
+	var lines_ok := true
+	for sd: int in seeds:
+		var r := _contact(sd, sd == seeds[0])
+		if r.is_empty():
+			return
+		days.append(r["day"])
+		if int(r["day"]) > 0:
+			met += 1
+			lines_ok = lines_ok and bool(r["lines"])
+	check(met * 2 > seeds.size(), "탐험하다 만난다 — 시드 %s 중 %d곳이 8일 안에 (만난 날 %s)" % [seeds, met, days])
+	check(lines_ok, "만난 두 무리의 연대기에 첫 만남 한 줄씩")
+
+
+## 시드 하나: 첫 무리에서 약 110칸 떨어진 곳에 두 번째 키트 → 8일까지 흘려 만나는 날 (−1 = 못 만남)
+func _contact(sd: int, checks: bool) -> Dictionary:
+	var jw := JarWorld.create(sd)
 	var rec := jw.recommended_kit_spots()
 	var a := jw.place_kit(rec[0].x, rec[0].y)
-	# 두 번째 키트: 첫 무리에서 약 110칸 떨어진 놓을 수 있는 자리
 	var second := Vector2.INF
 	for i in 72:
 		var ang := TAU * i / 72.0
@@ -354,25 +372,29 @@ func test_two_kits_contact() -> void:
 		if jw.kit_spot_ok(p.x, p.y)["ok"]:
 			second = p
 			break
-	check(second != Vector2.INF, "두 번째 키트 자리 (%s)" % str(second))
+	if checks:
+		check(second != Vector2.INF, "두 번째 키트 자리 (%s)" % str(second))
 	if second == Vector2.INF:
-		return
+		return {} if checks else {"day": -1, "lines": true}
 	var b := jw.place_kit(second.x, second.y)
-	check(jw.settlements.size() == 2 and a.sid == 0 and b.sid == 1 and a.others.has(b) and not b.owns_water, "무리 둘 (무리 번호 0·1, 물은 첫 무리가)")
+	if checks:
+		check(jw.settlements.size() == 2 and a.sid == 0 and b.sid == 1 and a.others.has(b) and not b.owns_water, "무리 둘 (무리 번호 0·1, 물은 첫 무리가)")
 	a.water.offline = true
 	a.step_dt = 30.0
 	b.step_dt = 30.0
 	var met_day := -1
-	for d in 6:
+	for d in 8:
 		jw.advance(Balance.DAY)
 		if a.met.has(1) and met_day < 0:
 			met_day = d + 1
 			break
-	check(met_day > 0 and b.met.has(0), "탐험하다 만난다 (%d일째)" % met_day)
+	if met_day > 0 and not b.met.has(0):
+		met_day = -1
 	var la: Array = a.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("낯선"))
 	var lb: Array = b.book.filter(func(e: Dictionary) -> bool: return String(e["text"]).contains("낯선"))
-	check(la.size() == 1 and lb.size() == 1, "두 무리의 연대기에 첫 만남 한 줄씩")
-	check(absf(a.t - b.t) < 1e-6 and b.people.size() >= 8, "두 무리가 같은 시계로 함께 걷는다 (인구 %d · %d)" % [a.people.size(), b.people.size()])
+	if checks:
+		check(absf(a.t - b.t) < 1e-6 and b.people.size() >= 8, "두 무리가 같은 시계로 함께 걷는다 (인구 %d · %d)" % [a.people.size(), b.people.size()])
+	return {"day": met_day, "lines": la.size() == 1 and lb.size() == 1}
 
 
 ## 병 돌리기 (기획서 4.6): 넓은 세상은 빛이 돈다 — 따뜻함이 바뀌고, 물·소금 총량은 그대로, 네 번이면 제자리

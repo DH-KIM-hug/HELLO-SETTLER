@@ -354,7 +354,7 @@ func grove(v: Village) -> int:
 		elif doubter == null and r.belief < 0.45:
 			doubter = r
 	if believer != null:
-		v.speak(believer, "{w:이/가} 내려 주신 양식이야!" if trust else "하늘의 것이 솟았다…!", 7)
+		v.speak(believer, "{w:이/가} 내려 주신 양식이야!" if trust and v.aware else "하늘의 것이 솟았다…!", 7)   # 깨닫기 전엔 거인을 모른다 (CLAUDE.md 1)
 	if doubter != null:
 		v.speak(doubter, "젖은 땅에선 원래 나.", 6)
 	return made
