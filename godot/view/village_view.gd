@@ -53,6 +53,12 @@ var _bld2d_on := false            # 지금 그림으로 그리는가 (Bld2D.enab
 var _card_items := {}             # 건물 id → [[그림, 마을 기준 원점(올림 포함), k, flip]…] (멀리 묶음 · 접촉 그림자)
 var _contact: MultiMeshInstance3D # 접촉 그림자 타원 (모든 건물 = 그리기 1번, 늘 보임)
 var _contact_dirty := false
+## (2D 그림책 꽃·소품 — view/flora2d, RENDERING.md 확정 2026-11-08) 건물 노드에 단 꽃·소품 그림 (짐 더미·짓는 터 더미·화분 집·찾은 물건):
+## 건물 id → [[그림, 마을 기준 원점, k, flip]…] — 멀리 묶음(Flora2D.multi, 아틀라스마다 그리기 1번)·접촉 그림자에 함께
+var _fcard_items := {}
+var _fcontact: MultiMeshInstance3D
+var no_pic2d := {}                # (2D) 그림이 없어 3D로 남은 바위·연잎 모양 (시험: 비어 있어야)
+var _flora2d_on := false          # 지금 꽃·소품을 그림으로 그리는가 (Flora2D.enabled — 바뀌면 꽃숲·소품·건물을 다시)
 const YARD_FLORA_2D := ["flowers", "flowers_b", "bush_flower"]   # 그림 건물: 마당 소품 중 꽃만 남김 (나머지는 그림에 들어 있음)
 ## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
 ## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
@@ -947,6 +953,18 @@ func _bld_state(b: Building) -> String:
 
 func _sync_buildings() -> void:
 	var on := Bld2D.enabled()
+	var fon := Flora2D.enabled()
+	if fon != _flora2d_on:           # (2D 꽃·소품) 설정을 바꾸면 꽃숲·소품·바위·연잎·먼 숲·건물(짐 더미)을 다시
+		_flora2d_on = fon
+		_tree_key = ""
+		_rock_key = ""
+		_prop_key = ""
+		_far_key = -1
+		_far_t = -1.0e9
+		_bld_key.clear()
+		_fcard_items.clear()
+		_yard_dirty = true
+		_contact_dirty = true
 	if on != _bld2d_on:              # 설정을 바꾸면 모든 건물·무덤을 다시
 		_bld2d_on = on
 		_bld_key.clear()
@@ -970,6 +988,8 @@ func _sync_buildings() -> void:
 		if _blds.has(b.id):
 			(_blds[b.id] as Node3D).queue_free()
 		if _card_items.erase(b.id):
+			_contact_dirty = true
+		if _fcard_items.erase(b.id):
 			_contact_dirty = true
 		var n := Node3D.new()
 		add_child(n)
@@ -1022,6 +1042,13 @@ func _sync_buildings() -> void:
 		if Art.has_far(it["model"]):
 			Art.instance(far, it["model"], Transform3D.IDENTITY, true).set_meta(SH_SRC, true)
 			dm.set_meta(SH_DST, true)
+		if _fcard_items.erase(id):
+			_contact_dirty = true
+		var dpic := Flora2D.pic_for(it["model"]) if _flora2d_on else ""
+		if dpic != "" and Flora2D.has(dpic):     # (2D) 화분 집 · 찾은 물건 그림 + 3D 모델은 그림자 대역
+			Flora2D.proxify(near)
+			Flora2D.proxify(far)
+			_add_fcard(n, id, n, dpic, Vector3.ZERO, 1.0)
 		n.set_meta("bid", id)
 		_record_far(id, n)
 		_apply_bld_lod(n)
@@ -1037,6 +1064,8 @@ func _sync_buildings() -> void:
 			if _shadow_items.erase(id):
 				_shadow_dirty = true
 			if _card_items.erase(id):
+				_contact_dirty = true
+			if _fcard_items.erase(id):
 				_contact_dirty = true
 			_far_rest.erase(id)
 			_far_moving.erase(id)
@@ -1144,7 +1173,7 @@ func _record_far(id: int, n: Node3D) -> void:
 		if root == null:
 			continue
 		for mi: MeshInstance3D in root.find_children("*", "MeshInstance3D", true, false):
-			if mi.mesh == null or not mi.visible:
+			if mi.mesh == null or not mi.visible or mi.has_meta(&"pic"):     # (2D) 그림 판은 굽지 않음 — 아래 Flora2D.multi
 				continue
 			var xf := mi.transform
 			var p := mi.get_parent()
@@ -1214,6 +1243,13 @@ func _far_bake_step(budget_ms: float) -> void:
 		cards.append_array(_card_items.get(id, []))
 	if not cards.is_empty():
 		_far_batch.add_child(Bld2D.multi(cards))
+	var fcards: Array = []                # (2D) 묶음에 든 건물의 꽃·소품 그림 (짐 더미·화분 집·찾은 물건) — 아틀라스마다 그리기 1번
+	for id in _far_items:
+		if _far_moving.has(id) or not _blds.has(id):
+			continue
+		fcards.append_array(_fcard_items.get(id, []))
+	if not fcards.is_empty():
+		_far_batch.add_child(Flora2D.multi(fcards, false))
 	for id in _blds:
 		_apply_bld_lod(_blds[id])
 
@@ -1346,6 +1382,18 @@ func _sync_yard() -> void:
 			if not groups.has(e[0]):
 				groups[e[0]] = [] as Array[Transform3D]
 			(groups[e[0]] as Array[Transform3D]).append(n.transform * (e[1] as Transform3D))
+	if _flora2d_on:                  # (2D) 마당 꽃·꽃덤불(·소품) 그림 — 아틀라스마다 그리기 1번
+		var items: Array = []
+		for k: String in groups:
+			var pic := Flora2D.pic_for(k)
+			if pic == "":
+				Art.multi(_yard, k, groups[k], false)
+				continue
+			for xf: Transform3D in groups[k]:
+				items.append([pic, xf.origin, xf.basis.y.length(), int(xf.origin.x * 7.0 + xf.origin.z * 3.0) % 2 == 0])
+		if not items.is_empty():
+			_yard.add_child(Flora2D.multi(items))
+		return
 	for k: String in groups:
 		Art.multi(_yard, k, groups[k], false)
 
@@ -1464,9 +1512,40 @@ func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false) -> 
 	_contact_dirty = true
 
 
+## (2D 꽃·소품) 건물 노드(n, id) 아래 parent에 그림 판을 달고 기록 (멀리 묶음 · 접촉 그림자). at = parent 기준 자리
+func _add_fcard(n: Node3D, id: int, parent: Node3D, pic: String, at: Vector3, k := 1.0, flip := false) -> void:
+	var c := Flora2D.card(pic, k, flip)
+	c.position = at
+	parent.add_child(c)
+	var xf := n.transform
+	var p := parent
+	var local := Transform3D(Basis.IDENTITY, at)
+	while p != null and p != n:
+		local = p.transform * local
+		p = p.get_parent() as Node3D
+	if not _fcard_items.has(id):
+		_fcard_items[id] = []
+	(_fcard_items[id] as Array).append([pic, xf * local.origin, k * n.scale.y, flip])
+	_contact_dirty = true
+
+
 ## (2D) 접촉 그림자 타원 다시 (모든 건물 = MultiMesh 하나). 들려 움직이는 건물은 뺌
 func _sync_contact() -> void:
 	_contact_dirty = false
+	if _fcontact != null:
+		_fcontact.queue_free()
+		_fcontact = null
+	var fitems: Array = []
+	for id in _fcard_items:
+		if _far_moving.has(id):
+			continue
+		for it: Array in _fcard_items[id]:
+			if float(Flora2D.info(it[0]).get("contact", 0.0)) > 0.0:
+				fitems.append(it)
+	if not fitems.is_empty():
+		_fcontact = Flora2D.contact_shadows(fitems)
+		_fcontact.name = "fcontact2d"
+		add_child(_fcontact)
 	if _contact != null:
 		_contact.queue_free()
 		_contact = null
@@ -1734,6 +1813,13 @@ func _build_site_shape(n: Node3D, b: Building) -> void:
 func _build_site_piles(n: Node3D, b: Building) -> void:
 	var s := b.size() * 0.85
 	var np := mini(6, int(b.delivered["판자"]))
+	if _flora2d_on:                  # (2D) 도착한 판자·돌 더미 그림 (많을수록 크게)
+		if np > 0:
+			_add_fcard(n, b.id, n, "pile_planks", Vector3(s + 0.55, 0, 0.3), 0.7 + 0.1 * np)
+		var ns := mini(6, int(b.delivered["돌"]))
+		if ns > 0:
+			_add_fcard(n, b.id, n, "pile_stone", Vector3(-s - 0.55, 0, 0.4), 0.7 + 0.1 * ns)
+		return
 	if np > 0:                       # (E3) 판자 = 쪼갠 갈대·나뭇가지 → 나뭇가지 더미 (많을수록 크게)
 		Art.instance(n, "flora/twig_pile_b", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * (0.16 + 0.025 * np)), Vector3(s + 0.55, 0, 0.3)))
 	for i in mini(6, int(b.delivered["돌"])):
@@ -1746,6 +1832,13 @@ func _build_piles(n0: Node3D, b: Building) -> void:
 	n.name = "piles"
 	n0.add_child(n)
 	var i := 0
+	if _flora2d_on:                  # (2D) 물건마다 더미 그림 하나 (많을수록 크게) — 멀리 묶음엔 Flora2D.multi로
+		for k in b.out:
+			var cnt := mini(6, int(b.out[k]))
+			if cnt > 0:
+				_add_fcard(n0, b.id, n, Flora2D.goods_pic(k), Vector3(b.size() + 0.55, 0, -0.6 + i * 0.6), 0.65 + 0.09 * cnt)
+			i += 1
+		return
 	for k in b.out:
 		var cnt := mini(6, int(b.out[k]))
 		var c: Color = Style.ITEM_COLORS.get(k, Style.WOOD)
@@ -1898,7 +1991,37 @@ func _add(groups: Dictionary, key: String, xf: Transform3D) -> void:
 	(groups[key] as Array[Transform3D]).append(xf)
 
 
+## (2D 그림 — 마을 한가운데가 읽히게, 2026-11-09 메인 검토) 정사영 카메라는 마을을 앞쪽 큰 꽃 너머로 본다: 불투명한 그림 판이라
+## (사용자: 반투명 싫음) 마을 둘레(CORE_R) 안과 그 앞(카메라 쪽 CORE_FRONT) 띠에서는 키 큰 그림을 CORE_H 높이로 줄여 놓는다.
+## 화면만 — 시뮬레이션 나무 자리·수는 그대로 (ADR-0001). 거리는 기본 방위(BASE_YAW) 기준.
+const CORE_H := 3.0               # 줄여 놓는 화면 높이 상한 (칸, 주민 세 명 키)
+const CORE_FRONT := 13.0          # 카메라 쪽 띠 길이 (꽃 키 14 × cot 48° — 그 뒤 땅을 가리는 몫)
+var _core_r := -1.0               # 이번에 놓는 동안의 마을 둘레 (−1 = 줄이지 않음)
+
+
+func _core_begin() -> void:
+	_core_r = clampf(v.territory_r() * 0.75, 6.0, 18.0) if _flora2d_on else -1.0
+
+
+func _core_scale(key: String, x: float, z: float, s: float) -> float:
+	if _core_r < 0.0:
+		return s
+	var p := Vector2(x, z) - v.center
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG)
+	var tw := Vector2(sin(yaw), cos(yaw))
+	var along := p.dot(tw)
+	var lat := absf(p.dot(Vector2(tw.y, -tw.x)))
+	if p.length() > _core_r and not (along > 0.0 and along < _core_r + CORE_FRONT and lat < _core_r):
+		return s
+	var pic := Flora2D.pic_for(key)
+	if pic == "":
+		return s
+	var h := float(Flora2D.info(pic).get("h", 0.0)) * s
+	return s * CORE_H / h if h > CORE_H else s
+
+
 func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: float, dy := 0.0) -> void:
+	s = _core_scale(key, x, z, s)
 	var y := gy(x, z) + dy
 	_add(groups, key, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * s), Vector3(x, y, z)))
 	if _rec != null and FloraPicks.pickable(key):
@@ -1912,6 +2035,23 @@ func _flush(parent: Node3D, groups: Dictionary, no_shadow: Array = []) -> void:
 		return
 	for c in parent.get_children():
 		c.queue_free()
+	if _flora2d_on:                  # (2D) 바위·연잎: 그림 (아틀라스마다 그리기 1번) + 그림자를 드리우던 것은 3D 대역 (SHADOWS_ONLY)
+		var items: Array = []
+		for k: String in groups:
+			var pic := Flora2D.pic_for(k)
+			if pic == "" or not Flora2D.has(pic):
+				no_pic2d[k] = true
+				Art.multi(parent, k, groups[k], not (k in no_shadow))
+				continue
+			for xf: Transform3D in groups[k]:
+				items.append([pic, xf.origin, xf.basis.y.length(), fposmod(xf.origin.x * 3.1 + xf.origin.z * 1.7, 2.0) < 1.0])
+			if not (k in no_shadow):
+				var sh := _node(parent)
+				Art.multi(sh, k, groups[k], true)
+				Flora2D.proxify(sh)
+		if not items.is_empty():
+			parent.add_child(Flora2D.multi(items))
+		return
 	for k: String in groups:
 		Art.multi(parent, k, groups[k], not (k in no_shadow))
 
@@ -1924,14 +2064,18 @@ func _sync_trees() -> void:
 			n_tree += 1
 		elif tr["s"] == "stump":
 			n_stump += 1
-	season = FloraLook.season_of(v)
-	var key := "%d|%d|%d|%d|%s" % [v.trees.size(), n_tree, n_stump, v.water.rot, season]
+	var se := FloraLook.season_of(v)
+	if se != season and _flora2d_on:
+		Flora2D.keep_season(se)      # (2D) 다른 철 꽃 아틀라스를 놓아 줌
+	season = se
+	var key := "%d|%d|%d|%d|%s|%s|%.0f" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0]
 	if key == _tree_key:
 		return
 	_tree_key = key
 	# (E3-3 소인의 세상) 나무 = 꽃숲 덩이 · 벤 자리 = 나뭇가지 더미 · 묘목 = 클로버·풀 싹 (view/flora_look.gd)
 	var groups := {}
 	n_flora = 0
+	_core_begin()
 	_rec = FloraPicks.new()
 	for tr: Dictionary in v.trees:
 		var x: float = tr["x"]
@@ -1985,6 +2129,21 @@ func _sync_rocks() -> void:
 	for ore: String in ores:
 		var node := _node(_rocks)
 		var og: Dictionary = ores[ore]
+		if _flora2d_on:              # (2D) 광맥 바위: 회색 그림에 돌 색을 곱함 (그리기 1번)
+			var oc: Color = Style.ORE.get(ore, Style.ORE["돌"])
+			var base: Color = Style.ORE["돌"]
+			var tint := Color(minf(oc.r / base.r, 1.6), minf(oc.g / base.g, 1.6), minf(oc.b / base.b, 1.6))
+			var items: Array = []
+			for gk: String in og:
+				var pic := Flora2D.pic_for(gk)
+				for xf: Transform3D in og[gk]:
+					items.append([pic, xf.origin, xf.basis.y.length(), false, tint])
+			node.add_child(Flora2D.multi(items))
+			var shadow_root := _node(node)
+			for gk: String in og:
+				Art.multi(shadow_root, gk, og[gk])
+			Flora2D.proxify(shadow_root)
+			continue
 		for gk: String in og:
 			Art.multi(node, gk, og[gk])
 		var mat := Toon.mat(Style.ORE.get(ore, Style.ORE["돌"]))
@@ -2021,6 +2180,7 @@ func _sync_props() -> void:
 	for r: Dictionary in v.rocks:
 		sim_pts.append(Vector2(r["x"], r["y"]))
 	_rec = FloraPicks.new()
+	_core_begin()
 	_decor_forest(groups, sim_pts)
 	_decor_clusters(groups)
 	_lilies.clear()

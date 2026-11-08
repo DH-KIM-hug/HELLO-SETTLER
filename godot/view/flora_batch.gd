@@ -11,6 +11,10 @@
 ##      버섯·고사리)은 ppu < LOW_FAR_PPU, 그 밖(꽃·장미 덤불·수국·이끼 둔덕…)은 ppu < BIG_FAR_PPU에서 바꾼다 (경계 ±FAR_GAP 이력 — 모바일은
 ##      visibility_range 페이드가 없어 확대 값으로). 아주 멀리(TINY_PPU 아래)는 납작한 것(이끼·클로버·풀 포기…)을 숨김.
 ## 자식 MultiMeshInstance3D의 multimesh.mesh는 가까이 단계에서 Art.model(이름)["mesh"] 그대로 (시험이 모양을 확인함).
+## (2D 그림책 — view/flora2d, RENDERING.md 확정 2026-11-08) Flora2D.enabled()이면 그림이 있는 모양은 메시 대신 카메라를 보는 그림 판:
+##   모든 모양이 아틀라스 무리(common · 지금 철 꽃)마다 MultiMesh 하나 = 그리기 1~2번 (모양 수와 상관없이) + 접촉 그림자 1번.
+##   그림자를 드리우던 큰 꽃은 같은 칸 버퍼로 3D 모델(멀리 모양이 있으면 그것 — 삼각형이 적음)을 SHADOWS_ONLY로 — 해·등불 그림자는 그대로.
+##   화면 자르기·아주 멀리 숨김(TINY)은 같은 규칙. 멀리 모양·접힌 곳 선 LOD는 그림엔 없음 (밉맵이 맡음).
 class_name FloraBatch
 extends RefCounted
 
@@ -62,6 +66,13 @@ var _occ_bb := Rect2()            # 그 칸들의 테두리 (부모 좌표 xz)
 var _pad := REFRESH               # 지금 담은 여유 (확대가 멀수록 넓게 — 아래 update)
 var n_total := 0                  # 놓은 인스턴스 수
 var n_drawn := 0                  # 지금 버퍼에 담긴 수 (시험·측정용)
+## (2D) 아틀라스 무리 → {"cells": {Vector2i: PackedFloat32Array (20 floats/인스턴스)}, "mmi": MultiMeshInstance3D}
+var _cards := {}
+var _contact_cells := {}          # 칸 → [[그림, 원점, k]…] (접촉 그림자)
+var _contact: MultiMeshInstance3D
+var pics2d := false               # 지금 그림으로 그리는가 (set_groups 때의 Flora2D.enabled)
+var n_cards := 0                  # 그림으로 그리는 인스턴스 수 (전체)
+var no_pic := {}                  # (2D) 그림이 없어 3D로 남은 모양 (시험: 비어 있어야)
 
 
 func _init(p: Node3D) -> void:
@@ -73,9 +84,15 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 	for c in parent.get_children():
 		c.queue_free()
 	_kinds.clear()
+	_cards.clear()
+	_contact_cells.clear()
+	_contact = null
 	_occ.clear()
 	_occ_bb = Rect2()
 	n_total = 0
+	n_cards = 0
+	no_pic.clear()
+	pics2d = Flora2D.enabled()
 	for k: String in groups:
 		var xfs: Array = groups[k]
 		if xfs.is_empty():
@@ -83,6 +100,12 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 		var m := Art.model(k)
 		if m["mesh"] == null:
 			continue
+		var pic := Flora2D.pic_for(k) if pics2d else ""
+		if pic != "" and Flora2D.has(pic):
+			_set_cards(k, pic, xfs, m, no_shadow)
+			continue
+		if pics2d:
+			no_pic[k] = true
 		var cells := {}
 		for xf: Transform3D in xfs:
 			var key := Vector2i(floori(xf.origin.x / CELL), floori(xf.origin.z / CELL))
@@ -109,9 +132,59 @@ func set_groups(groups: Dictionary, no_shadow: Array = []) -> void:
 		_kinds[k] = {"cells": cells, "n": xfs.size(), "near": near, "lines": lines, "far": null, "shadow": shadow, "low": hgt < HULL_MIN_H,
 			"far_mesh": Art.model_far(k)["mesh"], "big": not (k in CLUTTER)}
 		n_total += xfs.size()
+	if not _contact_cells.is_empty():
+		_contact = Flora2D.contact_shadows([])
+		parent.add_child(_contact)
 	_all = true
 	_rect = Rect2()
 	_fill(true)
+
+
+## (2D) 한 모양의 인스턴스 → 그림 판 (아틀라스 무리 버퍼) + 그림자 대역 (큰 꽃만 — 같은 SHADOW_MIN_H 규칙)
+func _set_cards(k: String, pic: String, xfs: Array, m: Dictionary, no_shadow: Array) -> void:
+	var d := Flora2D.info(pic)
+	var grp := String(d["group"])
+	if grp == "single":
+		return
+	if not _cards.has(grp):
+		var mmi := Flora2D.new_multi(grp)
+		parent.add_child(mmi)
+		_cards[grp] = {"cells": {}, "mmi": mmi}
+	var gcells: Dictionary = _cards[grp]["cells"]
+	var hgt := shown_height(m["mesh"], xfs)
+	var shadow := not (k in no_shadow) and hgt >= SHADOW_MIN_H
+	var pcells := {}
+	var contact := float(d.get("contact", 0.0)) > 0.0
+	for xf: Transform3D in xfs:
+		var o := xf.origin
+		var key := Vector2i(floori(o.x / CELL), floori(o.z / CELL))
+		var ks := xf.basis.y.length()
+		var hh := fposmod(sin(o.x * 12.9898 + o.z * 78.233) * 43758.5453, 1.0)
+		var arr: PackedFloat32Array = gcells.get(key, PackedFloat32Array())
+		arr.append_array(Flora2D.inst_floats(pic, o, ks, hh < 0.5, hh * TAU))
+		gcells[key] = arr
+		if contact:
+			if not _contact_cells.has(key):
+				_contact_cells[key] = []
+			(_contact_cells[key] as Array).append([pic, o, ks])
+		if shadow:
+			var b := xf.basis
+			var sa: PackedFloat32Array = pcells.get(key, PackedFloat32Array())
+			sa.append_array(PackedFloat32Array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z]))
+			pcells[key] = sa
+		if not _occ.has(key):
+			_occ[key] = true
+			var cr := Rect2(Vector2(key) * CELL, Vector2(CELL, CELL))
+			_occ_bb = cr if _occ.size() == 1 else _occ_bb.merge(cr)
+	n_total += xfs.size()
+	n_cards += xfs.size()
+	if shadow:
+		var fm: Mesh = Art.model_far(k)["mesh"]
+		var proxy := _mmi(fm if fm != null else m["mesh"], true)
+		proxy.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		proxy.name = "shadow2d"
+		_kinds[k] = {"cells": pcells, "n": xfs.size(), "near": [proxy], "lines": null, "far": null, "shadow": true, "low": false,
+			"far_mesh": null, "big": true, "proxy": true}
 
 
 ## 화면에서의 높이 (칸): 모델 높이 × 놓은 세로 배율의 중앙값
@@ -247,7 +320,7 @@ func _fill(lod_changed: bool) -> void:
 		if lines_off and e["lines"] != null:
 			show = show.filter(func(x: MultiMeshInstance3D) -> bool: return x != e["lines"])
 			hide = [e["lines"]]
-		if not (e["near"] as Array).is_empty():
+		if not (e["near"] as Array).is_empty() and not e.has("proxy"):
 			var body: MultiMeshInstance3D = e["near"][0]
 			var want_mat: Material = Art.flat_mat() if lines_off and bool(e["low"]) else null
 			if body.material_override != want_mat:
@@ -270,6 +343,52 @@ func _fill(lod_changed: bool) -> void:
 			if n > 0:
 				mm.buffer = buf
 			mmi.visible = n > 0
+	_fill_cards()
+
+
+## (2D) 아틀라스 무리마다 보이는 칸의 그림을 한 버퍼로 (TINY 숨김은 그림 이름으로)
+func _fill_cards() -> void:
+	for grp: String in _cards:
+		var cells: Dictionary = _cards[grp]["cells"]
+		var buf := PackedFloat32Array()
+		for key: Vector2i in cells:
+			if _all or _vis.has(key):
+				buf.append_array(cells[key])
+		if tiny_off:
+			buf = _drop_tiny(buf, grp)
+		var n := buf.size() / 20
+		n_drawn += n
+		var mmi: MultiMeshInstance3D = _cards[grp]["mmi"]
+		mmi.multimesh.instance_count = n
+		if n > 0:
+			mmi.multimesh.buffer = buf
+		mmi.visible = n > 0
+	if _contact != null:
+		var items: Array = []
+		for key: Vector2i in _contact_cells:
+			if _all or _vis.has(key):
+				items.append_array(_contact_cells[key])
+		var c := Flora2D.contact_shadows(items)
+		_contact.multimesh = c.multimesh
+		c.free()
+		_contact.visible = not items.is_empty() and not tiny_off
+
+
+## 아주 멀리: 납작한 것(TINY 모양의 그림)을 뺌 — 그림 번호로
+static var _tiny_idx := {}
+
+
+func _drop_tiny(buf: PackedFloat32Array, grp: String) -> PackedFloat32Array:
+	if _tiny_idx.is_empty():
+		for k: String in TINY:
+			var p := Flora2D.pic_for(k)
+			if p != "":
+				_tiny_idx["%s|%d" % [Flora2D.info(p).get("group", ""), int(Flora2D.info(p).get("i", -1))]] = true
+	var out := PackedFloat32Array()
+	for i in range(0, buf.size(), 20):
+		if not _tiny_idx.has("%s|%d" % [grp, int(buf[i + 16])]):
+			out.append_array(buf.slice(i, i + 20))
+	return out
 
 
 ## 카메라가 땅(높이 y0~y1 사이)에서 보는 사각형 → 부모 좌표 xz. 정사영·원근 모두 화면 네 귀퉁이 빛줄기를 두 높이 평면에 맞춘다.

@@ -4,7 +4,7 @@
 ## 켜는 법 (안드로이드 디버그 APK):
 ##   1) adb shell am start -n com.ddoystory.najakji/com.godot.game.GodotApp --esa command_line_params "--perf,scale=0.75"
 ##   2) 안 되면 깃발 파일: echo "perf scale=0.75" | adb shell run-as com.ddoystory.najakji sh -c 'cat > files/perf_probe.cfg'  (한 번 읽고 지워진다)
-## 옵션 (key=value): shproxy=0 (P1 4차 건물 그림자 대역 끔 — 비교) · shcmp=1 (shots=1과 함께: 가까이에서 멈춘 채 대역 켬·끔·켬 + 멀리 모양 그림) · cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
+## 옵션 (key=value): flora2d=0|1 (꽃·풀·소품 3D / 2D 그림책 그림 — view/flora2d) · shproxy=0 (P1 4차 건물 그림자 대역 끔 — 비교) · shcmp=1 (shots=1과 함께: 가까이에서 멈춘 채 대역 켬·끔·켬 + 멀리 모양 그림) · cut=0|1 (3D 주민 / 종이 인형 주민) · dur=20 (장면마다 초) · tog=8 (켜고 끄기 시험 초) · scale=1.0 (3D 배율) · tag=이름 · catchup=0 (따라잡기 건너뜀) · only=catchup|frames
 ##   · only=trans (끊김만) · trans=0 (방 → 마을 오므림 끊김 재기 끔) · trans_secs=2.5 · world_only=1 (세상 전체·방 장면만) · census=1 (보이는 메시 경로별)
 ##   · flora=old (꽃숲 자르기·멀리 덩이 끔 — 이전과 비교) · shots=1 (데스크톱: 장면마다 화면을 godot_shots/perf_<tag>_<장면>.png로 — 창이 필요)
 ##
@@ -84,6 +84,8 @@ func _run() -> void:
 	RenderingServer.viewport_set_measure_render_time(_vp, true)
 	if _opt("cut", "") != "":                  # cut=1 종이 인형 주민 · cut=0 3D 주민 (없으면 설정을 따름 — CutoutResident.enabled)
 		CutoutResident.override = int(_opt("cut", "-1"))
+	if _opt("flora2d", "") != "":              # flora2d=1 그림책 꽃·풀·소품 · flora2d=0 3D (없으면 설정을 따름 — Flora2D.enabled)
+		Flora2D.override = int(_opt("flora2d", "-1"))
 	var sc := float(_opt("scale", 1.0))
 	get_tree().root.scaling_3d_scale = sc
 	results["tag"] = tag

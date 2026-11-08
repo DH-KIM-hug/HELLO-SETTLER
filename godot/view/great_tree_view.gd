@@ -27,6 +27,10 @@ var _boost := 1.0
 var far_lod := false
 var force_lod := -1               # -1 = 확대 따라 · 0 = 늘 가까이 · 1 = 늘 멀리 (캡처·시험)
 var _lods: Array = []             # [가까이 노드, 멀리 노드] 나무마다
+## (2D 그림책 — view/flora2d, RENDERING.md 확정 2026-11-08) 큰 나무 = 철마다 그림 한 장 (제 텍스처) + 3D 멀리 모양은 그림자 대역(SHADOWS_ONLY).
+## 멀리 축소의 랜드마크 키움(FAR_BOOST)은 그림에도. 떨어진 큰 열매·발치 풀도 그림.
+var pics2d := false
+var cards := {}                   # kind → 그림 이름 (시험·캡처용)
 
 
 func _init(w: WorldWater, t: JarTerrain, src: Callable = Callable()) -> void:
@@ -79,6 +83,10 @@ static func far_boost(ppu: float) -> float:
 
 
 func _apply_lod() -> void:
+	if pics2d:
+		for pair: Array in _lods:
+			(pair[0] as Node3D).scale = Vector3.ONE * _boost        # 그림 (늘 보임) · 그림자 대역은 크기 그대로
+		return
 	for pair: Array in _lods:
 		(pair[0] as Node3D).visible = not far_lod
 		(pair[1] as Node3D).visible = far_lod
@@ -121,7 +129,8 @@ func sync(dt: float, force := false) -> void:
 		return
 	_t = 0.0
 	var se := season()
-	var key := "%s|%d|%d" % [se, ww.great_trees.size(), ww.giant_fruits.size()]
+	var on := Flora2D.enabled()
+	var key := "%s|%d|%d|%s" % [se, ww.great_trees.size(), ww.giant_fruits.size(), on]
 	for f: Dictionary in ww.giant_fruits:
 		key += ",%.0f%s" % [float(f["x"]), "c" if f.get("cut", false) else ""]
 	if key == _key and not force:
@@ -131,7 +140,9 @@ func sync(dt: float, force := false) -> void:
 		c.queue_free()
 	n_trees = 0
 	models.clear()
+	cards.clear()
 	_lods.clear()
+	pics2d = on
 	for t: Dictionary in ww.great_trees:
 		var x: float = t["x"]
 		var z: float = t["y"]
@@ -142,7 +153,18 @@ func sync(dt: float, force := false) -> void:
 		n.name = String(t["kind"])
 		n.transform = xf
 		add_child(n)
-		_lods.append([make_tree(n, spec["parts"], spec["keep"], false), make_tree(n, spec["parts"], spec["keep"], true)])
+		if pics2d:
+			var proxy := make_tree(n, spec["parts"], spec["keep"], true)      # 그림자 대역: 멀리 모양 (삼각형 적음)
+			Flora2D.proxify(proxy)
+			var holder := Node3D.new()
+			holder.name = "pic"
+			n.add_child(holder)
+			var pic := Flora2D.great_pic(String(t["kind"]), se)
+			holder.add_child(Flora2D.card(pic, 1.0, float(t.get("yaw", 0.0)) > PI))
+			cards[t["kind"]] = pic
+			_lods.append([holder, proxy])
+		else:
+			_lods.append([make_tree(n, spec["parts"], spec["keep"], false), make_tree(n, spec["parts"], spec["keep"], true)])
 		models[t["kind"]] = "%s:%s" % [spec["parts"], ",".join(spec["keep"])]
 		n_trees += 1
 	_apply_lod()
@@ -152,8 +174,10 @@ func sync(dt: float, force := false) -> void:
 		var x: float = f["x"]
 		var z: float = f["y"]
 		# (E3-3) 자르기 시작하면 잘린 열매
-		Art.instance(self, "flora/great_fruit_cut" if f.get("cut", false) else "flora/great_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
+		var fn := Art.instance(self, "flora/great_fruit_cut" if f.get("cut", false) else "flora/great_fruit", Transform3D(Basis(Vector3.UP, float(f.get("yaw", 0.0))).scaled(Vector3.ONE * FloraLook.FRUIT_SCALE),
 			Vector3(x, terrain.ground_y(x, z) - 0.15, z)))
+		if pics2d:
+			Flora2D.dress(fn, "flora/great_fruit_cut" if f.get("cut", false) else "flora/great_fruit")
 		n_fruits += 1
 
 
@@ -188,6 +212,17 @@ func _foot(se: String) -> void:
 		var node := Node3D.new()
 		node.name = "Foot_" + String(t["kind"])
 		add_child(node)
+		if pics2d:                      # (2D) 발치 풀·꽃 그림 — 아틀라스마다 그리기 1번 (멀리 축소하면 숨김: _process)
+			var items: Array = []
+			for nm: String in groups:
+				var pic := Flora2D.pic_for(nm)
+				for xf: Transform3D in groups[nm]:
+					if pic != "":
+						items.append([pic, xf.origin, xf.basis.y.length(), xf.basis.x.x > 0.0])
+			node.add_child(Flora2D.multi(items))
+			for mc in node.find_children("*", "GeometryInstance3D", true, false):
+				(mc as GeometryInstance3D).visibility_range_end = FOOT_FAR
+			continue
 		for nm: String in groups:
 			Art.multi(node, nm, groups[nm], not nm in FloraLook.NO_SHADOW)
 		for mc in node.get_children():  # 멀리 축소하면 발치 풀은 점보다 작다 → 그리지 않음 (카메라 거리 — 정사영은 축소할수록 물러남)

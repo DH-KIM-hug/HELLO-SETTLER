@@ -53,6 +53,9 @@ var _weed_key := ""
 var _racks: Node3D
 var _rack_key := ""
 var night := 0.0                            # 장면이 넣어 줌 (0~1)
+## (2D 그림책 — view/flora2d, RENDERING.md 확정 2026-11-08) 큰 버섯·민들레(잎 방석·줄기·머리 네 단계)·꽃씨 = 그림. 3D 메시는 그림자 대역
+## (SHADOWS_ONLY). 자람·시듦·피어남·부풂은 노드 배율 그대로 (그림 판이 부모 배율을 따름). 꽃씨는 그림 MultiMesh 하나.
+var pics2d := false
 
 
 func _init(village: Village) -> void:
@@ -60,14 +63,17 @@ func _init(village: Village) -> void:
 
 
 func _ready() -> void:
-	_seeds = MultiMeshInstance3D.new()
-	var mm := MultiMesh.new()
+	pics2d = Flora2D.enabled()
+	_seeds = Flora2D.new_multi("giants", "seeds2d") if pics2d else MultiMeshInstance3D.new()
+	var mm := _seeds.multimesh if pics2d else MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = seed_mesh()
+	if not pics2d:
+		mm.mesh = seed_mesh()
 	mm.instance_count = Balance.SEED_MAX
 	mm.visible_instance_count = 0
 	_seeds.multimesh = mm
-	_seeds.material_override = Toon.vc_mat()
+	if not pics2d:
+		_seeds.material_override = Toon.vc_mat()
 	_seeds.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(_seeds)
 	_weeds = Node3D.new()
@@ -522,6 +528,11 @@ func _make_shroom(s: Dictionary) -> Dictionary:
 			ln.mesh = Art.model(an)["lines"]
 			ln.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			root.add_child(ln)
+	if pics2d:                       # (2D) 버섯 그림 + 3D는 그림자 대역 (빛버섯은 원래 그림자 없음 → 숨김)
+		var pic := Flora2D.pic_for(String(ART_SHROOM.get(s["kind"], "")))
+		if Flora2D.has(pic):
+			Flora2D.proxify(root)
+			root.add_child(Flora2D.card(pic, 1.0, int(s["id"]) % 2 == 1))
 	return nd
 
 
@@ -549,6 +560,8 @@ func _sync_dands(f: Flora, dt: float, yaw: float) -> void:
 			nd["big"] = big
 			leaves.mesh = rosette_mesh(big)
 			leaves.material_override = vc_for(leaves.mesh)
+			if nd.has("rosette"):
+				Flora2D.set_pic(nd["rosette"], "dand_rosette" if big else "dand_rosette_small")
 		var shape := ""
 		match st:
 			"flower", "closed", "puff":
@@ -563,6 +576,8 @@ func _sync_dands(f: Flora, dt: float, yaw: float) -> void:
 			if shape != "":
 				head.mesh = dand_mesh(shape)
 				head.material_override = vc_for(head.mesh)
+				if nd.has("headpic"):
+					Flora2D.set_pic(nd["headpic"], "dand_" + shape, 2)
 			if shape == "flower" or shape == "puff":
 				nd["grow"] = 0.5
 		# 피어남·부풂: 단계가 바뀌면 머리가 부드럽게 자람 · 솜털 공은 꽃씨가 줄면 작아짐 · 첫 꽃대는 쑥 올라옴
@@ -612,7 +627,16 @@ func _make_dand(d: Dictionary) -> Dictionary:
 	head.material_override = Toon.vc_mat()
 	head.visible = false
 	pivot.add_child(head)
-	return {"root": root, "leaves": leaves, "stem": stem, "head": head, "pivot": pivot, "head_root": hr, "st": "?", "big": d["st"] != "sprout", "grow": 1.0}
+	var out := {"root": root, "leaves": leaves, "stem": stem, "head": head, "pivot": pivot, "head_root": hr, "st": "?", "big": d["st"] != "sprout", "grow": 1.0}
+	if pics2d:                       # (2D) 잎 방석·줄기·머리 그림 — 3D는 그림자 대역, 그림 판은 각 노드의 자식 (보임·배율을 따름)
+		for g: GeometryInstance3D in [leaves, stem, head]:
+			g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY
+		out["rosette"] = Flora2D.card("dand_rosette" if d["st"] != "sprout" else "dand_rosette_small")
+		leaves.add_child(out["rosette"])
+		stem.add_child(Flora2D.card("dand_stem"))
+		out["headpic"] = Flora2D.card("dand_flower", 1.0, false, 0.0, 2)
+		head.add_child(out["headpic"])
+	return out
 
 
 ## 날리는 꽃씨: 5초 걸음 사이를 보간 + 살랑살랑 (화면만)
@@ -620,6 +644,7 @@ func _sync_seeds(f: Flora, yaw: float) -> void:
 	var mm := _seeds.multimesh
 	var n := mini(f.seeds.size(), mm.instance_count)
 	var u := clampf((f._sacc + alpha * Balance.WATCH_STEP) / Balance.SEED_TICK, 0.0, 1.0)
+	var buf := PackedFloat32Array()
 	for i in n:
 		var s: Dictionary = f.seeds[i]
 		var x := lerpf(float(s["px"]), float(s["x"]), u)
@@ -630,8 +655,15 @@ func _sync_seeds(f: Flora, yaw: float) -> void:
 		z += cos(ph * 0.7) * 0.18
 		hgt += sin(ph * 1.3) * 0.08
 		# 카메라 쪽으로 옆모습이 보이게 기울임 (위에서 보면 우산이 톱니 원판처럼 보임) + 살랑
+		if pics2d:
+			buf.append_array(Flora2D.inst_floats("dand_seed", Vector3(x, _gy(x, z) + maxf(0.05, hgt), z), 1.0, false, ph))
+			continue
 		var b := Basis(Vector3.UP, yaw + sin(ph * 0.5) * 0.6) * Basis(Vector3(1, 0, 0), -0.85 + sin(ph * 1.1) * 0.25)
 		mm.set_instance_transform(i, Transform3D(b, Vector3(x, _gy(x, z) + maxf(0.05, hgt), z)))
+	if pics2d:
+		if n > 0:
+			buf.resize(mm.instance_count * 20)
+			mm.buffer = buf
 	mm.visible_instance_count = n
 
 

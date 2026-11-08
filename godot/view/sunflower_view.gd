@@ -52,6 +52,14 @@ static var _band_tex: Texture2D
 static var _leaf_tex: Texture2D
 var _mats := {}                   # "stalk" · "leaf" · "head" · "head_dry" → ShaderMaterial (이 화면 것 — 확대 따라 값이 바뀜)
 var _blend := -1.0                # 1 = 마을 시점, 0 = 세상 보기
+## (2D 그림책 — view/flora2d, RENDERING.md 확정 2026-11-08) 해바라기 = 그림: 세상 보기는 줄기·잎 그림 + 꽃판 그림 (등불을 보는 방향마다
+## 다섯 장 sf_head_0/45/90/135/180 — 반대쪽은 뒤집어서, 가을 숙인 꽃판도 다섯 장), 마을 시점은 줄기 기둥 그림을 위로 늘여(되풀이) 화면 위로
+## 빠져나가게 — 엷어지는 반투명 없이 불투명 (사용자 2026-11-08: 반투명이 싫음). 3D 몸은 원래 그림자를 드리우지 않으므로 숨김 (그림자는 데칼 그대로).
+const HEAD_STEPS := [0, 45, 90, 135, 180]
+const COLUMN_H := 400.0           # 마을 시점 기둥 그림 높이 (모델 칸 — ×SCALE = 240칸, 어떤 확대에서도 화면 위 밖)
+const COLUMN_TILE := Vector2(0.12, 0.55)   # 기둥 그림에서 되풀이할 띠 (위에서부터 v)
+var pics2d := false
+const SHOW_COLUMN := false
 static var _dust_mat: StandardMaterial3D
 
 
@@ -281,6 +289,7 @@ func _lay(dc: Decal, a: Vector2, b: Vector2, w: float) -> void:
 
 
 func _build() -> void:
+	pics2d = Flora2D.enabled()
 	for f: Dictionary in _flowers:
 		(f["root"] as Node3D).queue_free()
 		(f["shadow"] as Node3D).queue_free()
@@ -324,12 +333,29 @@ func _build() -> void:
 		var lv: Array = []
 		for k in LEAVES.size():
 			lv.append(_decal(1.0, leaf_tex(), SF_SHADOW))
+		var pc := {}
+		if pics2d:
+			near.visible = false
+			far.visible = false
+			pc["body"] = Flora2D.card("sf_stalk")
+			pc["column"] = Flora2D.card("sf_column")
+			var cm := Flora2D.material("sf_column").duplicate() as ShaderMaterial
+			cm.set_shader_parameter("tile_h", COLUMN_H)
+			cm.set_shader_parameter("tile", COLUMN_TILE)
+			(pc["column"] as MeshInstance3D).material_override = cm
+			(pc["column"] as MeshInstance3D).custom_aabb = AABB(Vector3(-60, -10, -60), Vector3(120, COLUMN_H * 1.2, 120))
+			pc["head"] = Flora2D.card("sf_head_0", 1.0, false, 0.0, 2)
+			for c: MeshInstance3D in pc.values():
+				c.layers = SF_LAYER
+				root.add_child(c)
 		_flowers.append({"root": root, "near": near, "far": far, "heads": heads, "id": int(sf["id"]), "leaf_mi": leaf_mi,
-			"band": _decal(1.0, band_tex(), SF_SHADOW), "leaves": lv, "shadow": _decal(1.0, ring_tex(), SF_SHADOW)})
+			"band": _decal(1.0, band_tex(), SF_SHADOW), "leaves": lv, "shadow": _decal(1.0, ring_tex(), SF_SHADOW), "pics": pc})
 	_apply_lod()
 
 
 func _apply_lod() -> void:
+	if pics2d:
+		return
 	for f: Dictionary in _flowers:
 		(f["near"] as Node3D).visible = not far_lod
 		(f["far"] as Node3D).visible = far_lod
@@ -351,7 +377,7 @@ func lod_check() -> void:
 
 
 func sync(_dt: float) -> void:
-	if _flowers.size() != ww.sunflowers.size():
+	if _flowers.size() != ww.sunflowers.size() or pics2d != Flora2D.enabled():
 		_build()
 	lod_check()
 	blend_check()
@@ -369,9 +395,40 @@ func sync(_dt: float) -> void:
 			var h: MeshInstance3D = f["heads"][pn]
 			h.visible = pn.begins_with("head_dry") == dry and st != "grow" and _blend < 0.3   # 마을 시점: 꽃판은 화면 위 밖
 			h.rotation = Vector3(0.0, yaw, 0.0)     # 원점 = 줄기 끝 굽이 → 목째 돈다. 가을 숙임은 head_dry 모델에 (얼굴이 땅 쪽)
+		if pics2d:
+			_sync_pics(f, st, dry, yaw)
 		_sync_shadow(f, sf, t, d, dry)
 	_sync_seeds(t)
 	_sync_cotton()
+
+
+## (2D) 마을 시점 = 기둥 그림만 · 세상 보기 = 줄기·잎 그림 + 고개 방향 꽃판 그림 (카메라에 대한 방위 → 다섯 장 + 뒤집기)
+func _sync_pics(f: Dictionary, st: String, dry: bool, yaw: float) -> void:
+	var pc: Dictionary = f["pics"]
+	var village := _blend >= 0.3
+	# 마을 시점: 기둥 그림은 숨김 — 화면 끝에서 끝까지 납작한 초록 띠로만 읽혀 (2026-11-09 메인 검토 "그림 오류 같음") 줄기는 땅 위
+	# 그림자(데칼)로만 보인다 (3D 때 "마을에선 줄기와 그림자만"의 그림자 쪽). SHOW_COLUMN = true면 되살림
+	(pc["column"] as Node3D).visible = village and SHOW_COLUMN
+	(pc["body"] as Node3D).visible = not village
+	var head: MeshInstance3D = pc["head"]
+	head.visible = not village and st != "grow"
+	if not head.visible:
+		return
+	var rel := wrapf(rad_to_deg(yaw - cam_yaw()), -180.0, 180.0)
+	var step: int = HEAD_STEPS[clampi(int(roundf(absf(rel) / 45.0)), 0, HEAD_STEPS.size() - 1)]
+	var pic := "%s_%d" % ["sf_dry" if dry else "sf_head", step]
+	Flora2D.set_pic(head, pic, 2)
+	head.set_instance_shader_parameter("flip", -1.0 if rel < 0.0 else 1.0)
+
+
+## 지금 카메라의 방위 (카메라가 서 있는 쪽 — 모델 +z가 카메라를 보면 0)
+func cam_yaw() -> float:
+	var vp := get_viewport()
+	var cam := vp.get_camera_3d() if vp != null else null
+	if cam == null:
+		return deg_to_rad(JarCamera.BASE_YAW_DEG)
+	var b := cam.global_transform.basis.z
+	return atan2(b.x, b.z)
 
 
 ## 꽃판·줄기·잎 그림자 — 높이 h의 점은 줄기에서 −d × SF_SHADOW_OFF × h / 꽃판 높이 (F1과 같은 빛)
@@ -412,6 +469,8 @@ func _sync_seeds(t: float) -> void:
 		var e: Dictionary = _seeds.get(id, {})
 		if e.is_empty():
 			var n := Art.instance(self, "flora/sunflower_seed", Transform3D(Basis(Vector3.UP, float(s.get("yaw", 0.0))).scaled(Vector3.ONE * SEED_SCALE), Vector3(x, gy(x, z), z)))
+			if pics2d:
+				Flora2D.dress(n, "flora/sunflower_seed")
 			var dc := _decal(1.0)
 			var dust := Node3D.new()
 			add_child(dust)
@@ -480,6 +539,7 @@ func _sync_cotton() -> void:
 	var key := ""
 	for b: Dictionary in ww.cotton:
 		key += "%d%s," % [int(b["id"]), "b" if b.get("boll", false) else ""]
+	key += str(pics2d)
 	if key == _cotton_key:
 		return
 	_cotton_key = key
@@ -496,3 +556,6 @@ func _sync_cotton() -> void:
 		_part(n, "flora/cotton_bush", "bush")
 		if b.get("boll", false):
 			_part(n, "flora/cotton_bush", "boll")
+		if pics2d:                    # (2D) 목화 그림 (솜이 달렸나) + 3D는 그림자 대역
+			Flora2D.proxify(n)
+			n.add_child(Flora2D.card("cotton_boll" if b.get("boll", false) else "cotton_bush"))
