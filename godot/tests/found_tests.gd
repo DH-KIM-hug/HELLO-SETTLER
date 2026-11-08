@@ -1,4 +1,4 @@
-## 떨어진 물건 — 신의 물건 (GAME_DESIGN 3.0 표 · STORY 1 2026-11-08 · ROADMAP E3-16, sim/found_objects.gd).
+## 떨어진 물건 — 하늘이 내린 물건 (GAME_DESIGN 3.0 표 · STORY 1 2026-11-08 · ROADMAP E3-16, sim/found_objects.gd).
 ## tests/run.gd가 부름 (`-- found`).
 extends RefCounted
 
@@ -10,8 +10,7 @@ const D := 86400.0
 const BAD_WORDS := ["게임", "앱", "플레이어", "휴대폰", "키트", "상자", "구매", "상점", "거인", "하늘의 분"]
 ## 깨닫기 전에는 큰 존재·숭배도 없다 ('하늘에서 떨어졌다'는 경이는 됨 — 누가 줬다는 말은 없음)
 const BAD_BEFORE := ["{w", "기도", "제단", "님", "께서", "주신", "내리신", "선물"]
-## 바깥 이름 — 주민은 무엇인지 모른다 (STORY 1 2026-11-08: 신의 물건)
-const REAL_WORDS := ["단추", "구슬", "병뚜껑", "뚜껑", "설탕", "성냥"]
+## 물건 이름(단추·설탕…)은 써도 된다 — 주민은 무엇인지 안다, 놀라운 건 크기 (STORY 1 2026-11-08 다시)
 
 
 func _init(r: SceneTree, q: bool) -> void:
@@ -30,7 +29,7 @@ func all() -> void:
 
 
 func _clean(text: String, before := false) -> bool:
-	var bad: Array = BAD_WORDS + REAL_WORDS + (BAD_BEFORE if before else [])
+	var bad: Array = BAD_WORDS + (BAD_BEFORE if before else [])
 	for w: String in bad:
 		if text.contains(w):
 			return false
@@ -121,7 +120,7 @@ func test_discover() -> void:
 	check(v.book.size() == b0 + 1 and String(v.book[-1]["text"]).contains(p.name), "연대기 한 줄 (찾은 사람 이름)")
 	var want := WatcherName.fill(v, FoundObjects.SAY[o["kind"]][0 if v.aware else 1])
 	check(p.say == want and p.say_t > 0.0, "말풍선 하나: " + p.say)
-	check(String(v.book[-1]["text"]).contains(FoundObjects.DIVINE[o["kind"]]), "연대기는 신의 물건 이름으로 (%s)" % FoundObjects.DIVINE[o["kind"]])
+	check(String(v.book[-1]["text"]).contains(FoundObjects.DIVINE[o["kind"]]), "연대기는 하늘 이름으로 (%s)" % FoundObjects.DIVINE[o["kind"]])
 	FoundObjects.hourly(v)
 	check(v.book.size() == b0 + 1, "다시 찾지 않음")
 
@@ -277,9 +276,9 @@ func test_lines() -> void:
 				if not _clean(t, before):
 					ok = false
 					bad = t
-	for t: String in FoundObjects.USE_LINE.values() + [FoundObjects.SUGAR_GONE_LINE, FoundObjects.SUGAR_MELT_LINE, FoundObjects.FAMILIAR_SAY, FoundObjects.FAMILIAR_LINE]:
+	for t: String in FoundObjects.USE_LINE.values() + [FoundObjects.SUGAR_GONE_LINE, FoundObjects.SUGAR_MELT_LINE] + FoundObjects.FAMILIAR_SAY.values() + FoundObjects.FAMILIAR_LINE.values():
 		all_lines.append(t)
-		if not _clean(t, true):             # 쓰임·녹음·낯익음은 깨달음 앞뒤 어느 때나 나옴
+		if not _clean(t, true):             # 쓰임·녹음·크기 물음은 깨달음 앞뒤 어느 때나 나옴
 			ok = false
 			bad = t
 	all_lines.append(FoundObjects.ALTAR_LINE)
@@ -287,20 +286,17 @@ func test_lines() -> void:
 		ok = false
 		bad = FoundObjects.ALTAR_LINE
 	check(ok, "주민 말·연대기에 금지어 없음 · 깨닫기 전 줄엔 큰 존재·숭배 없음 " + bad)
-	var real := true
-	for t: String in all_lines:
-		for w: String in REAL_WORDS:
-			real = real and not t.contains(w)
-	check(real, "주민 말·연대기에 바깥 이름 없음 (단추·구슬·병뚜껑·설탕·성냥 — 신의 물건 이름만)")
 	var named := true
 	var gift := true
 	for k: String in FoundObjects.FOUND_LINE:
 		var nm: String = FoundObjects.DIVINE[k]
-		named = named and String(FoundObjects.FOUND_LINE[k][0]).contains(nm) and String(FoundObjects.FOUND_LINE[k][1]).contains(nm)
+		named = named and nm.begins_with("하늘 ") and String(FoundObjects.FOUND_LINE[k][0]).contains(nm) and String(FoundObjects.FOUND_LINE[k][1]).contains(nm)
+		named = named and String(FoundObjects.FAMILIAR_LINE[k]).contains(nm) and String(FoundObjects.FAMILIAR_SAY[k]).contains("얼마나 컸을까")
 		gift = gift and String(FoundObjects.FOUND_LINE[k][0]).contains("{w") and String(FoundObjects.SAY[k][0]).contains("{w")
-	check(named, "찾은 줄마다 신의 물건 이름을 붙임 (하늘 방패·빛 알·물 그릇·단 돌·불 막대)")
+	check(named, "찾은 줄·크기 물음마다 하늘 이름을 붙임 (하늘 단추·구슬·뚜껑·설탕·성냥)")
 	check(gift, "깨달은 뒤 줄은 마을이 부르는 말의 선물로")
-	check(FoundObjects.DIVINE.keys() == FoundObjects.KINDS and FoundObjects.NAMES.keys() == FoundObjects.KINDS, "종류마다 바깥 이름(거인 쪽)과 신의 물건 이름")
+	check(FoundObjects.DIVINE.keys() == FoundObjects.KINDS and FoundObjects.NAMES.keys() == FoundObjects.KINDS
+		and FoundObjects.FAMILIAR_SAY.keys() == FoundObjects.KINDS and FoundObjects.FAMILIAR_LINE.keys() == FoundObjects.KINDS, "종류마다 물건 이름·하늘 이름·크기 물음")
 
 
 ## 깨달음 앞뒤로 갈라 씀: 깨닫기 전엔 경이 줄, 깨달은 뒤엔 부르는 말이 채워진 줄
@@ -312,7 +308,7 @@ func test_aware_lines() -> void:
 	var o := _rec(v, "button")
 	FoundObjects.discover(v, o, p)
 	var t0 := String(v.book[-1]["text"])
-	check(p.say == FoundObjects.SAY["button"][1] and _clean(t0, true) and t0.contains("하늘 방패"), "깨닫기 전: 경이만 — " + t0)
+	check(p.say == FoundObjects.SAY["button"][1] and _clean(t0, true) and t0.contains("하늘 단추") and t0.contains("크기"), "깨닫기 전: 크기에 놀람만 — " + t0)
 	var v2 := Village.new_prototype(31)
 	_noon(v2)
 	v2.aware = true
@@ -324,7 +320,7 @@ func test_aware_lines() -> void:
 	check(t1.contains(w) and not t1.contains("{w") and p2.say.contains(w) and _clean(t1), "깨달은 뒤: %s의 선물 — %s" % [w, t1])
 
 
-## 낯익음 초암시: 병마다 많아야 한 번 · 결정론 · 다른 난수 흐름을 쓰지 않음 · 아이가 곁에 없으면 없음
+## 크기 물음 초암시: 병마다 많아야 한 번 · 결정론 · 다른 난수 흐름을 쓰지 않음 · 아이가 곁에 없으면 없음
 func _familiar_run(seed_v: int, kid_near: bool, days: int) -> Array:
 	var v := Village.new_prototype(seed_v)
 	v.found.clear()
@@ -359,7 +355,7 @@ func _familiar_run(seed_v: int, kid_near: bool, days: int) -> Array:
 		kid.y = at.y
 		kid.say = ""
 		FoundObjects.hourly(v)
-		if v.people.any(func(q: Resident) -> bool: return q.say == FoundObjects.FAMILIAR_SAY):
+		if v.people.any(func(q: Resident) -> bool: return q.say == FoundObjects.FAMILIAR_SAY["button"]):
 			for q in v.people:
 				q.say = ""
 			hits += 1
@@ -367,7 +363,7 @@ func _familiar_run(seed_v: int, kid_near: bool, days: int) -> Array:
 				first = d
 	var lines: Array = []
 	for e in v.book.slice(b0):
-		if String(e["text"]).contains("낯익"):
+		if String(e["text"]).contains("얼마나 컸을까"):
 			lines.append(String(e["text"]))
 	var same := states == [v.rng.state, v.health_rng.state, v.gene_rng.state, v.econ_rng.state, v.social_rng.state, v.pop_rng.state, v.disc_rng.state]
 	return [hits, first, lines, same, bool(o.get("familiar", false))]
@@ -378,7 +374,7 @@ func test_familiar() -> void:
 	var a := _familiar_run(41, true, days)
 	var b := _familiar_run(41, true, days)
 	check(int(a[0]) == 1 and a[2].size() == 1 and bool(a[4]), "아이가 곁에 있으면 %d일 안에 꼭 한 번만 (%d번 · %d일째)" % [days, int(a[0]), int(a[1])])
-	check(a[2].size() == 1 and a[2][0] == "한 아이가 하늘 방패를 보고 왠지 낯익다고 했다. 아무도 까닭을 몰랐다.", "연대기: %s" % str(a[2]))
+	check(a[2].size() == 1 and a[2][0] == "한 아이가 하늘 단추를 올려다보며, 이걸 달던 옷은 얼마나 컸을까 물었다. 아무도 대답하지 못했다.", "연대기: %s" % str(a[2]))
 	check(int(a[1]) >= 3, "드묾 — 첫날부터는 아님 (%d일째)" % int(a[1]))
 	check(var_to_str(a) == var_to_str(b), "결정론: 같은 씨앗 → 같은 날")
 	check(bool(a[3]), "마을 난수 흐름을 쓰지 않음 (시드 해시)")
