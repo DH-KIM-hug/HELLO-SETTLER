@@ -280,7 +280,7 @@ func _state_sig() -> String:
 		0:
 			return "0|%d|%d" % [Chronicle.line_count(vs), limit]
 		1:
-			return "1|%d" % (village.myth.size() + mini(village.book.size(), 12))
+			return "1|%d|%d" % [village.myth.size() + mini(village.book.size(), 12), jar_notes().size()]
 		2:
 			return "2|%d|%d|%d|%d" % [village.people.size(), village.dead.size(), village.departed.size(), int(village.t / Balance.DAY * 10.0)]
 		3:
@@ -442,6 +442,7 @@ func _fill_myth() -> void:
 	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.3))
 	if lines.is_empty():
 		_soft("아직 아무도 이 땅의 처음을 이야기하지 않았어요.\n언젠가 노인들이 아이들에게 들려줄 거예요.")
+		_fill_jar()
 		return
 	for i in lines.size():
 		var l := _hand(body, lines[i], UiTheme.SIZE_HAND + 2)
@@ -450,7 +451,75 @@ func _fill_myth() -> void:
 			var orn := _label(body, "·", "Small")
 			orn.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 			orn.add_theme_color_override("font_color", UiTheme.PARCHMENT_EDGE)
+	_fill_jar()
 
+
+# ───────────────────────── 이 병 (A28b — 별지기의 수첩) ─────────────────────────
+## 핵 크기 = 병의 따뜻함 (OPENING v4.0-6): '조용한 별 / 따뜻한 별 / 뜨거운 별' + 살면서 처음 눈에 띈 병의 성질 (Village.jar_notes) — 손글씨, 숫자 없이.
+const STAR_WORDS := ["조용한 별", "따뜻한 별", "뜨거운 별"]
+
+
+## 같은 병의 무리가 적은 수첩 한 줄 (적힌 차례대로 — 같은 줄은 한 번만)
+func jar_notes() -> Array:
+	var out: Array = []
+	var seen := {}
+	for q: Village in villages():
+		for n: Dictionary in q.jar_notes:
+			var id := String(n.get("id", ""))
+			if seen.has(id):
+				continue
+			seen[id] = true
+			out.append(n)
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a.get("t", 0.0)) < float(b.get("t", 0.0)))
+	return out
+
+
+func star_word() -> String:
+	return STAR_WORDS[clampi(CoreWarmth.core_of(village), 0, 2)] if village != null else STAR_WORDS[1]
+
+
+func _fill_jar() -> void:
+	var sp := Control.new()
+	sp.custom_minimum_size.y = 18
+	sp.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	body.add_child(sp)
+	_rule(body)
+	var cap := _label(body, "— 이 병 —", "Small")
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.3))
+	var star := _hand(body, star_word(), UiTheme.SIZE_HAND + 4)
+	star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var notes := jar_notes()
+	var page := PanelContainer.new()                 # 수첩 한 장 (줄 공책 — NotebookNote와 같은 종이·왼쪽 묶음)
+	page.name = "JarNotes"
+	page.mouse_filter = Control.MOUSE_FILTER_PASS
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color("fdf6dc")
+	sb.border_color = UiTheme.PARCHMENT_EDGE
+	sb.set_border_width_all(1)
+	sb.border_width_left = 4
+	sb.set_corner_radius_all(4)
+	sb.content_margin_left = 14
+	sb.content_margin_right = 10
+	sb.content_margin_top = 8
+	sb.content_margin_bottom = 10
+	page.add_theme_stylebox_override("panel", sb)
+	body.add_child(page)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 4)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	page.add_child(col)
+	var head := _label(col, "별지기의 수첩", "Small")
+	head.add_theme_font_override("font", UiTheme.font(true))
+	head.add_theme_color_override("font_color", UiTheme.INK_BROWN)
+	if notes.is_empty():
+		var l := _hand(col, "아직 이 병만의 버릇은 모르겠다. 지켜보다 보면 알게 되겠지.")
+		l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+		return
+	for n: Dictionary in notes:
+		var l := _hand(col, "· " + String(n.get("text", "")))
+		l.add_theme_constant_override("line_spacing", -2)
+		_rule(col)
 
 # ───────────────────────── 사람들 ─────────────────────────
 func _fill_people() -> void:

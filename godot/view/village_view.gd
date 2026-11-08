@@ -55,6 +55,8 @@ var _manna_key := ""
 var _fire: Campfire             # [모닥불] view/campfire.gd — 돌 고리·장작·의자 + 불꽃 셰이더·불티·연기·불빛
 var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.5 — view/altar_view.gd): 둥근 돌 단 · 짓는 모습 · 제물 더미 + 빛
 var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
+var tremor_fx: TremorFx         # (A28b) 땅 흔들림 — 먼지·달그락·깨진 항아리 (view/tremor_fx.gd)
+var fireflies: Fireflies        # (E3-17) 여름밤 반딧불이 (view/fireflies.gd)
 var _props: Node3D
 var _prop_key := ""
 var _lily_node: Node3D          # 수련·연꽃 (따로 — 수면이 오르내리면 높이만 다시)
@@ -235,6 +237,12 @@ func sync(dt: float, force := false) -> void:
 	if altar_view != null:
 		altar_view.sync(dt)
 		manna_fx.sync(dt)
+	if tremor_fx != null:
+		tremor_fx.sync(dt)
+		if _yard != null:
+			_yard.position = tremor_fx.wobble()
+	if fireflies != null:
+		fireflies.sync(dt)
 
 
 ## (P1 성능) 꽃숲 묶음: 확대에 따라 멀리 덩이 · 화면 밖 자르기 (view/flora_batch.gd)
@@ -1977,6 +1985,10 @@ func _build_fire() -> void:
 	add_child(altar_view)
 	manna_fx = MannaFx.new(v, terrain)
 	add_child(manna_fx)
+	tremor_fx = TremorFx.new(v, self)
+	add_child(tremor_fx)
+	fireflies = Fireflies.new(v, self)
+	add_child(fireflies)
 
 
 func _animate_fire() -> void:

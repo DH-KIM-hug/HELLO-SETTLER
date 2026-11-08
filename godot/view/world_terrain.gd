@@ -1003,6 +1003,7 @@ func _job_ground(job: Dictionary) -> void:
 	var clear: Array = job["clear"]
 	var rim: bool = job["rim"]
 	var slope_k := HS / (2.0 * s)
+	var mp := GroundLook.moss_params(_season_village())     # (A28b) 서늘한 별 — 이끼가 더 넓게
 	for a in range(M, qe - M):
 		var si := b * qe + a
 		var k := kk[si]
@@ -1019,7 +1020,7 @@ func _job_ground(job: Dictionary) -> void:
 		# 물가 거리는 표본 단위 그대로 (LOD 2·4·8이면 물가 띠가 표본 하나 폭 — 반쯤 축소에서도 물가가 보이게).
 		# 얕은 물(습지)은 고운 칸에서만 — 거친 칸(8×8)의 수면은 칸마다 하나라 습지가 계단 모양 덩어리가 됨 (습기로만 진흙)
 		var w := GroundLook.cell_weights(ww.depth(k) if ww.is_fine_k(k) else 0.0, wv.z > 0.5, wv.y > 0.5, dist[si], _wet_w(k, x, y), ww.sun_at(x, y), slope, ww.h[k],
-			_forest_w(x, y, clear), float(_plots_w.get(k, 0.0)), float(_rocky.get(k, 0.0)), pool)
+			_forest_w(x, y, clear), float(_plots_w.get(k, 0.0)), float(_rocky.get(k, 0.0)), pool, mp)
 		ga[si] = w[0]
 		gb[si] = w[1]
 	job["row"] = b + 1
