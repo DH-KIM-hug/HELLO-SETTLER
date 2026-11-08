@@ -132,19 +132,16 @@ static func _part(parent: Node3D, model: String, pn: String, giant := false) -> 
 	return mi
 
 
-## 줄기·잎·꽃판 재질: 세상 높이 FADE_FROM 위로 디더로 엷어지고 (선은 화면 외곽선 — 아트 바이블 겹 2), 마을 시점에선 CUT 위로 사라짐.
+## 줄기·잎·꽃판 재질: 세상 높이 FADE_FROM 위로 반투명하게 엷어지고 (선은 화면 외곽선 — 아트 바이블 겹 2), 마을 시점에선 CUT 위로 사라짐.
 ## 셰이더 높이는 모델 칸이라 ÷SCALE. y_off = 부품 원점의 모델 높이 (꽃판).
 func fade_mat(kind: String, y_off := 0.0) -> ShaderMaterial:
 	if _mats.has(kind):
 		return _mats[kind]
-	var m := ShaderMaterial.new()
-	m.shader = load("res://render/toon_fade.gdshader")
-	Toon._light(m)
-	m.set_shader_parameter("view_fill", Style.VIEW_FILL)
-	m.set_shader_parameter("y_offset", y_off)
+	var m := ToonFade.make()                          # 불투명 아랫부분 + 반투명 윗부분 (render/toon_fade.gd)
+	ToonFade.set_param(m, &"y_offset", y_off)
 	var stalk := kind == "stalk"                      # 잎·꽃판은 높이 엷어짐 없음 (끊기만)
-	m.set_shader_parameter("fade_from", FADE_FROM / SCALE if stalk else 100000.0)
-	m.set_shader_parameter("fade_to", FADE_TO / SCALE if stalk else 100001.0)
+	ToonFade.set_param(m, &"fade_from", FADE_FROM / SCALE if stalk else 100000.0)
+	ToonFade.set_param(m, &"fade_to", FADE_TO / SCALE if stalk else 100001.0)
 	_mats[kind] = m
 	_apply_blend(m, kind)
 	return m
@@ -158,19 +155,19 @@ func _apply_blend(m: ShaderMaterial, kind: String) -> void:
 	var cf := CUT_OFF
 	var band := 1.0
 	if kind == "stalk":
-		m.set_shader_parameter("min_alpha", lerpf(1.0, FADE_MIN, grow_k))
-		m.set_shader_parameter("stretch_from", STRETCH_FROM / SCALE)
-		m.set_shader_parameter("stretch", lerpf(1.0, STRETCH, up_k))
+		ToonFade.set_param(m, &"min_alpha", lerpf(1.0, FADE_MIN, grow_k))
+		ToonFade.set_param(m, &"stretch_from", STRETCH_FROM / SCALE)
+		ToonFade.set_param(m, &"stretch", lerpf(1.0, STRETCH, up_k))
 	elif kind == "leaf":
-		m.set_shader_parameter("min_alpha", 1.0)    # 잎은 디더하지 않음 — 온전히 보이거나 숨거나
+		ToonFade.set_param(m, &"min_alpha", 1.0)    # 잎은 엷어지지 않음 — 온전히 보이거나 숨거나
 		cf = lerpf(CUT_OFF, LEAF_CUT, head_k)
 		band = 0.6
 	else:
-		m.set_shader_parameter("min_alpha", 1.0)
+		ToonFade.set_param(m, &"min_alpha", 1.0)
 		cf = lerpf(CUT_OFF, HEAD_CUT, head_k)
 		band = 14.0
-	m.set_shader_parameter("cut_from", cf / SCALE)
-	m.set_shader_parameter("cut_to", (cf + band) / SCALE)
+	ToonFade.set_param(m, &"cut_from", cf / SCALE)
+	ToonFade.set_param(m, &"cut_to", (cf + band) / SCALE)
 
 
 ## 마을 시점 ↔ 세상 보기 (ppu VILLAGE_PPU ~ WORLD_PPU 사이를 부드럽게). 1 = 마을 시점.

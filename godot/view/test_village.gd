@@ -467,6 +467,7 @@ func update_night() -> void:
 	if clock.skipping:
 		night = minf(night, 1.0 - smoothstep(0.45, 1.0, clock.skip_progress))
 	post_mat.set_shader_parameter("night_amount", night)
+	ToonFade.set_night(night)          # 엷어지는 윗부분 (반투명 — 화면 셰이더 뒤)
 	Campfire.apply_glow(post_mat, night)   # [모닥불] 불빛 웅덩이 (view/campfire.gd)
 	glass.set_night(night)
 	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
