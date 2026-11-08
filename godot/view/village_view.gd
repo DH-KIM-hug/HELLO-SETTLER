@@ -1533,6 +1533,23 @@ func _world_forest(p: Vector2, n: float, list: Array[Dictionary]) -> float:
 	return g
 
 
+## (꽃 군락) 꽃숲 자리 성질 = (젖음 0~1, 숲 짙기 0~1) — 지금 좌표 p. dense < 0이면 forest_at으로 읽음 (FloraLook.clump_at)
+func flora_site(p: Vector2, dense := -1.0) -> Vector2:
+	var w := v.water
+	var wet := 0.0
+	if w.inside(p.x, p.y, 0.0):
+		var k := w.idx(p.x, p.y)
+		wet = w.wet_k(k)
+		if w.is_lake(k) or w.is_river(k):
+			wet = 1.0
+	return Vector2(wet, forest_at(p) if dense < 0.0 else dense)
+
+
+## (꽃 군락) 얼룩 자리 씨앗 — 넓은 세상은 세상 씨앗, 소형 병은 고정 (병마다 같은 자리)
+func flora_seed() -> int:
+	return (v.water as WorldWater).seed_v if v.water is WorldWater else 20261105
+
+
 ## 장식 격자 (처음 방향 좌표) — 마을 중심 v.center 둘레 v.view_r (6단계: 소형 병은 (0, 0) 둘레 32칸 그대로)
 func _grid_range(step: float) -> Rect2i:
 	var n := int(v.view_r / step) + 1
@@ -1617,7 +1634,7 @@ func _sync_trees() -> void:
 		match String(tr["s"]):
 			"tree":
 				var o := _to_orig(Vector2(x, z))
-				c = FloraLook.clump(season, _hash(o.x, o.y, 11.0), _hash(o.y, o.x, 12.0))
+				c = FloraLook.clump_at(season, o, _hash(o.x, o.y, 11.0), _hash(o.y, o.x, 12.0), flora_site(Vector2(x, z)), flora_seed())
 				n_flora += 1
 			"stump":
 				c = FloraLook.twig(h)
@@ -1731,7 +1748,7 @@ func _decor_forest(groups: Dictionary, sim_pts: Array[Vector2]) -> void:
 							near = true
 			if near:
 				continue
-			var c := FloraLook.clump(season, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0))
+			var c := FloraLook.clump_at(season, p0, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), flora_site(p, f), flora_seed())
 			_put(groups, c[0], p.x, p.y, float(c[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 			n_decor_trees += 1
 
@@ -2062,7 +2079,7 @@ func _sync_far() -> void:
 					var k := ww.idx(p.x, p.y)
 					if ww.depth(k) > 0.002 or ww.is_river(k) or ww.salt_k(k) > 0.0015 or GreatTrees.blocks(ww, p.x, p.y, 1.0):
 						continue
-					var fc := FloraLook.clump(season, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), true)
+					var fc := FloraLook.clump_at(season, p, _hash(gi, gj, 4.0), _hash(gi, gj, 5.0), Vector2(ww.wet_k(k), fd), flora_seed(), true)
 					_put(groups, fc[0], p.x, p.y, float(fc[1]) * TREE_SCALE, _hash(gi, gj, 6.0) * TAU)
 					n_far_trees += 1
 	_flush(_far, groups, FloraLook.NO_SHADOW)
