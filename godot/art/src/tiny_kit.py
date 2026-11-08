@@ -109,8 +109,8 @@ def stem(m, a, b, r, col=REED, node=REED_NODE, nodes=2, seg=6, group="body"):
           bottom_cap=shade(col, 1.15), group=group)
     for k in range(nodes):
         t = (k + 1) / (nodes + 1)
-        m.cyl(r * 1.18, r * 1.18, min(0.03, d.length * 0.05), pos=a + d * t, rot=rot, color=node, seg=max(4, seg - 1),
-              smooth=True, group=group)
+        m.cyl(r * 1.18, r * 1.18, min(0.03, d.length * 0.05), pos=a + d * t, rot=rot, color=node, seg=max(4, seg - 2),
+              smooth=True, group=group + "_nl" if group == "body" else group)    # node band: hull only (P1 pass 4)
 
 
 def twig(m, a, b, r, col=TWIG, fork=0.0, seg=5, group="body"):
@@ -132,7 +132,7 @@ def twig(m, a, b, r, col=TWIG, fork=0.0, seg=5, group="body"):
 
 def lash(m, p, r=0.06, col=CORD):
     """Grass-twine lashing knot where stems meet."""
-    m.sphere(r, pos=p, scl=(1, 1, 0.7), color=col, seg=6, rings=3)
+    m.sphere(r, pos=p, scl=(1, 1, 0.7), color=col, seg=5, rings=3, group="body_nl")
 
 
 def cord(m, a, b, sag=0.0, r=0.012, col=CORD, n=4, group="body_nh"):
@@ -199,7 +199,7 @@ def reed_bundle(m, a, b, r, col=REED, node=REED_NODE, ties=2, n=5, seg=5, group=
         ang = k * math.tau / n
         off = q @ Vector((math.cos(ang) * r * 0.55, math.sin(ang) * r * 0.55, 0))
         sh = (1.0, 0.92, 1.06)[k % 3]
-        m.cyl(r * 0.42, r * 0.4, d.length * (0.97 + 0.03 * (k % 2)), pos=a + off, rot=rot, color=shade(col, sh), seg=5,
+        m.cyl(r * 0.42, r * 0.4, d.length * (0.97 + 0.03 * (k % 2)), pos=a + off, rot=rot, color=shade(col, sh), seg=4,
               smooth=True, cap=TWIG_PALE if col == REED else shade(col, 1.2), bottom_cap=shade(col, 1.2), group=group)
     for t in [(i + 1) / (ties + 1) for i in range(ties)]:
         m.cyl(r * 1.05, r * 1.05, min(0.06, d.length * 0.06), pos=a + d * t, rot=rot, color=CORD, seg=seg + 1, group=group)
@@ -237,7 +237,7 @@ def split_reeds(m, x, y, z, L, n=5, rz=0.0):
 
 # ───────────── stones ─────────────
 def pebble(m, x, y, z, rx, ry, rz_, col=PEBBLE, rot=0.0, seed=0, group="body"):
-    m.sphere(1.0, pos=(x, y, z), scl=(rx, ry, rz_), rot=(0, 0, rot), color=col, seg=7, rings=3, lumps=0.06,
+    m.sphere(1.0, pos=(x, y, z), scl=(rx, ry, rz_), rot=(0, 0, rot), color=col, seg=6, rings=3, lumps=0.06,
              seed=seed, group=group)
 
 
@@ -343,14 +343,66 @@ def woven_panel(m, x0, x1, y, z0, h, rows=5, cols=(WEAVE, WEAVE_DARK), stakes=Tr
     """Flat woven-grass screen along X at y: offset bands (basket checker) between twig stakes."""
     w = x1 - x0
     nc = max(2, int(w / 0.22))
-    for r in range(rows):
-        for c in range(nc):
-            m.box((w / nc + 0.002, th, h / rows + 0.002), pos=(x0 + (c + 0.5) * w / nc, y + (0.01 if (r + c) % 2 else -0.01),
-                  z0 + r * h / rows), color=cols[(r + c) % 2])
+    # (P1 perf pass 4) one slab; the basket checker is vertex colour on a flat grid (art bible 8.5: flat bands =
+    # edge loops + vertex colour) instead of one box per cell (12 tris + 12 crease-line quads each)
+    colfn = lambda f, i, j: cols[(i + j) % 2]                      # noqa: E731
+    grid_slab(m, x0, x1, y, z0, h, th, nc, rows, colfn, cols[1])
     if stakes:
         for k in range(nc + 1):
             stem(m, (x0 + k * w / nc, y, z0 - 0.02), (x0 + k * w / nc, y, z0 + h + 0.06), 0.02, TWIG, TWIG_DARK, 1, 4)
 
+
+def grid_slab(m, x0, x1, y, z0, h, th, nx, nz, colfn, edge_col, group="body", xs=None, back_grid=True, sheet=False):
+    """(P1 perf pass 4) Closed slab x0..x1 (along X), y +- th/2, z0..z0+h whose front (-Y) face (and back (+Y) face
+    unless back_grid=False) is an nx x nz grid of flat quads coloured colfn(None, iz, ix) - coplanar, so no crease
+    lines inside, only round the slab. xs = explicit column edges (overrides nx). Welded and closed, no sliver tris.
+    sheet=True: the front grid only (an open sheet in front of a backing box - its open border draws the outline)."""
+    bm = m._bm(group)
+    xs = xs or [x0 + (x1 - x0) * i / nx for i in range(nx + 1)]
+    nx = len(xs) - 1
+    zs = [z0 + h * k / nz for k in range(nz + 1)]
+    yb = y + th / 2
+    F = [[bm.verts.new((x, y - th / 2, z)) for x in xs] for z in zs]
+    faces = []
+
+    def q(vs, c):
+        f = bm.faces.new(vs)
+        m._finish(bm, [f], c, False)
+        faces.append(f)
+    for k in range(nz):
+        for i in range(nx):
+            q((F[k][i], F[k][i + 1], F[k + 1][i + 1], F[k + 1][i]), colfn(None, k, i))
+    if sheet:
+        bm.normal_update()
+        return faces
+    if back_grid:
+        B = [[bm.verts.new((x, yb, z)) for x in xs] for z in zs]
+        for k in range(nz):
+            for i in range(nx):
+                q((B[k][i + 1], B[k][i], B[k + 1][i], B[k + 1][i + 1]), colfn(None, k, nx - 1 - i))
+        for i in range(nx):
+            q((F[0][i + 1], F[0][i], B[0][i], B[0][i + 1]), edge_col)
+            q((F[nz][i], F[nz][i + 1], B[nz][i + 1], B[nz][i]), edge_col)
+        for k in range(nz):
+            q((F[k + 1][0], F[k][0], B[k][0], B[k + 1][0]), edge_col)
+            q((F[k][nx], F[k + 1][nx], B[k + 1][nx], B[k][nx]), edge_col)
+    else:
+        b00, b10 = bm.verts.new((xs[0], yb, zs[0])), bm.verts.new((xs[-1], yb, zs[0]))
+        b01, b11 = bm.verts.new((xs[0], yb, zs[-1])), bm.verts.new((xs[-1], yb, zs[-1]))
+        q((b10, b00, b01, b11), edge_col)
+        for i in range(nx):                     # bottom / top rims: fans to the back corners
+            q((F[0][i + 1], F[0][i], b00), edge_col)
+            q((F[nz][i], F[nz][i + 1], b01), edge_col)
+        q((F[0][nx], b00, b10), edge_col)
+        q((F[nz][nx], b11, b01), edge_col)
+        for k in range(nz):
+            q((F[k + 1][0], F[k][0], b00), edge_col)
+            q((F[k][nx], F[k + 1][nx], b10), edge_col)
+        q((F[nz][0], b00, b01), edge_col)
+        q((F[nz][nx], b10, b11), edge_col)
+    bmesh.ops.recalc_face_normals(bm, faces=faces)
+    bm.normal_update()
+    return faces
 
 def daub_box(m, W, D, H, col=DAUB, dark=DAUB_SHADE, posts=REED, z0=0.0, post_r=0.06, mid_posts=0):
     """Box walls of clay daub with reed corner posts (node rings) lashed at the top, a darker clay foot."""
@@ -383,23 +435,32 @@ def woven_box(m, W, D, H, cols=(WEAVE, WEAVE_DARK), z0=0.0, posts=REED, post_r=0
 
 
 def pebble_box(m, W, D, H, col=PEBBLE, dark=PEBBLE_DARK, z0=0.0, courses=5, seed=0):
-    """Box walls of stacked flat pebbles in offset courses (light/dark/warm stones), rounded corner stones."""
+    """Box walls of stacked flat pebbles in offset courses (light/dark/warm stones), rounded corner stones.
+    (P1 perf pass 4) one open sheet per course and side over the dark backing box: the stones are vertex-colour cells (half-cell offset every other
+    course), the course grooves stay real (crease lines between courses) - was one box per stone."""
     ch = H / courses
     for c in range(courses):
         z = z0 + c * ch
-        for (w, d, y0, x0, along) in ((W, D, -D / 2, 0, "x"), (W, D, D / 2, 0, "x"), (D, W, 0, -W / 2, "y"), (D, W, 0, W / 2, "y")):
+        for (w, y0, x0, along) in ((W, -D / 2, 0, "x"), (W, D / 2, 0, "x"), (D, 0, -W / 2, "y"), (D, 0, W / 2, "y")):
             n = max(2, int(w / 0.34))
-            off = 0.5 if c % 2 else 0.0
-            for k in range(n):
-                t0 = -w / 2 + (k + off) * w / n
-                t1 = min(w / 2, t0 + w / n)
-                if t1 - t0 < 0.05:
-                    continue
-                cc = (col, dark, shade(col, 1.06), PEBBLE_WARM)[(k * 3 + c * 5 + seed + (0 if along == "x" else 1)) % 4]
-                if along == "x":
-                    m.box((t1 - t0 - 0.015, 0.06, ch - 0.012), pos=((t0 + t1) / 2, y0, z), color=cc)
-                else:
-                    m.box((0.06, t1 - t0 - 0.015, ch - 0.012), pos=(x0, (t0 + t1) / 2, z), color=cc)
+            odd = c % 2
+
+            def cf(f, i, j, c=c, along=along):
+                k = j
+                return (col, dark, shade(col, 1.06), PEBBLE_WARM)[(k * 3 + c * 5 + seed + (0 if along == "x" else 1)) % 4]
+            xs = [-w / 2 + (k + 0.5) * w / n for k in range(n)] if odd else [-w / 2 + k * w / n for k in range(1, n)]
+            xs = [-w / 2] + [x for x in xs if -w / 2 + 0.05 < x < w / 2 - 0.05] + [w / 2]
+            yy = y0 if along == "x" else 0.0
+            if y0 > 0 or x0 > 0:                 # front grid outward on every side
+                fn = (lambda w=w, z=z, cf=cf, xs=xs: placed(m, lambda: grid_slab(m, 0, 0, 0, z, ch - 0.012, 0.06, 0, 1, cf, dark,
+                      xs=[-x for x in reversed(xs)], sheet=True), (0, 0, 0), math.pi))
+            else:
+                fn = (lambda w=w, z=z, cf=cf, xs=xs: grid_slab(m, 0, 0, 0, z, ch - 0.012, 0.06, 0, 1, cf, dark, xs=xs,
+                      sheet=True))
+            if along == "x":
+                placed(m, fn, (0, yy, 0), 0.0)
+            else:
+                placed(m, fn, (x0, 0, 0), -math.pi / 2)
     m.box((W - 0.04, D - 0.04, H), pos=(0, 0, z0), color=dark)
     for x in (-W / 2, W / 2):
         for y in (-D / 2, D / 2):
@@ -408,12 +469,13 @@ def pebble_box(m, W, D, H, col=PEBBLE, dark=PEBBLE_DARK, z0=0.0, courses=5, seed
 
 
 # ───────────── roofs ─────────────
-def _petal_solid(m, base, d, ln, w, nrm, col, under, curl=0.08, segs=3, group="body_nl"):
+def _petal_solid(m, base, d, ln, w, nrm, col, under, curl=0.08, segs=2, group="body_nl"):   # (P1 pass 4) segs 3 -> 2
     """One petal as a thin closed solid from base along d: narrow at the base, round-tipped."""
     d = d.normalized()
     pts = [base + d * ln * (i / segs) + nrm * (curl * ln * (i / segs) ** 2) for i in range(segs + 1)]
     shape = {2: (0.45, 1.0, 0.5), 3: (0.35, 0.92, 0.9, 0.42), 4: (0.3, 0.82, 1.0, 0.86, 0.36)}[segs]
-    leaf(m, pts, [w * s for s in shape], nrm, thick=max(0.03, w * 0.14), color=col, color_under=under, group=group)
+    leaf(m, pts, [w * s for s in shape], nrm, thick=max(0.03, w * 0.14), color=col, color_under=under, group=group,
+         keel=False)
 
 
 def petal_cone(m, cx, cy, z0, R, rise, col="pink", courses=4, per=11, over=0.28, flare=0.12, tip=True, seed=0,
@@ -508,12 +570,12 @@ def leaf_gable(m, W, D, H, rise, n=3, over=0.22, seed=0, cols=(LEAF_A, LEAF_B, L
                 x = -Wt / 2 + (k + (0.0 if row == 0 else 0.5)) * Wt / n
                 x = max(-Wt / 2 + 0.1, min(Wt / 2 - 0.1, x))
                 base = Vector((x, 0, H + rise)) + down * (ln * t0) + nrm * (0.035 + 0.035 * row)
-                pts = [base + down * L * (i / 5) + nrm * (0.05 * math.sin(math.pi * i / 5)) for i in range(6)]
+                pts = [base + down * L * (i / 3) + nrm * (0.05 * math.sin(math.pi * i / 3)) for i in range(4)]
                 wd = Wt / n * (0.62 if row == 0 else 0.7)
                 c = cols[(k * 2 + row + seed) % len(cols)]
-                leaf(m, pts, [wd * s for s in (0.3, 0.85, 1.0, 0.85, 0.45, 0.02)], nrm, thick=0.05, color=c,
-                     color_under=shade(c, 0.8))
-                tube(m, [p + nrm * 0.045 for p in pts[:5]], [0.02, 0.018, 0.015, 0.012, 0.008], seg=3,
+                leaf(m, pts, [wd * s for s in (0.3, 0.98, 0.72, 0.02)], nrm, thick=0.05, color=c,
+                     color_under=shade(c, 0.8), keel=False)
+                tube(m, [p + nrm * 0.045 for p in pts[:3]], [0.02, 0.016, 0.01], seg=3,
                      color=shade(c, 1.25), group="body_nh")
     m.cyl(0.08, 0.08, W + over * 1.6, pos=(-(W + over * 1.6) / 2, 0, H + rise + 0.04), rot=(0, math.pi / 2, 0),
           color=cols[1], seg=8, smooth=True, cap=LEAF_VEIN, bottom_cap=LEAF_VEIN, group="body_nl")
@@ -551,7 +613,7 @@ def bundle_gable(m, W, D, H, rise, col=WEAVE, dark=WEAVE_DARK, over=0.24, spacin
                 dark, ties=3, n=6, group="body_nl")
 
 
-def grass_cone(m, cx, cy, z0, R, rise, col=WEAVE, dark=WEAVE_DARK, over=0.28, ties=2, seg=18, knot=True):
+def grass_cone(m, cx, cy, z0, R, rise, col=WEAVE, dark=WEAVE_DARK, over=0.28, ties=2, seg=13, knot=True):
     """Cone roof of tied dry-grass bundles: ridged lathe (one ridge per bundle), cord tie bands, splayed top knot."""
     Re = R + over
     prof = [(Re + 0.02, -0.06), (Re, 0.0)]
@@ -743,7 +805,7 @@ def round_door(m, x, y, w=0.4, h=0.72, kind="leaf", col=LEAF_A, face=-1):
     a leaf curtain half drawn ('leaf'), a bark-scrap door ('bark') or a petal curtain ('petal' with col = hex)."""
     fy = face * 0.03
     m.box((w, 0.04, h - w / 2), pos=(x, y + fy * 0.5, 0.0), color=DOOR_DARK)
-    m.cyl(w / 2, w / 2, 0.04, pos=(x, y + fy * 0.5 - face * 0.02, h - w / 2), rot=(math.pi / 2, 0, 0), color=DOOR_DARK, seg=10)
+    m.cyl(w / 2, w / 2, 0.04, pos=(x, y + fy * 0.5 - face * 0.02, h - w / 2), rot=(math.pi / 2, 0, 0), color=DOOR_DARK, seg=8)
     # twig arch frame
     pts = [Vector((x - w / 2 - 0.03, y + fy, 0.0)), Vector((x - w / 2 - 0.03, y + fy, h - w / 2))]
     for k in range(1, 6):
@@ -755,7 +817,7 @@ def round_door(m, x, y, w=0.4, h=0.72, kind="leaf", col=LEAF_A, face=-1):
         m.box((w * 0.92, 0.05, h - w / 2), pos=(x, y + fy * 1.4, 0.0), color=BARK,
               colfn=lambda f: BARK_LIGHT if f.normal.y * face > 0.5 else BARK)
         m.cyl(w * 0.46, w * 0.46, 0.05, pos=(x, y + fy * 1.4 - face * 0.025, h - w / 2), rot=(math.pi / 2, 0, 0),
-              color=BARK_LIGHT, seg=10)
+              color=BARK_LIGHT, seg=8)
         for k in range(3):
             m.box((0.025, 0.02, h * 0.7), pos=(x - w * 0.25 + k * w * 0.25, y + fy * 2.2, 0.08), color=BARK_DARK)
         m.sphere(0.035, pos=(x + w * 0.3, y + fy * 2.5, h * 0.45), color=PEBBLE, seg=6, rings=3)
@@ -772,11 +834,18 @@ def round_door(m, x, y, w=0.4, h=0.72, kind="leaf", col=LEAF_A, face=-1):
 def round_window(m, x, y, z, r=0.15, face=-1, lit=True, cross=True):
     """Round window: twig ring, warm-lit pane, a twig cross."""
     fy = face * 0.03
-    m.cyl(r + 0.035, r + 0.035, 0.04, pos=(x, y + fy * 0.3, z), rot=(math.pi / 2, 0, 0), color=TWIG, seg=10)
-    m.cyl(r, r, 0.05, pos=(x, y + fy * 0.6, z), rot=(math.pi / 2, 0, 0), color=LIT if lit else DOOR_DARK, seg=10)
+    m.cyl(r + 0.035, r + 0.035, 0.04, pos=(x, y + fy * 0.3, z), rot=(math.pi / 2, 0, 0), color=TWIG, seg=8)
+    # (P1 pass 4) pane = one flat disc face where the old pane cylinder's front was (just proud of the twig ring).
+    # The old twig cross boxes sat behind that pane; only their crease lines (depth-biased) showed through as a dark
+    # cross -> now two flat dark bars just in front of the pane (no outline), same look for 4 tris instead of 24 + lines.
+    pane = [Vector((x + math.cos(i * math.tau / 8) * r, y + fy * 2.27, z + math.sin(i * math.tau / 8) * r)) for i in range(8)]
+    m.poly(pane if face < 0 else list(reversed(pane)), color=LIT if lit else DOOR_DARK, group="body_nl")
     if cross:
-        m.box((0.025, 0.03, 2 * r), pos=(x, y + fy * 1.4, z - r), color=TWIG_DARK)
-        m.box((2 * r, 0.03, 0.025), pos=(x, y + fy * 1.4, z - 0.012), color=TWIG_DARK)
+        yy = y + fy * 2.5
+        for (w, h) in ((0.03, 2 * r), (2 * r, 0.03)):
+            q = [Vector((x - w / 2, yy, z - h / 2)), Vector((x + w / 2, yy, z - h / 2)), Vector((x + w / 2, yy, z + h / 2)),
+                 Vector((x - w / 2, yy, z + h / 2))]
+            m.poly(q if face < 0 else list(reversed(q)), color=shade(TWIG_DARK, 0.45), group="body_nh")
 
 
 def door_on_ring(m, cx, cy, R, a, w=0.4, h=0.72, kind="leaf", col=LEAF_A):
@@ -819,11 +888,12 @@ def acorn_cup(m, x, y, z=0.0, r=0.16, fill=None, rz=0.0):
         if f.normal.z > 0.8 and c.z > z + r * 0.8:
             return ACORN_IN
         return ACORN_DARK if int((c.z - z) / r * 4.5) % 2 else ACORN
-    m.cyl(r * 0.7, r, r * 1.05, pos=(x, y, z), color=ACORN, seg=10, smooth=True, colfn=cf)
-    m.cyl(r * 1.06, r * 1.06, r * 0.18, pos=(x, y, z + r * 0.92), color=ACORN_DARK, seg=10, smooth=True, cap=ACORN_IN)
+    sg = 8 if r > 0.12 else 6                  # (P1 pass 4) small pots: 6 sides
+    m.cyl(r * 0.7, r, r * 1.05, pos=(x, y, z), color=ACORN, seg=sg, smooth=True, colfn=cf)
+    m.cyl(r * 1.06, r * 1.06, r * 0.18, pos=(x, y, z + r * 0.92), color=ACORN_DARK, seg=sg, smooth=True, cap=ACORN_IN)
     if fill:
-        m.sphere(r * 0.9, pos=(x, y, z + r * 1.08), scl=(1, 1, 0.3), color=fill, seg=8, rings=3)
-    m.cyl(r * 0.12, r * 0.08, r * 0.3, pos=(x, y, z - r * 0.15), color=ACORN_DARK, seg=5)
+        m.sphere(r * 0.9, pos=(x, y, z + r * 1.08), scl=(1, 1, 0.3), color=fill, seg=sg, rings=3)
+    m.cyl(r * 0.12, r * 0.08, r * 0.3, pos=(x, y, z - r * 0.15), color=ACORN_DARK, seg=4)
 
 
 def flower_pot(m, x, y, z=0.0, col="f2a2b8", s=1.0):
@@ -833,14 +903,14 @@ def flower_pot(m, x, y, z=0.0, col="f2a2b8", s=1.0):
     for k in range(5):
         a = k * math.tau / 5
         m.sphere(0.05 * s, pos=(x + math.cos(a) * 0.05 * s, y + math.sin(a) * 0.05 * s, z + 0.36 * s),
-                 scl=(1, 1, 0.45), color=col, seg=6, rings=3, group="body_nl")
-    m.sphere(0.03 * s, pos=(x, y, z + 0.38 * s), color="f2c230", seg=5, rings=3, group="body_nl")
+                 scl=(1, 1, 0.45), color=col, seg=5, rings=2, group="body_nl")
+    m.sphere(0.03 * s, pos=(x, y, z + 0.38 * s), color="f2c230", seg=4, rings=2, group="body_nl")
     m.blade((x, y, z + 0.14 * s), (x + 0.1 * s, y - 0.04 * s, z + 0.24 * s), 0.06 * s, color=LEAF_A)
 
 
 def grass_pouch(m, x, y, z=0.0, s=1.0, rz=0.0, top=FLOUR):
     """Woven-grass pouch tied at the neck (the tiny folk's sack)."""
-    m.sphere(0.2 * s, pos=(x, y, z + 0.17 * s), scl=(1.0, 0.85, 0.95), rot=(0, 0, rz), color=WEAVE, seg=9, rings=6,
+    m.sphere(0.2 * s, pos=(x, y, z + 0.17 * s), scl=(1.0, 0.85, 0.95), rot=(0, 0, rz), color=WEAVE, seg=8, rings=5,
              colfn=lambda f: WEAVE_DARK if int((f.calc_center_median().z - z) * 40 / s) % 2 else WEAVE)
     m.cyl(0.07 * s, 0.05 * s, 0.08 * s, pos=(x, y, z + 0.32 * s), color=CORD, seg=6)
     if top:
@@ -859,7 +929,7 @@ def woven_basket(m, x, y, z=0.0, r=0.18, h=0.2, fill=None, cols=(WEAVE, WEAVE_DA
 def seed_shell(m, x, y, z=0.0, L=0.9, W=0.4, H=0.22, rz=0.0, fill=None, col=SHELL, inner=SHELL_IN):
     """Half seed husk lying open side up (trough, boat, cradle): striped outside, pale inside."""
     def _b():
-        K, J = 7, 5
+        K, J = 6, 4                            # (P1 pass 4) was 7 x 5
         outer, inn = [], []
         for k in range(K + 1):
             t = k / K
@@ -901,13 +971,13 @@ def petal_flower(m, x, y, z, r=0.08, col="f2a2b8", center="f2c230", n=5, group="
     for k in range(n):
         a = k * math.tau / n
         m.sphere(r, pos=(x + math.cos(a) * r, y + math.sin(a) * r, z), scl=(1, 0.8, 0.35), rot=(0, 0, a),
-                 color=col, seg=6, rings=3, group=group)
-    m.sphere(r * 0.6, pos=(x, y, z + 0.02), scl=(1, 1, 0.6), color=center, seg=6, rings=3, group=group)
+                 color=col, seg=5, rings=2, group=group)
+    m.sphere(r * 0.6, pos=(x, y, z + 0.02), scl=(1, 1, 0.6), color=center, seg=5, rings=2, group=group)
 
 
 def sprout(m, x, y, h=0.25, s=1.0, col=LEAF_C):
     """Seedling: a green stalk with two round seed leaves."""
-    m.cyl(0.018 * s, 0.014 * s, h, pos=(x, y, 0), color=LEAF_B, seg=4, group="body_nh")
+    m.cyl(0.018 * s, 0.014 * s, h, pos=(x, y, 0), color=LEAF_B, seg=3, group="body_nh")
     for sx in (-1, 1):
         base = Vector((x, y, h))
         d = Vector((sx, 0, 0.45)).normalized()

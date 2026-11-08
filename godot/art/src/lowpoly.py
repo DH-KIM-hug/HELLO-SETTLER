@@ -79,6 +79,12 @@ def _mat(pos=(0, 0, 0), rot=(0, 0, 0), scl=(1, 1, 1)):
 class Model:
     """A model under construction: named bmesh groups -> one glb (one node per group)."""
 
+    # (P1 perf pass 4, 2026-11-08) > 0: on export, pieces ("islands") of group "body" whose second-largest extent is
+    # below this (thin sticks, cords, node rings, window crosses, knobs) move to "body_nl" -> hull outline kept, no
+    # crease lines (at ppu 32 a 0.12-cell piece is ~4 px: its edge lines were ink noise and cost 2 tris per edge).
+    # Build scripts for buildings set Model.nl_thin once at the top (class attribute, per Blender process).
+    nl_thin = 0.0
+
     def __init__(self, name, seed=1):
         self.name = name
         self.groups = {}
@@ -235,6 +241,8 @@ class Model:
         """far = optional function(objs) called after the group objects exist and before export — it may link extra
         objects (flora_far.decimated: a "body__far" far LOD node, P1 perf pass 3)."""
         name = name or self.name
+        if self.nl_thin > 0 and "body" in self.groups:
+            _move_thin_islands(self, self.nl_thin)
         bpy.ops.wm.read_factory_settings(use_empty=True)
         objs = []
         tris = 0
@@ -253,6 +261,56 @@ class Model:
         _export_glb(os.path.join(out_dir, name + ".glb"))
         print("  %-18s %5d tris%s" % (name, tris, ("  far %d" % far_n) if far is not None else ""))
         return tris
+
+
+def _move_thin_islands(model, limit):
+    """Model.nl_thin: move thin connected pieces of "body" into "body_nl" (deterministic: islands in face order)."""
+    src = model.groups["body"]
+    src.faces.index_update()
+    seen = set()
+    move = []
+    for f0 in src.faces:
+        if f0.index in seen:
+            continue
+        isl = []
+        stack = [f0]
+        seen.add(f0.index)
+        while stack:
+            f = stack.pop()
+            isl.append(f)
+            for e in f.edges:
+                for g in e.link_faces:
+                    if g.index not in seen:
+                        seen.add(g.index)
+                        stack.append(g)
+        vs = {v for f in isl for v in f.verts}
+        lo = [min(v.co[i] for v in vs) for i in range(3)]
+        hi = [max(v.co[i] for v in vs) for i in range(3)]
+        ext = sorted(h - l for h, l in zip(hi, lo))
+        if ext[1] < limit:
+            move.extend(sorted(isl, key=lambda f: f.index))
+    if not move:
+        return
+    dst = model._bm("body_nl")
+    ls = src.loops.layers.float_color["Color"]
+    ld = dst.loops.layers.float_color["Color"]
+    vmap = {}
+    for f in move:
+        nv = []
+        for v in f.verts:
+            if v not in vmap:
+                vmap[v] = dst.verts.new(v.co)
+            nv.append(vmap[v])
+        try:
+            g = dst.faces.new(nv)
+        except ValueError:
+            continue
+        g.smooth = f.smooth
+        for la, lb in zip(f.loops, g.loops):
+            lb[ld] = la[ls]
+    dst.normal_update()
+    bmesh.ops.delete(src, geom=move, context="FACES")
+    src.normal_update()
 
 
 def _triangulate(bm):
