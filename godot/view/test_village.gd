@@ -1129,7 +1129,10 @@ func _update_firsts(dt: float) -> void:
 		return
 	if not popup_ok():
 		return
-	var pid := firsts.take()
+	var shown_vs: Array = []
+	for vv: Array in village_views():
+		shown_vs.append(vv[0])
+	var pid := firsts.take_for(shown_vs)       # 이 병에서 아직 맞는 창만 (아기 창 — 아기가 이 병에 살아 있어야)
 	if pid != "":
 		first_popup.show_id(pid)
 		var sm := GameSave.get_instance()

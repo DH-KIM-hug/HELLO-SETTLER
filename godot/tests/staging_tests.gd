@@ -24,7 +24,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 사건 연출 · 안내 창 · 손 도구 (E1-0~2 · 6b · 6c)")
 	_old_aware = Village.start_aware
-	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow", "test_stage_clock",
+	run.timed(self, ["test_firsts_once_and_save", "test_firsts_instance_events", "test_baby_card_needs_baby", "test_tools_locked", "test_altar_stages", "test_pebbles", "test_flow_scene", "test_skip_and_slow", "test_stage_clock",
 		"test_popup_scene", "test_words"])
 	Village.start_aware = _old_aware
 	fs.reset()
@@ -116,6 +116,61 @@ func test_firsts_instance_events() -> void:
 	check(gs2.firsts == keep and gs2.firsts.has_tool("lamp") and "death" in gs2.firsts.queue, "GiantState 'firsts' 저장 → 불러오기 (같은 인스턴스에 채움)")
 	gs2.from_dict({})
 	check(gs2.firsts.was_seen("awakening") and gs2.firsts.has_tool("spray") and not gs2.firsts.pending(), "옛 거인 묶음 (firsts 없음) → 모두 본 것 · 모두 열림")
+
+
+## (폰 버그 2026-11-08) '새 식구' 창 · 수첩 아기 쪽지가 아기 없는 병에서 뜸 — 아기 창은 보이는 병에 그 아기가 살아 있을 때만:
+## 다른 병에서 줄 선 창 · 병보다 먼저 저장된 거인 묶음 · 떠난 아기 → 띄우지 않고 '본 것'도 아님 (이 병에서 정말 태어나면 다시)
+func test_baby_card_needs_baby() -> void:
+	var hut := func(v: Village) -> Village:
+		v.add_building("오두막", v.center.x + 6.0, v.center.y - 6.0, true)
+		return v
+	# 수첩의 첫 아기 (억지로 낳기)가 정말 주민 목록에 들어감
+	var va: Village = hut.call(proto(20261108))
+	var n0 := va.people.size()
+	var ba := Notebook._first_baby(va)
+	check(ba != null and va.people.size() == n0 + 1 and va.person(ba.id) == ba and ba.is_baby() and int(va.stats["born"]) == 1
+		and PeopleSheet.entries([va]).any(func(x: Dictionary) -> bool: return (x["r"] as Resident).id == ba.id),
+		"수첩의 첫 아기: 주민 목록·사람들 시트에 들어감 (출생 %d)" % int(va.stats["born"]))
+	# 다른 병에서 줄 선 아기 창 → 아기 없는 병에서 뜨지 않음
+	var vb: Village = hut.call(proto(20261109))
+	var f := Firsts.new()
+	check("baby" in f.check(va, false) and int((f.ctx["baby"] as Dictionary)["id"]) == ba.id, "아기 창이 줄 설 때 그 무리·아기를 적어 둠")
+	check(f.take_for([vb]) == "" and not f.was_seen("baby") and not f.pending(), "다른 병(아기 없음)에서는 아기 창을 띄우지 않고 '본 것'도 아님")
+	check(not "baby" in f.check(vb, false), "아기 없는 병을 훑어도 줄 서지 않음")
+	f.check(va, false)
+	check(f.take_for([va]) == "baby" and f.was_seen("baby"), "아기가 있는 병으로 돌아오면 그때 띄움")
+	# 거인 묶음이 병보다 먼저 저장됨 → 불러온 병엔 아직 아기가 없음
+	var g := Firsts.new()
+	g.check(va, false)
+	var g2 := Firsts.new()
+	g2.from_dict(JSON.parse_string(JSON.stringify(g.to_dict())))
+	var old: Village = hut.call(proto(20261108))                 # 아기가 태어나기 전에 저장된 같은 병
+	check("baby" in g2.queue and g2.take_for([old]) == "" and not g2.was_seen("baby"), "불러온 줄의 아기 창 · 병엔 아기 없음 → 띄우지 않음")
+	var bo := Notebook._first_baby(old)
+	check(bo != null and "baby" in g2.check(old, false) and g2.take_for([old]) == "baby", "그 병에서 정말 태어나면 다시 줄 서고 뜸")
+	# 아기가 떠난 뒤 (stats.born > 0이어도) → 새 식구 창 없음
+	var vd: Village = hut.call(proto(20261110))
+	var bd := Notebook._first_baby(vd)
+	vd.kill(bd, "노환")
+	var h := Firsts.new()
+	check(int(vd.stats["born"]) == 1 and not "baby" in h.check(vd, false), "태어난 아기가 떠난 병 → '새 식구' 창 없음")
+	# 수첩 아기 쪽지가 보이는데 그 아기가 없다 → 쪽지를 건너뜀 (빈 아기를 가리키지 않음)
+	var vn: Village = hut.call(proto(20261111))
+	Notebook.begin(vn)
+	var bn := Notebook._first_baby(vn)
+	var bi := -1
+	for i in Notebook.TASKS.size():
+		if String(Notebook.TASKS[i]["id"]) == "baby":
+			bi = i
+	vn.notebook["i"] = bi
+	vn.notebook["shown"] = 1.0
+	vn.notebook["baby"] = bn.id
+	Notebook.tick(vn, 0.1)
+	check(Notebook.index(vn) == bi and Notebook.text(vn) != "", "아기가 있으면 아기 쪽지 그대로")
+	vn.kill(bn, "노환")
+	Notebook.tick(vn, 0.1)
+	check(Notebook.index(vn) == bi + 1 and "baby" in (vn.notebook["skipped"] as Array), "아기 쪽지가 보이는데 아기가 떠남 → 쪽지를 건너뜀")
+	Market.reset()
 
 
 ## 손 도구는 처음엔 잠김 (보이지 않음) · 그 일이 처음 생기면 열림 + 안내 창 (한 줄 쓰는 법)
@@ -426,7 +481,7 @@ func test_popup_scene() -> void:
 	var d: StageDirector = scene.get("director")
 	var v: Village = scene.get("village")
 	fs.fire("altar")
-	fs.fire("baby")
+	fs.fire("death")                       # (아기 창은 이 병에 아기가 있어야 뜸 — test_baby_card_needs_baby)
 	d.play("first_prayer", v)
 	scene.set("_popup_wait", 0.0)
 	scene.call("_update_firsts", 0.1)
@@ -448,9 +503,9 @@ func test_popup_scene() -> void:
 	alt.call("close")
 	for i in 10:
 		scene.call("_update_firsts", 0.1)
-	check(pop.showing() and pop.id == "baby", "시트를 닫으면 다음 창 (아기)")
+	check(pop.showing() and pop.id == "death", "시트를 닫으면 다음 창 (죽음)")
 	pop.ok_btn.pressed.emit()
-	check(not pop.showing() and fs.was_seen("altar") and fs.was_seen("baby") and not fs.fire("altar"), "본 창은 다시 뜨지 않음")
+	check(not pop.showing() and fs.was_seen("altar") and fs.was_seen("death") and not fs.fire("altar"), "본 창은 다시 뜨지 않음")
 	# 360×640에서 창이 화면 안
 	run.root.size = Vector2i(360, 640)
 	fs.fire("crisis")

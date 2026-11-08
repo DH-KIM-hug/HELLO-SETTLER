@@ -87,6 +87,9 @@ var seen: Dictionary = {}      # 안내 창 id → true (이미 띄움)
 var tools: Dictionary = {}     # 도구 → true (열림)
 var queue: Array = []          # 띄울 차례를 기다리는 안내 창 id
 var plays: Dictionary = {}     # 연출 id → 본 횟수 (두 번째부터는 짧은 판 — StageDirector)
+## 줄 선 창이 가리키는 것 (저장): "baby" → {"sid": 무리, "id": 아기}. 띄울 때(take_for) 보이는 병에 그 아기가 살아 있어야 띄운다 —
+## 거인 묶음(10초마다 저장)이 병(넓은 세상 20~60초)보다 앞서 저장되거나, 다른 병에서 줄 선 창이 이 병에서 뜨지 않게
+var ctx: Dictionary = {}
 var _dry_since: Dictionary = {}    # (저장 안 함) "마을 sid:밭 id" → 마르기 시작한 병 시각
 var _cursors: Dictionary = {}      # (저장 안 함) 사건 줄(EventStream 인스턴스 id) → 읽은 번호 — 불러온 뒤엔 새 줄이라 처음부터
 
@@ -97,6 +100,7 @@ func reset() -> void:
 	tools = {}
 	queue = []
 	plays = {}
+	ctx = {}
 	_dry_since = {}
 	_cursors = {}
 
@@ -111,7 +115,7 @@ func open_all() -> void:
 
 
 func to_dict() -> Dictionary:
-	return {"seen": seen.keys(), "tools": tools.keys(), "queue": queue.duplicate(), "plays": plays.duplicate()}
+	return {"seen": seen.keys(), "tools": tools.keys(), "queue": queue.duplicate(), "plays": plays.duplicate(), "ctx": ctx.duplicate(true)}
 
 
 ## 같은 인스턴스에 다시 채운다 (화면들이 이 인스턴스를 들고 있으므로 바꿔 끼우지 않는다)
@@ -131,6 +135,11 @@ func from_dict(d: Variant) -> void:
 	if p is Dictionary:
 		for k: Variant in p:
 			plays[String(k)] = int(p[k])
+	var c: Variant = (d as Dictionary).get("ctx", {})
+	if c is Dictionary:
+		for k: Variant in c:
+			if String(k) in queue and c[k] is Dictionary:
+				ctx[String(k)] = {"sid": int((c[k] as Dictionary).get("sid", -1)), "id": int((c[k] as Dictionary).get("id", -1))}
 
 
 func has_tool(t: String) -> bool:
@@ -178,13 +187,55 @@ func take(id := "") -> String:
 	var got := String(queue[i])
 	queue.remove_at(i)
 	seen[got] = true
+	ctx.erase(got)
 	return got
+
+
+## 화면이 띄울 창을 꺼낸다 — 보이는 병의 무리들(villages)에서 아직 맞는 창만. 맞지 않게 된 창(아기가 이 병에 없음 —
+## 다른 병에서 줄 섰거나, 병보다 먼저 저장된 거인 묶음에서 불러옴, 아기가 그 사이 떠남)은 '본 것'으로 치지 않고 줄에서 뺀다
+## (그 일이 이 병에서 정말 생기면 check가 다시 줄 세움). 돌려줌: 띄울 창 id ("" = 없음)
+func take_for(villages: Array) -> String:
+	while not queue.is_empty():
+		var id := String(queue[0])
+		if still_true(id, villages):
+			return take(id)
+		queue.remove_at(0)
+		ctx.erase(id)
+	return ""
+
+
+## 줄 선 창이 보이는 병에서 아직 맞나 — 지금은 아기 창만 따짐 (나머지는 늘 맞음)
+func still_true(id: String, villages: Array) -> bool:
+	if id != "baby":
+		return true
+	var c: Dictionary = ctx.get(id, {})
+	for v: Variant in villages:
+		if v is Village and int((v as Village).sid) == int(c.get("sid", -2)):
+			var b := (v as Village).person(int(c.get("id", -1)))
+			if b != null and b.is_baby():
+				return true
+	for v: Variant in villages:                  # 줄 선 아기는 없지만 이 병에 다른 갓난아기가 있음 (옛 저장 · 직접 fire) → 그 아기로
+		var nb := living_baby(v as Village) if v is Village else null
+		if nb != null:
+			ctx[id] = {"sid": (v as Village).sid, "id": nb.id}
+			return true
+	return false
+
+
+## 그 무리의 살아 있는 아기 (가장 어린) — 없으면 null. 죽은 주민은 v.people에 없다 (Village.kill)
+static func living_baby(v: Village) -> Resident:
+	var best: Resident = null
+	for r in v.people:
+		if r.is_baby() and (best == null or r.age < best.age):
+			best = r
+	return best
 
 
 ## 설정 '안내 다시 보기' — 본 창을 잊는다 (도구는 그대로 열림)
 func replay() -> void:
 	seen = {}
 	queue = []
+	ctx = {}
 
 
 ## 연출을 한 번 더 봤다 → 지금까지 본 횟수
@@ -232,6 +283,8 @@ func check(v: Village, staged_ok := true) -> Array:
 					_gift_grain()
 					out.append(id)
 			elif fire(id):
+				if id == "baby":
+					ctx[id] = {"sid": v.sid, "id": living_baby(v).id}
 				out.append(id)
 	return out
 
@@ -249,8 +302,8 @@ func _happened(v: Village, id: String) -> bool:
 			return false
 		"sold":
 			return Market.first_paid
-		"baby":
-			return int(v.stats.get("born", 0)) > 0
+		"baby":                            # 살아 있는 갓난아기가 이 무리에 (stats.born만 보면 떠난 아기·아기가 없는 병에서도 '새 식구' 창이 뜸)
+			return living_baby(v) != null
 		"sick":
 			for r in v.people:
 				if r.sick_left > 0.0:

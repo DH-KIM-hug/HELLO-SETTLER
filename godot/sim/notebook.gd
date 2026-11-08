@@ -159,6 +159,13 @@ static func tick(v: Village, real_dt: float) -> void:
 			"wait":
 				return
 		_show(v, tk)
+	# 아기 쪽지가 보이는데 그 아기가 이 병에 없다 (떠남 · 옛 저장) → 다른 갓난아기로, 없으면 건너뜀 ('아기가 태어났어!'가 빈 아기를 가리키지 않게)
+	if String(tk["id"]) == "baby" and v.person(int(nb.get("baby", -1))) == null:
+		var other := Firsts.living_baby(v)
+		if other == null:
+			_advance(v, false)
+			return
+		nb["baby"] = other.id
 	# 보이는 동안: 지켜보기 쪽지 · 미리 한 일
 	if bool(tk.get("watch", false)) and _event_done(v, String(tk["act"])):
 		complete(v)
