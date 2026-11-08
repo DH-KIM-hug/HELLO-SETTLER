@@ -26,13 +26,17 @@ const CLOSE_PITCH := [13.0, 17.0, 22.0, 28.0]   # 낮은 각부터 — 뒤 언�
 const DROP_T := 0.9
 const RUSH_T := 1.25
 const OPEN_T := 0.45
-const CLIMB_GAP := 0.34                 # 주민 사이
+const CLIMB_GAP := 0.4                  # 주민 사이 (잠이 덜 깨 느릿느릿)
 const CLIMB_T := 2.3                    # 한 명이 기어 나와 제자리까지
-const LINGER_T := 1.8
+const LINGER_T := 2.6                   # 기지개 + 두리번 (WAKE_T 포함)
 const PULL_T := 1.3
 const OK_COL := Color(0.36, 0.86, 0.42)
 const BAD_COL := Color(0.92, 0.24, 0.2)
 const FIRE_SIZE := 0.9
+const WAKE_T := 1.3                     # 내려선 뒤 기지개 (막 잠에서 깬 듯 — 클립 "stretch")
+const BOARD := Color("eadcc0")          # 상품 상자 판지
+const BAND := Color("6f9a92")           # 포장 색 띠·뚜껑
+const PRINT := Color("a89878")          # 흐린 작은 글씨
 
 var sc: Node                            # world_village 장면
 var v: Village
@@ -139,33 +143,72 @@ static func stand_spots(village: Village, p: Vector2, yaw: float, n: int) -> Arr
 
 
 # ───────────────────────── 상자 ─────────────────────────
+## (OPENING v4.0 3 · STORY 1) 상자는 산 물건 — 상품 포장처럼: 판지 몸통 · 색 띠 · 둥근 상표 · 흐려서 읽을 수 없는 작은 글씨 줄 (글자는 없음)
 func _make_box() -> Node3D:
 	var b := Node3D.new()
-	var wood := Toon.mat(Color("e3c08f"))
-	var edge := Toon.mat(Color("b98a55"))
-	_part(b, Vector3(BOX.x, WALL, BOX.z), Vector3(0, WALL * 0.5, 0), wood)              # 바닥
-	_part(b, Vector3(BOX.x, BOX.y, WALL), Vector3(0, BOX.y * 0.5, BOX.z * 0.5 - WALL * 0.5), wood)     # 앞
-	_part(b, Vector3(BOX.x, BOX.y, WALL), Vector3(0, BOX.y * 0.5, -BOX.z * 0.5 + WALL * 0.5), wood)    # 뒤
-	_part(b, Vector3(WALL, BOX.y, BOX.z), Vector3(BOX.x * 0.5 - WALL * 0.5, BOX.y * 0.5, 0), wood)     # 옆
-	_part(b, Vector3(WALL, BOX.y, BOX.z), Vector3(-BOX.x * 0.5 + WALL * 0.5, BOX.y * 0.5, 0), wood)
-	for s: float in [-1.0, 1.0]:                                                         # 모서리 띠
-		_part(b, Vector3(0.16, BOX.y + 0.02, 0.16), Vector3(s * (BOX.x * 0.5 - 0.06), BOX.y * 0.5, BOX.z * 0.5 - 0.06), edge)
-	_part(b, Vector3(BOX.x + 0.04, 0.12, 0.16), Vector3(0, BOX.y - 0.04, BOX.z * 0.5 - 0.06), edge)
-	# 겉면 그림: 집 한 채 + 두 사람 (기획서 5.5 '상자 겉면엔 집·가족 그림')
-	var ink := Toon.mat(Color("8a4b3a"))
-	var front := BOX.z * 0.5 + 0.005
-	_part(b, Vector3(0.62, 0.42, 0.02), Vector3(-0.55, 0.42, front), ink)
-	var roof := _part(b, Vector3(0.6, 0.6, 0.02), Vector3(-0.55, 0.66, front), ink)
+	var board := Toon.mat(BOARD)
+	var edge := Toon.mat(BOARD.darkened(0.18))
+	_part(b, Vector3(BOX.x, WALL, BOX.z), Vector3(0, WALL * 0.5, 0), board)              # 바닥
+	_part(b, Vector3(BOX.x, BOX.y, WALL), Vector3(0, BOX.y * 0.5, BOX.z * 0.5 - WALL * 0.5), board)     # 앞
+	_part(b, Vector3(BOX.x, BOX.y, WALL), Vector3(0, BOX.y * 0.5, -BOX.z * 0.5 + WALL * 0.5), board)    # 뒤
+	_part(b, Vector3(WALL, BOX.y, BOX.z), Vector3(BOX.x * 0.5 - WALL * 0.5, BOX.y * 0.5, 0), board)     # 옆
+	_part(b, Vector3(WALL, BOX.y, BOX.z), Vector3(-BOX.x * 0.5 + WALL * 0.5, BOX.y * 0.5, 0), board)
+	for s: float in [-1.0, 1.0]:                                                         # 접힌 모서리
+		_part(b, Vector3(0.06, BOX.y + 0.01, 0.06), Vector3(s * (BOX.x * 0.5 - 0.02), BOX.y * 0.5, BOX.z * 0.5 - 0.02), edge)
+	var front := BOX.z * 0.5 + 0.006
+	var band := Toon.mat(BAND)
+	_part(b, Vector3(BOX.x - 0.02, 0.3, 0.02), Vector3(0, BOX.y - 0.2, front), band)     # 위 색 띠
+	_part(b, Vector3(BOX.x - 0.02, 0.06, 0.02), Vector3(0, 0.12, front), band)           # 아래 가는 띠
+	var logo := MeshInstance3D.new()                                                     # 둥근 상표 (흰 원 + 안쪽 작은 원)
+	var lc := CylinderMesh.new()
+	lc.top_radius = 0.2
+	lc.bottom_radius = 0.2
+	lc.height = 0.02
+	logo.mesh = lc
+	logo.material_override = Toon.mat(Color("f7f1e3"))
+	logo.rotation.x = PI * 0.5
+	logo.position = Vector3(-BOX.x * 0.5 + 0.38, BOX.y - 0.2, front + 0.012)
+	b.add_child(logo)
+	var dot := logo.duplicate() as MeshInstance3D
+	dot.scale = Vector3(0.5, 1.0, 0.5)
+	dot.material_override = Toon.mat(BAND.darkened(0.2))
+	dot.position.z += 0.006
+	b.add_child(dot)
+	var blur := StandardMaterial3D.new()                                                 # 흐린 작은 글씨 — 바탕과 비슷한 색, 반투명 (읽을 수 없음)
+	blur.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	blur.albedo_color = Color(PRINT, 0.55)
+	blur.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var r := RandomNumberGenerator.new()
+	r.seed = 77
+	for row in 3:                                                                         # 상표 곁 작은 글씨 세 줄
+		var x0 := -BOX.x * 0.5 + 0.66
+		var x := x0
+		while x < BOX.x * 0.5 - 0.2:
+			var w := r.randf_range(0.08, 0.26)
+			_part(b, Vector3(w, 0.035, 0.01), Vector3(x + w * 0.5, BOX.y - 0.12 - row * 0.075, front + 0.014), blur)
+			x += w + 0.05
+	for row in 4:                                                                         # 아래쪽 더 작은 글씨 (네 줄 — 반쯤만)
+		var x := -BOX.x * 0.5 + 0.2
+		while x < 0.2:
+			var w := r.randf_range(0.05, 0.16)
+			_part(b, Vector3(w, 0.022, 0.01), Vector3(x + w * 0.5, 0.42 - row * 0.055, front), blur)
+			x += w + 0.035
+	var ink := Toon.mat(BAND.darkened(0.25))                                              # 겉면 그림: 작은 집 한 채 + 두 사람 (기획서 5.5)
+	_part(b, Vector3(0.4, 0.28, 0.02), Vector3(0.62, 0.42, front), ink)
+	var roof := _part(b, Vector3(0.38, 0.38, 0.02), Vector3(0.62, 0.58, front), ink)
 	roof.rotation.z = PI * 0.25
 	roof.scale = Vector3(0.85, 0.85, 1.0)
 	for i in 2:
-		_part(b, Vector3(0.16, 0.34, 0.02), Vector3(0.35 + i * 0.32, 0.36, front), ink)
-		_part(b, Vector3(0.16, 0.16, 0.02), Vector3(0.35 + i * 0.32, 0.62, front), ink)
+		_part(b, Vector3(0.1, 0.22, 0.02), Vector3(0.95 + i * 0.2, 0.36, front), ink)
+		_part(b, Vector3(0.1, 0.1, 0.02), Vector3(0.95 + i * 0.2, 0.53, front), ink)
+	for i in 3:                                                                           # 옆면에도 흐린 글씨
+		_part(b, Vector3(0.01, 0.03, BOX.z * r.randf_range(0.35, 0.7)), Vector3(BOX.x * 0.5 + 0.006, BOX.y - 0.25 - i * 0.07, 0), blur)
 	# 뚜껑 (열면 들려서 상자 뒤에 기대 세워짐 — 낮은 카메라 앞을 가리지 않게)
 	lid = Node3D.new()
 	lid.position = Vector3(0, BOX.y, 0)
 	b.add_child(lid)
-	_part(lid, Vector3(BOX.x + 0.12, 0.14, BOX.z + 0.1), Vector3(0, 0.07, 0), Toon.mat(Color("d6694f")))
+	_part(lid, Vector3(BOX.x + 0.12, 0.14, BOX.z + 0.1), Vector3(0, 0.07, 0), band)
+	_part(lid, Vector3(BOX.x + 0.13, 0.05, 0.3), Vector3(0, 0.07, 0.25), Toon.mat(Color("f7f1e3")))   # 뚜껑의 흰 줄
 	return b
 
 
@@ -196,7 +239,7 @@ func play() -> void:
 	SkyDescent.set_shadow(box_shadow, 0.15)
 	for r in v.people:
 		vw.staged[r.id] = {"vis": false}
-	caption.say("이 세상에 살 사람들을 데려왔어요.")
+	caption.say("상자 안에서 사람들이 잠들어 있어요.")
 	var cam: JarCamera = sc.cam
 	cam.fly_to(Vector3(spot.x, gy0, spot.y), FLY_PPU)
 
@@ -246,6 +289,7 @@ func _process(dt: float) -> void:
 				tw.tween_method(_lid_pose, 0.0, 1.0, OPEN_T).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
 		"open":
 			if t >= OPEN_T + 0.15:
+				caption.say("사람들이 막 잠에서 깼어요.")
 				phase = "climb"
 				t = 0.0
 				_plan_climb()
@@ -458,15 +502,20 @@ func _climb_step() -> void:
 			var dv := s3 - d
 			st["rot"] = atan2(dv.x, dv.z)
 			st["anim"] = "walk"
+		elif lt < CLIMB_T + WAKE_T:                     # 막 잠에서 깬 듯 기지개 (OPENING v4.0 3)
+			st["pos"] = s3
+			st["rot"] = float(e["rot"])
+			st["anim"] = "stretch"
+			st["face"] = "sleep"                     # 눈을 감은 채
 		else:                                           # 두리번거림 (아이 하나는 하늘을 올려다보며 갸웃)
 			st["pos"] = s3
 			st["rot"] = float(e["rot"]) + sin(lt * 0.9 + r.id) * 0.5
 			st["anim"] = "look"
-			st["face"] = "surprised" if lt < CLIMB_T + 1.0 else ""
+			st["face"] = "surprised" if lt < CLIMB_T + WAKE_T + 0.8 else ""
 			if r == kid:
 				st["anim"] = "idle"
 				st["rot"] = float(e["rot"])
-				var k := clampf((lt - CLIMB_T) / 0.6, 0.0, 1.0)
+				var k := clampf((lt - CLIMB_T - WAKE_T) / 0.6, 0.0, 1.0)
 				st["tilt"] = Vector2(0.75 * k, 0.32 * k * (1.0 + 0.25 * sin(lt * 1.3)))
 				if k >= 1.0 and not e.has("wonder"):    # 낯선 하늘을 올려다보며 갸웃 (아직 거인을 모름 — 손 흔들기 없음)
 					e["wonder"] = true

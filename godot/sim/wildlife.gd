@@ -25,8 +25,8 @@ const LEGACY := ["deer", "rabbit", "wolf", "boar", "sheep", "aurochs"]
 const SPEC := {
 	"fish": {"name": "물고기", "rate": 0.20, "per": 1.0, "r": 14.0, "where": "호수"},
 }
-## 화면 모델 — 물고기 + 창조 오프닝의 '생명의 씨앗' 연출이 아직 보여 주는 옛 짐승 (view/start/creation_release.gd — A28에서 다시)
-const MODEL := {"fish": "fish_a", "deer": "deer", "rabbit": "rabbit", "wolf": "wolf", "boar": "boar", "sheep": "wild_sheep", "aurochs": "aurochs"}
+## 화면 모델 — 물고기만 (A28: 창조 오프닝의 들짐승 상자도 없앰)
+const MODEL := {"fish": "fish_a"}
 const DAWN_H := 6.0
 const LAKE_R := 20.0                    # (정함) 호수 무리가 세는 물 넓이 반지름
 const SMALL_LAKE_R := 9.0               # 소형 병 호수

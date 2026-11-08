@@ -1,44 +1,33 @@
-## 창조 오프닝 — docs/OPENING.md 1·2 (첫 병 줄임판) · UI.md 00 #5a · 08.
-## 타이틀 [시작하기] → 병으로 다가가는 연출(빈 병을 '톡' — 단계 0을 여기에) → 아래 단계. 단계마다 큰 단추 2~3개 + 아래 손글씨 자막.
-## 단추를 누르면 그 연출이 나오고 다음 단계로 (물은 잠깐 보여 주는 동안 [다시 고르기]). 2026-11-07: 손으로 빚기·물 게이지·
-## 씨앗 문지르기·상자 끌기는 없앴다 (거의 차이가 없어서) — 단추가 CreationPlan 프리셋을 고른다. 뚜껑 돌기만은 거인이 콕콕 찍는다.
-##   core     핵: [작게 · 보통 · 크게] → 빛·맥동 → 병 바닥으로 쿵 → 바위가 핵을 감쌈 (암반은 시드)
-##   soil     평평한 흙이 쏟아짐 → [너른 들 · 언덕 · 산과 골짜기] → 흙이 그 모양으로 우르릉 솟고 꺼짐 (1.2초 · 흙먼지 · CreationPlan.land_preset)
-##            → 다른 단추를 누르면 지금 모양에서 다시 바뀜 · [다음] (병 그림은 높낮이를 과장 — CreationJar.RELIEF)
-##   water    [조금 · 알맞게 · 넉넉히] → 물병이 그만큼 부음 (WATER_PICKS)
-##   lid      뚜껑을 뒤집어 들고 안쪽을 보여 줌 (가장자리에 저절로 난 작은 돌기) → 거인이 세 곳을 콕 → 돌기가 톡 솟고 끝에 이슬이 맺힘 ·
-##            그 아래 흙에 표시 (큰 호수 자리). 돌기를 다시 누르면 뗌 · [알아서] 채움 → [다음] → 뚜껑이 내려와 딸깍 ×3 → 잠시 배양
-##            (김 서림 · 첫 물방울 · 호수가 참 · 유리벽 물줄기 · 밤낮 · 핵이 크면 화산 연기). 세상은 이때 뒤 스레드에서 만든다
-##   seeds    [알아서 · 꽃을 더 · 풀밭을 더] → 씨앗이 흩뿌려짐 → 배양 (이끼 → 풀 → 꽃숲)
-##   wildlife 두 박자 (2026-11-07 — 한 단추일 때 무엇을 왜 하는지 몰랐음, view/start/creation_release.gd):
-##            ① "숲과 들에 살 짐승들이에요." [들짐승 풀어 주기] → 거인의 손가락이 나무 상자를 병 안에 내려놓고 열면 짐승들이
-##               뛰어나와 서식지로 (이름표 잠깐) ② "호수에 살 물고기예요." [물고기 풀어 주기] → 유리병을 호수에 기울여 퐁당
-##            → 짧은 배양 (새끼 · 물고기가 튐). 박자마다 [다음]으로 건너뜀. 중간 저장: plan.animals가 있으면 ②부터
-##            (plan 단계 이름은 그대로 wildlife — 옛 저장도 그대로 이어짐)
+## 창조 오프닝 — docs/OPENING.md v4.0 (2026-11-08 사용자 결정 A28: 5단계) · UI.md 00 #5a · 08.
+## 타이틀 [시작하기] → 어두운 방, 선반 위 빈 병 (옅은 암시만 — 이상하게 큰 방 물건 · 유리에 붙은 털 한 가닥, CreationJar) → 아래 단계.
+## 단계마다 큰 단추 + 아래 손글씨 자막. 손은 보이지 않는다 (그림자·반짝임·내려오는 것만 — A24).
+##   core   ① 별 심기: [작게 · 보통 · 크게] → 빛·맥동 → 병 바닥으로 쿵
+##   soil   ② 땅 빚기 (암반+흙 합침): 바위가 핵을 감싸고 흙이 쏟아짐 → [너른 들 · 언덕 · 산과 골짜기] → 흙이 그 모양으로 솟고 꺼짐 · [다음]
+##   water  ③ 물 붓기: [조금 · 알맞게 · 넉넉히] → 물이 그만큼 (송사리 알이 섞여 반짝임) — 잠깐 [다시 고르기]
+##   light  ④ 빛 걸기: [해 걸기] (첫 병은 온대 자리만 — 나머지는 안개) → 해가 걸리고 코르크가 저절로 내려앉음 → 잠시 배양
+##          (김 서림 · 첫 물방울 · 호수가 참 · 유리벽 물줄기 · 밤낮 · 핵이 크면 화산 연기). 세상은 이때 뒤 스레드에서 만든다
+##   seeds  ⑤ 꽃씨 뿌리기: [알아서 · 꽃을 더 · 풀밭을 더] → 씨앗이 흩뿌려짐 → 배양 (이끼 → 풀 → 꽃숲)
+##   life   7b 작은 생명이 깨어남 (상자 없음 — view/start/creation_release.gd): 꽃 속에서 무당벌레·나비·꿀벌·달팽이… 하나둘 · 호수에 송사리.
+##          꽃 하나를 톡 → 나비가 먼저 (선택). 짧게 자리를 잡으면 [다음]
 ##   → 넓은 세상 장면의 스타터킷 자리 고르기 (단계 8) → 지구 이름 (단계 9) → 병 안.
-## 단계에 들어갈 때마다 저장 폴더에 creation.json (앱이 꺼지면 그 단계의 단추부터 — 옛 형식의 중간 저장도 같은 단계 이름이라 그대로).
+## 단계에 들어갈 때마다 저장 폴더에 creation.json (앱이 꺼지면 그 단계의 단추부터 — 옛 단계 이름 lid · wildlife는 light · life로).
 ## 두 번째 병부터 (plan.quick) = 한 화면 빠른 창조 (OPENING 4).
 ## 뒤로 가기 = 거인의 방(타이틀) — 만들던 것은 남는다 ([이어 만들기]).
 ## 시험·캡처: instant = true면 연출 없이 바로 (세상도 그 자리에서 만듦).
 extends Control
 
-const STAGE_DOTS := ["core", "soil", "water", "lid", "seeds", "wildlife", "spot", "name"]
+const STAGE_DOTS := ["core", "soil", "water", "light", "seeds", "spot", "name"]   # life는 seeds 점 · build는 spot 점
 const LAPSE := 8.0                      # 뚜껑 배양 (초)
 const GROW := 6.0                       # 씨앗 배양
-const SETTLE := 4.0                     # 들짐승 배양
-const AFTER := 2.8                      # 짐승 박자 끝 자막을 읽는 동안 (→ 물고기 박자)
-const WILD_ASK := "숲과 들에 살 짐승들이에요."
-const WILD_DONE := "사슴과 토끼는 숲과 들로,\n늑대는 깊은 숲으로 갔어요."
-const FISH_ASK := "호수에 살 물고기예요."
-const FISH_DONE := "물고기들이 호수에서 헤엄쳐요."
+const LIFE := 5.0                       # 작은 생명이 깨어나 자리를 잡는 동안 (7b 짧은 배양)
+const LIFE_ASK := "꽃이 피자 작은 생명들이 깨어나요."
+const LIFE_DONE := "작은 생명들이 꽃숲에 자리를 잡았어요."
+const INTRO_DARK := 0.62                # 첫 화면: 어두운 방 (밤빛 셰이더 세기)
 const HOLD := 1.8                       # 물을 고른 뒤 보여 주는 동안 ([다시 고르기])
 const LAND_MORPH := 1.2                 # 땅이 그 모양으로 솟고 꺼지는 동안
-const LID_HOLD := Vector3(0, 20.0, 0)   # 돌기를 찍는 동안 뚜껑을 뒤집어 드는 곳
-const LID_TILT := -2.3                  # (안쪽이 카메라를 보게)
-const NUB_WORDS := ["뚜껑 안쪽을 세 곳 콕 찍어 주세요.\n물방울 돌기 아래에 큰 호수가 생겨요.", "두 곳 더 찍어 주세요.\n돌기를 다시 누르면 떼어 내요.",
-	"한 곳 더 찍어 주세요.", "이 세 돌기 아래에 큰 호수가 생겨요.\n돌기를 다시 누르면 떼어 내요."]
 const LAND_WORDS := ["너른 들이 펼쳐졌어요.", "둥근 언덕이 솟았어요.", "높은 산과 깊은 골짜기가 생겼어요.\n골짜기에는 물이 고일 거예요."]
-const WATER_WORDS := ["물을 조금 부었어요.\n작은 호수 몇이 생기겠어요.", "알맞게 부었어요.", "물을 넉넉히 부었어요.\n호수가 가득하겠어요."]
+const WATER_WORDS := ["물을 조금 부었어요.\n물속에 작은 알들이 반짝여요.", "알맞게 부었어요.\n물속에 작은 알들이 반짝여요.", "물을 넉넉히 부었어요.\n물속에 작은 알들이 반짝여요."]
+const SUN_ASK := "이 세상을 비출 해를 걸어 주세요.\n다른 자리는 아직 안개 속이에요."
 const SEED_WORDS := ["이끼·풀·꽃씨를 고루 뿌렸어요.", "꽃씨를 듬뿍 뿌렸어요.", "풀씨를 듬뿍 뿌렸어요."]   # (E3-3) 나무 대신 꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
 
 var jar: CreationJar
@@ -51,7 +40,7 @@ var chips: HBoxContainer                # 단계의 큰 단추들
 var dots: HBoxContainer
 var night: ColorRect
 var sweep: LightSweep
-var step := ""                          # 지금 단계 (plan 단계 + 안쪽 단계: intro · core_drop · pour · shaping · pouring · hold · closing · lapse · sprinkle · grow · release · releasing · released · fish · fishing · settle_run · settle)
+var step := ""                          # 지금 단계 (plan 단계 + 안쪽 단계: intro · core_drop · pour · shaping · pouring · hold · sun · closing · lapse · sprinkle · grow · life_run · settle)
 var instant := false
 var leaving := false
 var _insets := Vector2(-1, -1)
@@ -64,9 +53,6 @@ var _nav := true
 var _adv: Tween                         # 고른 뒤 다음 단계로 넘어가는 기다림 ([다시 고르기]가 멈춤)
 var _hold_stage := ""                   # 그 기다림이 끝나면 갈 단계
 var _cap_h := 0.0                       # 자막 높이 (줄이 늘면 다시 배치)
-var _beat: Tween                        # 들짐승·물고기 박자의 기다림 ([다음]이 건너뜀)
-var _crate_uv := Vector2.ZERO
-var _lake: Dictionary = {}
 var _land_i := -1                       # 고른 땅 (−1 아직)
 var _land_tw: Tween
 
@@ -185,7 +171,7 @@ func _set_choices(items: Array) -> void:
 
 
 func _update_dots() -> void:
-	var cur := STAGE_DOTS.find(plan.stage)
+	var cur := STAGE_DOTS.find({"life": "seeds", "build": "spot"}.get(plan.stage, plan.stage))
 	for i in dots.get_child_count():
 		var sb := StyleBoxFlat.new()
 		sb.set_corner_radius_all(4)
@@ -269,6 +255,8 @@ func _intro() -> void:
 	step = "intro"
 	_update_dots()
 	jar.shot("wide", 0.0)
+	jar.set_dark_room(true)
+	jar.set_night(INTRO_DARK)                # 어두운 방 (v4.0 첫 화면 — 옅은 암시는 방에만, 자막은 병 이야기만)
 	_say("아무것도 없는 병이 하나 있어요.")
 	if instant:
 		go("core")
@@ -305,7 +293,7 @@ func _resume() -> void:
 	jar.soil_mi.visible = si >= 1
 	jar.shape = 0.0 if (plan.stage == "soil" and _flat_soil()) else 1.0
 	jar.mark_dirty()
-	if si <= CreationPlan.STAGES.find("lid"):
+	if si <= CreationPlan.STAGES.find("light"):
 		if si >= 3:
 			jar.water_show = 1.0
 			jar.update_water_level(plan.water)
@@ -331,6 +319,7 @@ func go(s: String) -> void:
 		_save_stage(s)
 	match s:
 		"core":
+			jar.set_dark_room(false)
 			jar.core_mi.visible = true
 			jar.core_hover = true
 			jar.core_mi.position = Vector3(0, 19.5, 0)
@@ -339,39 +328,46 @@ func go(s: String) -> void:
 			_dim(0.35)
 			_say("핵을 넣어 주세요.\n작은 핵은 조용하고, 큰 핵은 뜨거워요.")
 			_set_choices(CreationPlan.CORE_PICKS)
-		"soil":
+		"soil":                                   # ② 땅 빚기 = 바위가 핵을 감싸고 (암반 — 시드의 지층) 그 위에 흙 (v4.0 합침)
 			_dim(0.0)
 			jar.shot("soil", 0.0 if instant else 1.2)
+			jar.core_mi.visible = false
+			jar.rock_root.visible = true
 			jar.soil_mi.visible = true
 			_land_i = -1
 			if _flat_soil():
 				jar.shape = 0.0                   # 평평한 흙 — 땅 단추를 누르면 솟고 꺼짐
-			_say("흙을 덮어요.")
+			_say("바위로 별을 감싸고, 흙을 덮어요.")
 			step = "pour"
-			GameAudio.fx("soil_pour", "Room", -4.0)          # 흙 붓기 (A17)
-			jar.set_pour("soil")
-			_tween_jar("soil_rise", 1.0, 1.6, func() -> void:
-				jar.set_pour("")
-				_choices("soil"))
+			if instant:
+				jar.rock_root.scale.y = 1.0
+			else:
+				create_tween().tween_property(jar.rock_root, "scale:y", 1.0, 0.8).set_trans(Tween.TRANS_SINE)
+				jar.set_pour("stone")
+				GameAudio.fx("soil_pour", "Room", -6.0, null, 0.7)          # 바위가 쏟아짐 = 흙 붓는 소리를 낮게
+			_seq([[0.0 if instant else 0.8, func() -> void:
+				GameAudio.fx("soil_pour", "Room", -4.0)          # 흙 붓기 (A17)
+				jar.set_pour("soil")
+				_tween_jar("soil_rise", 1.0, 1.4, func() -> void:
+					jar.set_pour("")
+					_choices("soil"))]])
 		"water":
 			jar.shot("water", 0.0 if instant else 1.0)
 			jar.water_show = 1.0
 			jar.update_water_level(plan.water)
 			_choices("water")
-		"lid":
+		"light":
 			jar.water_show = 1.0
 			jar.update_water_level(plan.water)
-			place_nubs()
+			jar.show_eggs(true)
+			_choices("light")
 		"seeds":
 			jar.shot("seeds", 0.0 if instant else 1.0)
 			_lift_cork(true)
 			jar.show_specks(plan.seeds)
 			_choices("seeds")
-		"wildlife":
-			_lift_cork(true)
-			if jar.release == null:
-				jar.build_kit()
-			_wild_beat()
+		"life":
+			wake_life()
 	layout()
 
 
@@ -389,9 +385,14 @@ func _choices(s: String) -> void:
 			step = "water"
 			_say("물을 주세요. 얼마나 부을까요?")
 			_set_choices(CreationPlan.WATER_PICKS_T)
+		"light":
+			step = "sun"
+			jar.shot("lid", 0.0 if instant else 1.0)
+			_say(SUN_ASK)
+			_set_choices(CreationPlan.SUN_PICKS)
 		"seeds":
 			step = "sow"
-			_say("생명을 뿌려 주세요.")
+			_say("꽃씨를 뿌려 주세요.")
 			_set_choices(CreationPlan.SEED_PICKS)
 
 
@@ -406,16 +407,13 @@ func pick(i: int) -> void:
 			pick_core(i)
 		"soil", "shaping":
 			pick_land(i)
-		"nubs":
-			auto_nubs()
+		"sun":
+			hang_sun(i)
 		"water":
 			pick_water(i)
 		"sow":
 			pick_seeds(i)
-		"release":
-			release_animals()
-		"fish":
-			release_fish()
+
 
 
 ## [다음]
@@ -428,27 +426,15 @@ func next() -> void:
 		"soil":
 			if _land_i >= 0:
 				go("water")
-		"nubs":
-			if plan.drips.size() >= CreationPlan.DRIP_N:
-				close_lid()
 		"hold":
 			go(_hold_stage)
 		"lapse":
 			if _world != null:
 				go("seeds")
 		"grow":
-			go("wildlife")
-		"release":
-			release_animals()
-		"releasing":
-			_animals_done()
-			_ask_fish()
-		"released":
-			_ask_fish()
-		"fish":
-			release_fish()
-		"fishing":
-			_fish_done()
+			go("life")
+		"life_run":
+			_life_done()
 		"settle":
 			leave()
 
@@ -567,25 +553,8 @@ func drop_core() -> void:
 	_seq([[0.0 if instant else 0.7, func() -> void:
 			GameAudio.fx("drop_thud")
 			GameAudio.buzz()
-			_flash(Color(1.0, 0.45, 0.25), 0.35)
-			jar.rock_root.visible = true
-			jar.set_pour("stone")
-			GameAudio.fx("soil_pour", "Room", -6.0, null, 0.7)],          # 바위가 쏟아짐 = 흙 붓는 소리를 낮게
-		[0.9, func() -> void:
-			_tween_jar_node_scale()
-			_say("단단한 바위가 핵을 감쌌어요.\n이 바위 깊은 곳에, 언젠가 누군가 곡괭이를 대겠지요.")],
-		[2.4, func() -> void:
-			jar.set_pour("")
-			jar.core_mi.visible = false
-			go("soil")]])
-
-
-func _tween_jar_node_scale() -> void:
-	if instant:
-		jar.rock_root.scale.y = 1.0
-		jar.core_mi.visible = false
-		return
-	create_tween().tween_property(jar.rock_root, "scale:y", 1.0, 1.8).set_trans(Tween.TRANS_SINE)
+			_flash(Color(1.0, 0.45, 0.25), 0.35)],
+		[0.8, func() -> void: go("soil")]])
 
 
 # ───────────────────────── 3. 땅 ─────────────────────────
@@ -685,7 +654,8 @@ func pick_water(i: int) -> void:
 		plan.water = w
 		plan.save(StartFlow.save_dir())
 		_say(WATER_WORDS[clampi(i, 0, 2)])
-		_hold_then("lid"))
+		jar.show_eggs(true)
+		_hold_then("light"))
 
 
 func _set_water(w: float) -> void:
@@ -706,126 +676,45 @@ func _pour_to(w: float, done: Callable) -> void:
 		done.call())
 
 
-# ───────────────────────── 6. 뚜껑 (거인의 돌기 셋) ─────────────────────────
-## 뚜껑을 뒤집어 병 위에 들고 안쪽을 보여 줌 (가장자리 작은 돌기는 저절로) → 거인이 콕 (tap_lid) · [알아서] · [다음]
-func place_nubs() -> void:
-	step = "nubs"
-	jar.cork.visible = true
-	jar.cork.rotation = Vector3(LID_TILT, 0, 0)
-	jar.set_nubs(plan.drips)
-	_set_choices(["알아서"])
-	if instant:
-		jar.cork.position = LID_HOLD
-		jar.shot("nubs", 0.0)
-	else:
-		jar.cork.position = LID_HOLD + Vector3(0, 9.0, 0)
-		var tw := create_tween()
-		tw.tween_property(jar.cork, "position", LID_HOLD, 0.9).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-		jar.shot("nubs", 1.1)
-		GameAudio.fx("cork_open", "Room", -6.0)
-	_nub_ui()
-
-
-func _nub_ui() -> void:
-	var n := plan.drips.size()
-	_say(NUB_WORDS[clampi(n, 0, 3)])
-	chips.visible = n < CreationPlan.DRIP_N
-	_show_next(n >= CreationPlan.DRIP_N)
-
-
-## 뚜껑 안쪽 (u, v)를 콕 (화면 탭 · 시험): 빈 곳이면 돌기가 톡 솟음 · 돌기를 다시 누르면 뗌 → 바뀌었으면 true
-func tap_lid(u: float, v: float) -> bool:
-	if step != "nubs":
-		return false
-	var i := plan.drip_near(u, v)
-	if i >= 0:
-		plan.remove_drip(i)
-		jar.unpop_nub(i, not instant)
-		GameAudio.fx("mold_puff", "Room", -10.0, null, 1.5)
-	elif plan.add_drip(u, v):
-		var dv: Array = plan.drips[plan.drips.size() - 1]
-		jar.pop_nub(float(dv[0]), float(dv[1]), not instant)
-		_pop_sound()
-	else:
-		return false
-	plan.save(StartFlow.save_dir())
-	_nub_ui()
-	return true
-
-
-func _pop_sound() -> void:
-	GameAudio.fx("mold_puff", "Room", -6.0, null, 1.9)           # 톡 (코르크 혹이 솟음)
-	if not instant:
-		var tw := create_tween()
-		tw.tween_interval(0.35)
-		tw.tween_callback(func() -> void: GameAudio.fx("drip", "Room", -12.0, null, 1.4))     # 이슬이 맺힘
-
-
-## [알아서]: 모자란 돌기를 채움 (찍은 것은 그대로) — 하나씩 톡톡
-func auto_nubs() -> void:
-	if step != "nubs":
+# ───────────────────────── ④ 빛 걸기 ─────────────────────────
+## [해 걸기]: 창가 쪽 하늘에 해가 걸려 병 안이 따뜻하게 밝아짐 → 코르크가 반짝임 속에 저절로 내려앉음 (손 없이 — 돌기는 저절로) → 잠시 배양
+func hang_sun(i := 0) -> void:
+	if step != "sun":
 		return
-	var n0 := plan.drips.size()
-	plan.fill_drips()
-	plan.save(StartFlow.save_dir())
 	chips.visible = false
-	for k in range(n0, plan.drips.size()):
-		var dv: Array = plan.drips[k]
-		if instant:
-			jar.pop_nub(float(dv[0]), float(dv[1]), false)
-			continue
-		var tw := create_tween()
-		tw.tween_interval(0.3 * (k - n0))
-		tw.tween_callback(func() -> void:
-			jar.pop_nub(float(dv[0]), float(dv[1]))
-			_pop_sound())
-	_nub_ui()
-
-
-func _gui_input(e: InputEvent) -> void:
-	if step != "nubs":
-		return
-	var mb := e as InputEventMouseButton
-	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
-		var uv: Variant = jar.lid_uv_at(mb.position)
-		if uv != null:
-			tap_lid((uv as Vector2).x, (uv as Vector2).y)
-			accept_event()
-
-
-## [다음]: 뒤집어 든 뚜껑이 돌아 병 위로 → 딸깍 ×3 → 배양
-func close_lid() -> void:
+	plan.climate = String(CreationPlan.SUN_SPOTS[clampi(i, 0, CreationPlan.SUN_SPOTS.size() - 1)])
+	plan.auto_drips()
+	plan.save(StartFlow.save_dir())
 	step = "closing"
-	chips.visible = false
 	_show_next(false)
-	plan.save(StartFlow.save_dir())
 	jar.cork.visible = true
+	jar.set_nubs(plan.drips)
+	jar.cork.rotation = Vector3.ZERO
 	if instant:
-		jar.set_nubs(plan.drips)
-		jar.cork.rotation = Vector3.ZERO
+		jar.cork.position = Vector3(0, CreationJar.CORK_C, 0)
 		_lid_closed()
 		return
-	_say("뚜껑을 닫아요.")
-	jar.shot("lid", 1.0)
-	var steps: Array = [[0.3, func() -> void:
-		var tw := create_tween().set_parallel(true)
-		tw.tween_property(jar.cork, "rotation", Vector3.ZERO, 0.7).set_trans(Tween.TRANS_BACK)
-		tw.tween_property(jar.cork, "position", Vector3(0, CreationJar.CORK_C + 0.6, 0), 0.8).set_trans(Tween.TRANS_QUAD)]]
-	for c in 3:
-		var k := c + 1
-		steps.append([0.9 if c == 0 else 0.35, func() -> void:
-			jar.cork.rotation.y = 0.7 * k
-			jar.cork.position.y = CreationJar.CORK_C + 0.6 - 0.2 * k
-			GameAudio.fx("cork_close", "Room", -8.0 + k * 2.0)
-			GameAudio.buzz()])
-	steps.append([0.3, _lid_closed])
-	_seq(steps)
+	_say("해가 걸렸어요.")
+	GameAudio.fx("chime", "Room", -8.0)
+	_flash(Color(1.0, 0.9, 0.6), 0.3)
+	var tw := create_tween()
+	tw.tween_method(func(a: float) -> void: jar._set_sun(a), -0.9, 0.0, 1.2).set_trans(Tween.TRANS_SINE)
+	jar.cork.position = Vector3(0, CreationJar.CORK_C + 9.0, 0)
+	var ct := create_tween()
+	ct.tween_interval(0.9)
+	ct.tween_property(jar.cork, "position:y", CreationJar.CORK_C, 1.0).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ct.tween_callback(func() -> void:
+		GameAudio.fx("cork_close", "Room", -6.0)
+		GameAudio.buzz())
+	ct.tween_interval(0.3)
+	ct.tween_callback(_lid_closed)
 
 
 func _lid_closed() -> void:
 	step = "lapse"
 	jar.cork.position.y = CreationJar.CORK_C
 	_show_next(false)
+	jar.show_eggs(false)
 	_say("유리병에 이슬이 맺히고,\n흘러내리며 강이 생겨요.")
 	_lapse_t = 0.0
 	_start_gen()
@@ -881,8 +770,8 @@ func _on_gen_done(jw: JarWorld) -> void:
 		jar.cork.position.y = CreationJar.CORK_C
 		jar.mark_dirty()
 		var si := plan.stage_index()
-		if si >= CreationPlan.STAGES.find("wildlife"):
-			WorldGen.apply_life(_world.water, plan.create_dict() if si > CreationPlan.STAGES.find("wildlife") else _life_dict(plan.animals.size() == 2))
+		if si >= CreationPlan.STAGES.find("life"):
+			WorldGen.apply_life(_world.water, plan.create_dict())
 			jar.green = 1.0
 			jar.plant_trees()
 			jar.mark_dirty()
@@ -890,15 +779,6 @@ func _on_gen_done(jw: JarWorld) -> void:
 			leave()
 			return
 		go(plan.stage)
-
-
-## 씨앗만 (들짐승·물고기는 아직) — 들짐승 단계 전의 세상
-func _life_dict(with_animals: bool) -> Dictionary:
-	var d := plan.create_dict()
-	if not with_animals:
-		d["animals"] = []
-		d["fish"] = []
-	return d
 
 
 func _lapse_process(dt: float) -> void:
@@ -1006,7 +886,7 @@ func grow() -> void:
 	_save_stage("seeds")
 	jar.set_pour("")
 	jar.shot("top", 0.0 if instant else 1.2)
-	WorldGen.apply_life(_world.water, _life_dict(false))
+	WorldGen.apply_life(_world.water, plan.create_dict())
 	jar.plant_trees()
 	jar.speck_mm.visible = false
 	GameAudio.fx("seeds_wind", "Room", -6.0)
@@ -1031,195 +911,63 @@ func grow() -> void:
 
 func _grow_done() -> void:
 	step = "grow"
-	_say("배양이 끝나서 식물들이 자랐어요.")
+	_say("배양이 끝나서 꽃숲이 자랐어요.")
 	GameAudio.fx("chime", "Room", -8.0)
 	_show_next(true)
+	if not instant:                          # 꽃이 피면 곧 작은 생명이 깨어남 ([다음]으로 바로)
+		_adv = create_tween()
+		_adv.tween_interval(HOLD)
+		_adv.tween_callback(func() -> void:
+			if step == "grow":
+				go("life"))
 
 
-# ───────────────────────── 7b. 들짐승 · 물고기 ─────────────────────────
-## 상자를 열 곳: 첫 키트 자리에서 가까운 (20칸 넘게 떨어진) 숲
-func _default_box_uv() -> Vector2:
-	var ww := _world.water
-	var S: Vector2 = ww.spots[0] if not ww.spots.is_empty() else Vector2.ZERO
-	var best := S
-	var bd := 1.0e9
-	for f: Dictionary in ww.forests:
-		var p := Vector2(f["x"], f["y"])
-		var d := p.distance_to(S)
-		if d > 20.0 and d < bd:
-			bd = d
-			best = p
-	return best / ww.rr
-
-
-## 물고기를 풀 곳: 가장 큰 민물 호수 (없으면 null)
-func _default_fish_uv() -> Variant:
-	var lakes := WorldGen.fresh_lakes(_world.water)
-	if lakes.is_empty():
-		return null
-	return (lakes[0]["p"] as Vector2) / _world.water.rr
-
-
-## 들짐승 단계에 들어올 때 (다시 켰을 때도): 아직 안 풀었으면 ① 짐승 · 짐승만 풀었으면 ② 물고기 · 다 풀었으면 배양
-func _wild_beat() -> void:
-	if plan.animals.size() != 2:
-		_ask_animals()
-		return
-	_crate_uv = jar.crate_spot(_world.water.wildlife)
-	jar.release.finish_crate(_crate_uv, _world.water.wildlife)
-	if plan.fish.size() != 2 and _fish_lake() != null:
-		_ask_fish()
-	else:
-		var fuv: Variant = _fish_lake()
-		if fuv != null:
-			_lake = jar.lake_near((fuv as Vector2) * _world.water.rr)
-			jar.release.finish_fish(_lake)
-		step = "fishing"
-		settle()
-
-
-## ① 상자를 병 입구 위에 들고: "숲과 들에 살 짐승들이에요." [들짐승 풀어 주기]
-func _ask_animals() -> void:
-	step = "release"
-	jar.shot("wild_ask", 0.0 if instant else 1.0)
-	jar.release.hold_crate()
-	_say(WILD_ASK)
-	_set_choices(["들짐승 풀어 주기"])
-
-
-## [들짐승 풀어 주기]: 손가락이 상자를 숲 쪽 땅에 내려놓고 → 뚜껑이 열려 짐승들이 서식지로 (자리는 알아서 — WorldGen.wildlife_plan)
-func release_animals() -> void:
-	if step != "release":
-		return
-	chips.visible = false
-	step = "releasing"
-	var buv := _default_box_uv()
-	plan.animals = [CreationPlan._q(buv.x), CreationPlan._q(buv.y)]
-	var ww := _world.water
-	WorldGen.apply_life(ww, _life_dict(true))
-	_save_stage("wildlife")                     # 앱이 꺼지면 ② 물고기부터
-	_crate_uv = jar.crate_spot(ww.wildlife)
-	if instant:
-		_animals_done()
-		_ask_fish()
-		return
-	_say("")
-	var dur := jar.release.play_crate(_crate_uv, ww.wildlife)
-	var g := jar.uv_point(_crate_uv.x, _crate_uv.y)
-	var mid := Vector2.ZERO                       # 짐승들이 가는 쪽 (카메라가 잠깐 따라감)
-	for wg: Dictionary in ww.wildlife:
-		mid += Vector2(float(wg["x"]), float(wg["y"])) / jar.R / maxf(1.0, ww.wildlife.size())
-	mid = _crate_uv.lerp(mid, 0.6)
-	jar.focus(g + Vector3(0, 0.6, 0.3), 12.0, 0.78, 1.0)
-	_show_next(true)
-	_beat = create_tween()
-	_beat.tween_interval(2.4)
-	_beat.tween_callback(func() -> void: jar.focus(jar.uv_point(mid.x, mid.y) + Vector3(0, 0, 0.6), 15.5, 0.9, 1.6))
-	_beat.tween_interval(dur - 2.4 - 1.2)
-	_beat.tween_callback(func() -> void: jar.focus(jar.uv_point(mid.x * 0.5, mid.y * 0.5) + Vector3(0, 0, 0.8), 20.0, 0.92, 1.4))
-	_beat.tween_interval(1.2)
-	_beat.tween_callback(func() -> void:
-		_animals_done(false)
-		_beat = create_tween()
-		_beat.tween_interval(AFTER)
-		_beat.tween_callback(_ask_fish))
-
-
-## 짐승 박자 끝: 짐승은 제자리 · 빈 상자는 떠올라 감 (A24 손 없이) · "사슴과 토끼는…"
-func _animals_done(skipped := true) -> void:
-	if step != "releasing":
-		return
-	_kill_beat()
-	step = "released"
-	jar.release.finish_crate(_crate_uv, _world.water.wildlife, skipped)
-	jar.release.lift_crate()
-	GameAudio.fx("chime", "Room", -10.0)
-	_say(WILD_DONE)
-	_show_next(true)
-
-
-## 물고기를 풀 곳: 가장 큰 민물 호수 (없으면 null)
-func _fish_lake() -> Variant:
-	return _default_fish_uv()
-
-
-## ② 물고기 유리병을 호수 쪽에 들고: "호수에 살 물고기예요." [물고기 풀어 주기] (민물 호수가 없으면 바로 배양)
-func _ask_fish() -> void:
-	_kill_beat()
-	if step == "fish":
-		return
-	var fuv: Variant = _fish_lake()
-	if fuv == null:
-		step = "fishing"
-		settle()
-		return
-	_lake = jar.lake_near((fuv as Vector2) * _world.water.rr)
-	if _lake.is_empty():
-		_lake = {"p": jar.uv_point((fuv as Vector2).x, (fuv as Vector2).y, 0.05), "rad": 0.5}
-	step = "fish"
-	_show_next(false)
-	jar.shot("wild_ask", 0.0 if instant else 0.9)
-	jar.release.hold_fish_jar(_lake)
-	_say(FISH_ASK)
-	_set_choices(["물고기 풀어 주기"])
-
-
-## [물고기 풀어 주기]: 유리병을 호수 위에서 기울여 퐁당 → 헤엄 · 뛰어오름
-func release_fish() -> void:
-	if step != "fish":
-		return
-	chips.visible = false
-	step = "fishing"
-	var fuv: Vector2 = _fish_lake()
-	plan.fish = [CreationPlan._q(fuv.x), CreationPlan._q(fuv.y)]
-	WorldGen.apply_life(_world.water, _life_dict(true))
-	if instant:
-		_fish_done()
-		return
-	_say("")
-	var dur := jar.release.play_fish(_lake)
-	var c: Vector3 = _lake["p"]
-	jar.focus(c + Vector3(0, 1.2, -0.2), 14.0, 0.6, 1.0)
-	_show_next(true)
-	_beat = create_tween()
-	_beat.tween_interval(dur * 0.62)
-	_beat.tween_callback(func() -> void: _say(FISH_DONE))
-	_beat.tween_interval(dur * 0.38)
-	_beat.tween_callback(_fish_done)
-
-
-func _fish_done() -> void:
-	if step != "fishing":
-		return
-	_kill_beat()
-	jar.release.finish_fish(_lake)
-	if _said != FISH_DONE:
-		_say(FISH_DONE)
-	settle()
-
-
-func _kill_beat() -> void:
-	if _beat != null and _beat.is_valid():
-		_beat.kill()
-	_beat = null
-
-
-## 짧은 배양: 뚜껑을 닫고 새끼가 태어나고 호수마다 물고기가 튐 → [다음] (키트 자리로)
-func settle() -> void:
-	if step != "fishing":
-		return
-	step = "settle_run"
+# ───────────────────────── 7b. 작은 생명이 깨어남 (상자 없음) ─────────────────────────
+## 꽃 속·잎 뒤·이끼 밑에서 작은 생물이 하나둘 · 호수에 송사리 (물에 섞여 온 알) → 짧은 배양 → [다음] (키트 자리로)
+func wake_life() -> void:
+	step = "life_run"
+	_save_stage("life")
 	_lift_cork(false)
-	_show_next(false)
-	_save_stage("wildlife")
+	if jar.release == null:
+		jar.build_kit()
+	_say(LIFE_ASK)
+	jar.release.wake(jar.flower_spots(), jar.fresh_lake_spots(), not instant)
+	if not instant:                          # 꽃 무리 곁으로 가까이 (작은 생물이 보이게) — 끝나면 병 전체로
+		var fp := jar.release.focus_point()
+		jar.focus(fp + Vector3(0, 0.3, 0), 10.0, 0.62, 1.4)
+	GameAudio.fx("seeds_wind", "Room", -12.0)
+	if instant:
+		_life_done()
+		return
+	_show_next(true)
+	_adv = create_tween()
+	_adv.tween_interval(LIFE)
+	_adv.tween_callback(_life_done)
+
+
+func _life_done() -> void:
+	if step != "life_run":
+		return
+	_cancel_hold()
+	jar.release.finish_wake()
+	step = "settle"
 	jar.shot("wildlife", 0.0 if instant else 1.4)
-	jar.release.add_jumpers(jar.fresh_lake_spots())
-	_seq([[1.2, func() -> void: jar.release.add_babies()],
-		[SETTLE - 1.2, func() -> void:
-			step = "settle"
-			GameAudio.fx("chime", "Room", -8.0)
-			_say("새끼들이 태어났어요.\n짐승과 물고기가 병 안에 자리를 잡았어요.")
-			_show_next(true)]])
+	GameAudio.fx("chime", "Room", -8.0)
+	_say(LIFE_DONE)
+	_show_next(true)
+
+
+## 꽃 하나를 톡 (선택 — 손짓 연습): 가까운 꽃에서 나비가 먼저 날아오름 → 날렸으면 true
+func tap_flower(sp: Vector2) -> bool:
+	if step != "life_run" and step != "settle":
+		return false
+	return jar.release != null and jar.release.tap_flower(sp)
+
+
+func _gui_input(e: InputEvent) -> void:
+	var mb := e as InputEventMouseButton
+	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and tap_flower(mb.position):
+		accept_event()
 
 
 # ───────────────────────── 빠른 창조 (OPENING 4 — 두 번째 병부터) ─────────────────────────
@@ -1395,16 +1143,16 @@ func jump(s: String) -> void:
 	var was := instant
 	instant = true
 	_nav = false
-	var order := ["core", "soil", "water", "lid", "seeds", "wildlife"]
+	var order := ["core", "soil", "water", "light", "seeds", "life"]
 	var target := order.find(s)
 	if step == "intro" or step == "":
 		go("core")
 	while order.find(plan.stage) < target and not leaving:
 		var before: String = plan.stage + "/" + step
-		if step == "soil" or step == "nubs":
-			pick(1 if step == "soil" else 0)
+		if step == "soil":
+			pick(1)
 			next()
-		elif step in ["core", "water", "sow", "release", "fish"]:
+		elif step in ["core", "water", "sow", "sun"]:
 			pick(1 if step != "sow" else 0)
 		else:
 			next()

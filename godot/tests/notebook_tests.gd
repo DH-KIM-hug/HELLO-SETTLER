@@ -253,7 +253,8 @@ func test_first_ten_minutes() -> void:
 	check(al >= 405.0 and al <= 510.0, "제단 완공 현실 %d:%02d (목표 ~7:30)" % [int(al) / 60, int(al) % 60])
 	var end := float(a["end"])
 	check(end >= 9.0 * 60.0 and end <= 13.0 * 60.0, "창세의 날(첫날 7시 → 다음 6시)이 현실 %d:%02d에 끝남 (9~13분 · ×1)" % [int(end) / 60, int(end) % 60])
-	check(float(a["night_skip"]) > 0.0 and float(a["skip_hour"]) >= Notebook.NAP_FROM, "첫 저녁 기도 뒤 밤을 저절로 건너뜀 (현실 %.0f초, 병 %.1f시)" % [float(a["night_skip"]), float(a.get("skip_hour", 0.0))])
+	var sh := float(a.get("skip_hour", 0.0))
+	check(float(a["night_skip"]) > 0.0 and (sh >= Notebook.NAP_FROM or sh < Balance.NIGHT_TO), "첫 저녁 기도 뒤 밤을 저절로 건너뜀 (현실 %.0f초, 병 %.1f시)" % [float(a["night_skip"]), float(a.get("skip_hour", 0.0))])
 	check(bool(a["evening_slow"]), "첫 저녁 기도 장면은 느리게 (×%d)" % int(Notebook.SLOW * Notebook.NORMAL_BASE))
 	var c: JarClock = a["clock"]
 	check(not c.creation and c.creation_done and absf(c.speed() - JarClock.normal_speed()) < 0.01, "둘째 날부터 보통 (1일=5분)")
@@ -271,8 +272,9 @@ func test_first_ten_minutes() -> void:
 	var h1 := float(a["hut"])
 	var h0 := float(b["hut"])
 	check(h1 > 0.0 and h0 > 0.0 and h1 < h0 * 0.75, "통나무를 내리면 첫 오두막이 눈에 띄게 빨리 (현실 %.0f초 vs 안 내리면 %.0f초)" % [h1, h0])
-	check(h0 <= 36.0 and h1 <= 19.0, "첫 오두막: 도와주지 않아도 현실 %.0f초 (~30초) · 통나무를 내리면 %.0f초 (~15초)" % [h0, h1])
-	check(int(a.get("hut_steps", 0)) >= 4 and float(a.get("hut_step_gap", 99.0)) <= 8.0,
+	# (A28 OPENING v4.0) 걸음 덤 없이 0.7칸/초로 판자를 나르므로 예전 ~30초 · ~15초보다 김 — 첫 오두막은 깨달음(~5:00) 한참 전 (OPENING 3.1 표 4:00)
+	check(h0 <= 100.0 and h1 <= 70.0, "첫 오두막: 도와주지 않아도 현실 %.0f초 (≤100초) · 통나무를 내리면 %.0f초 (≤70초)" % [h0, h1])
+	check(int(a.get("hut_steps", 0)) >= 4 and float(a.get("hut_step_gap", 99.0)) <= 30.0,     # (A28) 판자를 제 걸음으로 나르는 동안 (예전 ≤8초)
 		"짓는 모습이 몇 초마다 바뀜 (단계 %d번 · 가장 긴 사이 %.1f초)" % [int(a.get("hut_steps", 0)), float(a.get("hut_step_gap", 99.0))])
 	print("    첫 오두막 %s (병 시계) · 깨달음 %.0f초 · 제단 %.0f초 · 밤 건너뛰기 %.0f초 · 첫날 끝 %.0f초 · 계산 %.1f초" % [a.get("hut_clock", "-"), aw, al,
 		float(a["night_skip"]), end, (Time.get_ticks_msec() - t0) / 1000.0])

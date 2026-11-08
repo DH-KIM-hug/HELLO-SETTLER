@@ -354,15 +354,17 @@ func test_opening_first_hour() -> void:
 		var praying := v.people.filter(func(p: Resident) -> bool: return p.action == "pray")
 		var eating := v.people.filter(func(p: Resident) -> bool: return p.doing == "밥 먹는 중")
 		check(sites.size() >= 2, "%s: 5분 안에 촌장이 터를 둘 잡음 (%d)" % [tag, sites.size()])
-		check(working.size() >= adults.size() - 1, "%s: 5분에 어른이 거의 다 일함 (%d/%d)" % [tag, working.size(), adults.size()])
+		# (A28 OPENING v4.0) 걸음 덤(WALK_OPENING)을 없애 걸음은 어디서나 0.7칸/초 — 병 5분(보통 배속 현실 1초)엔 짐꾼만 먼저 나섬 (예전: 거의 다)
+		check(working.size() * 2 >= adults.size(), "%s: 5분에 어른 절반 넘게 일하러 나섬 (%d/%d)" % [tag, working.size(), adults.size()])
 		check(praying.is_empty() and eating.is_empty(), "%s: 첫 아침엔 따로 기도하거나 밥 먹지 않음 (기도 %d · 밥 %d)" % [tag, praying.size(), eating.size()])
 		var first := -1.0
-		while v.t < 60.0 * 60.0 and first < 0.0:
+		while v.t < 8.0 * 60.0 * 60.0 and first < 0.0:
 			v.advance(30.0)
 			for b in v.buildings:
 				if b.built and not kit_ids.has(b.id):
 					first = v.t
-		check(first >= 35.0 * 60.0 and first <= 50.0 * 60.0, "%s: 첫 건물이 도착 35~50분에 (%.1f분)" % [tag, first / 60.0])
+		# (A28) 옛 대본(첫 건물 35~50분)은 병 시계로 짠 걸음 덤 위에 있었다 — 이제 짐을 제 걸음으로 나르므로 도착 몇 시간 (Balance.THANKS_END 안)
+		check(first >= 35.0 * 60.0 and first <= Balance.THANKS_END, "%s: 첫 건물이 도착 %.1f시간에 (35분 ~ %.0f시간)" % [tag, first / 3600.0, Balance.THANKS_END / 3600.0])
 		check(int(v.stats.get("thanks", 0)) == 1 and v.book.any(func(e: Dictionary) -> bool: return String(e["text"]).contains("감사 기도")), "%s: 첫 건물이 서면 첫 감사 기도" % tag)
 		v.advance(60.0)
 		var thank := v.people.filter(func(p: Resident) -> bool: return p.doing == "감사 기도하는 중")

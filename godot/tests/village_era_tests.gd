@@ -191,7 +191,7 @@ func test_herbalist() -> void:
 	var picks := 0
 	var bad_pick := ""
 	var last_t := -1.0
-	while v.t - t0 < 30.0 * Balance.HOUR and float(v.stock.get(Balance.HERB, 0.0)) < 3.0:     # v5: 걸음이 느려 (예전 10시간)
+	while v.t - t0 < 48.0 * Balance.HOUR and float(v.stock.get(Balance.HERB, 0.0)) < 3.0:     # v5: 걸음이 느려 (예전 10시간) · A28: 첫 한 시간 걸음 덤도 없어 30 → 48시간
 		v.advance(300.0)
 		if b.has_spot and b.spot_t != last_t:      # 자리를 새로 고른 순간에 맞는 자리였는지 (E3-7: 이슬이 새벽에만 떨어져 땅이 하루 사이 젖었다 마름 — 6시간마다 다시 고름)
 			last_t = b.spot_t
@@ -331,7 +331,7 @@ func test_chapel() -> void:
 func test_plaza() -> void:
 	var v := proto(49)
 	v.era = 1
-	v.advance(Balance.HOUR)
+	v.advance(6.0 * Balance.HOUR)            # (A28) 첫 한 시간 걸음 덤이 없어져 집 배정이 늦음 — 예전 1시간
 	var pz := built(v, "광장")
 	var homed: Resident = null
 	for r in v.people:

@@ -1,7 +1,6 @@
 ## 창조 오프닝 — 땅 모양 바뀜 · 뚜껑 안쪽 돌기 찍기 캡처. 창이 필요: godot --path godot -s res://tools/shot_creation_land.gd
 ## 390×844. 결과 godot_shots/: creation_land_flat (평평한 흙 + 땅 단추) · creation_land_morph (솟는 중 — 흙먼지) ·
-##   creation_land_hills · creation_land_mountains · creation_nubs_place (뒤집어 든 뚜껑 안쪽) ·
-##   creation_nubs_pop (돌기가 톡 솟는 중) · creation_nubs_popped (세 곳 — 흙 위 표시 + [다음])
+##   creation_land_hills · creation_land_mountains
 ## 돌기는 진짜 화면 탭 (InputEventMouseButton)으로 찍는다 — 탭 → 뚜껑 안쪽 자리 계산까지 확인.
 extends SceneTree
 
@@ -53,14 +52,7 @@ func _steps() -> Array:
 		[0.1, func() -> void: c.call("pick", 2)],
 		[2.0, func() -> void: _save("creation_land_mountains")],
 		[0.1, func() -> void: c.call("next")],
-		[2.0, func() -> void: c.call("pick", 1)],
-		[5.5, func() -> void: _save("creation_nubs_place")],
-		[0.1, func() -> void: _tap(TAPS[0])],
-		[0.6, func() -> void: _tap(TAPS[1])],
-		[0.6, func() -> void: _tap(TAPS[2])],
-		[0.12, func() -> void: _save("creation_nubs_pop")],
-		[1.5, func() -> void: _save("creation_nubs_popped")],
-		[0.1, func() -> void: print("drips ", (c.get("plan") as CreationPlan).drips, " step ", c.get("step"))],
+		[1.0, func() -> void: print("step ", c.get("step"))],      # (A28) 뚜껑 돌기 찍기는 없앰 — 물 다음은 빛 걸기 (shot_creation.gd)
 	]
 
 

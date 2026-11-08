@@ -55,7 +55,6 @@ const YEARS_PER_DAY := 2.4              # 표시 나이 = 일 × 2.4세
 ## 병 초로는 0.7 ÷ 288. 배속을 따라 느리게·빠르게 보인다 (시뮬레이션은 배속과 상관없이 같다 — 결정론). 다리 동작은 화면의 땅 빠르기에 맞춤 (ResidentModel.STRIDE · GROUND_NORMAL)
 const WALK_SCREEN := 0.7                # 보통 배속에서 어른이 현실 1초에 걷는 칸 수
 const WALK := WALK_SCREEN / 288.0       # 칸/병 초 (≈ 병 한 시간에 8.75칸)
-const WALK_OPENING := 1.25              # 첫 한 시간 대본 (OPENING 3.1 — 감사 기도 전)·제단 장면: 병 시계로 짠 옛 대본의 걸음 (칸/병 초 — 첫 집 35~50분 · 5분 안에 일터로). 화면 걸음 덤이 아니다 — 대본은 오프닝 다시 짜기(ROADMAP A28)에서 0.7칸/초에 맞춰 다시
 const PACE_FIRST_DAY := 288.0 / 24.0    # 수첩이 펼쳐진 첫 병 첫날 (첫 한 시간 대본·제단 장면 밖): 병 시계가 현실 1초 = 병 약 24초로 느려 걸음·채집을 그만큼 빠르게 — 시계 보정뿐, 덤 없음 (화면에선 보통과 같은 0.7칸/초 · 2026-11-07 걸음 한 번 더: 예전 ×1.25 덤 없앰)
 const WALK_ELDER := 0.75
 const WALK_CHILD := 0.9
@@ -402,7 +401,7 @@ const B := {
 	"화덕": {"plank": 1, "stone": 1, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 90.0},
 	"빵집": {"plank": 2, "stone": 3, "time": 150 * BUILD_K, "era": 2, "size": 1.2, "job": true, "in": {"밀가루": 1}, "out": {"빵": BREAD_YIELD}, "cycle": 40.0, "replaces": "화덕"},
 	"소금밭": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 1.0, "job": true, "out": {"소금": 1}, "cycle": 1800.0, "needs_salt": true},
-	"제단": {"plank": 0, "stone": 0, "time": 5000, "era": 0, "size": 0.9},   # v5: 9,000 → 5,000 (아기를 돌보는 부모·짐꾼이 생겨 짓는 손이 줄었다 — 현실 ~7:30에 서게) · A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
+	"제단": {"plank": 0, "stone": 0, "time": 1300, "era": 0, "size": 0.9},   # A28: 5,000 → 1,300 (걸음 덤 없이 돌을 주워 오가므로 — 제단 현실 ~7:30) · v5: 9,000 → 5,000 (아기를 돌보는 부모·짐꾼이 생겨 짓는 손이 줄었다 — 현실 ~7:30에 서게) · A4b — 깨달음 뒤 주민이 모닥불 곁에 짓는 돌 제단 (sim/awakening.gd · 짧게). 돌은 둘레에서 주워 쌓는다 — 창고 자재 없음 (돌이 바닥나도 늘 지어지게)
 	"버섯꾼": {"plank": 2, "stone": 0, "time": 60 * BUILD_K, "era": 0, "size": 0.9, "job": true, "gather": true, "pick": 50.0 * GATHER_K},   # WORLD_EVENTS 2.6 — 나무꾼처럼 큰 버섯을 베어 나름 + 말림대
 	# 마을 시대 건물 1차 (A6 — BUILDINGS 3.1 · 4.1 · 6, buildings_v1.xlsx '건물' 시트의 판자/돌/시간 — sim/village_era.gd)
 	"묘지": {"plank": 0, "stone": 1, "time": 30 * BUILD_K, "era": 0, "size": 1.3},    # 개척기 — 첫 사망 뒤. 반경 행복 −0.01 · 슬픔이 덜함
@@ -457,6 +456,7 @@ const MEALS := [[6.5, 7.5], [12.0, 13.0], [18.0, 19.0]]     # v5: 창이 한 시
 const MEAL_TIME := 1800.0
 # 첫 한 시간 (OPENING 3.1 — 창조 6분 뒤부터의 대본). 첫 감사 기도를 드리면 끝난다
 const OPENING_END := 2.0 * HOUR         # (정함) 첫 감사 기도가 이때까지 없으면 그냥 평소대로
+const THANKS_END := 8.0 * HOUR          # (A28) 첫 건물이 이때까지 서면 감사 기도 (걸음 덤을 없애 첫 건물이 첫 한 시간 뒤에 설 수 있음 — 도착 3~4시간)
 const OPENING_MANNA_ADULT := 3.0 * 60.0   # (정함) 도착하고 이만큼은 어른도 하늘 낟알을 줍는다 — 그 뒤엔 아이들만 줍고 어른은 일하러
 const OPENING_CHIEF_AT := [3.0 * 60.0, 4.5 * 60.0]   # (정함) 촌장이 첫 터를 잡는 때 (첫 집 · 밭 — 15분 주기를 기다리지 않음)
 const OPENING_BUILD_WORK := 14000.0     # (정함) 첫 한 시간에 잡은 터는 땅을 고르고 기둥을 처음 세우느라 이만큼(사람×초)을 일해야 다 지어진다 — 첫 오두막 ≈ 도착 40~45분

@@ -473,8 +473,8 @@ static func _minerals(ww: WorldWater, core: int, seed_v: int, drips: Array) -> v
 				break
 
 
-## 씨앗 · 들짐승 · 물고기 (단계 7·7b) — 세상이 다 만들어진 뒤에 얹는다 (물이 다시 흐를 필요 없음). 결정론: 같은 선택 + 시드 → 같은 결과.
-## cr = CreationPlan.gen_opts()["create"] (씨앗 {moss, grass, tree: [[u, v]…]} · animals [u, v] · fish [u, v] — 비면 알아서)
+## 씨앗 · 송사리 (단계 ⑤·7b) — 세상이 다 만들어진 뒤에 얹는다 (물이 다시 흐를 필요 없음). 결정론: 같은 선택 + 시드 → 같은 결과.
+## cr = CreationPlan.gen_opts()["create"] (씨앗 {moss, grass, tree: [[u, v]…]} · fish [u, v] 옛 저장만 — 비면 가장 큰 민물 호수)
 static func apply_life(ww: WorldWater, cr: Dictionary) -> void:
 	var R := ww.rr
 	var r := RandomNumberGenerator.new()
@@ -512,15 +512,8 @@ static func apply_life(ww: WorldWater, cr: Dictionary) -> void:
 	for pt: Array in _clusters(seeds.get("moss", []), 0.08):
 		var p := Vector2(float(pt[0]), float(pt[1])) * R * CreationPlan.REACH
 		ww.moss.append({"x": p.x, "y": p.y, "r": clampf(6.0 + float(pt[2]) * 1.5, 6.0, 16.0)})
-	# 들짐승 (WILDLIFE.md 1 — 서식지대로): 놓은 곳에서 가까운 숲부터
-	var drop := Vector2.ZERO
-	var av: Array = cr.get("animals", [])
-	if av.size() == 2:
-		drop = Vector2(float(av[0]), float(av[1])) * R * CreationPlan.REACH
-	elif not ww.spots.is_empty():
-		drop = ww.spots[0]
-	ww.wildlife = wildlife_plan(ww, drop, r)
-	# 물고기: 기울인 호수(민물)에 많이 + 다른 민물 호수에도 조금씩 (강을 따라 퍼진다)
+	ww.wildlife.clear()                             # (A28 v4.0) 들짐승 없음 — 소인 세계엔 큰 짐승이 살지 않는다 (E3-12 · OPENING 7b)
+	# 송사리: 물에 섞여 온 알이 깨어남 (OPENING v4.0 ③·7b) — 가장 큰 민물 호수(옛 저장은 물고기를 푼 호수)에 많이 + 다른 민물 호수에도 조금씩
 	ww.fish.clear()
 	var fv: Array = cr.get("fish", [])
 	var lakes := fresh_lakes(ww)
@@ -538,62 +531,6 @@ static func apply_life(ww: WorldWater, cr: Dictionary) -> void:
 	ww.creation = cr.duplicate(true)
 	ww.creation.erase("sculpt")
 	ww.creation["myth"] = CreationPlan.myth_of(cr)
-
-
-## 들짐승 무리 자리: 사슴·토끼 = 놓은 곳 가까운 숲·숲 가장자리 · 늑대 = 깊은 숲(큰 숲, 키트 자리에서 먼) · 멧돼지 = 숲 ·
-## 들양 = 높은 언덕 · 들소 = 넓은 초원(숲에서 먼 평지)
-static func wildlife_plan(ww: WorldWater, drop: Vector2, r: RandomNumberGenerator) -> Array[Dictionary]:
-	var out: Array[Dictionary] = []
-	var fs := ww.forests.duplicate()
-	fs.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		return Vector2(a["x"], a["y"]).distance_to(drop) < Vector2(b["x"], b["y"]).distance_to(drop))
-	for i in mini(3, fs.size()):
-		var f: Dictionary = fs[i]
-		out.append({"kind": "deer", "x": float(f["x"]), "y": float(f["y"]), "n": 4 + r.randi() % 3})
-	for i in mini(2, fs.size()):
-		var f: Dictionary = fs[i]
-		var a := r.randf() * TAU
-		var p := Vector2(f["x"], f["y"]) + Vector2(cos(a), sin(a)) * (float(f["r"]) + 6.0)
-		out.append({"kind": "rabbit", "x": p.x, "y": p.y, "n": 6 + r.randi() % 4})
-	if not fs.is_empty():
-		var f: Dictionary = fs[mini(3, fs.size() - 1)]
-		out.append({"kind": "boar", "x": float(f["x"]), "y": float(f["y"]), "n": 3 + r.randi() % 2})
-	var deep: Dictionary = {}
-	var deep_s := -1.0
-	for f: Dictionary in ww.forests:
-		var p := Vector2(f["x"], f["y"])
-		var far := 1.0e9
-		for S in ww.spots:
-			far = minf(far, p.distance_to(S))
-		var s := float(f["r"]) * minf(far, 250.0)
-		if s > deep_s:
-			deep_s = s
-			deep = f
-	if not deep.is_empty():
-		out.append({"kind": "wolf", "x": float(deep["x"]), "y": float(deep["y"]), "n": 3 + r.randi() % 3})
-	var hill := Vector2.ZERO
-	var hill_h := -1.0e9
-	var plain := Vector2.ZERO
-	var plain_s := -1.0e9
-	for i in 120:
-		var p := _rand_disc(r, ww.rr * 0.85)
-		var k := ww.idx(p.x, p.y)
-		if ww.depth(k) > 0.002:
-			continue
-		var hh := ww.h[k]
-		if hh > hill_h:
-			hill_h = hh
-			hill = p
-		var nf := 1.0e9
-		for f: Dictionary in ww.forests:
-			nf = minf(nf, Vector2(f["x"], f["y"]).distance_to(p) - float(f["r"]))
-		var s := minf(nf, 60.0) - absf(hh - 0.35) * 80.0
-		if s > plain_s:
-			plain_s = s
-			plain = p
-	out.append({"kind": "sheep", "x": hill.x, "y": hill.y, "n": 5 + r.randi() % 3})
-	out.append({"kind": "aurochs", "x": plain.x, "y": plain.y, "n": 3 + r.randi() % 2})
-	return out
 
 
 ## 민물 호수들 [{name, p: Vector2}] (물방울 호수 + 부은 분지 중 짜지 않은 것)

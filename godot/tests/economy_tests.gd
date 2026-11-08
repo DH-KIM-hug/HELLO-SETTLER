@@ -191,9 +191,9 @@ func test_chief_autonomous() -> void:
 		var v := lab(4)
 		v.watching = watched
 		var b0 := v.buildings.size()
-		v.advance(12.0 * Balance.HOUR)
+		v.advance(20.0 * Balance.HOUR)          # (A28) 첫 한 시간 걸음 덤이 없어져 첫 터들이 늦게 섬 — 예전 12시간
 		var built := v.buildings.filter(func(b: Building) -> bool: return b.built).size()
-		check(v.buildings.size() >= b0 + 4 and built >= 4, "%s 12시간: 촌장이 터 %d곳을 잡고 %d채 완공" % ["거인이 볼 때" if watched else "거인이 없을 때", v.buildings.size() - b0, built - 1])
+		check(v.buildings.size() >= b0 + 4 and built >= 4, "%s 20시간: 촌장이 터 %d곳을 잡고 %d채 완공" % ["거인이 볼 때" if watched else "거인이 없을 때", v.buildings.size() - b0, built - 1])
 
 
 ## 소원 편지 (기획서 6.7): v5 — 병 1.5~3일에 한 통 (병 하루 = 현실 5분이라 현실 하루 3~6통), 들어주면 믿음↑ · 우선순위 맨 위 · 짓는 속도 ×1.5

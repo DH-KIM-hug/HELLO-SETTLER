@@ -1,18 +1,20 @@
-## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md 1·2 — 첫 병 줄임판).
-## 단계: core 핵 → soil 땅 → water 물 → lid 물방울 돌기·뚜껑 잠그기(배양, 저절로) → seeds 씨앗(배양) →
-##       wildlife 들짐승·물고기 풀기(배양) → spot 스타터킷 자리 (넓은 세상 장면) → build 키트 건물 놓기 (v3.9) → name 지구 이름 → 병 안.
-## 단계마다 큰 단추 2~3개 (2026-11-07 — 손으로 빚기·게이지·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
-##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 씨앗 seed_preset.
-## 돌기는 거인이 뚜껑 안쪽을 콕콕 찍는다 (2026-11-07 다시 — 큰 호수 자리를 고름): add_drip · 다시 누르면 drip_near → remove_drip · [알아서] fill_drips.
-##   sculpt · drips · seeds · animals · fish 칸은 그대로 (옛 저장·세상 만들기와 같은 모양).
-## 빈 병 두드리기(0)는 타이틀 → 병 연출에, 암반 컵(2)은 시드(광맥·암염은 WorldGen이 보장), 태양(5)은 첫 병 온대 고정 (나중 병의 자리만 climate).
+## 창조 오프닝에서 거인이 고른 것 (docs/OPENING.md v4.0 — 첫 병 5단계, 2026-11-08 사용자 결정 A28).
+## 단계: core 별 심기(핵) → soil 땅 빚기(암반+흙) → water 물 붓기(송사리 알이 섞여 옴) → light 빛 걸기(태양 자리 — 첫 병 온대, 배양) →
+##       seeds 꽃씨 뿌리기(배양) → life 작은 생명이 깨어남(상자 없음) → spot 스타터킷 자리 → build 키트 건물 놓기 (v3.9) → name 지구 이름 → 병 안.
+## 옛 저장의 단계 이름은 앞으로 옮긴다 (LEGACY_STAGES: lid → light · wildlife → life — 뚜껑·들짐승 단계는 없앰).
+## 단계마다 큰 단추 (2026-11-07 — 손으로 빚기·게이지·씨앗 문지르기·상자 끌기는 없앰). 단추 = 프리셋:
+##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 빛 SUN_SPOTS · 씨앗 seed_preset.
+## 뚜껑 안쪽 물방울 돌기는 저절로 (auto_drips — 거인이 찍지 않음, v4.0). sculpt · drips · seeds · animals · fish 칸은 그대로
+##   (옛 저장·세상 만들기와 같은 모양 — animals · fish는 옛 저장에만: 새 창조는 비움, 송사리는 민물 호수마다 저절로).
+## 핵 크기(CORE_PICKS)의 뜻(광물 풍부도·광맥·화산 자리)은 WorldGen이 읽는다 — 바뀔 수 있음 (사용자 질문 중), 여기는 고른 번호만.
 ## 좌표: 병 안 원판을 [-1, 1]로 (u = 세상 x / 반지름, v = 세상 y / 반지름). 빚기 = SG×SG 격자 (−1 파냄 ~ +1 쌓음).
 ## 결정론: 시드 + 이 선택(gen_opts — 값은 1/1000로 반올림) → 늘 같은 세상. 중간 저장(creation.json)에서 다시 만들어도 같다.
 ## 앱이 꺼져도 이어서: save()/load() — 저장 폴더의 creation.json (원자적으로: 임시 파일에 쓰고 이름 바꾸기). 병이 생기면 clear().
 class_name CreationPlan
 extends RefCounted
 
-const STAGES := ["core", "soil", "water", "lid", "seeds", "wildlife", "spot", "build", "name"]
+const STAGES := ["core", "soil", "water", "light", "seeds", "life", "spot", "build", "name"]
+const LEGACY_STAGES := {"lid": "light", "wildlife": "life"}   # 옛 저장의 단계 → 지금 단계 (v4.0)
 const SG := 32                          # 빚기 격자 한 변
 const REACH := 1.0                      # 병 안 원판 → 세상 (같은 비율)
 const FILE := "creation.json"
@@ -22,10 +24,9 @@ const LAND_PICKS := ["너른 들", "언덕", "산과 골짜기"]
 const WATER_PICKS_T := ["조금", "알맞게", "넉넉히"]
 const WATER_PICKS := [0.22, 0.5, 0.82]   # 물 단추 → 부은 양 (신화: 0.35 아래 '조금' · 0.75 위 '넉넉히')
 const SEED_PICKS := ["알아서", "꽃을 더", "풀밭을 더"]   # (E3-3 소인의 세상) 이끼·풀·꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
-const DRIP_N := 3                       # 거인의 돌기 (세상이 나머지를 채워 메이슨 자 8~12 — GD 3.3)
-const DRIP_MAX_R := 0.8                 # 뚜껑 안쪽에 돌기를 찍을 수 있는 곳 (가장자리 테 안)
-const DRIP_GAP := 0.24                  # 돌기 사이 (너무 붙으면 안 찍힘)
-const DRIP_HIT := 0.17                  # 이만큼 가까이 누르면 그 돌기를 뗌 (되돌리기)
+const SUN_SPOTS := ["temperate"]        # 빛 걸기: 첫 병에 열린 태양 자리 (나머지는 안개 — 기후대 점진 해금, GD 5.3)
+const SUN_PICKS := ["해 걸기"]
+const DRIP_N := 3                       # 뚜껑 안쪽 큰 돌기 (저절로 — 세상이 나머지를 채워 메이슨 자 8~12, GD 3.3)
 const CORE_WORDS := ["조용한 별이네요.", "따뜻한 별이네요.", "뜨거운 별이네요.\n땅이 자주 흔들릴지도 몰라요."]
 
 var seed_v := 0
@@ -36,11 +37,11 @@ var sculpt := PackedFloat32Array()      # SG×SG
 var water := 0.0                        # 0~1 (부은 양 — 물 단추 WATER_PICKS)
 var drips: Array = []                   # [[u, v]…] 뚜껑 안쪽 물방울 돌기 (auto_drips — 옛 저장은 거인이 찍은 1~3개)
 var seeds := {"moss": [], "grass": [], "tree": []}
-var animals: Array = []                 # [u, v] 들짐승을 푼 곳 (가까운 숲 — 비면 알아서)
-var fish: Array = []                    # [u, v] 물고기를 푼 호수
+var animals: Array = []                 # (옛 저장만) 들짐승을 푼 곳 — v4.0엔 들짐승 없음
+var fish: Array = []                    # (옛 저장만) 물고기를 푼 호수 — v4.0엔 송사리 알이 물에 섞여 와 민물 호수마다 깨어남
 var spot: Array = []                    # [x, y] 스타터킷 자리 (세상 좌표)
 var placed: Dictionary = {}             # (v3.9 build) 거인이 놓은 키트 건물: 건물 번호(문자열) 또는 "fire" → [x, y] (세상 좌표)
-var climate := "temperate"              # 첫 병은 온대 고정 (GAME_DESIGN 5.3) — 두 번째 병부터 태양 단계가 정함
+var climate := "temperate"              # 빛 걸기 (SUN_SPOTS — 첫 병은 온대만 열림, GAME_DESIGN 5.3)
 var jar_name := ""
 var quick := false                      # 두 번째 병부터 — 빠른 창조 (OPENING 4: 한 화면에 핵·땅·물·기후·씨앗)
 
@@ -201,37 +202,6 @@ func auto_drips() -> void:
 		drips.append([_q(cos(a) * d), _q(sin(a) * d)])
 
 
-## 거인이 뚜껑 안쪽 (u, v)를 콕: 돌기 하나 (DRIP_N개까지 · 테 안 · 다른 돌기와 떨어져야) → 찍혔으면 true
-func add_drip(u: float, v: float) -> bool:
-	if drips.size() >= DRIP_N:
-		return false
-	var p := Vector2(u, v)
-	if p.length() > DRIP_MAX_R:
-		p = p.normalized() * DRIP_MAX_R
-	for d: Variant in drips:
-		if p.distance_to(Vector2(float(d[0]), float(d[1]))) < DRIP_GAP:
-			return false
-	drips.append([_q(p.x), _q(p.y)])
-	return true
-
-
-## (u, v) 가까이 찍힌 돌기 번호 (없으면 −1) — 다시 누르면 떼기
-func drip_near(u: float, v: float, rad := DRIP_HIT) -> int:
-	var best := -1
-	var bd := rad
-	for i in drips.size():
-		var d := Vector2(float(drips[i][0]), float(drips[i][1])).distance_to(Vector2(u, v))
-		if d < bd:
-			bd = d
-			best = i
-	return best
-
-
-func remove_drip(i: int) -> void:
-	if i >= 0 and i < drips.size():
-		drips.remove_at(i)
-
-
 ## [알아서]: 모자란 돌기를 채움 (찍어 둔 것은 그대로 · 서로 떨어지게 · 같은 시드면 같은 자리)
 func fill_drips() -> void:
 	var r := RandomNumberGenerator.new()
@@ -244,7 +214,7 @@ func fill_drips() -> void:
 		var p := Vector2(cos(a), sin(a)) * d
 		var ok := true
 		for q: Variant in drips:
-			ok = ok and p.distance_to(Vector2(float(q[0]), float(q[1]))) >= (0.42 if tries < 200 else DRIP_GAP)
+			ok = ok and p.distance_to(Vector2(float(q[0]), float(q[1]))) >= (0.42 if tries < 200 else 0.24)
 		if ok:
 			drips.append([_q(p.x), _q(p.y)])
 
@@ -353,41 +323,46 @@ func add_seed(kind: String, u: float, v: float) -> void:
 	seeds[kind] = a
 
 
-# ───────────────────────── 창세 신화 (연대기 첫 장 — 선택에 따라 바뀜) ─────────────────────────
+# ───────────────────────── 창세 신화 (연대기 첫 장 — 거인만 아는 이야기, OPENING v4.0 5 · STORY 6.5) ─────────────────────────
+## 고른 것대로 바뀐다. 누가 했는지는 말하지 않는다 (주민은 창조를 모른다 — 별지기만 앎). 마지막 줄이 주민 쪽 연대기의 시작.
+## 줄 차례: 0 별 · 1 땅 · 2 물 · 3 빛 · 4 꽃씨 · 5 작은 생명 · 6 조상
+const MYTH_CORE := ["태초에 어둠 속에 작고 은은한 별 하나가 심겼다.", "태초에 어둠 속에 붉은 별 하나가 심겼다.", "태초에 어둠 속에 뜨겁게 타는 별 하나가 심겼다."]
+const MYTH_LAND := ["별은 바위에 감싸이고, 그 위에 흙이 덮여 너른 땅이 펼쳐졌다.", "별은 바위에 감싸이고, 그 위에 흙이 덮여 나지막한 언덕이 솟았다.",
+	"별은 바위에 감싸이고, 그 위에 흙이 덮여 산이 솟았다.", "별은 바위에 감싸이고, 그 위에 흙이 덮여 높은 산과 깊은 골짜기가 생겼다."]
+const MYTH_WATER := ["물이 조금 고여 작은 호수 몇이 남았고, 물속엔 작은 알들이 잠들어 있었다.", "물이 고여 호수가 생겼고, 물속엔 작은 알들이 잠들어 있었다.",
+	"물이 넉넉히 고여 호수가 가득했고, 물속엔 작은 알들이 잠들어 있었다."]
+const MYTH_LIGHT := "하늘에 해가 걸리자 이슬이 맺혀 흘러내렸고, 긴 세월이 흘렀다."
+const MYTH_SEEDS := ["이끼와 풀 사이로 꽃숲이 자랐다.", "거대한 꽃숲이 우거졌다.", "풀밭이 너르게 펼쳐졌다."]
+const MYTH_LIFE := "꽃이 피자 작은 것들이 깨어났다."
+const MYTH_PEOPLE := "그리고 어느 새벽, 조상 열 명이 불을 피웠다."
+
+
 static func myth_of(cr: Dictionary) -> Array:
-	var core := int(cr.get("core", 1))
 	var lines: Array = []
-	lines.append(["태초에 {c:이/가} 어둠 속에 작고 은은한 별 하나를 심었다.", "태초에 {c:이/가} 어둠 속에 붉은 별 하나를 심었다.",
-		"태초에 {c:이/가} 어둠 속에 뜨겁게 타는 별 하나를 심었다."][clampi(core, 0, 2)])
+	lines.append(MYTH_CORE[clampi(int(cr.get("core", 1)), 0, 2)])
 	var g := sculpt_of(cr)
 	var hi := 0.0
 	var lo := 0.0
 	for x in g:
 		hi = maxf(hi, x)
 		lo = minf(lo, x)
-	if hi > 0.5 and lo < -0.5:
-		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 높은 산과 깊은 골짜기를 빚었다.")
-	elif hi > 0.5:
-		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 산을 빚었다.")
-	elif hi > 0.3:
-		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 나지막한 언덕을 빚었다.")
-	else:
-		lines.append("{c:은/는} 별을 바위로 감싸고, 그 위에 흙을 덮어 너른 땅을 폈다.")
+	lines.append(MYTH_LAND[3 if (hi > 0.5 and lo < -0.5) else (2 if hi > 0.5 else (1 if hi > 0.3 else 0))])
 	var w := float(cr.get("water", 0.5))
-	lines.append("{c:이/가} 물을 조금 부으니 작은 호수 몇이 남았다." if w < 0.35 else ("{c:이/가} 물을 넉넉히 부으니 호수가 가득했다." if w > 0.75 else "{c:이/가} 물을 부으니 호수가 생겼다."))
-	lines.append("{c:이/가} 하늘을 닫자 하늘에서 첫 물방울이 떨어졌고, 긴 세월이 흘렀다.")
+	lines.append(MYTH_WATER[0 if w < 0.35 else (2 if w > 0.75 else 1)])
+	lines.append(MYTH_LIGHT)
 	var sd: Dictionary = cr.get("seeds", {})
 	var nt: int = (sd.get("tree", []) as Array).size()
 	var ng: int = (sd.get("grass", []) as Array).size()
-	if ng > nt * 2:
-		lines.append("{c:이/가} 생명을 뿌리니 풀밭이 너르게 펼쳐졌다.")
-	elif nt > ng * 3:
-		lines.append("{c:이/가} 생명을 뿌리니 거대한 꽃숲이 우거졌다.")
-	else:
-		lines.append("{c:이/가} 생명을 뿌리니 이끼와 풀 사이로 꽃숲이 자랐다.")
-	lines.append("사람보다 먼저, {c:은/는} 숲에 짐승을 물에 물고기를 풀어 놓으셨다.")
-	lines.append("그리고 어느 새벽, {c:이/가} 우리의 조상 열 명을 이 땅에 내려놓으셨다.")
+	lines.append(MYTH_SEEDS[2 if ng > nt * 2 else (1 if nt > ng * 3 else 0)])
+	lines.append(MYTH_LIFE)
+	lines.append(MYTH_PEOPLE)
 	return lines
+
+
+## 옛 저장의 단계 이름 → 지금 단계 (모르는 이름은 처음부터)
+static func stage_of(s: String) -> String:
+	s = String(LEGACY_STAGES.get(s, s))
+	return s if s in STAGES else "core"
 
 
 # ───────────────────────── 중간 저장 (OPENING 5 '창조 도중 앱 종료') ─────────────────────────
@@ -410,9 +385,7 @@ static func from_dict(d: Dictionary) -> CreationPlan:
 	if int(d.get("v", 0)) != 1 or not d.has("seed"):
 		return null
 	var p := CreationPlan.make(int(d["seed"]), int(d.get("size", 1024)))
-	p.stage = String(d.get("stage", "core"))
-	if not p.stage in STAGES:
-		p.stage = "core"
+	p.stage = stage_of(String(d.get("stage", "core")))
 	p.core = clampi(int(d.get("core", 1)), 0, 2)
 	var g := sculpt_of(d)
 	if g.size() == SG * SG:

@@ -323,7 +323,8 @@ func test_kits_and_fog() -> void:
 		lines.append(e["text"])
 	var found := lines.filter(func(t: String) -> bool: return t.contains("불렀다") or t.contains("하얀 바위"))
 	print("  탐험 %d번 · 본 안개 칸 %d → %d · 발견 연대기 %d줄" % [int(v.stats.get("explore", 0)), fog0, fog1, found.size()])
-	check(int(v.stats.get("explore", 0)) >= 4 and fog1 > fog0 * 1.5, "주민이 탐험하며 안개가 걷힌다 (탐험 %d번 — v5: 현실 사람 걸음이라 한 번이 길다, 예전 6번 이상)" % int(v.stats.get("explore", 0)))
+	# (A28) 첫 한 시간의 걸음 덤(WALK_OPENING)도 없어져 첫 탐험이 더 짧다 — 예전 4번·1.5배
+	check(int(v.stats.get("explore", 0)) >= 2 and fog1 > fog0 * 1.25, "주민이 탐험하며 안개가 걷힌다 (탐험 %d번 — v5: 현실 사람 걸음이라 한 번이 길다, 예전 6번 이상)" % int(v.stats.get("explore", 0)))
 	check(found.size() >= 2, "처음 본 호수·강·흰 바위를 연대기에 적는다 (%d줄)" % found.size())
 	var wbad: String = run.words_ok(lines)
 	check(wbad == "", "연대기에 금지어 없음 %s" % wbad)
