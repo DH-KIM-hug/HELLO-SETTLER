@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -51,7 +51,8 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd", "touch": "res://tests/touch_tests.gd",
 	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
-	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd"}
+	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
+	"bld2d": "res://tests/bld2d_tests.gd"}
 
 
 func _initialize() -> void:
@@ -70,6 +71,8 @@ func _initialize() -> void:
 	CatchUp.rate_override = 1.0
 	# 기존 묶음은 3D 주민 모델(ResidentModel의 뼈·부품)을 본다 — 종이 인형 미리 보기(설정 기본 켜짐)는 cutout 묶음이 따로 켬
 	CutoutResident.override = 0
+	# 건물은 기본(2D 그림책 그림 — view/bld2d)으로 고정 (기기의 설정 파일에 따라 달라지지 않게)
+	Bld2D.override = 1
 	CatchUp.step_override = Balance.STEP
 	var one := ""
 	for k: String in SUITES:

@@ -52,7 +52,26 @@ static func model_name(type: String, variant := 0) -> String:
 	return String(names[absi(variant) % names.size()])
 
 
+## (2D 그림 건물 — view/bld2d/bld2d.gd) 카드 그림 = 마을과 같은 그림책 그림 (다 지은 모습 · 밀밭은 익은 밀). 없으면 ""
+static func picture_name(type: String, variant := 0) -> String:
+	if not Bld2D.enabled():
+		return ""
+	var pic := Bld2D.wheat_pic(2) if type == "농장" else Bld2D.type_pic(type, variant)
+	return pic if Bld2D.has(pic) and Bld2D.near_texture(pic) != null else ""
+
+
 static func rect(type: String, px: float, variant := 0) -> Control:
+	var pic := picture_name(type, variant)
+	if pic != "":
+		var t2 := TextureRect.new()
+		t2.custom_minimum_size = Vector2(px, px)
+		t2.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		t2.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		t2.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		t2.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		t2.texture = Bld2D.near_texture(pic)
+		t2.set_meta(&"pic", pic)
+		return t2
 	var nm := model_name(type, variant)
 	if nm == "" or not Art.exists(nm):
 		return GameIcons.rect("마을로 가기", px)

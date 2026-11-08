@@ -48,6 +48,12 @@ var bld_shadow_proxy := true    # false = 예전처럼 본 모델이 그림자 (
 var _near_shadow: Node3D        # 그림자 전용 묶음 (가까이 LOD일 때만 보임)
 var _shadow_items := {}         # 건물 id → [노드 변환, [[메시, 재질, 건물 기준 Transform3D]…]]
 var _shadow_dirty := false
+## (2D 그림 건물 — view/bld2d/bld2d.gd, RENDERING.md 확정 2026-11-08) 건물마다 그림 판 + 3D 모델은 그림자 대역
+var _bld2d_on := false            # 지금 그림으로 그리는가 (Bld2D.enabled — 바뀌면 건물을 다시 만듦)
+var _card_items := {}             # 건물 id → [[그림, 마을 기준 원점(올림 포함), k, flip]…] (멀리 묶음 · 접촉 그림자)
+var _contact: MultiMeshInstance3D # 접촉 그림자 타원 (모든 건물 = 그리기 1번, 늘 보임)
+var _contact_dirty := false
+const YARD_FLORA_2D := ["flowers", "flowers_b", "bush_flower"]   # 그림 건물: 마당 소품 중 꽃만 남김 (나머지는 그림에 들어 있음)
 ## (A27-c) 밀 숲 터 = 농장: 키 큰 밀 줄기 다섯 (art/src/build_buildings.py build_wheat_forest). 윗부분(_top, 모델 높이 6칸 위)은
 ## 엷어지는 재질(render/toon_fade.gdshader)로 — 그 아래 주민·길을 가리지 않게. 그림자는 그림자 전용 쌍둥이가 드리운다.
 const WHEAT_MODELS := ["buildings/wheat_forest_sprout", "buildings/wheat_forest_green", "buildings/wheat_forest_ripe"]
@@ -361,6 +367,9 @@ func _apply_bld_lod(n: Node3D) -> void:
 	var piles := n.get_node_or_null("piles") as Node3D
 	if piles != null:
 		piles.visible = not batched
+	for c: Node in n.get_children():
+		if c.has_meta(&"pic"):
+			(c as Node3D).visible = not batched        # 묶음에 든 건물의 그림은 멀리 묶음(아틀라스 MultiMesh)이 그림
 	_set_near_shadows(near, not bld_far and _shadow_batched(n))
 
 
@@ -645,6 +654,15 @@ func _sync_graves() -> void:
 	if _graves != null:
 		_graves.queue_free()
 	_graves = _node(self)
+	if _bld2d_on and Bld2D.has("grave"):        # (2D) 무덤 그림 — 아틀라스 MultiMesh 하나 (그리기 1번, 그림자 없음 그대로)
+		var cards: Array = []
+		for g: Dictionary in v.graves:
+			var gx := float(g["x"])
+			var gz := float(g["y"])
+			cards.append(["grave", Vector3(gx, gy(gx, gz), gz), 0.9 + fposmod(float(g["id"]) * 0.37, 0.2), int(g["id"]) % 2 == 1])
+		if not cards.is_empty():
+			_graves.add_child(Bld2D.multi(cards))
+		return
 	# (P1 2차) 무덤마다 상자 셋을 따로 그리면 무덤 27개 = 그리기 54+ → 부품마다 MultiMesh 하나 (그리기 3).
 	# 주민 키 절반보다 낮아 그림자 끔 (아트 바이블 8.8).
 	var parts := [[Vector3(0.42, 0.1, 0.62), Vector3(0, 0.04, 0.08), Style.WOOD.darkened(0.15)],
@@ -833,6 +851,13 @@ func _bld_state(b: Building) -> String:
 
 
 func _sync_buildings() -> void:
+	var on := Bld2D.enabled()
+	if on != _bld2d_on:              # 설정을 바꾸면 모든 건물·무덤을 다시
+		_bld2d_on = on
+		_bld_key.clear()
+		_grave_key = ""
+		_card_items.clear()
+		_contact_dirty = true
 	var seen := {}
 	for b in v.buildings:
 		if b.site_type() == Awakening.ALTAR:      # 제단은 AltarView가 그린다 (짓는 모습까지)
@@ -849,6 +874,8 @@ func _sync_buildings() -> void:
 			_yard_dirty = true
 		if _blds.has(b.id):
 			(_blds[b.id] as Node3D).queue_free()
+		if _card_items.erase(b.id):
+			_contact_dirty = true
 		var n := Node3D.new()
 		add_child(n)
 		_blds[b.id] = n
@@ -914,6 +941,8 @@ func _sync_buildings() -> void:
 				_far_dirty = true
 			if _shadow_items.erase(id):
 				_shadow_dirty = true
+			if _card_items.erase(id):
+				_contact_dirty = true
 			_far_rest.erase(id)
 			_far_moving.erase(id)
 	var b0 := Time.get_ticks_usec()
@@ -925,6 +954,8 @@ func _sync_buildings() -> void:
 	var b2 := Time.get_ticks_usec()
 	if _shadow_dirty and not bld_far:
 		_sync_near_shadow()
+	if _contact_dirty:
+		_sync_contact()
 	bld_prof = {"rebuilt": _n_rebuilt, "yard": (b1 - b0) / 1000.0, "far_batch": (b2 - b1) / 1000.0, "shadow": (Time.get_ticks_usec() - b2) / 1000.0}
 	_n_rebuilt = 0
 
@@ -1081,6 +1112,13 @@ func _far_bake_step(budget_ms: float) -> void:
 		mi.material_override = k[0]
 		mi.cast_shadow = k[1]
 		_far_batch.add_child(mi)
+	var cards: Array = []                 # (2D) 묶음에 든 건물의 그림 — 아틀라스 하나 · MultiMesh 하나 (그리기 1번)
+	for id in _far_items:
+		if _far_moving.has(id) or not _blds.has(id):
+			continue
+		cards.append_array(_card_items.get(id, []))
+	if not cards.is_empty():
+		_far_batch.add_child(Bld2D.multi(cards))
 	for id in _blds:
 		_apply_bld_lod(_blds[id])
 
@@ -1179,6 +1217,7 @@ func _check_far_moving() -> void:
 		var moving := not n.visible or not n.transform.is_equal_approx(_far_rest[id])    # 숨긴 건물도 묶음에서 뺌
 		if moving != _far_moving.has(id):
 			changed = true
+			_contact_dirty = _contact_dirty or _card_items.has(id)
 			if moving:
 				_far_moving[id] = true
 			else:
@@ -1263,6 +1302,10 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	n.add_child(far)
 	if b.type == "농장":
 		_build_wheat(near, far, b)
+		if _bld2d_on:                 # (2D) 밀밭 그림 (자람 단계 셋) — 3D 줄기는 그림자만
+			Bld2D.proxify(near)
+			Bld2D.proxify(far)
+			_add_card(n, b, Bld2D.wheat_pic(wheat_stage(b, v.t)))
 		_set_yard(far, b, far.get_child_count() > 0)
 		_apply_bld_lod(n)
 		return
@@ -1274,6 +1317,24 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	if Art.has_far(nm):
 		Art.instance(far, nm, Transform3D.IDENTITY, true).set_meta(SH_SRC, true)     # (P1 4차) 가까이 그림자 대역
 		main.set_meta(SH_DST, true)
+	var pic := Bld2D.type_pic(b.type, b.id, v.era) if _bld2d_on else ""
+	if pic != "":
+		# (2D) 그림 판 + 3D 모델은 보이지 않는 그림자 대역. 맷돌 윗돌·마당 소품은 그림에 들어 있음. 화덕 불은 땅의 빛 웅덩이만
+		Bld2D.proxify(near)
+		Bld2D.proxify(far)
+		var flip := false
+		if b.type == "나루터" and b.has_link:     # 잔교 그림은 화면 오른쪽 위로 뻗음 → 건너편이 화면 왼쪽이면 뒤집기
+			flip = Vector2(b.link_x - b.x, b.link_y - b.y).dot(_cam_right2()) < 0.0
+		_add_card(n, b, pic, 1.0, flip)
+		if nm == "oven" and Art.exists(OVEN_GLOW):
+			var g := _oven_glow(n)
+			for c: Node in g.get_children():
+				if c is MeshInstance3D and not ((c as MeshInstance3D).mesh is PlaneMesh):
+					(c as MeshInstance3D).visible = false
+			_live[b.id] = {"glow": g}
+		_set_yard(far, b, Art.has_far(nm))
+		_apply_bld_lod(n)
+		return
 	if nm == "quern_house" and Art.exists(QUERN_STONE):
 		_live[b.id] = {"stone": Art.instance(near, QUERN_STONE, Transform3D(Basis.IDENTITY, QUERN_STONE_AT))}
 	elif nm == "oven" and Art.exists(OVEN_GLOW):
@@ -1284,6 +1345,47 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	_apply_bld_lod(n)
 
 
+## 기본 카메라의 화면 오른쪽 (땅 위, 마을 기준 x·z) — 방위 BASE_YAW_DEG의 카메라 basis.x
+static func _cam_right2() -> Vector2:
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG)
+	return Vector2(cos(yaw), -sin(yaw))
+
+
+## (2D) 건물 노드에 그림 판을 달고 기록 (멀리 묶음 · 접촉 그림자). 땅에 눕힌 그림은 발자리 네 귀퉁이 중 가장 높은 곳 위로
+func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false) -> void:
+	if not Bld2D.has(pic):
+		return
+	var lift := 0.0
+	if int(Bld2D.info(pic).get("mode", 0)) == 1:
+		var s := b.size()
+		var top := gy(b.x, b.y)
+		for a in 4:
+			top = maxf(top, gy(b.x + cos(a * PI / 2.0 + PI / 4.0) * s, b.y + sin(a * PI / 2.0 + PI / 4.0) * s))
+		lift = top - n.position.y + Bld2D.GROUND_LIFT
+	n.add_child(Bld2D.card(pic, k, flip, lift))
+	if not _card_items.has(b.id):
+		_card_items[b.id] = []
+	(_card_items[b.id] as Array).append([pic, n.position + Vector3(0, lift, 0), k, flip])
+	_contact_dirty = true
+
+
+## (2D) 접촉 그림자 타원 다시 (모든 건물 = MultiMesh 하나). 들려 움직이는 건물은 뺌
+func _sync_contact() -> void:
+	_contact_dirty = false
+	if _contact != null:
+		_contact.queue_free()
+		_contact = null
+	var items: Array = []
+	for id in _card_items:
+		if _far_moving.has(id):
+			continue
+		items.append_array(_card_items[id])
+	if items.is_empty():
+		return
+	_contact = Bld2D.contact_shadows(items)
+	add_child(_contact)
+
+
 ## 마당 소품 (가까이: _sync_yard가 모양마다 MultiMesh · 멀리: PF_FAR_YARD의 멀리 모양을 건물 "far" 노드에 넣어 건물 멀리 묶음에 함께 구움 →
 ## 기본 확대(ppu 16)에서 그리기 횟수가 늘지 않는다). bake_far = 이 건물에 멀리 모양이 있을 때만 (없으면 far 노드가 비어 있어야 가까이가 남는다)
 const PF_FAR_YARD := [PF_JARS, PF_FENCE, PF_CORDWOOD, PF_QUERN, PF_OVEN, PF_GRANARY, PF_RETTING, PF_WEAVE_JIG, PF_RACK_HASA,
@@ -1292,6 +1394,8 @@ const PF_FAR_YARD := [PF_JARS, PF_FENCE, PF_CORDWOOD, PF_QUERN, PF_OVEN, PF_GRAN
 
 func _set_yard(far: Node3D, b: Building, bake_far: bool) -> void:
 	var items := _yard_items(b)
+	if _bld2d_on and _card_items.has(b.id):      # (2D) 단지·화덕·맷돌·건조대·울타리는 그림에 들어 있음 — 집 앞 꽃만
+		items = items.filter(func(e: Array) -> bool: return e[0] in YARD_FLORA_2D)
 	if items.is_empty():
 		if _yard_xf.erase(b.id):
 			_yard_dirty = true
@@ -1464,6 +1568,22 @@ static func site_stage(b: Building) -> int:
 
 
 func _build_site(n: Node3D, b: Building) -> void:
+	var k0 := n.get_child_count()
+	_build_site_shape(n, b)
+	if _bld2d_on:      # (2D) 짓는 모습 그림 네 장 (말뚝·바닥 → 뼈대 → 벽 → 서까래) · 밭 고랑 · 개축 비계. 3D 상자는 그림자 대역
+		for i in range(k0, n.get_child_count()):
+			Bld2D.proxify(n.get_child(i))
+		if b.site_type() == "농장":
+			_add_card(n, b, "field_site", b.size() / 1.8)
+		elif b.built:
+			_add_card(n, b, "scaffold", b.size())
+		else:
+			_add_card(n, b, Bld2D.site_pic(site_stage(b), SITE_STAGES), b.size())
+	if b.site_type() != "농장":
+		_build_site_piles(n, b)
+
+
+func _build_site_shape(n: Node3D, b: Building) -> void:
 	var st := site_stage(b) if b.is_site() else SITE_STAGES - 1
 	if b.built:
 		st = mini(st, 3)                     # 개축: 옛 집 둘레 비계(기둥·들보)만
@@ -1513,6 +1633,11 @@ func _build_site(n: Node3D, b: Building) -> void:
 			mi.position = Vector3(side * s * 0.5, h + 0.42, 0)
 			mi.rotation.z = -side * atan2(0.8, s)
 			n.add_child(mi)
+
+
+## 짓는 터에 도착한 판자·돌 더미 (2D 그림 건물에서도 3D 그대로 — 소품 단계에서 그림으로)
+func _build_site_piles(n: Node3D, b: Building) -> void:
+	var s := b.size() * 0.85
 	var np := mini(6, int(b.delivered["판자"]))
 	if np > 0:                       # (E3) 판자 = 쪼갠 갈대·나뭇가지 → 나뭇가지 더미 (많을수록 크게)
 		Art.instance(n, "flora/twig_pile_b", Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * (0.16 + 0.025 * np)), Vector3(s + 0.55, 0, 0.3)))

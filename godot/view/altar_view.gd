@@ -87,7 +87,7 @@ func sync(dt: float) -> void:
 	var f := progress()
 	var site := Awakening.altar_site(v) != null
 	var st := stage_of(f, site)
-	var key := "%d|%d|%d" % [st, int(f * 40.0), v.altar_level]
+	var key := "%d|%d|%d|%s" % [st, int(f * 40.0), v.altar_level, Bld2D.enabled()]     # (2D) 그림으로 바꾸면 다시
 	if key != _key:
 		var was := _stage
 		_key = key
@@ -292,6 +292,11 @@ func _rebuild(st: int, f: float) -> void:
 			_peb(_body, Vector3(cos(a) * r, 0.1 + (i / 5) * 0.14, sin(a) * r), Vector3(0.26, 0.18, 0.22), _stone_c(i + 200), i * 0.7)
 		if st <= 2:
 			_peb(_body, Vector3(cos(1.6) * (RING_R + 0.75), 0.06, sin(1.6) * (RING_R + 0.75)), Vector3(0.6, 0.16, 0.5), CLAY)
+	# (2D 그림 건물 — view/bld2d/bld2d.gd) 단계 그림 (짓는 네 장 · 다 지음 · 넓힌 셋). 위의 3D 조약돌은 보이지 않는 그림자 대역
+	var pic := Bld2D.altar_pic(st, v.altar_level) if Bld2D.enabled() else ""
+	if pic != "" and Bld2D.has(pic):
+		Bld2D.proxify(_body)
+		_body.add_child(Bld2D.card(pic))
 
 
 ## 단계가 바뀜: 쿵 + 흙먼지 고리

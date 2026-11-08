@@ -19,6 +19,8 @@ var notify := false              # 알림 기본 꺼짐 (notifications GDD A2, 2
 ## 주민 그림: 2D 종이 인형 (art-bible 5.2, 2026-11-08 시안 A — 화면만, 시뮬레이션과 무관). 미리 보기 빌드는 켜짐이 기본.
 ## 끄면 예전 3D 모델 (view/cutout_resident.gd CutoutResident.enabled — 시험은 override로 고정)
 var cutout_residents := true
+## 건물 그림: 2D 그림책 그림 (RENDERING.md 확정 2026-11-08 — 화면만). 끄면 예전 3D 모델 (비교용 — view/bld2d/bld2d.gd Bld2D.enabled)
+var picture_buildings := true
 var away_speed := Balance.AWAY_DEFAULT_I   # 자리를 비운 동안 시간 (v4.3): 0 느리게 · 1 보통 · 2 빠르게 → Balance.AWAY_RATES
 # 빠르게 갈 때 멈출 일 (JarClock.STOP_CATS) — 꺼도 처음 몇 번의 탄생·편지는 멈추고, 꺼진 일은 짧은 알림만
 var stop_born := false
@@ -47,6 +49,7 @@ static func load_from(p: String) -> GameSettings:
 	s.vibration = bool(cf.get_value("device", "vibration", s.vibration))
 	s.notify = bool(cf.get_value("device", "notify", s.notify))
 	s.cutout_residents = bool(cf.get_value("view", "cutout_residents", s.cutout_residents))
+	s.picture_buildings = bool(cf.get_value("view", "picture_buildings", s.picture_buildings))
 	s.away_speed = clampi(int(cf.get_value("time", "away", s.away_speed)), 0, Balance.AWAY_RATES.size() - 1)
 	for c: String in STOP_NAMES:
 		s.set("stop_" + c, bool(cf.get_value("stop", c, s.get("stop_" + c))))
@@ -63,6 +66,7 @@ func save(p := "") -> Error:
 	cf.set_value("device", "vibration", vibration)
 	cf.set_value("device", "notify", notify)
 	cf.set_value("view", "cutout_residents", cutout_residents)
+	cf.set_value("view", "picture_buildings", picture_buildings)
 	cf.set_value("general", "language", language)
 	cf.set_value("time", "away", away_speed)
 	for c: String in STOP_NAMES:
