@@ -140,6 +140,11 @@ func _run(seed_v: int, days: int) -> void:
 		_pct(vals, 0.1), _pct(vals, 0.5), _pct(vals, 0.9), 100.0 * in14 / maxf(1, vals.size()), 100.0 * over10 / maxf(1, vals.size()),
 		lean, lean_at, helps, ",".join(inc), bread, v.era, (Time.get_ticks_msec() - t0) / 1000.0])
 	print("  offered ", _items, " | stock ", _stock_line(v))
+	if v.kitchen != null:                 # E3-14 우유·계란 없는 부엌 (sim/kitchen.gd)
+		var ks: Dictionary = v.kitchen.stats
+		print("KITCHEN seed %d | aphids %d (found %d sky %d) tended %d honeydew %.0f ladybugs %d | pressed %.0f milk %.0f oil %.0f binder %.0f | fine %d bound %d | feasts %d" % [
+			seed_v, v.kitchen.aphids(), int(ks["found"]), int(ks["sky"]), int(ks["tended"]), float(ks["honeydew"]), int(ks["ladybugs"]),
+			float(ks["pressed"]), float(ks["milk"]), float(ks["oil"]), float(ks["binder"]), int(ks["fine"]), int(ks["bound"]), int(ks["feasts"])])
 	var notes := PackedStringArray()
 	for n: Dictionary in v.jar_notes:
 		notes.append("%s@%.1f" % [n["id"], float(n["t"]) / D])

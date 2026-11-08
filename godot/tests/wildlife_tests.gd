@@ -489,7 +489,7 @@ func test_readd_shop() -> void:
 		var w := v.wild
 		Shop.update_unlocks(v)
 		var shown0 := Shop.items_in("생물", v)
-		check(not Shop.tab_open(v, "생물") and not "작은 사슴 한 쌍" in shown0, "물고기가 넉넉하면 다시 넣기 카드가 없음 (생물 탭 닫힘)")
+		check(not "작은 사슴 한 쌍" in shown0 and not "작은 물고기 한 줌" in shown0, "물고기가 넉넉하면 다시 넣기 카드가 없음")     # (E3-14) 생물 탭은 마을 시대에 열림 (진딧물 — wallet-shop D2)
 		var lake := first_of(w, "fish")
 		for h: Dictionary in w.herds:
 			h["n"] = 0

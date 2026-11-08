@@ -587,7 +587,7 @@ func test_shop_tables() -> void:
 		and gold.r > gold.b + 0.3 and gold.g > gold.b + 0.2, "돌 색 표: 회색 돌 · 붉은 철 · 하얀 소금 · 검은 석탄 · 금빛 금")
 	# 작은 가축 6종 (SHOP 2.5 · BALANCE v3-4)
 	var animals := {"작은 강아지 한 쌍": 600, "작은 돼지 한 쌍": 900, "작은 양 한 쌍": 800, "작은 소 한 쌍": 1800, "작은 닭 다섯": 500, "작은 당나귀": 1000}
-	var aok := Shop.items_in("생물").size() == 6
+	var aok := Shop.items_in("생물").size() == 7 and "진딧물 한 무리" in Shop.items_in("생물")     # (E3-14) + 진딧물 한 무리 (wallet-shop D2)
 	for it: String in animals:
 		var c := Shop.card(v, it)
 		aok = aok and Shop.ITEMS.has(it) and int(Shop.ITEMS[it]["price"]) == int(animals[it]) and String(c["lock"]) == "곧" \

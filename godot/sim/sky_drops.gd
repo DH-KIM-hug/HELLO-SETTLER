@@ -72,6 +72,9 @@ const SAY := {
 	"작은 사슴 한 쌍": ["하늘에서 사슴이 내려왔다!", "어, 사슴이다! 어디서 왔을까…?"],
 	"작은 토끼 한 쌍": ["하늘에서 토끼가 내려왔다!", "어, 토끼다! 어디서 왔을까…?"],
 	"작은 물고기 한 줌": ["하늘에서 물고기가 내려왔다!", "어, 물고기다! 어디서 왔을까…?"],
+	# (E3-14 · wallet-shop R6-4) 깨닫기 전엔 경이, 깨달은 뒤엔 부르는 말 — '사 왔다' 같은 말 없음
+	"메추리알": ["{w}의 큰 알이다!", "하늘에서 큰 알이 떨어졌어!"],
+	"진딧물 한 무리": ["하늘에서 진딧물이 내려왔다!", "어, 진딧물이다! 어디서 왔을까…?"],
 }
 ## 연대기 한 줄
 const BOOK := {
@@ -94,6 +97,8 @@ const BOOK := {
 	"작은 사슴 한 쌍": "어디선가 사슴 한 쌍이 나타나 숲가로 뛰어갔다. 사라졌던 사슴이 다시 숲에 산다.",
 	"작은 토끼 한 쌍": "어디선가 토끼 한 쌍이 나타나 들판으로 깡충깡충 뛰어갔다.",
 	"작은 물고기 한 줌": "어디선가 작은 물고기들이 호수로 쏟아져 내려왔다. 물 위로 은빛이 반짝였다.",
+	"메추리알": "하늘에서 허리만 한 얼룩 알이 내려와 땅에 살포시 앉았다. 사람들이 둘러서서 알을 두드려 보았다.",
+	"진딧물 한 무리": "어디선가 진딧물 한 무리가 꽃줄기에 내려앉았다.",
 }
 const TOWER_LINES := ["하늘의 탑 아래 땅이 푸르러진다", "탑이 밤에도 빛나요", "{w:이/가} 내려 주신 탑이다", "탑 둘레의 밀이 참 잘 자라"]
 const TOWER_DOUBT := "{w}의 물병일 뿐이야. 땅이 좋아진 건 물이 스며서지."
@@ -313,7 +318,7 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 		"pill", "bandage", "migrant":
 			total = 1.0
 	var o := {}
-	if kind != "ampoule" and kind != "vein" and kind != "wild":
+	if kind != "ampoule" and kind != "vein" and kind != "wild" and kind != "egg" and kind != "aphids":     # 큰 알·진딧물은 sim/kitchen.gd가 (깎지 않음)
 		v._drop_id += 1
 		o = {"id": v._drop_id, "item": item, "x": p.x, "y": p.y, "res": res, "total": total, "left": total, "size": size,
 			"res_n": 0, "t": v.t, "dur": (Immigrants.RAFT_DAYS if kind == "migrant" else float(d.get("days", 1.0))) * Balance.DAY}
@@ -343,6 +348,12 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 			_plant_tower(v, p)
 		"vein":
 			o = _plant_vein(v, item, p)
+		"egg":                                           # 하늘의 큰 알 — 굴려 와 깨고 잔치 (E3-14)
+			if v.kitchen != null:
+				o = v.kitchen.land(v, p)
+		"aphids":                                        # 진딧물 한 무리 — 떨어진 자리에 목장 (있으면 보탬)
+			if v.kitchen != null:
+				v.kitchen.start_ranch(v, p, int(d.get("n", Balance.APHID_BUY)), &"sky")
 		"wild":
 			if v.wild != null:
 				v.wild.readd(v, String(d["species"]), int(d.get("n", 2)), p, true)

@@ -60,3 +60,14 @@
 |---|---|---|---|---|
 | `&"ground_tremor"` | `CoreWarmth.tremor` — 뜨거운 별의 작은 땅 흔들림 (병 하루 `CORE_TREMOR_DAY`, 첫 빵 뒤). 죽음·다침 없음 | `{"n": int (몇 번째), "pot": String (깨진 항아리의 먹을 것, 없으면 ""), "lost": float}` | `at` = 마을 가운데 | `tests/warmth_tests.gd` (앞으로 화면의 먼지·흔들림 연출) |
 | `&"jar_trait_noticed"` | `CoreWarmth.note` — 병의 성질이 처음 눈에 띔 (별지기의 수첩 한 줄, `Village.jar_notes`에 저장 — 같은 병의 무리끼리 한 번) | `{"id": String (`CoreWarmth.NOTES` 열쇠), "text": String, "core": int}` | — | `tests/warmth_tests.gd` (앞으로 #26 수첩 '안내' 쪽) |
+- 2026-11-08 (E3-14 우유·계란 없는 부엌 — docs/FOOD.md 5, `sim/kitchen.gd`): 아래 kind를 냄. 모두 저장 순번 아니오 · 연대기는 `log_line` (목장이 섬·첫 단물·목장이 빔·잔치·껍데기·첫 방아·재료마다 첫 좋은 빵). 날마다의 굴림(진딧물 찾기·무당벌레)은 마을 씨앗·날의 해시로 정하고 `emit` 앞뒤로 난수를 쓰지 않는다. 지켜보는지 읽지 않는다.
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"aphids_found"` | `Kitchen.start_ranch` — 여름 꽃 무리 곁 어른이 장미 줄기에서 찾음 (`_try_find`, 10시) · 별지기가 '진딧물 한 무리'를 내려 줌 (`SkyDrops.drop` kind `aphids`) | `{"src": &"rose"·&"sky", "n": int (목장의 진딧물)}` | `who` = 찾은 사람 (내려 준 것은 −1) · `at` = 목장 | `tests/kitchen_tests.gd` (앞으로 목장 울타리·진딧물 모델) |
+| `&"honeydew_collected"` | `Kitchen.tend` (`kit_tend` — 아침 목장지기가 톡톡, 하루 한 번, 철만) | `{"amt": float (단물), "n": int (늘어난 뒤 진딧물)}` | `who` = 목장지기 · `at` = 목장 | `tests/kitchen_tests.gd` |
+| `&"ladybug_raid"` | `Kitchen._ladybug` (철이면 하루 한 번 해시 `LADYBUG_P`) | `{"lost": int, "n": int (남은 진딧물 — 0이면 목장이 빔)}` | `at` = 목장 | `tests/kitchen_tests.gd` |
+| `&"quail_egg_landed"` | `Kitchen.land` (`SkyDrops.drop` kind `egg` — 메추리알, 병마다 `EGG_COOLDOWN` 3일에 하나) | `{"id": int}` | `at` = 떨어진 자리 | `tests/kitchen_tests.gd` (앞으로 큰 알 모델·굴리기 연출) |
+| `&"egg_feast"` | `Kitchen.crack` (`kit_egg_crack` — 굴려 와 창고 곁에서 깸, 아무도 못 굴리면 `EGG_WAIT` 뒤 그 자리에서) | `{"food": float (알 = 식량 3일치, 전부 거인 몫), "shell": &"basin"·&"boat"}` | `who` = 깬 사람 (−1 = 그 자리) · `at` = 깬 자리 = 껍데기 자리 | `tests/kitchen_tests.gd` (화면은 `Kitchen.shells` — `props/pf_eggshell`) |
+| `&"seed_pressed"` | `Kitchen._press` (하루 한 번 `PRESS_HOUR`, 맷돌간·방앗간 일꾼이 해바라기씨를 빻음) | `{"seeds": float, "milk": float, "oil": float, "binder": float}` | `who` = 일꾼 · `at` = 맷돌간 | `tests/kitchen_tests.gd` |
+| `&"fine_bread"` | `Kitchen.on_bake` (화덕·빵집 한 판 — 재료마다 처음 한 번만: 단물 빵·우유 빵·기름 빵) | `{"k": &"단물"·&"씨앗 우유"·&"씨앗 기름"}` | `who` = 빵 굽는 사람 · `at` = 화덕 | `tests/kitchen_tests.gd` |

@@ -27,7 +27,7 @@ static func wheat_total(v: Village) -> float:
 ## 먹을 수 있는 양 (식량 단위) — 창고 먹을 것 + 건물 앞의 빵 + 낟알 + 밀을 죽으로 끓인 몫
 static func food_total(v: Village) -> float:
 	var n := 0.0
-	for k in Balance.FOODS:
+	for k in Balance.FOODS_ALL:          # 부엌 것(알·단물·씨앗 우유) 포함 (E3-14)
 		n += float(v.stock.get(k, 0.0))
 	for m: Dictionary in v.manna_batches:
 		n += float(m["amt"])
@@ -80,7 +80,7 @@ static func _eat(v: Village, need: float) -> float:
 			need -= take
 			if need <= 0.0:
 				break
-	for k: String in Balance.FOODS:
+	for k: String in Balance.FOODS_ALL:   # 알(잔치)이 먼저 · 단물·씨앗 우유는 맨 뒤 (평소엔 빵 반죽에 — E3-14)
 		if need <= 0.0:
 			break
 		var got := _take(v, k, need)
@@ -122,11 +122,11 @@ static func _eat(v: Village, need: float) -> float:
 ## 물건마다 그날 상한 양을 `spoiled` 사건으로
 static func spoil(v: Village) -> void:
 	var salt := float(v.stock.get("소금", 0.0)) >= Wildlife.SALT_MIN
-	for k: String in Balance.SPOIL_DAY:
+	for k: String in Balance.SPOIL_DAY.keys() + Balance.KITCHEN_SPOIL.keys():    # 부엌 것은 따로 붙인 표 (E3-14)
 		var have := float(v.stock.get(k, 0.0))
 		if have <= 0.0:
 			continue
-		var p := float(Balance.SPOIL_DAY[k])
+		var p := float(Balance.SPOIL_DAY[k]) if Balance.SPOIL_DAY.has(k) else float(Balance.KITCHEN_SPOIL[k])
 		if k == "생선" or k == "고기":
 			p *= (Wildlife.SALT_KEEP if salt else 1.0) * Discovery.keep_mult(v)
 		var lost := have * p
@@ -142,7 +142,7 @@ static func spoil(v: Village) -> void:
 static func food_happy(v: Village) -> float:
 	var honey := Balance.HONEY_HAPPY if v.t - v.ate_honey_t < Balance.DAY else 0.0     # 꿀을 먹은 날 + (R2-4)
 	if v.t - v.ate_bread_t < Balance.DAY:
-		return Balance.HAPPY_BREAD + honey
+		return Balance.HAPPY_BREAD + honey + Kitchen.happy(v)     # 단물 빵·우유 빵·기름 빵 (E3-14)
 	if v.t - v.ate_porridge_t < Balance.DAY:
 		return Balance.HAPPY_PORRIDGE_ONLY + honey
 	return honey
