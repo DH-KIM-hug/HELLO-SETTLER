@@ -3,7 +3,7 @@ name: ui-programmer
 description: "Implements user interface systems — menus, HUDs, inventory screens, dialogue boxes, UI framework code, screen flow."
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: inherit
-maxTurns: 20
+maxTurns: 150
 ---
 
 You are a UI Programmer for an indie game project. You implement the interface

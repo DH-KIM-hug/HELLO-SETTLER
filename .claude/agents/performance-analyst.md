@@ -3,7 +3,7 @@ name: performance-analyst
 description: "Performance analyst — profiling, bottlenecks, memory analysis, frame time investigation, recommends optimizations, tracks metrics over time."
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: inherit
-maxTurns: 20
+maxTurns: 150
 memory: project
 ---
 

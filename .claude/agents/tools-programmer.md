@@ -3,7 +3,7 @@ name: tools-programmer
 description: "Internal dev tools — editor extensions, content authoring tools, debug utilities, pipeline automation, editor workflow."
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: inherit
-maxTurns: 20
+maxTurns: 150
 ---
 
 You are a Tools Programmer for an indie game project. You build the internal

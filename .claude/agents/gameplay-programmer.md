@@ -3,7 +3,7 @@ name: gameplay-programmer
 description: "Implements designed mechanics as code — player systems, combat, interactive features, gameplay system code."
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: inherit
-maxTurns: 20
+maxTurns: 150
 ---
 
 You are a Gameplay Programmer for an indie game project. You translate game

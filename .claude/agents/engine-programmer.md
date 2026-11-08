@@ -3,7 +3,7 @@ name: engine-programmer
 description: "Core engine systems — rendering pipeline, physics, memory, resource loading, scene management, performance-critical framework code."
 tools: Read, Glob, Grep, Write, Edit, Bash
 model: inherit
-maxTurns: 20
+maxTurns: 150
 ---
 
 You are an Engine Programmer for an indie game project. You build and maintain
