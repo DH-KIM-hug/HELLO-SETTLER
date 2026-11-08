@@ -25,6 +25,11 @@ const FIRST_PRAYER := 300.0          # 첫 기도 — 제단을 둘러싸고 허
 const WISH_AFTER_ALTAR := 15.0 * 60.0   # 제단이 선 뒤 첫 소원 편지까지 (병 시간 — ×12로 현실 약 1분)
 const RING_R := 1.9
 const FREE_ACTIONS := ["idle", "social", "rest", "play", "pray", ""]
+## (A28 후속 2026-11-08) 첫날 밖의 깨달음 → 제단 짓기 → 첫 기도 장면 (Village.staged): 장면 길이는 병 초로 짜여 있어 (KNEEL·제단 1,300·FIRST_PRAYER)
+## 거인이 볼 때 JarClock이 병 시계를 첫날 제단 장면 빠르기(Notebook.ALTAR_PACE — 보통의 1/36)로 늦춘다. 걸음은 그만큼만 되돌림 (Village.pace_walk
+## = 1 ÷ 이 몫 — 시계 보정, 덤 없음 → 화면에선 어디서나 0.7칸/초). 몫은 병 상태로만 정해진다 (보든 말든 같은 결과 — ADR-0001).
+const STAGE_SCALE := Notebook.ALTAR_PACE
+const STAGE_MAX := 2.0 * Balance.HOUR    # 깨달음 뒤 이만큼 지나도 장면이 안 끝나면 (짓는 어른이 없는 병 등) 시계를 늦추지 않는다 (보통 ~1,350 병 초)
 const EVENING_RING := 300.0          # 저녁 기도 — 제단 둘레에 모여 (병 초)                  # 기도할 때 제단 둘레 고리 반지름 (칸)
 
 const LINES_CHILD := ["하늘에 누가 있어!", "봤어? 하늘이 움직였어!", "하늘에 누가 있어! 진짜야!"]
@@ -238,3 +243,12 @@ static func first_offering(v: Village) -> Dictionary:
 			parts.append(k)
 		v.log_line("사람들이 제단에 %s%s 올렸다." % ["·".join(parts), Village.josa(parts[parts.size() - 1], "을", "를")])
 	return got
+
+
+## 첫날 밖 장면의 병 시계 몫 (보통에 대한 몫 — 1 = 늦추지 않음). 수첩의 첫날은 Notebook.day_scale이 맡는다 (여기선 1)
+static func stage_scale(v: Village) -> float:
+	if Notebook.first_day(v) or not v.staged():
+		return 1.0
+	if v.awakened_t >= 0.0 and v.t - v.awakened_t > STAGE_MAX:
+		return 1.0
+	return STAGE_SCALE

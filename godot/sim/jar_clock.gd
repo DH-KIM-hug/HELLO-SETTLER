@@ -102,9 +102,20 @@ func speed() -> float:
 	var s := float(Balance.SPEEDS[speed_i])
 	if creation:                      # [창세의 날 v3.3] 첫날 빠르기 (보통에 대한 몫) × 거인이 고른 배속 ÷ 보통
 		s = Notebook.day_speed(v, creation_real) * float(Balance.SPEEDS[speed_i]) / normal_speed()
+	else:                             # (A28 후속) 첫날 밖의 깨달음·제단·첫 기도 장면 — 첫날 제단 장면처럼 늦춘다 (고른 배속에 곱함)
+		s *= stage_scale()
 	if stage_rate > 0.0:              # (E1-0) 사건 연출 중엔 느리게 (주민의 몸짓이 보이게)
 		s = minf(s, stage_rate)
 	return s
+
+
+## 함께 걷는 무리 중 장면(깨달음 → 제단 → 첫 기도)이 도는 곳이 있으면 그 몫 (가장 느린 것 — Awakening.stage_scale). 화면 빠르기만 바꾼다:
+## 걸음 크기(step_dt)·병 시간당 결과는 그대로 (보든 말든 같음 — ADR-0001)
+func stage_scale() -> float:
+	var k := 1.0
+	for q: Village in _group():
+		k = minf(k, Awakening.stage_scale(q))
+	return k
 
 
 ## 배속 이름 (칩·목록): ×1 … ×60 · 1초=5분 … 1초=12시간
@@ -385,7 +396,7 @@ func _marks() -> Array:
 ## 빠른 흐름 중 중요한 일이 생겼으면 ×1 + 무슨 일인지 (true). 새로 선 무리(분가)도 중요한 일.
 ## 생긴 일은 모두 events에 (화면이 카드·알림으로) — 설정이 끈 일·자잘한 일은 stop = false (멈추지 않음)
 func _important(before: Array) -> bool:
-	if not fast or not auto_slow or speed() <= normal_speed() + 1e-6:
+	if not fast or not auto_slow or float(Balance.SPEEDS[speed_i]) <= normal_speed() + 1e-6:     # 고른 배속으로 (장면이 늦춘 빠르기 말고 — 깨달음 걸음에 바로 늦춰져도 멈춤 카드가 뜨게)
 		return false
 	var now := _marks()
 	var found: Array = []
@@ -538,7 +549,7 @@ func _after_step() -> bool:
 	if not v.crises.is_empty():
 		last_crisis = v.crises.back()
 		v.crises.clear()
-		var was_fast := skipping or creation or speed() > normal_speed() + 1e-6
+		var was_fast := skipping or creation or float(Balance.SPEEDS[speed_i]) > normal_speed() + 1e-6     # 고른 배속 (장면이 늦춰도 빠르게를 골랐으면 보통으로)
 		if was_fast:
 			set_speed(Balance.SPEED_DEFAULT_I)
 			acc = 0.0

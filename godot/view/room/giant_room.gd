@@ -104,11 +104,11 @@ func setup(s: float, time_of_day: String, with_soil := true) -> void:
 	if with_soil:
 		soil = Art.instance(root, ROOM + "jar_soil")
 	cork = Art.instance(root, ROOM + "jar_cork")
-	# 소품 (선반 위 — 세로 화면에서 병 둘레에 보이게)
-	Art.instance(root, ROOM + "flowerpot", Transform3D(Basis(Vector3.UP, 0.3), Vector3(8.2, 0, -7.8)))
-	Art.instance(root, ROOM + "watering_can", Transform3D(Basis(Vector3.UP, 0.5), Vector3(-13.0, 0, -6.0)))
-	Art.instance(root, ROOM + "tweezers", Transform3D(Basis(Vector3.UP, 3.0), Vector3(3.0, 0, 8.6)))
-	Art.instance(root, ROOM + "sugar_bowl", Transform3D(y, Vector3(7.4, 0, 7.2)))
+	# 소품 (선반 위 — 세로 화면에서 병 둘레에 보이게). (OPENING v4.0-2 암시) 병에 견줘 조금 이상하게 크다 (ODD_BIG — 자리는 props()가 그만큼 밖으로)
+	var ps := props(false)
+	for i in PROP_NAMES.size():
+		var at: Vector2 = ps[i][0]
+		Art.instance(root, ROOM + String(PROP_NAMES[i]), Transform3D(Basis(Vector3.UP, float(PROP_YAW[i])).scaled(Vector3.ONE * ODD_BIG), Vector3(at.x, 0, at.y)))
 	# 등불 (+ 불꽃 · 둥근 빛 · 유리)
 	lamp = Node3D.new()
 	root.add_child(lamp)
@@ -303,7 +303,7 @@ func _make_blobs() -> void:
 	var heights := [10.0, 7.0, 0.8, 3.6]                            # 화분 · 물뿌리개 · 핀셋 · 각설탕 그릇
 	var ps := props(false)
 	for i in ps.size():
-		list.append([ps[i][0], float(ps[i][1]) * (0.75 if i == 2 else 1.0), heights[i]])
+		list.append([ps[i][0], float(ps[i][1]) * (0.75 if i == 2 else 1.0), float(heights[i]) * ODD_BIG])
 	list.append([null, 3.4, 10.0])                                  # 등불 (자리는 등불을 따라)
 	for e: Array in list:
 		var mi := MeshInstance3D.new()
@@ -380,12 +380,24 @@ func set_lamp(lit: bool, light_dir: Vector2) -> void:
 	lamp_glow.visible = lit
 
 
-## 선반 위 소품 (병 둘레, cm): 자리 · 반지름 — 유리를 지나는 카메라 방위 고르기(clear_yaw)와 바닥 그림자(blob)가 씀
+## 선반 위 소품 (병 둘레, cm): 자리 · 반지름 — 유리를 지나는 카메라 방위 고르기(clear_yaw)와 바닥 그림자(blob)가 씀.
+## ODD_BIG배 커진 만큼 병에서 밖으로 밀어 (방위는 그대로 — 카메라 길이 바뀌지 않게) 병과의 틈을 지킨다
 func props(with_lamp := true) -> Array:
-	var out: Array = [[Vector2(8.2, -7.8), 4.6], [Vector2(-13.0, -6.0), 4.0], [Vector2(3.0, 8.6), 3.0], [Vector2(7.4, 7.2), 4.2]]
+	var out: Array = []
+	for e: Array in PROPS_BASE:
+		var at: Vector2 = e[0]
+		var r: float = e[1]
+		out.append([at + at.normalized() * r * (ODD_BIG - 1.0), r * ODD_BIG])
 	if with_lamp and lamp != null:
 		out.append([Vector2(lamp.position.x, lamp.position.z), 3.6])
 	return out
+
+
+# (OPENING v4.0-2 · STORY 1 — 아주 옅은 암시, 설명·자막 없음) 타이틀과 넓은 세상 병 밖(⑤)은 같은 방이라 둘 다 이 크기 (넘겨받을 때 소품 크기가 튀지 않게)
+const ODD_BIG := 1.3                       # 방 물건이 병에 견줘 조금 이상하게 큼 (창조 첫 화면 CreationJar.ODD_BIG 1.45 — 그쪽은 소품이 멀리 있음)
+const PROPS_BASE := [[Vector2(8.2, -7.8), 4.6], [Vector2(-13.0, -6.0), 4.0], [Vector2(3.0, 8.6), 3.0], [Vector2(7.4, 7.2), 4.2]]   # 원래 크기의 자리 · 반지름
+const PROP_NAMES := ["flowerpot", "watering_can", "tweezers", "sugar_bowl"]
+const PROP_YAW := [0.3, 0.5, 3.0, 0.0]
 
 
 ## 병 앞쪽 반원(−90°~90°)에서 소품과 가장 먼 방위 (도, 0 = 방 정면 +z) — 유리를 지나는 순간 소품이 화면을 덮지 않게.
@@ -541,3 +553,49 @@ func _make_mini(parent: Node3D, houses: bool, era: int) -> Node3D:
 			Art.instance(mv, e[0], Transform3D(Basis(Vector3.UP, e[2]).scaled(Vector3.ONE * k), e[1]))
 	_set_layers(mv)
 	return mv
+
+
+# ───────────────────────── 숨은 진실 암시 (OPENING v4.0-2 · STORY 1 — 타이틀만) ─────────────────────────
+const FUR_C := Color("b08058")             # 털 한 가닥 (따뜻한 밤색 — 창조 첫 화면 CreationJar.FUR_C와 같은 색, 파란색 아님)
+const FUR_A := 0.92
+var fur: Node3D                            # 유리 바깥에 붙은 털 한 가닥 (타이틀 — 무엇인지 말하지 않는다)
+
+
+## 병 유리 바깥에 털 한 가닥 (가늘게 휜 선). yaw_deg = 붙은 방위 (0 = 방 정면 +z, 카메라 쪽 조금 옆)
+func add_fur(yaw_deg: float) -> void:
+	if fur != null:
+		fur.queue_free()
+	fur = Node3D.new()
+	fur.name = "Fur"
+	root.add_child(fur)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.albedo_color = Color(FUR_C, FUR_A)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.render_priority = 4                  # 병 유리(3) 위
+	var base := deg_to_rad(yaw_deg)
+	var pts: Array[Vector3] = []
+	var n := 10
+	for i in n:
+		var k := i / float(n - 1)
+		var a := base - 0.12 + 0.2 * k + 0.04 * sin(k * 5.0)        # 방위 (z 쪽 = 0)
+		var r := JAR_OUT + 0.03 + 0.02 * sin(k * 3.0)
+		pts.append(Vector3(sin(a) * r, 6.2 + 3.2 * k + 0.35 * sin(k * PI * 1.3), cos(a) * r))
+	for i in pts.size() - 1:
+		var a := pts[i]
+		var b := pts[i + 1]
+		var cmesh := CylinderMesh.new()
+		cmesh.top_radius = 0.04 * (1.0 - 0.6 * (i + 1) / float(n - 1))
+		cmesh.bottom_radius = 0.04 * (1.0 - 0.6 * i / float(n - 1))
+		cmesh.height = a.distance_to(b)
+		cmesh.radial_segments = 4
+		cmesh.rings = 1
+		var mi := MeshInstance3D.new()
+		mi.mesh = cmesh
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var up := (b - a).normalized()
+		var side := up.cross(Vector3(a.x, 0, a.z).normalized()).normalized()
+		mi.transform = Transform3D(Basis(side, up, side.cross(up)), (a + b) * 0.5)
+		fur.add_child(mi)
+	_set_layers(fur)
