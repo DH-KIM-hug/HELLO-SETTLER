@@ -112,8 +112,10 @@ def col_fern(c):
 SPECS = {
     # (2026-11-08) fence / bench / cordwood are no longer imported: polyfork's sawn rails, plank seat and ring-cut logs read
     # as human-world timber. They are built below from knobby twig pieces (TWIG_PROPS) with the same footprint.
-    "pf_basket": dict(src="kete-reed-basket-6ca36c.glb", col=col_basket, scale=0.85, near=280, far=64),
-    "pf_jug": dict(src="clay-wine-jug-b4ebd3.glb", col=col_jug, scale=1.3, near=220, far=56),
+    # (P1 perf pass 4) yard jars: lighter decimation + smooth-by-angle (soft facets drew a crease line on every edge)
+    "pf_basket": dict(src="kete-reed-basket-6ca36c.glb", col=col_basket, scale=0.85, near=170, far=64, smooth_angle=50,
+                      group="body_nl"),
+    "pf_jug": dict(src="clay-wine-jug-b4ebd3.glb", col=col_jug, scale=1.3, near=140, far=56, smooth_angle=50, group="body_nl"),
     "pf_cairn": dict(src="stone-cairn-a9bf48.glb", col=col_cairn, scale=0.5, near=300, far=140),
     # Plants are exported at REAL size like art/models/flora/*.glb (1 unit = a 5 cm resident; GAME_DESIGN 3.0) and
     # squeezed on screen by FloraLook.base_scale (K * sqrt(h)) at placement — not hand-sized here (2026-11-08):
@@ -207,6 +209,20 @@ def _decimate(bm, target):
     return out
 
 
+def _smooth_by_angle(bm, deg):
+    """(P1 perf pass 4) Smooth shading, sharp only where faces meet at more than deg (the real corners): the toon
+    terminator stays clean and Godot's crease lines (art.gd: hard normals + > 24 deg) appear only on those corners."""
+    bm.normal_update()
+    lim = math.radians(deg)
+    for f in bm.faces:
+        f.smooth = True
+    for e in bm.edges:
+        if len(e.link_faces) == 2:
+            e.smooth = e.calc_face_angle(0.0) <= lim
+        else:
+            e.smooth = False
+
+
 def _double(bm):
     """Back faces for thin fronds (the toon shader culls back faces): a flipped copy of every face."""
     lay = bm.loops.layers.float_color["Color"]
@@ -227,6 +243,8 @@ def build_one(name):
     spec = SPECS[name]
     bm = _bmesh_of(spec)
     bm = _decimate(bm, spec.get("near", 0))
+    if spec.get("smooth_angle"):
+        _smooth_by_angle(bm, spec["smooth_angle"])
     if spec.get("extra"):
         spec["extra"](bm)
     if spec.get("double"):
@@ -633,7 +651,7 @@ SPECS.update({
     "pf_oven": dict(src="clay-bread-oven-860b06.glb", scale=MAN, far=140,
                     col=remap({"9a9897": "d3a96c", "bdbbba": "e7c48a", "a55c4f": CLAY_DARK, "dbcfb2": "ecdcb8",
                                "bdaa93": "d9c49c", "856850": TWIG, "251d19": "3e2c24", "7b3730": "a0482f"})),
-    "pf_granary": dict(src="stilted-granary-3e7d7d.glb", scale=MAN, near=980, far=220,
+    "pf_granary": dict(src="stilted-granary-3e7d7d.glb", scale=MAN, near=560, far=220, smooth_angle=50, group="body_nl",   # (P1 pass 4) hull only
                        col=remap({"473427": TB_DARK, "bdbbba": "THATCH", "31333b": "THATCH_DARK"})),
     "pf_retting": dict(src="plant-fibre-retting-trough-0e8969.glb", scale=MAN, near=640, far=120,
                        col=remap({"d8b067": "cdbb84", "a78952": "a8935e"}, by_obj={"water": PUDDLE})),

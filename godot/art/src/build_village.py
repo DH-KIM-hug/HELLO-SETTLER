@@ -21,6 +21,7 @@ from tiny_kit import *  # noqa: E402,F401,F403
 import bmesh  # noqa: E402
 
 OUT = out_dir_from_argv()
+Model.nl_thin = 0.12      # (P1 perf pass 4) thin pieces: hull outline only, no crease lines (lowpoly.Model.nl_thin)
 FISH = "9fb8c4"
 FISH_DARK = "7d97a6"
 HIDE = "b98a5e"
@@ -147,7 +148,7 @@ def slate_gable(m, W, D, H, rise, over=0.2, rows=4, seed=0, sides=(-1, 1), ridge
                 c = Vector((x, 0, H + rise)) + down * (ln * t) + nrm * (0.04 + 0.015 * r)
                 col = (SLATE, shade(SLATE, 1.1), "9fa8a4", shade(SLATE, 0.92))[(k * 3 + r + seed) % 4]
                 m.sphere(1.0, pos=c, scl=(Wt / n * 0.62, ln / rows * 0.75, 0.04), rot=(-sy * ang, 0, ((k + r) % 3 - 1) * 0.08),
-                         color=col, seg=8, rings=3, smooth=False)
+                         color=col, seg=6, rings=3, smooth=False, group="body_nl")
     for k in range(int(Wt / 0.3) + 1 if ridge else 0):
         pebble(m, -Wt / 2 + 0.15 + k * 0.3, 0, H + rise + 0.02, 0.15, 0.13, 0.08, shade(PEBBLE, 0.9 + 0.05 * (k % 3)), k, k + seed)
 
@@ -170,7 +171,7 @@ def bell_flower(m, p, r=0.13, col="f6f1e4"):
     p = Vector(p)
     cup(m, p - Vector((0, 0, r * 1.5)), Vector((0, 0, 1)), [(r * 1.05, 0.0), (r * 0.95, r * 0.3), (r * 0.85, r * 0.9),
                                                               (r * 0.4, r * 1.4), (0.01, r * 1.5)],
-        seg=10, color=col, inner=shade(col, 0.82), group="body", tips=5, tip_h=-r * 0.25)
+        seg=8, color=col, inner=shade(col, 0.82), group="body", tips=4, tip_h=-r * 0.25)
 
 
 def headstone(m, x, y, rz=0.0, s=1.0, moss=False, col=PEBBLE):
@@ -306,11 +307,11 @@ def build_herbalist():
             pebble(m, x0 - 0.45 + k * 0.3, y - 0.24, 0.03, 0.1, 0.06, 0.04, shade(PEBBLE, 0.9 + 0.05 * (k % 3)), k, k + j)
         for k in range(5):
             x = x0 - 0.45 + k * 0.23
-            m.sphere(0.12, pos=(x, y, 0.13), scl=(1, 1, 0.8), color=shade(col, 0.95 + 0.06 * (k % 2)), seg=7, rings=4,
+            m.sphere(0.12, pos=(x, y, 0.13), scl=(1, 1, 0.8), color=shade(col, 0.95 + 0.06 * (k % 2)), seg=6, rings=4,
                      lumps=0.25, group="body_nl", seed=k + j * 5)
             if fl:
                 for q in range(3):
-                    m.sphere(0.035, pos=(x - 0.05 + q * 0.05, y + 0.03 * (q % 2), 0.25), color=fl, seg=5, rings=3,
+                    m.sphere(0.035, pos=(x - 0.05 + q * 0.05, y + 0.03 * (q % 2), 0.25), color=fl, seg=4, rings=2,
                              group="body_nl")
     twig_fence(m, -0.15, -1.1, 1.3, -1.1, 0.36, 0.3, gap=(0.1, 0.3), seed=5)
     twig_fence(m, 1.3, -1.1, 1.3, 0.85, 0.36, 0.3, seed=6)
@@ -361,7 +362,7 @@ def build_mushroom_hut():
         z = zc + 0.12 + hc * math.sin(phi) ** 0.85
         nrm = Vector((math.cos(a) * math.cos(phi), math.sin(a) * math.cos(phi), math.sin(phi)))
         m.sphere(r, pos=(math.cos(a) * rr, math.sin(a) * rr, z), scl=(1, 1, 0.3), rot=(0, math.acos(max(-1, min(1, nrm.z))), a),
-                 color="MUSHROOM_DOT", seg=10, rings=4)
+                 color="MUSHROOM_DOT", seg=8, rings=3)            # (P1 pass 4) was 10 x 4 (lower half sits in the cap)
     door_on_ring(m, 0, 0, R, -math.pi / 2, 0.38, 0.72, "bark")
     window_on_ring(m, 0, 0, R, -math.pi / 2 + 0.8, 0.62, 0.12)
     window_on_ring(m, 0, 0, R, -math.pi / 2 - 0.9, 0.62, 0.12)
