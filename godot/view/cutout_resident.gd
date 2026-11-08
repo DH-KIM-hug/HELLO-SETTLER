@@ -16,9 +16,10 @@ const Lib := preload("res://proto/cutout_a/cut_lib.gd")
 const Doll := preload("res://proto/cutout_a/cut_doll.gd")
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
-const STRIDE_CYCLE := 0.78       # 걷기 한 주기(두 걸음)에 가는 칸 (어른 키) — 걷기 0.9주기/초 × 보통 걸음 0.7칸/초
+## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
+## 옛 고정값 0.78칸은 짧은 인형 다리가 실제로 딛는 길(0.2~0.3)의 2.5배라 발이 땅에서 미끄러졌다
 const RATE_MIN := 0.35
-const RATE_MAX := 3.2
+const RATE_MAX := 4.0
 const RATE_STEP := 0.05          # 빠르기를 이만큼씩만 바꿈 (GPU에 보내는 일을 줄이고 위상 이음을 덜 함)
 const BABY_SCALE := 0.45
 const CHILD_SCALE := Vector2(0.68, 0.8)    # 아이 몸 f의 키 배율 (어린 → 큰 아이)
@@ -294,7 +295,8 @@ func _refresh_doll() -> void:
 		var g := _ground
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else 1.0)
-		rate = clampf(g / (STRIDE_CYCLE * (_doll_h / DOLL_H) * (0.85 if clip == "carry" else 1.0)), RATE_MIN, RATE_MAX)
+		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], clip) * _doll_h / float(Lib.lib()["fig"])
+		rate = clampf(g / maxf(stride, 0.01), RATE_MIN, RATE_MAX)
 		rate = snappedf(rate, RATE_STEP)
 	if clip != _d_clip or not is_equal_approx(rate, _d_rate):
 		var now := _shader_time()

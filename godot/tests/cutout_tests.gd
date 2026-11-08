@@ -21,7 +21,8 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 종이 인형 주민: 겉모습 기록 · 동작 대응 · 에셋")
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
-		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level"])
+		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
+		"test_hat_seated", "test_two_feet", "test_walk_no_slip"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -301,6 +302,120 @@ func test_hat_level() -> void:
 			if absf(va.x - fa.x) > 10.0:
 				bad.append("%s/%d %.1f°" % [s, v, va.x - fa.x])
 	check(checked >= 4 and bad.is_empty(), "비스듬한 보기의 챙 모자가 수평 (%d개 확인, 기운 것: %s)" % [checked, ", ".join(bad)])
+
+
+## 2026-11-08 사용자 "밀짚모자가 아직 떠 있음": 모자는 머리에 푹 눌러 써야 한다 (정수리 위에 얹힌 게 아니라).
+## build_atlas: 머리마다 모자 자리 = 눈썹 줄 (head_top = 턱 → 눈썹, head_brow = 정수리에서 눈썹까지),
+## 챙·뜨개 모자는 아래 끝(입구 가운데 아래)이 눈썹 둘레에, 꼭대기는 정수리(머리카락 위)보다 위 — 머리카락이 모자 안에 들어감.
+## 두건(d, 얼굴을 감쌈)은 그린 자리 그대로.
+func test_hat_seated() -> void:
+	var L := Lib.lib()
+	var hh := 232.0
+	var img: Image = (Lib.material().get_shader_parameter("atlas") as Texture2D).get_image()
+	if img.is_compressed():
+		img.decompress()
+	var ok_seat := L.has("head_brow") and L.has("hat_kind")
+	for s: String in Lib.SETS:
+		for v: String in L["views"]:
+			ok_seat = ok_seat and float(L["head_brow"].get("%s_%s" % [s, v], -1.0)) > 0.15 * hh
+	check(ok_seat, "머리마다 모자 자리(눈썹 줄)가 정수리 아래에 (head_brow)")
+	var n := 0
+	var bad := PackedStringArray()
+	for q: Dictionary in L["quads"]:
+		if q["part"] != "hat" or String(L["hat_kind"].get(q["set"], "wrap")) == "wrap":
+			continue
+		n += 1
+		var r: Array = q["rect"]
+		var brow := float(L["head_brow"]["%s_%s" % [q["set"], L["views"][int(q["view"])]]])
+		var edge := _hat_edge(img, q["uv"], r)          # 자리(눈썹) 기준
+		var crown := float(r[3]) - brow                 # 정수리 기준
+		if edge < -0.14 * hh or edge > 0.06 * hh or crown < 0.0:
+			bad.append("%s/%d edge %.2f crown %.2f" % [q["set"], int(q["view"]), edge / hh, crown / hh])
+	check(n >= 20 and bad.is_empty(), "모자 %d개: 아래 끝이 눈썹 둘레, 꼭대기가 머리 위 (어긋남: %s)" % [n, ", ".join(bad)])
+
+
+## 2026-11-08 사용자 "돌 때 왜 다리가 하나 없어": 비스듬한 뒤(a·f)의 두 다리가 같은 엉덩이에 겹쳐 있었고, 비스듬한 보기 걸음의
+## 반 주기는 두 발이 같은 높이에서 엇갈려 하나로 보였다. 모든 몸 · 비스듬한 보기 · 걷기/나르기 장면에서 두 발(다리 조각 아래 끝
+## 가운데, 그 동작으로 옮긴 자리)이 발 너비의 0.45배 넘게 떨어져 있어야 한다. 서 있을 때(idle)의 엉덩이 간격도.
+func test_two_feet() -> void:
+	var L := Lib.lib()
+	var worst := INF
+	var where := ""
+	var checked := 0
+	for sn: String in Lib.SETS:
+		for v in [1, 2]:
+			var legs := {}
+			for q: Dictionary in L["quads"]:
+				if q["set"] == sn and int(q["view"]) == v and String(q["part"]).begins_with("leg_"):
+					legs[q["part"]] = q
+			if legs.size() < 2:
+				continue
+			var fw := float(legs["leg_a"]["rect"][2]) - float(legs["leg_a"]["rect"][0])
+			for clip: String in ["idle", "walk", "carry"]:
+				for f in Lib.FRAMES:
+					var a: Array = Lib._pose(clip, v, float(f) / Lib.FRAMES)
+					var p := []
+					for i in 2:
+						var q: Dictionary = legs["leg_a" if i == 0 else "leg_b"]
+						var r: Array = q["rect"]
+						var foot := Vector2((float(r[0]) + float(r[2])) * 0.5, float(r[1]))
+						p.append(Lib._xf(foot, Vector2(q["pivot"][0], q["pivot"][1]), a[7 + i]))
+					var d := (p[0] as Vector2).distance_to(p[1]) / fw
+					checked += 1
+					if d < worst:
+						worst = d
+						where = "%s/%d %s %d" % [sn, v, clip, f]
+	check(checked > 600 and worst > 0.45, "비스듬한 보기: 두 발이 늘 갈려 보임 (가장 가까움 %.2f × 발 너비 @ %s)" % [worst, where])
+
+
+## 2026-11-08 걷기 점검: 걷기 주기 = 땅 빠르기 ÷ 그 몸 다리의 보폭 (Lib.stride_rig) → 디딘 발이 땅에서 미끄러지지 않음.
+## 옛 고정 보폭 0.78칸은 인형 다리가 실제로 딛는 길의 2.5배였다.
+func test_walk_no_slip() -> void:
+	var fig := float(Lib.lib()["fig"])
+	var ok := true
+	for sn: String in Lib.SETS:
+		var sw := Lib.stride_rig(sn, "walk") * CutoutResident.DOLL_H / fig
+		ok = ok and sw > 0.12 and sw < 0.6 and Lib.stride_rig(sn, "carry") < Lib.stride_rig(sn, "walk")
+	check(ok, "몸마다 걷기 보폭 (세계 0.12~0.6, 나르기는 더 짧게)")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 41
+	var r := _resident(rng, 4242)
+	r.age = 10.0
+	var m := _model(r)
+	m._ground = 0.7
+	m.set_anim("walk")
+	m.tick(0.0)
+	var stride := Lib.stride_rig(Lib.SETS[int(m.dlook["personal"])], "walk") * m._doll_h / fig
+	var want := clampf(0.7 / stride, CutoutResident.RATE_MIN, CutoutResident.RATE_MAX)
+	check(absf(m._d_rate - want) <= CutoutResident.RATE_STEP, "걷기 주기 %.2f/초 = 땅 0.7 ÷ 보폭 %.3f (%.2f) — 발이 미끄러지지 않음" % [m._d_rate, stride, want])
+	m.free()
+
+
+## 모자 조각의 입구(가장 넓은 줄) 가운데 아래 끝 → rig y (조각 틀 = 모자 자리)
+static func _hat_edge(img: Image, uv: Array, rect: Array) -> float:
+	var x0 := int(round(float(uv[0]) * img.get_width()))
+	var y0 := int(round(float(uv[1]) * img.get_height()))
+	var x1 := int(round(float(uv[2]) * img.get_width()))
+	var y1 := int(round(float(uv[3]) * img.get_height()))
+	var best := -1
+	var xc := (x0 + x1) / 2
+	for y in range(y0, y1):
+		var lo := -1
+		var hi := -1
+		for x in range(x0, x1):
+			if img.get_pixel(x, y).a > 0.5:
+				if lo < 0:
+					lo = x
+				hi = x
+		if lo >= 0 and hi - lo > best:
+			best = hi - lo
+			xc = (lo + hi + 1) / 2
+	var ye := y0
+	for y in range(y0, y1):
+		if img.get_pixel(clampi(xc, x0, x1 - 1), y).a > 0.5:
+			ye = y
+	var k := (float(rect[3]) - float(rect[1])) / float(y1 - y0)
+	return float(rect[3]) - (float(ye - y0) + 0.5) * k
 
 
 ## 아틀라스 uv 칸의 불투명 화소 주축: (각도°, 길쭉함 = 큰/작은 분산)
