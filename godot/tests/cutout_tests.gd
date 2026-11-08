@@ -21,7 +21,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 종이 인형 주민: 겉모습 기록 · 동작 대응 · 에셋")
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
-		"test_assets_imported", "test_view_only", "test_switch"])
+		"test_assets_imported", "test_view_only", "test_switch", "test_body_types"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -142,12 +142,12 @@ func test_clip_map() -> void:
 			bad.append("%s/%s/%s → %s %d 옷 %d" % [cs[0], cs[1], cs[2], st["clip"], st["prop"], outfit])
 	check(bad.is_empty(), "동작·짐·일터 → 인형 클립·소품·옷 대응표 %s" % [bad])
 	m.free()
-	# 아이: 줄인 어른 몸 · 같은 걸음을 더 빨리
+	# 아이: 아이 몸(f) · 같은 걸음을 더 빨리
 	var k := _resident(rng, 56)
 	k.age = 1.5
 	var km := _model(k)
 	var am := _model(r)
-	check(km.scale.x < 0.75 and is_equal_approx(am.scale.x, 1.0), "아이는 어른 몸을 줄여 씀 (%.2f)" % km.scale.x)
+	check(km.scale.x < 0.75 and is_equal_approx(am.scale.x, 1.0), "아이는 작게 (%.2f)" % km.scale.x)
 	for mm: CutoutResident in [km, am]:
 		mm.set_anim("walk")
 		mm.tick(0.0)
@@ -221,3 +221,36 @@ func test_switch() -> void:
 	s.save(p)
 	check(not GameSettings.load_from(p).cutout_residents, "설정 저장 → 읽기 (꺼짐)")
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
+
+
+## 시안 A 넷 (2026-11-08): 아이 = 아이 몸 f, 노인 = 노인 몸 g(+지팡이), 어른 = 어른 몸 — 일할 때도 아이·노인은 제 몸
+func test_body_types() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 31
+	var ok := true
+	var heads := {}
+	for i in 30:
+		var r := _resident(rng, 900 + i)
+		var kind: String = ["child", "adult", "elder"][i % 3]
+		r.age = {"child": 2.5, "adult": 10.0, "elder": 24.0}[kind]
+		var m := _model(r)
+		var dl := m.dlook
+		var p := int(dl["personal"])
+		var want: Array = {"child": [5], "elder": [6], "adult": [0, 1, 2, 4]}[kind]
+		ok = ok and want.has(p) and String(dl["body"]) == kind
+		if kind != "adult":
+			ok = ok and int(dl["jobs"]["farmer"]) == p
+		heads["%s/%d" % [kind, int(dl["head"])]] = true
+		m.free()
+	check(ok, "몸 종류: 아이 → f, 노인 → g, 어른 → a·b·c·e (일 옷도 제 몸)")
+	check(heads.size() >= 6, "몸 종류마다 머리 여러 가지 (%d)" % heads.size())
+	var L := Lib.lib()
+	check(L.has("body_types") and L["body_types"].has("f") and float(L["head_k"][Lib.SETS.find("f")]) > 1.0,
+		"doll_lib에 몸 종류별 머리 배율·목 (body_types, head_k)")
+	var cane := false
+	for q: Dictionary in L["quads"]:
+		if q["set"] == "g" and q["part"] == "cane" and float(q["grip"][2]) > 0.5:
+			cane = true
+	check(cane, "노인 몸에 지팡이 (손을 따라감)")
+	var c := Lib.concept_look("child")
+	check(int(c["personal"]) == 5 and int(c["dye"][0]) == -1, "시안 그대로의 아이 (그린 색 그대로)")

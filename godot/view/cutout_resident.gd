@@ -7,7 +7,7 @@
 ##   walk → walk (아이 = 같은 걸음을 더 빨리 = 뛰기, 노인 = 느린 걸음 — 빠르기는 실제 땅 빠르기에서) · 짐 든 walk/carry → carry ·
 ##   짐 든 idle → hold · work/torch → 연장이 괭이·낫이면 괭이질(hoe + 그 연장), 망치·도끼·곡괭이면 같은 내려찍기 + 나무망치, 그 밖 → idle ·
 ##   그 밖(sit·sleep·eat·pray·play·fly·wave·chat·사이 동작…) → idle. 일하는 동안엔 농부 옷(지금은 모든 일), 아니면 평상복.
-## 아이·노인·아기: 어른 몸을 줄여 씀 (아이 0.62~0.7 · 노인 0.95 · 아기 0.45 — 아이 몸·지팡이·강보는 아직 없음).
+## 아이·노인: 제 몸 (2026-11-08 시안 A 넷 — 아이 몸 f · 노인 몸 g + 지팡이, cut_lib.look_from body). 아기는 아이 몸을 0.45로 (강보는 아직 없음).
 ## 낮엔 모자(R6 머리쓰개 문화), 저녁엔 벗음. 발밑 접촉 그림자는 VillageView의 CutoutShadows (MultiMesh 하나).
 class_name CutoutResident
 extends ResidentModel
@@ -21,8 +21,10 @@ const RATE_MIN := 0.35
 const RATE_MAX := 3.2
 const RATE_STEP := 0.05          # 빠르기를 이만큼씩만 바꿈 (GPU에 보내는 일을 줄이고 위상 이음을 덜 함)
 const BABY_SCALE := 0.45
+const CHILD_SCALE := Vector2(0.68, 0.8)    # 아이 몸 f의 키 배율 (어린 → 큰 아이)
+const ELDER_SCALE := 0.9
 ## 짐 이름 → 소품 (Lib.PROPS 번호): 빵 0 · 나뭇가지 1 · 바구니 2 · 밀 10 · 물통 11. 표에 없으면 바구니
-const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11}
+const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11, "씨앗": 12}
 const PROP_BASKET := 2
 ## 일 연장 → 내려찍는 일 동작(hoe)의 소품: 괭이 6 · 낫 7 · 나무망치 9. 표에 없는 연장(빈손·삽·약초·낚싯대) = 서서 (idle)
 const WORK_PROP := {"tool_hoe": 6, "tool_sickle": 7, "tool_hammer": 9, "tool_axe": 9, "tool_pick": 9}
@@ -86,7 +88,7 @@ static func doll_look(lk: Dictionary, seed: int, household: int) -> Dictionary:
 	var skin := Style.SKIN_RAMP.find(tones["skin"].to_html(false))
 	if skin < 0:
 		skin = 0
-	var dl := Lib.look_from(seed * 131 + 7, String(lk.get("sex", "m")), skin, 0, household * 977 + 11)
+	var dl := Lib.look_from(seed * 131 + 7, String(lk.get("sex", "m")), skin, 0, household * 977 + 11, body_of(lk))
 	var hc: Color = tones["hair"]
 	var hi := Style.HAIR_RAMP.find(hc.to_html(false))
 	var d: Array = dl["dye"]
@@ -108,6 +110,16 @@ static func doll_look(lk: Dictionary, seed: int, household: int) -> Dictionary:
 			best = 54
 		d[1] = best
 	return dl
+
+
+## 몸 종류 (2026-11-08 시안 A 넷): 아이(아기 제외) = 아이 몸 f, 노인 = 노인 몸 g, 그 밖 = 어른 몸
+static func body_of(lk: Dictionary) -> String:
+	var age: float = lk.get("age", 10.0)
+	if age < Balance.AGE_ADULT:
+		return "child"
+	if age >= Balance.AGE_ELDER:
+		return "elder"
+	return "adult"
 
 
 func setup_from(r: Resident) -> void:
@@ -138,9 +150,10 @@ func build_look(lk: Dictionary) -> void:
 	if _baby:
 		_base_scale = BABY_SCALE
 	elif _child:
-		_base_scale = 0.62 + 0.08 * clampf((age - 1.0) / 3.0, 0.0, 1.0)
+		# 아이 몸(f)은 제 비율(큰 머리)로 그려져 있음 — 키만 나이에 따라 (시안 A 작은 화면: 아이 ≈ 어른의 0.8, 뾰족 모자 포함)
+		_base_scale = CHILD_SCALE.x + (CHILD_SCALE.y - CHILD_SCALE.x) * clampf((age - 1.0) / 3.0, 0.0, 1.0)
 	elif look["elder"]:
-		_base_scale = 0.95
+		_base_scale = ELDER_SCALE      # 노인 몸(g)은 굽은 등으로 그려져 있음
 	else:
 		_base_scale = 1.0
 	_gait = 0.85 if look["elder"] else 1.0

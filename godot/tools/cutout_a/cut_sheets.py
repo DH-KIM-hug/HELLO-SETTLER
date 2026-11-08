@@ -21,7 +21,12 @@ RAW = os.path.join(ART, "raw")
 PARTS = os.path.join(ART, "parts")
 VIEWS = ["front", "q_front", "q_back", "back"]
 # draw order used only for the check image (the rig has its own per-view order)
-CHECK_ORDER = ["leg_a", "leg_b", "tail", "body", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "knot"]
+CHECK_ORDER = ["leg_a", "leg_b", "tail", "body", "cane", "arm_a", "arm_b", "sleeve_a", "sleeve_b", "head", "knot"]
+SIDE_IN = {"f": 0.1}   # child: wide collar + smock -> the sleeve centre must sit near the body edge
+CANE_SETS = {"g"}     # elder: the walking stick (props sheet c) is auto-placed over the figure and becomes an outfit piece
+ARM_HANG = {("g", "q_front")}   # figure arm reaches forward to the stick -> placed hanging (see run_set)
+BRAIDS_ON_HEAD = {"f": 0.2}   # child: braid piece top at this fraction of the head piece height
+BRAIDS_W = 1.3                 # braid pair width = this x the head width (they stick out at the sides, concept)
 
 
 def raw_path(s, v):
@@ -246,7 +251,7 @@ def place(fig, part, cen, ds=4, scales=None, win=None, uniform=False, fixed=None
     return best
 
 
-def windows(name, pl, W, H, feet_y, cx, hat=False):
+def windows(name, pl, W, H, feet_y, cx, hat=False, side_in=0.3):
     """search windows from the reliable big parts (body, head) — the template fixes WHERE a part is, not just its size"""
     if name == "body":
         return (0, H * 0.25, W, H * 0.75)
@@ -260,7 +265,7 @@ def windows(name, pl, W, H, feet_y, cx, hat=False):
     xa0, xa1 = (0, cx + W * 0.1) if side_a else (cx - W * 0.1, W)
     if name.startswith("sleeve") or name.startswith("arm"):
         # outer side of the body: the sleeve / arm centre is outside the middle 40% of the body
-        xa0, xa1 = (-W, bx0 + 0.3 * bw) if side_a else (bx0 + 0.7 * bw, 2 * W)
+        xa0, xa1 = (-W, bx0 + side_in * bw) if side_a else (bx0 + (1 - side_in) * bw, 2 * W)
     if name.startswith("sleeve"):
         return (xa0, by0 - 0.05 * bh, xa1, by0 + 0.4 * bh)
     if name.startswith("arm"):
@@ -401,7 +406,7 @@ def run_set(s):
                 continue
             part = cut[name][0]
             Image.fromarray(part).save(os.path.join(od, name + ".png"))
-            win = windows(name, pl, Wf, Hf, feet_y, cx, hat=(s != "a"))
+            win = windows(name, pl, Wf, Hf, feet_y, cx, hat=(s != "a"), side_in=SIDE_IN.get(s, 0.3))
             # partly hidden parts (arm stubs under the sleeve, legs under the skirt, knot / hair tail behind the head) cannot
             # measure their own size -> they use the sheet's scale measured on the big, fully visible parts (body + head)
             fixed = None
@@ -422,9 +427,33 @@ def run_set(s):
             # visible fraction ~ how much of the part shows in the figure (low = occluded / behind)
             pl[name] = {"sx": round(sx, 3), "sy": round(sy, 3), "x": x, "y": y, "score": round(score, 3),
                         "w": int(round(part.shape[1] * sx)), "h": int(round(part.shape[0] * sy)), "flip": flip}
+            if name == "tail" and s in BRAIDS_ON_HEAD:
+                # two braids, one each side of the head: the colour match slides them to one side -> centre them on the head,
+                # top at ear height (the cut piece is drawn exactly as they sit, the gap between them = the head)
+                q, h = pl[name], pl["head"]
+                g = BRAIDS_W * h["w"] / q["w"]      # the cell was too narrow: the model drew the pair closer than in the figure
+                q.update({"sx": round(q["sx"] * g, 3), "sy": round(q["sy"] * g, 3), "w": int(q["w"] * g), "h": int(q["h"] * g)})
+                q.update({"x": int(h["x"] + h["w"] / 2 - q["w"] / 2), "y": int(h["y"] + BRAIDS_ON_HEAD[s] * h["h"]), "score": "head"})
             print(s, v, name, pl[name])
         if s != "a" and "knot" in cut and "head" in pl:
             hat_from_figure(fig, cut, pl, od)
+        if (s, v) in ARM_HANG:
+            # the figure reaches this arm forward (elder: hand on the stick) — the rig wants it hanging: put the sleeve at the
+            # shoulder height of the other sleeve on the body's edge, the forearm under it like the other arm under its sleeve
+            sa, sb, ab = pl["sleeve_a"], pl["sleeve_b"], pl["arm_b"]
+            # the near sleeve piece is drawn reaching forward too -> use the hanging far sleeve, mirrored
+            sbi = np.asarray(Image.open(os.path.join(od, "sleeve_b.png")).convert("RGBA"))[:, ::-1].copy()
+            Image.fromarray(sbi).save(os.path.join(od, "sleeve_a.png"))
+            cut["sleeve_a"] = (sbi, (0, 0))
+            sa.update({"sx": sb["sx"], "sy": sb["sy"], "w": sb["w"], "h": sb["h"]})
+            b = pl["body"]
+            sa.update({"x": int(b["x"] + 0.12 * b["w"] - sa["w"] / 2), "y": sb["y"] + (sb["h"] - sa["h"]) // 2, "score": "hang"})
+            aa = pl["arm_a"]
+            dy = (ab["y"] - sb["y"]) / max(sb["h"], 1)
+            aa.update({"x": int(sa["x"] + sa["w"] / 2 - aa["w"] / 2), "y": int(sa["y"] + dy * sa["h"]), "score": "hang"})
+            print("arm hang", s, v, sa, aa)
+        if s in CANE_SETS:
+            place_cane(fig, pl, cen, v, od, cut)
         json.dump(pl, open(os.path.join(od, "place.json"), "w"), indent=1)
         doll = compose(fig.shape, cut, pl, CHECK_ORDER)
         f = Image.fromarray(fig)
@@ -438,12 +467,55 @@ def run_set(s):
         report[v] = pl
     if s in HAT_FROM_BACK:
         hats_front_from_back(s, report)
+    if s in HAT_Q_FROM_FRONT:
+        hat_q_from_front(s, report)
     return report
+
+
+HAT_Q_FROM_FRONT = {"e"}     # wide straw hat: the mirrored 3/4-back hat came out tilted / clipped -> 3/4 front = the front hat
+
+
+def hat_q_from_front(s, report):
+    src = os.path.join(PARTS, s, "front", "knot.png")
+    od = os.path.join(PARTS, s, "q_front")
+    hb = Image.open(src)
+    hb.save(os.path.join(od, "knot.png"))
+    q, hd = report["q_front"]["knot"], report["q_front"]["head"]
+    cxh = hd["x"] + 0.55 * hd["w"]          # a little toward the side the face turns to
+    q.update({"w": hb.width, "h": hb.height, "x": int(cxh - hb.width / 2), "y": int(hd["y"] + HAT_BRIM.get(s, 0.4) * hd["h"] - hb.height),
+              "score": "from_front"})
+    json.dump(report["q_front"], open(os.path.join(od, "place.json"), "w"), indent=1)
+    print("hat", s, "q_front from front", q)
+
+
+def place_cane(fig, pl, cen, v, od, cut):
+    """walking stick (parts/props/cane[_q].png) matched over the assembled elder figure (it is drawn there in the hand).
+    The sheet scale of the props page is unknown -> wide scale search; flipped version tried too."""
+    src = os.path.join(PARTS, "props", ("cane_q" if v in ("q_front", "q_back") else "cane") + ".png")
+    if not os.path.exists(src):
+        return
+    cane = np.asarray(Image.open(src).convert("RGBA"))
+    W, H = fig.shape[1], fig.shape[0]
+    best = None
+    for flip in (False, True):
+        c = cane[:, ::-1].copy() if flip else cane
+        sl = [round(0.45 + 0.05 * i, 2) for i in range(16)]
+        sc, r = place(fig, c, cen, scales=sl, win=(0, H * 0.3, W, H * 0.85), uniform=True)
+        if best is None or sc > best[0]:
+            best = (sc, r, flip, c)
+    sc, (sx, sy, x, y), flip, c = best
+    Image.fromarray(c).save(os.path.join(od, "cane.png"))
+    cut["cane"] = (c, (0, 0))
+    pl["cane"] = {"sx": round(sx, 3), "sy": round(sy, 3), "x": x, "y": y, "score": round(sc, 3),
+                  "w": int(round(c.shape[1] * sx)), "h": int(round(c.shape[0] * sy)), "flip": flip}
+    print("cane", v, pl["cane"])
 
 
 # rigid, roughly symmetric hats: the front-facing view of the hat = its back view (front) / mirrored 3/4-back view (3/4 front).
 # The figure cut of a hat seen from the front is broken by the face and hair; the back view shows the whole hat. Hoods stay cut.
-HAT_FROM_BACK = {"b", "c"}
+HAT_FROM_BACK = {"b", "c", "e", "g"}      # f (pointed cap, tip flops to one side) stays cut from the figure
+HAT_K1 = {"e", "g"}
+HAT_BRIM = {"e": 0.5, "g": 0.52}     # brim line (fraction of the bare head height) for hats taken from the back view
 
 
 def hats_front_from_back(s, report):
@@ -456,7 +528,8 @@ def hats_front_from_back(s, report):
         hd = report[v]["head"]
         hs = report[src]["head"]
         qs = report[src]["knot"]
-        k = hd["w"] / hs["w"]                       # same hat, scaled by the head width ratio of the two views
+        k = hd["w"] / hs["w"] if s not in HAT_K1 else 1.0     # same hat, scaled by the head width ratio of the two views
+        # (sets e, g: the back-view head piece was matched at a squashed scale -> the ratio is wrong; the sheet scale is the same)
         hb = hb.resize((max(2, int(round(hb.width * k))), max(2, int(round(hb.height * k)))), Image.LANCZOS)
         hb.save(os.path.join(od, "knot.png"))
         # horizontally: same offset from the head centre as in the source view (mirrored for 3/4); vertically: brim bottom at
@@ -465,17 +538,17 @@ def hats_front_from_back(s, report):
         if flip:
             off = -off
         cxh = hd["x"] + hd["w"] / 2 + off * k
-        q.update({"w": hb.width, "h": hb.height, "x": int(cxh - hb.width / 2), "y": int(hd["y"] + 0.4 * hd["h"] - hb.height),
+        q.update({"w": hb.width, "h": hb.height, "x": int(cxh - hb.width / 2), "y": int(hd["y"] + HAT_BRIM.get(s, 0.4) * hd["h"] - hb.height),
                   "score": "from_" + src})
         report[v]["knot"] = q
         json.dump(report[v], open(os.path.join(od, "place.json"), "w"), indent=1)
         print("hat", s, v, "from", src, q)
 
 
-def run_props(tag, names):
+def run_props(tag, names, cells=None):
     p = os.path.join(RAW, "props%s.png" % ("" if tag == "a" else "_" + tag))
     rgba = key(p)
-    cells = [(c[0], n, c[2]) for c, n in zip(L.PROP_CELLS, names)]
+    cells = [(c[0], n, c[2]) for c, n in zip(cells or L.PROP_CELLS, names)]
     cut = cut_by_cells(rgba, cells)
     od = os.path.join(PARTS, "props")
     os.makedirs(od, exist_ok=True)
@@ -485,11 +558,13 @@ def run_props(tag, names):
 
 
 if __name__ == "__main__":
-    sets = sys.argv[1:] or [s for s in "abcd" if all(os.path.exists(raw_path(s, v)) for v in VIEWS)]
+    sets = sys.argv[1:] or [s for s in "abcdefg" if all(os.path.exists(raw_path(s, v)) for v in VIEWS)]
     for s in sets:
         if s == "props":
             run_props("a", ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q"])
             if os.path.exists(os.path.join(RAW, "props_b.png")):
                 run_props("b", ["hoe", "sickle", "rake", "mallet", "wheat", "bucket"])
+            if os.path.exists(os.path.join(RAW, "props_c.png")):
+                run_props("c", ["cane", "cane_q", "seed", "seed_q"], L.PROP_CELLS_C)
         else:
             run_set(s)

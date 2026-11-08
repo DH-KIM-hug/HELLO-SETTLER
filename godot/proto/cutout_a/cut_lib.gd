@@ -14,8 +14,8 @@ const NSLOT := 11
 ## 0 root 1 body 2 head 3 sleeve_a 4 sleeve_b 5 arm_a 6 arm_b 7 leg_a 8 leg_b 9 accessory 10 prop
 const CLIPS := ["idle", "walk", "carry", "hoe", "hold"]     # hold = 짐을 안고 서 있기 (나르기 팔 + 쉬는 다리, 2026-11-08 게임 연결)
 const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35}   # 주기/초 (걷기 한 주기 = 두 걸음)
-const SETS := ["a", "b", "c", "d"]
-const PROPS := ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket"]
+const SETS := ["a", "b", "c", "d", "e", "f", "g"]   # e 남자 · f 아이 · g 노인 (시안 A 넷, 2026-11-08) — 몸 종류는 lib "body_types"
+const PROPS := ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket", "seed"]
 
 ## 물감 (sRGB). 0~11 피부 = Genetics.SKIN_TONES, 12~17 머리 = Genetics.HAIR_TABLE (짙기 × 붉음), 18 흰머리, 19 은빛,
 ## 20~31 옷 물감 (art-bible 5.6 꽃물 공식 예 + 들풀), 32~35 크림, 36~41 띠·가죽, 42~45 모자, 46~49 다리, 50~53 신, 56~63 묶음 a 그대로
@@ -84,8 +84,10 @@ static func mesh() -> ArrayMesh:
 	var c0 := PackedFloat32Array()
 	var c1 := PackedFloat32Array()
 	var c2 := PackedFloat32Array()
+	var c3 := PackedFloat32Array()
 	var idx := PackedInt32Array()
 	for q: Dictionary in L["quads"]:
+		var gp: Array = q.get("grip", [0.0, 0.0, 0.0, 0.0])
 		var r: Array = q["rect"]
 		var uv: Array = q["uv"]
 		var s_i: float = float(SETS.find(q["set"])) if q["group"] < 3 else float(PROPS.find(q["set"]))
@@ -98,6 +100,7 @@ static func mesh() -> ArrayMesh:
 			c0.append_array([q["pivot"][0], q["pivot"][1], float(q["slot"]), float(q["group"])])
 			c1.append_array([s_i, float(q["view"]), float(q["dye"][0]), float(q["dye"][1])])
 			c2.append_array([float(q["dye"][2]), q["parent_pivot"][0], q["parent_pivot"][1], 0.0])
+			c3.append_array([float(gp[0]), float(gp[1]), float(gp[2]), float(gp[3])])     # 지팡이: 손 자리 + 표시
 		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
@@ -106,10 +109,12 @@ static func mesh() -> ArrayMesh:
 	arr[Mesh.ARRAY_CUSTOM0] = c0
 	arr[Mesh.ARRAY_CUSTOM1] = c1
 	arr[Mesh.ARRAY_CUSTOM2] = c2
+	arr[Mesh.ARRAY_CUSTOM3] = c3
 	arr[Mesh.ARRAY_INDEX] = idx
 	var fl := (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) | \
 		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT) | \
-		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT)
+		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT) | \
+		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM3_SHIFT)
 	_mesh = ArrayMesh.new()
 	_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, fl)
 	# 정점 셰이더가 세계 자리를 정하므로 경계 상자는 '발 둘레 1칸'으로 (rig 좌표 그대로면 수백 칸이 되어 가려 내기가 안 됨)
@@ -134,19 +139,31 @@ static func material() -> ShaderMaterial:
 	for s: String in SETS:
 		for n: String in names:
 			base.append(_v(Color(L["base"][s][n])))
+	base.resize(64)
 	_mat.set_shader_parameter("base_col", base)
 	var hs := PackedVector2Array()
 	for s: String in SETS:
 		for v: String in L["views"]:
 			var p: Array = L["head_socket"]["%s_%s" % [s, v]]
 			hs.append(Vector2(p[0], p[1]))
+	hs.resize(32)
 	_mat.set_shader_parameter("head_socket", hs)
 	var ht := PackedVector2Array()
 	for s: String in SETS:
 		for v: String in L["views"]:
 			var p: Array = L["head_top"]["%s_%s" % [s, v]]
 			ht.append(Vector2(p[0], p[1]))
+	ht.resize(32)
 	_mat.set_shader_parameter("head_top", ht)
+	var hk := PackedFloat32Array()
+	for s: String in SETS:
+		hk.append(float(L["body_types"][s]["head_k"]))
+	while hk.size() < 8:
+		hk.append(1.0)
+	_mat.set_shader_parameter("head_k", hk)
+	var po := prop_offsets()
+	_mat.set_shader_parameter("prop_off", po[0])
+	_mat.set_shader_parameter("prop_off_hoe", po[1])
 	_mat.set_shader_parameter("fig", float(L["fig"]))
 	var pl: Array = L["prop_layer"]
 	_mat.set_shader_parameter("prop_layer", Vector4i(int(pl[0]), int(pl[1]), int(pl[2]), int(pl[3])))     # 보기마다 소품의 겹 (ORDER)
@@ -330,23 +347,71 @@ static func bake_anim() -> ImageTexture:
 ##   dye: [피부, 머리카락, 옷 주색, 둘째, 장식, 모자, 다리, 신] (물감 번호) }
 ## 피부·머리색은 겉모습 유전자에서 (Genetics.skin_step / darkness·red) — 능력 값은 읽지 않는다.
 ## 옷 물감은 집안(household_seed)·마을 꽃에서, 사람마다 조금 다르게. 일 옷은 집안 물감을 따름.
-static func look_from(seed: int, sex: String, skin_step: int, hair_i: int, household_seed: int = -1) -> Dictionary:
+## body = "adult" · "child" · "elder" (2026-11-08 시안 A 넷): 몸(옷 묶음)은 몸 종류의 것만 — 아이 = f, 노인 = g, 어른 = a·b(여)·c·e(남).
+## 머리는 몸 종류에 맞는 것 중에서 (아이 여 = f 땋은 머리, 아이 남 = d 민머리 · 노인 남 = g 흰 곱슬·콧수염 또는 어른 남자 머리, 노인 여 = 어른 여자 머리 —
+## 흰머리는 유전자의 머리색). 일 옷(농부 d)은 어른만 — 아이·노인은 일할 때도 제 옷 (몸이 바뀌지 않게).
+static func look_from(seed: int, sex: String, skin_step: int, hair_i: int, household_seed: int = -1, body := "adult") -> Dictionary:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = seed
 	var hh := RandomNumberGenerator.new()
 	hh.seed = household_seed if household_seed >= 0 else seed * 7 + 3
 	var head: int
-	if sex == "f":
-		head = [0, 1][rng.randi() % 2]
-	else:
-		head = [2, 3][rng.randi() % 2]
 	var hat := -1
-	if head != 0:          # 묶음 a의 머리는 머릿수건이 그려져 있음 → 모자 없음
-		hat = [-1, 1, 2, 3][rng.randi() % 4]
-	var personal: int = [0, 1][rng.randi() % 2] if sex == "f" else 2       # 시제품: 남자 평상복은 c 하나뿐
+	var personal: int
+	var farmer := 3
+	match body:
+		"child":
+			head = 5 if sex == "f" else 3
+			hat = [-1, 5, 5, 2][rng.randi() % 4]
+			personal = 5
+			farmer = 5
+		"elder":
+			head = [0, 1][rng.randi() % 2] if sex == "f" else [6, 6, 2, 4][rng.randi() % 4]
+			if head != 0:
+				hat = [-1, 6, 6, 1][rng.randi() % 4]
+			personal = 6
+			farmer = 6
+		_:
+			if sex == "f":
+				head = [0, 1][rng.randi() % 2]
+			else:
+				head = [2, 3, 4][rng.randi() % 3]
+			if head != 0:          # 묶음 a의 머리는 머릿수건이 그려져 있음 → 모자 없음
+				hat = [-1, 1, 2, 3, 4, 6][rng.randi() % 6]
+			personal = [0, 1][rng.randi() % 2] if sex == "f" else [2, 4][rng.randi() % 2]
 	var cloth := OFF["cloth"] + (hh.randi() % DYES["cloth"].size() + (rng.randi() % 3 - 1) + 12) % 12
 	return {
-		"seed": seed, "sex": sex, "head": head, "hat": hat, "personal": personal, "jobs": {"farmer": 3},
+		"seed": seed, "sex": sex, "body": body, "head": head, "hat": hat, "personal": personal, "jobs": {"farmer": farmer},
 		"dye": [clampi(skin_step, 0, 11), 12 + clampi(hair_i, 0, 7), cloth, OFF["cream"] + rng.randi() % 4,
 			OFF["trim"] + hh.randi() % 6, OFF["hat"] + rng.randi() % 4, OFF["leg"] + rng.randi() % 4, OFF["shoe"] + rng.randi() % 4],
 	}
+
+
+## 시안 A 그대로의 네 사람 (res_A.png: 여자·남자·아이·노인) — 물감 -1 = 그린 색 그대로
+static func concept_look(who: String) -> Dictionary:
+	var keep := [-1, -1, -1, -1, -1, -1, -1, -1]
+	var t: Array = {"woman": ["f", "adult", 0, -1, 0], "man": ["m", "adult", 4, 4, 4],
+		"child": ["f", "child", 5, 5, 5], "elder": ["m", "elder", 6, 6, 6]}[who]
+	return {"seed": 0, "sex": t[0], "body": t[1], "head": t[2], "hat": t[3], "personal": t[4], "jobs": {"farmer": t[4]}, "dye": keep}
+
+
+## 몸이 다르면 손 자리도 다르다: 나르기·안기 소품은 묶음 a의 손, 괭이질 소품은 묶음 d의 손에 맞춰 구워 둠 →
+## 옷 묶음 S·보기 v마다 그 차이 (셰이더 prop_off[S × 4 + v]) — 아이·노인·남자도 제 손에 쥠
+static func prop_offsets() -> Array:
+	var po := PackedVector2Array()
+	var ph := PackedVector2Array()
+	po.resize(32)
+	ph.resize(32)
+	for si in SETS.size():
+		for v in 4:
+			var a := _pose("carry", v, 0.0)
+			po[si * 4 + v] = _hands_mid(a, v, SETS[si]) - _hands_mid(a, v, "a")
+			var h := _pose("hoe", v, 0.0)
+			ph[si * 4 + v] = _hands_mid(h, v, SETS[si]) - _hands_mid(h, v, "d")
+	return [po, ph]
+
+
+static func _hands_mid(a: Array, v: int, sn: String) -> Vector2:
+	if v == 1:
+		return _hand(a, v, "a", sn)
+	return (_hand(a, v, "a", sn) + _hand(a, v, "b", sn)) * 0.5

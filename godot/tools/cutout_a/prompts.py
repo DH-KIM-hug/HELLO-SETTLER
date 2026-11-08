@@ -128,11 +128,92 @@ Each tool fits its box (about 380 px tall). Clean flat colour, NO gradients, NO 
 """
 
 
+# --- concept-A CAST (2026-11-08 coordinator: the full res_A.png cast — man, child, elder as their own BODY TYPES) ---
+# Same strict template as above; the FIRST attached image is now the crop of THAT character from res_A.png (gen.sh REF).
+# e = man (adult body), f = child (child body), g = elder (stooped elder body, cane = separate prop in props_c).
+# The chunky in-game proportions of the res_A inset (big head, no visible neck) are made by the rig (build_atlas BODY_TYPES).
+CAST = {
+    "e": dict(
+        who="the adult village MAN of the concept",
+        char="""round friendly face, small solid dark dot eyes, short brows, small smile, a short round full dark beard; warm medium-dark brown skin; dark curly black hair; a WIDE round woven straw hat (golden straw #D9C37E, slightly darker band); a knee-length sage-green (#8FA87A) tunic with a small cream (#F3E6CC) collar with a short slit at the neck, a plaited golden rope belt (#C8AE82) tied in a knot at the front with two hanging tasselled ends; wide short sleeves in the tunic green ending above the elbow in thick cream rolled cuffs; bare forearms and soft mitten-like hands; cream (#F3E6CC) trousers to mid-calf with thick rolled cuffs; soft brown (#8A5A3A) shoes. Soft pear-ish body with a bit broader shoulders, about 4 heads tall (hat included)""",
+        head="HEAD = the BARE head: face with the full beard, ears and the full curly hair (as it looks WITHOUT the hat), plus a short neck stub at the bottom. NO hat on it.",
+        knot="HEADWEAR = the wide straw hat alone, exactly as worn.",
+        tail="HAIR BACK = the curly hair at the nape / back of the head as one small piece.",
+        body="BODY = the whole tunic as ONE piece: cream collar with neck slit, chest, rope belt with knot and tassels, the tunic skirt down to the knee hem",
+        sleeve="wide green short sleeve with the thick cream rolled cuff",
+        leg="leg = cream trouser leg from the knee with its thick rolled cuff, the short bare lower leg below it and the brown shoe",
+        extra=""),
+    "f": dict(
+        who="the village CHILD (a little girl) of the concept",
+        char="""a CHILD: short and chubby, about 3 heads tall with a BIG round head, short soft limbs, tiny body. Round friendly face with round soft blush cheeks and light freckles, small solid dark dot eyes, short brows, small smile; light warm skin; ginger-red (#C8643A) hair with a centre parting and TWO short braids sticking out to the sides at ear height, tied with little cream ties; a cream (#F3E6CC) POINTED soft cloth cap whose long tip flops over to the image-right; a big round cream collar (two rounded flaps) over the shoulders; a short mustard-yellow (#D9C37E) smock dress to above the knee; mustard puffy short sleeves; bare forearms and small soft mitten-like hands; cream (#F3E6CC) puffy bloomers gathered just below the knee; short bare lower legs; soft brown shoes""",
+        head="HEAD = the BARE head: face, ears and the full red hair with its centre parting (as it looks WITHOUT the cap), plus a short neck stub at the bottom. NO cap on it, NO braids on it.",
+        knot="HEADWEAR = the pointed cream cap alone, exactly as worn.",
+        tail="HAIR BACK = the TWO red braids with their cream ties as one piece (exactly where they sit beside the head, the gap between them empty).",
+        body="BODY = the whole smock as ONE piece: the round cream collar, the mustard smock down to its hem, plus the cream bloomers below it down to the gathered knee bands",
+        sleeve="mustard puffy short sleeve",
+        leg="leg = the short bare lower leg below the bloomers with its brown shoe",
+        extra="Keep the CHILD proportions (big head, short body). The figure is still drawn 920 px tall (cap tip on the upper line) because that is only the drawing scale."),
+    "g": dict(
+        who="the village ELDER (an old man) of the concept",
+        char="""an OLD MAN, slightly STOOPED (back and shoulders gently rounded forward, head a little forward and lower), about 4 heads tall. Round friendly old face, small solid dark dot eyes with short white brows, a big white curled moustache, small smile; warm medium-brown skin; fluffy white curly hair showing at the sides below the cap; a soft cream (#F3E6CC) KNITTED cap with a rolled brim; a big cream shawl over the shoulders, knotted at the front of the chest with two short tails; a long periwinkle-blue (#9082B5) robe down to the ankles with a brown (#8A5A3A) belt tied at the waist with one long hanging end; wide long robe sleeves in periwinkle; soft mitten-like hands; soft brown shoes peeking out under the robe. In the assembled figure his image-LEFT hand hangs down and rests on the top of a gnarled wooden walking stick that stands on the ground beside his image-left foot""",
+        head="HEAD = the BARE head: face with the white moustache, ears and the white curly hair (as it looks WITHOUT the cap, a little bald on top), plus a short neck stub at the bottom. NO cap on it.",
+        knot="HEADWEAR = the cream knitted cap alone, exactly as worn.",
+        tail="HAIR BACK = the white curly hair at the nape / back of the head as one small piece.",
+        body="BODY = the whole robe as ONE piece WITH the cream shawl and its front knot, the brown belt with its hanging end, down to the ankle hem (stooped shape kept)",
+        sleeve="wide periwinkle robe sleeve from the shoulder to the elbow (a soft wide tube)",
+        leg="leg = the short bit of ankle with its brown shoe that shows under the robe",
+        extra="The walking stick appears ONLY in the assembled figure; do NOT draw it among the pieces (the image-LEFT ARM piece is the plain forearm with its soft mitten hand, without the stick)."),
+}
+
+CAST_TEMPLATE = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
+
+The FIRST attached image is the APPROVED CHARACTER CONCEPT: {who}, in a soft, rounded, cosy picture-book style. Reproduce the character EXACTLY (same face construction, same outfit, same colours, same line weight): {char}. Thin dark-brown ink outline (#3A2A22) of even weight, flat cel colour with ONE soft shade step, light from the upper-left, cute and soft, no sharp angles. Lower legs and shoes show clearly below the hem.
+{extra}
+
+This image is a 2D CUTOUT-ANIMATION PART SHEET (paper-doll rig) of this character in {view}.
+
+The SECOND attached image is a STRICT LAYOUT TEMPLATE (1536x1024). Follow it exactly:
+- Background: one flat, uniform pure chroma green #00FF00 everywhere. The darker green rectangles and lines of the template are only guides: you may leave them or omit them, but do not draw anything else on the background (no text, no letters, no numbers, no shadows, no gradient, no ground).
+- LEFT tall box: the complete ASSEMBLED FIGURE (wearing the headwear) standing, arms hanging relaxed a little away from the body, feet slightly apart, centred in the box. The TOP of the headwear touches the upper horizontal guide line and the SOLES of the shoes touch the lower horizontal guide line (figure exactly 920 px tall).
+- RIGHT side: the SAME figure taken apart into separate cut-out pieces, ONE piece centred inside each box, each piece complete with its own closed ink outline, NO piece touching another piece or a box edge.
+- SCALE RULE (most important): every piece is drawn at EXACTLY the same size (1:1, same pixels) as the same part in the assembled figure on the left, as if cut out of it with scissors. Do NOT enlarge or shrink pieces to fill their boxes; empty green space inside a box is fine.
+
+Boxes on the right (left-to-right, top-to-bottom):
+- Top-left big box: {body}. WITHOUT head, WITHOUT neck, WITHOUT the sleeves, WITHOUT arms, WITHOUT the lower legs. Shoulders small and rounded under where the sleeves will sit. One continuous piece, no seam crossing it.
+- Top-right box: {head}
+- Middle row small box on the left: {knot}
+- Middle row small box on the right: {tail}
+- Bottom row, six narrow boxes, left to right:
+  1) SLEEVE = the {sleeve} on the IMAGE-LEFT side of the figure, alone.
+  2) SLEEVE = the same on the IMAGE-RIGHT side, alone.
+  3) ARM = the IMAGE-LEFT bare forearm with hand, hanging straight down; its top end is a plain rounded stub that will be hidden inside the sleeve.
+  4) ARM = the IMAGE-RIGHT bare forearm with hand, same.
+  5) LEG = the IMAGE-LEFT {leg}; the piece continues upward as a simple tube about 2x longer than what shows below the hem (it will be hidden under the clothes).
+  6) LEG = the IMAGE-RIGHT one, same.
+Pieces are full shapes (hidden overlapping regions completed) so they can be layered in animation.
+Keep line weight, colours and shading identical between the assembled figure and the pieces. Clean flat cel colour, NO gradients, NO texture noise, NO hatching, NO cast shadows.
+"""
+
+PROPS3 = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
+
+Style: the FIRST attached image is the approved character concept (an old man with a walking stick; soft, rounded, cosy picture-book, thin dark-brown ink outline #3A2A22 of even weight, flat cel colour with ONE soft shade step, light from the upper-left). Draw props in exactly that style.
+
+The SECOND attached image is the layout template: flat uniform pure chroma green #00FF00 background everywhere (the darker green rectangles are guides only — leave or omit them, draw nothing else on the background: no text, no shadows, no ground). ONE prop centred in each box, not touching the box edges or each other:
+- Box 1 (tall, left): the old man's gnarled wooden WALKING STICK exactly as in the concept (warm brown wood #8A5A3A, a gently curved knobbly top that bends a little to the image-right, a few knots), standing VERTICAL, about 880 px tall, filling the box height.
+- Box 2 (tall): the same walking stick seen turned 45 degrees (the curved top bends toward the viewer, looks a little shorter on top), VERTICAL, same height.
+- Box 3 (small, upper right): a single big brown SEED (almond-shaped, warm brown with a lighter stripe), about 120 px long, as a child holds it in both hands.
+- Box 4 (small, lower right): the same seed in three-quarter view.
+Clean flat colour, NO gradients, NO texture noise, NO cast shadows.
+"""
+
+
 if __name__ == "__main__":
     v, out = sys.argv[1], sys.argv[2]
     s = sys.argv[3] if len(sys.argv) > 3 else "a"
     if v == "props":
-        print((PROPS if s == "a" else PROPS2).format(out=out))
+        print({"a": PROPS, "b": PROPS2, "c": PROPS3}[s].format(out=out))
+    elif s in CAST:
+        print(CAST_TEMPLATE.format(out=out, view=VIEWS_SET[v], **CAST[s]))
     elif s in SETS:
         print(SET_TEMPLATE.format(out=out, view=VIEWS_SET[v], **SETS[s]))
     else:
