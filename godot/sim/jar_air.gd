@@ -176,7 +176,7 @@ func stale_target(v: Village) -> float:
 	for tr: Dictionary in v.trees:
 		if tr["s"] == "tree":
 			n += 1
-	return clampf((v.people.size() + 2.0) * 0.02 / (0.4 + n / 100.0), 0.0, 1.0)
+	return clampf((v.people.size() + 2.0) * 0.02 / (0.4 + n / 100.0) / CoreWarmth.stale_div(v), 0.0, 1.0)     # [핵] 서늘한 별의 이끼가 거름 (A28b)
 
 
 # ───────────────────────── 다른 계산이 읽는 값 ─────────────────────────

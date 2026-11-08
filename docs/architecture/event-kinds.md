@@ -53,3 +53,9 @@
 | kind | 내는 곳 | v | at / who | 읽는 곳 |
 |---|---|---|---|---|
 | `&"lean_season"` | `LeanSeasons.hourly` — 빠듯한 철이 오고 감 (그 해 한 번씩, 알린 해는 `Village.stats`) | `{"kind": &"green_wheat"·&"caterpillar_year", "on": bool}` | — | `tests/lean_tests.gd` (앞으로 #26 안내 · 연출) |
+- 2026-11-08 (A28b 핵 크기 = 병의 따뜻함 — docs/BALANCE.md A28b, `sim/core_warmth.gd`): 아래 kind를 냄. 저장 순번 아니오 · 연대기는 `log_line`. 흔들림 날·시각·항아리·온천은 마을 씨앗 해시로 정하고 `emit` 앞뒤로 난수를 쓰지 않는다 (온천을 알아낼 사람만 `Discovery.finder`의 `disc_rng` — 뜨거운 별에서만). 보통 별(핵 1)은 어느 것도 내지 않는다.
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"ground_tremor"` | `CoreWarmth.tremor` — 뜨거운 별의 작은 땅 흔들림 (병 하루 `CORE_TREMOR_DAY`, 첫 빵 뒤). 죽음·다침 없음 | `{"n": int (몇 번째), "pot": String (깨진 항아리의 먹을 것, 없으면 ""), "lost": float}` | `at` = 마을 가운데 | `tests/warmth_tests.gd` (앞으로 화면의 먼지·흔들림 연출) |
+| `&"jar_trait_noticed"` | `CoreWarmth.note` — 병의 성질이 처음 눈에 띔 (별지기의 수첩 한 줄, `Village.jar_notes`에 저장 — 같은 병의 무리끼리 한 번) | `{"id": String (`CoreWarmth.NOTES` 열쇠), "text": String, "core": int}` | — | `tests/warmth_tests.gd` (앞으로 #26 수첩 '안내' 쪽) |

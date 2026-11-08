@@ -138,6 +138,8 @@ var hand: GiantHand                   # [거인의 손] 물 뿌리기·감싸기
 var smalls: SmallCrises                # [작은 위기] 날벌레·떠돌이 물방울·먼지 뭉치 (WORLD_EVENTS 2.2 — sim/small_crises.gd, 난수도 따로)
 var flora: Flora                      # [하늘의 것] 큰 버섯·큰 민들레 (WORLD_EVENTS 2.6 · 2.7 — sim/flora.gd)
 var dogs: Dogs                        # [강아지] 집 강아지·마을 강아지·꿀떡이 — 무리마다 (GD 3.0 · E3-13 — sim/dogs.gd, 난수도 따로)
+var warmth: CoreWarmth                # [핵] 병의 따뜻함 캐시 (이끼 덮임·밭 이슬 배율 — sim/core_warmth.gd · 저장 안 함)
+var jar_notes: Array = []             # [핵] 별지기의 수첩 한 줄 — 처음 눈에 띈 병의 성질 {t, id, text} (A28b · OPENING v4.0-6, 저장됨)
 var lean: LeanSeasons                 # 빠듯한 철 캐시 (푸른 밀 고개·애벌레 많은 해 — docs/BALANCE.md B-1, sim/lean_seasons.gd · 저장 안 함)
 var caterpillars: Caterpillars        # 애벌레 → 고치 → 나비 · 애벌레 잡이 · 꿀방울 — 무리마다 (production-chain R7 — sim/caterpillars.gd)
 var direct_route := Balance.DIRECT_ROUTE   # 바로 보냄 (production-chain R3) — 시험이 끌 수 있게 (저장 안 함)
@@ -992,6 +994,7 @@ func step(dt: float) -> void:
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
 		GiantPlants.hourly(self)      # 해바라기 철·씨앗비 날·목화 (flower-forest R3·R4)
 		LeanSeasons.hourly(self)      # 빠듯한 철이 오고 감을 알림 · 애벌레 떼 (BALANCE B-1)
+		CoreWarmth.hourly(self)       # [핵] 병의 따뜻함 — 땅 흔들림 · 처음 보인 차이의 수첩 한 줄 (A28b, 보통 별은 아무것도 안 함)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
@@ -1021,7 +1024,7 @@ func step(dt: float) -> void:
 ## 나무: 묘목은 자라 나무가 되고, 그루터기는 다시 자라지 않고 썩어 사라진다. 숲 곁 빈 땅에는 가끔 묘목이 저절로 돋는다
 func _update_trees(dt: float) -> void:
 	var rotted := false
-	var gdt := dt * GiantHand.grow_mult(self)     # [거인의 손] 묘목은 볕을 따라 자람 (커튼·유리 — 그루터기가 썩는 것은 그대로)
+	var gdt := dt * GiantHand.grow_mult(self) * CoreWarmth.flower(self)     # [거인의 손] 묘목은 볕을 따라 자람 (커튼·유리 — 그루터기가 썩는 것은 그대로) · [핵] 꽃 자람 (A28b)
 	for tr: Dictionary in trees:
 		if tr["s"] == "tree":
 			continue
@@ -1051,7 +1054,7 @@ func _tree_spread() -> void:
 	var d := rng.randf_range(Balance.TREE_SPREAD_DIST[0], Balance.TREE_SPREAD_DIST[1])
 	var x := float(tr["x"]) + cos(a) * d
 	var y := float(tr["y"]) + sin(a) * d
-	var p_take := Balance.TREE_SPREAD_PER_DAY / 24.0 * (0.4 + wetness(x, y)) / 0.7 * Discovery.plant_mult(self)   # 발견 F3 씨앗을 심다 ×2
+	var p_take := Balance.TREE_SPREAD_PER_DAY / 24.0 * (0.4 + wetness(x, y)) / 0.7 * Discovery.plant_mult(self) * CoreWarmth.flower(self)   # 발견 F3 씨앗을 심다 ×2 · [핵] 꽃 퍼짐 (A28b)
 	if rng.randf() >= p_take:
 		return
 	if not water.inside(x, y, 1.5) or water.depth(water.idx(x, y)) >= 0.005 or water_at(x, y) or is_road(x, y) or path_at(x, y) > 0.0:
@@ -1398,6 +1401,7 @@ func _update_building(b: Building, dt: float) -> void:
 		place *= GiantHand.farm_mult(self, b)            # [거인의 손] 커튼·유리의 먼지막·물을 반긴 마른 밭·냉해 (GD 6.4 · WE 4.2)
 		place *= Health.season_grow(self)                # [철] 추운 철엔 밀이 더디 자람 (BALANCE v5-0 — 겨울의 빠듯함)
 		place *= LeanSeasons.farm_mult(self)             # [빠듯한 철] 푸른 밀 고개·애벌레 많은 해 (BALANCE B-1)
+		place *= CoreWarmth.farm_mult(self, b)           # [핵] 병의 따뜻함 — 밀 자람 · 이슬 · 마른 철 (A28b, 보통 별은 1)
 	if (b.type == "빵집" or b.type == "화덕") and mold.koji_tamed:     # [곰팡이·뚜껑] 길들인 누룩곰팡이 → 빵 ×1.3 (WORLD_EVENTS 2.1)
 		place *= Balance.KOJI_BREAD
 	if b.type == "빵집" or b.type == "화덕":
@@ -2031,7 +2035,7 @@ func chief() -> Resident:
 
 ## v5-0: 시간당 먹을 것 (촌장의 어림) = 밭의 밀 × 철 자람 — 그중 맷돌간·화덕이 빻고 구울 수 있는 몫은 빵(×1.5), 나머지는 죽(×0.75)
 func food_rate() -> float:
-	var w := farm_rate() * Health.season_grow(self)
+	var w := farm_rate() * Health.season_grow(self) * CoreWarmth.grow(self)     # [핵] 늘 그런 병의 밀 자람 (A28b — 이슬·마른 철은 지나가는 것이라 뺌)
 	var mill := 0.0
 	var oven := 0.0
 	for b in buildings:
@@ -3737,7 +3741,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
-const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "lean", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
+const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
 	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 

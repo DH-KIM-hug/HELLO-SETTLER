@@ -972,3 +972,36 @@ const CAT_BLIGHT_SPREAD := 8            # … 0~이만큼 날 늦게
 const CAT_BLIGHT_DAYS := 3              # 떼가 밀밭을 갉는 날 수 (그동안 꽃 무리 상한 CAT_BLIGHT_MAX)
 const CAT_BLIGHT_MAX := 5               # 떼가 깬 동안 꽃 무리마다 애벌레 상한 (알 포함)
 const CAT_BLIGHT_K := 0.6               # 떼가 꽉 차면 밭이 거두는 몫 = 하루 필요의 (1 − 이만큼)까지 — 잡을수록 줄어듦
+# ═══════════════ 핵 크기 = 병의 따뜻함 (OPENING v4.0-6 · ROADMAP A28b · docs/BALANCE.md A28b, sim/core_warmth.gd — 메인 판단 사용자 위임 2026-11-08) ═══════════════
+# 핵마다 [0 서늘한 별 · 1 따뜻한 별(기준 — 1의 값은 늘 중립으로 둘 것) · 2 뜨거운 별]
+const CORE_TEMP := [-1.5, 0.0, 1.5]     # 병 바탕 기온에 더함 (°C) → 겨울이 길거나 짧아짐은 기온에서
+const CORE_GROW_CAP := [0.0, 0.0, 0.05] # 철 자람 상한(SEASON_GROW_MAX)에 더함 — 뜨거운 별은 한여름에 조금 더
+const CORE_GROW := [0.93, 1.0, 1.05]    # 밀 자람 (촌장의 어림에도 — 늘 그런 병)
+const CORE_FLOWER := [0.9, 1.0, 1.15]   # 꽃숲 묘목 자람 · 저절로 퍼짐
+const CORE_DEW := [0.07, 0.0, 0.0]      # 이슬: 밭 젖음 m → m + (1 − m) × 이만큼 (첫 빵 뒤 — 밭이 잘 마르지 않음)
+const CORE_DRY := [0.0, 0.0, 0.12]      # 마른 철: 밭 자람 × (1 − 이만큼 × (1 − 젖음)) — 마른 밭일수록 (재해 아님 — light-seasons R5)
+const CORE_DRY_MONTHS := [6, 7, 8]      # 마른 철 (여름)
+const CORE_MOSS_K := [1.0, 0.0, 0.0]    # 이끼 덮임 세기 (서늘한 별만)
+const CORE_MOSS_BASE := [0.3, 0.0, 0.0] # 볕 드는 마른 땅에도 깔린 얇은 이끼 (마을 자리는 대개 볕 들고 마름 — 측정: 젖음 0.1 · 볕 0.2)
+const CORE_MOSS_SUN := [0.15, -0.15, -0.15]   # 볕(sun_at)이 이 값보다 그늘이면 이끼 (화면 ground_look은 −0.15)
+const CORE_MOSS_WET := [0.3, 0.45, 0.45]      # 축축함이 이 값보다 많으면 이끼 (화면 ground_look 0.45)
+const MOSS_STALE := 1.5                 # 탁한 공기 ÷ (1 + 이만큼 × 이끼 덮임)
+const MOSS_BED := 0.8                   # 집 안 추위 × (1 − 이만큼 × 이끼 덮임) — 이끼 이불
+const MOSS_ILL := 0.7                   # 추운 철(cold_season) 발병 × (1 − 이만큼 × 이끼 덮임) — 이끼 이불로 긴 겨울에 덜 앓음
+const MOSS_NOTE := 0.15                 # 이끼 덮임이 이만큼 넘으면 수첩 한 줄
+const CORE_SHROOM := [1.6, 1.0, 0.85]   # 큰 버섯 돋는 빠르기 · 하룻밤 버섯 숲 확률
+const CORE_SHROOM_DAMP := [0.03, 0.0, -0.02]  # 큰 버섯이 느끼는 김에 더함 (병의 김은 그대로 — 버섯 문턱 SHROOM_HUMID_MIN 0.38, 넓은 세상 마을 김 ≈ 0.35~0.40)
+const MOSS_SHROOM_DAMP := 0.1           # … + 이만큼 × 이끼 덮임 (이끼가 버섯 발치를 축축하게)
+const CORE_SNAIL := [0.3, 0.0, 0.0]     # 버섯꾼이 버섯을 내려놓을 때 달팽이 덤 (같은 '버섯' 더미에, 내려놓은 양 × 이만큼)
+const CORE_SNAIL_DAY := [0.06, 0.0, 0.0]   # 아침마다 아이들이 이끼에서 주워 오는 달팽이 = 하루 필요 × 이만큼 × 이끼 덮임 (아이가 있을 때)
+const SNAIL_HOUR := 7.0                 # 이 시각 뒤 첫 시간에
+const CORE_NOTE_FIELD := 1.04           # 밭 배율이 이만큼 넘으면(이슬) / 2 − 이만큼 아래면(마른 철) 수첩 한 줄
+const CORE_TREMOR_DAY := [0.0, 0.0, 0.12]   # 땅 흔들림 — 병 하루 확률 (마을 씨앗·날의 해시)
+const TREMOR_MIN_AGE := 3.0 * DAY       # 마을이 이보다 어리면 흔들리지 않음 (첫 빵 뒤에만)
+const TREMOR_POT_P := 0.35              # 두 번째 흔들림부터 항아리 하나가 깨질 몫
+const TREMOR_POT_MIN := 5.0             # 이만큼 넘게 쌓인 먹을 것만 (밀가루 → 빵 → 버섯 → 밀)
+const TREMOR_POT_LOSS := 0.04           # 깨진 항아리 = 그 더미의 이만큼
+const TREMOR_FEAR := 0.02               # 깨어 있는 사람마다 두려움 조금 (곧 가라앉음)
+const HOT_SPRING_P := 0.25              # 흔들린 뒤 발견 L5 '땅속의 열'(온천)이 될 몫
+const HOT_SPRING_COLD := 0.85           # 온천: 추위 노출 × (몸을 녹임)
+const HOT_SPRING_FUEL := 0.8            # 온천: 집 땔감이 타는 빠르기 ×
