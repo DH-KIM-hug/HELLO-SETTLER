@@ -216,7 +216,36 @@ func build_world_tables() -> void:
 
 ## 저장: 거친 칸 높이 정렬표(hs·pre)는 높이(h)에서 다시 만든다 (저장 크기 35 → 27 MB, 압축 전). 큰 격자는 파일에 쓸 때 WorldPack이 누른다
 func _save_skip() -> Array:
-	return ["hs", "pre", "_interest_done", "_cq", "_cterm"]
+	return ["hs", "pre", "_interest_done", "_cq", "_cterm", "humid"]
+
+
+## 뚜껑으로 빠져나가는 물 (JarWater.lid_escape): 고운 칸 + 거친 칸(부피) + 김이 같은 몫씩. 예전엔 소형 병의 칸 목록(cells)만
+## 보아서 넓은 세상에선 물이 하나도 나가지 않았다 (F-2)
+func lid_escape(f: float) -> float:
+	var ww := w
+	var lost := 0.0
+	for k in fcells:
+		var x := ww[k]
+		if x > 0.0:
+			lost += x * f
+			ww[k] = x * (1.0 - f)
+	w = ww
+	for sl: PackedInt32Array in cslices:
+		for c in sl:
+			var x := cV[c]
+			if x > 0.0:
+				lost += x * f
+				cV[c] = x * (1.0 - f)
+				_relevel(c)
+	return lost + _vapour_escape(f)
+
+
+func _ground_fine(k: int) -> bool:
+	return is_fine_k(k)
+
+
+func _ground_cells() -> PackedInt32Array:
+	return fcells
 
 
 func _after_load() -> void:
@@ -559,18 +588,14 @@ func advance(seconds: float) -> void:
 	while left > 1e-6:
 		var dt := minf(SUBSTEP, left)
 		left -= dt
+		var hm := humid                     # 물 순환 박자 (JarWater.day_humid — 조각 시작 때)
 		t += dt
 		_hydro_acc += dt
 		var every := OFFLINE_EVERY_BIG * offline_mult if offline else ONLINE_EVERY
 		while _hydro_acc >= every:
 			world_tick(every / 60.0)
 			_hydro_acc -= every
-		dew_step(dt)
-		var hr := hour_now()
-		if hr >= 7.0 and hr < 18.0:
-			humid = minf(1.0, humid + dt / (DAY * 0.45))
-		else:
-			humid = maxf(0.2, humid - dt / (DAY * 0.9))
+		dew_step(dt, hm)
 
 
 ## 돌기 i가 마지막으로 받은 뒤 떨어진 이슬 (E3-7 이슬의 하루 박자 — 새벽에 몰아서, 하루 총량은 예전과 같다)

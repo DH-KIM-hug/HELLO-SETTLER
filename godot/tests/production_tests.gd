@@ -216,8 +216,12 @@ static func _haul_secs(direct: bool, seed_v: int, days: float) -> float:
 func test_haul_time() -> void:
 	print("== 생산 사슬 — 나르기 시간 (AC11)")
 	var days := 2.0                       # (A28) 첫날 다음부터 이틀을 셈 (_haul_secs) — 하루로는 사슬이 덜 돌아 비가 흔들림
-	var on := _haul_secs(true, 45, days)
-	var off := _haul_secs(false, 45, days)
+	# 시드 하나의 비는 0.8~1.16으로 흔들린다 (F-2 측정) → 시드 41~46을 더해서 비교
+	var on := 0.0
+	var off := 0.0
+	for sd in range(41, 47):
+		on += _haul_secs(true, sd, days)
+		off += _haul_secs(false, sd, days)
 	var ref := off * Balance.WALK_SCREEN / 1.0
 	print("   빵 사슬 나르기 사람-초: 바로 보냄 %.0f · 옛 방식 %.0f (w1.0 어림 %.0f) · 비 %.2f" % [on, off, ref, on / maxf(ref, 1.0)])
 	check(on < off, "같은 걸음 %.1f에서 바로 보냄이 빵 사슬 나르기를 줄임 (%.0f < %.0f, ×%.2f)" % [Balance.WALK_SCREEN, on, off, on / maxf(off, 1.0)])

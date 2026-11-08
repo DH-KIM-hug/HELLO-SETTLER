@@ -291,7 +291,7 @@ const HEAT_REST_HOURS := [12.0, 15.0]   # 더위 0.5↑이면 한낮에 쉬는 �
 # 땔감 (HEALTH.md 1.3 · BUILDINGS 7장)
 const FUEL_EVERY := 4.0 * HOUR          # 추위 정도 > 0인 동안 집 1채당 4시간마다 통나무 1개 (v5 — 예전 10분, design/gdd/health.md 메인 판단 ②)
 const FUEL_STONE := 0.5                 # 석조 주택 ×0.5
-const FUEL_TARGET := 4.0               # (정함) 집에 쌓아 두는 땔감 (6시간치 — 밤을 나게). 운반 일이 창고에서 나른다
+const FUEL_TARGET := 4.0               # (정함) 집에 쌓아 두는 땔감 (FUEL_EVERY 4시간 × 4 = 16시간치 — 밤을 나게). 운반 일이 창고에서 나른다
 const FUEL_STOCK_PER_HOUSE := 3.0      # (정함) 추운 철에는 창고 통나무 '넉넉함' 기준을 집마다 이만큼 올린다 (나무꾼이 멈추지 않게)
 const FUEL_SEASON_LOOKAHEAD := 0.5 * DAY   # (정함) 지금부터 이 시간 안에 추위가 오면 '추운 철'
 # ═══════════════ 질병 (HEALTH.md 2 — v1.3: 병마다 전염·기간·치사율·면역·확률 스펙트럼) ═══════════════

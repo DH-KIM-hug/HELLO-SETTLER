@@ -70,6 +70,9 @@ static func enc(x: Variant, what := "") -> Variant:
 			errors += 1
 			push_error("SaveCodec: Callable은 저장할 수 없다 (%s)" % what)
 			return null
+	var ty := typeof(x)
+	if ty >= TYPE_PACKED_BYTE_ARRAY and ty <= TYPE_PACKED_VECTOR4_ARRAY:
+		return x.duplicate()                # 묶음 배열은 같은 메모리 — 저장본이 계속 흐르는 병과 함께 바뀌지 않게 (F-2)
 	return x
 
 
@@ -93,6 +96,11 @@ static func dec(x: Variant) -> Variant:
 			for k: Variant in dx:
 				out[k] = dec(dx[k])
 			return out
+	# 묶음 배열(PackedFloat32Array 등)은 GDScript에서 같은 메모리를 가리킨다 → 불러온 객체가 저장본(과 그 저장본을 만든 살아 있는 객체)과
+	# 땅의 물 같은 격자를 나눠 쓰지 않게 새로 만든다 (F-2: 사전으로 바로 넘긴 두 병이 서로의 물을 고치던 문제)
+	var ty := typeof(x)
+	if ty >= TYPE_PACKED_BYTE_ARRAY and ty <= TYPE_PACKED_VECTOR4_ARRAY:
+		return x.duplicate()
 	return x
 
 

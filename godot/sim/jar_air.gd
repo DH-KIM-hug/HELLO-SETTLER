@@ -7,7 +7,7 @@ class_name JarAir
 extends RefCounted
 
 var rng := RandomNumberGenerator.new()
-var humid := 0.4                      # 김 0~1
+var humid := 0.4                      # 김 0~1 — 병의 습도는 이 값 하나 (F-2). JarWater.humid는 병 시계의 하루 박자일 뿐 (목표에 HUMID_CYCLE로 들어감)
 var smoke := 0.0                      # 연기 0~1
 var stale := 0.0                      # 탁한 공기 0~1
 var lid_open := false
@@ -127,15 +127,7 @@ func _lose_water(v: Village, secs: float) -> void:
 	if not v.owns_water or v.water == null:
 		return
 	var f := 1.0 - exp(-Balance.LID_WATER_LOSS * secs)
-	var w := v.water.w
-	var lost := 0.0
-	for k in v.water.cells:
-		var x := w[k]
-		if x > 0.0:
-			lost += x * f
-			w[k] = x * (1.0 - f)
-	v.water.w = w
-	water_lost += lost
+	water_lost += v.water.lid_escape(f)       # 땅의 물 + 공기의 김 (물이 병을 떠나는 유일한 길 — design/gdd/water.md, F-2)
 
 
 # ───────────────────────── 목표값 (병의 상태) ─────────────────────────

@@ -35,6 +35,11 @@ const SUBSTEP := 10.0                   # 프로토타입 goAway와 같은 시�
 const DEW_FROM := 4.0                   # 새벽 이슬이 떨어지기 시작 (시)
 const DEW_TO := 8.0                     # 다 떨어짐 (시) — 사이는 sin 모양 (6시 무렵 가장 잦음)
 const DEW_FULL := DAY / 60.0 * 1.2      # 하루 동안 모이는 김 (보통 습도 — 화면의 '물방울 크기 1')
+# 하루 물 순환의 박자 (day_humid — 병 시계만의 함수, 저장하지 않음): 볕 드는 때(7~18시) 올라 1에서 멈추고, 밤엔 내려간다
+const CYCLE_LIGHT := [7.0, 18.0]        # 등불 볕으로 김이 오르는 때 (시)
+const CYCLE_RISE_DAYS := 0.45           # 0 → 1 오르는 데 병 0.45일 (예전 advance의 dt / (DAY × 0.45))
+const CYCLE_FALL_DAYS := 0.9            # 1 → 0 내려가는 데 병 0.9일
+const CYCLE_LOW := 0.2                  # 바닥
 
 var h := PackedFloat32Array()           # 땅 높이
 var w := PackedFloat32Array()           # 물 깊이
@@ -49,7 +54,11 @@ var basins: Array[Dictionary] = []      # {name, x, y, r, area0}
 
 var t := 0.0                            # 흐른 시간 (초)
 var start_clock := 8.0 * HOUR           # 시작 시각 (프로토타입은 실제 시각 — 여기선 고정해 결과를 재현)
-var humid := 0.5
+## 하루 물 순환의 박자 0.2~1 (F-2 '두 습도' 정리): 따로 쌓이는 값이 아니라 병 시계의 함수 (day_humid) — 저장하지 않는다.
+## 병의 습도(김) 상태는 JarAir.humid 하나뿐이고, 이 박자는 그 목표(HUMID_CYCLE)와 이슬 모임 빠르기에 들어가는 입력이다.
+var humid: float:
+	get:
+		return day_humid(clock())
 var dew := 0.0                          # 모인 김·맺힌 이슬 (분 단위 — × DRIP_RATE × 돌기 배율 = 돌기 하나의 물)
 var dew_cum := 0.0                      # 지금까지 떨어진 이슬 (같은 단위, 늘기만 한다)
 var dew_given := 0.0                    # 그중 이미 땅에 준 몫 (소형 병 — 넓은 세상은 돌기마다 WorldWater.drip_got)
@@ -225,25 +234,35 @@ func hour_now() -> float:
 	return clock() / HOUR
 
 
+## 하루 물 순환의 박자 (병 시계 clk초 → 0.2~1). 예전엔 advance가 조각마다 쌓던 값 — 볕 동안 오르는 양(11시간 ≈ 1.02)이
+## 밤에 내려간 양(13시간 ≈ 0.60)보다 커서 하루 만에 늘 같은 모양이 되므로, 그 모양을 닫힌 식으로 쓴다 (결정론 · 저장할 상태 없음)
+static func day_humid(clk: float) -> float:
+	var hr := fposmod(clk, DAY) / HOUR
+	var l0: float = CYCLE_LIGHT[0]
+	var l1: float = CYCLE_LIGHT[1]
+	var rise := 1.0 / (CYCLE_RISE_DAYS * 24.0)
+	var fall := 1.0 / (CYCLE_FALL_DAYS * 24.0)
+	if hr >= l0 and hr < l1:
+		var lo := maxf(CYCLE_LOW, 1.0 - (24.0 - (l1 - l0)) * fall)
+		return minf(1.0, lo + (hr - l0) * rise)
+	var since := hr - l1 if hr >= l1 else hr + 24.0 - l1
+	return maxf(CYCLE_LOW, 1.0 - since * fall)
+
+
 ## 시간을 흘린다. 프로토타입 step()의 물·습도 부분과 같은 순서 (10초 조각).
 func advance(seconds: float) -> void:
 	var left := seconds
 	while left > 1e-6:
 		var dt := minf(SUBSTEP, left)
 		left -= dt
+		var hm := humid                     # 이 조각이 시작할 때의 물 순환 박자 (예전처럼 — 조각 끝에 갱신하던 값)
 		t += dt
 		_hydro_acc += dt
 		var every := OFFLINE_EVERY * offline_mult if offline else ONLINE_EVERY
 		while _hydro_acc >= every:
 			hydro_step(every / 60.0)
 			_hydro_acc -= every
-		dew_step(dt)
-		# 닫힌 병의 물 순환: 낮의 빛으로 증발 → 천장에 맺힘 → 습한 새벽
-		var hr := hour_now()
-		if hr >= 7.0 and hr < 18.0:
-			humid = minf(1.0, humid + dt / (DAY * 0.45))
-		else:
-			humid = maxf(0.2, humid - dt / (DAY * 0.9))
+		dew_step(dt, hm)
 
 
 ## 물 보존 (design/gdd/water.md · ROADMAP F-2): 증발·스며듦은 병 안의 김(vapour, 물 부피 단위)으로 가고, 이슬(돌기)·유리벽 골은
@@ -271,6 +290,76 @@ func close_vapour() -> void:
 		vapour = daily_inflow() * Balance.VAPOUR_DAYS
 
 
+## 뚜껑이 열린 동안 병 밖으로 빠져나가는 물 (JarAir._lose_water — 물이 병을 떠나는 유일한 길): 땅의 물과 공기의 김이
+## 같은 몫 f씩 나간다. → 나간 물의 합. 넓은 세상은 고운 칸 + 거친 칸 모두 (WorldWater가 덮어씀)
+func lid_escape(f: float) -> float:
+	var ww := w
+	var lost := 0.0
+	for k in cells:
+		var x := ww[k]
+		if x > 0.0:
+			lost += x * f
+			ww[k] = x * (1.0 - f)
+	w = ww
+	return lost + _vapour_escape(f)
+
+
+func _vapour_escape(f: float) -> float:
+	if vapour <= 0.0:
+		return 0.0
+	var out := vapour * f
+	vapour -= out
+	return out
+
+
+## 유리에 맺혀 떨어진 물덩이 (SmallCrises — 떠돌이 물방울): 공기의 김이 맺힌 것이라 김에서 온다. 김이 모자라면 나머지는
+## 땅의 물에서 고르게 덜어 온다 (닫힌 순환 — 땅의 물 + 김 = 그대로). 가운데 깊고 가장자리 얕게. → 부은 물의 합 (못 부으면 0)
+func condense(at: Vector2, rad: float, depth: float) -> float:
+	var ww := w
+	var add := {}
+	var total := 0.0
+	for k in cells_near(at, rad):
+		if not _ground_fine(k):
+			continue
+		var d := Vector2(cx(k) - at.x, cy(k) - at.y).length()
+		if d > rad:
+			continue
+		var a := depth * (1.0 - 0.6 * d / rad)
+		add[k] = a
+		total += a
+	if total <= 0.0:
+		return 0.0
+	var from_v := clampf(vapour, 0.0, total)
+	var rest := total - from_v
+	if rest > 0.0:
+		var gc := _ground_cells()
+		var have := 0.0
+		for k in gc:
+			have += ww[k]
+		if have <= rest * 2.0:
+			return 0.0
+		var f := rest / have
+		for k in gc:
+			var x := ww[k]
+			if x > 0.0:
+				ww[k] = x * (1.0 - f)
+	if vapour > 0.0:
+		vapour -= from_v
+	for k: int in add:
+		ww[k] += float(add[k])
+	w = ww
+	return total
+
+
+## 고운 물 칸 (w로 계산하는 칸) — 소형 병은 모두, 넓은 세상은 고운 조각만
+func _ground_fine(_k: int) -> bool:
+	return true
+
+
+func _ground_cells() -> PackedInt32Array:
+	return cells
+
+
 ## 땅의 물 + 김 (보존되는 양 — 시험용)
 func water_and_vapour() -> float:
 	var s := maxf(vapour, 0.0)
@@ -282,8 +371,8 @@ func water_and_vapour() -> float:
 ## 이슬 한 조각 (dt초, 방금 흐른 시간): 김이 모이고, 새벽이면 모인 것의 몫이 떨어진다 (dew → dew_cum).
 ## 떨어지는 몫 = 1 − R(u1)/R(u0), R(u) = (1 + cos πu)/2 (새벽 창 안에서 남은 몫) — 곱하면 맞물려 조각 크기와 상관없이 같은 모양,
 ## 창 끝(DEW_TO)에는 남김없이 떨어진다. 하루 동안 모인 양 = 예전에 하루 동안 떨어지던 양 (테스트 test_dew_rhythm)
-func dew_step(dt: float) -> void:
-	dew += dt / 60.0 * (0.6 + humid)
+func dew_step(dt: float, hm := -1.0) -> void:
+	dew += dt / 60.0 * (0.6 + (hm if hm >= 0.0 else humid))
 	var h1 := hour_now()
 	var h0 := h1 - dt / HOUR
 	if h1 <= DEW_FROM or h0 >= DEW_TO:
@@ -622,7 +711,7 @@ func to_dict() -> Dictionary:
 
 ## 저장하지 않는 변수 (불러올 때 다른 값에서 다시 만든다 — _after_load). 넓은 세상은 거친 칸 높이 정렬표(8 MB)를 뺀다
 func _save_skip() -> Array:
-	return []
+	return ["humid"]                    # 병 시계의 함수 (day_humid)
 
 
 func _after_load() -> void:
@@ -632,7 +721,7 @@ func _after_load() -> void:
 static func from_dict(d: Dictionary) -> JarWater:
 	d = WorldPack.unpack_water(d)                 # 누른 넓은 세상 (A16) — 옛 사전은 그대로
 	var s: JarWater = WorldWater.new() if d.get("$kind", "jar") == "world" else JarWater.new()
-	SaveCodec.apply(s, d)
+	SaveCodec.apply(s, d, ["humid"])              # 옛 저장의 humid (쌓던 박자)는 읽고 버림 — 이제 병 시계의 함수
 	# (giant-touch AC14) 없앤 커튼·감싸기 값(curtain·curtain_dark·curtain_frost·cup_left)은 변수가 없어 SaveCodec이 읽고 버림
 	if not d.has("hs") and s is WorldWater:
 		s._after_load()
