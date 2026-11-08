@@ -18,6 +18,7 @@ from tiny_kit import smoke  # noqa: E402,F401  (build_pioneer imports smoke from
 import bmesh  # noqa: E402
 
 OUT = out_dir_from_argv()
+Model.nl_thin = 0.12      # (P1 perf pass 4) thin pieces: hull outline only, no crease lines (lowpoly.Model.nl_thin)
 
 
 # ───────────────────────── homes ─────────────────────────
@@ -191,12 +192,12 @@ def _granary(m, cx, cy, R, H, lid_rise, legs=0.3):
         pebble(m, cx + math.cos(a) * R * 0.55, cy + math.sin(a) * R * 0.55, legs * 0.5, 0.17, 0.15, legs * 0.55,
                shade(PEBBLE, 0.95 + 0.05 * k), a, k)
     prof = [(R * 0.55, 0), (R * 0.85, H * 0.12), (R * 1.0, H * 0.4), (R * 0.97, H * 0.7), (R * 0.82, H * 0.9), (R * 0.72, H)]
-    lathe(m, cx, cy, legs, prof, seg=18, colfn=weave_fn())
-    m.cyl(R * 0.75, R * 0.75, 0.07, pos=(cx, cy, legs + H - 0.05), color=CORD, seg=18, smooth=True)
+    lathe(m, cx, cy, legs, prof, seg=12, colfn=weave_fn())
+    m.cyl(R * 0.75, R * 0.75, 0.07, pos=(cx, cy, legs + H - 0.05), color=CORD, seg=12, smooth=True, group="body_nl")
     for t in (0.33, 0.62):
         rr = R * (0.99 if t < 0.5 else 0.96)
-        m.cyl(rr + 0.02, rr + 0.02, 0.05, pos=(cx, cy, legs + H * t), color=CORD, seg=18, smooth=True)
-    grass_cone(m, cx, cy, legs + H - 0.04, R * 0.72, lid_rise, over=0.18)
+        m.cyl(rr + 0.02, rr + 0.02, 0.05, pos=(cx, cy, legs + H * t), color=CORD, seg=12, smooth=True, group="body_nl")
+    grass_cone(m, cx, cy, legs + H - 0.04, R * 0.72, lid_rise, over=0.18, seg=11)
 
 
 def build_store():

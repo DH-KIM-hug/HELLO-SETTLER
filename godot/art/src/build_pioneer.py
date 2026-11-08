@@ -25,6 +25,7 @@ from far_kit import add_far  # noqa: E402  (far LOD node "body__far", buildings 
 from build_buildings import smoke  # noqa: E402
 
 OUT = out_dir_from_argv()
+Model.nl_thin = 0.12      # (P1 perf pass 4) thin pieces: hull outline only, no crease lines (lowpoly.Model.nl_thin)
 CLAY = "d79a6a"
 CLAY_DARK = "b07650"
 CLAY_LIGHT = "e8b88a"

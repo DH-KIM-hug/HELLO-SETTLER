@@ -156,15 +156,37 @@ def build_conifer():
     export(m)
 
 
+def _drop_hidden(m, blobs, owned, margin=0.9):
+    """(P1 perf pass 4) Faces no one can see: wholly under the ground (z < -0.05) or wholly inside another blob of the
+    same bush (every vertex within margin x that blob's squashed sphere). The holes stay hidden inside the neighbour;
+    the group is body_nl (no crease lines) so open edges draw nothing."""
+    import bmesh
+    bm = m.groups["body_nl"]
+
+    def inside(co, j):
+        x, y, z, r = blobs[j]
+        return ((co.x - x) / r) ** 2 + ((co.y - y) / r) ** 2 + ((co.z - z) / (r * 0.85)) ** 2 < margin ** 2
+    kill = []
+    for own, faces in enumerate(owned):
+        for f in faces:
+            if all(v.co.z < -0.05 for v in f.verts) or any(
+                    j != own and all(inside(v.co, j) for v in f.verts) for j in range(len(blobs))):
+                kill.append(f)
+    if kill:
+        bmesh.ops.delete(bm, geom=kill, context="FACES")
+
 def _bush(name, seed, blobs, flowers=0, fcols=("LOTUS", "PLASTER", "FLAME2")):
     m = Model(name, seed)
     zs = [z for (_, _, z, _) in blobs]
     lo, hi = min(zs) - 0.25, max(zs) + 0.05
+    owned = []
     for i, (x, y, z, r) in enumerate(blobs):
         h = (z - lo) / (hi - lo)
         c = "BUSH_TOP" if h > 0.75 else ("BUSH" if h > 0.35 else mix("BUSH", "LEAF_LOW", 0.5))
-        m.ico(r, pos=(x, y, z), scl=(1, 1, 0.85), color=shade(c, (1.0, 0.96, 1.04)[i % 3]), subdiv=2, smooth=True,
-              lumps=0.1, group="body_nl")
+        # (P1 perf pass 4) 48-tri lumpy UV blob (was an 80-tri icosphere) + hidden faces dropped below
+        owned.append(m.sphere(r, pos=(x, y, z), scl=(1, 1, 0.85), color=shade(c, (1.0, 0.96, 1.04)[i % 3]), seg=8,
+                              rings=4, smooth=True, lumps=0.1, group="body_nl"))
+    _drop_hidden(m, blobs, owned)
     rng = m.rng
     for i in range(flowers):
         x, y, z, r = blobs[i % len(blobs)]
@@ -173,7 +195,7 @@ def _bush(name, seed, blobs, flowers=0, fcols=("LOTUS", "PLASTER", "FLAME2")):
         p = Vector((x, y, z)) + Vector((math.cos(a) * math.cos(el), math.sin(a) * math.cos(el), math.sin(el) * 0.85)) * r
         if p.z < 0.15:
             continue
-        m.sphere(0.075, pos=p, scl=(1, 1, 0.7), color=fcols[i % len(fcols)], seg=5, rings=3, group="body_nl")
+        m.sphere(0.075, pos=p, scl=(1, 1, 0.7), color=fcols[i % len(fcols)], seg=4, rings=2, group="body_nl")
     export(m)
 
 

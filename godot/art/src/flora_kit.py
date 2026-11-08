@@ -86,7 +86,7 @@ def tube(m, pts, radii, seg=6, color="TRUNK", group="body", smooth=True, colfn=N
 
 
 def leaf(m, pts, widths, normal, thick=0.06, color="LEAF_MID", color_under=None, group="body_nl", ridge=1.0,
-         colfn=None):
+         colfn=None, keel=True):
     """Closed thin leaf/petal/blade along the polyline pts. Cross-section = flat triangle (edge, raised midrib,
     edge) over a flat underside -> 4 faces per segment. normal = Vector (same for all) or list per point:
     the leaf's face direction (up side). widths = half widths per point (0 = pointed)."""
@@ -102,7 +102,9 @@ def leaf(m, pts, widths, normal, thick=0.06, color="LEAF_MID", color_under=None,
         s = t.cross(nn)
         w = max(widths[i], 0.004)
         th = thick * (0.3 + 0.7 * min(1.0, w / max(1e-6, max(widths)))) if max(widths) > 0 else thick
-        rings.append([p + s * w, p + nn * th * ridge, p - s * w, p - nn * th * 0.35])
+        # keel=False (P1 perf pass 4): flat underside, 3 faces per segment instead of 4 (roof petals: never seen below)
+        rings.append([p + s * w, p + nn * th * ridge, p - s * w, p - nn * th * 0.35] if keel else
+                     [p + s * w, p + nn * th * ridge, p - s * w])
     fs = m.strip(rings, color=color, group=group, smooth=False, close=True, caps=True)
     bm = m._bm(group)
     bmesh.ops.recalc_face_normals(bm, faces=fs)
