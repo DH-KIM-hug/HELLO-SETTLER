@@ -383,7 +383,7 @@ static func _farm_spot(v: Village, size: float) -> Variant:
 			while d < rp + FARM_FROM + 22.0:
 				var p := _side_pt(pl, k, d, side * off)
 				if v.is_free(p.x, p.y, size) and _spaced(v, p, size, 0.5) and (not on or _house_clear(v, p, size)):
-					var val := v.farm_mult(p.x, p.y) - d * 0.025
+					var val := v.farm_mult(p.x, p.y) - d * Balance.FARM_DIST_W      # (2026-11-09 0.025 → 0.06: 비탈 벌점이 밭을 먼 평지로 밀어 먹을 것 바닥 22 → 10 — 광장 쪽으로 당김)
 					if on:                                   # [자리 잡기] 평평한 땅 · 숲은 벌목장 몫
 						val -= Siting.SLOPE_W * Siting.slope_at(v, p) + 0.05 * Siting.trees_at(v, p, 2, tf)
 					for b in v.buildings:

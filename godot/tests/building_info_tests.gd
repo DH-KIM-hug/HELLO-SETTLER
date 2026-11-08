@@ -93,8 +93,8 @@ func test_bakery() -> void:
 		check(String(f["warn"]) == "일하는 사람이 없어요", "일꾼 없음 → 경고")
 	var w: Resident = null
 	for r in v.people:
-		if r.is_adult():
-			w = r
+		if r.is_adult() and r.sick_left <= 0.0:
+			w = r                         # 앓는 사람은 빼고 (앓으면 '앓아누워 쉬고 있어요' 경고 — 마을 걸음에 따라 누가 앓는지 달라짐, 2026-11-09)
 	b.worker = w.id
 	led.sample(v)
 	b.out["빵"] = float(b.out.get("빵", 0.0)) + 3.0

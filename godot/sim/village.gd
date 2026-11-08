@@ -2149,6 +2149,60 @@ func _fav_want() -> String:
 	return ""
 
 
+## 집이 필요한가 (2026-11-09 — design/gdd/mayor-decisions.md F2·F8(새) · BALANCE HOUSE_BUFFER). 짓는 중인 집 터도 정원에 넣는다 (터가 서는 동안 또 짓지 않게).
+## free = 빈 침대 (정원 − 집 있는 사람) · need = 집 없는 사람 + 곧 태어날 아기(아이 낳을 부부 중 집에 빈자리가 없는 부부) + HOUSE_BUFFER.
+## 돌려줌: short (free < need) · homeless (집 없는 가족이 들 자리 모자람: 침대 수 또는 한 집에 함께 들 자리) ·
+##   crowded (아이 낳을 부부가 지금 집이 꽉 찼고 어느 집(터 포함)에도 가족 + 1 자리가 없음 — 새 집이 그 가족을 품을 때만) ·
+##   fit_homeless · fit_crowded (새 집이 품어야 할 가족 크기, 없으면 1) · free · need
+func house_need() -> Dictionary:
+	var room := {}                        # 집(터 포함) → 남은 자리
+	var cap := 0
+	for b in buildings:
+		if b.is_house():
+			var c := int(Balance.B[b.site_type()]["cap"])
+			room[b.id] = c
+			cap += c
+	for p in people:
+		if p.home >= 0 and room.has(p.home):
+			room[p.home] = int(room[p.home]) - 1
+	var max_room := 0
+	for k: int in room:
+		max_room = maxi(max_room, int(room[k]))
+	var era_cap := int(Balance.B[Balance.ERA_HOUSE[mini(era, 3)]]["cap"])
+	var homeless := 0
+	var hh_fit := 0                       # 한 집에 들 자리가 없는 집 없는 가족 중 가장 큰 크기
+	var seen := {}
+	for p in people:
+		if p.home >= 0 or seen.has(p.id):
+			continue
+		homeless += 1
+		if not (p.partner >= 0 or p.age >= Balance.AGE_ADULT):
+			continue                      # 아이는 부모 집으로 (부모와 함께 셈)
+		var hh := household_of(p).filter(func(q: Resident) -> bool: return q.home < 0)
+		for q: Resident in hh:
+			seen[q.id] = true
+		if hh.size() > max_room:
+			hh_fit = maxi(hh_fit, hh.size())
+	var births := 0
+	var crowd_fit := 0
+	for w in people:
+		if w.sex != "f" or w.partner < 0 or w.age < Balance.BIRTH_WIFE_MIN or w.age >= Balance.BIRTH_WIFE_MAX or w.home < 0:
+			continue
+		if int(room.get(w.home, 0)) > 0:
+			continue                      # 지금 집에 아기 자리가 있다
+		var n := household_of(w).size() + 1
+		if n > era_cap:
+			continue                      # 이 시대 어떤 집에도 못 드는 큰 가족 (집 크기 병목 — 의도한 규칙)
+		births += 1
+		if n > max_room:
+			crowd_fit = maxi(crowd_fit, n)
+	var free := cap - (people.size() - homeless)     # 빈 침대 (짓는 터 포함)
+	var need := homeless + births + Balance.HOUSE_BUFFER
+	return {"free": free, "need": need, "short": free < need,
+		"homeless": homeless > 0 and (free < homeless or hh_fit > 0),
+		"crowded": crowd_fit > 0, "fit_homeless": maxi(1, hh_fit), "fit_crowded": maxi(1, crowd_fit)}
+
+
 func chief_build() -> void:
 	Production.self_learn(self)          # 새로 배워야 하는 건물을 스스로 깨쳤나 (시대가 열린 지 MUST_LEARN_SELF_DAYS — 연대기 한 줄)
 	var pending := 0
@@ -2169,14 +2223,8 @@ func chief_build() -> void:
 			idle += 1
 	var era_house: String = Balance.ERA_HOUSE[mini(era, 3)]
 	var era_cap := int(Balance.B[era_house]["cap"])
-	# 집이 꽉 차서 아이를 못 낳는 부부 (새 집으로 옮기면 해결되는 크기의 가족만)
-	var crowded := false
-	for w in people:
-		if w.sex == "f" and w.partner >= 0 and w.age >= Balance.BIRTH_WIFE_MIN and w.age < Balance.BIRTH_WIFE_MAX and w.home >= 0:
-			var h := bld(w.home)
-			if occupants(h) >= h.cap() and household_of(w).size() + 1 <= era_cap:
-				crowded = true
-				break
+	var house_fit := 1                    # 새 집이 품어야 할 가족 크기
+	var hn := house_need()                # 집은 필요할 때만 (빈 침대 < 필요 · 한 집에 들 자리가 없는 가족) — 남발 막기 (2026-11-09)
 	var n_houses := 0
 	for b in buildings:
 		if b.is_house():
@@ -2200,8 +2248,9 @@ func chief_build() -> void:
 		want = "나무꾼"
 	elif int(stats.get("died", 0)) > 0 and count_type("묘지") == 0 and VillageEra.can_build(self, "묘지"):
 		want = "묘지"                 # 첫 죽음 뒤 (슬픔 — 묻을 곳부터)
-	elif homeless > 0:
+	elif homeless > 0 and bool(hn["homeless"]):
 		want = "집"
+		house_fit = int(hn["fit_homeless"])                   # 집 없는 사람이 들 자리가 모자람 (침대 수 또는 한 집에 함께 들 자리)
 	elif count_type("농장") > 0 and mill_n == 0:
 		want = "맷돌간"               # v5: 첫 수확이 다가오면 밀을 빻을 곳 (A22 — 날밀은 못 먹는다)
 	elif count_type("농장") > 0 and oven_n == 0:
@@ -2210,7 +2259,8 @@ func chief_build() -> void:
 		want = "농장"                 # v5: 시작 건량은 하루치 — 밭이 모자라면 둘째 밭을 집보다 먼저 (첫 며칠 굶주림 막기)
 	elif food_short or (food_low and count_type("농장") * Balance.FARM_FEEDS * yld / Balance.PORRIDGE_YIELD < pop + 6):
 		want = "농장"                 # v5: 창고 먹을 것이 이틀치 아래면 촌장은 밭부터 (집보다 먼저) — v5-0: 밭 하나가 먹이는 사람 수는 빵을 구우면 두 배 (죽 기준 6명)
-	elif cap - pop <= 1 or (crowded and basics and not food_low):
+	elif bool(hn["short"]) or (bool(hn["crowded"]) and basics and not food_low):
+		house_fit = 1 if bool(hn["short"]) else int(hn["fit_crowded"])
 		want = "집"                   # v5: 먹을 것이 모자라면 아이 낳을 큰 집은 미룬다
 	elif count_type("농장") > 0 and mill_n * Balance.MILL_PER < maxi(pop, 1):
 		want = "맷돌간"
@@ -2252,8 +2302,8 @@ func chief_build() -> void:
 			upgrade = upgrade_candidate(cap, era_cap, land_capacity() * Balance.HOUSE_SLACK)
 			if upgrade == null:
 				return
-	if upgrade == null and want == era_house and not _affordable(want) and _affordable("오두막"):
-		want = "오두막"          # 판자가 모자라면 작은 집이라도 (프로토타입)
+	if upgrade == null and want == era_house and not _affordable(want) and _affordable("오두막") and int(Balance.B["오두막"]["cap"]) >= house_fit:
+		want = "오두막"          # 판자가 모자라면 작은 집이라도 (프로토타입) — 기다리는 가족이 들어갈 크기일 때만 (안 들어가면 오두막만 늘어남 — 2026-11-09)
 	if not _affordable(want):
 		# 자재가 모자라 못 지으면 그 자재를 만드는 일터부터 (교착 방지 — 정함)
 		var free_plank := float(stock["판자"]) - _owed("판자")

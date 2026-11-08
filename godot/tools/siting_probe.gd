@@ -79,6 +79,7 @@ func _one(sd: int, days: float, size: int) -> Dictionary:
 	var dt := 60.0
 	var n := int(days * Balance.DAY / dt)
 	var food_min := INF
+	var food_min_t := -1.0
 	for i in n:
 		jw.advance(dt)
 		if v.t >= haul_from:
@@ -87,7 +88,10 @@ func _one(sd: int, days: float, size: int) -> Dictionary:
 					haul += dt
 		if i % 60 == 0:
 			if v.t > 3.0 * Balance.DAY:
-				food_min = minf(food_min, v.food_total() / maxf(1, v.people.size()))
+				var fpp := v.food_total() / maxf(1, v.people.size())
+				if fpp < food_min:
+					food_min = fpp
+					food_min_t = v.t / Balance.DAY
 			for b in v.buildings:
 				if seen.has(b.id):
 					continue
@@ -143,6 +147,13 @@ func _one(sd: int, days: float, size: int) -> Dictionary:
 	res["era"] = v.era
 	res["food_per_person_end"] = v.food_total() / maxf(1, v.people.size())
 	res["food_per_person_min"] = food_min if food_min < INF else -1.0
+	res["food_min_day"] = food_min_t
+	res["beds"] = v.house_capacity()
+	res["beds_per_person"] = float(v.house_capacity()) / maxf(1, v.people.size())
+	res["starved"] = int(v.stats.get("starved", 0))
+	res["born"] = int(v.stats.get("born", 0))
+	res["died"] = int(v.stats.get("died", 0))
+	res["farms"] = v.count_type("농장")
 	res["haul_person_h_per_day"] = haul / 3600.0 / maxf(1.0, days - 2.0)
 	var wk_out := 0
 	var wk_n := 0

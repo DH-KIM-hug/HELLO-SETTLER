@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	Market.today_override = "시험날"
-	run.timed(self, ["test_market_saturation", "test_territory", "test_chief_autonomous", "test_wish", "test_offerings", "test_forced_taking", "test_buy_building", "test_footpath", "test_split", "test_v5_food_gift_altar"])
+	run.timed(self, ["test_market_saturation", "test_territory", "test_chief_autonomous", "test_wish", "test_offerings", "test_forced_taking", "test_buy_building", "test_footpath", "test_split", "test_v5_food_gift_altar", "test_house_need"])
 	Market.today_override = ""
 	Market.reset()
 
@@ -28,6 +28,76 @@ static func lab(seed_v := 3) -> Village:
 	v.water.offline = true
 	v.step_dt = 30.0
 	return v
+
+
+## 집은 필요할 때만 (2026-11-09 — design/gdd/mayor-decisions.md F2·F8(새) · Balance.HOUSE_BUFFER): 빈 침대 < 집 없는 사람 + 곧 태어날 아기 + 여유.
+## 침대가 넉넉하면 짓지 않고, 아기 자리 없는 가족에게는 그 가족이 들어갈 집만 (오두막이 그 가족을 못 품으면 오두막을 늘리지 않는다 — 25일 측정의 오두막 20채)
+func _house_lab(n_huts: int) -> Village:
+	var v := lab(6)
+	v.stock["판자"] = 500.0
+	v.stock["돌"] = 0.0
+	v.stock["도구"] = 100.0
+	v.stock["건량"] = 5000.0
+	for ty: String in ["농장", "농장", "농장", "농장", "나무꾼", "맷돌간", "화덕", "우물"]:
+		var sp: Variant = v.find_spot(ty)
+		v.add_building(ty, (sp as Vector2).x, (sp as Vector2).y, true)
+	for i in n_huts:
+		var sp: Variant = v.find_spot("오두막")
+		v.add_building("오두막", (sp as Vector2).x, (sp as Vector2).y, true)
+	v.assign_homes()
+	return v
+
+
+func _house_sites(v: Village) -> int:
+	return v.buildings.filter(func(b: Building) -> bool: return b.is_house() and b.is_site()).size()
+
+
+func test_house_need() -> void:
+	print("== 집은 필요할 때만 (빈 침대 < 필요)")
+	# 집 없음: 오두막 둘(8침대)에 10명 → 집 없는 사람 → 집
+	var v := _house_lab(2)
+	var hn := v.house_need()
+	v.chief_build()
+	check(bool(hn["homeless"]) and _house_sites(v) == 1, "집 없는 사람이 있으면 집 터 (빈 %d · 필요 %d · 터 %d)" % [hn["free"], hn["need"], _house_sites(v)])
+	# 침대 넉넉: 오두막 다섯(20침대)에 10명 → 빈 10 ≥ 필요 → 아무리 라운드를 돌아도 집을 더 짓지 않는다
+	v = _house_lab(5)
+	hn = v.house_need()
+	check(not bool(hn["short"]) and not bool(hn["homeless"]) and int(hn["free"]) == 10, "빈 침대 10 ≥ 필요 %d — 모자라지 않음" % int(hn["need"]))
+	var h0 := v.houses().size()
+	for i in 30:
+		v.chief_build()
+		for b in v.buildings:
+			if b.is_site():
+				for k in ["판자", "돌"]:
+					b.delivered[k] = b.need(k)
+				v.on_built(b)
+		v.assign_homes()
+	check(v.houses().size() == h0, "침대가 넉넉하면 집을 더 짓지 않는다 (%d → %d채)" % [h0, v.houses().size()])
+	# 아기 자리 없는 가족 (마을 시대 1 — 집 정원 6): 넷 식구가 꽉 찬 오두막, 다른 집엔 다섯 자리가 없음, 돌이 없어 목조주택을 못 지음
+	# → 오두막(정원 4)은 그 가족을 못 품으니 오두막을 짓지 않는다 (옛: 라운드마다 오두막 — 측정의 오두막 20채)
+	v = _house_lab(4)
+	v.era = 1
+	var w: Resident = null
+	for q in v.people:
+		if q.sex == "f" and q.partner >= 0 and v.household_of(q).size() == 4:
+			w = q
+	w.age = Balance.BIRTH_WIFE_MIN + 1.0
+	hn = v.house_need()
+	check(w != null and v.occupants(v.bld(w.home)) == 4 and bool(hn["crowded"]) and int(hn["fit_crowded"]) == 5, "넷 식구 + 아기 = 다섯 자리가 필요 (crowded %s · fit %d)" % [hn["crowded"], hn["fit_crowded"]])
+	for i in 10:
+		v.chief_build()
+	var huts := v.buildings.filter(func(b: Building) -> bool: return b.type == "오두막" and b.is_site()).size()
+	check(huts == 0, "가족을 못 품는 오두막은 짓지 않는다 (오두막 터 %d)" % huts)
+	# 돌이 생기면 목조주택 (가족을 품는 집) 한 채
+	v.stock["돌"] = 50.0
+	for i in 6:
+		for b in v.buildings.duplicate():
+			if b.is_site() and not b.is_house():
+				v.buildings.erase(b)          # 다른 터는 치워 (집 차례만 보려고 — 아무도 일하지 않은 터)
+				v._bld_by_id.erase(b.id)
+		v.chief_build()
+	var wood := v.buildings.filter(func(b: Building) -> bool: return b.type == "목조주택" and b.is_site()).size()
+	check(wood == 1, "돌이 있으면 그 가족이 들 목조주택 한 채 (%d)" % wood)
 
 
 ## BALANCE v5: 밀은 날로 못 먹음(죽 ×0.75) · 빵 사슬 · 거인이 준 몫은 제물로 안 나감 · 제단 크기 · 설계도로 아는 건물
