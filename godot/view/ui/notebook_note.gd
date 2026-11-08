@@ -24,7 +24,7 @@ var _arrow := Rect2()                # 가리킬 단추 (화면 좌표) — 크�
 var _ring := Vector2(-1, -1)         # 가리킬 땅 자리 (화면 좌표)
 var _ring_label := ""
 var _done_text := ""                # 방금 끝낸 쪽지 (보상이 떠오르는 동안 '했다!'와 함께)
-var site_marks: Array = []           # 짓는 터 위 작은 진행 고리 [[화면 점, 0~1]] (첫 병 첫날 — 장면이 줌)
+var ground_layer: CanvasItem = null  # 땅 고리를 그릴 장면의 낮은 화면 층 (draw_ground_ring을 부름)
 var hidden_by_sheet := false        # 큰 시트(제단·상점·연대기·아기 이름…)가 열린 동안은 숨김 (장면이 정함)
 
 
@@ -138,6 +138,8 @@ func _process(dt: float) -> void:
 	queue_redraw()
 	if pointer != null:
 		pointer.queue_redraw()
+	if ground_layer != null:
+		ground_layer.queue_redraw()
 
 
 ## 모서리의 작은 별 (반짝임만 — 빨간 점 금지) + 떠오르는 보상
@@ -155,14 +157,18 @@ func _draw_sparkle() -> void:
 		draw_string(f, Vector2(size.x - 70.0, size.y + 14.0 - 18.0 * u), _reward, HORIZONTAL_ALIGNMENT_RIGHT, 66.0, UiTheme.SIZE, col)
 
 
-## 가리키기: 단추 위에서 통통 뛰는 화살표 + 금빛 테두리 · 땅 자리엔 숨 쉬는 고리와 짧은 말
-func _draw_pointer() -> void:
-	for m: Array in site_marks:                     # 짓는 터 위 진행 고리 (쪽지와 상관없이)
+## 짓는 터 위 진행 고리 [[화면 점, 0~1]] (첫 병 첫날). 장면의 화면 층(띠·시트 아래)에 그린다 — 이 쪽지 층(시트 위)이 아니라.
+static func draw_site_marks(ci: CanvasItem, marks: Array) -> void:
+	for m: Array in marks:
 		var c: Vector2 = m[0]
 		var f: float = m[1]
-		pointer.draw_circle(c, 11.0, Color(1, 0.98, 0.9, 0.85))
-		pointer.draw_arc(c, 9.0, 0.0, TAU, 28, Color(UiTheme.INK_BROWN, 0.25), 3.0)
-		pointer.draw_arc(c, 9.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(f, 0.0, 1.0), 28, UiTheme.PRIMARY, 3.0)
+		ci.draw_circle(c, 11.0, Color(1, 0.98, 0.9, 0.85))
+		ci.draw_arc(c, 9.0, 0.0, TAU, 28, Color(UiTheme.INK_BROWN, 0.25), 3.0)
+		ci.draw_arc(c, 9.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(f, 0.0, 1.0), 28, UiTheme.PRIMARY, 3.0)
+
+
+## 가리키기: 단추 위에서 통통 뛰는 화살표 + 금빛 테두리 (땅 자리 고리는 draw_ground_ring — 낮은 층)
+func _draw_pointer() -> void:
 	if not visible or _shown == "":
 		return
 	var gold := UiTheme.GLOW
@@ -179,13 +185,20 @@ func _draw_pointer() -> void:
 			tip + Vector2(3.5, -24 * d), tip + Vector2(3.5, -12 * d), tip + Vector2(9, -12 * d)])
 		pointer.draw_colored_polygon(pts, Color(gold, 0.95))
 		pointer.draw_polyline(pts + PackedVector2Array([tip]), UiTheme.INK_BROWN, 1.2)
-	if _ring.x >= 0.0:
-		var rr := 22.0 + 5.0 * sin(_t * 3.5)
-		pointer.draw_arc(_ring, rr, 0.0, TAU, 40, Color(gold, 0.9), 3.0)
-		pointer.draw_arc(_ring, rr + 7.0, 0.0, TAU, 40, Color(gold, 0.35), 2.0)
-		if _ring_label != "":
-			var f := UiTheme.hand_font()
-			var w := f.get_string_size(_ring_label, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.SIZE_HAND_SMALL).x
-			var at := _ring + Vector2(-w * 0.5, -rr - 10.0)
-			pointer.draw_rect(Rect2(at + Vector2(-5, -15), Vector2(w + 10, 20)), Color(1, 0.98, 0.9, 0.9))
-			pointer.draw_string(f, at, _ring_label, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.SIZE_HAND_SMALL, UiTheme.INK_BROWN)
+
+
+## 땅 자리의 숨 쉬는 고리 + 짧은 말 (제단·짓는 터·첫 밭…). 장면의 화면 층(띠·시트 아래, ground_layer)에 그린다 —
+## 쪽지 층(시트 위)에 그리면 주민 상세 같은 시트 위로 떠 보인다.
+func draw_ground_ring(ci: CanvasItem) -> void:
+	if not visible or _shown == "" or _ring.x < 0.0:
+		return
+	var gold := UiTheme.GLOW
+	var rr := 22.0 + 5.0 * sin(_t * 3.5)
+	ci.draw_arc(_ring, rr, 0.0, TAU, 40, Color(gold, 0.9), 3.0)
+	ci.draw_arc(_ring, rr + 7.0, 0.0, TAU, 40, Color(gold, 0.35), 2.0)
+	if _ring_label != "":
+		var f := UiTheme.hand_font()
+		var w := f.get_string_size(_ring_label, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.SIZE_HAND_SMALL).x
+		var at := _ring + Vector2(-w * 0.5, -rr - 10.0)
+		ci.draw_rect(Rect2(at + Vector2(-5, -15), Vector2(w + 10, 20)), Color(1, 0.98, 0.9, 0.9))
+		ci.draw_string(f, at, _ring_label, HORIZONTAL_ALIGNMENT_LEFT, -1, UiTheme.SIZE_HAND_SMALL, UiTheme.INK_BROWN)
