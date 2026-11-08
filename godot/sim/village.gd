@@ -115,6 +115,7 @@ var last_short_t := -1.0e9            # 마지막으로 식량이 모자랐던 �
 var salt_known := false
 var crises: Array = []                # 위기가 시작됨 {t, kind, text} — JarClock이 가져가 ×1로 되돌리고 알림 (기획서 6.6)
 var stats := {"born": 0, "died": 0, "built": 0, "starved": 0, "marriages": 0, "moves": 0, "upgrades": 0}
+var found: Array[Dictionary] = []     # 떨어진 물건 (작은 시험 병만 — 넓은 세상은 WorldWater.found, sim/found_objects.gd · E3-16)
 var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, home, occ_before, cap}
 var violations: Array = []            # 테스트용: 규칙 위반 기록
 var basins_said: Array = []
@@ -236,6 +237,7 @@ func _init_prototype(seed_v: int) -> void:
 	var st := add_building("창고", 0.0, 0.0, true)
 	st.is_store = true
 	altar_pos = pick_altar_pos()
+	FoundObjects.bury_local(self, seed_v)     # 떨어진 물건 (E3-16) — 마을 둘레에 2~3개 (따로 쓰는 난수)
 	# 첫 정착민 두 가족 + 노인 + 젊은이
 	var ids: Array[Resident] = []
 	for f: Array in Balance.FIRST_SETTLERS:
@@ -930,6 +932,7 @@ func step(dt: float) -> void:
 	Dogs.step(self, dt)               # [강아지] 따라다님·집 앞 잠·새끼·분양·짖음 (E3-13)
 	SimProf.mark("dogs")
 	SkyDrops.step(self, dt)           # [상점] 하늘에서 내려온 것·돌봄·앰플 탑·녹조·진열 (SHOP · WORLD_EVENTS 4)
+	FoundObjects.step(self, dt)       # [떨어진 물건] 잔치 각설탕이 물 뿌림에 녹음 (E3-16)
 	SimProf.mark("skydrops")
 	for b in buildings:
 		_update_building(b, dt)
@@ -987,6 +990,7 @@ func step(dt: float) -> void:
 		salt_discovery()
 		SimProf.mark("salt")
 		Discovery.hourly(self)        # 발견 W2 · F3 · F5 · S3 · P1 (DISCOVERIES — sim/discovery.gd)
+		FoundObjects.hourly(self)     # 떨어진 물건: 찾음 · 마을 쪽으로 옮겨 씀 · 각설탕 잔치 (E3-16 — sim/found_objects.gd)
 		if owns_water:
 			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
@@ -1311,6 +1315,7 @@ func _update_happiness() -> void:
 		if tea:
 			h += Balance.TEA_HAPPY                        # [하늘의 것] 민들레 꽃차 (WORLD_EVENTS 2.7)
 		h += Wildlife.happy(self, p)                      # [들짐승] 물가에서 낚싯대를 드리운 날 (WILDLIFE 2)
+		h += FoundObjects.happy(self, p)                  # [떨어진 물건] 잔치 각설탕이 있는 동안 아이들 (E3-16)
 		h += Immigrants.mood(self)                        # [이주민] 축제처럼 맞이 ↑ · 경계 ↓ (기획서 11.2 — 하루 동안)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
