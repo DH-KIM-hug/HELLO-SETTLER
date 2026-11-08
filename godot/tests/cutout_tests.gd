@@ -22,7 +22,8 @@ func all() -> void:
 	print("== 종이 인형 주민: 겉모습 기록 · 동작 대응 · 에셋")
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
-		"test_hat_seated", "test_two_feet", "test_walk_no_slip"])
+		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -125,9 +126,12 @@ func test_clip_map() -> void:
 		["work", "", "버섯꾼", "hoe", 7, true],
 		["work", "", "", "hoe", 9, true],
 		["work", "", "우물", "idle", -1, true],
-		["sit", "", "", "idle", -1, false],
-		["sleep", "", "", "idle", -1, false],
-		["pray", "", "", "idle", -1, false],
+		["work", "", "약초꾼", "gather", -1, true],
+		["sit", "", "", "sit", -1, false],
+		["eat", "", "", "eat", 0, false],
+		["sleep", "", "", "sleep", -1, false],
+		["pray", "", "", "kneel", -1, false],
+		["play", "", "", "idle", -1, false],
 	]
 	var bad: Array = []
 	for cs: Array in cases:
@@ -452,3 +456,307 @@ static func _alpha_axis(img: Image, uv: Array) -> Vector2:
 	var h := (cxx + cyy) * 0.5
 	var d := sqrt(maxf(0.0, (cxx - cyy) * (cxx - cyy) * 0.25 + cxy * cxy))
 	return Vector2(ang, (h + d) / maxf(h - d, 1e-6))
+
+
+
+## A23 ③ (2026-11-08): 새 동작 sit·eat·sleep·kneel·gather — 동작 표에 있고, 몸마다 엉덩이를 제 다리 길이만큼 내리고 (묶음 칸),
+## 지팡이를 내려놓고, 눕기는 인형을 가로로, 먹기는 빵이 입가로 감
+func test_new_clips() -> void:
+	var ok := true
+	for c: String in ["sit", "eat", "sleep", "kneel", "gather"]:
+		ok = ok and Lib.CLIPS.has(c) and Lib.CLIP_RATE.has(c) and Lib.NO_CANE.has(c)
+	check(ok, "새 동작 다섯이 동작 표·빠르기·지팡이 내려놓기 표에")
+	var img := (Lib.material().get_shader_parameter("anim_tex") as Texture2D).get_image()
+	check(img.get_width() == Lib.SET_COL + Lib.SETS.size() and img.get_height() == Lib.CLIPS.size() * 4 * Lib.FRAMES,
+		"동작 표 = 슬롯 %d + 묶음 %d칸 × %d줄" % [Lib.SET_COL, Lib.SETS.size(), img.get_height()])
+	var low := true
+	var cane := true
+	for c: String in ["sit", "kneel"]:
+		var ci := Lib.CLIPS.find(c)
+		for v in 4:
+			for si in Lib.SETS.size():
+				var px := img.get_pixel(Lib.SET_COL + si, (ci * 4 + v) * Lib.FRAMES)
+				low = low and px.b < -0.3 * Lib.leg_len(Lib.SETS[si], v)
+				cane = cane and px.a > 0.5
+	var wi := Lib.CLIPS.find("walk")
+	for si in Lib.SETS.size():
+		cane = cane and img.get_pixel(Lib.SET_COL + si, wi * 4 * Lib.FRAMES).a < 0.5
+	check(low, "앉기·무릎: 모든 몸·보기에서 엉덩이를 다리 길이의 30% 넘게 내림")
+	check(cane, "앉기·무릎은 지팡이를 내려놓고 걷기는 짚음")
+	var sl: Array = Lib._pose("sleep", 0, 0.3)
+	check(absf((sl[0] as Vector4).x - PI * 0.5) < 0.01 and (sl[0] as Vector4).z > 100.0, "눕기: 인형 전체를 가로로 눕히고 땅 위로")
+	# 먹기: 한 입 무는 장면에 손(빵)이 턱 가까이 — 앞·비스듬한 앞
+	for v in [0, 1]:
+		var a: Array = Lib._pose("eat", v, 0.4)
+		var d := Lib._hand(a, v, "a").distance_to(Lib._chin(v))
+		check(d < 110.0 and (a[10] as Vector4).w > 0.5, "먹기 보기 %d: 빵 든 손이 입가에 (턱에서 %.0f)" % [v, d])
+		var r: Array = Lib._pose("eat", v, 0.9)
+		check(Lib._hand(r, v, "a").distance_to(Lib._chin(v)) > d + 80.0, "먹기 보기 %d: 씹는 동안엔 손을 무릎으로" % v)
+	# 무릎 꿇고 손 모음: 앞 보기의 두 손이 가슴 앞에서 만남
+	var k: Array = Lib._pose("kneel", 0, 0.0)
+	check(Lib._hand(k, 0, "a").distance_to(Lib._hand(k, 0, "b")) < 60.0, "무릎 꿇기: 두 손을 모음")
+	# 줍기: 비스듬한 보기에서 손이 땅 쪽으로 내려감
+	var g: Array = Lib._pose("gather", 1, 0.42)
+	var hy: float = (g[11] as Vector4).x * Lib.leg_len("a", 1)
+	var stand := Lib._hand(Lib._pose("idle", 1, 0.0), 1, "a").y
+	check(Lib._hand(g, 1, "a").y + hy < stand - 80.0, "줍기: 손이 선 자세보다 한참 아래로 (%.0f → %.0f)" % [stand, Lib._hand(g, 1, "a").y + hy])
+
+
+## 2026-11-08 "정면에서 걷는 게 이상해": 앞·뒤 보기 걸음 — 디딘 다리는 곧게·땅 줄에 (미끄러지지 않음), 넘기는 다리는 무릎을 듦,
+## 몸은 엇갈릴 때 높고 닿을 때 낮음, 팔은 다리와 반대로 흔들림
+func test_front_walk() -> void:
+	var planted := true
+	var knee := 0.0
+	var arms := 0.0
+	var bob_hi := -INF
+	var bob_lo := INF
+	for v in [0, 3]:
+		for f in Lib.FRAMES:
+			var t := float(f) / Lib.FRAMES
+			var a: Array = Lib._pose("walk", v, t)
+			var la: Vector4 = a[7]
+			var lb: Vector4 = a[8]
+			var st: Vector4 = la if la.w >= lb.w else lb       # 디딘 다리 = 덜 짧아진 쪽
+			planted = planted and absf(st.w - 1.0) < 0.02 and absf(st.z) < 1.5
+			knee = maxf(knee, 1.0 - minf(la.w, lb.w))
+			arms = maxf(arms, absf((a[3] as Vector4).w - (a[4] as Vector4).w))
+			var bz: float = (a[1] as Vector4).z
+			if absf(sin(TAU * t)) < 0.01:
+				bob_hi = maxf(bob_hi, bz)
+			if absf(absf(sin(TAU * t)) - 1.0) < 0.01:
+				bob_lo = minf(bob_lo, bz)
+	check(planted, "앞·뒤 걸음: 디딘 다리는 곧고 발은 땅 줄에")
+	check(knee > 0.3, "앞·뒤 걸음: 넘기는 다리는 무릎을 듦 (%.2f)" % knee)
+	check(arms > 0.1, "앞·뒤 걸음: 두 팔이 엇갈려 앞뒤로 (짧아짐 차이 %.2f)" % arms)
+	check(bob_hi > bob_lo + 6.0, "앞·뒤 걸음: 엇갈릴 때 높고(%.0f) 닿을 때 낮음(%.0f)" % [bob_hi, bob_lo])
+
+
+## 2026-11-08 "옆으로 걷는 것도 이상해": 비스듬한 보기 — 디딘 발은 땅에서 같은 빠르기로 뒤로 (미끄러지지 않음), 넘기는 발은 들림,
+## 두 다리가 X자로 엇갈리지 않음 (가까운 발이 늘 먼 발의 왼쪽), 닿을 때 엉덩이가 내려감
+func test_side_walk() -> void:
+	var L := Lib.lib()
+	var even := true
+	var lifted := 0.0
+	var no_x := true
+	var dip := 0.0
+	var where := ""
+	for sn: String in Lib.SETS:
+		for v in [1, 2]:
+			var legs := {}
+			for q: Dictionary in L["quads"]:
+				if q["set"] == sn and int(q["view"]) == v and String(q["part"]).begins_with("leg_"):
+					legs[q["part"]] = q
+			var ll := Lib.leg_len(sn, v)
+			var xs := []
+			for f in Lib.FRAMES:
+				var t := float(f) / Lib.FRAMES
+				var a: Array = Lib._pose("walk", v, t)
+				var feet := []
+				for i in 2:
+					var q: Dictionary = legs["leg_a" if i == 0 else "leg_b"]
+					var hip := Vector2(q["pivot"][0], q["pivot"][1])
+					feet.append(Lib._xf(hip + Vector2(0, -ll), hip, a[7 + i]) + Vector2(0, (a[11] as Vector4).x * ll))
+				if (feet[0] as Vector2).x >= (feet[1] as Vector2).x:
+					no_x = false
+					where = "%s/%d f%d" % [sn, v, f]
+				dip = minf(dip, (a[11] as Vector4).x)
+				if fposmod(t - 0.25, 1.0) <= 0.5 + 1e-4:
+					xs.append((feet[0] as Vector2).x)
+				else:
+					lifted = maxf(lifted, Lib._step_lift(t))
+			for i in range(1, xs.size() - 1):
+				var d0: float = xs[i] - xs[i - 1]
+				var d1: float = xs[i + 1] - xs[i]
+				even = even and d0 < 0.0 and absf(d1 - d0) < 0.25 * absf(d0)
+	check(even, "비스듬한 걸음: 디딘 발이 같은 빠르기로 뒤로 (미끄러짐 없음)")
+	check(lifted > 0.9, "비스듬한 걸음: 넘기는 발을 들어 올림")
+	check(no_x, "비스듬한 걸음: 두 다리가 X자로 엇갈리지 않음 %s" % where)
+	check(dip < -0.03, "비스듬한 걸음: 닿을 때 엉덩이가 내려감 (%.2f × 다리)" % dip)
+
+
+## 일 옷 (art-bible 5.2 · A23 ③): 일을 시작할 때 갈아입고, 같은 일로 걸어 다니는 동안은 그대로, 쉬러·먹으러 가면 평상복
+func test_outfit_shift() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 61
+	var r := _resident(rng, 6100)
+	r.age = 10.0
+	var m := _model(r)
+	var farmer := int(m.dlook["jobs"]["farmer"])
+	var own := int(m.dlook["personal"])
+	m.set_job("농장")
+	m.set_tool("농장")
+	var steps := [
+		# [동작, 행동, 일 옷인가]
+		["walk", "work", false],      # 일터로 가는 길: 아직 평상복
+		["work", "work", true],       # 일터에서 일 시작: 갈아입음
+		["walk", "work", true],       # 같은 일로 나르기: 일 옷 그대로
+		["idle", "work", true],
+		["walk", "eat", false],       # 밥 먹으러: 평상복
+		["work", "build", true],      # 다른 일 시작: 다시 일 옷
+		["sit", "build", false],      # 앉아 쉼: 평상복
+	]
+	var bad := []
+	for st: Array in steps:
+		m.set_anim(st[0], st[1])
+		m.tick(0.0)
+		var want := farmer if st[2] else own
+		if int(_sel(m).x) != want:
+			bad.append("%s/%s → %d" % [st[0], st[1], int(_sel(m).x)])
+	check(bad.is_empty(), "일 옷 갈아입기 규칙 %s" % [bad])
+	check(m.swaps == (4 if farmer != own else 0), "갈아입은 횟수 %d" % m.swaps)
+	m.free()
+	# 아이는 일해도 제 옷 (몸이 같음) — 갈아입지 않음
+	var k := _resident(rng, 6101)
+	k.age = 2.5
+	var km := _model(k)
+	km.set_job("농장")
+	km.set_anim("work", "work")
+	km.tick(0.0)
+	check(km.swaps == 0, "아이는 일 옷 = 제 옷 (연기 없음)")
+	km.free()
+
+
+## 옷 갈아입기 연기: 트리 안에서 갈아입으면 인형이 잠깐 숨고 연기가 생겼다가 스스로 사라짐
+func test_swap_puff() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 62
+	var r := _resident(rng, 6200)
+	r.age = 10.0
+	var m := CutoutResident.new()
+	run.root.add_child(m)
+	m.setup_from(r)
+	m.set_job("농장")
+	m.set_tool("농장")
+	m.set_anim("idle", "work")
+	m.tick(0.0)
+	m.set_anim("work", "work")
+	m.tick(0.0)
+	var puff: Node = null
+	for c in m.get_children():
+		if c is CutoutResident.SwapPuff:
+			puff = c
+	check(puff != null and not m.doll.visible, "갈아입는 순간 인형이 숨고 연기가 남")
+	if puff != null:
+		puff._process(CutoutResident.SWAP_HIDE + 0.02)
+		check(m.doll.visible, "%.2f초 뒤 일 옷으로 다시 나타남" % CutoutResident.SWAP_HIDE)
+		puff._process(CutoutResident.SWAP_PUFF)
+		check(puff.is_queued_for_deletion(), "연기는 스스로 사라짐")
+	m.free()
+
+
+## 아이 몸(f)의 뒤·비스듬한 뒤 땋은 머리가 몸을 덮던 것 (2026-11-08): 앞모습 땋은 머리보다 좁고, 끝이 어깨 둘레
+func test_child_braids() -> void:
+	var rect := {}
+	for q: Dictionary in Lib.lib()["quads"]:
+		if q["set"] == "f" and q["part"] == "tail":
+			rect[int(q["view"])] = q["rect"]
+	var fw := float(rect[0][2]) - float(rect[0][0])
+	var ok := true
+	for v in [2, 3]:
+		var r: Array = rect[v]
+		ok = ok and float(r[2]) - float(r[0]) <= fw * 0.85 and float(r[1]) > -130.0
+	check(ok, "아이 뒤 보기 땋은 머리: 앞모습보다 좁고(%.0f) 어깨 위에서 끝남 %s / %s" % [fw, str(rect[2]), str(rect[3])])
+
+
+## 2026-11-08 "아기가 태어났다 했는데 없음": 아기는 늘 보임 — 깨어 서 있는 부모의 품에, 아니면 문 옆 요람에, 걸음마 아기는 부모 곁에
+func test_babies() -> void:
+	var v := Village.new()
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 63
+	var mom := _resident(rng, 7000)
+	mom.sex = "f"
+	mom.age = 8.0
+	mom.x = 3.0
+	mom.y = 3.0
+	var dad := _resident(rng, 7001)
+	dad.sex = "m"
+	dad.age = 8.0
+	var baby := _resident(rng, 7002)
+	baby.age = 0.2
+	baby.parents = PackedInt32Array([7000, 7001])
+	baby.anim = "sleep"
+	var tod := _resident(rng, 7003)
+	tod.age = 0.8
+	tod.parents = PackedInt32Array([7000, 7001])
+	var people := [mom, dad, baby, tod]
+	var models := {}
+	for p: Resident in people:
+		var m := CutoutResident.new()
+		run.root.add_child(m)
+		m.setup_from(p)
+		m.position = Vector3(p.x, 0, p.y)
+		models[p.id] = m
+	var bm: CutoutResident = models[7002]
+	check(bm._infant and bm.doll_state()["clip"] == "sleep", "젖먹이 = 누운 인형 (강보)")
+	var cases := [
+		# [엄마 동작, 엄마 짐, 엄마 잠, 아빠 잠, 젖먹이 자리, 걸음마 자리]
+		["walk", "", false, true, "carried", "toddle"],
+		["idle", "빵", false, true, "cradle", "toddle"],
+		["sit", "", false, true, "cradle", "toddle"],
+		["work", "", false, false, "cradle", "toddle"],
+		["sleep", "", true, true, "cradle", "toddle"],
+	]
+	var bad := []
+	for cs: Array in cases:
+		mom.anim = cs[0]
+		mom.carry = cs[1]
+		mom.sleeping = cs[2]
+		dad.sleeping = cs[3]
+		dad.anim = "sleep" if cs[3] else "work"
+		(models[7000] as CutoutResident).set_item(cs[1])
+		(models[7000] as CutoutResident).set_anim(cs[0])
+		var pl := CutoutResident.place_babies(v, people, models)
+		var b: Dictionary = pl.get(7002, {})
+		var t: Dictionary = pl.get(7003, {})
+		if b.get("mode", "") != cs[4] or t.get("mode", "") != cs[5] or not bm.visible or not (models[7003] as CutoutResident).visible:
+			bad.append("%s → %s/%s" % [cs[0], b.get("mode", "?"), t.get("mode", "?")])
+		if cs[4] == "carried":
+			var mm: CutoutResident = models[7000]
+			check(mm.carry_baby and mm.doll_state()["clip"] == "carry" and int(mm.doll_state()["prop"]) == -1,
+				"아기를 안은 엄마 = 안기 팔, 다른 짐 없음")
+			check(Vector2(bm.position.x - mm.position.x, bm.position.z - mm.position.z).length() < 0.2 and bm.position.y > mm.position.y + 0.1,
+				"안긴 아기는 엄마 가슴 앞")
+		else:
+			check(bm.cradle != null and bm.cradle.visible, "요람이 보임 (엄마 %s)" % cs[0])
+	check(bad.is_empty(), "아기 자리 표 %s" % [bad])
+	check(baby.x == 0.0 and baby.anim == "sleep", "아기 데이터는 바꾸지 않음 (ADR-0001)")
+	for m: Node in models.values():
+		m.free()
+
+
+
+## 2026-11-08 "아주 빠르게 할 때 주민들이 꼭 뒤로 가": 어떤 배속·FPS에서도 걸음 위상이 한 장면에 반 주기 가까이 넘어가지 않고
+## (수레바퀴 착시), 발이 땅에 맞출 수 없을 만큼 빠르면 걸음 대신 travel (멈춘 보폭)
+func test_speed_cap() -> void:
+	var stride := Lib.stride_rig("a", "walk") * CutoutResident.DOLL_H / float(Lib.lib()["fig"])
+	var cap_ok := true
+	var slide_ok := true
+	var fast_travel := true
+	for sp: float in Balance.SPEEDS:
+		var g: float = Balance.WALK_SCREEN * sp / float(Balance.SPEEDS[Balance.SPEED_DEFAULT_I])
+		var want := g / stride
+		for fps: float in [20.0, 30.0, 60.0, 120.0]:
+			var wr := CutoutResident.walk_rate(want, 1.0 / fps)
+			var step := float(wr["rate"]) / fps
+			cap_ok = cap_ok and step <= 0.5
+			if not bool(wr["travel"]):
+				slide_ok = slide_ok and (float(wr["rate"]) >= want * 0.75 or float(wr["rate"]) <= CutoutResident.RATE_MIN + 0.01)
+		if sp >= 1440.0:
+			fast_travel = fast_travel and bool(CutoutResident.walk_rate(want, 1.0 / 60.0)["travel"])
+	check(cap_ok, "모든 배속·FPS: 걸음 위상이 한 장면에 반 주기 안")
+	check(slide_ok, "걷는 동안엔 걸음 빠르기가 땅 빠르기의 75% 이상 (뒷걸음질로 안 보임)")
+	check(fast_travel, "아주 빠르게(×1440) 이상은 travel 자세")
+	check(Lib.CLIPS.has("travel"), "travel 동작")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 71
+	var r := _resident(rng, 7100)
+	r.age = 10.0
+	var m := _model(r)
+	m._ground = 40.0
+	m.set_anim("walk")
+	m.tick(0.0)
+	check(m._d_clip == "travel" and m._d_rate / CutoutResident.MIN_FPS <= CutoutResident.MAX_FRAME_STEP, "땅 빠르기 40칸/초 → travel (%s)" % m._d_clip)
+	m.set_item("빵")
+	m.tick(0.0)
+	check(m._d_clip == "hold", "짐을 든 채 아주 빠르면 안고 선 자세")
+	m.free()

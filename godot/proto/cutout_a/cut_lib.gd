@@ -12,14 +12,32 @@ const LIB_DIR := "res://art/cutout/woman_a/"
 const FRAMES := 16
 const NSLOT := 11
 ## 0 root 1 body 2 head 3 sleeve_a 4 sleeve_b 5 arm_a 6 arm_b 7 leg_a 8 leg_b 9 accessory 10 prop
-const CLIPS := ["idle", "walk", "carry", "hoe", "hold"]     # hold = 짐을 안고 서 있기 (나르기 팔 + 쉬는 다리, 2026-11-08 게임 연결)
-const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35}   # 주기/초 (걷기 한 주기 = 두 걸음) — 걷기·나르기는 기본값일 뿐, 게임에선 땅 빠르기 ÷ stride_rig
+## hold = 짐을 안고 서 있기 (나르기 팔 + 쉬는 다리, 2026-11-08 게임 연결)
+## A23 ③ (2026-11-08): sit 땅에 앉기 · eat 앉아 먹기(빵을 입으로) · sleep 누워 자기 · kneel 무릎 꿇고 손 모음(기도·깨달음) · gather 숙여 줍기
+## travel = 아주 빠른 배속의 걸음 (2026-11-08 "아주 빠르게 할 때 주민들이 꼭 뒤로 가"): 걸음 주기를 땅 빠르기에 맞추면 한 장면에
+## 반 주기 넘게 넘어가 거꾸로 걷는 것처럼 보이고(수레바퀴 착시), 빠르기 상한에 묶으면 발이 앞으로 미끄러져 뒷걸음질로 보였다 →
+## 걸음을 멈춘 큰 보폭 자세에 작은 들썩임만 (CutoutResident.walk_rate가 고름)
+const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel"]
+const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35, "sit": 0.3, "eat": 0.4, "sleep": 0.22,
+	"kneel": 0.16, "gather": 0.45, "travel": 2.2}
+## 지팡이를 내려놓는 동작 (앉기·눕기·무릎·숙이기 — 땅에 선 지팡이가 허공에 뜨지 않게)
+const NO_CANE := ["sit", "eat", "sleep", "kneel", "gather"]
+## 동작 표 텍스처의 가로: 조각 슬롯 NSLOT칸 + 옷 묶음마다 한 칸 (SETS) = (소품 dx, dy, 몸 내림 dy, 지팡이 숨김) — 몸마다 다른 다리 길이·손 자리
+const SET_COL := 11   # 주기/초 (걷기 한 주기 = 두 걸음) — 걷기·나르기는 기본값일 뿐, 게임에선 땅 빠르기 ÷ stride_rig
 ## 비스듬한 보기 걸음 (2026-11-08 걷기 점검): 다리 흔들기(rad), 먼 다리를 위로(rig), 앞뒤로 간 발의 위아래(다리 길이 배율),
 ## 두 발 벌리기(rad)
 const SWING := {"walk": 0.55, "carry": 0.36}
 const LEG_FAR_UP := 10.0
 const LEG_DEPTH := 0.28
 const LEG_SPLAY := 0.05
+## 비스듬한 보기 걸음 v2 (2026-11-08 "옆으로 걷는 것도 이상해"): 발 자리를 다리 길이 단위로 정하고 다리 회전·길이를 거기서 구함.
+## STEP_X = 반 걸음의 가로 (화면), STEP_Y = 앞으로 간 발이 화면 아래로 (깊이), FOOT_LIFT = 넘기는 발 들기, HIP_DIP = 디딘 다리가 기울어진 만큼
+## 엉덩이(몸 전체)를 내림의 배율 (귀여운 들썩임), FOOT_SPLAY = 두 발 벌리기
+const STEP_X := {"walk": 0.32, "carry": 0.24}
+const STEP_Y := {"walk": 0.22, "carry": 0.16}
+const FOOT_LIFT := {"walk": 0.17, "carry": 0.1}
+const HIP_DIP := 1.7
+const FOOT_SPLAY := 0.05
 const SETS := ["a", "b", "c", "d", "e", "f", "g"]   # e 남자 · f 아이 · g 노인 (시안 A 넷, 2026-11-08) — 몸 종류는 lib "body_types"
 const PROPS := ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket", "seed"]
 
@@ -167,9 +185,7 @@ static func material() -> ShaderMaterial:
 	while hk.size() < 8:
 		hk.append(1.0)
 	_mat.set_shader_parameter("head_k", hk)
-	var po := prop_offsets()
-	_mat.set_shader_parameter("prop_off", po[0])
-	_mat.set_shader_parameter("prop_off_hoe", po[1])
+	_mat.set_shader_parameter("set_col", SET_COL)
 	_mat.set_shader_parameter("fig", float(L["fig"]))
 	var pl: Array = L["prop_layer"]
 	_mat.set_shader_parameter("prop_layer", Vector4i(int(pl[0]), int(pl[1]), int(pl[2]), int(pl[3])))     # 보기마다 소품의 겹 (ORDER)
@@ -223,10 +239,108 @@ static func _hand(a: Array, v: int, side: String, sn := "a") -> Vector2:
 	return _xf(h, Vector2(0, 380), a[1])
 
 
+## 몸 틀의 손 자리 (몸 흔들림 빼고) — 셰이더는 소품에도 몸 흔들림을 한 번 입히므로 새 동작의 소품은 이 자리에 둔다
+static func _hand_local(a: Array, v: int, side: String, sn := "a") -> Vector2:
+	var g: Array = _arm_geo(v, sn)[side]
+	var si := 0 if side == "a" else 1
+	return _xf(_xf(g[2], g[1], a[5 + si]), g[0], a[3 + si])
+
+
+## 다리 하나: 발 자리 (다리 길이 단위, 선 자리의 발 = (0, 0) · 위 +) 와 엉덩이 내림 hy(같은 단위, 음수 = 내림)에서
+## 다리 슬롯 값 (회전, 0, dy, 길이 배율). 다리 조각은 엉덩이 기준으로 세로 배율 → 회전되므로 어느 몸에나 같은 값이 맞음.
+static func _leg_to(foot: Vector2, hy: float, dy := 0.0) -> Vector4:
+	var d := Vector2(foot.x, foot.y - 1.0 - hy)
+	return Vector4(atan2(d.x, -d.y), 0, dy, d.length())
+
+
+## 팔 굽히기 풀기: 손(묶음 sn, 보기 v, 팔 side)을 target에 가장 가깝게 하는 (소매 회전, 아래팔 회전) — 몸 흔들림(a[1])까지 넣어 셈.
+## 앞·뒤 보기의 오른쪽 팔(b)은 거울 (안쪽 = -). 아래팔은 어깨보다 덜 꺾이게 (자연스러운 팔꿈치)
+static var _ik_cache := {}
+
+
+static func _ik(a: Array, v: int, side: String, target: Vector2, sn := "a", elbow_down := 0.0) -> Vector2:
+	var b1: Vector4 = a[1]
+	var key := "%d%s%s%d,%d|%.2f,%.0f,%.0f|%.0f" % [v, side, sn, int(target.x), int(target.y), b1.x, b1.y, b1.z, elbow_down]
+	if _ik_cache.has(key):
+		return _ik_cache[key]
+	var sg := -1.0 if side == "b" and not (v == 1 or v == 2) else 1.0
+	var si := 3 if side == "a" else 4
+	var t := a.duplicate()
+	var best := Vector2.ZERO
+	var bc := INF
+	var lo := Vector2(-0.6, -0.2)
+	var hi := Vector2(3.2, 2.6)
+	var step := 0.12
+	for pass_i in 2:
+		var x := lo.x
+		while x <= hi.x + 1e-4:
+			var y := lo.y
+			while y <= hi.y + 1e-4:
+				t[si] = Vector4(x * sg, 0, 0, 1)
+				t[si + 2] = Vector4(y * sg, 0, 0, 1)
+				var c := _hand(t, v, side, sn).distance_to(target) + 6.0 * absf(y) + elbow_down * absf(x)
+				if c < bc:
+					bc = c
+					best = Vector2(x, y)
+				y += step
+			x += step
+		lo = best - Vector2(step, step)
+		hi = best + Vector2(step, step)
+		step = 0.025
+	var r := best * sg
+	_ik_cache[key] = r
+	return r
+
+
+## 팔 둘을 (소매, 아래팔) 값으로
+static func _set_arm(a: Array, side: String, sf: Vector2) -> void:
+	var si := 3 if side == "a" else 4
+	a[si] = Vector4(sf.x, 0, 0, 1)
+	a[si + 2] = Vector4(sf.y, 0, 0, 1)
+
+
+## 묶음 a의 목 자리 (턱) — 손을 입·가슴으로 가져갈 때의 기준
+static func _chin(v: int) -> Vector2:
+	var p: Array = lib()["head_socket"]["a_" + String(lib()["views"][v])]
+	return Vector2(p[0], p[1])
+
+
+## 나르기·안기: 짐(소품)의 자리 — 앞 = 두 손 가운데 조금 아래, 비스듬한 앞 = 가까운 손, 뒤쪽 보기 = 몸 앞 (몸에 가려짐)
+static func _carry_hp(a: Array, v: int) -> Vector2:
+	var bz: float = (a[1] as Vector4).z
+	if v == 0:
+		return (_hand(a, v, "a") + _hand(a, v, "b")) * 0.5 + Vector2(0, 25)
+	elif v == 1:
+		return _hand(a, v, "a") + Vector2(-10, 15)
+	elif v == 2:
+		return Vector2(110, 420 + bz)
+	return Vector2(0, 430 + bz)
+
+
+## 비스듬한 보기 걸음: 가까운 다리(a)의 위상 t → 발의 앞뒤 (-1 뒤 ~ +1 앞). t = 0.25에 앞에 닿고(옛 위상과 같음: s = 1)
+## 0.75까지 땅에 붙은 채 같은 빠르기로 뒤로 (디딤), 그다음 들려 앞으로 (넘김, 부드럽게 + 끝에서 조금 더 뻗음)
+static func _step_x(t: float) -> float:
+	var p := fposmod(t - 0.25, 1.0)
+	if p < 0.5:
+		return 1.0 - 4.0 * p
+	var u := (p - 0.5) * 2.0
+	return -1.0 + 2.0 * smoothstep(0.0, 1.0, u) + 0.12 * sin(PI * u) * u
+
+
+## 같은 위상에서 발 들기 (0~1): 넘김 동안만, 앞쪽이 일찍 솟고 내디딜 때 낮게
+static func _step_lift(t: float) -> float:
+	var p := fposmod(t - 0.25, 1.0)
+	if p < 0.5:
+		return 0.0
+	var u := (p - 0.5) * 2.0
+	return sin(PI * pow(u, 0.8))
+
+
 static func _pose(clip: String, v: int, t: float) -> Array:
 	var a := []
 	for i in NSLOT:
 		a.append(Vector4(0, 0, 0, 1))
+	a.append(Vector4(0, 0, 0, 0))   # [11] 구울 때만: (엉덩이 내림 hy = 다리 길이 배율, -, -, -) → 묶음 칸 (SET_COL)
 	var w := TAU * t
 	var s := sin(w)
 	var side := v == 1 or v == 2
@@ -246,18 +360,27 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 			a[6] = Vector4(rest_f.y, 0, 0, 1)
 		"walk", "carry":
 			var carry := clip == "carry"
-			# 몸 들썩임: 두 발이 다 땅에 닿은 순간(다리가 가장 벌어짐, |s| = 1)이 가장 낮고, 발이 엇갈려 지나가는 순간(s = 0)이 가장 높음
-			# (2026-11-08 걷기 점검 — 전에는 거꾸로 벌어질 때 솟았음)
-			var bob := (12.0 if not carry else 8.0) * (1.0 - absf(s))
 			if not side:
-				# 다가오는/멀어지는 걸음: 앞발은 화면에서 아래로·조금 크게, 뒷발은 위로·작게 + 넘기는 발은 들림
-				var lift := 40.0 if not carry else 28.0
-				var st := 26.0 if not carry else 18.0
-				var dirk := 1.0 if v == 0 else -1.0      # 뒤 보기는 앞발이 화면 위쪽
-				a[7] = Vector4(0, 0, -st * s * dirk + lift * maxf(0.0, cos(w)), 1.0 + 0.06 * s * dirk)
-				a[8] = Vector4(0, 0, st * s * dirk + lift * maxf(0.0, -cos(w)), 1.0 - 0.06 * s * dirk)
-				a[1] = Vector4(0.055 * s, 0, bob, 1)          # 뒤뚱 (귀여운 흔들림)
-				a[2] = Vector4(-0.04 * s, 0, 0, 1)
+				# 다가오는/멀어지는 걸음 (2026-11-08 "정면에서 걷는 게 이상해" — 옛 걸음은 두 발이 제자리에서 위아래로 미끄러지고
+				# 몸만 좌우로 흔들려 걷는 것으로 안 읽혔다). 앞·뒤 보기에선 발이 앞뒤로 가는 것이 안 보이므로:
+				#   · 딛은 다리는 곧게, 발은 땅 줄에 그대로 (미끄러지지 않음)
+				#   · 넘기는 다리는 무릎을 듦 = 엉덩이 기준으로 짧아지고(KNEE) 조금 들리며 살짝 바깥으로
+				#   · 몸: 발이 엇갈려 지나갈 때(넘기는 다리가 가장 높음) 가장 높고 두 발이 닿을 때 가장 낮음 + 딛은 다리 쪽으로 기움
+				#   · 팔: 다리와 반대로 앞뒤 흔들기 = 앞으로 간 팔은 짧아지고(카메라 쪽으로 줄어 보임) 손이 배 앞으로,
+				#     뒤로 간 팔은 덜 짧아지고 손이 몸 옆으로 + 어깨가 반대로 조금 오르내림 (어깨 돌림)
+				#   · 머리는 몸 들썩임을 조금 늦게 따름
+				# 위상은 비스듬한 보기와 같다: s = 다리 a가 앞으로 간 정도, cos(w) > 0 = 다리 a를 넘기는 중
+				var knee := 0.46 if not carry else 0.3
+				var lift := 16.0 if not carry else 10.0
+				var la := smoothstep(0.0, 1.0, maxf(0.0, cos(w)))
+				var lb := smoothstep(0.0, 1.0, maxf(0.0, -cos(w)))
+				a[7] = Vector4(-0.12 * la, 0, lift * la, 1.0 - knee * la)
+				a[8] = Vector4(0.12 * lb, 0, lift * lb, 1.0 - knee * lb)
+				var bb := (12.0 if not carry else 8.0)
+				var fb := bb * (1.0 - absf(s)) - bb * 0.5            # 지나감 +, 닿음 -
+				var lag := bb * (1.0 - absf(sin(w - 0.5))) - bb * 0.5
+				a[1] = Vector4(-0.045 * cos(w), 7.0 * cos(w), fb, 1)    # 딛은 다리 쪽으로 (a를 들면 b 쪽 = 오른쪽)
+				a[2] = Vector4(0.03 * cos(w - 0.5), 0, 0.6 * (lag - fb), 1)
 				if carry:
 					var bend := 1.25 if v == 0 else 0.15
 					a[3] = Vector4(0.12, 0, 0, 1)
@@ -265,57 +388,70 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 					a[5] = Vector4(bend, 0, 0, 1)
 					a[6] = Vector4(-bend, 0, 0, 1)
 				else:
-					a[3] = Vector4(rest_s.x + 0.1 * s, 0, 0, 1.0 - 0.1 * s)
-					a[4] = Vector4(rest_s.y + 0.1 * s, 0, 0, 1.0 + 0.1 * s)
-					a[5] = Vector4(rest_f.x, 0, 0, 1)
-					a[6] = Vector4(rest_f.y, 0, 0, 1)
+					var fa := -s            # 팔 a가 앞으로 간 정도 (다리 a와 반대)
+					for i in 2:
+						var f := fa if i == 0 else -fa
+						var inn := 1.0 if i == 0 else -1.0       # 안쪽 회전 방향 (그림 왼쪽 팔 a는 +)
+						var fwd := maxf(0.0, f)
+						var bwd := maxf(0.0, -f)
+						var rs := rest_s.x if i == 0 else rest_s.y
+						var rf := rest_f.x if i == 0 else rest_f.y
+						a[3 + i] = Vector4(rs + inn * (0.12 * fwd - 0.1 * bwd), 0, -4.0 * f, 1.0 - 0.24 * fwd - 0.1 * bwd)
+						a[5 + i] = Vector4(rf + inn * 0.35 * fwd, 0, 0, 1)
 			else:
-				# 비스듬한 보기 (2026-11-08 "돌 때 왜 다리가 하나 없어"): 두 엉덩이가 그림에서 나란해서, 가까운 다리(a)가 앞(오른쪽)으로
-				# 먼 다리(b)가 뒤로 가는 반 주기 동안 두 발이 같은 높이에서 겹쳐 다리 하나로 보였다. 깊이 단서를 줌:
-				#   · 먼 다리는 조금 위 (더 멀리 = 화면 위, LEG_FAR_UP) + 셰이더가 조금 어둡게 (far_shade)
-				#   · 걸음은 화면에서 비스듬한 선: 비스듬한 앞이면 앞으로 간 발이 카메라 쪽 = 화면 아래, 뒤로 간 발은 위
-				#     (비스듬한 뒤는 반대) — 발이 앞뒤로 간 만큼(s) 위아래로도: 다리를 엉덩이 기준 세로로 늘이고/줄임 (LEG_DEPTH ×
-				#     다리 길이 — 엉덩이는 몸에 붙은 채, 짧은 아이 다리도 제 길이만큼) → 엇갈려도 두 발이 위아래로 갈림
-				#   · 두 발을 조금 벌림 (LEG_SPLAY) — 지나갈 때도 틈이 남음
-				# 보폭(sw)은 stride_rig()가 읽어 걷기 빠르기를 땅 빠르기에 맞춤 (발이 미끄러지지 않게)
-				var sw: float = SWING[clip]
+				# 비스듬한 보기 걸음 v2 (2026-11-08 "옆으로 걷는 것도 이상해" — 옛 걸음은 다리를 엉덩이에서 sin으로 흔들기만 해서
+				# 디딘 발이 땅에서 미끄러지고 들리지도 않았다). 발 자리를 정하고 다리를 거기에 맞춤 (_leg_to):
+				#   · 디딤 (반 주기): 발은 땅에 붙은 채 앞 → 뒤로 같은 빠르기로 쓸려 감 (몸이 그만큼 앞으로 감 — stride_rig와 맞음)
+				#   · 넘김 (반 주기): 발을 들어(FOOT_LIFT) 앞으로 뻗어 내디딤 (끝에서 살짝 더 뻗었다 닿음) — 다리가 짧아져 무릎을 든 모양
+				#   · 걸음은 화면에서 비스듬한 선: 앞으로 간 발은 비스듬한 앞에선 화면 아래(카메라 쪽), 비스듬한 뒤에선 위 (STEP_Y)
+				#   · 엉덩이: 디딘 다리가 기울수록 내려감 (닿을 때 가장 낮고 지나갈 때 가장 높음, HIP_DIP으로 조금 과장) → 셰이더가
+				#     몸마다 다리 길이만큼 몸 전체를 내림 (묶음 칸)
+				#   · 먼 다리는 조금 위 (LEG_FAR_UP) + 어둡게 (far_shade), 두 발은 조금 벌림 — 엇갈려도 X자·한 다리로 겹치지 않음
+				#   · 가까운 팔은 가까운 다리와 반대로 크게, 먼 팔은 작게 · 조금 앞으로 숙임 · 머리는 들썩임을 늦게 따름
+				var stx: float = STEP_X[clip]
+				var sty: float = STEP_Y[clip]
+				var fl: float = FOOT_LIFT[clip]
 				var toward := 1.0 if v == 1 else -1.0     # 비스듬한 앞: 앞 = 카메라 쪽 (화면 아래) · 비스듬한 뒤: 앞 = 화면 위
-				a[7] = Vector4(sw * s - LEG_SPLAY, 0, 14.0 * maxf(0.0, cos(w)), 1.0 + LEG_DEPTH * s * toward)       # 가까운 다리: 앞으로 s
-				a[8] = Vector4(-sw * s + LEG_SPLAY, 0, 14.0 * maxf(0.0, -cos(w)) + LEG_FAR_UP, 1.0 - LEG_DEPTH * s * toward)   # 먼 다리: -s
-				a[1] = Vector4(-0.03 if not carry else -0.087, 0, bob, 1)      # 앞으로 조금 숙임 (짐 = 5°)
-				a[2] = Vector4(0.02 * s, 0, 0, 1)
+				var xs := [_step_x(t), _step_x(t + 0.5)]       # 가까운 다리 a · 먼 다리 b의 앞뒤 (-1~1)
+				var ls := [_step_lift(t), _step_lift(t + 0.5)]
+				# 엉덩이: 디딘 다리(들리지 않은 쪽)의 기울기만큼
+				var xp: float = xs[0] if ls[0] <= ls[1] else xs[1]
+				var hx := xp * stx
+				var hy := HIP_DIP * (sqrt(maxf(0.0, 1.0 - hx * hx)) - 1.0)
+				for i in 2:
+					var x: float = xs[i]
+					var foot := Vector2(x * stx + (-FOOT_SPLAY if i == 0 else FOOT_SPLAY), -x * sty * toward + fl * float(ls[i]))
+					a[7 + i] = _leg_to(foot, hy, 0.0 if i == 0 else LEG_FAR_UP)
+				a[11] = Vector4(hy, 0, 0, 0)
+				var pass_k := 1.0 - absf(s)                     # 1 = 발이 엇갈려 지나감
+				a[1] = Vector4((-0.05 if not carry else -0.087) + 0.015 * pass_k, 0, 6.0 * pass_k, 1)      # 앞으로 조금 숙임 (짐 = 5°)
+				a[2] = Vector4(0.035 * sin(w * 2.0 - 0.9), 0, 3.0 * (1.0 - absf(sin(w - 0.45))) - 3.0 * pass_k, 1)
 				if carry:
 					# 가까운 팔이 짐을 안고, 몸 뒤의 먼 팔은 내려 둠 (굽히면 아래팔만 몸 밖으로 튀어나옴)
 					a[3] = Vector4(0.15 if v == 1 else 0.05, 0, 0, 1)
 					a[5] = Vector4(0.8 if v == 1 else 0.25, 0, 0, 1)
 				else:
-					# 가까운 팔(a)은 크게, 몸 뒤의 먼 팔(b)은 작게 (크게 흔들면 소매 없이 아래팔만 튀어나와 보임)
-					a[3] = Vector4(-0.3 * s, 0, 0, 1)
-					a[4] = Vector4(0.14 * s, 0, 0, 1)
-					a[5] = Vector4(0.12 + 0.08 * maxf(0.0, -s), 0, 0, 1)
+					# 가까운 팔(a)은 가까운 다리와 반대로 크게, 몸 뒤의 먼 팔(b)은 작게 (크게 흔들면 소매 없이 아래팔만 튀어나와 보임)
+					var xa: float = xs[0]
+					a[3] = Vector4(-0.36 * xa, 0, 0, 1)
+					a[4] = Vector4(0.16 * xa, 0, 0, 1)
+					a[5] = Vector4(0.14 + 0.22 * maxf(0.0, -xa), 0, 0, 1)
 					a[6] = Vector4(0.08, 0, 0, 1)
 			a[9] = Vector4(0.1 * sin(w * 2.0 + 0.7), 0, 0, 1)
 			if carry:
-				var hp: Vector2
-				if v == 0:
-					hp = (_hand(a, v, "a") + _hand(a, v, "b")) * 0.5 + Vector2(0, 25)
-				elif v == 1:
-					hp = _hand(a, v, "a") + Vector2(-10, 15)
-				elif v == 2:
-					hp = Vector2(110, 420) + Vector2(0, bob)
-				else:
-					hp = Vector2(0, 430) + Vector2(0, bob)
+				var hp := _carry_hp(a, v)
 				a[10] = Vector4(0, hp.x, hp.y, 1)
 		"hold":
-			# 짐을 안고 서 있기: 나르기의 팔·소품 자리(걸음 위상 0 = 흔들림 없음) + 다리는 그대로 + 숨쉬기 (윗몸과 짐이 함께)
+			# 짐을 안고 서 있기: 나르기의 팔·소품 자리(걸음 위상 0) + 다리는 그대로 + 몸은 바로 (앞·뒤 보기의 뒤뚱 없음) + 숨쉬기
 			a = _pose("carry", v, 0.0)
 			a[7] = Vector4(0, 0, 0, 1)
 			a[8] = Vector4(0, 0, 0, 1)
-			var br := 3.0 * s
+			a[11] = Vector4(0, 0, 0, 0)
 			var b1: Vector4 = a[1]
-			a[1] = Vector4(b1.x, b1.y, b1.z + br, b1.w)
-			var p10: Vector4 = a[10]
-			a[10] = Vector4(p10.x, p10.y, p10.z + br, p10.w)
+			a[1] = Vector4(b1.x if side else 0.0, 0, 3.0 * s, 1)
+			a[2] = Vector4(0, 0, 0, 1)
+			var hp := _carry_hp(a, v)
+			a[10] = Vector4(0, hp.x, hp.y, 1)
 			a[9] = Vector4(0.05 * sin(w + 0.6), 0, 0, 1)
 		"hoe":
 			# 괭이질 (일 옷 d 전용 일 동작): 들어 올림(0~0.45) → 내려찍음(0.45~0.6) → 멈춤
@@ -344,19 +480,215 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 				a[1] = Vector4(0, 0, -12.0 * (1.0 - u), 1)
 				var hp := (_hand(a, v, "a", "d") + _hand(a, v, "b", "d")) * 0.5
 				a[10] = Vector4(0, hp.x, hp.y - 60.0 + 120.0 * u, 1)
+		"sit", "eat":
+			_sit(a, v, side, s, w)
+			if clip == "eat":
+				# 빵을 입으로: 들어 올림(0~0.3) → 입가에서 한 입 (0.3~0.55, 고개 끄덕) → 무릎으로 내림(0.55~0.8) → 씹으며 쉼
+				var u := 0.0
+				if t < 0.3:
+					u = smoothstep(0.0, 0.3, t)
+				elif t < 0.55:
+					u = 1.0
+				elif t < 0.8:
+					u = 1.0 - smoothstep(0.55, 0.8, t)
+				var ch := _chin(v)
+				var mouth: Vector2
+				if v == 0:
+					mouth = ch + Vector2(-20, 30)
+				elif v == 3:
+					mouth = ch + Vector2(-50, 10)
+				else:
+					mouth = ch + Vector2(85 if v == 1 else 60, 25)
+				var rest: Vector4 = a[3]
+				var restf: Vector4 = a[5]
+				var up := _ik(a, v, "a", mouth)
+				a[3] = Vector4(lerpf(rest.x, up.x, u), 0, 0, 1)
+				a[5] = Vector4(lerpf(restf.x, up.y, u), 0, 0, 1)
+				var bite := 0.0
+				if t >= 0.3 and t < 0.55:
+					bite = sin((t - 0.3) / 0.25 * TAU * 2.0)
+				var h2: Vector4 = a[2]
+				a[2] = Vector4(h2.x - 0.05 * absf(bite), 0, h2.z - 4.0 * absf(bite), 1)
+				var hp := _hand_local(a, v, "a")
+				a[10] = Vector4(0, hp.x + (6.0 if v != 0 else 0.0), hp.y + 10.0, 0.95)
+		"sleep":
+			_sleep(a, v, side, s)
+		"travel":
+			# 큰 보폭에서 멈춘 걸음 (앞·뒤 보기 = 한 다리 무릎을 든 자리, 비스듬한 보기 = 두 발이 벌어진 자리) + 위아래 작은 들썩임
+			a = _pose("walk", v, 0.0 if not side else 0.25)
+			var b1: Vector4 = a[1]
+			a[1] = Vector4(b1.x, b1.y, b1.z + 5.0 * absf(s), 1)
+			a[2] = Vector4(0.02 * s, 0, 0, 1)
+		"kneel":
+			# 무릎 꿇고 두 손 모음 (제단 앞 기도 · 깨달음): 엉덩이를 발꿈치에, 손은 가슴 앞. 고개를 천천히 들었다(하늘) 숙임
+			var bow := 0.5 - 0.5 * cos(w)          # 0 = 고개 듦 · 1 = 숙임
+			var ch := _chin(v)
+			if side:
+				var toward := 1.0 if v == 1 else -1.0
+				var hy := -0.62
+				a[7] = _leg_to(Vector2(-0.5 - FOOT_SPLAY, 0.1 * toward), hy)                 # 정강이가 뒤로 땅에 (엉덩이 밑으로 접음)
+				a[8] = _leg_to(Vector2(-0.42 + FOOT_SPLAY, 0.1 * toward), hy, LEG_FAR_UP)
+				a[11] = Vector4(hy, 0, 0, 0)
+				a[1] = Vector4(-0.04 - 0.1 * bow, 0, 1.5 * s, 1)
+				a[2] = Vector4(0.14 - 0.3 * bow, 0, 0, 1)
+				_set_arm(a, "a", _ik(a, v, "a", ch + Vector2(78, -70)))
+				_set_arm(a, "b", _ik(a, v, "b", ch + Vector2(92, -62)))
+			else:
+				var hy := -0.44
+				var back := 0.06 if v == 0 else -0.06
+				a[7] = _leg_to(Vector2(-0.2, back), hy)
+				a[8] = _leg_to(Vector2(0.2, back), hy)
+				a[11] = Vector4(hy, 0, 0, 0)
+				a[1] = Vector4(0, 0, -10.0 * bow + 1.5 * s, 1)
+				a[2] = Vector4(0, 0, -10.0 * bow, 1)
+				var chest := ch + Vector2(0, -78)
+				_set_arm(a, "a", _ik(a, v, "a", chest + Vector2(-8, 0), "a", 40.0))
+				_set_arm(a, "b", _ik(a, v, "b", chest + Vector2(8, 0), "a", 40.0))
+		"gather":
+			# 숙여 줍기: 손을 땅으로 뻗음(0~0.35) → 집음(0.35~0.5) → 일어나며 허리춤으로(0.5~0.8) → 쉼. 무릎을 조금 굽힘
+			var u := 0.0
+			if t < 0.35:
+				u = smoothstep(0.0, 0.35, t)
+			elif t < 0.5:
+				u = 1.0
+			elif t < 0.8:
+				u = 1.0 - smoothstep(0.5, 0.8, t)
+			if side:
+				var toward := 1.0 if v == 1 else -1.0
+				var hy := -0.06 - 0.36 * u
+				a[7] = _leg_to(Vector2(0.3 - FOOT_SPLAY, -0.3 * 0.6 * toward), hy)
+				a[8] = _leg_to(Vector2(-0.18 + FOOT_SPLAY, 0.18 * 0.6 * toward), hy, LEG_FAR_UP)
+				a[11] = Vector4(hy, 0, 0, 0)
+				a[1] = Vector4(-0.12 - 0.78 * u, 0, -40.0 * u, 1)       # 허리를 굽히며 윗몸을 조금 내림 (몸 돌림 중심이 가슴이라)
+				a[2] = Vector4(-0.1 - 0.12 * u, 0, 0, 1)
+				var hip := Vector2(30, 300)
+				var ground := Vector2(150, 10 - hy * 150.0)
+				var ha := _ik(a, v, "a", hip.lerp(ground, u))
+				_set_arm(a, "a", ha)
+				_set_arm(a, "b", Vector2(0.35 + 0.6 * u, 0.2))
+			else:
+				var hy := -0.12 - 0.22 * u
+				var back := 0.0
+				a[7] = _leg_to(Vector2(-0.16 - 0.06 * u, back), hy)
+				a[8] = _leg_to(Vector2(0.16 + 0.06 * u, back), hy)
+				a[11] = Vector4(hy, 0, 0, 0)
+				a[1] = Vector4(0, 0, -16.0 * u, 1)
+				a[2] = Vector4(0, 0, -14.0 * u, 1)
+				var gy := 30.0 - hy * 150.0
+				_set_arm(a, "a", _ik(a, v, "a", Vector2(-120, 300).lerp(Vector2(-40, gy), u)))
+				_set_arm(a, "b", _ik(a, v, "b", Vector2(120, 300).lerp(Vector2(40, gy + 10.0), u)))
+	if clip in NO_CANE:
+		var f11: Vector4 = a[11]
+		a[11] = Vector4(f11.x, 0, 0, 1)
 	return a
 
 
-static func bake_anim() -> ImageTexture:
-	var img := Image.create(NSLOT, CLIPS.size() * 4 * FRAMES, false, Image.FORMAT_RGBAF)
+## 땅에 앉기: 엉덩이를 내리고(다리 길이의 반쯤) 다리를 앞으로. 앞 보기 = 다리가 카메라 쪽으로 짧게 (발이 치마 아래로),
+## 비스듬한 보기 = 다리를 앞으로 뻗고 먼 다리는 무릎을 조금 세움. 손은 무릎·무릎 위에. 숨쉬기
+static func _sit(a: Array, v: int, side: bool, s: float, w: float) -> void:
+	if side:
+		var toward := 1.0 if v == 1 else -1.0
+		var hy := -0.8
+		a[7] = _leg_to(Vector2(1.0, -0.16 * toward), hy)
+		a[8] = _leg_to(Vector2(0.86, -0.08 * toward + 0.06), hy, LEG_FAR_UP)
+		a[11] = Vector4(hy, 0, 0, 0)
+		a[1] = Vector4(0.07, 0, 2.0 * s, 0.9)          # 조금 뒤로 기대고, 치마가 무릎 위로 접힘 (세로 0.9)
+		a[2] = Vector4(0.03 * sin(w + 1.0), 0, 0, 1)
+		a[3] = Vector4(0.32, 0, 0, 1)
+		a[5] = Vector4(0.3, 0, 0, 1)
+		a[4] = Vector4(0.12, 0, 0, 1)
+		a[6] = Vector4(0.2, 0, 0, 1)
+	else:
+		var hy := -0.5
+		var fy := -0.22 if v == 0 else 0.06
+		a[7] = _leg_to(Vector2(-0.3, fy), hy)
+		a[8] = _leg_to(Vector2(0.3, fy), hy)
+		a[11] = Vector4(hy, 0, 0, 0)
+		a[1] = Vector4(0.01 * s, 0, 2.0 * s, 1)
+		a[2] = Vector4(0.025 * sin(w + 1.0), 0, 0, 1)
+		a[3] = Vector4(0.16, 0, 0, 1)
+		a[4] = Vector4(-0.16, 0, 0, 1)
+		a[5] = Vector4(0.75, 0, 0, 1)
+		a[6] = Vector4(-0.75, 0, 0, 1)
+	a[9] = Vector4(0.04 * sin(w + 0.6), 0, 0, 1)
+
+
+## 누워 자기: 인형 전체를 눕힘 (머리 = 왼쪽, 뒤집기로 오른쪽) — 서 있는 사람들 사이의 가로 모양 (art-bible 5.2 아기와 같은 문법).
+## 앞 보기 = 반듯이 누워 손을 배 위에, 비스듬한 보기 = 옆으로 웅크림 (무릎을 가슴 쪽으로). 숨쉬기 = 배가 오르내림
+const SLEEP_LIFT := 190.0
+const SLEEP_SHIFT := 400.0
+
+
+static func _sleep(a: Array, v: int, side: bool, s: float) -> void:
+	a[0] = Vector4(PI * 0.5, SLEEP_SHIFT, SLEEP_LIFT, 1)
+	a[1] = Vector4(0, 3.0 * s, 0, 1)
+	a[2] = Vector4(-0.12, 0, 0, 1)
+	if side:
+		a[7] = _leg_to(Vector2(0.62, 0.3), 0.0)
+		a[8] = _leg_to(Vector2(0.5, 0.38), 0.0, LEG_FAR_UP)
+		a[3] = Vector4(0.9, 0, 0, 1)
+		a[5] = Vector4(0.6, 0, 0, 1)
+		a[4] = Vector4(0.7, 0, 0, 1)
+		a[6] = Vector4(0.5, 0, 0, 1)
+	else:
+		a[7] = Vector4(0.06, 0, 0, 1)
+		a[8] = Vector4(-0.06, 0, 0, 1)
+		a[3] = Vector4(0.2, 0, 0, 1)
+		a[4] = Vector4(-0.2, 0, 0, 1)
+		a[5] = Vector4(1.15, 0, 0, 1)
+		a[6] = Vector4(-1.15, 0, 0, 1)
+	a[9] = Vector4(0.0, 0, 0, 1)
+
+
+## 동작 표: 가로 = 조각 슬롯 11칸 + 옷 묶음 7칸 (SET_COL~), 세로 = (동작 × 4 + 보기) × 16 장면.
+## 묶음 칸 = (소품 dx, dy, 몸 내림 dy, 지팡이 숨김): 옛 동작(나르기·안기·괭이)의 소품은 예전 그대로 (prop_offsets),
+## 새 동작의 소품은 그 장면에서 이 몸의 손 - 묶음 a의 손 (먹기 = 팔 a). 몸 내림 = hy × 이 몸·보기의 다리 길이.
+## mod(clip, v, f, a) -> a: 시험·캡처용으로 자세를 바꿔 구울 때 (shot_cuthat)
+static func bake_anim(mod := Callable()) -> ImageTexture:
+	var img := Image.create(SET_COL + SETS.size(), CLIPS.size() * 4 * FRAMES, false, Image.FORMAT_RGBAF)
+	var po := prop_offsets()
 	for ci in CLIPS.size():
+		var clip: String = CLIPS[ci]
 		for v in 4:
 			for f in FRAMES:
-				var a := _pose(CLIPS[ci], v, float(f) / FRAMES)
+				var a := _pose(clip, v, float(f) / FRAMES)
+				if mod.is_valid():
+					a = mod.call(clip, v, f, a)
+				var y := (ci * 4 + v) * FRAMES + f
 				for s in NSLOT:
 					var p: Vector4 = a[s]
-					img.set_pixel(s, (ci * 4 + v) * FRAMES + f, Color(p.x, p.y, p.z, p.w))
+					img.set_pixel(s, y, Color(p.x, p.y, p.z, p.w))
+				var fl: Vector4 = a[11]
+				for si in SETS.size():
+					var sn: String = SETS[si]
+					var off := Vector2.ZERO
+					if clip == "hoe":
+						off = (po[1] as PackedVector2Array)[si * 4 + v]
+					elif clip == "eat":
+						off = _hand_local(a, v, "a", sn) - _hand_local(a, v, "a")
+					else:
+						off = (po[0] as PackedVector2Array)[si * 4 + v]
+					img.set_pixel(SET_COL + si, y, Color(off.x, off.y, fl.x * leg_len(sn, v), fl.w))
 	return ImageTexture.create_from_image(img)
+
+
+## 옷 묶음 sn·보기 v의 다리 길이 (엉덩이 → 발끝, 두 다리 평균, rig 단위)
+static var _leg_len := {}
+
+
+static func leg_len(sn: String, v: int) -> float:
+	var key := "%s%d" % [sn, v]
+	if _leg_len.has(key):
+		return _leg_len[key]
+	var sum := 0.0
+	var n := 0
+	for q: Dictionary in lib()["quads"]:
+		if q["set"] == sn and int(q["view"]) == v and String(q["part"]).begins_with("leg"):
+			sum += float(q["pivot"][1]) - float(q["rect"][1])
+			n += 1
+	var r := sum / n if n > 0 else 150.0
+	_leg_len[key] = r
+	return r
 
 
 ## ---------- 생김새 기록 (저장되는 작은 기록) ----------
@@ -445,7 +777,10 @@ static func stride_rig(sn: String, clip: String) -> float:
 			sum += float(q["pivot"][1]) - float(q["rect"][1])      # 엉덩이 → 발끝
 			n += 1
 	var leg := sum / maxf(1.0, float(n)) if n > 0 else 180.0
-	var r := 4.0 * leg * sin(float(SWING.get(clip, SWING["walk"])))
+	# 디딘 발은 반 주기에 화면의 비스듬한 선(가로 STEP_X · 세로 STEP_Y — 걷는 쪽)을 따라 2 × 그 길이만큼 쓸고 감.
+	# (두 엉덩이 사이보다 가로로 덜 가야 다리가 X자로 엇갈리지 않음 — 나머지는 깊이 = 화면 세로)
+	var c := clip if STEP_X.has(clip) else "walk"
+	var r := 4.0 * leg * Vector2(float(STEP_X[c]), float(STEP_Y[c])).length()
 	_stride[key] = r
 	return r
 

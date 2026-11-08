@@ -43,16 +43,10 @@ func _phase_of(clip: String, v: int) -> float:
 ## 머리 돌림만 바꾼 동작 표 (나머지 슬롯은 그대로)
 func _stress_mesh() -> Mesh:
 	var mat: ShaderMaterial = Lib.material().duplicate()
-	var img := Image.create(Lib.NSLOT, Lib.CLIPS.size() * 4 * Lib.FRAMES, false, Image.FORMAT_RGBAF)
-	for ci in Lib.CLIPS.size():
-		for v in 4:
-			for f in Lib.FRAMES:
-				var a: Array = Lib._pose(Lib.CLIPS[ci], v, float(f) / Lib.FRAMES)
-				a[2] = Vector4(STRESS_ROT if f < Lib.FRAMES / 2 else -STRESS_ROT, 0, 0, 1)
-				for s in Lib.NSLOT:
-					var p: Vector4 = a[s]
-					img.set_pixel(s, (ci * 4 + v) * Lib.FRAMES + f, Color(p.x, p.y, p.z, p.w))
-	mat.set_shader_parameter("anim_tex", ImageTexture.create_from_image(img))
+	var mod := func(_clip: String, _v: int, f: int, a: Array) -> Array:
+		a[2] = Vector4(STRESS_ROT if f < Lib.FRAMES / 2 else -STRESS_ROT, 0, 0, 1)
+		return a
+	mat.set_shader_parameter("anim_tex", Lib.bake_anim(mod))
 	var m: Mesh = Lib.mesh().duplicate()
 	m.surface_set_material(0, mat)
 	return m

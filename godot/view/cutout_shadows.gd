@@ -59,5 +59,5 @@ func refresh(residents: Dictionary) -> void:
 		b = Basis(Vector3.UP, atan2(-r.z, r.x))
 	for i in list.size():
 		var m: Node3D = list[i]
-		var s := absf(m.scale.x) if m.visible else 0.0
+		var s := absf(m.scale.x) if m.visible and (m as CutoutResident).baby_mode != "carried" else 0.0     # 품에 안긴 아기는 부모 그림자 안
 		multimesh.set_instance_transform(i, Transform3D(b.scaled(Vector3.ONE * s), m.position + Vector3(0, LIFT, 0)))

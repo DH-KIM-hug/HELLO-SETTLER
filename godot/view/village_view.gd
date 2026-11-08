@@ -458,7 +458,8 @@ func _sync_residents(dt: float) -> void:
 		# 집 안에서 자는 사람·집 안의 아기는 보이지 않는다
 		var hm := v.bld(r.home)
 		var inside := hm != null and r.anim == "sleep" and Vector2(r.x - hm.x, r.y - hm.y).length() < 0.6
-		m.visible = not inside
+		var cut_baby := cut and r.is_baby()      # (2026-11-08 "아기가 없음") 종이 인형 아기는 부모 품·문 옆 요람에 (CutoutResident.place_babies)
+		m.visible = not inside or cut_baby
 		if not m.visible:
 			continue
 		var x := r.x
@@ -466,7 +467,10 @@ func _sync_residents(dt: float) -> void:
 		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
-		m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
+		if not cut_baby:
+			m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
+		elif fresh:
+			m.position = Vector3(x, gy(x, z), z)
 		m.rotation.y = r.facing
 		if (r.anim == "walk" or r.anim == "carry") and not crossings.is_empty():     # (E3-6) 징검돌에서 폴짝 · 다리 위
 			m.position.y = maxf(m.position.y, crossing_y(x, z))
@@ -521,6 +525,8 @@ func _sync_residents(dt: float) -> void:
 		if rafting:                     # 장대를 두 손으로 밀어 나감 (오른팔 — 장대와 같은 박자)
 			m.aim_arm_r(-0.95 + 0.3 * sin(_anim_t * POLE_SPEED + r.id), 0.35)
 	_pair_follow(dt)
+	if cut:
+		_place_babies()
 	for id in _torches.keys():
 		if not seen.has(id) or not is_instance_valid(_torches[id]):
 			_torches.erase(id)
@@ -544,6 +550,15 @@ func _sync_residents(dt: float) -> void:
 		if not seen.has(int(id) / 2):
 			(_rafts[id] as Node3D).queue_free()
 			_rafts.erase(id)
+
+
+## 종이 인형 아기: 부모 품 · 문 옆 요람 · 부모 곁 걸음마 (화면만 — CutoutResident.place_babies). 요람·걸음마의 땅 높이는 여기서
+func _place_babies() -> void:
+	var placed := CutoutResident.place_babies(v, v.people, residents)
+	for id: int in placed:
+		var m: Node3D = residents.get(id)
+		if m != null and String(placed[id]["mode"]) != "carried":
+			m.position.y = gy(m.position.x, m.position.z) + (0.03 if String(placed[id]["mode"]) == "cradle" else 0.0)
 
 
 ## (E3-6 GD 3.0) 물고기를 나르는 어른 둘이 같은 쪽으로 가까이 걸으면 장대에 메고 간다 → id → [역할 "앞"/"뒤", 짝 id].

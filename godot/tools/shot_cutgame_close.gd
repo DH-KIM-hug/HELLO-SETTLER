@@ -163,14 +163,24 @@ func _save(name: String) -> void:
 
 
 ## 가운데 몇 사람을 동작마다 멈춰 세움 (사진용 — 시뮬레이션은 멈춤, 찍고 나면 _unstage가 되돌림)
-const STATES := [["walk", "", ""], ["carry", "빵", ""], ["idle", "통나무", ""], ["work", "", "농장"], ["work", "", ""],
-	["walk", "물", ""], ["sit", "", ""], ["carry", "밀", ""], ["idle", "", ""]]
+## (A23 ③) 새 동작: 먹기 · 약초 줍기 · 앉기 · 무릎 꿇고 기도 · 밖에서 누워 자기 · 아기를 안은 엄마 · 문 옆 요람 · 걸음마 아기
+const STATES := [["walk", "", ""], ["idle", "", ""], ["eat", "", ""], ["work", "", "약초꾼"], ["work", "", "농장"],
+	["carry", "빵", ""], ["sit", "", ""], ["pray", "", ""], ["sleep", "", ""], ["walk", "", ""]]
 var _saved := {}
 
 
 func _states(ppu: float) -> int:
 	scene.paused = true
 	_center = _busy()
+	# 집 문 앞 마당에 늘어세움 (요람·아기가 같은 화면에)
+	var home0: Building = null
+	for hb in v.buildings:
+		if hb.type.ends_with("주택") and (home0 == null or Vector2(hb.x, hb.y).distance_to(_center) < Vector2(home0.x, home0.y).distance_to(_center)):
+			home0 = hb
+	if OS.get_environment("SHOT_AT") == "fire":
+		_center = Vector2(v.fire.x, v.fire.y + 1.6)       # 모닥불 마당 (큰 풀·꽃이 덜 가림)
+	elif home0 != null:
+		_center = Vector2(home0.x, home0.y + home0.size() * 0.5 + 2.2)
 	var cam: Camera3D = scene.cam.camera
 	var bs := cam.global_transform.basis
 	var right := Vector2(bs.x.x, bs.x.z).normalized()
@@ -189,31 +199,91 @@ func _states(ppu: float) -> int:
 		var r: Resident = picks[i]
 		var s: Array = STATES[i]
 		if not _saved.has(r.id):
-			_saved[r.id] = [r.x, r.y, r.px, r.py, r.anim, r.carry, r.job, r.facing]
-		var p: Vector2 = _center + right * (float(i % 5) - 2.0) * 1.15 + toward * (float(i / 5) * 1.6 - 0.6)
+			_saved[r.id] = [r.x, r.y, r.px, r.py, r.anim, r.carry, r.job, r.facing, r.home, r.action, r.sleeping]
+		var p: Vector2 = _center + right * (float(i % 5) - 2.0) * 1.15 + toward * (float(i / 5) * 1.6 - 1.5)
 		r.x = p.x
 		r.y = p.y
 		r.px = p.x
 		r.py = p.y
 		r.anim = s[0]
 		r.carry = s[1]
-		if s[2] == "농장" and farm != null:
-			r.job = farm.id
+		r.action = "work" if s[0] == "work" else ""
+		r.sleeping = false
+		if s[0] == "sleep":
+			r.home = -1                 # 집 없이 밖에서 (집 안에서 자면 보이지 않음)
+		var wb: Building = farm if s[2] == "농장" else _bld(String(s[2]))
+		if wb != null:
+			r.job = wb.id
 		elif s[0] == "work":
 			r.job = -1
-		var ang: float = [0.0, 0.8, 2.2, 3.14, -0.8, -2.2, 0.4, 1.6, -1.6][i]
+		var ang: float = [0.0, 0.8, 2.2, 3.14, -0.8, -2.2, 0.4, 1.6, -1.6, 2.6][i]
 		var dir := toward.rotated(ang)
 		r.facing = atan2(dir.x, dir.y)
 		if i == 1 or i == 6:
 			r.say = "빵 냄새!" if i == 1 else "좋은 날이네"
 			r.say_t = 30.0
+	# 아기: 서 있는 엄마(1)의 품에 젖먹이 · 앉은 사람(6) 곁 요람의 젖먹이 · 걷는 아빠(9) 곁에 걸음마 아기
+	if _babies.is_empty() and picks.size() >= STATES.size():
+		var house: Building = null
+		for hb in v.buildings:
+			if hb.type.ends_with("주택") and (house == null or Vector2(hb.x, hb.y).distance_to(_center) < Vector2(house.x, house.y).distance_to(_center)):
+				house = hb
+		for spec: Array in [[1, 0.2], [6, 0.15], [9, 0.8]]:
+			var pa: Resident = picks[spec[0]]
+			var b := v.add_person("아기%d" % _babies.size(), "f" if _babies.size() % 2 == 0 else "m", spec[1], "", pa.x, pa.y, pa, null)
+			b.anim = "sleep"
+			b.parents = PackedInt32Array([pa.id])
+			b.home = house.id if house != null else -1
+			if house != null:
+				b.x = house.x
+				b.y = house.y
+				b.px = b.x
+				b.py = b.y
+			_babies.append(b.id)
 	_look(_center, ppu)
 	scene.view.sync(0.0, true)
+	_flora(false)
 	return 40
+
+
+## 이 사진에선 큰 풀·꽃·나무를 숨김 (동작을 가리지 않게) — _unstage가 되돌림
+var _hidden: Array[Node3D] = []
+
+
+func _flora(on: bool) -> void:
+	if on:
+		for n in _hidden:
+			if is_instance_valid(n):
+				n.visible = true
+		_hidden.clear()
+		return
+	for n in scene.find_children("*", "Node3D", true, false):
+		var sc: Script = n.get_script()
+		var path := sc.resource_path if sc != null else ""
+		if (path.contains("flora") or path.contains("great_tree") or path.contains("ground_cover") or path.contains("sunflower")) and (n as Node3D).visible:
+			(n as Node3D).visible = false
+			_hidden.append(n)
+
+
+var _babies: Array[int] = []
+
+
+func _bld(ty: String) -> Building:
+	for b in v.buildings:
+		if b.type == ty:
+			return b
+	return null
 
 
 func _states_shot(ppu: float) -> int:
 	_save("states_ppu%d" % int(ppu))
+	for id: int in _saved.keys() + _babies:
+		var mm: Node3D = scene.view.residents.get(id)
+		var rr := v.person(id)
+		if mm is CutoutResident and rr != null:
+			var cm := mm as CutoutResident
+			var sp: Vector2 = (scene.cam.camera as Camera3D).unproject_position(cm.global_position) * 3.0
+			print("state %d %s/%s → %s outfit %d view %d baby %s vis %s screen %s" % [id, rr.anim, rr.action, cm._d_clip, cm._d_outfit, cm.doll.view, cm.baby_mode, cm.visible, str(sp.round())])
 	# 누르기: 인형 몸 가운데(발 위 0.35칸)를 누르면 그 사람이 골라지는가
 	var c3: Camera3D = scene.cam.camera
 	var ok := 0
@@ -232,6 +302,7 @@ func _states_shot(ppu: float) -> int:
 
 
 func _unstage() -> int:
+	_flora(true)
 	for id: int in _saved:
 		var r := v.person(id)
 		if r == null:
@@ -245,6 +316,9 @@ func _unstage() -> int:
 		r.carry = s[5]
 		r.job = s[6]
 		r.facing = s[7]
+		r.home = s[8]
+		r.action = s[9]
+		r.sleeping = s[10]
 		r.say_t = 0.0
 	_saved.clear()
 	return 2
