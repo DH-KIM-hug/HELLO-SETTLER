@@ -22,6 +22,11 @@ extends ResidentModel
 
 const Lib := preload("res://proto/cutout_a/cut_lib.gd")
 const Doll := preload("res://proto/cutout_a/cut_doll.gd")
+## 방식 C 시험판 (스파이크, docs/RESIDENTS_2D.md 7장): NAZAKJI_FRAMES=1 또는 FrameLib.spike = 1 일 때만 —
+## 여자 평상복(a) 어른의 걷기·나르기·서기·안고 서기를 장면 그림 몸 + 머리 조각으로 (그 밖은 그대로 컷아웃). 기본값은 바뀌지 않음.
+const FrameLib := preload("res://proto/cutout_c/frame_lib.gd")
+const FrameDoll := preload("res://proto/cutout_c/frame_doll.gd")
+const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk"}
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
@@ -85,6 +90,14 @@ var cradle: MeshInstance3D
 var on_shift := false
 var _shift_action := ""
 var swaps := 0                   # 옷을 갈아입은 횟수 (시험)
+## 방식 C 시험판: 이 사람만 켜기·끄기 (-1 = FrameLib.enabled() 따름) — 비교 사진용
+var frames_force := -1
+var fdoll: MeshInstance3D
+var _f_on := false
+var _f_clip := ""
+var _f_rate := -1.0
+var _f_phase := 0.0
+var _f_hat := -9
 
 
 static func enabled() -> bool:
@@ -219,6 +232,9 @@ func build_look(lk: Dictionary) -> void:
 	item = Node3D.new()
 	chest.add_child(item)
 	item.visible = false
+	fdoll = null
+	_f_on = false
+	_f_clip = ""
 	doll = Doll.new()
 	doll.material_override = game_material()
 	add_child(doll)
@@ -395,7 +411,59 @@ func _refresh_doll() -> void:
 		doll.clip = clip
 		doll.set_instance_shader_parameter("misc", Vector4(_doll_h, 1, rate, 0))
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(clip), _d_phase))
+	_refresh_frames()
 	_update_view()
+
+
+## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
+func _frames_ok() -> bool:
+	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
+	return on and not _baby and not on_shift and String(dlook.get("body", "")) == "adult" \
+		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip)
+
+
+func _refresh_frames() -> void:
+	if not _frames_ok():
+		if _f_on:
+			_f_on = false
+			fdoll.visible = false
+			doll.visible = true
+		return
+	if fdoll == null:
+		fdoll = FrameDoll.new()
+		fdoll.setup(FrameLib.material(game_material().get_shader_parameter("palette")))
+		add_child(fdoll)
+	if not _f_on:
+		_f_on = true
+		fdoll.visible = true
+		_f_clip = ""
+		_f_hat = -9
+	doll.visible = false
+	fdoll.screen_h = _doll_h
+	if _d_hat != _f_hat:
+		_f_hat = _d_hat
+		fdoll.set_look(dlook, _d_hat)
+	var fc: String = FRAME_CLIPS[_d_clip]
+	var rate: float = Lib.CLIP_RATE["idle"] if fc == "idle" or fc == "hold" else 0.0
+	if fc == "walk" or fc == "carry":
+		var g := _ground
+		if g < 0.0:
+			g = GROUND_NORMAL * _gait
+		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 비스듬한 보기에선 걷는 쪽의 화면 가로 몫만큼만 (발이 땅에 붙게),
+		# 앞·뒤 보기는 깊이로 걸어 발 움직임이 안 보이므로 0.8 (2026-11-09 라이브 점검)
+		var stride := FrameLib.stride_rig(fc) * _doll_h / float(FrameLib.lib()["fig"])
+		var hk: float = clampf(fdoll.side_h, 0.5, 1.0) if fdoll.view == 1 or fdoll.view == 2 else 0.8
+		var wr := walk_rate(g * hk / maxf(stride, 0.01), frame_dt())
+		rate = 0.0 if bool(wr["travel"]) or _d_clip == "travel" else float(wr["rate"])
+	if fc != _f_clip or not is_equal_approx(rate, _f_rate):
+		var now := _shader_time()
+		if fc == _f_clip and _f_rate >= 0.0:
+			_f_phase = fposmod(_f_phase + now * (_f_rate - rate), 1.0)
+		else:
+			_f_phase = fposmod(_rng.randf() - now * rate, 1.0)
+		_f_clip = fc
+		_f_rate = rate
+		fdoll.set_clip(fc, rate, _f_phase)
 
 
 ## 땅에 맞는 걸음 빠르기 want(주기/초) · 장면 길이 fdt(초) → {travel: 걸음 대신 멈춘 보폭인가, rate: 걸음 빠르기 (상·하한·계단)}
@@ -456,6 +524,9 @@ func _update_view() -> void:
 	var m0: float = doll.mirror
 	doll.view_lock = "front" if FRONT_ONLY.has(_d_clip) else ("side" if SIDE_ONLY.has(_d_clip) else "")
 	doll.update_view(cam)
+	if _f_on:
+		fdoll.move_dir = doll.move_dir
+		fdoll.update_view(cam)
 	if doll.view != v0 or doll.mirror != m0:
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
 
