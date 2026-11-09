@@ -1,0 +1,155 @@
+## 방식 C 주민 시험판 — 장면 그림 라이브러리 (docs/RESIDENTS_2D.md 7장, 2026-11-08 스파이크; 기본값은 그대로 컷아웃)
+## art/cutout/woman_c/frames.json + frames_atlas.png + frames_mask0/1.png (tools/cutout_c/build_frames.py) +
+## 지금 컷아웃 라이브러리의 머리·모자 조각 (proto/cutout_a/cut_lib.gd — 같은 아틀라스·물감 마스크·바탕색).
+## 켜기: 환경 변수 NAZAKJI_FRAMES=1 또는 FrameLib.spike = 1 (CutoutResident가 여자 평상복 a 몸에만 씀).
+extends RefCounted
+
+const Cut := preload("res://proto/cutout_a/cut_lib.gd")
+const DIR := "res://art/cutout/woman_c/"
+const CLIPS := ["walk", "carry", "idle", "hold"]
+## 짐을 머리 위에 다시 그리는 보기 (앞·비스듬한 앞: 오른 어깨의 자루가 얼굴 옆 앞쪽) — 뒤쪽 보기는 머리가 자루 앞
+const SACK_OVER := [true, true, false, false]
+## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
+## 밉맵에서 점선으로 끊김 — 1.06에서 보였음)
+const HEAD_FIT := 1.17
+
+## -1 = 환경 변수를 따름 · 0 끔 · 1 켬
+static var spike := -1
+static var _lib: Dictionary
+static var _mesh: ArrayMesh
+static var _mat: ShaderMaterial
+
+
+static func enabled() -> bool:
+	if spike >= 0:
+		return spike == 1
+	return OS.get_environment("NAZAKJI_FRAMES") == "1"
+
+
+static func lib() -> Dictionary:
+	if _lib.is_empty():
+		_lib = JSON.parse_string(FileAccess.open(DIR + "frames.json", FileAccess.READ).get_as_text())
+	return _lib
+
+
+static func clip_index(c: String) -> int:
+	return CLIPS.find(c)
+
+
+## 걷기 한 주기(두 걸음)에 디딘 발이 가는 길 (rig) — 장면 그림에서 잰 값 (비스듬한 보기 디딤 장면의 두 발 사이 × 2)
+static func stride_rig(clip: String) -> float:
+	return float(lib()["stride"].get(clip, lib()["stride"]["walk"]))
+
+
+static func mesh() -> ArrayMesh:
+	if _mesh != null:
+		return _mesh
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var c0 := PackedFloat32Array()
+	var c1 := PackedFloat32Array()
+	var c2 := PackedFloat32Array()
+	var idx := PackedInt32Array()
+	# 몸 장면 (group 0) + 짐 겹 (group 4): 귀퉁이만 (UV = 0~1, 셰이더가 장면 사각형으로)
+	for g in [0, 4]:
+		var b := verts.size()
+		for cr: Vector2 in [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
+			verts.append(Vector3(cr.x, cr.y, 0))
+			uvs.append(cr)
+			c0.append_array([0, 0, 0, float(g)])
+			c1.append_array([0, 0, -1, -1])
+			c2.append_array([-1, 0, 0, 0])
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함)
+	for q: Dictionary in Cut.lib()["quads"]:
+		var grp := int(q["group"])
+		if grp != 1 and grp != 2:
+			continue
+		if String(q["part"]) == "neck":
+			continue
+		var r: Array = q["rect"]
+		var uv: Array = q["uv"]
+		var s_i := float(Cut.SETS.find(q["set"]))
+		var b := verts.size()
+		var corners := [[r[0], r[3], uv[0], uv[1]], [r[2], r[3], uv[2], uv[1]], [r[2], r[1], uv[2], uv[3]], [r[0], r[1], uv[0], uv[3]]]
+		for cr: Array in corners:
+			verts.append(Vector3(cr[0], cr[1], float(q["layer"])))
+			uvs.append(Vector2(cr[2], cr[3]))
+			c0.append_array([q["pivot"][0], q["pivot"][1], float(q["slot"]), float(grp)])
+			c1.append_array([s_i, float(q["view"]), float(q["dye"][0]), float(q["dye"][1])])
+			c2.append_array([float(q["dye"][2]), 0, 0, 0])
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_CUSTOM0] = c0
+	arr[Mesh.ARRAY_CUSTOM1] = c1
+	arr[Mesh.ARRAY_CUSTOM2] = c2
+	arr[Mesh.ARRAY_INDEX] = idx
+	var fl := (Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) | \
+		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT) | \
+		(Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT)
+	_mesh = ArrayMesh.new()
+	_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, fl)
+	_mesh.custom_aabb = AABB(Vector3(-0.8, -0.1, -0.8), Vector3(1.6, 1.6, 1.6))
+	return _mesh
+
+
+## 재질 (palette = 컷아웃 게임 재질의 물감 — 피부·머리 단계가 게임과 같게)
+static func material(palette: PackedVector3Array) -> ShaderMaterial:
+	if _mat != null:
+		return _mat
+	var L := lib()
+	var cut: ShaderMaterial = Cut.material()
+	_mat = ShaderMaterial.new()
+	_mat.shader = load("res://proto/cutout_c/frame_doll.gdshader")
+	for n in ["atlas", "dye_mask", "base_col", "head_top", "fig", "lit_tint", "shade_tint"]:
+		_mat.set_shader_parameter(n, cut.get_shader_parameter(n))
+	_mat.set_shader_parameter("palette", palette)
+	_mat.set_shader_parameter("frames_atlas", load(DIR + "frames_atlas.png"))
+	_mat.set_shader_parameter("fmask0", load(DIR + "frames_mask0.png"))
+	_mat.set_shader_parameter("fmask1", load(DIR + "frames_mask1.png"))
+	_mat.set_shader_parameter("fdata", _fdata())
+	var off := Vector4i.ZERO
+	var nn := Vector4i.ZERO
+	var o := 0
+	for i in CLIPS.size():
+		var n := int(L["frames_per_clip"][CLIPS[i]])
+		off[i] = o
+		nn[i] = n
+		o += n * 4
+	_mat.set_shader_parameter("clip_off", off)
+	_mat.set_shader_parameter("clip_n", nn)
+	var r: Array = L["rect"]
+	_mat.set_shader_parameter("body_rect", Vector4(r[0], r[1], r[2], r[3]))
+	var k := HEAD_FIT * float(L["d_rig"]) / 248.0
+	_mat.set_shader_parameter("head_k", Vector4(k, k, k, k))
+	var bl := Vector4.ZERO
+	var sl := Vector4.ZERO
+	for q: Dictionary in Cut.lib()["quads"]:
+		if q["set"] == "a" and q["part"] == "body":
+			bl[int(q["view"])] = float(q["layer"])
+	for v in 4:
+		sl[v] = 12.0 if SACK_OVER[v] else -1.0
+	_mat.set_shader_parameter("body_layer", bl)
+	_mat.set_shader_parameter("sack_layer", sl)
+	var fb := PackedVector3Array()
+	var names := ["skin", "", "main", "second", "trim", "", "leg", "shoe"]
+	for nm: String in names:
+		var c := Color(String(L["base"].get(nm, "ffffff"))) if nm != "" else Color.WHITE
+		fb.append(Vector3(c.r, c.g, c.b))
+	_mat.set_shader_parameter("fbase", fb)
+	return _mat
+
+
+## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig)
+static func _fdata() -> ImageTexture:
+	var fr: Array = lib()["frames"]
+	var img := Image.create(fr.size(), 2, false, Image.FORMAT_RGBAF)
+	for i in fr.size():
+		var f: Dictionary = fr[i]
+		var uv: Array = f["uv"]
+		img.set_pixel(i, 0, Color(uv[0], uv[1], uv[2], uv[3]))
+		img.set_pixel(i, 1, Color(f["head"][0], f["head"][1], float(f.get("t0", 0.0)), 0))
+	return ImageTexture.create_from_image(img)
