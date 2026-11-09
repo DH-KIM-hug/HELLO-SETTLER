@@ -449,10 +449,10 @@ func _refresh_frames() -> void:
 		var g := _ground
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait
-		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 비스듬한 보기에선 걷는 쪽의 화면 가로 몫만큼만 (발이 땅에 붙게),
-		# 앞·뒤 보기는 깊이로 걸어 발 움직임이 안 보이므로 0.8 (2026-11-09 라이브 점검)
+		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 화면 움직임을 그 보기의 걸음 축에 투영한 몫만큼 (발이 땅에 붙게,
+		# 사선으로 내려올 때 너무 느리게 미끄러지지 않게 — 2026-11-09), 앞·뒤 보기는 0.8
 		var stride := FrameLib.stride_rig(fc) * _doll_h / float(FrameLib.lib()["fig"])
-		var hk: float = clampf(fdoll.side_h, 0.5, 1.0) if fdoll.view == 1 or fdoll.view == 2 else 0.8
+		var hk: float = fdoll.step_k        # 화면 움직임을 그림의 걸음 축에 투영 (frame_doll.update_view)
 		var wr := walk_rate(g * hk / maxf(stride, 0.01), frame_dt())
 		rate = 0.0 if bool(wr["travel"]) or _d_clip == "travel" else float(wr["rate"])
 	if fc != _f_clip or not is_equal_approx(rate, _f_rate):

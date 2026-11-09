@@ -26,7 +26,7 @@ VIEWS = ["front", "q_front", "q_back", "back"]
 CW, CH = 384, 512
 FIG = 920.0            # rig units of the old doll (cut_lib fig) — same screen_h maps to the same height
 D_RIG = 300.0          # nominal head placeholder diameter in rig units (head overlay size)
-CHIN_RIG = 560.0       # soles -> chin in rig units (median per sheet) — same body size in every clip / view
+CHIN_RIG = 500.0      # v6: total figure no taller than the old cutout doll (was 560: +7..20% taller in game)       # soles -> chin in rig units (median per sheet) — same body size in every clip / view
 PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu 44 the figure is ~50 px on screen)
 # clips in the atlas: (name, sheet, cells)
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
@@ -356,9 +356,12 @@ def main():
         for v in ("q_front", "q_back"):
             fr = [f for f in frames if f and f["clip"] == clip and f["view"] == v]
             xs = [f["far"] for f in fr]
+            seen = [x for x in xs if x is not None]
+            if len(fr) == 8 and len(seen) >= 5:
+                # v6 long skirt: the far boot is hidden in some frames — use the visible ones
+                st.append(2.0 * (max(seen) - min(seen)))
             if len(fr) != 8 or any(x is None for x in xs):
                 continue
-            st.append(2.0 * (max(xs) - min(xs[0:3] + xs[6:8])))
             stance = [max(0.0, xs[i] - xs[(i + 1) % 8]) for i in range(4, 8)]
             m = max(1e-3, sum(stance) / 4.0)
             d4 = [float(np.clip(x / m, 0.6, 1.6)) for x in stance]

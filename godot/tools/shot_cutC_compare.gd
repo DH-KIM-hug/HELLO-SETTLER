@@ -34,6 +34,8 @@ var news: Array[MeshInstance3D] = []
 var _job: Array = []            # 띠 할 일 [ppu, clip, view]
 var _pending: Array = []
 var _hid_pass := false
+var _plate_y := 0.0
+var _plate: MeshInstance3D
 var _hidden: Array[Node3D] = []
 
 
@@ -167,7 +169,7 @@ func _clear_area(c: Vector2, rad: float) -> void:
 	var box := AABB(Vector3(c.x - rad, -100.0, c.y - rad), Vector3(rad * 2.0, 200.0, rad * 2.0))
 	for n in scene.find_children("*", "GeometryInstance3D", true, false):
 		var g := n as GeometryInstance3D
-		if not g.visible or g is CutoutShadows:
+		if not g.visible or g is CutoutShadows or g == _plate:
 			continue
 		var up: Node = g
 		var keep := false
@@ -209,6 +211,20 @@ func _g3(p: Vector2) -> Vector3:
 
 # ───────────────────────── (a) 띠 ─────────────────────────
 func _strip_setup(_dt: float) -> int:
+	# 평평한 풀색 바닥판 (2026-11-09 비율 재기: 길·흙이 인형 둘레에 섞여 머리·치맛단·발바닥을 잴 수 없었음)
+	var pm := PlaneMesh.new()
+	pm.size = Vector2(16, 16)
+	var bm := StandardMaterial3D.new()
+	bm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	bm.albedo_color = Color(0.62, 0.8, 0.5)
+	pm.material = bm
+	var plate := MeshInstance3D.new()
+	plate.mesh = pm
+	plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	scene.view.add_child(plate)
+	_plate = plate
+	plate.position = _g3(C) + Vector3(0, 0.02, 0)
+	_plate_y = plate.position.y + 0.005
 	var look := Lib.concept_look("woman")
 	var pal: PackedVector3Array = CutoutResident.game_material().get_shader_parameter("palette")
 	for i in 8:
@@ -245,8 +261,8 @@ func _strip_loop(_dt: float) -> int:
 			var pn := C + right * x + toward * ROW * 0.5
 			var o = olds[i]
 			var n = news[i]
-			o.position = _g3(po)
-			n.position = _g3(pn)
+			o.position = Vector3(po.x, _plate_y, po.y)
+			n.position = Vector3(pn.x, _plate_y, pn.y)
 			# 서기 줄: 1~4 = 숨쉬기 (서기 4장면), 5~8 = 짐 안고 서기 (안고 서기 4장면)
 			var oc := clip
 			var nc := clip
@@ -325,8 +341,11 @@ func _live_setup(_dt: float, ppu: float) -> int:
 	# 시작: 카메라 쪽으로 (앞 보기) 걷는 변부터, 시계 반대로 8변
 	var p := Vector2.ZERO
 	_route.append(p)
+	# CUTC_ROUTE=diag (2026-11-09 "사선 내려오기 좀 이상"): only diagonal-DOWN headings, alternating sides (45, 55, 40, 50 deg)
+	var diag := OS.get_environment("CUTC_ROUTE") == "diag"
+	var angs := [45.0, -45.0, 55.0, -55.0, 40.0, -40.0, 50.0, -50.0]
 	for k in 8:
-		var dir := toward.rotated(-TAU * k / 8.0)
+		var dir := toward.rotated(-TAU * k / 8.0) if not diag else toward.rotated(-deg_to_rad(angs[k]))
 		p += dir * LEG
 		_route.append(p)
 	var c := Vector2.ZERO
@@ -355,6 +374,8 @@ func _live_setup(_dt: float, ppu: float) -> int:
 		m.frames_force = pair[1]
 		m.doll.set_look(m.dlook)
 	print("live ppu%d: A %d (cutout) B %d (frames), look %s" % [int(ppu), _A.id, _B.id, str(src["dye"])])
+	for cl in scene.find_children("*", "CanvasLayer", true, false):     # 화면 UI(단추·안내)는 이 사진에선 숨김
+		(cl as CanvasLayer).visible = false
 	_live_hide = 10
 	return 20
 
@@ -435,7 +456,8 @@ func _capture() -> void:
 	var r := Rect2()
 	var first := true
 	for sx in [-1.0, 1.0]:
-		for corner in [Vector2(-1.25, -1.0), Vector2(1.25, -1.0), Vector2(-1.25, 1.0), Vector2(1.25, 1.0)]:
+		var dz := 1.0 if OS.get_environment("CUTC_ROUTE") != "diag" else 2.7
+		for corner in [Vector2(-1.25, -dz), Vector2(1.25, -dz), Vector2(-1.25, dz), Vector2(1.25, dz)]:
 			var p: Vector2 = C + right * (float(sx) * 1.4 + corner.x) + toward * corner.y
 			for hh in [0.0, 1.2]:
 				var sp: Vector2 = cam.unproject_position(_g3(p) + Vector3(0, float(hh), 0)) * 3.0

@@ -37,6 +37,25 @@ the reference (position + order, tolerance 0.13 of soles→chin); `pick_pose.py`
 | puppet-only reference takes (8 sheets + 2 extra 3/4 walk) | legs traced, but body drawn frontal in 3/4 | codex-cli 0.163.0 | - | 1536x1024 | 2026-11-09 | no | deleted |
 | raw/{walk,carry}_{front,q_front,q_back,back}.png | hybrid reference takes (12: 3/4 walk ×2, back walk ×2, back carry ×2, rest ×1) | same | - | 1536x1024 | 2026-11-09 | yes | all 8 sheets 8/8 after pick (walk/carry back needed a 2nd take) |
 
+## 2026-11-09 v7 — diagonal-down walking ("사선 내려오기 좀 이상")
+3/4-front step axis in pose_ref 18 deg -> 29 deg down (fwd (1, 0.55)); front view now up to 38 deg (was 30) so the 3/4-front
+sheet covers screen motion 0..42 deg; step rate = screen motion projected on the sheet's step axis (frame_doll.step_k).
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/{walk,carry}_q_front.png | v7 takes (2 each) | codex-cli 0.163.0 | - | 1536x1024 | 2026-11-09 | yes (p2 both) | 8/8; extras deleted |
+
+## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
+Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
+hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to
+mid-shin, boots only), walk S 36 / lift 16, carry S 30 / lift 13; prompt "long dress to mid-shin, only short boots show";
+build CHIN_RIG 560 -> 500 (total height = old doll). Result: new idle 105 px, hem->sole 0.076; walk frames 0.07-0.14.
+check_pose: feet hidden by the skirt in the reference itself are skipped; TOL 0.09.
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/{walk,carry}_{front,q_front,q_back,back}.png | v6 hybrid reference takes (11: 3/4 walk ×2, carry q_back ×2, rest ×1) | codex-cli 0.163.0 | - | 1536x1024 | 2026-11-09 | yes | all 8/8 (carry q_back frame 4 needed the 2nd take); extras deleted |
+
 ## 2026-11-09 v5 — chunky-leg pass (legs were long thin sticks, off-model)
 pose_ref.py: hips lower (HIP_Y 350 = short stubby legs), legs 36 px thick, rounded boots, subtle knee, shorter stride (walk S 52,
 carry S 40), hem at 392 (just above the knee). Prompt: chunky rounded legs as thick as the puppet's; arms swing opposite to the legs.

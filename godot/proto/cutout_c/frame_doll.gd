@@ -43,7 +43,12 @@ func _push() -> void:
 ## 컷아웃 인형(cut_doll.update_view)과 같은 문턱: 다가옴 = 앞, 30~110° = 비스듬한 앞, 110~150° = 비스듬한 뒤, 멀어짐 = 뒤 —
 ## 지금 보기 쪽으로 HYST°만큼 문턱을 밀어 둠 (2026-11-09 라이브 점검: 문턱 언저리에서 보기가 깜빡이며 다리 장면이 튐)
 const HYST := 10.0
-var side_h := 1.0          # 걷는 쪽이 화면 가로로 얼마나 가는지 (0~1) — 걸음 빠르기에 씀
+## 앞 보기 ↔ 비스듬한 앞 문턱 (2026-11-09 "사선 내려오기 좀 이상"): 30°는 화면에서 52° 아래로 가파르게 내려오는데 비스듬한 그림의
+## 걸음 축은 29°라 발이 옆으로 미끄러져 보였음 → 38°까지 앞 보기 (화면 42°부터 비스듬한 그림)
+const FRONT_LIM := 38.0
+## 비스듬한 그림의 걸음 축 (화면, 오른쪽 +x · 아래 +y — pose_ref.geometry fwd)
+const STEP_AXIS := {1: Vector2(1.0, 0.55), 2: Vector2(1.0, -0.33)}
+var step_k := 1.0          # 땅 빠르기 → 그림 걸음 축 위의 빠르기 (화면 움직임을 걸음 축에 투영, 그림 가로 보폭 기준) — 걸음 빠르기에 씀
 
 
 func update_view(cam: Camera3D) -> void:
@@ -54,10 +59,9 @@ func update_view(cam: Camera3D) -> void:
 	if d.length() < 0.01:
 		return
 	d = d.normalized()
-	side_h = absf(d.dot(right))
 	var deg := rad_to_deg(atan2(d.dot(right), d.dot(toward)))
 	var a := absf(deg)
-	var lim := [30.0, 110.0, 150.0]
+	var lim := [FRONT_LIM, 110.0, 150.0]
 	for i in 3:
 		if view <= i:
 			lim[i] += HYST       # 지금 보기가 문턱 아래쪽이면 문턱을 올림 (더 버팀)
@@ -71,3 +75,11 @@ func update_view(cam: Camera3D) -> void:
 		view = v
 		mirror = m
 		_push()
+	# 화면 움직임 (그림 단위: 가로 그대로, 깊이는 sin(내려다보는 각)만큼 세로로) 을 걸음 축에 투영
+	if view == 1 or view == 2:
+		var sin_t := sqrt(maxf(0.0, 1.0 - b.y.y * b.y.y))
+		var mv := Vector2(absf(d.dot(right)), d.dot(toward) * sin_t)       # +y = toward the camera = down the screen
+		var ax: Vector2 = (STEP_AXIS[view] as Vector2).normalized()
+		step_k = maxf(0.3, mv.dot(ax)) * ax.x
+	else:
+		step_k = 0.8

@@ -18,8 +18,9 @@ CYAN, NAVY = (32, 168, 255), (32, 48, 112)
 SKIN = (240, 170, 112)
 DRESS = (200, 112, 106)
 SACK, STRIPE = (217, 214, 205), (90, 127, 176)
-HIP_Y, CHIN_Y, HEAD_R = 350, 212, 74     # v5 chunky pass (2026-11-09): hips lower = short stubby legs
-GAIT = {"walk": dict(S=52.0, H=26.0, bob=8.0), "carry": dict(S=40.0, H=20.0, bob=6.0)}
+HIP_Y, CHIN_Y, HEAD_R = 385, 212, 74     # v6 (2026-11-09 "아직도 긴데요"): long skirt to mid-shin, only short boots show
+HEM_Y = 430                              # skirt hem: hem->sole = 40 px ~ 0.10 of the figure (old cutout 0.08-0.10)
+GAIT = {"walk": dict(S=36.0, H=16.0, bob=6.0), "carry": dict(S=30.0, H=13.0, bob=5.0)}
 
 
 def smooth(u):
@@ -42,7 +43,9 @@ def geometry(view):
     if view == "back":        # walking away: forward = up the screen; her right is on the image right
         return dict(fwd=(0.0, -0.38), hip={"R": (30, 0), "L": (-30, 0)}, foot={"R": (32, 0), "L": (-32, 0)}, sack=1, side=0)
     if view == "q_front":     # walking toward the lower right; right leg = near (lower on the image)
-        return dict(fwd=(1.0, 0.33), hip={"R": (-10, 4), "L": (16, -6)}, foot={"R": (-6, 10), "L": (12, -10)}, sack=-1, side=1)
+        # v7 (2026-11-09 "사선 내려오기 좀 이상"): step axis steeper (29 deg down instead of 18) — the 3/4-front view is used for
+        # headings 38..110 deg from the camera, whose screen motion runs 0..42 deg down; she walks diagonally DOWN most of the time
+        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (16, -6)}, foot={"R": (-6, 10), "L": (12, -10)}, sack=-1, side=1)
     return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-14, -6)}, foot={"R": (10, 10), "L": (-10, -10)}, sack=1, side=1)
 
 
@@ -182,8 +185,14 @@ def hybrid(clip, view):
         chin, hem, hx = my.max(), rows.max() + 3, mx.mean()
         keep = cell.copy()
         keep[hem + 1:, :, 3] = 0
+        # the source sheets' own legs (v3: cyan / navy far leg, tan / brown near leg) that poke out above the cut: drop them,
+        # the puppet legs are the only legs in the reference
+        low = np.zeros(cell.shape[:2], bool)
+        low[max(0, hem - 90):, :] = True
+        legish = (b > r + 25) & (b > gg + 5) & (L < 190)      # the v3 cyan / navy far leg (the near leg is under the cut)
+        keep[..., 3] = np.where(low & legish & ~rose, 0, keep[..., 3])
         up = Image.fromarray(np.clip(keep, 0, 255).astype(np.uint8), "RGBA")
-        pchin, phem = CHIN_Y + by, 392 + by          # hem just above the knee (v5: shorter visible legs)
+        pchin, phem = CHIN_Y + by, HEM_Y + by          # hem at mid-shin (v6)
         k = (phem - pchin) / max(1.0, hem - chin)
         up = up.resize((round(CW * k), round(CH * k)), Image.LANCZOS)
         hc = CW / 2 + (8 if view == "q_front" else (-4 if view == "q_back" else 0))

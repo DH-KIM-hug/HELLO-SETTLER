@@ -69,14 +69,14 @@ Clean flat cel colour, NO gradients, NO texture noise, NO hatching, NO cast shad
 POSE = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
 
 {body}
-HEM OVERRIDE: in this sheet the dress hem ends at the KNEE, so both lower legs and both shoes are fully visible in every frame.
+HEM: the dress is LONG, down to mid-shin exactly where the reference dress ends; under it only her short rounded BOOTS (and a little ankle) show. The total figure is short and chunky — do NOT make the legs longer than in the reference.
 
 This is an 8-frame {what} animation sprite sheet of her in {view}.
 
 The THIRD attached image is the POSE REFERENCE AND LAYOUT (1536x1024, 2 rows x 4 cells). Each cell holds a crude puppet: a magenta head circle, a trapezoid dress, stick arms, stick legs and oval shoes{sack}. It is ONLY a pose guide — in each cell draw HER (the character of the first image, with her real dress, apron, sash, puffy sleeves, rounded arms and mitten hands, rounded legs) in EXACTLY the puppet's pose:
 - Keep the magenta head circle exactly as in the reference: a flat solid MAGENTA (#FF00FF) circle, same size and same position in each cell (no face, no hair, no outline).
-- TRACE THE LEGS EXACTLY: each shoe at the same position as the puppet's shoe (same x, same height above the ground line), the lifted foot lifted exactly as high, the same knee bends, the same leg in front. The two legs are colour-coded and you must KEEP THESE COLOURS: the TAN puppet leg = her tan stocking with a dark-brown shoe; the CYAN puppet leg = a bright CYAN (#20A8FF) stocking with a dark NAVY (#203070) shoe. Both legs and both shoes are visible in EVERY frame; where one leg passes behind the other, draw the cyan one behind.
-- LEG SHAPE: short, CHUNKY, soft rounded legs exactly as thick as the puppet legs (NOT thin sticks), a subtle knee bend, small rounded chunky boots — the cute stubby proportions of the second attached image.
+- TRACE THE FEET EXACTLY: each shoe at the same position as the puppet's shoe (same x, same height above the ground line), the lifted foot lifted exactly as high, the same knee bends, the same leg in front. The two legs are colour-coded and you must KEEP THESE COLOURS: the TAN puppet leg = her tan stocking with a dark-brown shoe; the CYAN puppet leg = a bright CYAN (#20A8FF) stocking with a dark NAVY (#203070) shoe. Both legs and both shoes are visible in EVERY frame; where one leg passes behind the other, draw the cyan one behind.
+- LEG SHAPE: only short chunky ankles and small rounded boots show under the long skirt, exactly as much as in the reference (NO visible knees, NO long legs) — the cute stubby proportions of the second attached image. The boots still step: the lifted boot is lifted (partly tucked under the hem) and the boots alternate exactly as in the reference.
 - Arms{sack2}: they swing OPPOSITE to the legs — when the TAN leg is forward her arm on the cyan-leg side swings forward, and the other way round.
 - The puppet's dress shows where her dress goes (hem at the knee); draw her real dress shape there.
 - Background: flat uniform pure chroma green #00FF00 everywhere; the dark green cell frames and ground lines may stay or go; NO numbers, NO text, NO cast shadows. Exactly one figure per cell, same size in every cell, soles of the planted foot on the ground line.
