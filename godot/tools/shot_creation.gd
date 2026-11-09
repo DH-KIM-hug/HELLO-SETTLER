@@ -1,7 +1,7 @@
 ## 창조 오프닝 캡처 (OPENING v4.0 — 첫 병 5단계, A28). 창이 필요: godot --path godot -s res://tools/shot_creation.gd
 ## 390×844, 가짜 안전 영역. 저장은 user://shot_creation_save. 결과 godot_shots/a28_*.png:
-##   first_screen (어두운 방 · 빈 병 · 옅은 암시) · 1_core · 2_land · 3_water (알) · 4_light · 4_sun_cork · 4_lapse_done ·
-##   5_seeds · 5_grown · 7b_life_wake · 7b_life_mid · 7b_life_done
+##   first_screen (어두운 방 · 빈 병 · 옅은 암시) · 1_core · 1_core_planted · 2_land · 3_water (알) · 4_light · 4_sun_cork · 4_lapse_done ·
+##   5_seeds · 5_seeds_sowing · 5_grown · 7b_life_wake · 7b_life_mid · 7b_life_done
 ## 단계의 단추가 나타나면 찍고, 단추를 눌러 연출을 끝까지 본 뒤 다음 단계로.
 extends SceneTree
 
@@ -16,13 +16,13 @@ var pending: Array = []                 # [[찍을 때, 이름]…]
 ## [기다릴 안쪽 단계, 찍을 이름, 누를 단추 (-1 = [다음]), (누른 뒤 [초, 찍을 이름]…)]
 ## 누를 단추: n ≥ 0 = pick(n) · -1 = [다음] · -2 = 끝 · -3 = 누르지 않고 찍기만
 var plan_steps := [
-	["core", "a28_1_core", 1],
+	["core", "a28_1_core", 0, [[0.9, "a28_1_core_planted"]]],   # [별 심기] 하나 (2026-11-09) → 이 별의 한 줄 느낌
 	["soil", "a28_2_land", 2, [[1.6, "a28_2_land_shaped"]]],
 	["soil", "", -1],                    # 땅이 솟은 뒤 [다음]
 	["water", "a28_3_water", 1, [[2.4, "a28_3_water_eggs"]]],
 	["sun", "a28_4_light", 0, [[1.3, "a28_4_sun_cork"]]],
 	["lapse", "a28_4_lapse_done", -1],
-	["sow", "a28_5_seeds", 0],
+	["sow", "a28_5_seeds", 0, [[1.4, "a28_5_seeds_sowing"]]],   # [꽃씨 뿌리기] 하나 (기본 섞임) → 흩뿌려짐
 	["grow", "a28_5_grown", -3],
 	["life_run", "a28_7b_life_wake", -3, [[2.2, "a28_7b_life_mid"]]],
 	["settle", "a28_7b_life_done", -2],

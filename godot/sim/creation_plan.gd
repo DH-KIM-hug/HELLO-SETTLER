@@ -6,7 +6,11 @@
 ##   땅 land_preset (너른 들 · 언덕 · 산과 골짜기 → 빚기 격자) · 물 WATER_PICKS · 빛 SUN_SPOTS · 씨앗 seed_preset.
 ## 뚜껑 안쪽 물방울 돌기는 저절로 (auto_drips — 거인이 찍지 않음, v4.0). sculpt · drips · seeds · animals · fish 칸은 그대로
 ##   (옛 저장·세상 만들기와 같은 모양 — animals · fish는 옛 저장에만: 새 창조는 비움, 송사리는 민물 호수마다 저절로).
-## 핵 크기(CORE_PICKS)의 뜻(광물 풍부도·광맥·화산 자리)은 WorldGen이 읽는다 — 바뀔 수 있음 (사용자 질문 중), 여기는 고른 번호만.
+## 핵 크기의 뜻(병의 따뜻함 A28b — sim/core_warmth.gd · 광물·광맥·화산 자리 — WorldGen)은 다른 곳이 읽는다. 여기는 번호만.
+## (2026-11-09 사용자 — OPENING v4.0 상자: "선택이 크게 영향을 안 미치면 선택지를 빼라 — 행위는 놔두고")
+##   ① 핵 크기 = 시드로 무작위 (core_for — 같은 시드면 늘 같은 핵, 고르는 단추 없음 · 수첩이 살면서 알려 줌)
+##   ④ 빛 = 정해진 기본 자리 (첫 병 온대) · ⑤ 꽃씨 = 기본 섞임 (seed_preset(SEED_DEFAULT)). ② 땅 · ③ 물만 고른다.
+##   빠른 창조(두 번째 병부터, OPENING 4)는 핵·씨앗도 고를 수 있다 (지난 병들의 기록을 보고) — 처음 값은 이 기본.
 ## 좌표: 병 안 원판을 [-1, 1]로 (u = 세상 x / 반지름, v = 세상 y / 반지름). 빚기 = SG×SG 격자 (−1 파냄 ~ +1 쌓음).
 ## 결정론: 시드 + 이 선택(gen_opts — 값은 1/1000로 반올림) → 늘 같은 세상. 중간 저장(creation.json)에서 다시 만들어도 같다.
 ## 앱이 꺼져도 이어서: save()/load() — 저장 폴더의 creation.json (원자적으로: 임시 파일에 쓰고 이름 바꾸기). 병이 생기면 clear().
@@ -19,21 +23,26 @@ const SG := 32                          # 빚기 격자 한 변
 const REACH := 1.0                      # 병 안 원판 → 세상 (같은 비율)
 const FILE := "creation.json"
 const MAX_PTS := 80                     # 씨앗 종류마다 남기는 점 수
-const CORE_PICKS := ["작게", "보통", "크게"]
+const CORE_PICKS := ["작게", "보통", "크게"]   # 빠른 창조의 핵 줄 (첫 병 ① 별 심기엔 고르는 단추 없음 — core_for)
+const CORE_ODDS := [1.0, 1.0, 1.0]      # 시드로 정하는 핵의 몫 (작게 · 보통 · 크게 — 정답 없는 취향이라 고르게, 균형 측정으로 바꿀 수 있음)
+const CORE_SALT := 7919                 # 핵 난수 줄기 (땅·씨앗·돌기 난수와 겹치지 않게)
+const SEED_DEFAULT := 0                 # ⑤ 꽃씨 뿌리기의 기본 섞임 (이끼·풀·꽃 고루)
 const LAND_PICKS := ["너른 들", "언덕", "산과 골짜기"]
 const WATER_PICKS_T := ["조금", "알맞게", "넉넉히"]
 const WATER_PICKS := [0.22, 0.5, 0.82]   # 물 단추 → 부은 양 (신화: 0.35 아래 '조금' · 0.75 위 '넉넉히')
-const SEED_PICKS := ["알아서", "꽃을 더", "풀밭을 더"]   # (E3-3 소인의 세상) 이끼·풀·꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
+const SEED_PICKS := ["알아서", "꽃을 더", "풀밭을 더"]   # 빠른 창조의 씨앗 줄 (첫 병은 SEED_DEFAULT 하나) — (E3-3 소인의 세상) 이끼·풀·꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
 const SUN_SPOTS := ["temperate"]        # 빛 걸기: 첫 병에 열린 태양 자리 (나머지는 안개 — 기후대 점진 해금, GD 5.3)
-const SUN_PICKS := ["해 걸기"]
+const SUN_PICKS := ["해 걸기"]          # ④ 빛 걸기: 단추 하나 = 거는 행위 (자리는 SUN_SPOTS[0])
+const CORE_PLANT := ["별 심기"]         # ① 별 심기: 단추 하나 = 심는 행위 (크기는 시드 — core_for)
+const SEED_SOW := ["꽃씨 뿌리기"]       # ⑤ 꽃씨 뿌리기: 단추 하나 = 뿌리는 행위 (기본 섞임)
 const DRIP_N := 3                       # 뚜껑 안쪽 큰 돌기 (저절로 — 세상이 나머지를 채워 메이슨 자 8~12, GD 3.3)
-## 고를 때 한 줄 느낌 자막만 (OPENING v4.0-6 — 숫자·장단점 표 없음). 실제 차이는 살면서 드러남 (sim/core_warmth.gd)
+## 별을 심을 때 그 별의 한 줄 느낌 자막만 (OPENING v4.0-6 — 숫자·장단점 표 없음). 실제 차이는 살면서 드러남 (sim/core_warmth.gd)
 const CORE_WORDS := ["조용한 별이네요.\n이끼가 포근히 덮일 거예요.", "따뜻한 별이네요.\n꽃도 밀도 제 걸음으로 자랄 거예요.", "뜨거운 별이네요.\n꽃이 서둘러 피겠지만, 땅이 가끔 뒤척일지도요."]
 
 var seed_v := 0
 var size := 1024
 var stage := "core"
-var core := 1                           # 0 작게 · 1 보통 · 2 크게
+var core := 1                           # 0 작게 · 1 보통 · 2 크게 (make가 시드로 정함 — core_for)
 var sculpt := PackedFloat32Array()      # SG×SG
 var water := 0.0                        # 0~1 (부은 양 — 물 단추 WATER_PICKS)
 var drips: Array = []                   # [[u, v]…] 뚜껑 안쪽 물방울 돌기 (auto_drips — 옛 저장은 거인이 찍은 1~3개)
@@ -53,7 +62,15 @@ static func make(seed_v: int, size: int) -> CreationPlan:
 	p.size = size
 	p.sculpt.resize(SG * SG)
 	p.sculpt.fill(0.0)
+	p.core = core_for(seed_v)
 	return p
+
+
+## 시드 → 핵 크기 (0 작게 · 1 보통 · 2 크게). 결정적: 같은 세상 씨앗이면 늘 같은 별 (난수 흐름을 따로 — 다른 프리셋과 섞이지 않음)
+static func core_for(seed_v: int) -> int:
+	var r := RandomNumberGenerator.new()
+	r.seed = seed_v * 17 + CORE_SALT
+	return clampi(r.rand_weighted(PackedFloat32Array(CORE_ODDS)), 0, 2)
 
 
 func stage_index() -> int:
@@ -383,7 +400,7 @@ static func from_dict(d: Dictionary) -> CreationPlan:
 		return null
 	var p := CreationPlan.make(int(d["seed"]), int(d.get("size", 1024)))
 	p.stage = stage_of(String(d.get("stage", "core")))
-	p.core = clampi(int(d.get("core", 1)), 0, 2)
+	p.core = clampi(int(d.get("core", core_for(int(d["seed"])))), 0, 2)   # 옛 저장은 고른 핵 그대로
 	var g := sculpt_of(d)
 	if g.size() == SG * SG:
 		p.sculpt = g

@@ -1,12 +1,13 @@
 ## 창조 오프닝 — docs/OPENING.md v4.0 (2026-11-08 사용자 결정 A28: 5단계) · UI.md 00 #5a · 08.
 ## 타이틀 [시작하기] → 어두운 방, 선반 위 빈 병 (옅은 암시만 — 이상하게 큰 방 물건 · 유리에 붙은 털 한 가닥, CreationJar) → 아래 단계.
 ## 단계마다 큰 단추 + 아래 손글씨 자막. 손은 보이지 않는다 (그림자·반짝임·내려오는 것만 — A24).
-##   core   ① 별 심기: [작게 · 보통 · 크게] → 빛·맥동 → 병 바닥으로 쿵
+## (2026-11-09 사용자: 결과 차이가 작은 단계는 고르는 단추를 빼고 행위만 — ①·④·⑤는 단추 하나 · 병을 톡 해도 같음)
+##   core   ① 별 심기: 시드의 별이 떠 있음 → [별 심기] (또는 병을 톡) → 빛·맥동 + 그 별의 한 줄 느낌 → 병 바닥으로 쿵
 ##   soil   ② 땅 빚기 (암반+흙 합침): 바위가 핵을 감싸고 흙이 쏟아짐 → [너른 들 · 언덕 · 산과 골짜기] → 흙이 그 모양으로 솟고 꺼짐 · [다음]
 ##   water  ③ 물 붓기: [조금 · 알맞게 · 넉넉히] → 물이 그만큼 (송사리 알이 섞여 반짝임) — 잠깐 [다시 고르기]
-##   light  ④ 빛 걸기: [해 걸기] (첫 병은 온대 자리만 — 나머지는 안개) → 해가 걸리고 코르크가 저절로 내려앉음 → 잠시 배양
+##   light  ④ 빛 걸기: [해 걸기] (또는 병을 톡 — 자리는 정해진 기본: 첫 병 온대) → 해가 걸리고 코르크가 저절로 내려앉음 → 잠시 배양
 ##          (김 서림 · 첫 물방울 · 호수가 참 · 유리벽 물줄기 · 밤낮 · 핵이 크면 화산 연기). 세상은 이때 뒤 스레드에서 만든다
-##   seeds  ⑤ 꽃씨 뿌리기: [알아서 · 꽃을 더 · 풀밭을 더] → 씨앗이 흩뿌려짐 → 배양 (이끼 → 풀 → 꽃숲)
+##   seeds  ⑤ 꽃씨 뿌리기: [꽃씨 뿌리기] (또는 병을 톡 — 기본 섞임) → 씨앗이 흩뿌려짐 → 배양 (이끼 → 풀 → 꽃숲)
 ##   life   7b 작은 생명이 깨어남 (상자 없음 — view/start/creation_release.gd): 꽃 속에서 무당벌레·나비·꿀벌·달팽이… 하나둘 · 호수에 송사리.
 ##          꽃 하나를 톡 → 나비가 먼저 (선택). 짧게 자리를 잡으면 [다음]
 ##   → 넓은 세상 장면의 스타터킷 자리 고르기 (단계 8) → 지구 이름 (단계 9) → 병 안.
@@ -27,7 +28,10 @@ const HOLD := 1.8                       # 물을 고른 뒤 보여 주는 동안
 const LAND_MORPH := 1.2                 # 땅이 그 모양으로 솟고 꺼지는 동안
 const LAND_WORDS := ["너른 들이 펼쳐졌어요.", "둥근 언덕이 솟았어요.", "높은 산과 깊은 골짜기가 생겼어요.\n골짜기에는 물이 고일 거예요."]
 const WATER_WORDS := ["물을 조금 부었어요.\n물속에 작은 알들이 반짝여요.", "알맞게 부었어요.\n물속에 작은 알들이 반짝여요.", "물을 넉넉히 부었어요.\n물속에 작은 알들이 반짝여요."]
-const SUN_ASK := "이 세상을 비출 해를 걸어 주세요.\n다른 자리는 아직 안개 속이에요."
+const CORE_ASK := "작은 별 하나가 반짝이고 있어요.\n병 바닥에 심어 주세요."
+const SUN_ASK := "이 세상을 비출 해를 걸어 주세요."
+const SEED_ASK := "꽃씨 주머니가 열렸어요.\n병 안에 꽃씨를 뿌려 주세요."
+const ONE_TAP := ["core", "sun", "sow"]  # 단추 하나뿐인 단계 — 병을 톡 해도 그 행위 (pick(0))
 const SEED_WORDS := ["이끼·풀·꽃씨를 고루 뿌렸어요.", "꽃씨를 듬뿍 뿌렸어요.", "풀씨를 듬뿍 뿌렸어요."]   # (E3-3) 나무 대신 꽃 — 씨앗 키 "tree"는 저장 호환으로 그대로
 
 var jar: CreationJar
@@ -55,6 +59,7 @@ var _hold_stage := ""                   # 그 기다림이 끝나면 갈 단계
 var _cap_h := 0.0                       # 자막 높이 (줄이 늘면 다시 배치)
 var _land_i := -1                       # 고른 땅 (−1 아직)
 var _land_tw: Tween
+var _invite: Tween                      # 단추 하나뿐인 단계: 단추가 살짝 숨 쉼 (누르라는 손짓)
 
 
 func _ready() -> void:
@@ -168,6 +173,15 @@ func _set_choices(items: Array) -> void:
 		chips.add_child(b)
 	chips.visible = true
 	layout()
+	if _invite != null and _invite.is_valid():
+		_invite.kill()
+	_invite = null
+	if items.size() == 1 and not instant:
+		var b1 := chips.get_child(0) as Button
+		b1.pivot_offset = b1.custom_minimum_size * 0.5
+		_invite = b1.create_tween().set_loops()
+		_invite.tween_property(b1, "scale", Vector2.ONE * 1.06, 0.7).set_trans(Tween.TRANS_SINE)
+		_invite.tween_property(b1, "scale", Vector2.ONE, 0.7).set_trans(Tween.TRANS_SINE)
 
 
 func _update_dots() -> void:
@@ -326,8 +340,8 @@ func go(s: String) -> void:
 			jar.show_core(plan.core)
 			jar.shot("core", 0.0 if instant else 0.8)
 			_dim(0.35)
-			_say("핵을 넣어 주세요.\n작은 핵은 조용하고, 큰 핵은 뜨거워요.")
-			_set_choices(CreationPlan.CORE_PICKS)
+			_say(CORE_ASK)
+			_set_choices(CreationPlan.CORE_PLANT)
 		"soil":                                   # ② 땅 빚기 = 바위가 핵을 감싸고 (암반 — 시드의 지층) 그 위에 흙 (v4.0 합침)
 			_dim(0.0)
 			jar.shot("soil", 0.0 if instant else 1.2)
@@ -392,8 +406,8 @@ func _choices(s: String) -> void:
 			_set_choices(CreationPlan.SUN_PICKS)
 		"seeds":
 			step = "sow"
-			_say("꽃씨를 뿌려 주세요.")
-			_set_choices(CreationPlan.SEED_PICKS)
+			_say(SEED_ASK)
+			_set_choices(CreationPlan.SEED_SOW)
 
 
 ## 큰 단추 i (시험·캡처도 부름) — 지금 단계의 연출을 하고 다음으로
@@ -404,15 +418,15 @@ func pick(i: int) -> void:
 		"quick":
 			pass
 		"core":
-			pick_core(i)
+			plant_core()
 		"soil", "shaping":
 			pick_land(i)
 		"sun":
-			hang_sun(i)
+			hang_sun()
 		"water":
 			pick_water(i)
 		"sow":
-			pick_seeds(i)
+			sow_seeds()
 
 
 
@@ -511,6 +525,7 @@ func _lift_cork(open: bool) -> void:
 
 
 # ───────────────────────── 1. 핵 ─────────────────────────
+## 이 별의 모습 + 한 줄 느낌 (크기는 plan.core — 첫 병은 시드, 빠른 창조는 고른 것)
 func set_core(sz: int) -> void:
 	plan.core = clampi(sz, 0, 2)
 	jar.show_core(plan.core)
@@ -521,20 +536,21 @@ func set_core(sz: int) -> void:
 		GameAudio.buzz()
 
 
-## [작게 · 보통 · 크게]: 핵이 그 빛으로 웅웅 → 병 바닥으로
-func pick_core(i: int) -> void:
+## [별 심기] (또는 병을 톡): 시드의 별이 그 빛으로 웅웅 · 반짝 + 한 줄 느낌 → 병 바닥으로 (크기는 고르지 않음 — 2026-11-09)
+func plant_core() -> void:
 	if step != "core":
 		return
 	chips.visible = false
-	set_core(i)
+	set_core(plan.core)
+	plan.save(StartFlow.save_dir())
 	step = "core_drop"
 	if instant:
 		drop_core()
 		return
+	_flash(Color(1.0, 0.8, 0.5), 0.18)
 	var tw := create_tween()
-	tw.tween_property(jar.core_mi, "scale", Vector3.ONE * 1.15, 0.25).set_trans(Tween.TRANS_SINE)
-	tw.tween_property(jar.core_mi, "scale", Vector3.ONE, 0.25).set_trans(Tween.TRANS_SINE)
-	tw.tween_interval(0.5)
+	tw.tween_property(jar.core_mi, "position:y", jar.core_mi.position.y + 0.8, 0.3).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	tw.tween_interval(1.1)                   # 한 줄 느낌을 읽을 동안 떠서 맥동
 	tw.tween_callback(drop_core)
 
 
@@ -678,11 +694,11 @@ func _pour_to(w: float, done: Callable) -> void:
 
 # ───────────────────────── ④ 빛 걸기 ─────────────────────────
 ## [해 걸기]: 창가 쪽 하늘에 해가 걸려 병 안이 따뜻하게 밝아짐 → 코르크가 반짝임 속에 저절로 내려앉음 (손 없이 — 돌기는 저절로) → 잠시 배양
-func hang_sun(i := 0) -> void:
+func hang_sun() -> void:
 	if step != "sun":
 		return
 	chips.visible = false
-	plan.climate = String(CreationPlan.SUN_SPOTS[clampi(i, 0, CreationPlan.SUN_SPOTS.size() - 1)])
+	plan.climate = String(CreationPlan.SUN_SPOTS[0])      # 자리는 고르지 않음 — 정해진 기본 (첫 병 온대, 2026-11-09)
 	plan.auto_drips()
 	plan.save(StartFlow.save_dir())
 	step = "closing"
@@ -845,14 +861,14 @@ func _finish_lapse() -> void:
 
 
 # ───────────────────────── 7. 씨앗 ─────────────────────────
-## [알아서 · 꽃을 더 · 풀밭을 더]: 씨앗 무리마다 주머니에서 흩뿌려짐 → 배양
-func pick_seeds(i: int) -> void:
+## [꽃씨 뿌리기] (또는 병을 톡): 기본 섞임 (고르지 않음 — 2026-11-09) · 씨앗 무리마다 주머니에서 흩뿌려짐 → 배양
+func sow_seeds() -> void:
 	if step != "sow":
 		return
 	chips.visible = false
-	plan.seed_preset(i)
+	plan.seed_preset(CreationPlan.SEED_DEFAULT)
 	plan.save(StartFlow.save_dir())
-	_say(SEED_WORDS[clampi(i, 0, 2)])
+	_say(SEED_WORDS[CreationPlan.SEED_DEFAULT])
 	if instant:
 		jar.show_specks(plan.seeds)
 		grow()
@@ -966,18 +982,25 @@ func tap_flower(sp: Vector2) -> bool:
 
 func _gui_input(e: InputEvent) -> void:
 	var mb := e as InputEventMouseButton
-	if mb != null and mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT and tap_flower(mb.position):
+	if mb == null or not mb.pressed or mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	if tap_flower(mb.position):
+		accept_event()
+	elif step in ONE_TAP and chips.visible:    # 단추 하나뿐인 단계: 병을 톡 해도 그 행위
+		GameAudio.ui_click()
+		pick(0)
 		accept_event()
 
 
 # ───────────────────────── 빠른 창조 (OPENING 4 — 두 번째 병부터) ─────────────────────────
 ## 단계 1~7을 한 화면에: 핵 크기 / 땅 / 물 / 기후대 / 씨앗 → [만들기] (배양 타임랩스 없이 세상을 만들고 키트 자리로)
 var quick_box: PanelContainer
-var quick_sel := {"core": 1, "land": 1, "water": 1, "seeds": 0}
+var quick_sel := {"core": 1, "land": 1, "water": 1, "seeds": CreationPlan.SEED_DEFAULT}   # 핵 처음 값 = 이 병의 시드 별 (_quick)
 
 
 func _quick() -> void:
 	step = "quick"
+	quick_sel["core"] = plan.core
 	_update_dots()
 	dots.visible = false
 	jar.shot("quick", 0.0)
@@ -1153,7 +1176,7 @@ func jump(s: String) -> void:
 			pick(1)
 			next()
 		elif step in ["core", "water", "sow", "sun"]:
-			pick(1 if step != "sow" else 0)
+			pick(1)
 		else:
 			next()
 		if plan.stage + "/" + step == before:

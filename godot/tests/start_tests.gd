@@ -27,7 +27,7 @@ func all() -> void:
 	StartFlow.navigate = false
 	var old_plan := StartFlow.plan
 	run.timed(self, ["test_names_and_time", "test_boot_to_title", "test_title_button", "test_continue_path", "test_first_run_and_back", "test_kit_pick", "test_kit_place_by_hand",
-		"test_kit_unpack_order", "test_creation_stages", "test_creation_land_morph", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
+		"test_kit_unpack_order", "test_creation_stages", "test_creation_core_seeded", "test_creation_land_morph", "test_creation_presets", "test_creation_choices", "test_creation_determinism", "test_creation_resume", "test_reset_all"])
 	StartFlow.plan = old_plan
 	StartFlow.pending_world = null
 	_clean()
@@ -475,15 +475,18 @@ func test_kit_unpack_order() -> void:
 
 
 ## OPENING v4.0 5단계 — ① 핵 · ② 땅(암반+흙) · ③ 물(송사리 알) · ④ 빛 · ⑤ 꽃씨 → 7b 작은 생명 (상자 없음) → 키트 자리
+## (2026-11-09 사용자: ①·④·⑤는 고르는 단추 없이 행위 하나 — 핵 크기는 시드, 빛·꽃씨는 기본)
 func test_creation_stages() -> void:
 	var sm := manager()
 	var c := creation(CreationPlan.make(11, WorldCfg.SMALL_SIZE))
 	var plan: CreationPlan = c.get("plan")
 	var chips: HBoxContainer = c.get("chips")
-	check(c.get("step") == "core" and chips.visible and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "크게", "핵: [작게 · 보통 · 크게]")
+	var want_core := CreationPlan.core_for(11)
+	check(c.get("step") == "core" and chips.visible and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "별 심기" and plan.core == want_core,
+		"① 별 심기: 단추 하나 [별 심기] (크기 단추 없음 — 핵은 시드로 %s)" % CreationPlan.CORE_PICKS[want_core])
 	c.call("pick", 2)
-	check(plan.core == 2 and c.get("step") == "soil" and CreationPlan.load_from(sm.dir).stage == "soil" and (c.get("jar") as CreationJar).rock_root.visible,
-		"핵 크게 → ② 땅 빚기: 바위가 핵을 감싸고 흙 (단계마다 저장)")
+	check(plan.core == want_core and c.get("step") == "soil" and CreationPlan.load_from(sm.dir).stage == "soil" and CreationPlan.load_from(sm.dir).core == want_core
+		and (c.get("jar") as CreationJar).rock_root.visible, "별을 심으면 → ② 땅 빚기: 바위가 핵을 감싸고 흙 (어느 단추 번호여도 시드의 별 · 단계마다 저장)")
 	check(chips.visible and chips.get_child_count() == 3 and (chips.get_child(0) as Button).text == "너른 들", "땅: [너른 들 · 언덕 · 산과 골짜기]")
 	check(not (c.get("next_btn") as Button).visible, "땅을 고르기 전엔 [다음] 없음")
 	c.call("pick", 2)
@@ -493,17 +496,19 @@ func test_creation_stages() -> void:
 	check(c.get("step") == "water" and chips.get_child_count() == 3 and (chips.get_child(2) as Button).text == "넉넉히", "[다음] → 물: [조금 · 알맞게 · 넉넉히]")
 	c.call("pick", 0)
 	check(is_equal_approx(plan.water, CreationPlan.WATER_PICKS[0]) and c.get("step") == "sun" and chips.visible and chips.get_child_count() == CreationPlan.SUN_PICKS.size()
-		and (chips.get_child(0) as Button).text == "해 걸기" and String(c.get("_said")).contains("안개") and (c.get("jar") as CreationJar).egg_mm.visible,
-		"물 조금 (송사리 알이 반짝임) → ④ 빛 걸기: [해 걸기] (다른 자리는 안개 — 뚜껑 단계 없음)")
+		and (chips.get_child(0) as Button).text == "해 걸기" and not String(c.get("_said")).contains("안개") and (c.get("jar") as CreationJar).egg_mm.visible,
+		"물 조금 (송사리 알이 반짝임) → ④ 빛 걸기: 단추 하나 [해 걸기] (자리 고르기 없음 — 뚜껑 단계 없음)")
 	c.call("pick", 0)
 	var jw: JarWorld = c.get("_world")
 	check(jw != null and c.get("step") == "lapse" and (c.get("next_btn") as Button).visible and (c.get("jar") as CreationJar).cork.rotation == Vector3.ZERO
 		and plan.climate == "temperate" and plan.drips.size() == CreationPlan.DRIP_N, "[해 걸기] → 온대 · 코르크가 저절로 내려앉고 (돌기도 저절로) 배양 → [다음]")
 	check(jw.water.drips.size() >= 8 and jw.water.drips.size() <= 12, "세상의 물방울 호수 %d곳 (메이슨 자 8~12)" % jw.water.drips.size())
 	c.call("next")
-	check(c.get("step") == "sow" and (chips.get_child(1) as Button).text == "꽃을 더", "→ ⑤ 꽃씨: [알아서 · 꽃을 더 · 풀밭을 더]")
-	c.call("pick", 1)
-	check(c.get("step") == "grow" and (plan.seeds["tree"] as Array).size() > (plan.seeds["grass"] as Array).size(), "꽃을 더 → 꽃씨(키 tree)가 많음 → 배양")
+	check(c.get("step") == "sow" and chips.get_child_count() == 1 and (chips.get_child(0) as Button).text == "꽃씨 뿌리기", "→ ⑤ 꽃씨: 단추 하나 [꽃씨 뿌리기] (섞임 고르기 없음)")
+	var dflt := CreationPlan.make(11, WorldCfg.SMALL_SIZE)
+	dflt.seed_preset(CreationPlan.SEED_DEFAULT)
+	c.call("pick", 2)
+	check(c.get("step") == "grow" and str(plan.seeds) == str(dflt.seeds), "꽃씨를 뿌리면 → 기본 섞임 그대로 (어느 단추 번호여도) → 배양")
 	c.call("next")
 	var cr: CreationRelease = (c.get("jar") as CreationJar).release
 	check(c.get("step") == "settle" and CreationPlan.load_from(sm.dir).stage == "life" and cr != null and cr.bug_count() >= 6 and cr.fish_count() > 0
@@ -516,15 +521,54 @@ func test_creation_stages() -> void:
 	c.call("next")
 	check(StartFlow.last_target == StartFlow.GAME_SCENE and CreationPlan.load_from(sm.dir).stage == "spot", "→ 스타터킷 자리 (creation.json = spot)")
 	var myth: Array = StartFlow.pending_world.water.creation.get("myth", [])
-	check(myth.size() == 7 and String(myth[0]).contains("뜨겁게") and String(myth[1]).contains("골짜기") and String(myth[2]).contains("조금") and String(myth[4]).contains("우거")
-		and String(myth[5]).contains("작은 것들이 깨어났다") and String(myth[6]) == "그리고 어느 새벽, 조상 열 명이 불을 피웠다.",
-		"창세 신화가 고른 대로 (핵 크게 · 산과 골짜기 · 물 조금 · 꽃을 더 · 작은 것들이 깨어남 · 조상 열 명이 불을 피움)")
+	check(myth.size() == 7 and String(myth[0]) == CreationPlan.MYTH_CORE[want_core] and String(myth[1]).contains("골짜기") and String(myth[2]).contains("조금")
+		and String(myth[4]) == CreationPlan.MYTH_SEEDS[0] and String(myth[5]).contains("작은 것들이 깨어났다") and String(myth[6]) == "그리고 어느 새벽, 조상 열 명이 불을 피웠다.",
+		"창세 신화가 이 병대로 (시드의 별 · 산과 골짜기 · 물 조금 · 기본 꽃씨 · 작은 것들이 깨어남 · 조상 열 명이 불을 피움)")
 	var who := false
 	for l: Variant in myth:
 		who = who or String(l).contains("{c") or String(l).contains("거인")
 	check(not who and run.words_ok(myth) == "", "신화 첫 장은 누가 했는지 말하지 않음 (별지기만 앎 — STORY 6.5) · 금지어 없음")
 	StartFlow.take()
 	StartFlow.pending_world = null
+	remove(c)
+	drop(sm)
+
+
+## (2026-11-09) 핵 크기 = 시드로 무작위 · 결정적 (같은 시드 → 같은 별 · 저장했다 다시 읽어도) · 세 크기가 다 나옴 ·
+## 단추 하나뿐인 단계는 병을 톡 해도 그 행위
+func test_creation_core_seeded() -> void:
+	var seen := [0, 0, 0]
+	var same := true
+	for sv in range(1, 301):
+		var a := CreationPlan.make(sv, WorldCfg.SMALL_SIZE)
+		var b := CreationPlan.make(sv, WorldCfg.SMALL_SIZE)
+		same = same and a.core == b.core and a.core == CreationPlan.core_for(sv)
+		seen[a.core] += 1
+	check(same and seen.all(func(n: int) -> bool: return n >= 60), "핵 = 시드로 정함 (같은 시드 → 같은 별) · 300병에 작게 %d · 보통 %d · 크게 %d" % seen)
+	var p := CreationPlan.make(77, WorldCfg.SMALL_SIZE)
+	var back := CreationPlan.from_dict(JSON.parse_string(JSON.stringify(p.to_dict())))
+	var old := p.to_dict()
+	old["core"] = (p.core + 1) % 3
+	var nokey := p.to_dict()
+	nokey.erase("core")
+	check(back.core == p.core and CreationPlan.from_dict(old).core == (p.core + 1) % 3 and CreationPlan.from_dict(nokey).core == p.core,
+		"저장했다 다시 읽어도 같은 별 · 옛 저장(고른 핵)은 그대로 · 핵이 없는 저장은 시드의 별")
+	var w1 := JarWorld.create(77, WorldCfg.SMALL_SIZE, p.gen_opts())
+	check(w1.water.core == p.core, "세상의 핵 = 시드의 별")
+	var sm := manager()
+	var c := creation(CreationPlan.make(9, WorldCfg.SMALL_SIZE))
+	var ev := InputEventMouseButton.new()
+	ev.button_index = MOUSE_BUTTON_LEFT
+	ev.pressed = true
+	ev.position = Vector2(195, 300)
+	c.call("_gui_input", ev)
+	check(c.get("step") == "soil", "① 병을 톡 → 별을 심음 (단추와 같음)")
+	c.call("jump", "light")
+	c.call("_gui_input", ev)
+	check(c.get("step") == "lapse", "④ 병을 톡 → 해가 걸림")
+	c.call("next")
+	c.call("_gui_input", ev)
+	check(c.get("step") == "grow", "⑤ 병을 톡 → 꽃씨를 뿌림")
 	remove(c)
 	drop(sm)
 
@@ -672,6 +716,7 @@ func test_creation_presets() -> void:
 ## 거인의 선택이 세상을 바꾼다 (WorldGen opts["create"] · apply_life)
 func test_creation_choices() -> void:
 	var base := CreationPlan.make(21, WorldCfg.SMALL_SIZE)
+	base.core = 1                                    # 기준 별 (시드의 별과 상관없이 — 핵이 세상을 바꾸는지 견줌)
 	var a := JarWorld.create(21, WorldCfg.SMALL_SIZE, base.gen_opts())
 	var p := CreationPlan.make(21, WorldCfg.SMALL_SIZE)
 	p.core = 2
