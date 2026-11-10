@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 종이 인형 강아지: 에셋 · 겉모습 · 동작 · 걸음")
-	run.timed(self, ["test_assets", "test_look_from_genes", "test_kkultteok", "test_kk_sides", "test_kk_spots", "test_clip_map", "test_trot_diagonal",
+	run.timed(self, ["test_assets", "test_look_from_genes", "test_kkultteok", "test_kk_sides", "test_kk_spots", "test_kk_far_patch", "test_kk_lips", "test_kk_open_mouth", "test_kk_plume", "test_clip_map", "test_trot_diagonal",
 		"test_feet_on_ground", "test_walk_rate", "test_walk_from_motion", "test_view_pick", "test_switch", "test_view_only"])
 
 
@@ -180,6 +180,163 @@ func test_kk_spots() -> void:
 		if c.a > 0.5 and c.get_luminance() < 0.4:
 			dark += 1
 	check(heads == 6 and dark == heads, "꿀떡이 코 자리 = 그려진 코 위 (%d / %d)" % [dark, heads])
+
+
+## 조각 표의 머리 사각형 위 rig 자리 → 그림 화소 (공용 그림 · 마스크는 같은 칸 배치)
+static func _px(q: Dictionary, img: Image, at: Vector2) -> Color:
+	var r: Array = q["rect"]
+	var uv: Array = q["uv"]
+	var fx := (at.x - float(r[0])) / (float(r[2]) - float(r[0]))
+	var fy := (float(r[3]) - at.y) / (float(r[3]) - float(r[1]))
+	var px := int(lerpf(minf(float(uv[0]), float(uv[2])), maxf(float(uv[0]), float(uv[2])), fx) * img.get_width())
+	var py := int(lerpf(minf(float(uv[1]), float(uv[3])), maxf(float(uv[1]), float(uv[3])), fy) * img.get_height())
+	return img.get_pixel(clampi(px, 0, img.get_width() - 1), clampi(py, 0, img.get_height() - 1))
+
+
+## 꿀떡이: 두 눈 모두 생강빛 얼룩 안 — 비스듬한 두 보기에서도 먼 쪽 눈의 얼룩이 (머리 가장자리를 따라) 보인다.
+## 얼룩은 바탕 털 위에만, 얼굴이 향한 쪽에만, 머리의 일부만 (가운데 흰 줄은 남는다) — 앞·뒤 보기는 두 얼룩을 따로 그리므로 0.
+func test_kk_far_patch() -> void:
+	var mat := Lib.material()
+	check((mat.get_shader_parameter("kk_far") as PackedVector4Array).size() == 2 and (Lib.kk_spots()["far"] as PackedVector4Array).size() == 2,
+		"꿀떡이 먼 쪽 눈 얼룩: 비스듬한 두 보기의 자리 값이 재질에 실림")
+	check(Lib.kk_far_at(0, Vector2(0, 300)) == 0.0 and Lib.kk_far_at(3, Vector2(0, 300)) == 0.0, "앞 · 뒤 보기엔 먼 쪽 얼룩 식을 쓰지 않음")
+	var mask := Image.load_from_file(ProjectSettings.globalize_path("res://art/cutout/dog_a/dog_mask.png"))
+	var seen := 0
+	for q: Dictionary in Lib.lib()["quads"]:
+		var view := int(q["view"])
+		if int(q["cls"]) != 1 or (view != 1 and view != 2):
+			continue
+		seen += 1
+		var r: Array = q["rect"]
+		var hw := float(q["parent"][1])
+		var eye := Vector2(float(q["eyes"][0]), float(q["eyes"][1]))
+		var ylo := (eye.y + 0.05 * hw) if view == 1 else 0.0
+		var coat := 0
+		var far := 0
+		var wrong := 0
+		var y := float(r[1]) + 2.0
+		while y < float(r[3]):
+			var x := float(r[0]) + 2.0
+			while x < float(r[2]):
+				var m := _px(q, mask, Vector2(x, y))
+				if m.a > 0.5 and m.r > 0.6:
+					coat += 1
+					if Lib.kk_far_at(view, Vector2(x, y), ylo) > 0.5:
+						far += 1
+						# 얼굴이 향한 쪽 (그림 오른쪽 반) 가장자리에만 — 비스듬히 앞에선 주둥이 위쪽만
+						if x < float(q["parent"][0]) or y < ylo:
+							wrong += 1
+				x += 4.0
+			y += 4.0
+		check(far >= 12 and wrong == 0 and far * 6 < coat,
+			"꿀떡이 %s (%s): 먼 쪽 눈 얼룩이 바탕 털 위에 보임 — 얼굴 쪽 가장자리에만, 머리의 일부 (%d / %d)" % [q["part"], Lib.VIEWS[view], far, coat])
+	check(seen == 6, "비스듬한 두 보기의 머리 그림 여섯 장을 다 봄 (%d)" % seen)
+
+
+## 꿀떡이의 짙은 잿빛 입술: 얼굴이 보이는 두 보기 × 머리 셋마다 입 둘레 자리가 그려진 입 선(어두운 잉크) 위 — 선을 새로 긋지 않고 그 선만 물들임
+func test_kk_lips() -> void:
+	var lips: PackedVector4Array = Lib.kk_spots()["lip"]
+	var noses: PackedVector4Array = Lib.kk_spots()["nose"]
+	check(lips.size() == 6 and (Lib.material().get_shader_parameter("kk_lip") as PackedVector4Array).size() == 6, "꿀떡이 입술 자리 여섯이 재질에 실림")
+	if lips.size() != 6:
+		return
+	var img := Image.load_from_file(ProjectSettings.globalize_path("res://art/cutout/dog_a/dog_atlas.png"))
+	var heads := 0
+	var good := 0
+	var low := 0
+	for q: Dictionary in Lib.lib()["quads"]:
+		if int(q["cls"]) != 1 or int(q["view"]) > 1:
+			continue
+		heads += 1
+		var i := int(q["view"]) * 3 + int(q["kind"])
+		var lp := lips[i]
+		var dark := 0
+		var y := lp.y - lp.w
+		while y <= lp.w + lp.y:
+			var x := lp.x - lp.z
+			while x <= lp.x + lp.z:
+				if Vector2((x - lp.x) / lp.z, (y - lp.y) / lp.w).length() < 0.8:
+					var c := _px(q, img, Vector2(x, y))
+					if c.a > 0.5 and c.get_luminance() < 0.3:
+						dark += 1
+				x += 2.0
+			y += 2.0
+		if dark >= 6:
+			good += 1
+		if lp.y < noses[i].y:          # 입은 코 아래
+			low += 1
+	check(heads == 6 and good == heads and low == heads, "꿀떡이 입술 자리 = 그려진 입 선 위 · 코 아래 (%d · %d / %d)" % [good, low, heads])
+
+
+## 꿀떡이는 걷거나 놀자고 하거나 짖을 때 입을 벌린 머리로 — 짖기는 앞 보기에서도 한 주기 내내 (전엔 입 다문 머리가 섞였다)
+func test_kk_open_mouth() -> void:
+	var sm := Lib.kk_smile()
+	var ok := sm.size() == Lib.CLIPS.size()
+	for i in Lib.CLIPS.size():
+		ok = ok and (sm[i] > 0.5) == (Lib.CLIPS[i] in ["walk", "bow", "bark"])
+	check(ok and (Lib.material().get_shader_parameter("kk_smile") as PackedFloat32Array) == sm, "입을 벌리는 동작 = 걷기 · 놀자 절 · 짖기 (재질에 실림)")
+	var open := true
+	var has := {}
+	for q: Dictionary in Lib.lib()["quads"]:
+		if int(q["cls"]) == 1 and int(q["kind"]) == 2:
+			has[int(q["view"])] = true
+	for view in 4:
+		for f in Lib.FRAMES:
+			var hk := int(roundf((Lib._pose("bark", view, float(f) / Lib.FRAMES)[10] as Vector4).x))
+			open = open and Lib.kk_head_kind("bark", hk) == 2
+	check(open and has.has(0) and has.has(1), "꿀떡이 짖기: 네 보기 모두 한 주기 내내 입 벌린 머리 (앞 보기 포함)")
+	check(Lib.kk_head_kind("idle", 0) == 0 and Lib.kk_head_kind("sit", 0) == 0 and Lib.kk_head_kind("lie", 1) == 1 and Lib.kk_head_kind("walk", 1) == 1,
+		"가만히 · 앉기는 입 다문 머리, 자는 머리는 어느 동작에서도 그대로")
+
+
+## 꿀떡이만의 깃털 꼬리 (kk_tail.png — 공용 그림과 따로): 꼬리가 보이는 세 보기에서 원래 말린 꼬리보다 크고, 뿌리에서 위로 뻗는다.
+## 앞 보기는 꼬리가 몸 뒤라 원래 그림 그대로 (사각형 0).
+func test_kk_plume() -> void:
+	var kp := Lib.kk_plume()
+	var rects: PackedVector4Array = kp["rect"]
+	var uvs: PackedVector4Array = kp["uv"]
+	var mat := Lib.material()
+	check(rects.size() == 4 and uvs.size() == 4 and (mat.get_shader_parameter("kk_plume") as PackedVector4Array) == rects
+		and (mat.get_shader_parameter("kk_plume_uv") as PackedVector4Array) == uvs and mat.get_shader_parameter("kk_tail_tex") is Texture2D,
+		"꿀떡이 깃털 꼬리: 그림 · 자리 값이 재질에 실림")
+	if rects.size() != 4:
+		return
+	check(rects[0] == Vector4.ZERO, "앞 보기 (꼬리가 몸 뒤)는 원래 꼬리 그림")
+	var img := Image.load_from_file(ProjectSettings.globalize_path("res://art/cutout/dog_a/kk_tail.png"))
+	var curl := {}
+	for q: Dictionary in Lib.lib()["quads"]:
+		if int(q["cls"]) == 3 and int(q["kind"]) == 0:
+			var r: Array = q["rect"]
+			curl[int(q["view"])] = (float(r[2]) - float(r[0])) * (float(r[3]) - float(r[1]))
+	for view in [1, 2, 3]:
+		var r := rects[view]
+		var u := uvs[view]
+		var area := (r.z - r.x) * (r.w - r.y)
+		var ok := r.z > r.x and r.w > r.y and r.x < 0.0 and r.z > 0.0 and r.y < 12.0 and r.w > 90.0          # 뿌리를 품고 위로
+		ok = ok and u.x >= 0.0 and u.y >= 0.0 and u.z <= 1.0 and u.w <= 1.0 and u.z > u.x and u.w > u.y
+		ok = ok and area > float(curl.get(view, 1e9)) * 1.5
+		# 그림: 칸 안에 털(선 아님)과 선이 다 있고, 칸 가장자리는 비어 있다 (옆 칸이 번지지 않게)
+		var fur := 0
+		var ink := 0
+		var edge := 0
+		var x0 := int(u.x * img.get_width())
+		var x1 := int(u.z * img.get_width())
+		var y0 := int(u.y * img.get_height())
+		var y1 := int(u.w * img.get_height())
+		for y in range(y0, y1):
+			for x in range(x0, x1):
+				var c := img.get_pixel(x, y)
+				if c.a > 0.5:
+					if c.g < 0.3:
+						fur += 1
+					elif c.g > 0.7:
+						ink += 1
+					if x == x0 or x == x1 - 1 or y == y0 or y == y1 - 1:
+						edge += 1
+		ok = ok and fur > 600 and ink > 300 and fur > ink and edge == 0
+		check(ok, "꿀떡이 깃털 꼬리 (%s): 말린 꼬리보다 크고 뿌리에서 위로 · 털 %d · 선 %d" % [Lib.VIEWS[view], fur, ink])
+	# 다른 강아지는 꿀떡이 표시가 없어 이 그림을 읽지 않는다 (셰이더: pat_c.w) — 꼬리 조각 · 공용 그림은 그대로
+	check((CutoutDogs.doll_params(_dg(77, 0, 0, 1, 0))["pat_c"] as Vector4).w < 0.5, "같은 하양 · 말린 꼬리 강아지도 깃털 꼬리는 아님 (꿀떡이만)")
 
 
 func test_clip_map() -> void:

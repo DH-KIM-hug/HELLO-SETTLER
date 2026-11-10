@@ -111,6 +111,13 @@ static func material() -> ShaderMaterial:
 	_mat.set_shader_parameter("kk_ear", ke["ear"])
 	_mat.set_shader_parameter("kk_tail", ke["tail"])
 	_mat.set_shader_parameter("kk_nose", ke["nose"])
+	_mat.set_shader_parameter("kk_lip", ke["lip"])
+	_mat.set_shader_parameter("kk_far", ke["far"])
+	_mat.set_shader_parameter("kk_smile", kk_smile())
+	var kp := kk_plume()
+	_mat.set_shader_parameter("kk_tail_tex", _tex("kk_tail.png"))
+	_mat.set_shader_parameter("kk_plume", kp["rect"])
+	_mat.set_shader_parameter("kk_plume_uv", kp["uv"])
 	_mat.set_shader_parameter("shade_tint", Style.SHADE_TINT)
 	return _mat
 
@@ -121,6 +128,67 @@ const KK_NOSE := [
 	Vector4(-1.0, 269.5, 18.0, 12.5), Vector4(-1.8, 270.0, 18.0, 12.5), Vector4(-1.8, 280.0, 18.0, 12.5),       # 앞: 보통 · 잠 · 짖음
 	Vector4(228.5, 283.5, 17.0, 17.0), Vector4(227.0, 283.5, 17.0, 17.0), Vector4(228.0, 303.5, 17.0, 17.0),   # 비스듬히 앞
 ]
+
+## 입 둘레 (x, y, 가로 반지름, 세로 반지름) — 그 안의 그려진 입 선이 짙은 잿빛 입술이 된다 (KK_NOSE와 같은 순서, 그림에서 잰 값)
+const KK_LIP := [
+	Vector4(-1.0, 247.0, 36.0, 13.0), Vector4(-1.8, 247.0, 36.0, 13.0), Vector4(-0.5, 241.0, 33.0, 25.0),       # 앞: 보통 · 잠 · 짖음
+	Vector4(211.0, 249.0, 21.0, 12.0), Vector4(210.0, 249.0, 21.0, 12.0), Vector4(210.0, 257.0, 25.0, 25.0),   # 비스듬히 앞
+]
+## 먼 쪽 눈 얼룩이 따라가는 머리 둘레 타원 (가운데 x, y, 반지름 x, y) — 비스듬히 앞 · 비스듬히 뒤 머리 그림의 바깥 선에 맞춘 값
+const KK_FAR := [Vector4(88.0, 291.0, 121.0, 129.0), Vector4(82.6, 310.0, 126.0, 115.0)]
+## 꿀떡이가 입을 벌린 머리(혀)로 그려지는 동작 — 걷기 · 놀자 절 · 짖기 (짖기는 앞 보기에서도 늘 입이 벌어져 있게)
+const KK_SMILE := ["walk", "bow", "bark"]
+
+
+## 동작 표가 고른 머리(hk: 0 보통 · 1 잠 · 2 짖음)를 꿀떡이는 어떻게 그리나 — 셰이더(vertex)와 같은 규칙
+static func kk_head_kind(clip: String, hk: int) -> int:
+	return 2 if hk == 0 and clip in KK_SMILE else hk
+
+
+static func kk_smile() -> PackedFloat32Array:
+	var a := PackedFloat32Array()
+	for c: String in CLIPS:
+		a.append(1.0 if c in KK_SMILE else 0.0)
+	return a
+
+
+## 먼 쪽 눈 얼룩 (0~1) — 셰이더 kk_far_m과 같은 식. view 1 = 비스듬히 앞 (ylo = 주둥이 위 높이) · 2 = 비스듬히 뒤, 다른 보기는 0.
+static func kk_far_at(view: int, p: Vector2, ylo := 0.0) -> float:
+	if view < 1 or view > 2:
+		return 0.0
+	var f: Vector4 = KK_FAR[view - 1]
+	var q := Vector2((p.x - f.x) / f.z, (p.y - f.y) / f.w)
+	var d := q.length()
+	var a := rad_to_deg(atan2(q.y, q.x))
+	if view == 1:
+		var th := lerpf(0.845, 0.9, smoothstep(15.0, 60.0, a)) + smoothstep(56.0, 74.0, a) * 0.16 + (1.0 - smoothstep(8.0, 30.0, a)) * 0.14
+		return smoothstep(th - 0.02, th + 0.02, d) * smoothstep(ylo, ylo + 8.0, p.y)
+	var th2 := lerpf(0.9, 0.84, smoothstep(5.0, 50.0, a)) + (1.0 - smoothstep(-8.0, 10.0, a)) * 0.2 + smoothstep(52.0, 70.0, a) * 0.3
+	return smoothstep(th2 - 0.02, th2 + 0.02, d)
+
+
+## 꿀떡이만의 깃털 꼬리 (art/cutout/dog_a/kk_tail.png · kk_tail.json — tools/cutout_dog/build_kk_tail.py가 그림):
+## 보기마다 꼬리 뿌리에서 잰 사각형 (rig, × KK_PLUME_SCALE)과 그 그림의 uv. 그림이 없는 보기(앞 — 꼬리가 몸 뒤)는 0 = 원래 꼬리 그림.
+## 공용 그림·조각 표(dog_atlas · dog_mask · dog_lib.json)는 건드리지 않는다 — 셰이더가 꼬리 사각형을 다시 펴서 이 그림을 읽을 뿐.
+const KK_PLUME_SCALE := 1.0
+
+
+static func kk_plume() -> Dictionary:
+	var rect := PackedVector4Array()
+	var uv := PackedVector4Array()
+	rect.resize(4)
+	uv.resize(4)
+	var f := FileAccess.open(LIB_DIR + "kk_tail.json", FileAccess.READ)
+	if f == null:
+		return {"rect": rect, "uv": uv}
+	var d: Dictionary = JSON.parse_string(f.get_as_text())
+	for c: Dictionary in d["cells"]:
+		var r: Array = c["rect"]
+		var u: Array = c["uv"]
+		for v in c["views"]:
+			rect[int(v)] = Vector4(float(r[0]), float(r[1]), float(r[2]), float(r[3])) * KK_PLUME_SCALE
+			uv[int(v)] = Vector4(float(u[0]), float(u[1]), float(u[2]), float(u[3]))
+	return {"rect": rect, "uv": uv}
 
 
 static func kk_spots() -> Dictionary:
@@ -142,7 +210,7 @@ static func kk_spots() -> Dictionary:
 			ear[v] = e
 		elif int(q["cls"]) == 3 and int(q["kind"]) == 0:
 			tail[v] = Vector2(float(pv[0]), float(pv[1]))
-	return {"ear": ear, "tail": tail, "nose": PackedVector4Array(KK_NOSE)}
+	return {"ear": ear, "tail": tail, "nose": PackedVector4Array(KK_NOSE), "lip": PackedVector4Array(KK_LIP), "far": PackedVector4Array(KK_FAR)}
 
 
 ## 꿀떡이의 귀가 '제 왼쪽 귀'(생강빛)인가 — 셰이더와 같은 규칙. side: 0 = a · 1 = b, view 0~3, mirror ±1 (그림 뒤집기).
