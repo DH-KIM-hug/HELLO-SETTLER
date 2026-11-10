@@ -21,7 +21,7 @@ func all() -> void:
 	print("== 보이는 살림 (건물 쪽)")
 	var old := Bld2D.override
 	Bld2D.override = 1
-	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_bubbles", "test_sim_unchanged"])
+	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_yaw", "test_plants", "test_wheat", "test_front", "test_stall_gather", "test_bubbles", "test_sim_unchanged"])
 	Bld2D.override = old
 
 
@@ -57,6 +57,33 @@ func _wide_cam(scene: Node, vw: VillageView) -> void:
 	scene.add_child(cam)
 	cam.look_at_from_position(c + Vector3(0.0, 1000.0, 0.0), c, Vector3(0.0, 0.0, -1.0))
 	cam.make_current()
+
+
+## 게임 카메라와 같은 각(기울기 48° · 방위 45° + 90° × st)의 넓은 카메라 — '앞'이 카메라 방위를 따라가는지 볼 때 (v3)
+func _yaw_cam(scene: Node, vw: VillageView, st: int) -> void:
+	var c := Vector3.ZERO
+	for id: int in vw._blds:
+		c = (vw._blds[id] as Node3D).global_position
+		break
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG + 90.0 * float(st))
+	var pitch := deg_to_rad(JarCamera.PITCH_DEG)
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = 4000.0
+	cam.far = 8000.0
+	scene.add_child(cam)
+	cam.look_at_from_position(c + Vector3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch)) * 2000.0, c)
+	cam.make_current()
+
+
+## 건물 자리 org 둘레 r 안의, 이름이 pre로 시작하는 더미들의 자리 [화면 오른쪽, 카메라 쪽] (건물 자리에서)
+func _pile_xy(econ: BldEcon, org: Vector3, pre: String, r: float) -> Array:
+	var out: Array = []
+	for it: Array in econ.items:
+		var d := Vector2((it[1] as Vector3).x - org.x, (it[1] as Vector3).z - org.z)
+		if String(it[0]).begins_with(pre) and d.length() < r:
+			out.append(Vector2(d.dot(econ._r2), d.dot(econ._f2)))
+	return out
 
 
 func _add(a: Village, type: String, built: bool) -> Building:
@@ -106,7 +133,7 @@ func test_pics() -> void:
 		for lv in [1, 2, 3]:
 			if not BldEcon.has("%s_%d" % [f, lv]):
 				missing.append("%s_%d" % [f, lv])
-	for nm: String in BldEcon.WANT.values() + ["bub_want_goods", "bub_noworker", "bub_full", "peg_on", "peg_off", "leaf", "puff", "star"]:
+	for nm: String in BldEcon.WANT.values() + ["bub_want_goods", "bub_noworker", "bub_full", "bub_no_tree", "bub_no_rock", "peg_on", "peg_off", "leaf", "puff", "star"]:
 		if not BldEcon.has(nm):
 			missing.append(nm)
 	for k: StringName in BldEcon.FX:
@@ -300,7 +327,7 @@ func test_gather() -> void:
 		a.stock[k] = 1.0
 		vw.sync(0.1, true)
 		check(_slots(econ, b, "o") == [String(row[2]) + "1"], "%s: 창고가 줄면 더미도 줄어듦 %s" % [ty, _slots(econ, b, "o")])
-		# 일꾼: 일터에서 멀리 떨어진 자리(나무·바위 곁)에서 일하는 중
+		# 일꾼: 일터에서 떨어진 나무·바위에서 정말 베고 캐는 중 (ResidentAI.work_task가 주는 걸음 그대로)
 		var r: Resident = null
 		for q: Resident in a.people:
 			if q.is_adult() and not q.dead and q.job < 0:
@@ -308,8 +335,24 @@ func test_gather() -> void:
 				break
 		if r == null:
 			r = a.people[0]
-		var keep := [r.job, r.x, r.y, r.action, r.anim, r.carry, r.sleeping]
-		var spot := Vector2(b.x + 9.0, b.y - 7.0)
+		var rock := ty == "채석장"
+		var node := {}
+		var best := 1.0e9
+		for q: Dictionary in (a.rocks if rock else a.trees):
+			if (float(q["amt"]) <= 0.0 if rock else String(q["s"]) != "tree"):
+				continue
+			var dq := Vector2(float(q["x"]) - b.x, float(q["y"]) - b.y).length()
+			var sq := econ.stand_of(q)
+			if dq > b.size() * 2.0 + 5.0 and dq < best and not econ._card_covers(Vector2(sq.x, sq.y)):
+				best = dq
+				node = q
+		check(not node.is_empty(), "%s: 건물 그림에 안 가리는 %s가 있음" % [ty, "바위" if rock else "나무"])
+		if node.is_empty():
+			continue
+		var keep := [r.job, r.x, r.y, r.action, r.anim, r.carry, r.sleeping, r.steps.duplicate()]
+		var np := Vector2(float(node["x"]), float(node["y"]))
+		var spot := np + (BldEcon.ROCK_AT if rock else BldEcon.TREE_AT)
+		var gstep := ResidentAI.act(1.0e6, "work", ResidentAI.op("dig", {"rk": node}) if rock else ResidentAI.op("chop", {"tr": node}), true, ResidentAI.op("unres", {"q": node}))
 		r.job = b.id
 		b.worker = r.id
 		r.x = spot.x
@@ -320,16 +363,56 @@ func test_gather() -> void:
 		r.carry = ""
 		r.action = "work"
 		r.anim = "work"
+		r.steps.clear()
+		r.steps.append(gstep)
 		check(BldEcon.gather_worker(a, b) == r, "%s: 일하는 중인 일꾼을 읽음" % ty)
-		vw.sync(0.1, true)
-		check(_at_point(vw, spot, 1.5, String(row[3])) == n, "%s: 일꾼이 선 자리에 조각이 튐 (%d개)" % [ty, _at_point(vw, spot, 1.5, String(row[3]))])
+		for i in 8:
+			vw.sync(0.5, true)
+		var st := econ.stand_of(node)
+		var sp2 := Vector2(st.x, st.y)
+		var fx_at := sp2 + econ._f2 * BldEcon.GATHER_FRONT
+		check(_at_point(vw, fx_at, 1.0, String(row[3])) == n, "%s: 일꾼 인형이 선 자리에 조각이 튐 (%d개)" % [ty, _at_point(vw, fx_at, 1.0, String(row[3]))])
 		check(_near(vw, b, String(row[3])).size() == (n if BldEcon.GATHER_AT_CAMP else 0), "%s: 일터 그림에도 '일하는 중' 움직임" % ty)
+		# (v3) 인형은 나무·바위 그림에 가리지 않는 자리에: 그림 밑변보다 카메라 쪽 · 옆으로 비켜 · 나무·바위를 봄 — 시뮬 자리는 그대로
+		var m: Node3D = vw.residents[r.id]
+		var dn := sp2 - np
+		var inf := Flora2D.info(Flora2D.pic_for("rocks"))
+		var dk := float(econ.rock_draw.get(np, minf(0.8 + float(node["amt"]) / 25.0, 2.4))) if rock else 0.0
+		var toe := (float(inf.get("front", 0.0)) * dk + BldEcon.STAND_TOE) if rock else BldEcon.STAND_FRONT
+		var look := Vector2(sin(st.z), cos(st.z))
+		var off := Vector2(m.position.x - st.x, m.position.z - st.y).length()
+		check(off < 0.05 and absf(angle_difference(m.rotation.y, st.z)) < 0.01, "%s: 일하는 동안 인형은 선 자리에 (%.2f 떨어짐)" % [ty, off])
+		check(dn.dot(econ._sf) >= toe - 0.01 and absf(dn.dot(econ._sr)) >= 0.3 and look.dot(-dn) > 0.0 and not econ._card_covers(sp2),
+			"%s: 선 자리 = 그림 밑변 앞(%.2f ≥ %.2f) · 옆으로 %.2f · 나무·바위 쪽을 봄" % [ty, dn.dot(econ._sf), toe, dn.dot(econ._sr)])
+		check(r.x == spot.x and r.y == spot.y and r.steps.size() == 1 and r.steps[0] == gstep, "%s: 주민의 시뮬 자리·걸음은 그대로" % ty)
+		var keep_cov: Array = econ._covers
+		var sgn := signf(dn.dot(econ._sr))
+		var cb := sp2 + econ._f2 * 1.0 + econ._r2 * (sgn * 0.5)
+		econ._covers = [[cb.x, cb.y, 0.4, 3.0, -99]]       # 그 자리 앞에 건물 그림이 서면 → 반대편
+		var st2 := econ.stand_of(node)
+		var flip := (Vector2(st2.x, st2.y) - np).dot(econ._sr)
+		econ._covers = [[cb.x, cb.y, 50.0, 30.0, -99]]     # 어디에 서도 가리면 → 제자리 (자리를 거짓으로 멀리 옮기지 않음)
+		var st3 := econ.stand_of(node)
+		econ._covers = keep_cov
+		check(signf(flip) == -sgn and Vector2(st3.x - st.x, st3.y - st.y).length() < 0.01, "%s: 선 자리가 건물 그림에 가리면 반대편 (%.2f → %.2f)" % [ty, dn.dot(econ._sr), flip])
+		# (v3 · 5) 조각은 정말 베고 캐는 동안만: 같은 '일하는 몸짓'이라도 다른 일이면 일꾼 곁에도 일터에도 없음
+		r.steps.clear()
+		r.steps.append(ResidentAI.act(1.0e6, "work"))
+		check(BldEcon.gather_worker(a, b) == null, "%s: 다른 일을 하는 몸짓은 채집이 아님" % ty)
+		vw.sync(0.1, true)
+		check(_at_point(vw, fx_at, 1.5, String(row[3])) == 0 and _near(vw, b, String(row[3])).is_empty(), "%s: 채집이 아니면 일꾼 곁에도 일터에도 조각 없음" % ty)
+		r.steps.clear()
+		r.steps.append(ResidentAI.act(1.0e6, "work", ResidentAI.op("chop", {"tr": node}) if rock else ResidentAI.op("dig", {"rk": node}), true))
+		check(BldEcon.gather_worker(a, b) == null, "%s: 다른 일터의 채집 걸음은 세지 않음" % ty)
+		r.steps.clear()
+		r.steps.append(gstep)
+		check(BldEcon.gather_worker(a, b) == r, "%s: 다시 베고 캐면 일하는 중" % ty)
 		r.anim = "carry"
 		r.action = "haul"
 		r.carry = k
 		check(BldEcon.gather_worker(a, b) == null, "%s: 나르는 중에는 일하는 중이 아님" % ty)
 		vw.sync(0.1, true)
-		check(_at_point(vw, spot, 1.5, String(row[3])) == 0 and _near(vw, b, String(row[3])).is_empty(), "%s: 일을 멈추면 고요" % ty)
+		check(_at_point(vw, fx_at, 1.5, String(row[3])) == 0 and _near(vw, b, String(row[3])).is_empty(), "%s: 일을 멈추면 고요" % ty)
 		r.carry = ""
 		r.anim = "work"
 		r.action = "work"
@@ -347,6 +430,8 @@ func test_gather() -> void:
 		r.anim = keep[4]
 		r.carry = keep[5]
 		r.sleeping = keep[6]
+		r.steps.clear()
+		r.steps.append_array(keep[7])
 	scene.queue_free()
 
 
@@ -409,6 +494,366 @@ func test_apron() -> void:
 			if String(it[0]).begins_with("logs_") and Vector2((it[1] as Vector3).x - org.x, (it[1] as Vector3).z - org.z).length() < w + 3.0:
 				side = minf(side, Vector2((it[1] as Vector3).x - org.x, (it[1] as Vector3).z - org.z).dot(econ._r2))
 		check(_slots(econ, b, "f") == ["logs_3"] and side <= -(w * 0.5 + BldEcon.HOUSE_WOOD.x) + 0.01, "집 땔감: 그림 왼쪽 벽 밖에 (%.2f ≤ -%.2f)" % [side, w * 0.5 + BldEcon.HOUSE_WOOD.x])
+	scene.queue_free()
+
+
+## (v3) '앞'은 카메라 방위를 따라간다: 네 걸음 어디서나 카메라 쪽 앞마당만 낮춤 · 가만히 있으면 다시 놓지 않음
+func test_yaw() -> void:
+	var ap := [[10.0, 20.0, 1.5, 3.0]]
+	var o := Vector2(10.0, 20.0)
+	var bad: Array = []
+	for st in 4:
+		var tw: Vector2 = BldEcon.step_dirs(st)[0]
+		if BldEcon.step_of(tw) != st or BldEcon.step_of(tw.rotated(0.3)) != st:
+			bad.append("걸음 %d" % st)
+		var p := o + tw * 3.5
+		if not is_equal_approx(BldEcon.apron_h(ap, p.x, p.y, 6.0, 0.0, st), 2.0 * BldEcon.APRON_SIN):
+			bad.append("앞 %d" % st)
+		if not is_equal_approx(BldEcon.apron_h(ap, p.x, p.y, 6.0, 0.0, (st + 2) % 4), 6.0) or not is_equal_approx(BldEcon.apron_h(ap, p.x, p.y, 6.0, 0.0, (st + 1) % 4), 6.0):
+			bad.append("뒤·옆 %d" % st)
+	check(bad.is_empty(), "방위 네 걸음: 그 방위에서 카메라 쪽에 선 것만 낮춤 %s" % [bad])
+	var tw1: Vector2 = BldEcon.step_dirs(1)[0]
+	var rt1: Vector2 = BldEcon.step_dirs(1)[1]
+	var q := o + tw1 * 0.5                   # 더미 줄보다 1 뒤에 선 큰 꽃 — 그림 밑변(front × 크기 = 2)이 줄 앞으로 나온다
+	var cap := BldEcon.apron_h(ap, q.x, q.y, 6.0, 0.0, 1, 2.0)
+	check(is_equal_approx(BldEcon.apron_h(ap, q.x, q.y, 6.0, 0.0, 1), 6.0) and cap < 6.0 and 2.0 * cap / 6.0 <= 1.0 - BldEcon.APRON_CLEAR + 0.001,
+		"줄 뒤에 선 큰 꽃: 그림 밑변이 줄 뒤로 물러날 만큼만 줄임 (키 6 → %.2f)" % cap)
+	q = o - tw1 * 1.0
+	check(is_equal_approx(BldEcon.apron_h(ap, q.x, q.y, 6.0, 0.0, 1, 2.0), 6.0), "밑변이 줄에 닿지 않는 뒤쪽 꽃은 그대로")
+	var nd := Vector2(30.0, 40.0)            # 일꾼이 베는 꽃 · 그 앞 일꾼 자리의 앞마당 한 줄
+	var own := [[nd.x + tw1.x, nd.y + tw1.y, 0.0, 0.5, nd.x, nd.y]]
+	var mate := nd + rt1 * 0.3
+	var fr := nd + tw1 * 2.0
+	check(is_equal_approx(BldEcon.apron_h(own, nd.x, nd.y, 6.0, 0.0, 1, 2.0), 6.0) and BldEcon.apron_h(own, mate.x, mate.y, 6.0, 0.0, 1, 2.0) < 6.0
+		and is_equal_approx(BldEcon.apron_h(own, fr.x, fr.y, 6.0, 0.0, 1), 1.0 * BldEcon.APRON_SIN), "채집 일꾼 앞마당: 베는 꽃은 그대로 · 곁의 꽃과 일꾼 앞의 꽃은 낮춤")
+
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	_yaw_cam(scene, vw, 0)
+	vw.sync(0.1, true)
+	var v0 := econ.apron_ver
+	var k0 := econ.place_key()
+	vw.sync(0.1, true)
+	vw.sync(0.3, true)
+	check(econ.step == 0 and econ.apron_ver == v0 and econ.place_key() == k0, "카메라가 가만히 있으면 앞마당을 다시 재지 않음 (꽃·풀을 다시 놓지 않음)")
+	_yaw_cam(scene, vw, 1)
+	vw.sync(0.1, true)
+	var v1 := econ.apron_ver
+	check(econ.step == 1 and v1 > v0 and econ.place_key() != k0 and econ._sf.distance_to(tw1) < 0.001 and econ._f2.distance_to(tw1) < 0.01,
+		"카메라가 한 걸음 돌면 '앞'도 돈다 (걸음 %d · 앞마당 %d → %d)" % [econ.step, v0, v1])
+	vw.sync(0.1, true)
+	vw.sync(0.3, true)
+	check(econ.apron_ver == v1, "돈 뒤에도 가만히 있으면 그대로")
+	var b := _house(a)
+	check(b != null, "집이 있음")
+	if b != null:
+		b.in_buf["통나무"] = Balance.FUEL_TARGET
+		econ._apron_frame = -1
+		vw.sync(0.1, true)
+		var line := 0.0
+		for e: Array in BldEcon.apron_list(a):
+			if is_equal_approx(float(e[0]), b.x) and is_equal_approx(float(e[1]), b.y):
+				line = float(e[2])
+		q = Vector2(b.x, b.y) + tw1 * (line + 1.0)
+		var s0 := 0.5
+		var h0 := float(Flora2D.info(Flora2D.pic_for("flora/poppy_red")).get("h", 0.0)) * s0
+		var s1 := econ.apron_scale("flora/poppy_red", q.x, q.y, s0)
+		check(s1 < s0 and s1 * h0 / s0 <= 1.0 * BldEcon.APRON_SIN + 0.01, "돈 방위에서 집 앞 1칸의 큰 양귀비는 %.2f로 낮춤" % (s1 * h0 / s0))
+		var pc := econ.plant_cap(q.x, q.y, 3.3, 0.8, 1.66)
+		econ.on = false
+		var pc_off := econ.plant_cap(q.x, q.y, 3.3, 0.8, 1.66)
+		econ.on = true
+		check(pc * 3.3 <= 1.0 * BldEcon.APRON_SIN + 0.01 and is_equal_approx(pc_off, 1.0), "민들레·큰 버섯도 같은 규칙 (키 3.3 → %.2f · 끄면 그대로)" % (pc * 3.3))
+		var org: Vector3 = (vw._blds[b.id] as Node3D).position
+		var w := float(Bld2D.info(String(BldEcon.pic_k(a, b)[0]))["w"])
+		var logs := _pile_xy(econ, org, "logs_", w * 0.5 + BldEcon.NUDGE_OUT + 0.6)
+		var okp := false
+		for lp: Vector2 in logs:
+			var wd := econ._r2 * lp.x + econ._f2 * lp.y
+			okp = okp or (wd.dot(tw1) > 0.0 and absf(wd.dot(rt1)) <= w * 0.5 + BldEcon.NUDGE_OUT + 0.01)
+		check(okp, "돈 방위에서도 집 땔감 더미는 그림 앞(카메라 쪽) · 집 곁 %s" % [logs])
+	# 모든 건물의 더미 줄: 그 앞 어디에 큰 꽃을 놓아도 줄을 가리지 않는 키까지만 (두 방위)
+	for st in [0, 1]:
+		_yaw_cam(scene, vw, st)
+		vw.sync(0.1, true)
+		var sd := BldEcon.step_dirs(st)
+		var s0 := 0.5
+		var h0 := float(Flora2D.info(Flora2D.pic_for("flora/poppy_red")).get("h", 0.0)) * s0
+		var over := 0
+		var seen := 0
+		for e: Array in BldEcon.apron_list(a):
+			for d: float in [0.2, 1.0, 2.0, 4.0]:
+				for lat: float in [-float(e[3]) + 0.1, 0.0, float(e[3]) - 0.1]:
+					var pp: Vector2 = Vector2(float(e[0]), float(e[1])) + (sd[0] as Vector2) * (float(e[2]) + d) + (sd[1] as Vector2) * lat
+					seen += 1
+					if econ.apron_scale("flora/poppy_red", pp.x, pp.y, s0) * h0 / s0 > maxf(BldEcon.APRON_MIN_H, d * BldEcon.APRON_SIN) + 0.01:
+						over += 1
+		check(econ.step == st and seen > 0 and over == 0, "방위 걸음 %d: 건물 %d채의 더미 줄 앞 %d곳 — 줄을 가리는 키로 남는 꽃 없음 (%d)" % [st, a.buildings.size(), seen, over])
+	scene.queue_free()
+
+
+## 놓인 꽃숲(나무)·바위 가운데 더미 줄을 가리는 것 수 [가리는 것, 앞마당에 든 것] — VillageView가 실제로 그린 크기(tree_draw · rock_draw)로
+func _plants_over(econ: BldEcon, st: int) -> Array:
+	var sd := BldEcon.step_dirs(st)
+	var tw: Vector2 = sd[0]
+	var rt: Vector2 = sd[1]
+	var drawn: Array = []                # [자리, 그림 이름, 크기]
+	for tp: Vector2 in econ.tree_draw:
+		drawn.append([tp, Flora2D.pic_for(String(econ.tree_draw[tp][0])), float(econ.tree_draw[tp][1])])
+	for rp: Vector2 in econ.rock_draw:
+		drawn.append([rp, Flora2D.pic_for("rocks"), float(econ.rock_draw[rp])])
+	var over := 0
+	var inside := 0
+	for e: Array in drawn:
+		var inf := Flora2D.info(String(e[1]))
+		if inf.is_empty() or int(inf.get("mode", 0)) != 0:
+			continue
+		var p: Vector2 = e[0]
+		var h := float(inf.get("h", 0.0)) * float(e[2])
+		var base := float(inf.get("front", 0.0)) * float(e[2])
+		for ap: Array in econ._aprons_now():
+			var d := p - Vector2(float(ap[0]), float(ap[1]))
+			var along := d.dot(tw) - float(ap[2])
+			if absf(d.dot(rt)) > float(ap[3]) or along > 8.0 or along < -4.0:
+				continue
+			if ap.size() > 5 and absf(p.x - float(ap[4])) < 0.01 and absf(p.y - float(ap[5])) < 0.01:
+				continue
+			inside += 1
+			if along >= 0.0:
+				over += 1 if h > maxf(BldEcon.APRON_MIN_H, along * BldEcon.APRON_SIN) + 0.02 else 0
+			elif h > BldEcon.APRON_MIN_H + 0.02 and base > -along + 0.02:      # 줄 뒤에 섰는데 그림 밑변이 줄 앞으로 나옴
+				over += 1
+	return [over, inside]
+
+
+## (v3) 실제로 놓인 꽃숲·바위: 두 방위에서 어느 건물의 더미 줄도 가리지 않는다 (제 카메라로 — 그린 크기를 읽음)
+func test_plants() -> void:
+	var oldf := Flora2D.override
+	Flora2D.override = 1
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	var b := _house(a)
+	check(b != null, "집이 있음")
+	if b != null:
+		var line := 0.0
+		for e: Array in BldEcon.apron_list(a):
+			if is_equal_approx(float(e[0]), b.x) and is_equal_approx(float(e[1]), b.y):
+				line = float(e[2])
+		var mine: Array = []             # 집 더미 줄 앞 1칸에 심은 큰 꽃 · 큰 바위 (방위마다)
+		for st in [0, 1]:
+			var sd := BldEcon.step_dirs(st)
+			var tp: Vector2 = Vector2(b.x, b.y) + (sd[0] as Vector2) * (line + 1.0)
+			var rp: Vector2 = tp + (sd[1] as Vector2) * 0.9
+			a.trees.append({"x": tp.x, "y": tp.y, "s": "tree", "g": 0.0, "res": 0})
+			a.rocks.append({"x": rp.x, "y": rp.y, "amt": 40, "res": 0})
+			mine.append([Vector2(tp.x, tp.y), Vector2(rp.x, rp.y)])
+		for st in [0, 1]:
+			_yaw_cam(scene, vw, st)
+			econ._apron_frame = -1
+			vw.sync(0.1, true)
+			vw.sync(0.3, true)
+			var res := _plants_over(econ, st)
+			check(econ.step == st and int(res[1]) >= 2 and int(res[0]) == 0,
+				"방위 걸음 %d: 놓인 꽃숲 %d · 바위 %d 가운데 앞마당 %d곳 — 더미 줄을 가리는 것 없음 (%d)" % [st, econ.tree_draw.size(), econ.rock_draw.size(), res[1], res[0]])
+			var te: Array = econ.tree_draw.get(mine[st][0], [])
+			var th := 99.0
+			if not te.is_empty():
+				th = float(Flora2D.info(Flora2D.pic_for(String(te[0]))).get("h", 0.0)) * float(te[1])
+			var rh := float(Flora2D.info(Flora2D.pic_for("rocks")).get("h", 0.0)) * float(econ.rock_draw.get(mine[st][1], 99.0))
+			check(th <= 1.0 * BldEcon.APRON_SIN + 0.02 and rh <= 1.0 * BldEcon.APRON_SIN + 0.02, "방위 걸음 %d: 집 앞 1칸의 큰 꽃(키 %.2f) · 큰 바위(키 %.2f)는 낮게" % [st, th, rh])
+	scene.queue_free()
+	Flora2D.override = oldf
+
+
+## (v3) 밀밭: 뒤쪽 건물의 더미 줄을 가리는 밭은 그림을 낮춤 (두 방위) — 밭 자리·수확은 그대로
+func test_wheat() -> void:
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	var saw := _add(a, "제재소", true)
+	var farm := _add(a, "농장", true)
+	check(saw != null and farm != null, "제재소 · 농장을 놓음")
+	if saw == null or farm == null:
+		scene.queue_free()
+		return
+	saw.worker = -1
+	saw.in_buf["통나무"] = 0.0
+	saw.out["판자"] = 2.0
+	a.stock["판자"] = 0.0
+	var band := BldEcon.pile_band(a, saw)
+	check(band.size() == 3 and float(band[1]) < float(band[2]) and float(band[0]) > 0.0, "제재소의 더미 줄 %s" % [band])
+	var d := Bld2D.info(Bld2D.wheat_pic(2))
+	var h := float(d["h"]) * float(BldEcon.WHEAT_FILL[2])
+	var fr := float(d["front"])
+	var mid := (float(band[1]) + float(band[2])) * 0.5
+	var all_b: Array = a.buildings.duplicate()
+	for st in [0, 1]:
+		var sd := BldEcon.step_dirs(st)
+		var tw: Vector2 = sd[0]
+		var rt: Vector2 = sd[1]
+		var o := Vector2(saw.x, saw.y) + rt * mid + tw * (float(band[0]) + BldEcon.WHEAT_CLEAR)
+		# 두 건물만 놓고 규칙을 봄 (다른 건물이 섞이지 않게)
+		a.buildings.clear()
+		a.buildings.append(saw)
+		a.buildings.append(farm)
+		farm.ready_at = a.t - 1.0            # 익은 밀 (키 큰 그림)
+		farm.x = o.x + tw.x * 5.0
+		farm.y = o.y + tw.y * 5.0
+		var k := BldEcon.wheat_cap(a, farm, st)
+		check(k < 1.0 and k > BldEcon.WHEAT_MIN_K and (5.0 + fr * k) * BldEcon.APRON_SIN >= h * k - 0.01,
+			"방위 걸음 %d: 더미 줄 5칸 앞의 익은 밭은 %.2f배로 — 윗선이 줄에 닿지 않음" % [st, k])
+		check(is_equal_approx(BldEcon.wheat_cap(a, farm, (st + 2) % 4), 1.0), "방위 걸음 %d: 반대편에서 보면 (밭이 건물 뒤) 그대로" % st)
+		farm.x = o.x + tw.x * 1.0
+		farm.y = o.y + tw.y * 1.0
+		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), BldEcon.WHEAT_MIN_K), "방위 걸음 %d: 바로 앞 밭도 %.2f배보다 작게는 줄이지 않음 (그때는 더미를 옆으로)" % [st, BldEcon.WHEAT_MIN_K])
+		farm.x = o.x + tw.x * 30.0
+		farm.y = o.y + tw.y * 30.0
+		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 멀리 앞의 밭은 그대로" % st)
+		farm.x = o.x + tw.x * 5.0 + rt.x * 12.0
+		farm.y = o.y + tw.y * 5.0 + rt.y * 12.0
+		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 옆으로 비켜 선 밭은 그대로" % st)
+		farm.x = o.x + tw.x * 5.0
+		farm.y = o.y + tw.y * 5.0
+		farm.ready_at = a.t + Balance.GROW_FIRST
+		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 싹(낮은 그림)은 그대로" % st)
+		farm.ready_at = a.t - 1.0
+		# 마을 전체에서 화면까지: 그 방위의 카메라로 — 밭 그림 판이 그 크기로 서고, 제재소 더미는 밭 그림에 가리지 않음
+		a.buildings.clear()
+		a.buildings.append_array(all_b)
+		_yaw_cam(scene, vw, st)
+		econ._apron_frame = -1
+		for i in 4:
+			vw.sync(0.3, true)
+		var want := BldEcon.wheat_cap(a, farm, st)
+		var built := float(econ._wheat_built.get(farm.id, -1.0))
+		var org: Vector3 = (vw._blds[saw.id] as Node3D).position
+		var piles := _pile_xy(econ, org, "planks_", 4.5)
+		var hid := piles.is_empty()
+		for c: Array in econ._covers:
+			if int(c[4]) != farm.id:
+				continue
+			for pl: Vector2 in piles:
+				var dv := Vector2(float(c[0]), float(c[1])) - (Vector2(org.x, org.z) + econ._r2 * pl.x + econ._f2 * pl.y)
+				var al := dv.dot(econ._f2)
+				if al > 0.05 and al * BldEcon.APRON_SIN < float(c[3]) and absf(dv.dot(econ._r2)) < float(c[2]) + BldEcon.PILE_HALF:
+					hid = true
+		check(econ.step == st and want < 1.0 and is_equal_approx(econ.wheat_k(farm), want) and absf(built - want) < 0.011 and not hid,
+			"방위 걸음 %d: 밭 그림 판 %.2f배 (규칙 %.2f) · 제재소 판자 더미 %d개는 밭 그림에 안 가림" % [st, built, want, piles.size()])
+	scene.queue_free()
+
+
+## (v3) 앞에 다른 건물이 서서 더미 자리를 가리면: 건물은 그대로 두고 더미만 제 건물 곁의 보이는 자리로 (화면만 · 늘 같은 답)
+func test_front() -> void:
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	_yaw_cam(scene, vw, 1)
+	var saw := _add(a, "제재소", true)
+	check(saw != null, "제재소를 놓음")
+	if saw == null:
+		scene.queue_free()
+		return
+	saw.worker = -1
+	saw.in_buf["통나무"] = 0.0
+	saw.out["판자"] = 2.0
+	a.stock["판자"] = 0.0
+	vw.sync(0.1, true)
+	var org: Vector3 = (vw._blds[saw.id] as Node3D).position
+	var w := float(Bld2D.info(String(BldEcon.pic_k(a, saw)[0]))["w"])
+	var rad := w * 0.5 + BldEcon.NUDGE_OUT + 1.5
+	var p0s := _pile_xy(econ, org, "planks_", rad)
+	check(p0s.size() == 1, "제재소 앞 판자 더미 하나 %s" % [p0s])
+	if p0s.size() != 1:
+		scene.queue_free()
+		return
+	var p0: Vector2 = p0s[0]
+	var at := Vector2(org.x, org.z) + econ._f2 * (p0.y + 0.3) + econ._r2 * p0.x
+	var hut := a.add_building("오두막", at.x, at.y, true)      # 그 더미 바로 앞(카메라 쪽)에 오두막
+	vw.sync(0.1, true)
+	vw.sync(0.3, true)
+	econ._cov = econ._cov_for(saw.id, org)
+	var p1s := _pile_xy(econ, org, "planks_", rad)
+	check(hut != null and econ._covered(p0.x, p0.y), "오두막 그림이 제자리의 더미를 가림")
+	check(p1s.size() == 1, "더미는 여전히 하나 %s" % [p1s])
+	if p1s.size() == 1:
+		var p1: Vector2 = p1s[0]
+		var in_x := float((BldEcon.LAYOUT["sawmill"]["in"] as Vector2).x)
+		check(absf(p1.x - p0.x) >= 0.3 and not econ._covered(p1.x, p1.y) and absf(p1.x) <= w * 0.5 + BldEcon.NUDGE_OUT + 0.01 and p1.y > 0.0
+			and absf(p1.x - in_x) >= BldEcon.NUDGE_GAP - 0.01, "더미가 보이는 자리로 비켜 남 (옆 %.2f → %.2f) — 제 건물 곁 · 재료 더미 자리와 안 겹침" % [p0.x, p1.x])
+		vw.sync(0.3, true)
+		var p2s := _pile_xy(econ, org, "planks_", rad)
+		check(p2s.size() == 1 and (p2s[0] as Vector2).distance_to(p1) < 0.001 and (vw._blds[saw.id] as Node3D).position == org
+			and is_equal_approx(hut.x, at.x) and is_equal_approx(hut.y, at.y), "다시 봐도 같은 자리 · 건물은 옮기지 않음")
+	scene.queue_free()
+
+
+## (v3) 채집 일터가 멈춘 까닭: 일꾼은 있는데 둘레에 벨 나무 · 캘 바위가 없다 → 그림 풍선 (다른 막힌 일터처럼 늦게 뜸)
+func test_stall_gather() -> void:
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	_wide_cam(scene, vw)
+	var rr := Balance.GATHER_RANGE + 1.0
+	for row: Array in [["나무꾼", "bub_no_tree"], ["채석장", "bub_no_rock"]]:
+		var ty := String(row[0])
+		var pic := String(row[1])
+		var b := _add(a, ty, true)
+		check(b != null, "%s를 놓음" % ty)
+		if b == null:
+			continue
+		var rock := ty == "채석장"
+		var r: Resident = a.people[1 if rock else 0]
+		var keep_job := r.job
+		var near: Array = []
+		for q: Dictionary in (a.rocks if rock else a.trees):
+			if Vector2(float(q["x"]) - b.x, float(q["y"]) - b.y).length() <= rr and (float(q["amt"]) > 0.0 if rock else String(q["s"]) == "tree"):
+				near.append(q)
+		if near.is_empty():              # 둘레에 하나도 없는 자리면 하나 놓고 시작
+			var nq := {"x": b.x + 6.0, "y": b.y + 6.0, "amt": 20, "res": 0} if rock else {"x": b.x + 6.0, "y": b.y + 6.0, "s": "tree", "g": 0.0, "res": 0}
+			(a.rocks if rock else a.trees).append(nq)
+			near.append(nq)
+		b.worker = r.id
+		r.job = b.id
+		check(not BldEcon.gather_empty(a, b) and BldEcon.stall_pic(a, b) == "", "%s: 둘레에 있으면 풍선 없음" % ty)
+		var keep_v: Array = []
+		for q: Dictionary in near:       # 둘레의 것을 다 베고 캠
+			keep_v.append(q["amt"] if rock else q["s"])
+			if rock:
+				q["amt"] = 0
+			else:
+				q["s"] = "stump"
+		check(BldEcon.gather_empty(a, b) and BldEcon.stall_pic(a, b) == pic, "%s: 둘레에 하나도 없으면 '%s' 풍선" % [ty, pic])
+		b.worker = -1
+		check(BldEcon.stall_pic(a, b) == "", "%s: 일꾼이 없는 일터는 이 풍선이 아님 (빈 밀짚모자 쪽)" % ty)
+		b.worker = r.id
+		vw.sync(0.3, true)
+		var early := _near(vw, b, pic).size()
+		vw.sync(BldEcon.BUBBLE_DELAY, true)
+		vw.sync(0.3, true)
+		var late := _near(vw, b, pic).size()
+		check(econ.bubbles.has(b.id) and String(econ.bubbles[b.id]["pic"]) == pic and early == 0 and (late == 1 or econ.bubbles.size() > BldEcon.BUBBLE_MAX),
+			"%s: 풍선은 조금 뒤에 일터 위에 뜸 (%d → %d · 후보 %d)" % [ty, early, late, econ.bubbles.size()])
+		if rock:
+			near[0]["amt"] = keep_v[0]
+		else:
+			near[0]["s"] = keep_v[0]
+		check(BldEcon.stall_pic(a, b) == "", "%s: 하나라도 다시 생기면 풍선 없음" % ty)
+		vw.sync(0.3, true)
+		check(_near(vw, b, pic).is_empty() and not econ.bubbles.has(b.id), "%s: 풍선이 사라짐" % ty)
+		b.worker = -1
+		r.job = keep_job
 	scene.queue_free()
 
 
