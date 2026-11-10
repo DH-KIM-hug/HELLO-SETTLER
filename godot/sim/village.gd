@@ -1932,6 +1932,7 @@ func _give_birth(w: Resident, h: Building) -> void:
 	if Genetics.piebald(baby.genes):
 		log_line("눈송이 아이가 태어났다. 사람들은 %s%s '하늘의 눈송이가 내려앉은 아이'라 부르며 귀하게 여겼다." % [nm, josa(nm, "을", "를")])
 	speak(w, "%s, 반가워!" % nm, 7)
+	emit(&"born", {"who": baby.id, "at": Vector2(h.x, h.y), "v": {"first": int(stats["born"]) == 1, "mom": w.id, "home": h.id}})   # 연출은 화면이 (EVENTS_STAGING 4)
 
 
 func _deaths(dt: float) -> void:
@@ -2949,6 +2950,7 @@ func grant_wish(id: int) -> bool:
 		if who != null:
 			speak(who, "{w:이/가} 들어주셨다!", 7)
 		log_line("{w:이/가} %s의 소원을 들어주셨다. 사람들은 %s부터 짓기로 했다." % [l["name"], Balance.label(ty)])
+		emit(&"wish_granted", {"who": int(l["from"]), "v": {"id": id, "how": &"help", "type": ty}})   # 연출은 화면이 (EVENTS_STAGING 6)
 		giant_acted()
 		Notebook.on(self, "wish")          # [거인의 수첩]
 		return true
