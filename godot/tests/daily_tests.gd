@@ -79,6 +79,7 @@ func _drop(scene: Node) -> void:
 
 func _aim(scene: Node, p: Vector2, ppu: float) -> void:
 	var cam: JarCamera = scene.get("cam")
+	(cam.camera as Camera3D).make_current()      # 다른 시험 장면이 지워진 뒤 뷰포트가 엉뚱한 카메라를 고를 수 있음 (전체 시험에서만 드러남) — 매번 이 장면 것으로
 	scene.call("look_at_ground", p)
 	cam.ppu = ppu
 	cam.ppu_goal = ppu
