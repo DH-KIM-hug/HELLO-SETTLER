@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily", "nest"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -53,7 +53,7 @@ const SUITES := {"milestone": "res://tests/milestone_tests.gd", "world": "res://
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
 	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
 	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd",
-	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd",
+	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd", "nest": "res://tests/nest_tests.gd",
 	"kids": "res://tests/kids_tests.gd", "dogs_play": "res://tests/dogs_play_tests.gd", "kids_view": "res://tests/kids_view_tests.gd", "daily": "res://tests/daily_tests.gd"}
 
 
