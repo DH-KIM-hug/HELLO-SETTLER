@@ -117,6 +117,44 @@ func _initialize() -> void:
 			_seq("k2_circle", 44.0, 9, 95)
 			_seq("k2_circle_far", 20.0, 4, 95)
 			plan.append(_sheet_k2.bind("k2_circle"))
+		# ── 아이들 놀이 ③: k3_* — KIDS_ONLY=k3hop·k3skip·k3story 로 하나씩 (가까이 44 · 마을 기본 20)
+		if only == "" or only.contains("k3hop"):
+			plan.append(_s_hop.bind(3))
+			_seq("k3_hop_start", 44.0, 3, 22)                   # 칸을 긋는 중 · 첫 아이가 첫 칸 앞으로
+			plan.append(_until.bind(_hop_stage.bind(1), 400))
+			_seq("k3_hop", 44.0, 10, 13)                        # 깨금발 (뜀 · 디딤이 번갈아)
+			plan.append(_until.bind(_hop_stage.bind(2), 900))
+			_seq("k3_hop_turn", 44.0, 3, 12)
+			plan.append(_until.bind(_hop_cheer, 2400))
+			_seq("k3_hop_cheer", 44.0, 4, 9)
+			plan.append(_until.bind(_hop_stage.bind(3), 3600))
+			_seq("k3_hop_wob", 44.0, 3, 16)
+			plan.append(_until.bind(_hop_stage.bind(1), 900))
+			_seq("k3_hop_far", 20.0, 6, 13)
+			plan.append(_until.bind(_hop_cheer, 2400))
+			_seq("k3_hop_far_cheer", 20.0, 3, 10)
+			plan.append(_end_game)
+			_seq("k3_hop_fade", 44.0, 4, 150)                   # 놀이가 끝난 뒤 칸이 닳아 사라짐
+			plan.append(_sheet_k2.bind("k3_hop"))
+		if only == "" or only.contains("k3skip"):
+			plan.append(_s_skip.bind(3))
+			plan.append(_until.bind(_skip_ph.bind(0, 0), 900))
+			_seq("k3_skip", 44.0, 12, 12)                       # 팔을 젖힘 → 던짐 → 돌이 튐 → 고리
+			plan.append(_until.bind(_skip_ph.bind(1, ChildPlay.SKIP_FAR), 3600))
+			_seq("k3_skip_far_throw", 44.0, 8, 11)              # 멀리 튄 돌 · 구경하던 아이가 폴짝
+			plan.append(_until.bind(_skip_ph.bind(0, 0), 900))
+			_seq("k3_skip_far", 20.0, 8, 14)
+			plan.append(_until.bind(_skip_ph.bind(1, ChildPlay.SKIP_FAR), 3600))
+			_seq("k3_skip_far_rings", 20.0, 9, 12)
+			plan.append(_sheet_k2.bind("k3_skip"))
+		if only == "" or only.contains("k3story"):
+			plan.append(_s_circle.bind(2, 3))                   # 자리가 셋만 열린 곳 · 아이 둘
+			_seq("k3_story_two", 44.0, 2, 120)
+			_seq("k3_story_two_far", 20.0, 1, 60)
+			plan.append(_s_circle.bind(3, 3))                   # 같은 저녁에 이어서 · 아이 셋
+			_seq("k3_story", 44.0, 8, 95)
+			_seq("k3_story_far", 20.0, 5, 95)
+			plan.append(_sheet_k2.bind("k3_story"))
 		if only == "":
 			plan.append(_sheet)
 		plan.append(_finish)
@@ -330,6 +368,7 @@ var _c := Vector2.ZERO            # 지금 장면의 가운데 (땅)
 var _follow: Resident             # 있으면 그 사람의 화면 자리를 가운데로
 var _game: Dictionary = {}
 var _half := Vector2(100, 84)
+var _half_wide := Vector2.ZERO    # 가까이 찍을 때 더 넓게 자름 (사방치기 칸 · 물가)
 
 
 ## 이름_1..n: 가운데를 맞추고 gap 장면마다 한 장
@@ -343,6 +382,8 @@ func _centre(ppu: float, gap: int) -> int:
 	_half = Vector2(100, 84) if _follow == null and not _game.is_empty() else Vector2(66, 56)
 	if ppu < 30.0 or ppu > 60.0:
 		_half = Vector2(100, 84)
+	elif _half_wide != Vector2.ZERO:
+		_half = _half_wide
 	var p := _c
 	if _follow != null:
 		var m := _model(_follow)
@@ -508,6 +549,7 @@ func _s_toddle() -> int:
 
 func _s_game(kind: String, n: int) -> int:
 	scene.paused = true
+	_half_wide = Vector2.ZERO
 	_clear_games()
 	_find_spot()
 	var g := ChildPlay.open_game(v, kids[0], _to_spot, kind, 3 + step)
@@ -607,17 +649,28 @@ var _first_dbg := false
 
 
 ## 저녁 이야기: 모닥불 곁에 앉아 쉬는 할매 둘레로 아이 n명 (어른들은 멀리서 일함)
-func _s_circle(n: int) -> int:
-	_to_hour(19.03)
+func _s_circle(n: int, want_cap := 0) -> int:
+	if v.hour_now() < 19.0 or v.hour_now() > 19.5:     # 같은 저녁에 이어 찍을 땐 하루를 건너뛰지 않음
+		_to_hour(19.03)
 	scene.paused = true
+	_half_wide = Vector2.ZERO
 	_clear_games()
 	_first_dbg = false
 	var e := Vector2(v.fire.x + 1.4, v.fire.y + 1.4)
-	for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:     # 모닥불 둘레 두 칸 (쉬는 자리) 중 아이들이 앉을 수 있는 곳
-		var q := Vector2(v.fire.x + cos(a) * 2.0, v.fire.y + sin(a) * 2.0)
-		if ChildPlay.story_side(v, q) != 0:
-			e = q
-			break
+	var got := false
+	for rad: float in ([2.0] if want_cap == 0 else [2.0, 1.7, 2.3, 2.6, 1.4]):
+		for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0, 0.5, 1.1, 1.7, 2.3, 2.9, 3.8, 4.6, 5.4, 5.9]:     # 모닥불 둘레 두 칸 (쉬는 자리) 중 아이들이 앉을 수 있는 곳
+			var q := Vector2(v.fire.x + cos(a) * rad, v.fire.y + sin(a) * rad)
+			if not got and ChildPlay.story_side(v, q) != 0 and (want_cap == 0 or ChildPlay.story_seats(v, q).size() == want_cap):     # want_cap: 열린 자리가 꼭 그만큼인 곳
+				e = q
+				got = true
+	if want_cap > 0 and not got:
+		print("  (열린 자리가 %d인 곳이 없음 — 기본 자리에서 찍음)" % want_cap)
+		for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:
+			var q := Vector2(v.fire.x + cos(a) * 2.0, v.fire.y + sin(a) * 2.0)
+			if not got and ChildPlay.story_side(v, q) != 0:
+				e = q
+				got = true
 	for r in v.people:
 		if r.is_adult() and r != elder:
 			_hold(r, "work", v.fire.x + 16.0 + float(r.id % 5), v.fire.y + 12.0, "일하는 중")
@@ -644,6 +697,14 @@ func _s_circle(n: int) -> int:
 		r.say = ""
 		r.say_t = 0.0
 	scene.view.stage_say.clear()
+	if want_cap > 0:                          # k3: 이야기 자리의 사람이 하는 혼잣말은 뜨지 않아야 (어르신·앉은 아이)
+		var busy: Dictionary = v.social.get("busy", {})     # 찍는 동안 지나가던 이웃이 어르신을 불러 세우지 않게 (Social._can_stop의 쉬는 시간)
+		busy[str(elder.id)] = v.t + 1.0e6
+		v.social["busy"] = busy
+		elder.say = "허리야"
+		elder.say_t = 1.0e6
+		kids[0].say = "배고파"
+		kids[0].say_t = 1.0e6
 	_game = g
 	_c = e + (ChildPlay.seat(g, 0) + ChildPlay.seat(g, 1) - e * 2.0) * 0.3
 	_follow = null
@@ -659,7 +720,8 @@ func _sheet_k2(prefix: String) -> int:
 	for path: String in sheet:
 		if path.get_file().begins_with(prefix):
 			mine.append(path)
-	var out := out_dir.path_join("k2_sheet_%s.png" % prefix.trim_prefix("k2_"))
+	var tag := prefix.get_slice("_", 0)       # k2 · k3
+	var out := out_dir.path_join("%s_sheet_%s.png" % [tag, prefix.trim_prefix(tag + "_")])
 	var cols := 4
 	var cw := 0
 	var chh := 0
@@ -696,3 +758,111 @@ func _sheet() -> int:
 	load("res://tools/contact_sheet.gd").make(sheet, out_dir.path_join("kids_sheet.png"), 0.5)
 	print("모음: %s (%d장)" % [out_dir.path_join("kids_sheet.png"), sheet.size()])
 	return 1
+
+
+# ───────────────────────── 아이들 놀이 ③ (k3): 사방치기 · 물수제비 ─────────────────────────
+## 어른들은 멀리서 일함 (장면을 가리지 않게) · 낮
+func _k3_stage() -> void:
+	_to_hour(10.5)
+	scene.paused = true
+	_clear_games()
+	_first_dbg = false
+	for r in v.people:
+		if r.is_adult():
+			_hold(r, "work", v.fire.x + 16.0 + float(r.id % 5), v.fire.y + 12.0, "일하는 중")
+		r.say = ""
+		r.say_t = 0.0
+	scene.view.stage_say.clear()
+
+
+func _k3_seat(g: Dictionary, n: int) -> void:
+	for i in kids.size():
+		var k := kids[i]
+		if i >= n:
+			_hold(k, "rest", v.fire.x - 9.0 - float(i), v.fire.y - 8.0, "쉬는 중")
+			continue
+		var gi := ChildPlay._add(g, k.id)
+		var sp := ChildPlay.seat(g, int(g["sl"][gi]))
+		k.x = sp.x
+		k.y = sp.y
+		k.action = "play"
+		k.anim = "play"
+		k.carry = ""
+		k.sleeping = false
+		k.steps.clear()
+		ChildPlay._attach(k, g, gi, 1.0e6)
+
+
+## 사방치기: 집 가까운 트인 땅 (규칙 그대로 hop_spot이 고른 곳) · 아이 n명
+func _s_hop(n: int) -> int:
+	_k3_stage()
+	var hp := {}
+	for k in 120:
+		var p := Vector2(v.fire.x, v.fire.y) + Vector2(3.0 + 0.5 * float(k / 8), 0.0).rotated(TAU * float(k % 8) / 8.0 + 0.4)
+		kids[0].x = p.x
+		kids[0].y = p.y
+		hp = ChildPlay.hop_spot(v, kids[0], p, k)
+		if not hp.is_empty():
+			break
+	if hp.is_empty():
+		print("사방치기 자리를 못 찾음")
+		return 1
+	var g := ChildPlay.open_hop(v, kids[0], hp["c"], int(hp["dir"]), 3 + step)
+	g["c1"] = 1.0e9
+	_k3_seat(g, n)
+	_game = g
+	_c = (hp["c"] as Vector2) - Vector2(float(g["ax"]), float(g["ay"])) * 0.45
+	_half_wide = Vector2(118, 88)
+	_follow = null
+	scene.refresh()
+	scene.paused = false
+	print("사방치기 — 가운데 (%.1f, %.1f) · 방향 %d · 아이 %d · 모닥불 (%.1f, %.1f)" % [(hp["c"] as Vector2).x, (hp["c"] as Vector2).y, int(hp["dir"]), n, v.fire.x, v.fire.y])
+	return 14
+
+
+func _hop_stage(stage: int) -> bool:
+	return int(ChildPlay.hop_at(_game, float(_game["c"]))[0]) == stage
+
+
+## 깨끗이 다녀온 바로 뒤 (동무들이 폴짝 · 손뼉)
+func _hop_cheer() -> bool:
+	return int(_game["ok"]) == 1 and int(_game["tags"]) > 0 and float(_game["c"]) - float(_game["hs"]) > 45.0 and float(_game["c"]) - float(_game["hs"]) < 110.0
+
+
+func _end_game() -> int:
+	_game["c1"] = 0.0
+	return 380
+
+
+## 물수제비: 호숫가 (규칙 그대로 skip_spot이 고른 곳) · 아이 n명
+func _s_skip(n: int) -> int:
+	_k3_stage()
+	var sk := {}
+	for ring in range(2, 24):
+		for k in 16:
+			var p := Vector2(v.fire.x, v.fire.y) + Vector2(float(ring), 0.0).rotated(TAU * float(k) / 16.0)
+			if sk.is_empty() and v.water.inside(p.x, p.y, 2.0) and not v.water_at(p.x, p.y):
+				sk = ChildPlay.skip_spot(v, p, k)
+	if sk.is_empty():
+		print("물수제비 자리를 못 찾음")
+		return 1
+	var d: Vector2 = sk["d"]
+	var g := ChildPlay.open_skip(v, kids[0], sk["c"], d, float(sk["len"]), 3 + step)
+	g["c1"] = 1.0e9
+	_k3_seat(g, n)
+	_game = g
+	_c = (sk["c"] as Vector2) + d * 1.7
+	_half_wide = Vector2(118, 92)
+	_follow = null
+	scene.refresh()
+	scene.paused = false
+	print("물수제비 — 물가 (%.1f, %.1f) · 던지는 쪽 (%.2f, %.2f) · 물길 %.1f · 아이 %d · 모닥불 (%.1f, %.1f)" % [(sk["c"] as Vector2).x, (sk["c"] as Vector2).y, d.x, d.y, float(sk["len"]), n, v.fire.x, v.fire.y])
+	return 30
+
+
+## 물수제비 단계: ph (0 = 팔을 젖히기 시작 · 1 = 던진 뒤) · min_skips 넘게 튀는 돌
+func _skip_ph(ph: int, min_skips: int) -> bool:
+	if int(_game["turn"]) < 0 or int(_game["ph"]) != ph or int(_game["h"]) < min_skips:
+		return false
+	var u := float(_game["c"]) - float(_game["hs"])
+	return u < 60.0 if ph == 0 else u < ChildPlay.SKIP_WIND + 60.0

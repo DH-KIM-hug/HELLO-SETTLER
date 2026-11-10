@@ -1647,7 +1647,7 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		elif not sc.is_empty():
 			text = String(sc[0])
 			mood = String(sc[1])
-		elif r.say_t > 0.0 and r.say != "":
+		elif r.say_t > 0.0 and r.say != "" and not ChildPlay.story_seated(vil, r.id):     # 저녁 이야기 자리(어르신·앉은 아이)에서는 제 혼잣말을 띄우지 않음 — 그림 말풍선만
 			text = r.say
 			staged = false
 		else:
