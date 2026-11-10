@@ -5,7 +5,7 @@
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
 ##         era 깨달음·계시·연대기 (A4b · A5 · A10) · shop 상점·손·떨어뜨리기·아래 띠 (A7 · A9) ·
 ##         village 마을 시대 건물·등불 옮기기 (A6 · A11) ·
-##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초) · touch 거인의 손길 (giant-touch, 몇 초) · population 인구 (혼인·출산 확률·가임 부부·조각, 몇 초) · kitchen 우유·계란 없는 부엌 (진딧물 목장·큰 알·씨앗 방앗간 — E3-14) · kitchen_view 부엌 화면 (목장·큰 알·껍데기·씨앗 짜개, 몇 초) · production 생산 사슬 (바로 보냄·입구 채우기·상함·애벌레 한살이·꿀방울 — design/gdd/production-chain.md AC) · ui_batch 화면 UI 그리기 묶기 (P1b, 1초 안) · dogs 강아지 새끼·털 유전·상세 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · flower_info 꽃 정보 카드 (UI.md, 몇 초) · cutdog 종이 인형 강아지 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초) · touch 거인의 손길 (giant-touch, 몇 초) · population 인구 (혼인·출산 확률·가임 부부·조각, 몇 초) · kitchen 우유·계란 없는 부엌 (진딧물 목장·큰 알·씨앗 방앗간 — E3-14) · kitchen_view 부엌 화면 (목장·큰 알·껍데기·씨앗 짜개, 몇 초) · production 생산 사슬 (바로 보냄·입구 채우기·상함·애벌레 한살이·꿀방울 — design/gdd/production-chain.md AC) · ui_batch 화면 UI 그리기 묶기 (P1b, 1초 안) · dogs 강아지 새끼·털 유전·상세 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · flower_info 꽃 정보 카드 (UI.md, 몇 초) · cutdog 종이 인형 강아지 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · tap_react 톡 반응 (주민·강아지를 누르면 귀엽게 — 화면만, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -52,7 +52,8 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
 	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
-	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd"}
+	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd",
+	"tap_react": "res://tests/tap_react_tests.gd"}
 
 
 func _initialize() -> void:

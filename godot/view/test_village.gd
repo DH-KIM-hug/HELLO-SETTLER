@@ -27,6 +27,7 @@ var sun: DirectionalLight3D
 var night := 0.0                      # 지금 화면의 밤 정도 0~1 (Style.night_amount + 밤 건너뛰기 연출)
 var ui_label: Label
 var bubbles: Control
+var tap_react: TapReact              # [톡 반응] 누른 주민·강아지의 귀여운 반응 + 그림 말풍선 (view/tap_react.gd — 화면만)
 var paused := false
 var speed_btn: Button
 var skip_btn: Button
@@ -445,6 +446,8 @@ func _process(dt: float) -> void:
 		for vv: Array in village_views():
 			(vv[1] as VillageView).sync(dt)
 		_follow(dt)
+		if tap_react != null:             # [톡 반응] 주민을 놓은 뒤에 인형만 움직임 (시뮬 자리는 그대로)
+			tap_react.step(dt, cam.camera, top_h, bottom_h)
 	if lineup != null:
 		for m in lineup.get_children():
 			if m is ResidentModel:
@@ -585,6 +588,9 @@ func _setup_ui() -> void:
 	bubbles.set_anchors_preset(Control.PRESET_FULL_RECT)
 	bubbles.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	root.add_child(bubbles)
+	tap_react = TapReact.new()            # [톡 반응] 그림 말풍선 — 띠·버튼·시트 아래
+	tap_react.name = "TapReact"
+	root.add_child(tap_react)
 	site_marks_ctl = Control.new()        # 첫날 짓는 터 진행 고리 + 쪽지의 땅 고리(제단·짓는 터…) — 띠·버튼·시트 아래 (그 위에 떠 보이지 않게)
 	site_marks_ctl.name = "SiteMarks"
 	site_marks_ctl.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -1701,9 +1707,12 @@ func _unhandled_input(e: InputEvent) -> void:
 			if mb.pressed:
 				_press_pos = mb.position
 				_tap_ok = true
+				_react_press(mb.position)
 			elif _tap_ok:
 				_tap_ok = false
 				_on_tap(mb.position)
+			else:
+				_react_cancel()
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
 			cam.zoom_by(1.15)
 		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
@@ -1718,6 +1727,7 @@ func _unhandled_input(e: InputEvent) -> void:
 			return
 		if _tap_ok and (e as InputEventMouseMotion).position.distance_to(_press_pos) > TAP_SLOP:
 			_tap_ok = false
+			_react_cancel()
 		if not _tap_ok:
 			_stop_follow()
 		cam.pan_pixels((e as InputEventMouseMotion).relative)
@@ -1743,8 +1753,11 @@ func _on_touch(t: InputEventScreenTouch) -> void:
 			_touch_press = t.position
 			if hand_ctl != null and hand_ctl.aiming():
 				hand_ctl.aim_at(t.position, true)
+			else:
+				_react_press(t.position)
 		else:
 			_touch_tap = false        # 두 손가락 = 확대, 톡 아님
+			_react_cancel()
 			_pinch_reset()
 	else:
 		var had := _touches.has(t.index)
@@ -1755,8 +1768,10 @@ func _on_touch(t: InputEventScreenTouch) -> void:
 		if had and _touches.is_empty() and _touch_tap:
 			_touch_tap = false
 			_on_tap(t.position)
-		elif _touches.size() >= 2:
-			_pinch_reset()
+		else:
+			_react_cancel()
+			if _touches.size() >= 2:
+				_pinch_reset()
 
 
 func _on_touch_drag(d: InputEventScreenDrag) -> void:
@@ -1770,6 +1785,7 @@ func _on_touch_drag(d: InputEventScreenDrag) -> void:
 			return
 		if _touch_tap and d.position.distance_to(_touch_press) > TAP_SLOP:
 			_touch_tap = false
+			_react_cancel()
 		if not _touch_tap:
 			_stop_follow()
 			cam.pan_pixels(d.relative)
@@ -1821,6 +1837,43 @@ func pick_resident(sp: Vector2) -> Resident:
 
 
 var _picked: Array = []              # pick_resident가 고른 주민의 [Village, VillageView]
+
+
+# ───────────────────────── 톡 반응 (view/tap_react.gd — 화면만) ─────────────────────────
+## 누른 곳의 강아지 {vw, id, d} — 주민 r이 화면에서 더 가까우면 빈 사전 (주민이 먼저)
+func _pick_dog(sp: Vector2, r: Resident) -> Dictionary:
+	if tap_react == null or not views_live:
+		return {}
+	var dog := TapReact.pick_dog(cam.camera, village_views(), sp, PICK_R)
+	if dog.is_empty() or r == null:
+		return dog
+	var m: Node3D = (_picked[1] as VillageView).residents.get(r.id)
+	return dog if float(dog["d"]) < TapReact.resident_dist(cam.camera, m, sp) else {}
+
+
+## 손가락이 닿은 순간: 그 밑의 주민·강아지가 살짝 눌림 (톡으로 확정되면 _on_tap이 반응을 잇고, 끌면 _react_cancel)
+func _react_press(sp: Vector2) -> void:
+	if tap_react == null or not views_live or not _react_can_tap(sp):
+		return
+	var keep := _picked
+	var r := pick_resident(sp)
+	var vw: VillageView = _picked[1] if r != null else null
+	_picked = keep
+	var dog := TapReact.pick_dog(cam.camera, village_views(), sp, PICK_R)
+	if not dog.is_empty() and (r == null or float(dog["d"]) < TapReact.resident_dist(cam.camera, vw.residents.get(r.id), sp)):
+		tap_react.press_dog(dog["vw"], int(dog["id"]))
+	elif r != null:
+		tap_react.press_resident(vw, r)
+
+
+## 이 누름이 주민·강아지 톡이 될 수 있는가 — 손 조준 중이거나 제단 위면 아님 (world_village가 병 밖·무리 나누기를 더함)
+func _react_can_tap(sp: Vector2) -> bool:
+	return not (hand_ctl != null and hand_ctl.aiming()) and pick_altar(sp) == null
+
+
+func _react_cancel() -> void:
+	if tap_react != null:
+		tap_react.cancel_press()
 var _follow_vv: Array = []           # 상세를 연(따라가는) 주민의 [Village, VillageView]
 
 
@@ -1833,6 +1886,11 @@ func _on_tap(sp: Vector2) -> void:
 		open_altar_of(av)
 		return
 	var r := pick_resident(sp)
+	var dog := _pick_dog(sp, r)             # [톡 반응] 강아지가 더 가까우면 강아지 (화면만 — 유리 톡으로 넘어가지 않음)
+	if not dog.is_empty():
+		_react_cancel()
+		tap_react.react_dog(dog["vw"], int(dog["id"]))
+		return
 	if r != null:
 		altar_sheet.close()
 		bcard.close()
@@ -1841,8 +1899,12 @@ func _on_tap(sp: Vector2) -> void:
 		_follow_vv = _picked
 		detail.open(r)
 		Notebook.on_detail(_picked[0], r)     # [거인의 수첩] 아이 하나를 눌러 보기
-		GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
+		if tap_react != null:
+			tap_react.react_resident(_picked[1], r)   # [톡 반응] 폴짝·말풍선·제 목소리 한마디 (화면만 — AUDIO.md 7의 "응?"을 이어받음)
+		else:
+			GameAudio.say("hello", [r])   # 누른 주민이 "응?" (AUDIO.md 7)
 		return
+	_react_cancel()
 	var b := pick_building(sp)              # 건물 (주민이 앞에 있으면 위에서 주민이 먼저)
 	if b != null:
 		open_building(_picked_b[0], b, _picked_b[1])
