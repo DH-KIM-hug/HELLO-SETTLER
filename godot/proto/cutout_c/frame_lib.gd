@@ -6,7 +6,10 @@ extends RefCounted
 
 const Cut := preload("res://proto/cutout_a/cut_lib.gd")
 const DIR := "res://art/cutout/woman_c/"
-const CLIPS := ["walk", "carry", "idle", "hold"]
+## 그려진 동작 = frames.json의 clips (2026-11-10: 걷기·나르기·서기·안고 서기 + 앉기·먹기·올려다보기·무릎·괭이질·줍기). 셰이더 배열 길이
+const MAX_CLIPS := 16
+## 머리가 위에 그려진 연장 (낫·나무망치 — 괭이·갈퀴는 날이 아래): 괭이질 장면의 날 쪽으로 머리가 가게 반 바퀴 더 돌림
+const PROP_HEAD_UP := [7, 9]
 ## 짐을 머리 위에 다시 그리는 보기 (앞·비스듬한 앞: 오른 어깨의 자루가 얼굴 옆 앞쪽) — 뒤쪽 보기는 머리가 자루 앞
 const SACK_OVER := [true, true, false, false]
 ## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
@@ -33,7 +36,14 @@ static func lib() -> Dictionary:
 
 
 static func clip_index(c: String) -> int:
-	return CLIPS.find(c)
+	return (lib()["clips"] as Array).find(c)
+
+
+## 소품의 키 (rig) · 더 돌림 (rad) — frame_doll.gdshader prop
+static func prop_fit(id: int) -> Vector2:
+	if id < 0 or id >= Cut.PROPS.size():
+		return Vector2.ZERO
+	return Vector2(Cut._prop_h(Cut.PROPS[id]), PI if PROP_HEAD_UP.has(id) else 0.0)
 
 
 ## 걷기 한 주기(두 걸음)에 디딘 발이 가는 길 (rig) — 장면 그림에서 잰 값 (비스듬한 보기 디딤 장면의 두 발 사이 × 2)
@@ -67,16 +77,17 @@ static func mesh() -> ArrayMesh:
 				c1.append_array([0, 0, -1, -1])
 				c2.append_array([-1, 0, 0, 0])
 			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
-	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함)
+	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함) + 소품 (group 3: 빵·괭이·낫·망치 …
+	# 컷아웃 인형과 같은 그림, 묶음 번호 = PROPS 번호 — 2026-11-10 먹기·괭이질)
 	for q: Dictionary in Cut.lib()["quads"]:
 		var grp := int(q["group"])
-		if grp != 1 and grp != 2:
+		if grp != 1 and grp != 2 and grp != 3:
 			continue
 		if String(q["part"]) == "neck":
 			continue
 		var r: Array = q["rect"]
 		var uv: Array = q["uv"]
-		var s_i := float(Cut.SETS.find(q["set"]))
+		var s_i := float(Cut.SETS.find(q["set"])) if grp != 3 else float(Cut.PROPS.find(q["set"]))
 		var b := verts.size()
 		var corners := [[r[0], r[3], uv[0], uv[1]], [r[2], r[3], uv[2], uv[1]], [r[2], r[1], uv[2], uv[3]], [r[0], r[1], uv[0], uv[3]]]
 		for cr: Array in corners:
@@ -104,6 +115,18 @@ static func mesh() -> ArrayMesh:
 
 
 ## 재질 (palette = 컷아웃 게임 재질의 물감 — 피부·머리 단계가 게임과 같게)
+## 양말·신 물감 (2026-11-10 메인 세션 결정, 위임: "신은 짙은 갈색 그대로, 양말은 두 단계쯤 밝은 따뜻한 색 — 기본 확대(ppu 20)에서 두 발이
+## 두 덩이로 읽히게"). 팔레트의 양말 네 가지 가운데 어두운 둘(짙은 갈색 6a4332 · 갈색 8a6a50)은 신과 한 덩이로 뭉쳤다 → 방식 C 인형은
+## 그 둘을 밝은 황갈(dba26d)로 입히고, 신 가운데 가장 밝은 것(9c7656)은 그린 신 색(7b442e)에 가장 가까운 짙은 갈색(744628)으로 입힌다. 팔레트 안의 색만 쓰고, 생김새 기록
+## (look["dye"])과 컷아웃 인형은 그대로 — 옷 물감(주색·크림·띠)은 이 함수를 지나지 않는다. -1(그린 색 그대로)은 그대로 둔다.
+static func leg_dye(i: int) -> int:
+	return Cut.OFF["leg"] if i == Cut.OFF["leg"] + 1 or i == Cut.OFF["leg"] + 3 else i
+
+
+static func shoe_dye(i: int) -> int:
+	return Cut.OFF["shoe"] + 1 if i == Cut.OFF["shoe"] + 3 else i
+
+
 static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	if _mat != null:
 		return _mat
@@ -118,11 +141,14 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	_mat.set_shader_parameter("fmask0", load(DIR + "frames_mask0.png"))
 	_mat.set_shader_parameter("fmask1", load(DIR + "frames_mask1.png"))
 	_mat.set_shader_parameter("fdata", _fdata())
-	var off := Vector4i.ZERO
-	var nn := Vector4i.ZERO
+	var off := PackedInt32Array()
+	var nn := PackedInt32Array()
+	off.resize(MAX_CLIPS)
+	nn.resize(MAX_CLIPS)
 	var o := 0
-	for i in CLIPS.size():
-		var n := int(L["frames_per_clip"][CLIPS[i]])
+	var clips: Array = L["clips"]
+	for i in mini(clips.size(), MAX_CLIPS):
+		var n := int(L["frames_per_clip"][clips[i]])
 		off[i] = o
 		nn[i] = n
 		o += n * 4
@@ -150,13 +176,17 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	return _mat
 
 
-## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig)
+## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품 (기울기, 손 x, y, 배율),
+## [3] = 쥐는 자리 (소품 키의 몇 배)
 static func _fdata() -> ImageTexture:
 	var fr: Array = lib()["frames"]
-	var img := Image.create(fr.size(), 2, false, Image.FORMAT_RGBAF)
+	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
 	for i in fr.size():
 		var f: Dictionary = fr[i]
 		var uv: Array = f["uv"]
 		img.set_pixel(i, 0, Color(uv[0], uv[1], uv[2], uv[3]))
-		img.set_pixel(i, 1, Color(f["head"][0], f["head"][1], float(f.get("t0", 0.0)), 0))
+		img.set_pixel(i, 1, Color(f["head"][0], f["head"][1], float(f.get("t0", 0.0)), float(f.get("hang", 0.0))))
+		var pr: Array = f.get("prop", [0.0, 0.0, 0.0, 0.0, 0.0])
+		img.set_pixel(i, 2, Color(pr[0], pr[1], pr[2], pr[3]))
+		img.set_pixel(i, 3, Color(pr[4], 0, 0, 0))
 	return ImageTexture.create_from_image(img)

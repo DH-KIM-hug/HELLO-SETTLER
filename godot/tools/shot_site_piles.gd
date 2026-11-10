@@ -4,6 +4,9 @@
 ##    <tag>_stall_<n>_ppu44.png · _ppu20.png                         막힌 일터 (재료 없음 · 일꾼 없음 · 앞이 가득)
 ##    <tag>_wide_ppu20.png · <tag>_wide_ppu44.png                    마을 한 장 (여러 곳이 한꺼번에)
 ## 인자: -- before | after | off (파일 이름 머리말) [site | work | stall | wide | draws]  (하나만 · 'draws'는 그리기 횟수만 재고 끝)
+##   v3 | v3:plants | v3:wheat | v3:front | v3:village | v3:gather | v3:chips | v3:stall   남은 가림 (카메라 방위 두 걸음 × ppu 44·20):
+##     -> <tag>_plants_ · _wheat_ · _front_ · _village_<건물>_ · _<일터>_worker_ · _chips_away_ · _stall_<일터>_ yaw<걸음>_ppu<..>.png
+##   세 번째 인자 dbg = 건물 둘레 꽃·풀·더미 자리와 채집 일꾼이 선 자리를 찍어 냄 (무엇이 가리는지 찾을 때)
 ##   off = 보이는 살림(BldEcon)을 끄고 (그리기 횟수 견줌)
 ## 시뮬레이션은 멈춘 채(paused) 건물 값만 바꿔 찍는다 — 화면이 값을 그대로 읽는지 보는 용도.
 ## '일하는 중'은 일터 시계(b.timer)를 화면마다 조금씩 밀어 흉내 낸다 (BldEcon은 시계가 움직이는 일터만 돌아가는 것으로 본다).
@@ -28,6 +31,9 @@ var site: Building
 var site2: Building
 var blds := {}            # 종류 → Building
 var working := {}         # Building → true (일하는 중 흉내 — 화면마다 timer를 민다)
+var vblds := {}           # 종류 → 마을에 원래 있던 Building (트인 자리가 아닌 제자리 — 큰 꽃·밀에 가리는지 보는 용도)
+var gworkers := {}        # 채집 일터 종류 → 나무·바위에서 일하는 주민
+var _skip := false        # 마을에 그 건물이 없으면 그 장은 찍지 않음
 
 
 func _initialize() -> void:
@@ -56,6 +62,12 @@ func _initialize() -> void:
 
 
 func _plan_shots() -> void:
+	if only.begins_with("v3"):       # v3 = 전부 · v3:plants|wheat|front|gather|chips|stall = 그 부분만 (카메라 방위 두 걸음씩)
+		_plan_v3(only.trim_prefix("v3").trim_prefix(":"))
+		return
+	if only.begins_with("v2"):       # v2 = 전부 · v2:gather|village|site|house|sawmill|portrait = 그 부분만
+		_plan_v2(only.trim_prefix("v2").trim_prefix(":"))
+		return
 	# 짓는 터: [진행 몫, 판자, 돌]
 	var st := [[0.0, 0, 0], [0.0, 2, 0], [0.0, 8, 4], [0.14, 8, 4], [0.30, 8, 4], [0.55, 8, 4], [0.80, 8, 4], [0.97, 8, 4], [1.0, 8, 4], [1.0, 8, 4]]
 	for i in (st.size() if only in ["", "site"] else 0):
@@ -92,7 +104,7 @@ func _plan_shots() -> void:
 
 func _ascii(ty: String) -> String:
 	return {"맷돌간": "quern", "화덕": "oven", "나무꾼": "lumber", "제재소": "sawmill", "채석장": "quarry", "우물": "well",
-		"농장": "farm", "창고": "store"}.get(ty, "bld")
+		"농장": "farm", "창고": "store", "오두막": "house"}.get(ty, "bld")
 
 
 func _process(_dt: float) -> bool:
@@ -139,6 +151,7 @@ func _build() -> int:
 	for b in v.buildings:
 		if b.built and not blds.has(b.type):
 			blds[b.type] = b
+	vblds = blds.duplicate()
 	for ty: String in WORK:      # 일터는 앞(카메라 쪽)이 트인 자리에 하나씩 새로 (마을 것은 큰 꽃·밀밭 그림에 가려 더미를 볼 수 없다)
 		if ty == "농장":
 			if blds.has(ty):
@@ -168,6 +181,8 @@ func _build() -> int:
 	var hp := _clear_spot(2.6)
 	if hp != Vector2.INF:
 		blds["house"] = v.add_building("오두막", hp.x, hp.y, true)
+	if only.begins_with("v3"):
+		_build_v3()
 	scene.refresh()
 	scene.set_debug_mode(false)
 	if tag == "off" and scene.view.get("econ") != null:
@@ -289,6 +304,312 @@ func _set_stalls(list: Array) -> int:
 	return 150         # 말풍선은 조금 뒤에 뜬다
 
 
+## (v2) 남은 일 확인용: 채집 일터 · 마을 제자리 건물 · 벽/지붕 단계 그림자 · 집 땔감 · 제재소 톱밥 · 세로 화면 기본 확대
+func _plan_v2(part: String) -> void:
+	for ty: String in (["나무꾼", "채석장"] if part in ["", "gather"] else []):      # 마을 재고 0 · 절반 · 가득 (뒤 둘은 일꾼이 나무·바위에서 일하는 중)
+		for i in 3:
+			plan.append(_set_gather.bind(ty, i))
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind(ty, ppu), _save.bind("%s_%d_ppu%d" % [_ascii(ty), i, int(ppu)], ppu)])
+		for ppu: float in [64.0, 44.0, 20.0]:
+			plan.append_array([_aim_w.bind(ty, ppu), _save.bind("%s_worker_ppu%d" % [_ascii(ty), int(ppu)], ppu)])
+	if part in ["", "village"]:
+		plan.append(_set_village)
+		for ty: String in ["오두막", "창고", "맷돌간", "화덕", "나무꾼", "채석장", "제재소", "우물"]:
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_v.bind(ty, ppu), _save.bind("village_%s_ppu%d" % [_ascii(ty), int(ppu)], ppu)])
+	var st := [[0.55, 8, 4], [0.80, 8, 4], [0.97, 8, 4]]
+	for i in (st.size() if part in ["", "site"] else 0):
+		plan.append(_set_site.bind(st[i]))
+		for ppu: float in [44.0, 20.0]:
+			plan.append_array([_aim_b.bind("site", ppu), _save.bind("site_%d_ppu%d" % [i + 5, int(ppu)], ppu)])
+	for i in ([0, 2] if part in ["", "house"] else []):
+		plan.append(_set_house.bind(i))
+		for ppu: float in [44.0, 20.0]:
+			plan.append_array([_aim_b.bind("house", ppu), _save.bind("house_%d_ppu%d" % [i, int(ppu)], ppu)])
+	if part in ["", "sawmill"]:
+		plan.append(_set_work.bind("제재소", 0.67, true))
+		for ppu: float in [44.0, 24.0, 20.0, 16.0]:
+			plan.append_array([_aim_b.bind("제재소", ppu), _save.bind("sawmill_work_ppu%d" % int(ppu), ppu)])
+	if part in ["", "portrait"]:
+		plan.append(_set_portrait)
+		for ppu: float in [16.0, 20.0, 24.0]:
+			plan.append_array([_aim.bind(Vector2.INF, ppu), _save.bind("portrait_village_ppu%d" % int(ppu), 0.0)])
+			plan.append_array([_aim_b.bind("화덕", ppu), _save.bind("portrait_stalls_ppu%d" % int(ppu), 0.0)])
+
+
+# ───────────────────────── v3: 남은 가림 (시뮬이 놓는 식물 · 밀 · 앞 건물) · 카메라 방위 · 채집 일꾼 · '둘레에 없음' 풍선 · 빈 일터 조각 ─────────────────────────
+const V3_YAWS := [0, 1]
+
+
+## 카메라 방위 걸음 st(0~3)의 카메라 쪽 · 화면 오른쪽 (땅 위 x·z)
+func _fdir(st: int) -> Vector2:
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG + 90.0 * st)
+	return Vector2(sin(yaw), cos(yaw))
+
+
+func _rdir(st: int) -> Vector2:
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG + 90.0 * st)
+	return Vector2(cos(yaw), -sin(yaw))
+
+
+## 건물 그림 밑변에서 더미 줄까지 (건물 자리에서 카메라 쪽으로)
+func _line(b: Building) -> float:
+	var pk := BldEcon.pic_k(v, b)
+	var d := Bld2D.info(pk[0])
+	return float(d.get("front", 0.0)) * float(pk[1]) + BldEcon.FRONT_GAP
+
+
+## 가리는 것들을 두 방위의 '앞'에 하나씩: 제재소 더미 앞 큰 민들레·큰 버섯 · 맷돌간 앞 밀밭 · 우물 더미 앞 집
+func _build_v3() -> void:
+	for st: int in V3_YAWS:
+		var f := _fdir(st)
+		var r := _rdir(st)
+		var saw: Building = blds.get("제재소")
+		if saw != null and v.flora != null:
+			var o := Vector2(saw.x, saw.y)
+			var d := v.flora._add_dand(v, o + f * (_line(saw) + 1.3) + r * 1.5, "flower")
+			d["st_t"] = v.t - 0.5 * Balance.DAND_FLOWER
+			var d2 := v.flora._add_dand(v, o + f * (_line(saw) + 1.1) - r * 0.2, "leaf")
+			d2["st_t"] = v.t
+			v.flora.add_shroom(v, o + f * (_line(saw) + 1.8) - r * 1.6, "흰갓버섯", 1.0)
+			print("v3 plants yaw", st, " dand ", Vector2(d["x"], d["y"]), " leaf ", Vector2(d2["x"], d2["y"]))
+		var quern: Building = blds.get("맷돌간")
+		if quern != null:
+			var p := Vector2(quern.x, quern.y) + f * 5.0 + r * 0.4
+			var farm := v.add_building("농장", p.x, p.y, true)
+			farm.built_t = v.t
+			farm.ready_at = v.t - 1.0          # 익은 밀 (키 큰 이삭 — 싹은 낮아서 가리지 않는다)
+			farm.out["밀"] = BldEcon.out_full("밀")
+			blds["farm%d" % st] = farm
+			print("v3 farm yaw", st, " ", p)
+		var well: Building = blds.get("우물")
+		if well != null:
+			var p := Vector2(well.x, well.y) + f * 2.4 + r * 0.9
+			var hut := v.add_building("오두막", p.x, p.y, true)
+			hut.built_t = v.t
+			blds["hut%d" % st] = hut
+			print("v3 hut yaw", st, " ", p)
+	if scene.get("world") != null and scene.world.get("water") != null:
+		for sf: Dictionary in scene.world.water.sunflowers:
+			print("v3 sunflower at ", Vector2(sf["x"], sf["y"]), " village ", v.center, " dist ", Vector2(sf["x"], sf["y"]).distance_to(v.center))
+
+
+func _plan_v3(part: String) -> void:
+	for st: int in V3_YAWS:
+		plan.append(_yaw.bind(st))
+		if part in ["", "plants"]:
+			plan.append(_set_work.bind("제재소", 1.0, true))
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind("제재소", ppu), _save.bind("plants_yaw%d_ppu%d" % [st, int(ppu)], ppu)])
+		if part in ["", "wheat"]:
+			plan.append(_set_work.bind("맷돌간", 1.0, true))
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind("맷돌간", ppu), _save.bind("wheat_yaw%d_ppu%d" % [st, int(ppu)], ppu)])
+		if part in ["", "front"]:
+			plan.append(_set_work.bind("우물", 1.0, true))
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind("우물", ppu), _save.bind("front_yaw%d_ppu%d" % [st, int(ppu)], ppu)])
+		if part in ["", "village"]:
+			plan.append(_set_village)
+			for ty: String in ["창고", "맷돌간", "화덕", "제재소"]:
+				for ppu: float in [44.0, 20.0]:
+					plan.append_array([_aim_v.bind(ty, ppu), _save.bind("village_%s_yaw%d_ppu%d" % [_ascii(ty), st, int(ppu)], ppu)])
+		for ty: String in (["나무꾼", "채석장"] if part in ["", "gather"] else []):
+			plan.append(_set_gather.bind(ty, 1))
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_w.bind(ty, ppu), _save.bind("%s_worker_yaw%d_ppu%d" % [_ascii(ty), st, int(ppu)], ppu)])
+		if part in ["", "chips"]:      # 일꾼이 다른 데서 다른 일 (화덕 곁에서 '일하는' 몸짓) → 일터에 조각이 튀면 안 됨
+			plan.append(_set_away)
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind("나무꾼", ppu), _save.bind("chips_away_yaw%d_ppu%d" % [st, int(ppu)], ppu)])
+	for st: int in (V3_YAWS if part in ["", "stall"] else []):
+		plan.append(_yaw.bind(st))
+		plan.append(_set_bare)
+		for ty: String in ["나무꾼", "채석장"]:
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_aim_b.bind(ty, ppu), _save.bind("stall_%s_yaw%d_ppu%d" % [_ascii(ty), st, int(ppu)], ppu)])
+	plan.append(_yaw.bind(0))
+
+
+func _yaw(st: int) -> int:
+	scene.cam.turn(st - int(scene.cam.quarter), true)
+	scene.cam._apply()
+	scene.view.sync(0.0, true)
+	return 30
+
+
+## 채집 일꾼 둘 다: 일터 사람이지만 지금은 다른 데서 다른 일 (나무·바위 일이 아닌 '일하는' 몸짓)
+func _set_away() -> int:
+	for ty: String in ["나무꾼", "채석장"]:
+		var b: Building = blds.get(ty)
+		var r: Resident = gworkers.get(ty)
+		if b == null or r == null:
+			continue
+		var q: Resident = r
+		q.steps.clear()
+		q.steps.append(ResidentAI.act(1.0e6, "work"))
+		q.x = b.x + 6.0 * _fdir(2).x
+		q.y = b.y + 6.0 * _fdir(2).y
+		q.px = q.x
+		q.py = q.y
+		q.action = "work"
+		q.anim = "work"
+		q.carry = ""
+	scene.refresh()
+	return 90
+
+
+## 둘레(Balance.GATHER_RANGE)에 벨 나무·캘 바위가 없게: 나무는 그루터기로 · 바위는 다 캔 것으로
+func _set_bare() -> int:
+	for ty: String in ["나무꾼", "채석장"]:
+		var b: Building = blds.get(ty)
+		if b == null:
+			continue
+		if not gworkers.has(ty):
+			_set_gather(ty, 1)
+		var r: Resident = gworkers.get(ty)
+		for q: Dictionary in (v.trees if ty == "나무꾼" else v.rocks):
+			if Vector2(q["x"] - b.x, q["y"] - b.y).length() <= Balance.GATHER_RANGE + 0.5:
+				if ty == "나무꾼":
+					if q["s"] == "tree":
+						q["s"] = "stump"
+						q["g"] = 3.0 * Balance.DAY
+				else:
+					q["amt"] = 0
+		if r != null:              # 일꾼은 일터 곁에서 기다림
+			r.steps.clear()
+			r.steps.append(ResidentAI.act(1.0e6, "idle"))
+			r.x = b.x + 1.2 * _fdir(0).x - 0.8 * _rdir(0).x
+			r.y = b.y + 1.2 * _fdir(0).y - 0.8 * _rdir(0).y
+			r.px = r.x
+			r.py = r.y
+			r.action = "idle"
+			r.anim = "idle"
+			r.carry = ""
+	scene.refresh()
+	return 170
+
+
+func _set_gather(ty: String, i: int) -> int:
+	var b: Building = blds.get(ty)
+	if b == null:
+		return 1
+	var k: String = BldEcon.GATHER[ty][0]
+	v.stock[k] = roundf([0.0, 0.5, 1.0][i] * BldEcon.store_full(k))
+	if i == 0:
+		b.worker = -1
+		scene.refresh()
+		return 20
+	var adults := v.people.filter(func(r: Resident) -> bool: return r.is_adult())
+	var r: Resident = adults[b.id % adults.size()]
+	# 가장 가까운 나무·바위 — 단, 지금 방위에서 밑동이 통째로 다른 건물 그림 뒤인 것은 건너뜀 (일꾼이 설 자리가 없다: 그런 곳은
+	# 카메라를 돌려야 보인다 — 보고서에 적음). 모두 가리면 그냥 가장 가까운 것
+	var best := {}
+	var best_open := {}
+	var econ: BldEcon = scene.view.econ
+	for q: Dictionary in (v.trees if ty == "나무꾼" else v.rocks):
+		if (q["s"] != "tree") if ty == "나무꾼" else (int(q["amt"]) <= 0):
+			continue
+		var dq := Vector2(q["x"] - b.x, q["y"] - b.y).length()
+		if best.is_empty() or dq < Vector2(best["x"] - b.x, best["y"] - b.y).length():
+			best = q
+		if best_open.is_empty() or dq < Vector2(best_open["x"] - b.x, best_open["y"] - b.y).length():
+			var sq := econ.stand_of(q)
+			if not econ._card_covers(Vector2(sq.x, sq.y)):
+				best_open = q
+	if not best_open.is_empty():
+		if best_open != best:
+			print("gather %s yaw%d: nearest node %s is behind a building picture, using %s" % [_ascii(ty), econ.step, Vector2(best["x"], best["y"]), Vector2(best_open["x"], best_open["y"])])
+		best = best_open
+	b.worker = r.id
+	r.job = b.id
+	if not best.is_empty():
+		var off := Vector2(0.4, 0.2) if ty == "나무꾼" else Vector2(0.6, 0.4)      # ResidentAI의 일하는 자리와 같게
+		r.x = float(best["x"]) + off.x
+		r.y = float(best["y"]) + off.y
+		r.px = r.x
+		r.py = r.y
+	r.steps.clear()
+	if not best.is_empty():          # ResidentAI.work_task와 같은 걸음 (나무·바위를 일감으로 든 '일하는' 걸음)
+		best["res"] = 1
+		if ty == "나무꾼":
+			r.steps.append(ResidentAI.act(1.0e6, "work", ResidentAI.op("chop", {"tr": best}), true, ResidentAI.op("unres", {"q": best})))
+		else:
+			r.steps.append(ResidentAI.act(1.0e6, "work", ResidentAI.op("dig", {"rk": best}), true, ResidentAI.op("unres", {"q": best})))
+	r.action = "work"
+	r.anim = "work"
+	r.carry = ""
+	r.sleeping = false
+	gworkers[ty] = r
+	print("gather %s: building (%.1f, %.1f) worker %d at (%.1f, %.1f) node %s" % [_ascii(ty), b.x, b.y, r.id, r.x, r.y, best])
+	scene.refresh()
+	return 90
+
+
+func _aim_w(ty: String, ppu: float) -> int:
+	var r: Resident = gworkers.get(ty)
+	if r == null:
+		return 1
+	if OS.get_cmdline_user_args().has("dbg"):
+		var econ: BldEcon = scene.view.econ
+		var node := BldEcon.gather_node(r, true)
+		var st := econ.stand_of(node)
+		var o := Vector2(node["x"], node["y"])
+		var m: Node3D = scene.view.residents.get(r.id)
+		print("dbg %s yaw%d node %s draw %s covered %s stand lat %.2f along %.2f doll lat %.2f along %.2f stands %s" % [_ascii(ty), econ.step, o,
+			econ.tree_draw.get(o, econ.rock_draw.get(o, [])), econ._card_covers(Vector2(st.x, st.y)), (Vector2(st.x, st.y) - o).dot(_rdir(econ.step)), (Vector2(st.x, st.y) - o).dot(_fdir(econ.step)),
+			(Vector2(m.position.x, m.position.z) - o).dot(_rdir(econ.step)), (Vector2(m.position.x, m.position.z) - o).dot(_fdir(econ.step)), econ.stands.get(r.id, [])])
+		_dbg_near(ty + "_w", o)
+	return _aim(Vector2(r.x, r.y), ppu)
+
+
+## 마을에 원래 있던 건물들: 재료·산출·땔감·창고를 채움 (제자리에서 더미가 보이는지)
+func _set_village() -> int:
+	v._stall.clear()
+	for k: String in ["통나무", "판자", "돌", "빵"]:
+		v.stock[k] = BldEcon.store_full(k)
+	for ty: String in vblds:
+		var b: Building = vblds[ty]
+		var d := b.def()
+		for k: String in d.get("in", {}):
+			b.in_buf[k] = Production.in_cap(k)
+		for k: String in d.get("out", {}):
+			b.out[k] = BldEcon.out_full(k)
+		if b.is_house():
+			b.in_buf["통나무"] = Balance.FUEL_TARGET
+			b.fuel_on = true
+	scene.refresh()
+	return 60
+
+
+func _aim_v(ty: String, ppu: float) -> int:
+	var b: Building = vblds.get(ty)
+	_skip = b == null
+	if b == null:
+		print("village has no ", ty)
+		return 1
+	return _aim(Vector2(b.x, b.y), ppu)
+
+
+## 세로 화면 기본 확대: 막힌 일터를 풍선 수보다 많이 (트인 자리 넷 + 마을 일터) + 주민 몇이 말하는 중
+func _set_portrait() -> int:
+	_set_stalls([["맷돌간", &"no_input"], ["화덕", &"no_worker"], ["우물", &"full"], ["제재소", &"no_input"]])
+	for ty: String in vblds:
+		var b: Building = vblds[ty]
+		if b.def().get("job", false) and b.def().has("out") and not b.def().get("gather", false):
+			b.worker = -1
+			v._stall[b.id] = {"why": &"no_worker", "since": v.t - 7200.0, "stalled": true, "at": v.t - 3600.0, "ok": -1.0}
+	var n := 0
+	for r: Resident in v.people:
+		if r.is_adult() and n < 4:
+			r.say = ["오늘은 볕이 좋네", "밀이 잘 자라요", "물 길으러 가요", "장작이 모자라요"][n]
+			r.say_t = 30.0
+			n += 1
+	scene.refresh()
+	return 150
+
+
 func _set_wide() -> int:
 	v._stall.clear()
 	var i := 0
@@ -309,7 +630,24 @@ func _aim_b(ty: String, ppu: float) -> int:
 	var b: Building = blds.get(ty)
 	if b == null:
 		return 1
+	if OS.get_cmdline_user_args().has("dbg"):
+		_dbg_near(ty, Vector2(b.x, b.y))
 	return _aim(Vector2(b.x, b.y), ppu)
+
+
+## (dbg) 그 자리 둘레 6칸의 꽃·풀: 종류 · 건물에서 본 자리 [화면 옆, 카메라 쪽] · 화면 키 — 무엇이 더미를 가리는지 찾을 때
+func _dbg_near(what: String, o: Vector2) -> void:
+	var st: int = scene.view.econ.step
+	for layer: String in scene.view.flora_picks:
+		var fp: FloraPicks = scene.view.flora_picks[layer]
+		for i in fp.size():
+			var d := Vector2(fp.xs[i], fp.zs[i]) - o
+			if d.length() < 6.0:
+				print("dbg %s yaw%d %s %s lat %.2f along %.2f h %.2f sim %d" % [_ascii(what), st, layer, fp.names[i], d.dot(_rdir(st)), d.dot(_fdir(st)), fp.hs[i], fp.sim[i]])
+	for it: Array in scene.view.econ.items:
+		var d := Vector2((it[1] as Vector3).x, (it[1] as Vector3).z) - o
+		if d.length() < 6.0 and int(it[3]) <= 1:
+			print("dbg %s yaw%d pile %s lat %.2f along %.2f" % [_ascii(what), st, it[0], d.dot(_rdir(st)), d.dot(_fdir(st))])
 
 
 func _aim(c: Vector2, ppu: float) -> int:
@@ -331,6 +669,9 @@ func _aim(c: Vector2, ppu: float) -> int:
 
 ## 가운데를 잘라 저장 (ppu > 0: 건물 둘레 약 7칸 · 0: 화면 전체를 반으로 줄여)
 func _save(name: String, ppu: float) -> int:
+	if _skip:
+		_skip = false
+		return 1
 	var img := vp.get_texture().get_image()
 	if ppu > 0.0:
 		var px := int(7.0 * ppu * 3.0) if ppu > 30.0 else int(8.0 * ppu * 3.0)

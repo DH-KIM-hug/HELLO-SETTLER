@@ -524,8 +524,20 @@ def puff(c, r=0.15):
 
 
 def chip(c):
-    with c.part(OUT * 0.8):
-        c.rpoly([(-0.06, 0.03), (0.05, 0.02), (0.07, 0.07), (-0.04, 0.09)], PLANK_L, 0.012)
+    """Wood chip — chunky and two-toned so it still reads as a chip (not a smudge) at the default village zoom."""
+    with c.part(OUT * 1.15):
+        c.rpoly([(-0.11, 0.03), (0.09, 0.015), (0.12, 0.105), (-0.07, 0.15)], PLANK_L, 0.022)
+        with c.inside():
+            c.rpoly([(-0.12, 0.02), (0.1, 0.0), (0.105, 0.05), (-0.1, 0.07)], PLANK, 0.0)
+
+
+def pebble(c):
+    """Stone chip flying off a quarried rock."""
+    with c.part(OUT * 1.15):
+        c.rpoly([(-0.1, 0.02), (0.09, 0.02), (0.11, 0.1), (0.02, 0.16), (-0.09, 0.12)], STONE, 0.028)
+        with c.inside():
+            c.ell(0.01, 0.02, 0.15, 0.05, STONE_D)
+            c.ell(-0.02, 0.115, 0.05, 0.028, STONE_L, 12)
 
 
 def leaf(c):
@@ -582,6 +594,60 @@ def icon_noworker(c):
             c.ell(-0.03, 0.365, 0.03, 0.02, GOLD_L)
 
 
+GHOST = "#b7a58c"          # dashed "it is not there" line (same as the empty head under the straw hat)
+
+
+def dashed(c, pts, wd=0.022, dash=0.045, gap=0.035, closed=False):
+    """Dashed poly-line: the outline of something that is missing."""
+    if closed:
+        pts = list(pts) + [pts[0]]
+    carry = 0.0
+    for (x0, y0), (x1, y1) in zip(pts, pts[1:]):
+        ln = math.hypot(x1 - x0, y1 - y0)
+        if ln < 1e-6:
+            continue
+        t = carry
+        while t < ln:
+            a, b = t, min(t + dash, ln)
+            with c.part(0):
+                c.line([(x0 + (x1 - x0) * a / ln, y0 + (y1 - y0) * a / ln), (x0 + (x1 - x0) * b / ln, y0 + (y1 - y0) * b / ln)], GHOST, wd)
+            t += dash + gap
+        carry = t - ln
+
+
+def ring(cx, cy, rx, ry, n=20, a0=0.0):
+    return [(cx + math.cos(a0 + i / n * math.tau) * rx, cy + math.sin(a0 + i / n * math.tau) * ry) for i in range(n)]
+
+
+def icon_no_tree(c):
+    """Nothing left to cut in reach: a fresh stump, and the dashed outline of the big flower that stood on it."""
+    dashed(c, [(0.0, 0.135), (0.0, 0.265)], wd=0.028, dash=0.05, gap=0.035)                         # stalk
+    dashed(c, ring(0.0, 0.37, 0.125, 0.105, 24, 0.3), wd=0.028, dash=0.06, gap=0.036, closed=True)  # flower head
+    with c.part(0):
+        c.ell(0.0, 0.37, 0.034, 0.03, GHOST)
+    with c.part():                                                               # stump
+        c.rpoly([(-0.12, 0.0), (0.12, 0.0), (0.095, 0.1), (-0.095, 0.1)], BARK, 0.03)
+        with c.inside():
+            c.rrect(0.05, 0.04, 0.12, 0.12, 0.0, BARK_D)
+    with c.part(OUT * 0.8):
+        c.ell(0.0, 0.1, 0.095, 0.04, GRAIN)
+        with c.inside():
+            c.ell(0.0, 0.1, 0.05, 0.02, GRAIN_D)
+            c.ell(0.0, 0.1, 0.022, 0.009, GRAIN)
+    with c.at(0.17, 0.0, 0.62):                                                  # one chip left behind
+        chip(c)
+
+
+def icon_no_rock(c):
+    """Nothing left to dig in reach: the dashed outline of a boulder, two crumbs where it was."""
+    dashed(c, [(-0.2, 0.05), (-0.23, 0.2), (-0.12, 0.36), (0.07, 0.4), (0.21, 0.27), (0.22, 0.05)], wd=0.028, dash=0.06, gap=0.036, closed=True)
+    dashed(c, [(-0.1, 0.28), (-0.02, 0.31)], wd=0.022, dash=0.03, gap=0.03)
+    with c.at(-0.07, 0.0, 0.62):
+        stone(c, 0.0, 0.0, 1.0, 1)
+    with c.at(0.1, 0.0, 0.5):
+        stone(c, 0.0, 0.0, 1.0, 2)
+
+
 def icon_full(c):
     """A basket heaped over the brim, three little burst strokes above."""
     with c.at(0.0, 0.0, 0.8):
@@ -613,10 +679,12 @@ def table():
     t["leaf"] = leaf
     t["drop"] = drop
     t["star"] = lambda c: sparkle(c, 0.0, 0.1, 0.075)
+    t["pebble"] = pebble
     for nm, ic in [("want_logs", icon_good(logs, 0.9, 0.12)), ("want_wheat", icon_good(wheat, 0.82)),
                    ("want_flour", icon_good(flour, 0.9, 0.02)), ("want_goods", icon_good(goods, 0.9, 0.05)),
                    ("want_planks", icon_good(planks, 0.72, 0.12)), ("want_stone", icon_good(stones, 1.0, 0.08)),
-                   ("noworker", icon_noworker), ("full", icon_full)]:
+                   ("noworker", icon_noworker), ("full", icon_full),
+                   ("no_tree", icon_no_tree), ("no_rock", icon_no_rock)]:      # appended last: earlier indices stay put
         t["bub_" + nm] = (lambda c, ic=ic: bubble(c, ic))
     return t
 

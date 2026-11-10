@@ -14,7 +14,9 @@ const FLib := preload("res://proto/cutout_c/frame_lib.gd")
 const FDoll := preload("res://proto/cutout_c/frame_doll.gd")
 const ADD := ["목조주택", "목조주택", "창고", "방앗간", "빵집", "우물", "광장", "농장"]
 const PPUS := [20.0, 44.0]
-const CLIPS := ["walk", "carry", "idle"]
+var CLIPS := ["walk", "carry", "idle"]      # CUTC_CLIPS="sit,eat,lookup,kneel,hoe,gather" (2026-11-10 states4): 띠에 찍을 동작
+## 띠에서 옛 인형이 드는 소품 (게임의 CutoutResident와 같게): 먹기 = 빵, 괭이질 = 괭이 (CUTC_PROP=9 → 나무망치 등)
+const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6}
 const SP := 0.7            # 띠의 칸 간격 (세계)
 const ROW := 1.5          # 위·아래 줄의 깊이 차 (세계, 카메라 쪽)
 const LEG := 0.8           # 살아 있는 장면 팔각형 한 변 (세계)
@@ -55,9 +57,14 @@ func _initialize() -> void:
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = 20261107
 	vp.add_child(scene)
+	if OS.get_environment("CUTC_CLIPS") != "":
+		CLIPS = Array(OS.get_environment("CUTC_CLIPS").split(","))
 	for p in PPUS:
 		for c in CLIPS:
 			for vv in 4:
+				# 게임과 같은 보기 잠금: 앉기·먹기·줍기는 비스듬한 보기만, 올려다보기는 앞 보기만 (CutoutResident.SIDE_ONLY / FRONT_ONLY)
+				if (CutoutResident.SIDE_ONLY.has(c) and (vv == 0 or vv == 3)) or (CutoutResident.FRONT_ONLY.has(c) and vv != 0):
+					continue
 				_job.append([p, c, vv])
 	var mode := OS.get_environment("CUTC_MODE")     # "" 둘 다 · strip · live
 	plan = [_build, _live_hour]
@@ -151,6 +158,10 @@ func _live_hour(_dt: float) -> int:
 	print("clear spot ", C, " (centre ", Vector2(v.center.x, v.center.y), ")")
 	_flora(false)
 	_clear_area(C, 6.0)
+	for n in scene.find_children("*", "Node3D", true, false):       # 둘레 생물(나비·꿀벌)이 띠 위로 날아듦 (2026-11-10 states4) — 사진에서는 끔
+		if n is FaunaView:
+			(n as FaunaView).enabled = false
+			(n as Node3D).visible = false
 	return 20
 
 
@@ -232,6 +243,12 @@ func _strip_setup(_dt: float) -> int:
 	plate.position = _g3(C) + Vector3(0, 0.02, 0)
 	_plate_y = plate.position.y + 0.005
 	var look := Lib.concept_look("woman")
+	# CUTC_DYE="4,12,28,32,36,45,49,53" (2026-11-10 양말·신 색 점검): 띠의 두 인형에 이 물감 8칸을 입힘 (없으면 그린 색 그대로)
+	if OS.get_environment("CUTC_DYE") != "":
+		var dd: Array = []
+		for t in OS.get_environment("CUTC_DYE").split(","):
+			dd.append(int(t))
+		look["dye"] = dd
 	var pal: PackedVector3Array = CutoutResident.game_material().get_shader_parameter("palette")
 	for i in 8:
 		var o: MeshInstance3D = Doll.new()
@@ -279,11 +296,18 @@ func _strip_loop(_dt: float) -> int:
 				ph = (float(i % 4) + 0.5) / 4.0
 			o.view = view
 			o.mirror = 1.0
-			o.set_prop(Lib.PROPS.find("basket") if oc == "carry" or oc == "hold" else -1)
+			var pr := int(STRIP_PROP.get(oc, -1))
+			if oc == "hoe" and OS.get_environment("CUTC_PROP") != "":
+				pr = int(OS.get_environment("CUTC_PROP"))
+			o.set_prop(pr)
 			o.set_clip(oc, 0.0, ph)
 			n.view = view
 			n.mirror = 1.0
-			n.set_clip(nc, 0.0, ph)
+			n.visible = FLib.clip_index(nc) >= 0          # 아직 그리지 않은 동작은 아래 줄을 비움
+			if n.visible:
+				if n.has_method("set_prop"):
+					n.set_prop(pr if oc != "carry" and oc != "hold" else -1)
+				n.set_clip(nc, 0.0, ph)
 		_pending = j
 		_hid_pass = false
 		return -30
@@ -334,8 +358,13 @@ func _live_setup(_dt: float, ppu: float) -> int:
 	_look(C, ppu)
 	_A = null
 	_B = null
+	var moms := {}                 # 아기의 부모는 고르지 않음 (걸음마 아기가 곁에 따라와 사진에 낌 — 2026-11-10 states4)
+	for q: Resident in v.people:
+		if q.is_baby():
+			for pid in q.parents:
+				moms[pid] = true
 	for r: Resident in v.people:
-		if r.sex == "f" and r.is_adult() and not r.is_baby() and r.age < Balance.AGE_ELDER and not r.sleeping:
+		if r.sex == "f" and r.is_adult() and not r.is_baby() and r.age < Balance.AGE_ELDER and not r.sleeping and not moms.has(r.id):
 			if _A == null:
 				_A = r
 			elif _B == null:
@@ -378,6 +407,11 @@ func _live_setup(_dt: float, ppu: float) -> int:
 		m._d_prop = -2
 		m._f_hat = -9
 		m.frames_force = pair[1]
+		if OS.get_environment("CUTC_DYE") != "":              # 살아 있는 장면에도 같은 물감 (두 사람 모두)
+			var de: Array = []
+			for t in OS.get_environment("CUTC_DYE").split(","):
+				de.append(int(t))
+			m.dlook["dye"] = de
 		# CUTC_BOOTDBG=1 (2026-11-10 "발이 이상함" — 발 디딤 재기): 방식 C 사람의 신을 파란 물감(21), 양말을 크림(48)으로 —
 		# 화면에서 신만 색으로 골라 디딘 발이 제자리에 있는지 잰다 (tools 전용, 게임에는 영향 없음)
 		if int(pair[1]) == 1 and OS.get_environment("CUTC_BOOTDBG") == "1":
@@ -386,6 +420,9 @@ func _live_setup(_dt: float, ppu: float) -> int:
 			dd[7] = 21
 			m.dlook["dye"] = dd
 		m.doll.set_look(m.dlook)
+		if OS.get_environment("CUTC_SEQ") == "hoe":           # 두 사람에게 같은 연장 (일터와 상관없이)
+			m._job_tool = OS.get_environment("CUTC_TOOL") if OS.get_environment("CUTC_TOOL") != "" else "tool_hoe"
+			m._tool_kind = "?"
 	print("live ppu%d: A %d (cutout) B %d (frames), look %s" % [int(ppu), _A.id, _B.id, str(src["dye"])])
 	for cl in scene.find_children("*", "CanvasLayer", true, false):     # 화면 UI(단추·안내)는 이 사진에선 숨김
 		(cl as CanvasLayer).visible = false
@@ -398,10 +435,52 @@ const T_IDLE := 1.5
 const T_CARRY := 4.0 * LEG / 0.7
 
 
+## CUTC_SEQ=sit_eat | hoe (2026-11-10 states4): 걷는 길 대신 제자리에서 [동작, 초, 바라보는 쪽 (도 — 0 = 카메라 쪽, 60 = 비스듬한 앞, 130 = 비스듬한 뒤, 180 = 뒤)]
+## 를 차례로. hoe는 두 사람에게 괭이를 쥐여 줌 (CUTC_TOOL=tool_hammer → 나무망치)
+const SEQS := {
+	"sit_eat": [["idle", 1.0, 60.0], ["sit", 2.5, 60.0], ["eat", 5.0, 60.0], ["sit", 1.5, 60.0], ["idle", 1.5, 60.0]],
+	"hoe": [["work", 3.4, 60.0], ["work", 2.0, 0.0], ["work", 2.6, 130.0], ["work", 2.0, 180.0]],
+	"pray": [["idle", 1.0, 0.0], ["lookup", 4.0, 0.0], ["pray", 6.5, 0.0], ["pray", 3.0, 60.0], ["idle", 1.0, 60.0]],
+	"gather": [["idle", 0.8, 60.0], ["gather", 4.6, 60.0], ["gather", 4.6, 130.0]],
+}
+
+
+func _seq() -> Array:
+	return SEQS.get(OS.get_environment("CUTC_SEQ"), [])
+
+
+func _seq_len() -> float:
+	var n := 0.0
+	for s in _seq():
+		n += float(s[1])
+	return n
+
+
 ## 시각 t (초) → 두 사람의 자리·동작
 func _place(t: float, dt: float) -> void:
 	var ax := _cam_axes()
 	var right: Vector2 = ax[0]
+	if not _seq().is_empty():
+		var acc := 0.0
+		var cur: Array = _seq()[-1]
+		for s in _seq():
+			if t < acc + float(s[1]):
+				cur = s
+				break
+			acc += float(s[1])
+		var d2 := (ax[1] as Vector2).rotated(-deg_to_rad(float(cur[2])))
+		for pair in [[_A, -0.8], [_B, 0.8]]:
+			var r: Resident = pair[0]
+			var q := C + right * float(pair[1])
+			r.x = q.x
+			r.y = q.y
+			r.px = q.x
+			r.py = q.y
+			r.anim = cur[0]
+			r.carry = ""
+			r.action = ""
+			r.facing = atan2(d2.x, d2.y)
+		return
 	var speed := Balance.WALK_SCREEN
 	var anim := "walk"
 	var carry := ""
@@ -451,17 +530,17 @@ func _live_loop(dt: float) -> int:
 	dt = 1.0 / 60.0               # 사진 시계: 장면마다 1/60초 (창 FPS와 무관하게 같은 걸음)
 	_lt += dt
 	_place(_lt, dt)
-	if OS.get_environment("CUTC_LOCK") == "0":          # 발 붙이기(frame_doll.gdshader foot_lock)를 끄고 찍기 — 앞뒤 비교
+	if OS.get_environment("CUTC_LOCK") != "":           # 발 붙이기 세기(frame_doll.gdshader foot_lock)를 이 값으로 찍기 — 0 / 0.5 / 1 비교
 		var fm := scene.view.residents[_B.id] as CutoutResident
 		if fm.fdoll != null:
-			(fm.fdoll.material_override as ShaderMaterial).set_shader_parameter("foot_lock", 0.0)
+			(fm.fdoll.material_override as ShaderMaterial).set_shader_parameter("foot_lock", float(OS.get_environment("CUTC_LOCK")))
 	if OS.get_environment("CUTC_REACT") == "1":         # 톡 반응 값(폴짝·찌그러짐·기울기·돌아섬)을 두 인형에 똑같이 — 방식 C 인형이 컷아웃과 같게 움직이는지 (2초 돌림)
 		var ph := fmod(_lt, 2.0) / 2.0
 		var sq := 0.2 * sin(ph * TAU * 2.0)
 		for rr: Resident in [_A, _B]:
 			(scene.view.residents[rr.id] as CutoutResident).set_react(Vector3(0, 0.25 * absf(sin(ph * TAU)), 0),
 				Vector2(1.0 + sq, 1.0 - sq), 0.35 * sin(ph * TAU), 0.5 if ph > 0.75 else 0.0, "")
-	if _lt >= T_WALK + T_IDLE + T_CARRY:
+	if _lt >= (T_WALK + T_IDLE + T_CARRY if _seq().is_empty() else _seq_len()):
 		return 4
 	_cap_t += dt
 	if _cap_t >= 1.0 / FPS_CAP:

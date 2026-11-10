@@ -28,6 +28,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "cutout_a"))
 import cut_sheets as C   # noqa: E402  key() + guide line removal (same 1536x1024 canvas)
 import pose_ref as PR    # noqa: E402  cell template geometry (root, ground line, step S, foot depth offsets)
+import pose_states as PS  # noqa: E402  v11 state sheets (sit / kneel / eat, look up, hoe, gather): puppets, clip entries, prop grips
 
 ART = os.path.normpath(os.path.join(HERE, "..", "..", "art", "cutout", "woman_c"))
 RAW = os.path.join(ART, "raw")
@@ -41,6 +42,12 @@ PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
          ("idle", "idle", [0, 1, 2, 3]), ("hold", "idle", [4, 5, 6, 7])]
 POSE_SHEETS = True      # v4: walk / carry sheets traced from pose_ref.py (frame 1 = contact R in every view)
+IDLE_POSE_VIEWS = ("front", "q_front", "q_back", "back")    # v10 3/4, v11 front / back: standing sheets traced from the standing reference (pose_ref.py hybrid idle) — same scale / root as walk
+BOOT_R = 46.0          # px: state cells class stockings / boots only this close to a puppet boot (a hand on the ground stays skin)
+FIST_R = 36.0          # px: a drawn fist (skin blob) is looked for this close to the puppet's fist
+GRIP_SIDE = 0.3        # tools in the 3/4 views: the fists hold the shaft this far (x prop height) above the sprite centre (cut_lib hoe)
+TOOL_HALF = 300.0     # half the tallest tool sprite (hoe 588 rig) — back view: keep the tool above the root line
+FOOD_AT = (6.0, 10.0, 0.95)    # bread at the near fist: dx, dy (rig), scale — the old doll's eat prop (cut_lib "eat")
 K_POSE = CHIN_RIG / float(PR.GROUND - PR.CHIN_Y)      # rig per template px (1.94): the traced sheets share the template's scale
 HEAD_DX = {v: (8.0 if v == "q_front" else (-4.0 if v == "q_back" else 0.0)) for v in VIEWS}   # template head centre - root (px)
 FOOT_DEPTH = {v: float(PR.geometry(v)["foot"]["R"][1]) for v in VIEWS}    # near foot below the root ground line (px, 3/4 views)
@@ -94,9 +101,11 @@ def blobs(mask, min_n=30):
 
 
 LEG_ZONE = 0.3
+SPECK = 48           # px (sheet): islands of a dye class smaller than this take the class around them
+SPECK_IN = 220       # px (sheet): ... and up to this size when the island lies wholly inside the figure (no outside within 4 px)
 
 
-def classify(rgb, alpha, magenta, feet, fig_h):
+def classify(rgb, alpha, magenta, feet, fig_h, legzone=None):
     """hard dye class per pixel (CLASSES index). Ink & magenta = none. Below the skirt hem (per column): tan -> leg, brown -> shoe."""
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     L = luma(rgb)
@@ -131,10 +140,21 @@ def classify(rgb, alpha, magenta, feet, fig_h):
     hem = np.where(rose_l.any(0), H - 1 - np.argmax(rose_l[::-1], 0), -1)
     hem = np.maximum.reduce([shift(hem[None, :], 0, d)[0] for d in range(-6, 7)])      # widen (skirt edge columns)
     zone = rows > feet - LEG_ZONE * fig_h
+    if legzone is not None:
+        # v11 state cells (sitting, kneeling, bending): legs / boots only around the puppet's boots; a boot lying against the
+        # skirt (seen from behind, above the hem in its column) is the brown inside that zone
+        zone = legzone
+        lab[zone & fg & ~ink & (lab == 4)] = 6
     below = zone & ((rows > hem[None, :] + 2) | (hem[None, :] < 0))
     dark = (L < 100)
-    lab[below & fg & ~ink & ~sack & dark] = 6
-    lab[below & fg & ~ink & ~sack & ~dark] = 5
+    # the apron's lower corner hangs past the dress hem in its own columns (3/4 back): cream that continues up out of the leg
+    # rows is cloth, not a stocking (v11 — it took the legwear dye as a sliver beside the skirt)
+    cloth = np.zeros_like(fg)
+    for n_, _cy, _cx, _box, m_ in blobs(fg & (lab == 3), 1):
+        if (m_ & ~below).sum() > 0.5 * n_:
+            cloth |= m_
+    lab[below & fg & ~ink & ~sack & dark & ~cloth] = 6
+    lab[below & fg & ~ink & ~sack & ~dark & ~cloth] = 5
     # edges: pixels next to ink / the silhouette take the majority class of the nearby core pixels
     core = fg & ~dilate(ink | ~fg, 1)
     edge = fg & ~ink & ~core
@@ -147,6 +167,21 @@ def classify(rgb, alpha, magenta, feet, fig_h):
                 cnt[..., c] += (sc & (sl == c))
     best = cnt.argmax(-1).astype(np.int8)
     lab[edge & (cnt.max(-1) > 0)] = best[edge & (cnt.max(-1) > 0)]
+    # speckles (v11): a tiny island of one class inside another (seam lines in a sleeve read as skin, the sack's knot as rose,
+    # ...) takes the class around it — a dyed dress showed them as dots of the wrong colour
+    for c in range(1, len(CLASSES)):
+        for n_, _cy, _cx, _box, m_ in blobs(lab == c, 1):
+            if n_ >= SPECK_IN:
+                continue
+            near = dilate(m_, 4) & ~m_
+            if n_ >= SPECK and (near & ~fg).any():      # at the silhouette's edge and not tiny = a small real part (a far fist), keep
+                continue
+            ring = near & (lab > 0)
+            if ring.sum() < 4:
+                continue
+            around = np.bincount(lab[ring].astype(np.int64), minlength=len(CLASSES))
+            if around[c] < 0.15 * ring.sum() and around.argmax() != c:
+                lab[m_] = around.argmax()
     return lab
 
 
@@ -301,14 +336,27 @@ def main():
             p = os.path.join(RAW, f"{clip}_{v}.png")
             if os.path.exists(p):
                 sheets[f"{clip}_{v}"] = frames_of(f"{clip}_{v}")
+    for sname in PS.SHEETS:
+        if os.path.exists(os.path.join(RAW, sname + ".png")):
+            sheets[sname] = frames_of(sname)
+    # a state clip goes in only when all its sheets are drawn (the game falls back to the old doll for a missing clip)
+    state_clips = [cl for cl in PS.ENTRIES if all(sh in sheets for sh in PS.CLIP_SHEET[cl])]
     # per sheet scale: placeholder diameter -> D_RIG
     placed = {}      # sheet -> list of (rgba_scaled, dye_lab, frame info in rig)
     ext = [0.0, 0.0, 0.0]   # max |x|, max y (body top incl. sack), min y (below the root ground line: the forward foot in 3/4 views)
     for name, frs in sheets.items():
         clip_n, view_n = name.split("_", 1)
-        pose = POSE_SHEETS and clip_n in ("walk", "carry")
+        state = name in PS.SHEETS
+        pose = state or (POSE_SHEETS and (clip_n in ("walk", "carry") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS)))
         dmed = float(np.median([f["head"]["d"] for f in frs]))
-        if pose:
+        if state:
+            # v11: traced from pose_states.py puppets — the same template scale and root; the head moves per pose
+            k = K_POSE
+            ref = [PS.info(name, i)["head"] for i in range(8)]
+            dx = [round(f["head"]["cx"] - r_[0]) for f, r_ in zip(frs, ref)]
+            dy = [round((f["head"]["top"] + f["head"]["bottom"]) / 2.0 - r_[1]) for f, r_ in zip(frs, ref)]
+            print(f"  {name}: head centre - puppet  dx {dx}  dy {dy} px, placeholder d {[round(f['head']['d']) for f in frs]}")
+        elif pose:
             # traced from the cell template: the template's scale, root = (cell centre, ground line 470) in every frame
             k = K_POSE
             drift = [f["head"]["cx"] - (CW / 2.0 + HEAD_DX[view_n]) for f in frs]
@@ -320,8 +368,14 @@ def main():
             chin = float(np.median([f["feet"] - f["head"]["bottom"] for f in frs]))
             k = CHIN_RIG / chin                    # rig per sheet px
         info = []
-        for f in frs:
-            lab = classify(f["rgb"], f["a"], f["mag"], f["feet"], f["feet"] - f["head"]["top"])
+        for fi_, f in enumerate(frs):
+            lz = None
+            if state:
+                yy, xx = np.mgrid[0:CH, 0:CW]
+                lz = np.zeros((CH, CW), bool)
+                for bx, by in PS.boots(name, fi_):
+                    lz |= (xx - bx) ** 2 + (yy - by) ** 2 < BOOT_R ** 2
+            lab = classify(f["rgb"], f["a"], f["mag"], f["feet"], f["feet"] - f["head"]["top"], lz)
             if pose:
                 ox, oy = CW / 2.0, float(PR.GROUND)
             else:
@@ -370,7 +424,9 @@ def main():
     H_RIG = ext[1] + 20
     Y0 = min(-10.0, float(np.floor(ext[2])) - 10.0)      # the forward foot of the 3/4 views sits below the root ground line
     cw, ch = int(np.ceil(W_RIG * PX_PER_RIG)), int(np.ceil((H_RIG - Y0) * PX_PER_RIG))
-    order = []
+    # entries = the frames the game plays: (clip, view, sheet, cell, t0 | None, extra head tilt). v11: several entries may show
+    # the same drawn cell (ping-pong, nod, a view that borrows another view's sheet) — the atlas holds each cell once.
+    entries = []
     for clip, sheet, cells in CLIPS:
         for v in VIEWS:
             cs = list(cells)
@@ -379,20 +435,26 @@ def main():
                 # the back sheets were drawn the other way round -> start at their frame 5 (no pop when the view changes)
                 cs = cs[4:] + cs[:4]
             for c in cs:
-                order.append((clip, v, f"{sheet}_{v}", c))
+                entries.append((clip, v, f"{sheet}_{v}", c, None, 0.0))
+    for clip in state_clips:
+        for vi, v in enumerate(VIEWS):
+            sh = PS.CLIP_SHEET[clip][vi]
+            for pose_n, t0, dang in PS.ENTRIES[clip]:
+                entries.append((clip, v, sh, PS.cell_of(sh, pose_n), t0, dang))
+    order = []
+    for e in entries:
+        if (e[2], e[3]) not in order:
+            order.append((e[2], e[3]))
     cols = 12
     rows = (len(order) + cols - 1) // cols
     AW, AH = cols * cw, rows * ch
     atlas = np.zeros((AH, AW, 4), np.float32)
     m0 = np.zeros((AH, AW, 4), np.float32)
     m1 = np.zeros((AH, AW, 4), np.float32)
-    frames = []
+    cellinfo = {}
     cls_px = {c: [] for c in range(1, len(CLASSES))}
     strides = {}
-    for idx, (clip, v, sheet, c) in enumerate(order):
-        if sheet not in placed:
-            frames.append(None)
-            continue
+    for idx, (sheet, c) in enumerate(order):
         it = placed[sheet][c]
         f, k, lab = it["f"], it["k"], it["lab"]
         # resample the cell into the atlas cell: atlas px (u, w) -> rig (x, y) -> sheet px
@@ -436,18 +498,53 @@ def main():
             ys, xs = np.nonzero(sm)
             sack = [float((xs.min() - it["ox"]) * k), float((it["oy"] - ys.max()) * k), float((xs.max() - it["ox"]) * k), float((it["oy"] - ys.min()) * k)]
         shoes = blobs(((lab == 6) & (f["a"] > 128))[::2, ::2], 8)[:2]
-        frames.append(dict(clip=clip, view=v, cell=c, uv=[ax0 / AW, ay0 / AH, (ax0 + cw) / AW, (ay0 + ch) / AH],
-                           head=[round(head[0], 1), round(head[1], 1)], hands=[[round(p, 1) for p in h] for h in hands],
-                           sack=[round(p, 1) for p in sack] if sack else None,
-                           shoes=[[round((s_[2] * 2 - it["ox"]) * k, 1), round((it["oy"] - s_[1] * 2) * k, 1)] for s_ in shoes],
-                           far=round((f["far"][0] - it["ox"]) * k, 1) if f.get("far") else None, t0=0.0))
-    # uniform timing first (position in the clip)
+        cellinfo[(sheet, c)] = dict(cell=c, uv=[ax0 / AW, ay0 / AH, (ax0 + cw) / AW, (ay0 + ch) / AH],
+                                    head=[round(head[0], 1), round(head[1], 1)], hands=[[round(p, 1) for p in h] for h in hands],
+                                    sack=[round(p, 1) for p in sack] if sack else None,
+                                    shoes=[[round((s_[2] * 2 - it["ox"]) * k, 1), round((it["oy"] - s_[1] * 2) * k, 1)] for s_ in shoes],
+                                    far=round((f["far"][0] - it["ox"]) * k, 1) if f.get("far") else None)
+    # the frames the game plays (clip by clip, view by view): cell data + timing + head tilt + prop grip
+    frames = []
     pos = {}
-    for fr in frames:
-        if fr:
-            key = (fr["clip"], fr["view"])
-            fr["t0"] = pos.get(key, 0) / len(CLIP_CELLS[fr["clip"]])
+    for clip, v, sheet, c, t0, dang in entries:
+        fr = dict(clip=clip, view=v, **cellinfo[(sheet, c)])
+        it = placed[sheet][c]
+        if t0 is None:
+            # uniform timing first (position in the clip)
+            key = (clip, v)
+            fr["t0"] = pos.get(key, 0) / len(CLIP_CELLS[clip])
             pos[key] = pos.get(key, 0) + 1
+        else:
+            fr["t0"] = t0
+            inf = PS.info(sheet, c)
+            side = inf["view"] in ("q_front", "q_back")
+            # head tilt (rad, about the head centre; - = nodding toward where she faces) — 3/4 drawings only; seen from the
+            # front / back a nod is a few rig lower instead
+            fr["hang"] = round(inf["hang"] + dang, 3) if side else 0.0
+            if not side and dang != 0.0:
+                fr["head"] = [fr["head"][0], round(fr["head"][1] - 60.0 * abs(dang), 1)]
+            if clip in PS.PROP and inf["grip"] is not None:
+                # the drawn fists (skin blobs next to the puppet's fists); a fist hidden by the body falls back to the puppet's
+                skin = (it["lab"] == 1) & (it["f"]["a"] > 128)
+                yy, xx = np.mgrid[0:CH, 0:CW]
+                got = []
+                for fx, fy in (inf["fists"] if inf["tool"] else inf["fists"][:1]):
+                    near = skin & ((xx - fx) ** 2 + (yy - fy) ** 2 < FIST_R ** 2)
+                    got.append((float(xx[near].mean()), float(yy[near].mean()), True) if near.sum() > 60 else (fx, fy, False))
+                gx, gy = sum(g_[0] for g_ in got) / len(got), sum(g_[1] for g_ in got) / len(got)
+                hx, hy = (gx - it["ox"]) * it["k"], (it["oy"] - gy) * it["k"]
+                if inf["tool"]:
+                    ang = float(np.arctan2(inf["tool"][0], -inf["tool"][1]))      # sprite = shaft upright, blade down
+                    if inf["view"] == "back":
+                        # seen from behind the tool is beyond her (behind the body): its lower end must not dip under the root
+                        # line — the shader pulls anything below the root toward the camera (boots), which put the blade
+                        # in front of the skirt on the strike frame (2026-11-10 states4 strip)
+                        hy = max(hy, TOOL_HALF)
+                    fr["prop"] = [round(ang, 3), round(hx, 1), round(hy, 1), 1.0, GRIP_SIDE if side else 0.0]
+                else:
+                    fr["prop"] = [0.0, round(hx + FOOD_AT[0], 1), round(hy + FOOD_AT[1], 1), FOOD_AT[2], 0.0]
+                fr["fists_seen"] = [bool(g_[2]) for g_ in got]
+        frames.append(fr)
     # stride + frame timing from the planted foot (2026-11-09 live check: the drawn foot travel is uneven — e.g. 42 / 152 / 62 / 5
     # rig per frame — so equal frame times made the planted foot slip forward and back). 3/4 views with the colour-coded far leg:
     #   stride (per cycle, 2 steps) = 2 x (far foot max forward - max back) ; frame i's duration ~ far-foot backward travel i -> i+1
@@ -492,11 +589,17 @@ def main():
     save(m0, "frames_mask0.png")
     save(m1, "frames_mask1.png")
     nclip = {cl: len(cells) for cl, _, cells in CLIPS}
+    for cl in state_clips:
+        nclip[cl] = len(PS.ENTRIES[cl])
+        seen = [fr["fists_seen"] for fr in frames if fr["clip"] == cl and "fists_seen" in fr]
+        if seen:
+            print(f"  {cl}: fists found on the drawing in {sum(all(x) for x in seen)} of {len(seen)} frames (else the puppet's)")
     lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], cell=[cw, ch], views=VIEWS,
-               clips=[cl for cl, _, _ in CLIPS], frames_per_clip=nclip, stride=strides, base=base, frames=frames)
+               clips=[cl for cl, _, _ in CLIPS] + state_clips, frames_per_clip=nclip, stride=strides, base=base, cells=len(order),
+               frames=frames)
     with open(os.path.join(ART, "frames.json"), "w") as fh:
         json.dump(lib, fh, indent=0)
-    print("atlas", AW, AH, "cell", cw, ch, "rect", lib["rect"], "stride", strides, "base", base)
+    print("atlas", AW, AH, "cell", cw, ch, "cells", len(order), "frames", len(frames), "rect", lib["rect"], "stride", strides, "base", base)
     # check images: aligned frames + class colours
     pal = np.array([[0, 0, 0], [240, 170, 110], [210, 60, 60], [250, 240, 200], [140, 80, 40], [60, 160, 220], [40, 40, 160], [180, 180, 180]], np.float32)
     for name, info in placed.items():

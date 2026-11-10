@@ -78,3 +78,13 @@
 |---|---|---|---|---|
 | `&"born"` | `Village._give_birth` (아이가 태어남 — 연대기 줄 바로 뒤) | `{"first": bool (이 마을에서 처음 태어난 아이), "mom": int (엄마 id), "home": int (집 id)}` | `who` = 아기 · `at` = 집 | `view/stage_director.gd` (커서 — 보고 있는 무리면 첫 아기 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
 | `&"wish_granted"` | `Village.grant_wish` (별지기가 소원을 들어줌 — 연대기 줄 바로 뒤) | `{"id": int (편지 id), "how": StringName (&"help" — 짓는 법을 일러 줌), "type": String (지을 것)}` | `who` = 소원을 빈 사람 (세상을 떠났으면 그 id 그대로 — 읽는 쪽이 가까운 사람으로) | `view/stage_director.gd` (커서 — 처음이면 첫 기적 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
+
+- 2026-11-10 (Q2-b 귀여움 묶음 ② 아이·아기 — docs/ROADMAP.md Q2-b · E2-2 · E2-3, `sim/child_play.gd`): 아래 kind를 냄. 모두 저장 순번 아니오 · 연대기는 첫걸음마만 `log_line` 한 줄. 굴림(놀이를 열지·무슨 놀이·술래·돌탑이 무너질 높이)은 마을 씨앗·놀이 번호의 해시로 정하고 마을 난수 흐름을 쓰지 않는다 — `emit` 앞뒤로 난수 없음. 지켜보는지 읽지 않는다. 행복·경제 값은 바꾸지 않는다 (놀이는 아이의 `play` 행동 그대로 — 놀 자리와 하는 일 이름만, 들여다보기는 쉬는 사람의 짧은 멈춤).
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"kid_play_started"` | `ChildPlay.try_play` — 아이가 놀이를 엶 (술래잡기·나비 쫓기·돌탑) · `_tick_tag` — 혼자 남아 돌탑으로 바꿈 | `{"game": int, "kind": String ("tag"·"bfly"·"stack")}` | `who` = 연 아이 · `at` = 놀이 가운데 | `view/kids_view.gd` (말풍선) · `tests/kids_tests.gd` |
+| `&"kid_tagged"` | `ChildPlay._tick_tag` — 술래가 한 아이를 잡음 (잡힌 아이가 다음 술래) | `{"by": int (잡은 술래), "game": int, "n": int (그 놀이의 몇 번째)}` | `who` = 잡힌 아이 · `at` = 잡힌 자리 | `view/kids_view.gd` ("잡았다!"·폴짝) · `tests/kids_tests.gd` |
+| `&"kid_stack_fell"` | `ChildPlay._tick_stack` — 돌탑이 흔들리다 무너짐 (다시 쌓음) | `{"game": int, "h": int (무너질 때 돌 수), "n": int}` | `who` = 다음 차례 아이 (−1 없음) · `at` = 돌탑 | `view/kids_view.gd` (구르는 돌·"와르르") · `tests/kids_tests.gd` |
+| `&"baby_peeked"` | `ChildPlay._peek` — 문 옆 요람의 젖먹이를 지나가던 쉬는 이웃이 잠깐 들여다봄 | `{"baby": int, "secs": float}` | `who` = 들여다보는 이웃 · `at` = 요람 | `view/kids_view.gd` (하트 그림 말풍선·아기 꼼지락) · `tests/kids_tests.gd` |
+| `&"first_steps"` | `ChildPlay._first_steps` — 아기가 걸음마 나이(보이는 나이 1살)를 넘긴 첫 낮 (아기마다 한 번, `Village.kids["walked"]`) | `{"with": int (곁의 보는 사람, −1 없음)}` | `who` = 아기 · `at` = 집 문 앞 | `view/kids_view.gd` (말풍선) · `tests/kids_tests.gd` |

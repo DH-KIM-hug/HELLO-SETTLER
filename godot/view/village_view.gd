@@ -138,6 +138,8 @@ const FAST_EVERY := 0.1
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
+var dog_pals: DogPals           # [강아지와 사람] 따라가다 앉기·놀이에 끼기·쓰다듬기 — 그릴 자리와 몸짓만 (view/dog_pals.gd — Q2-d, 화면만)
+var kids_view: KidsView         # [아이·아기] 놀이 몸짓·소품 · 요람 · 아장아장 (view/kids_view.gd — Q2-b)
 var econ: BldEcon               # [보이는 살림 Q6] 짓는 터 자재·말뚝, 일터 앞 더미, 일하는 김, 막힘 풍선 (view/bld2d/bld_econ.gd — 2D 건물일 때만)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
@@ -236,6 +238,9 @@ func _ready() -> void:
 	add_child(kitchen_view)
 	social = SocialStage.new(v, self)   # [마을의 삶]
 	add_child(social)
+	kids_view = KidsView.new(v, self)   # [아이·아기]
+	add_child(kids_view)
+	dog_pals = DogPals.new(v, self)     # [강아지와 사람]
 	econ = BldEcon.new(v, self)         # [보이는 살림 Q6]
 	add_child(econ)
 	_build_fire()
@@ -434,6 +439,8 @@ func flora_stats() -> Dictionary:
 func _sync_moving(dt: float) -> void:
 	if social != null:
 		social.sync(dt, fast)
+	if kids_view != null:
+		kids_view.begin(dt, fast)   # [아이·아기] 놀이 소품 · 누가 놀이 속인가 (주민을 놓기 전)
 	_sync_residents(dt)
 	mold_view.alpha = alpha         # [곰팡이·뚜껑]
 	mold_view.sync(dt)
@@ -445,6 +452,8 @@ func _sync_moving(dt: float) -> void:
 		drop_view.sync(dt)          # [상점]
 	if animal_view != null:
 		animal_view.sync(dt)        # [들짐승]
+	if dog_pals != null:
+		dog_pals.step(dt, fast)     # [강아지와 사람] 놀이 곁 강아지·쓰다듬기 (강아지를 그리기 전에)
 	if fauna_view != null:
 		fauna_view.alpha = alpha    # [강아지·작은 생물]
 		fauna_view.sync(dt, fast)
@@ -502,11 +511,17 @@ func _sync_residents(dt: float) -> void:
 		if alpha < 1.0 and absf(r.x - r.px) + absf(r.y - r.py) < lerp_max:     # 순간이동(집 안·새로 태어남)은 보간하지 않음
 			x = lerpf(r.px, r.x, alpha)
 			z = lerpf(r.py, r.y, alpha)
+		var face := r.facing
+		if econ != null and econ.stands.has(r.id):     # [보이는 살림 Q6] 채집 일꾼은 나무·바위 그림에 가리지 않는 자리에 (화면만 — BldEcon.stand_pos)
+			var sp := econ.stand_pos(r, x, z, dt)
+			x = sp.x
+			z = sp.y
+			face = sp.z
 		if not cut_baby:
 			m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
 		elif fresh:
 			m.position = Vector3(x, gy(x, z), z)
-		m.rotation.y = r.facing
+		m.rotation.y = face
 		if (r.anim == "walk" or r.anim == "carry") and not crossings.is_empty():     # (E3-6) 징검돌에서 폴짝 · 다리 위
 			m.position.y = maxf(m.position.y, crossing_y(x, z))
 		if staged.has(r.id):            # (스타터킷 풀기) 장면이 직접 — 상자 가장자리를 넘어 폴짝
@@ -537,6 +552,10 @@ func _sync_residents(dt: float) -> void:
 			_face_partner(r, m)
 		if social != null and not fast:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
+		if kids_view != null and not fast:
+			kids_view.pose(r, m, dt)    # [아이·아기] 놀이 속 아이: 화면 자리·폴짝 · 요람을 들여다보는 이웃
+		if dog_pals != null and not fast:
+			dog_pals.pose(r, m)         # [강아지와 사람] 강아지를 쓰다듬는 아이: 그쪽을 보고 몸을 숙임
 		var po: Dictionary = pose_over.get(r.id, {}) if not pose_over.is_empty() else hint_pose.get(r.id, {})
 		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함 · (E1-1) 조짐: 멈춰 서서 하늘을 봄
 			if po.has("face"):
@@ -562,6 +581,8 @@ func _sync_residents(dt: float) -> void:
 	_pair_follow(dt)
 	if cut:
 		_place_babies()
+		if kids_view != null:
+			kids_view.babies(dt, fast)  # [아이·아기] 요람 그림 · 아장아장 (place_babies가 정한 자리 뒤에)
 	_stage_after(dt)
 	_wonder_hints(dt)
 	for id in _torches.keys():
@@ -1459,7 +1480,11 @@ func _build_shape(n: Node3D, b: Building) -> void:
 		if _bld2d_on:                 # (2D) 밀밭 그림 (자람 단계 셋) — 3D 줄기는 그림자만
 			Bld2D.proxify(near)
 			Bld2D.proxify(far)
-			_add_card(n, b, Bld2D.wheat_pic(wheat_stage(b, v.t)))
+			# [보이는 살림 Q6] 뒤쪽 건물의 더미 줄을 가리는 밭은 그림을 줄여 놓는다 (화면만 — BldEcon.wheat_cap. 밭 자리·수확은 그대로)
+			var wk := econ.wheat_build_k(b) if econ != null else 1.0
+			near.scale = Vector3.ONE * wk
+			far.scale = Vector3.ONE * wk
+			_add_card(n, b, Bld2D.wheat_pic(wheat_stage(b, v.t)), wk)
 		_set_yard(far, b, far.get_child_count() > 0)
 		_apply_bld_lod(n)
 		return
@@ -1795,6 +1820,10 @@ func _build_site_shape(n: Node3D, b: Building) -> void:
 			return
 		if _bld2d_on and st < 4:       # (2D · Q6) 벽이 서기 전 바닥·기둥·들보는 그림자 대역이 되면 그림과 어긋난 빗금·토막 그림자뿐 — 만들지 않음
 			return
+		if _bld2d_on:                  # (2D · Q6) 벽·지붕 단계 그림자 대역 = 그림 폭에 맞춰 화면 쪽으로 돌린 상자 하나 (건물 방위로 돌아간 벽·서까래 상자는 그림과 어긋난 네모 그림자)
+			var sh := 0.9 if st < 6 else 1.5
+			_box(n, Vector3(s * 2.0, sh, d * 0.9), Vector3(0, sh * 0.5, 0), Style.WOOD, deg_to_rad(JarCamera.BASE_YAW_DEG) - n.rotation.y)
+			return
 		if st >= 1:
 			_box(n, Vector3(s * 2.0, 0.1, d * 2.0), Vector3(0, 0.05, 0), Style.WOOD.lightened(0.25))
 	var h := 1.5
@@ -2025,7 +2054,7 @@ func _core_scale(key: String, x: float, z: float, s: float) -> float:
 	if _core_r < 0.0:
 		return s
 	var p := Vector2(x, z) - v.center
-	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG)
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG + 90.0 * float(econ.step if econ != null else 0))     # [Q6] 지금 카메라 방위 걸음
 	var tw := Vector2(sin(yaw), cos(yaw))
 	var along := p.dot(tw)
 	var lat := absf(p.dot(Vector2(tw.y, -tw.x)))
@@ -2038,8 +2067,14 @@ func _core_scale(key: String, x: float, z: float, s: float) -> float:
 	return s * CORE_H / h if h > CORE_H else s
 
 
+var _put_s := 1.0                 # 방금 _put이 놓은 크기 (마을 한가운데·더미 앞마당에서 줄인 뒤)
+
+
 func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: float, dy := 0.0) -> void:
 	s = _core_scale(key, x, z, s)
+	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 건물 앞 더미를 가리는 키 큰 그림은 낮춤 (화면만 — BldEcon.apron_scale)
+		s = econ.apron_scale(key, x, z, s)
+	_put_s = s
 	var y := gy(x, z) + dy
 	_add(groups, key, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * s), Vector3(x, y, z)))
 	if _rec != null and FloraPicks.pickable(key):
@@ -2086,7 +2121,11 @@ func _sync_trees() -> void:
 	if se != season and _flora2d_on:
 		Flora2D.keep_season(se)      # (2D) 다른 철 꽃 아틀라스를 놓아 줌
 	season = se
-	var key := "%d|%d|%d|%d|%s|%s|%.0f" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0]
+	var key := "%d|%d|%d|%d|%s|%s|%.0f|%d" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0, v.buildings.size() if _flora2d_on else 0]
+	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 카메라 방위·더미 앞마당·채집 일꾼 자리가 바뀌면 다시 (낮출 꽃이 달라짐)
+		key += "|" + econ.place_key()
+		if key != _tree_key:
+			econ.tree_draw.clear()
 	if key == _tree_key:
 		return
 	_tree_key = key
@@ -2112,6 +2151,8 @@ func _sync_trees() -> void:
 			_:
 				c = FloraLook.sprout(h)
 		_put(groups, c[0], x, z, float(c[1]) * TREE_SCALE, yaw)
+		if _rec_sim and _flora2d_on and econ != null:
+			econ.tree_draw[Vector2(x, z)] = [c[0], _put_s]     # 나무꾼 인형이 이 꽃 그림 앞에 서게 (BldEcon.stand_of)
 	flora_picks["_trees"] = _rec
 	_rec = null
 	_rec_sim = false
@@ -2123,9 +2164,13 @@ func _sync_rocks() -> void:
 	for r: Dictionary in v.rocks:
 		key += "%d,%.1f,%.1f;" % [int(r["amt"]), float(r["x"]), float(r["y"])]     # 자리도 (핀셋으로 옮긴 바위 — B6)
 	key += str(v.water.rot)
+	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 방위·앞마당이 바뀌면 다시
+		key += "|" + econ.place_key()
 	if key == _rock_key:
 		return
 	_rock_key = key
+	if econ != null:
+		econ.rock_draw.clear()
 	var groups := {}
 	var ores := {}                       # 광맥 돌의 바위 (SHOP 2.4) — 돌 색으로 (Style.ORE: 회색 돌 · 하양 소금 · 붉은 철 · 검정 석탄)
 	for r: Dictionary in v.rocks:
@@ -2142,6 +2187,8 @@ func _sync_rocks() -> void:
 				ores[ore] = {}
 			g = ores[ore]
 		_put(g, "rocks", x, z, k, _hash(x, z) * TAU, -0.08)
+		if _flora2d_on and econ != null:
+			econ.rock_draw[Vector2(x, z)] = _put_s     # [Q6] 캐는 일꾼이 그린 바위 곁에 서게 (BldEcon.stand_of)
 		_put(g, "rock_small", x + 1.1 * k, z + 0.5 * k, k * 0.8, _hash(z, x) * TAU, -0.04)
 	_flush(_rocks, groups)
 	for ore: String in ores:
@@ -2182,6 +2229,8 @@ func _sync_props() -> void:
 	if v.water is WorldWater:
 		_sync_far()
 	var key := "%d|%d|%d|%s|%s" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0), season, _decor_sig]
+	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 방위·앞마당이 바뀌면 다시
+		key += "|" + econ.place_key()
 	if key == _prop_key:
 		return
 	_prop_key = key

@@ -20,7 +20,13 @@ DRESS = (200, 112, 106)
 SACK, STRIPE = (217, 214, 205), (90, 127, 176)
 HIP_Y, CHIN_Y, HEAD_R = 385, 212, 74     # v6 (2026-11-09 "아직도 긴데요"): long skirt to mid-shin, only short boots show
 HEM_Y = 430                              # skirt hem: hem->sole = 40 px ~ 0.10 of the figure (old cutout 0.08-0.10)
-GAIT = {"walk": dict(S=36.0, H=16.0, bob=6.0), "carry": dict(S=30.0, H=13.0, bob=5.0)}
+GAIT = {"walk": dict(S=36.0, H=16.0, bob=6.0), "carry": dict(S=30.0, H=13.0, bob=5.0),
+        "idle": dict(S=0.0, H=0.0, bob=0.0)}     # v10 standing sheet (3/4 views): top row = breathing, bottom row = holding the sack
+BREATH = [0.0, -3.0, -6.0, 0.0]          # v10 idle: the chin rises this much per frame (px); feet, hips and hem stay
+# v10 standing feet in the 3/4 views (x, y from the root): apart along the lateral axis so both boots are whole under the hem
+# standing feet (px from the cell centre / ground line). First try 34-38 px apart: the two boots touched and read as ONE dark lump
+# under the hem at ppu 20 (1 screen px = 12 sheet px) -> 70 px apart: a gap of ~2 screen px between the boots at the default zoom
+STAND = {"q_front": {"R": (-35, 8), "L": (35, -4)}, "q_back": {"R": (37, 8), "L": (-35, -2)}}
 
 
 def smooth(u):
@@ -41,7 +47,7 @@ def leg_phase(p, S, H, v9=False):
     return -S + 2 * S * u * u * u * (u * (6 * u - 15) + 10), H * sn * sn, sn ** 4
 
 
-def geometry(view):
+def geometry(view, clip=None):
     """forward vector on screen (unit = stride), lateral offsets of the right / left hip & foot (x, y), sack side"""
     if view == "front":       # walking toward the viewer: forward = down the screen (foreshortened)
         return dict(fwd=(0.0, 0.38), hip={"R": (-30, 0), "L": (30, 0)}, foot={"R": (-32, 0), "L": (32, 0)}, sack=-1, side=0)
@@ -60,23 +66,44 @@ def geometry(view):
         # late swing + low peel-off (leg_phase v9), the swinging foot arcs 10 px around the planted one, hem 6 px higher in the
         # 3/4 views (hem->sole was 0.076 in game against 0.093 on the old cutout). Far boot visible in the reference, of ~940 px:
         # walk 934 558 451 956 943 959 483 678, carry 936 381 426 956 966 940 410 495 (was 389 2 634 957 977 974 569 66).
-        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (7.5, -6)}, foot={"R": (-9, 8), "L": (-2, 8)}, sack=-1, side=1,
-                    v9=True, arc={"L": (10.0, -3.0), "R": (-10.0, 3.0)}, hem=HEM_Y - 6)
+        g = dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (7.5, -6)}, foot={"R": (-9, 8), "L": (-2, 8)}, sack=-1, side=1,
+                 v9=True, arc={"L": (10.0, -3.0), "R": (-10.0, 3.0)}, hem=HEM_Y - 6)
+        if clip == "idle":
+            g.update(foot=STAND["q_front"], arc={"L": (0.0, 0.0), "R": (0.0, 0.0)})
+        return g
     # v9: 3/4 back the same way (was hidden in frames 4 and 6: 182 / 200 px): walk 979 947 624 676 947 582 679 974,
     # carry 947 947 613 478 922 390 633 971 (carry frames 4 and 6 = the legs passing: the far boot is mostly behind the near leg)
-    return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-8.5, -6)}, foot={"R": (13, 8), "L": (-2, 8)}, sack=1, side=1,
-                v9=True, arc={"L": (-14.0, -4.2), "R": (14.0, 4.2)}, hem=HEM_Y - 6)
+    g = dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-8.5, -6)}, foot={"R": (13, 8), "L": (-2, 8)}, sack=1, side=1,
+             v9=True, arc={"L": (-14.0, -4.2), "R": (14.0, 4.2)}, hem=HEM_Y - 6)
+    if clip == "carry":
+        # v10 (2026-11-10 coordinator: "carry 3/4 back frames 4 and 6 still show only a sliver of the far foot"): the carry stride
+        # is short (30 px against 48 px boots), so with both feet on one line the boots are never more than ~25 px apart next
+        # to the passing frames. Planted feet stay where they were (same anchors, no sliding); only the SWING path changes:
+        # wider arc around the planted foot (18 px) and the swinging foot crosses 12 px to the other side before / after the
+        # legs pass ("over") — far boot visible in the reference 947 933 705 718 912 659 696 945 (was .. 613 478 922 390 633 ..)
+        g.update(arc={"L": (-18.0, -5.4), "R": (18.0, 5.4)}, over=12.0)
+    if clip == "idle":
+        g.update(foot=STAND["q_back"], arc={"L": (0.0, 0.0), "R": (0.0, 0.0)})
+    return g
 
 
 def feet(clip, view, f):
     """reference foot positions (cell coords, sole point) and lift for frame f: {'R': (x, y, lift), 'L': ...}"""
-    g, G = geometry(view), GAIT[clip]
+    g, G = geometry(view, clip), GAIT[clip]
     out = {}
     for leg, ph in (("R", 0.0), ("L", 0.5)):
-        s, h, w = leg_phase(f / 8.0 + ph, G["S"], G["H"], bool(g.get("v9")))
+        p = (f / 8.0 + ph) % 1.0
+        s, h, w = leg_phase(p, G["S"], G["H"], bool(g.get("v9")))
         bx, by = g["foot"][leg]
         ax, ay = g.get("arc", {}).get(leg, (0.0, 0.0))        # v9: the swinging foot swings around the planted one
-        out[leg] = (CW / 2 + bx + g["fwd"][0] * s + ax * w, GROUND + by + g["fwd"][1] * s + ay * w - h, h)
+        ox = 0.0
+        if g.get("over") and p >= 0.5:                        # v10: far foot crosses inward after passing, near foot before
+            u = (p - 0.5) * 2
+            if leg == "L" and u > 0.5:
+                ox = g["over"] * math.sin(2 * math.pi * (u - 0.5)) ** 2
+            elif leg == "R" and u < 0.5:
+                ox = -g["over"] * math.sin(2 * math.pi * u) ** 2
+        out[leg] = (CW / 2 + bx + g["fwd"][0] * s + ax * w + ox, GROUND + by + g["fwd"][1] * s + ay * w - h, h)
     return out
 
 
@@ -134,7 +161,7 @@ def draw_leg(d, hip, foot, col, shoe, fwd, front):
 
 
 def draw_frame(d, x0, y0, clip, view, f):
-    g = geometry(view)
+    g = geometry(view, clip)
     by = bob(clip, f)
     cx = x0 + CW / 2
     ft = feet(clip, view, f)
@@ -196,11 +223,25 @@ def hybrid(clip, view):
     _s.path.insert(0, os.path.join(HERE, "..", "cutout_a"))
     import numpy as np
     import cut_sheets as C
-    src = C.key(os.path.join(RAW, f"src_{clip}_{view}.png"))
+    if clip == "idle":
+        # v10 standing sheet: the upper body comes from the traced WALK sheet (top row, standing and breathing) and the traced
+        # CARRY sheet (bottom row, holding the sack) — frame 2 of each (arms closest to the body, the skirt hangs evenly) — so
+        # walk -> stop and carry -> stop keep the same body size, hem height and drawing; only the legs stand still
+        def _sheet(name):
+            a_ = C.key(os.path.join(RAW, name))
+            if a_.shape[1] != 4 * CW:
+                a_ = np.asarray(Image.fromarray(np.clip(a_, 0, 255).astype(np.uint8), "RGBA").resize((4 * CW, 2 * CH), Image.LANCZOS))
+            return np.array(a_)
+        wk, car = _sheet(f"walk_{view}.png"), _sheet(f"carry_{view}.png")
+        src = np.zeros_like(wk)
+        for f in range(8):
+            src[(f // 4) * CH:(f // 4 + 1) * CH, (f % 4) * CW:(f % 4 + 1) * CW] = (wk if f < 4 else car)[0:CH, CW:2 * CW]
+    else:
+        src = C.key(os.path.join(RAW, f"src_{clip}_{view}.png"))
     im = Image.new("RGB", (4 * CW, 2 * CH), (0, 255, 0))
     d = ImageDraw.Draw(im)
     gcol = (0, 176, 0)
-    g = geometry(view)
+    g = geometry(view, clip)
     for f in range(8):
         x0, y0 = (f % 4) * CW, (f // 4) * CH
         d.rectangle((x0 + 4, y0 + 4, x0 + CW - 4, y0 + CH - 4), outline=gcol, width=3)
@@ -214,7 +255,7 @@ def hybrid(clip, view):
         colour = {"R": (TAN, BROWN), "L": (CYAN, NAVY)}
         for k in order:
             draw_leg(d, hips[k], (x0 + ft[k][0], y0 + ft[k][1]), colour[k][0], colour[k][1], g["fwd"], front)
-        sf = (f + 4) % 8 if view == "back" else f        # the earlier back sheets had the other leg phase
+        sf = (f + 4) % 8 if view == "back" and clip != "idle" else f        # the earlier back sheets had the other leg phase (the standing source is built per cell above)
         sx0, sy0 = (sf % 4) * CW, (sf // 4) * CH
         cell = src[sy0:sy0 + CH, sx0:sx0 + CW].astype(np.float32)
         r, gg, b, a = cell[..., 0], cell[..., 1], cell[..., 2], cell[..., 3]
@@ -253,6 +294,8 @@ def hybrid(clip, view):
         keep[..., 3] = np.where(low & legish & ~rose, 0, keep[..., 3])
         up = Image.fromarray(np.clip(keep, 0, 255).astype(np.uint8), "RGBA")
         pchin, phem = CHIN_Y + by, g.get("hem", HEM_Y) + by          # hem at mid-shin (v6; v9: per view)
+        if clip == "idle":
+            pchin += BREATH[f % 4]
         k = (phem - pchin) / max(1.0, hem - chin)
         up = up.resize((round(CW * k), round(CH * k)), Image.LANCZOS)
         hc = CW / 2 + (8 if view == "q_front" else (-4 if view == "q_back" else 0))
@@ -265,6 +308,8 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "hybrid":
     for clip in ("walk", "carry"):
         for v in VIEWS:
             hybrid(clip, v).save(os.path.join(RAW, f"pose_{clip}_{v}.png"))
+    for v in VIEWS:          # v10: standing sheets of the 3/4 views (from the picked walk / carry sheets); v11: front / back too
+        hybrid("idle", v).save(os.path.join(RAW, f"pose_idle_{v}.png"))
     print("hybrid ok")
     sys.exit(0)
 

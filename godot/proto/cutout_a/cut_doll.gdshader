@@ -34,7 +34,7 @@ instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // 옷 묶음 S, 머�
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작 번호, 시작 위상(0~1)
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);    // 물감 번호: 피부, 머리카락, 옷 주색, 둘째(크림)
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);    // 장식(띠·가죽), 모자, 다리(양말·바지), 신
-instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 동작 빠르기(주기/초), 기울기(rad, 발끝 중심)
+instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 동작 빠르기(주기/초), 기울기(rad, 발끝 중심 — 톡 반응 + 화면 몸짓을 더한 값: cutout_resident._push_misc)
 
 varying flat vec4 v_dye;     // xyz = 이 조각의 물감 슬롯 0·1·2 (-1 없음), w = 묶음
 varying flat float v_show;
@@ -129,7 +129,7 @@ void vertex() {
 		p = xf(p, vec2(0.0), anim(0, row0, f));
 		p.y += ps.z;                                   // 엉덩이 내림 (걸음 들썩임·앉기·무릎 — 이 몸의 다리 길이만큼)
 		p.x *= st.y * misc.y;
-		if (misc.w != 0.0) {                           // [톡 반응] 발끝을 중심으로 인형 전체를 기울임 (view/tap_react.gd — 화면만)
+		if (misc.w != 0.0) {                           // [톡 반응 · 아이·아기 몸짓] 발끝을 중심으로 인형 전체를 기울임 (view/tap_react.gd · view/kids_view.gd — 화면만)
 			float rc = cos(misc.w), rs = sin(misc.w);
 			p = vec2(rc * p.x - rs * p.y, rs * p.x + rc * p.y);
 		}

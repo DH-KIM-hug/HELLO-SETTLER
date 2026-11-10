@@ -243,6 +243,8 @@ static func _can_stop(v: Village, a: Resident, b: Resident) -> bool:
 	for r: Resident in [a, b]:
 		if float(busy.get(str(r.id), -1.0e9)) + TALK_COOLDOWN > v.t:
 			return false
+		if r.is_child() and not ChildPlay.game_of(v, r.id).is_empty():     # [아이·아기] 놀이 중인 아이는 멈춰 세우지 않는다 (만남 자체는 그대로 — sim/child_play.gd)
+			return false
 	return true
 
 

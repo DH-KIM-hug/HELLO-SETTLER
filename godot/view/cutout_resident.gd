@@ -26,7 +26,8 @@ const Doll := preload("res://proto/cutout_a/cut_doll.gd")
 ## 여자 평상복(a) 어른의 걷기·나르기·서기·안고 서기를 장면 그림 몸 + 머리 조각으로 (그 밖은 그대로 컷아웃). 기본값은 바뀌지 않음.
 const FrameLib := preload("res://proto/cutout_c/frame_lib.gd")
 const FrameDoll := preload("res://proto/cutout_c/frame_doll.gd")
-const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk"}
+const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk",
+	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather"}     # 2026-11-10 states4
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
@@ -65,7 +66,7 @@ const SWAP_PUFF := 0.5           # 연기가 퍼졌다 사라지는 시간
 const INFANT_AGE := 1.0 / 2.4
 const INFANT_H := 0.4            # 젖먹이의 화면 키 (누운 인형의 길이 쪽) — 부모 품·요람에
 const HOLD_RIG := 400.0          # 부모 품 높이 (rig 단위 — 안기 소품 자리와 같은 쪽)
-const CRADLE_OFF := Vector2(0.4, 0.55)   # 집 문 옆 요람: 집 가운데에서 (옆, 앞) + 집 크기 × 0.5 앞
+const CRADLE_OFF := Vector2(0.4, 0.85)   # 집 문 옆 요람: 집 가운데에서 (옆, 앞) + 집 크기 × 0.5 앞
 
 ## -1 = 설정(GameSettings.cutout_residents)을 따름 · 0 = 늘 3D · 1 = 늘 컷아웃 (시험·캡처·성능 비교)
 static var override := -1
@@ -87,6 +88,9 @@ var baby_mode := ""
 var toddle_clip := "idle"
 var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기 팔, 소품 없음)
 var cradle: MeshInstance3D
+var minder_id := -1              # (Q2-b) 이 아기를 지금 보는 사람 (place_babies가 적음 — 없으면 -1: 문 옆)
+var _warp := Vector3(1, 1, 0)    # (Q2-b) 화면 몸짓: (키 배율, 폭 배율, 기울임) — set_body_warp
+var _lift := 0.0                 # (Q2-b) 화면 몸짓: 인형만 들어 올림 (폴짝·요람 높이, 인형 좌표) — set_body_lift
 ## 일 옷 차림 (shift): 일을 시작한 행동 — 그 행동이 이어지는 동안 일 옷
 var on_shift := false
 var _shift_action := ""
@@ -323,16 +327,17 @@ func set_react(off: Vector3, squash: Vector2, roll: float, turn: float, hint: St
 func _push_misc() -> void:
 	if doll == null:
 		return
-	doll.position = transform.basis.inverse() * react_off
+	doll.position = transform.basis.inverse() * react_off + Vector3(0.0, _lift, 0.0)     # 톡 반응 자리 + (Q2-b) 몸짓 높이
 	var c := cos(react_turn * TAU)
 	if absf(c) < 0.16:                              # 종이 인형이 돌 때 선으로 사라지지 않게 (옆모습 두께)
 		c = 0.16 if c >= 0.0 else -0.16
-	var w := react_sq.x * c
-	var sy := maxf(react_sq.y, 0.05)
+	var w := react_sq.x * c * _warp.y                               # (Q2-b) 화면 몸짓(set_body_warp)과 곱해서
+	var sy := maxf(react_sq.y, 0.05) * _warp.x
 	var face := float(doll.mirror) * (-1.0 if w < 0.0 else 1.0)      # 화면에서 바라보는 쪽 (오른쪽 +1)
-	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -react_roll * face))
+	var roll := react_roll + _warp.z * face                         # 몸짓 기울임은 화면 오른쪽이 + → 바라보는 쪽 기준으로 바꿔 더함
+	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -roll * face))
 	if fdoll != null:
-		fdoll.set_react(doll.position, w, sy, react_roll)        # 방식 C 인형도 같은 반응 (frame_doll.set_react)
+		fdoll.set_react(doll.position, w, sy, roll)              # 방식 C 인형도 같은 반응 (frame_doll.set_react)
 
 
 ## [톡 반응] 지금 그려진 인형의 머리 높이 (세계, 찌그러짐 전) — 말풍선 자리. 누웠으면 낮게, 앉았으면 조금 낮게
@@ -437,7 +442,7 @@ func _refresh_doll() -> void:
 	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
 	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
 	if outfit != _d_outfit or hat != _d_hat:
-		if _d_outfit >= 0 and outfit != _d_outfit:
+		if _d_outfit >= 0 and outfit != _d_outfit and not _f_on:      # 방식 C 인형은 일 옷이 아직 없음 (평상복 그대로) → 연기도 없음
 			_swap_puff()
 		_d_outfit = outfit
 		_d_hat = hat
@@ -476,11 +481,29 @@ func _refresh_doll() -> void:
 	_update_view()
 
 
+## (Q2-b) 인형 통째 몸짓 — 화면만: 키 배율 sy · 폭 배율 sx (눌림·늘어남) · 기울임 lean (라디안, 발 둘레 — 화면 오른쪽이 +).
+## (1, 1, 0)이면 원래대로. 바뀔 때만 GPU에 보낸다 — 톡 반응(set_react)과 곱·합으로 함께 간다 (_push_misc)
+func set_body_warp(sy := 1.0, sx := 1.0, lean := 0.0) -> void:
+	var w := Vector3(maxf(sy, 0.05), sx, lean)
+	if doll == null or w.is_equal_approx(_warp):
+		return
+	_warp = w
+	_push_misc()
+
+
+## (Q2-b) 인형만 위로 (그림자·자리는 그대로 — 폴짝, 요람 속 높이). 인형 자리는 _push_misc 한 곳에서만 쓴다 (톡 반응과 겹쳐도 됨)
+func set_body_lift(y := 0.0) -> void:
+	if doll == null or is_equal_approx(y, _lift):
+		return
+	_lift = y
+	_push_misc()
+
+
 ## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
 func _frames_ok() -> bool:
 	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
-	return on and not _baby and not on_shift and String(dlook.get("body", "")) == "adult" \
-		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip)
+	return on and not _baby and not carry_baby and String(dlook.get("body", "")) == "adult" \
+		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(FRAME_CLIPS[_d_clip]) >= 0
 
 
 func _refresh_frames() -> void:
@@ -505,7 +528,8 @@ func _refresh_frames() -> void:
 		_f_hat = _d_hat
 		fdoll.set_look(dlook, _d_hat)
 	var fc: String = FRAME_CLIPS[_d_clip]
-	var rate: float = Lib.CLIP_RATE["idle"] if fc == "idle" or fc == "hold" else 0.0
+	fdoll.set_prop(_d_prop)
+	var rate: float = 0.0 if fc == "walk" or fc == "carry" else Lib.CLIP_RATE[fc]
 	if fc == "walk" or fc == "carry":
 		var g := _ground
 		if g < 0.0:
@@ -595,6 +619,7 @@ func _update_view() -> void:
 	doll.update_view(cam)
 	if _f_on:
 		fdoll.move_dir = doll.move_dir
+		fdoll.view_lock = doll.view_lock
 		fdoll.update_view(cam)
 	if doll.view != v0 or doll.mirror != m0:
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
@@ -626,16 +651,13 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 		if bm == null:
 			continue
 		var infant := r.age < INFANT_AGE
-		var best: Resident = null
-		for pid in r.parents:
-			var p := _find(people, pid)
-			if p == null or p.dead or p.sleeping or p.anim == "sleep" or p.is_baby():
-				continue
-			var pm0 := models.get(p.id) as CutoutResident
+		# (Q2-b) 누가 아기를 보는가는 시뮬 규칙 (ChildPlay.minder): 깨어서 집 가까이 돌보거나 쉬는 부모 (엄마 먼저) · 한집 노인.
+		# 일하러·멀리 나간 부모는 아기를 데려가지 않는다 → 문 옆 요람 (정보 창의 '하는 일'과 화면이 같음)
+		var best: Resident = ChildPlay.minder(v, r, people)
+		if best != null:
+			var pm0 := models.get(best.id) as CutoutResident
 			if pm0 == null or not pm0.visible:
-				continue
-			if best == null or (p.sex == "f" and best.sex != "f"):
-				best = p
+				best = null
 		var mode := "cradle"
 		var pos := Vector3.INF
 		var yaw := bm.rotation.y
@@ -672,6 +694,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 			if not infant:
 				mode = "toddle"
 				bm.toddle_clip = "sit"
+		bm.minder_id = carrier
 		bm.set_baby_mode(mode, pos, yaw, cam)
 		out[r.id] = {"mode": mode, "pos": pos, "carrier": carrier}
 	return out
@@ -774,6 +797,6 @@ class SwapPuff extends Node3D:
 			b.scale = Vector3.ONE * (0.7 + 1.1 * u) * height
 			b.transparency = u
 		if doll != null and t >= SWAP_HIDE:
-			doll.visible = true
+			doll.visible = not bool(get_parent().get("_f_on"))      # 방식 C 인형이 나와 있으면 컷아웃 인형은 숨긴 채 (두 인형이 겹쳐 보였음)
 		if t >= SWAP_PUFF:
 			queue_free()

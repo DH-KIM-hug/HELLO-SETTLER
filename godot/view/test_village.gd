@@ -427,7 +427,8 @@ func _process(dt: float) -> void:
 			bledger.sample(vv[0])
 		var vfast := clock.view_fast()
 		# [마을의 삶] 말풍선 장면은 보통 이하 빠르기에서만 (주민이 제 걸음일 때) — 화면 상태라 SocialStage 인스턴스에 (시뮬은 늘 같음, ADR-0001)
-		var talk_on := not vfast and not clock.skipping and not clock.fast and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
+		# (Q2-d) 'not clock.fast'를 뺌: 2026-11-07부터 목록의 모든 배속이 빠른 흐름 걸음(Balance.FAST_FROM 50)이라 그 조건 때문에 어느 빠르기에서도 장면이 펼쳐지지 않았다
+		var talk_on := not vfast and not clock.skipping and clock.speed() <= Balance.SPEEDS[Balance.SPEED_DEFAULT_I] * 1.01
 		var sdt := village.step_dt if clock.fast else clock.step
 		var al := 1.0 if clock.skipping or vfast else clampf(clock.acc / sdt, 0.0, 1.0)
 		for vv: Array in village_views():
@@ -447,6 +448,11 @@ func _process(dt: float) -> void:
 			(vv[1] as VillageView).sync(dt)
 		_follow(dt)
 		if tap_react != null:             # [톡 반응] 주민을 놓은 뒤에 인형만 움직임 (시뮬 자리는 그대로)
+			for vv: Array in village_views():          # (Q2-d) 강아지와 사람: 화면이 시킨 몸짓 (움찔·멍!·좋아서 납작 — view/dog_pals.gd)
+				var pals: DogPals = (vv[1] as VillageView).dog_pals
+				if pals != null:
+					for c: Dictionary in pals.take_cues():
+						tap_react.cue(vv[1], String(c["who"]), int(c["id"]), String(c["kind"]))
 			tap_react.step(dt, cam.camera, top_h, bottom_h)
 	if lineup != null:
 		for m in lineup.get_children():
@@ -1623,11 +1629,14 @@ func see_ground(p: Vector2) -> void:
 ## [마을의 삶] 장면의 말(vw.social.say_of)이 먼저 — 기분마다 색과 작은 그림 (화남 · 사랑 · 노래 · 환호 · 시무룩). 멀리서는 장면 말풍선을 띄우지 않는다
 func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 	var close_enough := cam.ppu >= BUBBLE_SCENE_PPU
+	var said := {}                                    # (Q2-d) 이번 화면에 이미 뜬 말 — 같은 말이 두 사람 머리 위에 나란히 뜨지 않게
+	var placed: Array = []                            # (Q2-d) 이번에 놓은 말풍선 네모 — 가까이 선 두 사람의 말이 포개지지 않게
 	for r in vil.people:
 		if shown >= 5:
 			break
 		var text := ""
 		var mood := ""
+		var staged := true
 		var sc: Array = vw.social.say_of(r.id) if vw.social != null and close_enough else []
 		var ss: Array = vw.stage_say.get(r.id, [])        # (E1-1) 연출·조짐의 화면 말풍선 (시뮬레이션 말이 아님) — 먼저
 		if not ss.is_empty():
@@ -1640,14 +1649,18 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 			mood = String(sc[1])
 		elif r.say_t > 0.0 and r.say != "":
 			text = r.say
+			staged = false
 		else:
 			continue
 		var m: ResidentModel = vw.residents.get(r.id)
 		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
 			continue
-		var p := cam.camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
-		if p.x < 0 or p.y < top_h + 20.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
+		var p := head_px(cam.camera, m)                # (Q2-d) 머리 바로 위 — 어느 확대에서나
+		if p.x < 0 or p.y < top_h + 2.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
 			continue
+		if not staged and (said.has(text) or _staged_text(vil, vw, r.id, text, close_enough)):
+			continue                  # 남아 있던 혼잣말이 옆 사람의 말과 똑같으면 한 번만 보임 (말은 그대로 기록됨 — 화면만)
+		said[text] = true
 		var st: Array = BUBBLE_MOOD.get(mood, BUBBLE_MOOD[""])
 		var l := Label.new()
 		l.text = text
@@ -1667,7 +1680,9 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		l.add_theme_stylebox_override("normal", sb)
 		bubbles.add_child(l)
 		var ms := l.get_minimum_size()
-		l.position = bubble_pos(p, ms, mood in SocialEmote.KINDS, vs)
+		l.position = bubble_clear(bubble_pos(bubble_anchor(p, ms, mood in SocialEmote.KINDS, vs, TapReact.px_per_unit(cam.camera, m.global_position)), ms, mood in SocialEmote.KINDS, vs),
+			ms, placed, vs, mood in SocialEmote.KINDS)
+		placed.append(Rect2(l.position, ms))
 		if mood in SocialEmote.KINDS:              # 말풍선 오른쪽 위 작은 그림
 			var em := SocialEmote.new()
 			em.kind = mood
@@ -1677,7 +1692,63 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 	return shown
 
 
+## (Q2-d) 먼저 놓인 말풍선과 포개지면 그 위로 (위에 자리가 없으면 아래로) 비켜 놓음 — 멀리서 보면 이웃한 두 사람의 말이 겹쳤다
+func bubble_clear(pos: Vector2, ms: Vector2, placed: Array, vs: Vector2, emote: bool) -> Vector2:
+	var rect := bubble_rect(vs)
+	var ext_y := float(BUBBLE_EMOTE_EXT.y) if emote else 0.0
+	for k in 3:
+		var hit := false
+		for o: Rect2 in placed:
+			if Rect2(pos, ms).grow(1.0).intersects(o):
+				var up := o.position.y - ms.y - 2.0 - ext_y * 0.5
+				pos.y = up if up - ext_y >= rect.position.y else o.end.y + 2.0 + ext_y
+				hit = true
+		if not hit:
+			break
+	return pos
+
+
+## (Q2-d) 다른 주민이 지금 연출·장면의 말로 같은 글을 하고 있는가 (화면 쪽 말만 봄)
+func _staged_text(vil: Village, vw: VillageView, me: int, text: String, close_enough: bool) -> bool:
+	for id: int in vw.stage_say:
+		if id != me and String((vw.stage_say[id] as Array)[0]) == text:
+			return true
+	if vw.social != null and close_enough:
+		for o in vil.people:
+			if o.id == me:
+				continue
+			var sc: Array = vw.social.say_of(o.id)
+			if not sc.is_empty() and String(sc[0]) == text:
+				return true
+	return false
+
+
+## (Q2-d) 말풍선이 붙을 머리 위 점 (화면 px). 종이 인형은 카메라를 보는 판이라 발 자리 + 화면 위쪽 × 지금 인형 키 (아이·아기·앉은 사람은 낮게) —
+## 확대가 달라도 머리 바로 위. 3D 대역은 예전처럼 어른 키 높이
+static func head_px(camera: Camera3D, m: Node3D) -> Vector2:
+	if not m.has_method("react_top"):
+		return camera.unproject_position(m.global_position + Vector3(0, 2.4 * m.scale.y, 0))
+	var feet := m.global_position
+	var doll: Variant = m.get("doll")
+	if doll is Node3D and is_instance_valid(doll):
+		feet = (doll as Node3D).global_position
+	return camera.unproject_position(feet) + TapReact.up_px(camera, feet) * float(m.call("react_top")) + Vector2(0.0, -BUBBLE_GAP)
+
+
+## (Q2-d) 머리 위에 말풍선이 들어갈 자리가 없으면 (맨 위 띠 바로 밑에 선 사람) 얼굴을 덮지 않게 머리 옆으로 — 화면 가운데 쪽으로 비켜 세움
+func bubble_anchor(p: Vector2, ms: Vector2, emote: bool, vs: Vector2, px_unit: float) -> Vector2:
+	var rect := bubble_rect(vs)
+	var need := ms.y + 2.0 + (BUBBLE_EMOTE_EXT.y if emote else 0.0)
+	if p.y - need >= rect.position.y:
+		return p
+	var side := 1.0 if p.x < vs.x * 0.5 else -1.0
+	var ext_x := float(BUBBLE_EMOTE_EXT.x) if emote and side < 0.0 else 0.0      # 왼쪽으로 비킬 땐 오른쪽 위 기분 그림만큼 더
+	return Vector2(p.x + side * (ms.x * 0.5 + ext_x + maxf(px_unit, 8.0) * BUBBLE_SIDE), rect.position.y + need)
+
+
 const BUBBLE_SCENE_PPU := 11.0
+const BUBBLE_GAP := 3.0                            # 머리와 말풍선 사이 (px)
+const BUBBLE_SIDE := 0.5                           # 머리 옆으로 비킬 때: 세계 이만큼 (머리 반 너비 + 틈)
 const BUBBLE_EDGE := 6.0                           # 말풍선과 화면 옆 가장자리 사이 (px)
 const BUBBLE_EMOTE_EXT := Vector2(10.0, 9.0)       # 기분 그림(SocialEmote 14px)이 말풍선 오른쪽·위로 나오는 만큼
 

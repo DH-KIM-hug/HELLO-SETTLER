@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -53,7 +53,8 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
 	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
 	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd",
-	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd"}
+	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd",
+	"kids": "res://tests/kids_tests.gd", "dogs_play": "res://tests/dogs_play_tests.gd"}
 
 
 func _initialize() -> void:
@@ -90,7 +91,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting", "kids"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()

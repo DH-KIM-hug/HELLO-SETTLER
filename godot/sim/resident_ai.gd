@@ -463,9 +463,12 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			if pa != null:
 				c = Vector2(pa.x, pa.y)
 			var p := near(v, c.x, c.y, 2.5 + v.rng.randf() * 2.0)
+			var play_secs: float = Balance.PLAY_TIME[0] + v.rng.randf() * Balance.PLAY_TIME[1]     # (난수 순서는 옛 그대로: 자리 → 시간)
 			r.doing = "노는 중"
+			if ChildPlay.try_play(v, r, p, play_secs):     # [아이·아기] 벌어진 놀이에 끼거나 새 놀이를 엶 (sim/child_play.gd)
+				return true
 			r.steps.append(walk(p.x, p.y))
-			r.steps.append(act(Balance.PLAY_TIME[0] + v.rng.randf() * Balance.PLAY_TIME[1], "play"))
+			r.steps.append(act(play_secs, "play"))
 			return true
 		"shelter":
 			return _shelter(v, r)
@@ -644,7 +647,7 @@ static func _baby(v: Village, r: Resident) -> void:
 	r.x = p.x
 	r.y = p.y
 	r.action = "baby"
-	r.doing = "집 안의 아기" if hm != null else "모닥불 곁의 아기"
+	r.doing = ChildPlay.baby_doing(v, r)     # 품에 안김 · 문 앞 요람 · 아장아장 (화면과 같은 말 — sim/child_play.gd)
 	r.sleeping = v.is_night()
 	r.steps.append(act(600.0, "sleep" if hm != null else "sit"))
 

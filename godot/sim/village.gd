@@ -129,6 +129,7 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 # [마을의 삶] 사람 사이 — 이야기·다툼·사랑·혼례 모임 (ROADMAP E2 — sim/social.gd, 난수도 따로)
 var social := {}                      # {"p": 짝마다 관계 값, "wed": 혼례 모임 약속, "story": 사랑 이야기 …} (저장됨)
 var social_rng := RandomNumberGenerator.new()
+var kids := {}                        # [아이·아기] 벌어진 놀이·요람 들여다보기·첫걸음마 (sim/child_play.gd — 저장됨)
 # [인구] 이주민의 조각 (design/gdd/population.md R6-6 · STORY 1) — 따로 흐름 (혼인·출산 흐름 rng를 흔들지 않게)
 var pop_rng := RandomNumberGenerator.new()
 var hint_bag: Array = []              # 아직 나오지 않은 조각 id (네 가지가 다 나오면 다시 섞어 채움 — 저장됨, 옛 저장은 빈 채로)
@@ -953,6 +954,7 @@ func step(dt: float) -> void:
 	_walker = null
 	SimProf.mark("resident_ai")
 	Social.step(self, dt)             # [마을의 삶] 쉬는 둘이 만나면 이야기·다툼·사랑 (sim/social.gd)
+	ChildPlay.step(self, dt)          # [아이·아기] 술래잡기·나비 쫓기·돌탑, 요람 들여다보기, 첫걸음마 (sim/child_play.gd)
 	_update_trees(dt)
 	SimProf.mark("trees")
 	# 주기 처리

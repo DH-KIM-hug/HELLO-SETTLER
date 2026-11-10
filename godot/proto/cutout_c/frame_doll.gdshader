@@ -10,9 +10,12 @@ uniform sampler2D dye_mask : hint_default_black, filter_linear_mipmap, repeat_di
 uniform sampler2D frames_atlas : filter_linear_mipmap, repeat_disable;   // 몸 장면들
 uniform sampler2D fmask0 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 피부 · 옷 주색 · 둘째(크림) · 장식(띠)
 uniform sampler2D fmask1 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 다리(양말) · 신 · 짐(물감 없음)
-uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, -) rig
-uniform ivec4 clip_off = ivec4(0, 32, 64, 80);   // 동작(걷기·나르기·서기·안고 서기)의 첫 장면 번호
-uniform ivec4 clip_n = ivec4(8, 8, 4, 4);         // 동작의 장면 수 (보기마다)
+uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
+                                                                         // [2] 소품 (기울기 rad, 손 x, y, 배율 — 0 = 소품 없음), [3] (쥐는 자리: 소품 키의 몇 배, -, -, -)
+// 동작 = frames.json의 clips 차례 (걷기·나르기·서기·안고 서기 + 2026-11-10 앉기·먹기·올려다보기·무릎·괭이질·줍기) — frame_lib.material이 채움
+uniform int clip_off[16];        // 동작의 첫 장면 번호
+uniform int clip_n[16];          // 동작의 장면 수 (보기마다)
+uniform float head_r = 143.0;    // 머리 자리 표시 원의 반지름 (rig) — 고개 기울기는 그 가운데(턱 위 head_r)를 중심으로
 uniform vec4 body_rect = vec4(-400.0, -10.0, 400.0, 1020.0);   // 몸 장면 사각형 (rig, 발바닥 가운데 = 0)
 uniform vec4 head_k = vec4(1.3);                  // 보기마다 머리 배율 (자리 표시 원 지름에 맞춤)
 uniform vec4 body_layer = vec4(5.0, 7.0, 6.0, 4.0);   // 보기마다 몸의 겹 (컷아웃 라이브러리의 몸 겹 — 머리꼬리·매듭 앞뒤가 그대로)
@@ -28,10 +31,13 @@ uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;
 uniform float alpha_cut = 0.5;
 uniform float ground_pull = 1.3;   // 뿌리 아래(앞으로 디딘 발)를 땅 위로 당기는 배율 (1 = 딱 땅 높이, 그보다 크면 땅 위로 뜸)
-uniform float foot_lock = 1.0;     // 발 붙이기 세기 (0 = 끔): 한 장면이 떠 있는 동안 인형을 제자리에 세워 디딘 발이 땅에서 밀리지 않게 (아래 lockv)
+uniform float foot_lock = 0.5;     // 발 붙이기 세기 (0 = 끔, 1 = 다 붙임): 한 장면이 떠 있는 동안 인형을 제자리에 세워 디딘 발이 땅에서 밀리지 않게 (아래 lockv).
+                                   // 2026-11-10 눈으로 맞춤: 1이면 발은 딱 붙지만 몸이 장면마다 톡톡 나아감 (ppu 44에서 몸 흔들림 sd 1.7~1.9px), 0이면 몸은 미끄러지듯 가고 발이 밀림 —
+                                   // 0.5가 둘을 반씩 (몸 sd 1.0px, 디딘 발 ±1px; ppu 20에서는 둘 다 1px 이하)
 uniform float far_k = 0.68;       // 비스듬한 보기의 먼 다리 (frames_mask1.a)를 물감을 입힌 뒤 이만큼 어둡게 — 어떤 양말 색이든 두 다리가 갈림
 
-instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // -, 머리 묶음 T, 모자 묶음 U(-1 없음), -
+instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // -, 머리 묶음 T, 모자 묶음 U(-1 없음), 소품 P(-1 없음 — 컷아웃 PROPS 번호)
+instance uniform vec4 prop = vec4(0.0);                    // x = 소품의 키 (rig — 쥐는 자리 계산), y = 더 돌림 (rad: 머리가 위에 그려진 낫·망치 = PI)
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작(0 걷기 1 나르기 2 서기 3 안고 서기), 시작 위상
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);
@@ -68,14 +74,21 @@ void vertex() {
 	if (group == 0) {
 		show = true;
 	} else if (group == 4) {
-		show = sack_layer[cur_view] >= 0.0 && clip != 0 && clip != 2;
+		show = sack_layer[cur_view] >= 0.0 && (clip == 1 || clip == 3);      // 나르기·안고 서기만 (짐이 그림에 있음)
+	} else if (group == 3) {
+		// 소품 (컷아웃 인형과 같은 그림·같은 번호): 그 장면에 쥘 자리가 있을 때만. 빵·나뭇가지·바구니는 비스듬한 그림이 따로 (+3)
+		float pid = sel.w;
+		if ((cur_view == 1 || cur_view == 2) && pid >= 0.0 && pid < 2.5) {
+			pid += 3.0;
+		}
+		show = pid >= 0.0 && abs(set_i - pid) < 0.5 && texelFetch(fdata, ivec2(fi, 2), 0).w > 0.0;
 	} else if (group == 1) {
 		show = abs(set_i - sel.y) < 0.5 && view == cur_view;
 	} else {
 		show = sel.z >= 0.0 && abs(set_i - sel.z) < 0.5 && view == cur_view;
 	}
 	v_show = show ? 1.0 : 0.0;
-	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 0 ? 50.0 : (group == 4 ? 60.0 : set_i));
+	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 0 ? 50.0 : (group == 4 ? 60.0 : (group == 3 ? 0.0 : set_i)));
 	if (!show) {
 		VERTEX = vec3(0.0);
 		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
@@ -88,12 +101,27 @@ void vertex() {
 			vec4 r = texelFetch(fdata, ivec2(fi, 0), 0);
 			UV = mix(r.xy, r.zw, c);
 			layer = group == 0 ? body_layer[cur_view] : sack_layer[cur_view];
+		} else if (group == 3) {
+			// 소품: 원점 둘레 그림 → 돌림·배율 → 손 자리. 자루를 쥐는 연장(비스듬한 보기)은 손에서 날 쪽으로 (쥐는 자리 × 소품 키)만큼 밀어
+			// 자루 위쪽이 손에 오게 (컷아웃 인형의 괭이와 같은 식). 겹: 앞쪽 보기 = 몸 바로 앞 (머리 뒤), 뒤쪽 보기 = 몸 뒤.
+			vec4 pr = texelFetch(fdata, ivec2(fi, 2), 0);
+			float th = pr.x + prop.y;
+			float tc = cos(th), ts = sin(th);
+			p = vec2(tc * VERTEX.x - ts * VERTEX.y, ts * VERTEX.x + tc * VERTEX.y) * pr.w + pr.yz;
+			p += texelFetch(fdata, ivec2(fi, 3), 0).x * prop.x * vec2(sin(pr.x), -cos(pr.x));
+			layer = cur_view < 2 ? body_layer[cur_view] + 0.5 : -0.5;
 		} else {
 			p = VERTEX.xy;
 			if (group == 2) {
 				p += head_top[int(sel.y + 0.5) * 4 + cur_view];
 			}
-			p = p * head_k[cur_view] + fd.xy;
+			p *= head_k[cur_view];
+			if (fd.w != 0.0) {                         // 고개 기울기 (숙여 줍기·절·한 입): 머리 가운데를 중심으로 — 그린 자리 표시 원과 같은 자리
+				float hc = cos(fd.w), hs = sin(fd.w);
+				vec2 q = p - vec2(0.0, head_r);
+				p = vec2(hc * q.x - hs * q.y, hs * q.x + hc * q.y) + vec2(0.0, head_r);
+			}
+			p += fd.xy;
 			layer = VERTEX.z;
 		}
 		p.x *= st.y * misc.y;

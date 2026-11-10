@@ -41,6 +41,12 @@ static var _meshes: Dictionary = {}
 static var _glow_mat: ShaderMaterial
 static var _night_cap: ShaderMaterial
 
+const DAND_TALL := 3.3                      # (Q6) 민들레 그림 키 어림: 꽃대 + 머리 (dand_stem 2.41 + 머리 반)
+const DAND_LEAF := 3.0                      # 잎 방석 그림 (dand_rosette) · 어린 것 (dand_rosette_small)
+const DAND_LEAF_SMALL := 1.2
+const DAND_HALF_W := 0.8                    # 잎 방석 폭의 ¼ (꽃·풀과 같은 어림 — BldEcon.apron_scale)
+const DAND_DF := 1.66                       # 잎 방석 그림 밑변이 원점보다 카메라 쪽으로 나오는 거리 (dand_rosette front)
+
 var v: Village
 var alpha := 1.0
 var _t := 0.0
@@ -427,6 +433,22 @@ func _gy(x: float, z: float) -> float:
 	return 0.0
 
 
+## [보이는 살림 Q6] 건물 앞 더미 · 채집 일꾼 앞에 선 민들레·큰 버섯은 가리지 않는 키까지만 (화면만 — BldEcon.plant_cap).
+## nd = 그 식물의 화면 기록 · h = 지금 키 · hw = 반 폭 어림 · df = 그림의 깊이 면. 앞마당(apron_ver)이나 키가 바뀔 때만 다시 잰다
+func _apron_cap(nd: Dictionary, x: float, z: float, h: float, hw: float, df: float) -> float:
+	if not pics2d:
+		return 1.0
+	var p := get_parent() as VillageView
+	if p == null or p.econ == null:
+		return 1.0
+	var ver: int = p.econ.apron_ver
+	if int(nd.get("cap_v", -1)) != ver or absf(float(nd.get("cap_h", -1.0)) - h) > 0.05:
+		nd["cap_v"] = ver
+		nd["cap_h"] = h
+		nd["cap"] = p.econ.plant_cap(x, z, h, hw, df)
+	return float(nd["cap"])
+
+
 func _cam_yaw() -> float:
 	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
 	if cam == null:
@@ -477,7 +499,10 @@ func _sync_shrooms(f: Flora, dt: float) -> void:
 		var sc: float = nd["scale"]
 		var life := float(s["life"]) / Balance.SHROOM_LIFE
 		var droop := clampf((life - 0.75) / 0.25, 0.0, 1.0)
-		root.scale = Vector3(sc, sc * (1.0 - 0.12 * droop), sc)
+		var cap := 1.0
+		if nd.has("pic_h"):              # (2D · Q6) 더미·일꾼 앞마당에서는 낮게
+			cap = _apron_cap(nd, x, z, float(nd["pic_h"]) * sc, float(nd["pic_w"]) * sc * 0.25, float(nd["pic_df"]) * sc)
+		root.scale = Vector3(sc, sc * (1.0 - 0.12 * droop), sc) * cap
 		root.rotation.z = droop * 0.18 * (1.0 if id % 2 == 0 else -1.0)
 		var body: MeshInstance3D = nd["body"]
 		if s["kind"] == "빛버섯":
@@ -533,6 +558,10 @@ func _make_shroom(s: Dictionary) -> Dictionary:
 		if Flora2D.has(pic):
 			Flora2D.proxify(root)
 			root.add_child(Flora2D.card(pic, 1.0, int(s["id"]) % 2 == 1))
+			var inf := Flora2D.info(pic)
+			nd["pic_h"] = float(inf.get("h", 0.0))
+			nd["pic_w"] = float(inf.get("w", 0.0))
+			nd["pic_df"] = float(inf.get("front", 0.0))
 	return nd
 
 
@@ -598,6 +627,9 @@ func _sync_dands(f: Flora, dt: float, yaw: float) -> void:
 		pivot.position = stem_top()
 		pivot.scale = Vector3(1.0, 1.0 / maxf(0.2, rise), 1.0) * float(nd["grow"])
 		leaves.scale = Vector3.ONE * (0.55 + 0.45 * u if st == "sprout" else 1.0)
+		if pics2d:                       # (2D · Q6) 더미·일꾼 앞마당에서는 낮게 — 꽃대가 섰으면 꽃대 + 머리 키, 아니면 잎 방석 키
+			var dh := (DAND_TALL * rise if shape != "" else (DAND_LEAF if big else DAND_LEAF_SMALL) * leaves.scale.y)
+			root.scale = Vector3.ONE * _apron_cap(nd, x, z, dh, DAND_HALF_W, DAND_DF)
 	for id in _dd.keys():
 		if not seen.has(id):
 			var nd: Dictionary = _dd[id]
