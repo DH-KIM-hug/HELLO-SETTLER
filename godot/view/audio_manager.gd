@@ -425,11 +425,21 @@ static func death_staged(secs := DEATH_BELL_OWN) -> void:
 		a._bell_own_until = a.now() + maxf(0.0, secs)
 
 
-## 장례의 짧은 판이 줄 서 있는 동안 (큰 시트가 닫히길 기다림): 기다리는 종을 조금 더 붙잡아 둔다 — 짧은 판이 끝내 못 나오면 그때 울림
+## 장례의 짧은 판이 줄 서 있는 동안 (큰 시트가 닫히길 기다림) · 다른 긴 연출이 나오는 동안: 기다리는 종을 조금 더 붙잡아 둔다 —
+## 그 뒤에 장례 연출 · 짧은 판이 나오면 그 종만, 끝내 못 나오면 그때 한 번
 static func death_hold() -> void:
 	var a := get_instance()
 	if a != null and a._bell_at >= 0.0:
 		a._bell_at = maxf(a._bell_at, a.now() + DEATH_BELL_WAIT)
+
+
+## 장례 연출이 종을 울리지 못하고 끝남 (자막 앞에서 건너뜀 · 짧은 판이 빛 앞에서 긴 연출에 밀려남): 맡았던 종을 돌려준다 —
+## 예전의 종이 조금(DEATH_BELL_WAIT) 뒤 한 번 (빠르게 돌리는 중이면 예전처럼 없음 — _run_bell). 죽음 하나에 종 하나
+static func death_bell_back() -> void:
+	var a := get_instance()
+	if a != null:
+		a._bell_own_until = a.now()
+		a._bell_at = a.now() + DEATH_BELL_WAIT
 
 
 ## 기다리던 장례 종 (매 화면): 때가 되었고 연출이 맡지 않았으면 한 번 — 아주 작고 낮은 종 (A17). 빠르게 돌릴 땐 없음

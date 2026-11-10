@@ -15,6 +15,7 @@ const HOP_EDGE := 0.3                # 폴짝 앞뒤로 웅크렸다 펴는 시�
 const WALK_BACK := 1.5               # (E1-5 장례) 걸어서 돌아가는 빠르기 (칸/초 — 깡충 뛰지 않음)
 const WALK_BACK_MAX := 3.6
 const DROOP := 0.07                  # 어깨를 늘어뜨림: 인형 키가 이만큼 줄어듦 (droop 1일 때)
+const HOLD_NEAR := 0.06              # (E1-5) 머무는 자리에 시뮬레이션의 그 사람이 이만큼 가까이 오면 그대로 넘겨줌 (칸)
 
 var view: VillageView
 var v: Village
@@ -122,6 +123,28 @@ func bow(rid: int, secs := 0.9, depth := 0.16, delay := 0.0) -> void:
 		(a["bows"] as Array).append([float(a["t"]) + delay, maxf(0.1, secs), depth])
 
 
+## (E1-5 장례가 두 번으로 보이지 않게) 연출이 끝나도 제자리로 돌아가지 않고 to(시뮬레이션의 그 사람이 걸어가 설 자리)에 머묾:
+## 천천히 걸어가 an 몸짓으로 서 있다가, 시뮬레이션의 그 사람이 그 자리에 닿으면 그대로 넘겨준다 (자리가 같아 튀지 않음).
+## keep(주민)이 거짓이 되면 (그 일을 그만둠 · 다른 일로 불림) 여느 때처럼 걸어서 제자리로.
+## 화면만 (ADR-0001): 시뮬레이션의 걸음은 그대로 흐르고 여기서는 읽기만 — 그동안 인형이 그 자리에 서 있을 뿐.
+func hold(rid: int, to: Vector2, secs: float, look_at: Vector2, an: String, keep: Callable) -> void:
+	var a := _act(rid)
+	if a.is_empty():
+		return
+	a["hops"] = []
+	a["bows"] = []
+	a["tip"] = Vector2(-1, 0)
+	a["droop"] = 0.0
+	a["gait"] = "walk"
+	a["anim"] = an
+	go(rid, to, secs, look_at)
+	a["hold"] = keep
+
+
+func holding(rid: int) -> bool:
+	return acts.has(rid) and (acts[rid] as Dictionary).has("hold")
+
+
 func look(rid: int, at: Vector2) -> void:
 	var a := _act(rid)
 	if not a.is_empty():
@@ -149,6 +172,7 @@ func release(rid: int, secs := -1.0) -> void:
 		return
 	var r := v.person(rid)
 	var here := _now_pos(rid, a)
+	a.erase("hold")
 	a["to"] = here
 	a["w"] = 1.0
 	a["back"] = true
@@ -226,6 +250,15 @@ func step(dt: float) -> void:
 			continue
 		a["t"] = float(a["t"]) + dt
 		var t := float(a["t"])
+		if a.has("hold") and not bool(a["back"]):          # (E1-5) 머무는 중: 시뮬레이션이 닿았거나 그만뒀으면 넘겨줌
+			var keep: Callable = a["hold"]
+			var near := Vector2(r.x, r.y).distance_to(a["to"]) < HOLD_NEAR
+			if near or not keep.is_valid() or not bool(keep.call(r)):
+				if near and float(a["w"]) >= 1.0:              # 같은 자리 → 그대로
+					_drop(rid)
+					acts.erase(rid)
+					continue
+				release(rid)
 		var before := _now_pos(rid, a)
 		var moving := false
 		if bool(a["back"]):
@@ -289,6 +322,8 @@ func step(dt: float) -> void:
 			"anim": (("walk" if walking else "run") if moving and far else String(a["anim"]))}
 		if String(a["face"]) != "":
 			st["face"] = String(a["face"])
+		if a.has("hold") and not (moving and far):          # 머물러 선 사람 (GraveView가 고개 숙임을 얹음)
+			st["hold"] = true
 		view.staged[rid] = st
 		var m: Node3D = view.residents.get(rid)
 		if m == null or not is_instance_valid(m) or not m.visible:

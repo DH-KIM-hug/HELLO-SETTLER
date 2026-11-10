@@ -65,6 +65,9 @@ const NUDGE_GAP := 0.7           # 그 건물의 다른 더미 자리와 이만�
 ## 밀밭(세워 놓는 큰 그림)이 뒤쪽 건물의 더미 줄을 가리면 밭 그림을 가리지 않는 크기까지 줄인다 (밭 자리·수확은 그대로)
 const WHEAT_FILL := [0.27, 1.0, 0.96]     # 밀 그림에서 실제로 그려진 키 몫 (싹 · 푸른 줄기 · 익은 이삭)
 const WHEAT_MIN_K := 0.45        # 이보다 작게는 줄이지 않음 (그래도 가리면 더미를 옆으로)
+const GRAVE_CLEAR := 0.7         # (E1-5) 밭 그림 윗선은 무덤 자리보다 이만큼 앞에서 끝남 — 돌 발치의 꽃까지 보이게 (돌 그림 밑변 + 꽃 줄)
+const GRAVE_HALF_W := 0.7        # 무덤 돌·꽃의 반 폭 (밭 그림과 가로로 겹치는지)
+const GRAVE_MIN_K := 0.3         # 무덤을 가리는 밭은 이만큼까지 줄임 (더미 줄보다 더 — 무덤은 옆으로 옮길 수 없으므로)
 const WHEAT_CLEAR := 0.06        # 밭 그림 윗선은 더미 줄보다 이만큼 앞에서 끝남 (딱 걸쳐 '가림'으로 읽히지 않게)
 ## 채집 일꾼이 서는 자리 (화면만): 나무·바위 그림의 깊이 면 앞 · 화면 옆으로 비켜서 옆모습 도끼질·곡괭이질이 보이게
 const GATHER_OPS := {"나무꾼": "chop", "채석장": "dig"}      # 그 일터 일꾼의 채집 걸음 (ResidentAI.work_task의 done)
@@ -751,8 +754,8 @@ func _aprons_now() -> Array:
 		return _aprons
 	_apron_frame = fr
 	var list := apron_list(v)
-	var bsig := hash([list, step])
-	if bsig != _bld_sig:             # 건물·방위가 바뀜 → 밀밭 크기도 다시
+	var bsig := hash([list, step, v.graves.size()])
+	if bsig != _bld_sig:             # 건물·방위가 바뀜 (· 무덤이 생김) → 밀밭 크기도 다시
 		_bld_sig = bsig
 		_wheat.clear()
 	for id: int in _spots:
@@ -842,6 +845,24 @@ static func wheat_cap(vil: Village, farm: Building, st: int) -> float:
 		if lat + hw < float(band[1]) or lat - hw > float(band[2]):
 			continue
 		k = minf(k, maxf(WHEAT_MIN_K, a0 * APRON_SIN / maxf(h - fr * APRON_SIN, 0.01)))
+	return minf(k, grave_wheat_cap(vil, farm, st, h, fr, hw))
+
+
+## (E1-5 무덤이 남는다) 밭 그림이 그 뒤(카메라에서 먼 쪽)의 무덤 돌·꽃을 가리지 않는 가장 큰 k (GRAVE_MIN_K~1) — 꽃·나무를 낮추는
+## VillageView._grave_scale과 같은 뜻, 셈은 더미 줄과 같다. 화면만: 밭 자리·자람·수확은 그대로 (ADR-0001)
+static func grave_wheat_cap(vil: Village, farm: Building, st: int, h: float, fr: float, hw: float) -> float:
+	if vil.graves.is_empty():
+		return 1.0
+	var sd := step_dirs(st)
+	var tw: Vector2 = sd[0]
+	var rt: Vector2 = sd[1]
+	var k := 1.0
+	for g: Dictionary in vil.graves:
+		var dv := Vector2(farm.x - float(g["x"]), farm.y - float(g["y"]))
+		var a0 := dv.dot(tw) - GRAVE_CLEAR
+		if a0 <= -fr or (a0 + fr * k) * APRON_SIN >= h * k or absf(dv.dot(rt)) > hw + GRAVE_HALF_W:
+			continue
+		k = minf(k, maxf(GRAVE_MIN_K, a0 * APRON_SIN / maxf(h - fr * APRON_SIN, 0.01)))
 	return k
 
 

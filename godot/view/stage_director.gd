@@ -22,7 +22,7 @@
 ## (2026-11-10 다듬기) 콘티에 "hud": false인 연출(첫 기적 · 첫 아기)은 가까이 보는 동안 위·아래 띠 · 지도 · 단추가 HUD_FADE초에 물러난다
 ## (staging.md '띠 물러남' — 장면의 것을 이름으로 찾아 투명도만 바꿈: HUD_PARTS). '천천히' 띠도 띄우지 않고 작은 건너뛰기 귀띔만.
 ## 카메라가 돌아올 때(back) · 끝날 때 · 건너뛸 때 다시 나타난다. 짧은 판은 띠를 건드리지 않는다.
-## (E1-5 첫 죽음과 장례 — 2026-11-10) 죽음은 사건 줄에 없어서 Village.graves(무덤 줄)를 커서로 읽어 &"died" 꼴의 일로 줄 세운다 (_read_graves —
+## (E1-5 첫 죽음과 장례 — 2026-11-10, 사건으로 바꿈 2026-11-11) 죽음은 사건 줄의 &"died"를 커서로 읽는다 (Village.kill이 무덤을 만든 바로 뒤에 냄 —
 ## 시뮬레이션은 읽기만). 그 마을의 첫 무덤 = 긴 연출 "first_death", 그다음부터 = 짧은 판 "death_more". 같은 때 여럿이 떠나면 한 번만 (이름은 자막에),
 ## 장례 연출 뒤 FOLD_T 안의 죽음은 연출 없이 연대기 줄만. 꽃 · 돌 위의 빛 · 손에 든 꽃은 view/grave_view.gd.
 class_name StageDirector
@@ -42,6 +42,8 @@ const SHADOW_R := 9.0                # 큰 그림자 반지름 (칸 — 마을 �
 const SHADOW_RUN := 26.0             # 그림자가 지나가는 길의 반 (칸)
 const LIGHT_R := 4.5                 # 빛기둥 웅덩이 반지름 (칸)
 const HUG_R := 4.0                   # 아이를 끌어안는 사람: 아이와 이만큼 안 (칸)
+const BELL := "funeral"              # 장례 종 소리 — 죽음 하나(같은 때 떠난 여럿은 한 무리)에 딱 한 번, 밤을 건너뛰는 중엔 없음 (GameAudio.death_*)
+const HOLD_T := 2.0 * 3600.0         # (E1-5) 긴 장례 연출 뒤 무덤가에 머무는 가장 긴 시간 (병 초 — 보통 빠르기로 25초). 멀리서 오느라 더 걸리는 사람은 걸어서 제자리로 (_funeral_hold)
 const FOLD_T := 6.0 * 3600.0         # 장례 연출 뒤 이만큼(병 초 — 병의 반나절의 반) 안에 또 누가 떠나면 연출 없이 연대기 줄만 (잇달아 떠날 때)
 const VEIL := Color(0.16, 0.11, 0.09)  # 자리를 옮길 때 화면이 잠기는 따뜻한 어둠
 
@@ -63,8 +65,7 @@ var _page_a := 0.0
 var _page_goal := 0.0
 var _page_rate := 1.0
 var _said: Array = []                # 이 연출이 띄운 말풍선 주민 id (끝나면 지움)
-var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" · &"born" · &"wish_granted" 구독)
-var _grave_cur: Dictionary = {}      # 무리 → 본 무덤 수 (Village.graves 커서 — 죽음은 사건 줄에 없음)
+var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" · &"born" · &"wish_granted" · &"died" 구독)
 var _last_death: Dictionary = {}     # 무리 → 마지막으로 장례를 연출한 죽음의 병 시각
 var _veil: ColorRect                 # 자리를 옮길 때 잠깐 화면을 덮음 (veil)
 var _aw_ev: Dictionary = {}          # 무리 → 사건으로 받은 깨달음 시각
@@ -124,6 +125,7 @@ var _vig_goal := 0.0
 var _cap_a := 0.0
 var _cap_on := false
 var _carded := false
+var _belled := false                 # 이 연출의 종 박자가 지났나 (장례 — 그 앞에서 건너뛰면 종을 소리 쪽에 돌려줌)
 var _closing := -1.0                 # 'until'이 되어 돌아오는 중 (남은 초)
 var _slowed := false                 # 이 연출이 배속을 보통으로 내렸다
 var _seen_aw: Dictionary = {}        # 무리 → 본 깨달음 시각
@@ -355,25 +357,11 @@ func watch(q: Village, can_stage := true) -> void:
 	play(due, q)
 
 
-## (E1-5) 무덤 줄에서 새 죽음을 읽는다 — &"died" 사건 꼴로 줄 세움 (시뮬레이션이 그 사건을 내면 이 함수만 바꾸면 됨). 첫 무덤 = first.
-## 처음 보는 무리의 지난 무덤은 흘려보냄 (방금 것만). 무덤이 있으면 그 마을 화면에 꽃·빛(GraveView)을 붙여 둔다.
-func _read_graves(q: Village) -> void:
-	var n := q.graves.size()
-	if not _grave_cur.has(q):
-		var st := n
-		while st > 0 and q.t - float(q.graves[st - 1]["t"]) < JUST:
-			st -= 1
-		_grave_cur[q] = st
-	if n > 0:
+## (E1-5) 죽음은 사건 줄의 &"died"로 받는다 (_read_events — Village.kill이 무덤을 만든 바로 뒤에 냄). 여기서는 무덤이 있는 마을 화면에
+## 꽃·빛(GraveView)을 붙여 두기만 한다 — 사건 줄은 저장되지 않으므로 불러오기 전의 죽음은 다시 연출되지 않고 무덤만 남는다.
+func _attach_graves(q: Village) -> void:
+	if not q.graves.is_empty():
 		GraveView.of(_view_of(q), q)
-	var cur := mini(int(_grave_cur[q]), n)
-	for i in range(cur, n):
-		var g: Dictionary = q.graves[i]
-		if not _pend.has(q):
-			_pend[q] = []
-		(_pend[q] as Array).append({"kind": &"died", "t": float(g["t"]), "who": int(g["id"]), "village": q.sid,
-			"v": {"first": i == 0, "name": String(g["name"])}})
-	_grave_cur[q] = n
 
 
 ## 같은 때 떠난 여럿 = 연출 한 번 (그 마을의 첫 죽음이 있으면 그것을, 이름은 자막에 함께). 조금 전(FOLD_T)에 장례를 연출했으면 연출 없이 흘려보냄.
@@ -419,7 +407,7 @@ func _passes_by(cat: String) -> bool:
 
 ## 사건 줄에서 이 무리의 &"awakened"를 읽는다 (ADR-0001 — 구독은 커서로, 시뮬레이션은 구독자를 모른다)
 func _read_events(q: Village) -> void:
-	_read_graves(q)
+	_attach_graves(q)
 	if q.events == null:
 		return
 	var first := not _ev_cur.has(q)
@@ -428,7 +416,7 @@ func _read_events(q: Village) -> void:
 			continue
 		if e["kind"] == &"awakened":
 			_aw_ev[q] = float(e["t"])
-		elif e["kind"] == &"born" or e["kind"] == &"wish_granted":
+		elif e["kind"] == &"born" or e["kind"] == &"wish_granted" or e["kind"] == &"died":
 			if first and q.t - float(e["t"]) >= JUST:
 				continue                           # 처음 보는 무리의 지난 일 — 연출하지 않음
 			if not _pend.has(q):
@@ -501,6 +489,7 @@ func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 	_bi = 0
 	skipped = false
 	_carded = false
+	_belled = false
 	_closing = -1.0
 	_cap_on = false
 	_cap_a = 0.0
@@ -652,6 +641,7 @@ func step(dt: float) -> void:
 	t += dt
 	_now += dt
 	_run_queue()
+	GameAudio.death_hold()                         # 긴 연출 중에 누가 떠나면 그 종은 연출이 끝날 때까지 기다림 (뒤이은 장례 연출이 맡거나, 없으면 그때 한 번)
 	var beats: Array = spec.get("beats", [])
 	while _bi < beats.size() and float(beats[_bi]["t"]) * k <= t + 1e-6:
 		_beat(beats[_bi])
@@ -743,8 +733,8 @@ func _beat(b: Dictionary) -> void:
 		if _beam != null:
 			_beam.peak = float(b.get("beam_peak", 1.0))
 			_beam.width = float(b.get("beam_width", 1.0))
-	if b.has("fx"):
-		_play_fx(b["fx"])
+	if b.has("fx") and _play_fx(b["fx"]):
+		_belled = true
 	if b.has("light_at") and not _cast.is_empty():   # 빛 웅덩이를 옮김 (무덤가로)
 		var lp: Variant = (_cast["marks"] as Dictionary).get(String(b["light_at"]))
 		if lp is Vector2:
@@ -821,8 +811,11 @@ func _end() -> void:
 			view.stage_say.erase(rid)
 	_said.clear()
 	var naming := _naming_due()
-	if String(spec.get("cast", "")) == "funeral":  # 끝났거나 건너뜀: 종을 맡은 시간을 줄임 (곧 이어 다른 죽음이 있으면 그 종은 예전처럼)
-		GameAudio.death_staged()
+	if String(spec.get("cast", "")) == "funeral":
+		if _belled:                                # 끝났거나 종 뒤에 건너뜀: 종을 맡은 시간을 줄임 (곧 이어 다른 죽음이 있으면 그 종은 예전처럼)
+			GameAudio.death_staged()
+		else:                                      # 자막(종) 앞에서 건너뜀: 맡았던 종을 돌려줌 — 예전의 종이 조금 뒤 한 번
+			GameAudio.death_bell_back()
 	_end_moment()
 	_vig = 0.0
 	_vig_goal = 0.0
@@ -1151,6 +1144,9 @@ func _begin_moment(ctx: Dictionary) -> void:
 	_dolls.bind(view, v)
 	if kind == "funeral":                          # 돌은 세우는 박자까지 보이지 않음 · 무릎은 지켜보는 이를 안 마을만
 		_grave_stage(_cast, view, v, true)
+		var gd := GraveView.grave_of(v, int(_cast.get("grave", -1)))
+		if not gd.is_empty():                          # 끝난 뒤 무덤가에 머물 사람을 가리는 이름표 (_funeral_hold)
+			_cast["hold_nm"] = VillageEra.FUNERAL_DOING % String(gd["name"])
 		(_cast["roles"] as Dictionary)["pray"] = (_cast["roles"]["all"] as Array).duplicate() if v.aware else []
 	var st: Dictionary = (_cast["slots"] as Dictionary).get("start", {})
 	for rid: int in st:                            # 집 안에서 나오는 사람 (자고 있던 · 멀리 있던 엄마 — 화면만)
@@ -1212,10 +1208,27 @@ func _mark3(c: Dictionary, nm: String) -> Vector3:
 
 
 ## 소리: 한 줄 [소리, dB, 버스(기본 Village), 높낮이(0 = 조금씩 다르게)] 또는 여러 줄 [[…], […]] (Stagings.fx_rows)
-func _play_fx(x: Variant) -> void:
+## 박자의 소리 줄을 냄. 장례 종(BELL) 줄은 밤을 건너뛰는 중 · 빠른 흐름에선 내지 않는다 (_bell_quiet).
+## 돌려주는 값 = 이 박자에 종 줄이 있었나 (울렸든 조용히 넘겼든 이 죽음의 종은 여기서 끝 — 죽음 하나에 종 하나)
+func _play_fx(x: Variant) -> bool:
+	var bell := false
 	for fx: Array in Stagings.fx_rows(x):
+		if String(fx[0]) == BELL:
+			bell = true
+			if _bell_quiet():
+				continue
 		GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0,
 			null, float(fx[3]) if fx.size() > 3 else 0.0)
+	return bell
+
+
+## 장례 종을 울리지 않을 때: 밤을 건너뛰는 중 · 빠른 흐름 (주민이 점처럼 순간이동) · 소리 쪽이 '빠르게'로 보는 빠르기 (GameAudio.fast — 예전의 종과 같은 기준)
+func _bell_quiet() -> bool:
+	var c := _clock()
+	if c != null and (c.skipping or c.fast):
+		return true
+	var a := GameAudio.get_instance()
+	return a != null and a.fast()
 
 
 ## 배역이 있는 장면의 할 일 (긴 연출 · 짧은 판 공통): dolls · says · wbeam · wgift · fxs · bundle · fxr
@@ -1407,8 +1420,35 @@ func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
 		_dolls.hop(rid, int(h[0]), hh, float(h[2]))
 	if d.has("tiptoe"):
 		_dolls.tiptoe(rid, float(d["tiptoe"]) * dk)
-	if d.has("back"):
+	if d.has("back") and not _funeral_hold(c, rid):
 		_dolls.release(rid, float(d["back"]))
+
+
+## (E1-5 장례가 두 번으로 보이지 않게) 긴 장례 연출에서 돌아갈 차례가 된 사람이 시뮬레이션의 장례 행렬에 들어 있으면 돌려보내지 않고
+## 무덤가 — 시뮬레이션의 그 사람이 걸어와 설 자리 — 에 머물게 한다. 시뮬레이션이 닿으면 그대로 넘겨주고, 그 뒤는 시뮬레이션 그대로
+## (잠시 서 있다가 제 일로). 돌려보내면 방금 장례를 마친 사람들이 마을로 왔다가 곧바로 다시 무덤으로 걸어 나가 한 번 더 치르는 것처럼 보인다.
+## 화면만 (ADR-0001): 시뮬레이션의 행렬·걸음·시간은 그대로이고 읽기만 한다. 건너뛰었으면 하지 않음 (보지 않은 장례 — 시뮬레이션 행렬이 곧 장례).
+## 참 = 머묾.
+func _funeral_hold(c: Dictionary, rid: int) -> bool:
+	var nm := String(c.get("hold_nm", ""))
+	var q: Village = c.get("v")
+	if nm == "" or q == null or skipped:
+		return false
+	var r := q.person(rid)
+	if r == null or not VillageEra.in_funeral(r) or r.doing != nm:
+		return false
+	var t0 := q.t
+	var to := Vector2(r.x, r.y)                        # 이미 닿아 서 있으면 그 자리
+	for i in range(r.steps.size() - 1, -1, -1):
+		var s: Dictionary = r.steps[i]
+		if String(s.get("k", "")) == "walk":
+			to = Vector2(float(s["x"]), float(s["y"]))
+			break
+	var gp: Vector2 = (c["marks"] as Dictionary).get("grave", to)
+	_dolls.hold(rid, to, clampf(_dolls.pos_of(rid).distance_to(to) / StageDolls.WALK_BACK, 0.4, StageDolls.WALK_BACK_MAX), gp,
+		"pray" if r.action == "pray" else "idle",       # 깨닫기 전: 선 채 (고개 숙임은 GraveView) · 안 뒤: 무릎 — 시뮬레이션이 닿아서 할 몸짓과 같게
+		func(p: Resident) -> bool: return VillageEra.in_funeral(p) and p.doing == nm and q.t - t0 < HOLD_T)
+	return true
 
 
 ## 화면 말풍선만 (R4 — 시뮬레이션의 말 기록 v.speak를 쓰지 않음)
@@ -1492,7 +1532,9 @@ func _end_moment() -> void:
 		_dolls.clear()
 		_free_props()
 	else:                                              # 끝: 인형은 깡충 제자리로 · 빛은 스러짐 (idle_step이 이어서 걸음을 줌)
-		_dolls.release_all()
+		for rid: int in _dolls.acts.keys():            # (E1-5) 시뮬레이션의 장례 행렬에 든 사람은 무덤가에 머묾 (_funeral_hold)
+			if not _dolls.holding(rid) and not _funeral_hold(_cast, rid):
+				_dolls.release(rid)
 		for p: Variant in _props:
 			if is_instance_valid(p):
 				(p as MomentFx).dismiss()
@@ -1567,8 +1609,8 @@ func idle_step(dt: float) -> void:
 		while int(m["bi"]) < beats.size() and float(beats[int(m["bi"])]["t"]) <= float(m["t"]) + 1e-6:
 			var b: Dictionary = beats[int(m["bi"])]
 			m["bi"] = int(m["bi"]) + 1
-			if b.has("fx"):
-				_play_fx(b["fx"])
+			if b.has("fx") and _play_fx(b["fx"]):
+				m["bell"] = true
 			_moment_beat(m["cast"], b, 1.0)
 		if float(m["t"]) >= float((m["spec"] as Dictionary).get("dur", 3.0)):
 			_end_mini(m)
@@ -1626,6 +1668,8 @@ func _stop_minis() -> void:
 		var c: Dictionary = m["cast"]
 		if c.is_empty():
 			continue
+		if String((m["spec"] as Dictionary)["cast"]) == "grave" and not bool(m.get("bell", false)):
+			GameAudio.death_bell_back()            # 빛(종) 앞에서 긴 연출에 밀려남: 맡았던 종을 돌려줌 (긴 연출이 끝난 뒤 한 번 — step의 death_hold)
 		c["on"] = false
 		_grave_done(c, false)
 		for bm: Variant in c.get("beams", []):
