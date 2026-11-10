@@ -288,7 +288,7 @@ static func pick_state(v: Village) -> String:
 		for s: Array in v.hand.soaks:
 			if float(s[2]) > 0.0 and Vector2(float(s[0]), float(s[1])).distance_to(v.fire) < GiantHand.SPRAY_R + 0.3:
 				return "out"
-	if v.t - v.festival_t < Balance.FESTIVAL_DAYS * Balance.DAY or VillageEra.wedding_on(v):
+	if v.t - v.festival_t < Balance.FESTIVAL_DAYS * Balance.DAY or VillageEra.wedding_on(v) or Milestones.feast_on(v):
 		return "big"
 	var h := v.hour_now()
 	if h >= 5.0 and h < 9.0:

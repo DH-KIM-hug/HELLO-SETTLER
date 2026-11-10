@@ -242,6 +242,7 @@ func _ready() -> void:
 	add_child(social)
 	kids_view = KidsView.new(v, self)   # [아이·아기]
 	add_child(kids_view)
+	MilestoneView.of(self)              # [자람의 보상] 빵 간판 · 마을 이름 표지판 · 잔치 춤 (view/milestone_view.gd — Q9)
 	dog_pals = DogPals.new(v, self)     # [강아지와 사람]
 	econ = BldEcon.new(v, self)         # [보이는 살림 Q6]
 	add_child(econ)
