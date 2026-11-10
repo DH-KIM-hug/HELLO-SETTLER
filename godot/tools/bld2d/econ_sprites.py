@@ -524,8 +524,20 @@ def puff(c, r=0.15):
 
 
 def chip(c):
-    with c.part(OUT * 0.8):
-        c.rpoly([(-0.06, 0.03), (0.05, 0.02), (0.07, 0.07), (-0.04, 0.09)], PLANK_L, 0.012)
+    """Wood chip — chunky and two-toned so it still reads as a chip (not a smudge) at the default village zoom."""
+    with c.part(OUT * 1.15):
+        c.rpoly([(-0.11, 0.03), (0.09, 0.015), (0.12, 0.105), (-0.07, 0.15)], PLANK_L, 0.022)
+        with c.inside():
+            c.rpoly([(-0.12, 0.02), (0.1, 0.0), (0.105, 0.05), (-0.1, 0.07)], PLANK, 0.0)
+
+
+def pebble(c):
+    """Stone chip flying off a quarried rock."""
+    with c.part(OUT * 1.15):
+        c.rpoly([(-0.1, 0.02), (0.09, 0.02), (0.11, 0.1), (0.02, 0.16), (-0.09, 0.12)], STONE, 0.028)
+        with c.inside():
+            c.ell(0.01, 0.02, 0.15, 0.05, STONE_D)
+            c.ell(-0.02, 0.115, 0.05, 0.028, STONE_L, 12)
 
 
 def leaf(c):
@@ -613,6 +625,7 @@ def table():
     t["leaf"] = leaf
     t["drop"] = drop
     t["star"] = lambda c: sparkle(c, 0.0, 0.1, 0.075)
+    t["pebble"] = pebble
     for nm, ic in [("want_logs", icon_good(logs, 0.9, 0.12)), ("want_wheat", icon_good(wheat, 0.82)),
                    ("want_flour", icon_good(flour, 0.9, 0.02)), ("want_goods", icon_good(goods, 0.9, 0.05)),
                    ("want_planks", icon_good(planks, 0.72, 0.12)), ("want_stone", icon_good(stones, 1.0, 0.08)),
