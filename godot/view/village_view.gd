@@ -138,6 +138,7 @@ const FAST_EVERY := 0.1
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
+var kids_view: KidsView         # [아이·아기] 놀이 몸짓·소품 · 요람 · 아장아장 (view/kids_view.gd — Q2-b)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
                                      #   (E1-1) hold: true = 두 팔로 안음 (종이 인형 안기 팔) · to: 주민 id = 그 사람 곁으로 다가가 안김 (화면 자리만, 1초에 걸쳐)
@@ -235,6 +236,8 @@ func _ready() -> void:
 	add_child(kitchen_view)
 	social = SocialStage.new(v, self)   # [마을의 삶]
 	add_child(social)
+	kids_view = KidsView.new(v, self)   # [아이·아기]
+	add_child(kids_view)
 	_build_fire()
 	sync(0.0, true)
 
@@ -429,6 +432,8 @@ func flora_stats() -> Dictionary:
 func _sync_moving(dt: float) -> void:
 	if social != null:
 		social.sync(dt, fast)
+	if kids_view != null:
+		kids_view.begin(dt, fast)   # [아이·아기] 놀이 소품 · 누가 놀이 속인가 (주민을 놓기 전)
 	_sync_residents(dt)
 	mold_view.alpha = alpha         # [곰팡이·뚜껑]
 	mold_view.sync(dt)
@@ -532,6 +537,8 @@ func _sync_residents(dt: float) -> void:
 			_face_partner(r, m)
 		if social != null and not fast:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
+		if kids_view != null and not fast:
+			kids_view.pose(r, m, dt)    # [아이·아기] 놀이 속 아이: 화면 자리·폴짝 · 요람을 들여다보는 이웃
 		var po: Dictionary = pose_over.get(r.id, {}) if not pose_over.is_empty() else hint_pose.get(r.id, {})
 		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함 · (E1-1) 조짐: 멈춰 서서 하늘을 봄
 			if po.has("face"):
@@ -557,6 +564,8 @@ func _sync_residents(dt: float) -> void:
 	_pair_follow(dt)
 	if cut:
 		_place_babies()
+		if kids_view != null:
+			kids_view.babies(dt, fast)  # [아이·아기] 요람 그림 · 아장아장 (place_babies가 정한 자리 뒤에)
 	_stage_after(dt)
 	_wonder_hints(dt)
 	for id in _torches.keys():

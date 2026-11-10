@@ -356,7 +356,7 @@ func _try_vignette() -> void:
 		var sit := free.filter(func(q: Resident) -> bool: return q.anim == "sit" and Vector2(q.x - v.fire.x, q.y - v.fire.y).length() < 4.5)
 		if sit.size() >= 2:
 			opts.append(["song", sit])
-	var kids := free.filter(func(q: Resident) -> bool: return q.is_child() and q.action == "play")
+	var kids := free.filter(func(q: Resident) -> bool: return q.is_child() and q.action == "play" and ChildPlay.game_of(v, q.id).is_empty())     # (Q2-b) 놀이(ChildPlay)에 낀 아이는 그 놀이대로
 	if kids.size() >= 2:
 		var k0: Resident = kids[_rng.randi() % kids.size()]
 		var near := kids.filter(func(q: Resident) -> bool: return q != k0 and Vector2(q.x - k0.x, q.y - k0.y).length() < 5.0)

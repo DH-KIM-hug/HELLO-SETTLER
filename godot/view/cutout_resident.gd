@@ -60,7 +60,7 @@ const SWAP_PUFF := 0.5           # 연기가 퍼졌다 사라지는 시간
 const INFANT_AGE := 1.0 / 2.4
 const INFANT_H := 0.4            # 젖먹이의 화면 키 (누운 인형의 길이 쪽) — 부모 품·요람에
 const HOLD_RIG := 400.0          # 부모 품 높이 (rig 단위 — 안기 소품 자리와 같은 쪽)
-const CRADLE_OFF := Vector2(0.4, 0.55)   # 집 문 옆 요람: 집 가운데에서 (옆, 앞) + 집 크기 × 0.5 앞
+const CRADLE_OFF := Vector2(0.4, 0.85)   # 집 문 옆 요람: 집 가운데에서 (옆, 앞) + 집 크기 × 0.5 앞
 
 ## -1 = 설정(GameSettings.cutout_residents)을 따름 · 0 = 늘 3D · 1 = 늘 컷아웃 (시험·캡처·성능 비교)
 static var override := -1
@@ -82,6 +82,8 @@ var baby_mode := ""
 var toddle_clip := "idle"
 var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기 팔, 소품 없음)
 var cradle: MeshInstance3D
+var minder_id := -1              # (Q2-b) 이 아기를 지금 보는 사람 (place_babies가 적음 — 없으면 -1: 문 옆)
+var _warp := Vector3(1, 1, 0)    # (Q2-b) 화면 몸짓: (키 배율, 폭 배율, 기울임) — set_body_warp
 ## 일 옷 차림 (shift): 일을 시작한 행동 — 그 행동이 이어지는 동안 일 옷
 var on_shift := false
 var _shift_action := ""
@@ -398,9 +400,19 @@ func _refresh_doll() -> void:
 		_d_clip = clip
 		_d_rate = rate
 		doll.clip = clip
-		doll.set_instance_shader_parameter("misc", Vector4(_doll_h, 1, rate, 0))
+		doll.set_instance_shader_parameter("misc", Vector4(_doll_h * _warp.x, _warp.y / _warp.x, rate, _warp.z))
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(clip), _d_phase))
 	_update_view()
+
+
+## (Q2-b) 인형 통째 몸짓 — 화면만: 키 배율 sy · 폭 배율 sx (눌림·늘어남) · 기울임 lean (라디안, 발 둘레 — 화면 오른쪽이 +).
+## (1, 1, 0)이면 원래대로. 바뀔 때만 GPU에 보낸다 (동작·빠르기는 그대로)
+func set_body_warp(sy := 1.0, sx := 1.0, lean := 0.0) -> void:
+	var w := Vector3(maxf(sy, 0.05), sx, lean)
+	if doll == null or w.is_equal_approx(_warp):
+		return
+	_warp = w
+	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * w.x, w.y / w.x, maxf(_d_rate, 0.0), w.z))
 
 
 ## 땅에 맞는 걸음 빠르기 want(주기/초) · 장면 길이 fdt(초) → {travel: 걸음 대신 멈춘 보폭인가, rate: 걸음 빠르기 (상·하한·계단)}
@@ -491,16 +503,13 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 		if bm == null:
 			continue
 		var infant := r.age < INFANT_AGE
-		var best: Resident = null
-		for pid in r.parents:
-			var p := _find(people, pid)
-			if p == null or p.dead or p.sleeping or p.anim == "sleep" or p.is_baby():
-				continue
-			var pm0 := models.get(p.id) as CutoutResident
+		# (Q2-b) 누가 아기를 보는가는 시뮬 규칙 (ChildPlay.minder): 깨어서 집 가까이 돌보거나 쉬는 부모 (엄마 먼저) · 한집 노인.
+		# 일하러·멀리 나간 부모는 아기를 데려가지 않는다 → 문 옆 요람 (정보 창의 '하는 일'과 화면이 같음)
+		var best: Resident = ChildPlay.minder(v, r, people)
+		if best != null:
+			var pm0 := models.get(best.id) as CutoutResident
 			if pm0 == null or not pm0.visible:
-				continue
-			if best == null or (p.sex == "f" and best.sex != "f"):
-				best = p
+				best = null
 		var mode := "cradle"
 		var pos := Vector3.INF
 		var yaw := bm.rotation.y
@@ -537,6 +546,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 			if not infant:
 				mode = "toddle"
 				bm.toddle_clip = "sit"
+		bm.minder_id = carrier
 		bm.set_baby_mode(mode, pos, yaw, cam)
 		out[r.id] = {"mode": mode, "pos": pos, "carrier": carrier}
 	return out

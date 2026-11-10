@@ -34,7 +34,7 @@ instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // 옷 묶음 S, 머�
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작 번호, 시작 위상(0~1)
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);    // 물감 번호: 피부, 머리카락, 옷 주색, 둘째(크림)
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);    // 장식(띠·가죽), 모자, 다리(양말·바지), 신
-instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율, 동작 빠르기(주기/초), -
+instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율, 동작 빠르기(주기/초), 몸 기울임(라디안)
 
 varying flat vec4 v_dye;     // xyz = 이 조각의 물감 슬롯 0·1·2 (-1 없음), w = 묶음
 varying flat float v_show;
@@ -129,6 +129,10 @@ void vertex() {
 		p = xf(p, vec2(0.0), anim(0, row0, f));
 		p.y += ps.z;                                   // 엉덩이 내림 (걸음 들썩임·앉기·무릎 — 이 몸의 다리 길이만큼)
 		p.x *= st.y * misc.y;
+		if (misc.w != 0.0) {                           // 몸 통째 기울임 (발 둘레, 화면 오른쪽이 + — 화면 몸짓: 아장아장·들여다보기)
+			float lc = cos(misc.w), ls = sin(misc.w);
+			p = vec2(lc * p.x + ls * p.y, lc * p.y - ls * p.x);
+		}
 		// 카메라를 보는 세로 판: 오른쪽 = 카메라 오른쪽(수평), 위 = 세계 위. 정사영에서 세로 길이는 cam_up.y 만큼 줄어 보이므로 늘려 줌
 		vec3 right = INV_VIEW_MATRIX[0].xyz;
 		right = normalize(vec3(right.x, 0.0, right.z));
