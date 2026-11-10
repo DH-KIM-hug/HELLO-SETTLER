@@ -159,7 +159,9 @@ func test_scene_seasons() -> void:
 	for id in vw._fcard_items:
 		for it: Array in vw._fcard_items[id]:
 			pile = pile or String(it[0]) == "pile_bread"
-	check(pile, "빵집 앞 빵 더미 = 그림 (멀리 묶음·접촉 그림자에 기록)")
+	for it: Array in vw.econ.items:              # Q6: 그림 건물의 더미는 보이는 살림(BldEcon)이 그린다
+		pile = pile or String(it[0]).begins_with("bread_")
+	check(pile, "빵집 앞 빵 더미 = 그림 (보이는 살림 묶음)")
 	scene.queue_free()
 
 
