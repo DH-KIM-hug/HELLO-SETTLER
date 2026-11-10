@@ -138,6 +138,7 @@ const FAST_EVERY := 0.1
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
+var dog_pals: DogPals           # [강아지와 사람] 따라가다 앉기·놀이에 끼기·쓰다듬기 — 그릴 자리와 몸짓만 (view/dog_pals.gd — Q2-d, 화면만)
 var kids_view: KidsView         # [아이·아기] 놀이 몸짓·소품 · 요람 · 아장아장 (view/kids_view.gd — Q2-b)
 var econ: BldEcon               # [보이는 살림 Q6] 짓는 터 자재·말뚝, 일터 앞 더미, 일하는 김, 막힘 풍선 (view/bld2d/bld_econ.gd — 2D 건물일 때만)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
@@ -239,6 +240,7 @@ func _ready() -> void:
 	add_child(social)
 	kids_view = KidsView.new(v, self)   # [아이·아기]
 	add_child(kids_view)
+	dog_pals = DogPals.new(v, self)     # [강아지와 사람]
 	econ = BldEcon.new(v, self)         # [보이는 살림 Q6]
 	add_child(econ)
 	_build_fire()
@@ -450,6 +452,8 @@ func _sync_moving(dt: float) -> void:
 		drop_view.sync(dt)          # [상점]
 	if animal_view != null:
 		animal_view.sync(dt)        # [들짐승]
+	if dog_pals != null:
+		dog_pals.step(dt, fast)     # [강아지와 사람] 놀이 곁 강아지·쓰다듬기 (강아지를 그리기 전에)
 	if fauna_view != null:
 		fauna_view.alpha = alpha    # [강아지·작은 생물]
 		fauna_view.sync(dt, fast)
@@ -544,6 +548,8 @@ func _sync_residents(dt: float) -> void:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
 		if kids_view != null and not fast:
 			kids_view.pose(r, m, dt)    # [아이·아기] 놀이 속 아이: 화면 자리·폴짝 · 요람을 들여다보는 이웃
+		if dog_pals != null and not fast:
+			dog_pals.pose(r, m)         # [강아지와 사람] 강아지를 쓰다듬는 아이: 그쪽을 보고 몸을 숙임
 		var po: Dictionary = pose_over.get(r.id, {}) if not pose_over.is_empty() else hint_pose.get(r.id, {})
 		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함 · (E1-1) 조짐: 멈춰 서서 하늘을 봄
 			if po.has("face"):

@@ -143,6 +143,7 @@ func sync(fv: FaunaView, dt: float, c: Vector2, vr: float, _fast: bool) -> void:
 	var winter := FloraLook.season_of(fv.v) == "겨울"
 	var hide := d == null or vr <= 0.0 or vr > HIDE_R
 	var shadow_xf: Array = []
+	var pals: DogPals = fv.vv.dog_pals if fv.vv != null else null      # [강아지와 사람] 그릴 자리·몸짓만 얹음 (view/dog_pals.gd — 화면만)
 	if not hide:
 		for dg: Dictionary in d.list:
 			var id := int(dg["id"])
@@ -157,16 +158,21 @@ func sync(fv: FaunaView, dt: float, c: Vector2, vr: float, _fast: bool) -> void:
 				continue
 			seen[id] = true
 			var e: Dictionary = dogs.get(id, {})
+			var pal: Dictionary = pals.place(dg, Vector2(x, z), dt) if pals != null else {}
+			if not pal.is_empty():
+				x = (pal["pos"] as Vector2).x
+				z = (pal["pos"] as Vector2).y
 			var pos := Vector3(x, fv._gy(x, z), z)
 			if e.is_empty():
 				e = _entry(id, pos)
 				dogs[id] = e
+			e["pal"] = pal
 			var grow := clampf(d.age_days(fv.v, dg) / Dogs.PUP_DAYS, 0.0, 1.0)
 			_update(e, dg, pos, dt, grow, winter, cam)
 			shown += 1
 			var s := float(e["h"]) / DOG_H
 			var ro: Vector3 = (react[id] as Dictionary)["off"] if react.has(id) else Vector3.ZERO
-			s *= CutoutShadows.hop_shrink(ro.y)       # [톡 반응] 폴짝 뛰면 그림자가 작아짐
+			s *= CutoutShadows.hop_shrink(ro.y + float(pal.get("hop", 0.0)))       # [톡 반응] 폴짝 뛰면 그림자가 작아짐
 			shadow_xf.append(Transform3D(Basis().scaled(Vector3.ONE * s), pos + Vector3(ro.x, CutoutShadows.LIFT, ro.z)))
 	for id: int in dogs.keys():
 		if not seen.has(id):
@@ -213,13 +219,18 @@ func _update(e: Dictionary, dg: Dictionary, pos: Vector3, dt: float, grow: float
 		if mv.length() > 0.002:
 			e["dir"] = mv.normalized()
 		e["still_t"] = 0.0 if bool(e["walking"]) else float(e["still_t"]) + dt
+	var pal: Dictionary = e.get("pal", {})
 	if not bool(e["walking"]):
 		var f := float(dg.get("face", 0.0))
 		e["dir"] = Vector3(sin(f), 0, cos(f))
+		var lk: Vector2 = pal.get("look", Vector2.INF)        # [강아지와 사람] 멈추면 주인·아이·돌탑 쪽을 봄
+		if lk != Vector2.INF and Vector2(lk.x - pos.x, lk.y - pos.z).length() > 0.08:
+			e["dir"] = Vector3(lk.x - pos.x, 0, lk.y - pos.z).normalized()
 	e["last"] = pos
 	var rx: Dictionary = react.get(int(e["id"]), {})
-	m.position = pos + (rx["off"] as Vector3) if not rx.is_empty() else pos
-	var clip := react_clip(clip_for(String(dg.get("state", "idle")), bool(e["walking"]), float(e["still_t"]), int(e["id"])), String(rx.get("hint", "")))
+	m.position = pos + Vector3(0, float(pal.get("hop", 0.0)), 0) + ((rx["off"] as Vector3) if not rx.is_empty() else Vector3.ZERO)
+	var clip := react_clip(pal_clip(clip_for(String(dg.get("state", "idle")), bool(e["walking"]), float(e["still_t"]), int(e["id"])), String(pal.get("hint", ""))),
+		String(rx.get("hint", "")))
 	var h := float(e["h"])
 	var rate: float = Lib.CLIP_RATE[clip]
 	if clip == "walk":
@@ -241,10 +252,12 @@ func _update(e: Dictionary, dg: Dictionary, pos: Vector3, dt: float, grow: float
 			e["view"] = int(vm.x)
 			e["mirror"] = vm.y
 			push = true
+	var wag := float(pal.get("roll", 0.0))
 	if push:
 		m.set_instance_shader_parameter("st", Vector4(int(e["view"]), float(e["mirror"]), Lib.CLIPS.find(clip), float(e["phase"])))
-		if not rx.is_empty():
-			_push_misc(e)
+	if (push and not rx.is_empty()) or not is_equal_approx(wag, float(e.get("wag", 0.0))):
+		e["wag"] = wag
+		_push_misc(e)
 
 
 # ───────────────────────── 톡 반응 (view/tap_react.gd) ─────────────────────────
@@ -255,7 +268,7 @@ func set_react(id: int, off: Vector3, squash: Vector2, roll: float, turn: float,
 		return
 	react[id] = {"off": off, "sq": squash, "roll": roll, "turn": turn, "hint": hint}
 	var e: Dictionary = dogs[id]
-	(e["doll"] as MeshInstance3D).position = (e["last"] as Vector3) + off
+	(e["doll"] as MeshInstance3D).position = (e["last"] as Vector3) + off + Vector3(0, float((e.get("pal", {}) as Dictionary).get("hop", 0.0)), 0)
 	_push_misc(e)
 
 
@@ -267,6 +280,13 @@ func clear_react(id: int) -> void:
 		var e: Dictionary = dogs[id]
 		(e["doll"] as MeshInstance3D).position = e["last"]
 		_push_misc(e)
+
+
+## [강아지와 사람] 멈춰 있을 때의 동작 부탁 (sit · bow · idle) — 걷는 중·자는 중엔 그대로
+static func pal_clip(clip: String, hint: String) -> String:
+	if hint == "" or clip == "walk" or clip == "lie" or clip == "bark":
+		return clip
+	return hint
 
 
 ## 반응하는 동안의 동작: 자는 강아지는 그대로 눕고, 걷던 발은 멈춤 · bark = 짖는 동작
@@ -288,7 +308,7 @@ func _push_misc(e: Dictionary) -> void:
 	var sy := maxf(sq.y, 0.05)
 	var face := float(e["mirror"]) * (-1.0 if w < 0.0 else 1.0)       # 화면에서 바라보는 쪽 (오른쪽 +1)
 	(e["doll"] as MeshInstance3D).set_instance_shader_parameter("misc",
-		Vector4(float(e["h"]) * sy, w / sy, maxf(float(e["rate"]), 0.0), -float(rx.get("roll", 0.0)) * face))
+		Vector4(float(e["h"]) * sy, w / sy, maxf(float(e["rate"]), 0.0), -float(rx.get("roll", 0.0)) * face + float(e.get("wag", 0.0))))
 
 
 func _sync_shadows(list: Array, cam: Camera3D) -> void:

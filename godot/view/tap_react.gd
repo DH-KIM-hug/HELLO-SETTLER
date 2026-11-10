@@ -30,6 +30,11 @@ const BUB_PX := 17.0             # 말풍선 지름 (화면 px, 배율 1)
 const BUB_REF := 26.0            # 인형 키가 이만큼(px)일 때 배율 1
 const BUB_MIN := 0.92
 const BUB_MAX := 2.3
+const ZOOM_REF := 44.0           # (Q2-d) 가까이 본 확대 (세계 1칸 = 이만큼 px): 여기부터는 몸짓 크기 그대로
+const ZOOM_POW := 0.75           # 멀어질수록 몸짓을 키우는 세기 — 기본 확대(20px)에서 ×1.8쯤
+const ZOOM_MAX := 2.2
+const ZOOM_SQ := 0.55            # 눌림·늘어남은 덜 키움 (납작해져 사라지지 않게)
+const ZOOM_ROLL_MAX := 0.5       # 키운 기울임의 한계 (rad)
 const MEM_KEEP := 30.0           # 누른 기억을 이만큼(초) 지나면 잊음
 const PICK_DOG := 0.75           # 강아지 누르기 반지름 = 주민 반지름 × 이 값
 const CREAM := Color("fffbea")
@@ -150,6 +155,17 @@ const DEFS := {
 		"y": [[0.03, 0], [0.14, 0.12], [0.6, 0.06], [0.7, 0]],
 		"turn": [[0.03, 0], [0.66, 3.0]],
 		"roll": [[0.66, 0], [0.75, 0.13], [0.84, -0.1], [0.92, 0.05], [0.98, 0]]},
+	# ── 강아지와 사람 (Q2-d — 톡이 아니라 화면이 시키는 몸짓: view/dog_pals.gd → cue) ──
+	"dog_flinch": {"dur": 0.8, "hint": "still", "bub": ["bang"], "snd": [["dog_yip_1", "dog_yip_0"], -4.0],        # 돌탑이 와르르 — 움찔 뒤로
+		"y": [[0.02, 0], [0.2, 0.5], [0.42, 0], [0.56, 0.1], [0.7, 0]],
+		"st": [[0, 1], [0.03, 0.8], [0.18, 1.2], [0.42, 1.0], [0.48, 0.8], [0.62, 1.05], [0.8, 1]],
+		"roll": [[0, 0], [0.14, -0.2], [0.42, -0.12], [0.7, 0]]},
+	"dog_woof": {"dur": 0.6, "hint": "bark", "bub": ["bark"], "snd": [["dog_arf"], -5.0],                          # 같이 놀다 멍!
+		"y": [[0.04, 0], [0.24, 0.28], [0.46, 0]],
+		"st": [[0, 1], [0.04, 0.86], [0.2, 1.12], [0.46, 1], [0.54, 0.9], [0.7, 1.03], [0.85, 1]]},
+	"dog_happy": {"dur": 1.4, "hint": "still", "bub": ["love"], "bub_at": 0.1, "snd": [["dog_yip_0", "dog_yip_1"], -7.0], "snd_at": 0.12,     # 쓰다듬어 주니 좋아서 납작
+		"st": [[0, 1], [0.1, 0.8], [0.22, 0.9], [0.34, 0.78], [0.46, 0.9], [0.58, 0.78], [0.7, 0.9], [0.82, 0.8], [0.92, 1.05], [1, 1]],
+		"roll": [[0.1, 0], [0.16, 0.1], [0.28, -0.1], [0.4, 0.1], [0.52, -0.1], [0.64, 0.1], [0.76, -0.08], [0.88, 0.04], [0.96, 0]]},
 }
 
 ## 작은 소리의 음높이 배 — 나이대로 (그 위에 대상마다 ±1반음: GameAudio.resident_pitch)
@@ -298,6 +314,30 @@ static func mix_pose(a: Dictionary, b: Dictionary, x: float) -> Dictionary:
 	return out
 
 
+# ───────────────────────── 확대에 따른 몸짓 크기 (Q2-d) ─────────────────────────
+## 세계 1칸이 px 화면 픽셀일 때 몸짓을 몇 배로 — 가까이(ZOOM_REF 이상)는 1, 멀어질수록 커져 기본 확대에서도 숙임·폴짝이 보인다. 화면만
+static func zoom_gain(px: float) -> float:
+	if px <= 0.0:
+		return 1.0
+	return clampf(pow(ZOOM_REF / px, ZOOM_POW), 1.0, ZOOM_MAX)
+
+
+## 자세 p를 gain배로: 폴짝·기울임은 그대로 곱하고, 눌림·늘어남은 덜 (1에서 벗어난 만큼 × 덜 키운 배). gain 1이면 그대로
+static func zoom_pose(p: Dictionary, gain: float) -> Dictionary:
+	if gain <= 1.0:
+		return p
+	var gs := lerpf(1.0, gain, ZOOM_SQ)
+	return {"y": float(p["y"]) * gain, "sx": clampf(1.0 + (float(p["sx"]) - 1.0) * gs, 0.5, 1.7), "sy": clampf(1.0 + (float(p["sy"]) - 1.0) * gs, 0.5, 1.6),
+		"roll": clampf(float(p["roll"]) * gain, -ZOOM_ROLL_MAX, ZOOM_ROLL_MAX), "turn": float(p["turn"])}
+
+
+## 화면에서 세계 1칸이 몇 px인가 (그 인형 자리에서)
+static func px_per_unit(cam: Camera3D, at: Vector3) -> float:
+	if cam == null or cam.is_position_behind(at):
+		return 0.0
+	return up_px(cam, at).length()
+
+
 # ───────────────────────── 누르기 (화면 거리) ─────────────────────────
 ## 화면에서 세계 1칸이 세로로 몇 px인지 (위쪽 벡터) — 종이 인형은 카메라를 보는 판이라 이 벡터 × 키가 머리 자리
 static func up_px(cam: Camera3D, at: Vector3) -> Vector2:
@@ -424,6 +464,36 @@ func cancel_press() -> void:
 	if not e.is_empty() and String(e["kind"]) == "press":
 		_start(_press_key, _entry(String(e["who"]), e["vw"], int(e["id"]), "rest"))
 	_press_key = ""
+
+
+## (Q2-d) 화면이 시킨 몸짓 (view/dog_pals.gd — 톡이 아님): 누른 기억·눌림은 건드리지 않고, 톡 반응 중인 대상에는 끼어들지 않는다.
+## who = "d" 강아지 · "r" 주민. 말풍선 그림은 후보의 첫째 (난수를 쓰지 않음). 시작했으면 true
+func cue(vw: VillageView, who: String, id: int, kind: String) -> bool:
+	if vw == null or not DEFS.has(kind):
+		return false
+	var key := dkey(vw, id) if who == "d" else rkey(vw, id)
+	if _active.has(key):
+		return false
+	var e := _entry(who, vw, id, kind)
+	if _geom(e, vw).is_empty():
+		return false
+	var ctx: Dictionary
+	var r: Resident = null
+	if who == "d":
+		var dg := _dog_dict(vw, id)
+		if dg.is_empty():
+			return false
+		ctx = dog_context(dg, vw.v.aware)
+	else:
+		r = vw.v.person(id)
+		if r == null:
+			return false
+		ctx = context_of(r, vw.v.aware, false)
+	e["bub"] = bubble_of(kind, bool(ctx["aware"]), null)
+	e["cue"] = true
+	_start(key, e)
+	_voice(kind, ctx, r, e)
+	return true
 
 
 func _press(key: String, who: String, vw: VillageView, id: int) -> void:
@@ -558,6 +628,11 @@ func _step_entry(key: String, e: Dictionary, dt: float, cam: Camera3D) -> bool:
 	var t: float = e["t"]
 	var dur: float = e["dur"]
 	var stay := bool(d.get("stay", false))
+	if cam != null:                                # (Q2-d) 멀리서 볼수록 몸짓을 크게 — 화면만 (cam 없으면 그대로: 시험)
+		var gn: Node3D = g["node"]
+		var gp := px_per_unit(cam, gn.global_position)
+		if gp > 0.0:
+			e["gain"] = zoom_gain(gp)
 	if stay and t > PRESS_MAX:
 		_start(key, _entry(String(e["who"]), vw, int(e["id"]), "rest"))
 		if _press_key == key:
@@ -650,6 +725,9 @@ func _apply(e: Dictionary, p: Dictionary, hold: Vector3, hint: String, rest: boo
 		g = _geom(e, e["vw"] if is_instance_valid(e["vw"]) else null)
 		if g.is_empty():
 			return
+	if not rest:
+		p = zoom_pose(p, float(e.get("gain", 1.0)))
+	e["shown"] = p                                 # 지금 입힌 자세 (확대 배율까지 — 말풍선 자리·시험)
 	var off := hold + Vector3(0, float(p["y"]) * float(g["unit"]), 0)
 	var sq := Vector2(float(p["sx"]), float(p["sy"]))
 	var turn := float(e["turn0"]) + float(p["turn"])
@@ -715,7 +793,7 @@ func _dog_dict(vw: VillageView, id: int) -> Dictionary:
 # ───────────────────────── 그림 말풍선 ─────────────────────────
 func _place_bubble(e: Dictionary, g: Dictionary, cam: Camera3D) -> void:
 	var n: Node3D = g["node"]
-	var p: Dictionary = e["pose"]
+	var p: Dictionary = e.get("shown", e["pose"])
 	var feet: Vector3 = n.global_position
 	var doll: Variant = n.get("doll")
 	if doll is Node3D and is_instance_valid(doll):

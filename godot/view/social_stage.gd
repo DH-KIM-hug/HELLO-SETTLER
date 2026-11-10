@@ -11,6 +11,14 @@ extends Node3D
 const MAX_SCENES := 3
 const VIGNETTE_EVERY := Vector2(5.0, 11.0)   # 화면 장면을 살피는 간격 (현실 초)
 const BLEND := 0.35
+# (Q2-d) 듣는 이의 끄덕임 — 인형 전체를 말하는 이 쪽으로 살짝 숙였다 폄 (새 그림 없이: 주민 그림이 바뀌어도 그대로)
+const NOD_AT := [0.3, 0.62]                  # 한 줄(Social.LINE_REAL) 안에서 끄덕이는 때 (0~1)
+const NOD_W := 0.13                          # 끄덕임 하나의 반 너비 (0~1)
+const NOD_LEAN := 0.1                        # 숙이는 기울임 (rad)
+const NOD_SQ := 0.07                         # 숙이며 눌리는 만큼
+const NOD_HOP := 0.07                        # 반가운 말(환호·사랑)을 들으면 끄덕임 대신 작게 폴짝 (세계)
+const HOP_MOODS := ["cheer", "love"]
+const SAME_ALT := {"sulk": "sulk", "song": "vignette/song"}    # 같은 말이 잇달아 나올 때 바꿔 쓸 말 묶음 (장면 종류 → Social.pool 길)
 
 var v: Village
 var vw: Node3D
@@ -22,6 +30,7 @@ var _rng := RandomNumberGenerator.new()
 var _sing_t := -100.0                 # 마지막 모닥불 노래 (현실 초)
 var _clock := 0.0
 var n_played := 0                     # 시험·캡처: 펼친 장면 수
+var _nodded := {}                     # (Q2-d) 끄덕이느라 몸을 숙여 둔 인형 id → true (장면이 끝나면 되돌림)
 var stage_on := true                  # 화면이 장면을 펼치나 (test_village가 빠르기에 따라 — 화면 상태, 시뮬은 읽지 않음)
 
 
@@ -47,12 +56,15 @@ func sync(dt: float, fast: bool) -> void:
 	if fast or not stage_on or not v.is_watching():
 		Social.take_events(v)          # 빠른 흐름 중 쌓인 것은 버린다 (말은 관계 값으로 이미 남음)
 		_clear_all()
+		_unnod_all()
 		return
 	for ev: Dictionary in Social.take_events(v):
 		if float(ev.get("t", v.t)) + float(ev.get("secs", 0.0)) + Balance.HOUR < v.t:
 			continue                   # 오래전 (따라잡기·불러오기 전) 만남 — 펼치지 않음
 		if scenes.size() >= MAX_SCENES + 1 and String(ev["kind"]) != "wedding":
 			continue
+		if String(ev["kind"]) != "wedding" and _any_in_scene(ev["who"]):
+			continue                   # (Q2-d) 이미 이야기 중인 사람 — 한 사람 머리 위에 두 장면의 말이 겹쳐 뜨지 않게 (말은 관계 값으로 이미 남음)
 		start(ev)
 	_next_v -= dt
 	if _next_v <= 0.0:
@@ -78,6 +90,15 @@ func _alive(sc: Dictionary) -> bool:
 	return true
 
 
+## 그 사람들 가운데 누가 지금 펼쳐지는 장면에 있나
+func _any_in_scene(who: Array) -> bool:
+	for sc: Dictionary in scenes:
+		for id: Variant in sc["ev"]["who"]:
+			if who.has(id):
+				return true
+	return false
+
+
 func _clear_all() -> void:
 	for sc: Dictionary in scenes:
 		_end(sc)
@@ -86,6 +107,11 @@ func _clear_all() -> void:
 
 ## 장면 하나 시작 (시험·캡처가 직접 부를 수 있다)
 func start(ev: Dictionary) -> Dictionary:
+	var alt: Array = Social.pool(String(SAME_ALT.get(String(ev.get("vig", ev["kind"])), "")))
+	var fixed := distinct_lines(ev["lines"], alt)       # (Q2-d) 같은 말이 잇달아 뜨지 않게 — 화면에 띄울 줄만 (시뮬의 기록·관계 값은 그대로)
+	if fixed != ev["lines"]:
+		ev = ev.duplicate()
+		ev["lines"] = fixed
 	var n := (ev["lines"] as Array).size()
 	var walk := 4.0 if bool(ev.get("walk", false)) else 0.0
 	var sc := {"ev": ev, "t": 0.0, "dur": walk + n * Social.LINE_REAL + 1.2, "walk": walk, "nodes": [], "flower": null}
@@ -103,6 +129,64 @@ func start(ev: Dictionary) -> Dictionary:
 	scenes.append(sc)
 	n_played += 1
 	return sc
+
+
+## (Q2-d) 바로 앞 줄과 글이 같은 줄은 다른 말로: alt(같은 묶음의 말들)에서 앞·뒤 줄과 다른 첫째, 없으면 말없음표. 순수 함수 (시험)
+static func distinct_lines(ls: Array, alt: Array) -> Array:
+	var out: Array = []
+	var changed := false
+	for i in ls.size():
+		var l: Array = ls[i]
+		var prev := String(out[i - 1][1]) if i > 0 else ""
+		if i == 0 or String(l[1]) != prev:
+			out.append(l)
+			continue
+		var next := String(ls[i + 1][1]) if i + 1 < ls.size() else ""
+		var pick := ""
+		for a: Variant in alt:
+			if String(a) != prev and String(a) != next:
+				pick = String(a)
+				break
+		if pick == "":
+			pick = "……" if prev != "……" else "…"
+		var nl := l.duplicate()
+		nl[1] = pick
+		out.append(nl)
+		changed = true
+	return out if changed else ls
+
+
+## (Q2-d) 한 줄 안의 때 u(0~1)에서 끄덕임 세기 0~1 — NOD_AT마다 한 번씩 부드럽게. 순수 함수 (시험)
+static func nod_at(u: float) -> float:
+	var k := 0.0
+	for c: float in NOD_AT:
+		var x := absf(u - c) / NOD_W
+		if x < 1.0:
+			k = maxf(k, 0.5 + 0.5 * cos(x * PI))
+	return k
+
+
+func _unnod(id: int) -> void:
+	_nodded.erase(id)
+	var rs: Variant = vw.get("residents") if vw != null else null
+	if rs is Dictionary:
+		var cm := (rs as Dictionary).get(id) as CutoutResident
+		if cm != null and is_instance_valid(cm):
+			cm.set_body_warp()
+			cm.set_body_lift(0.0)
+
+
+func _unnod_all() -> void:
+	for id: int in _nodded.keys():
+		_unnod(id)
+
+
+## 듣는 이의 몸짓을 자세에 얹음: 말하는 이(sp) 쪽으로 끄덕, 반가운 말이면 폴짝
+func _listen(p: Dictionary, sp: Resident, lt: float, mood: String) -> Dictionary:
+	p["nod"] = lt / Social.LINE_REAL
+	p["nod_to"] = Vector2(sp.x, sp.y)
+	p["nod_hop"] = mood in HOP_MOODS
+	return p
 
 
 func _end(sc: Dictionary) -> void:
@@ -208,7 +292,10 @@ func _play(sc: Dictionary) -> void:
 				if kind == "shy" and i == 0:    # 설렘: 눈을 피함
 					_pose(p, {"look": Vector2(p.x, p.y) * 2.0 - Vector2(other.x, other.y) + Vector2(other.y - p.y, p.x - other.x), "face": "happy", "anim": "scratch", "w": w})
 					continue
-				_pose(p, {"look": Vector2(other.x, other.y), "face": face, "anim": anim, "w": w})
+				var dp := {"look": Vector2(other.x, other.y), "face": face, "anim": anim, "w": w}
+				if not cur.is_empty() and int(cur[0]) == 1 - i and _says.has(other.id):      # (Q2-d) 듣는 쪽: 말하는 이를 보며 끄덕 (상대가 지금 이 줄을 말할 때만)
+					_listen(dp, other, lt, String(cur[2]) if cur.size() > 2 else "")
+				_pose(p, dp)
 			if sc["flower"] != null:
 				_move_flower(sc, a, b, li)
 
@@ -221,6 +308,8 @@ func _pose(r: Resident, p: Dictionary) -> void:
 func pose(r: Resident, m: ResidentModel) -> void:
 	var p: Dictionary = _poses.get(r.id, {})
 	if p.is_empty():
+		if _nodded.has(r.id):
+			_unnod(r.id)
 		return
 	var w := float(p.get("w", 1.0))
 	if p.has("look"):
@@ -235,6 +324,29 @@ func pose(r: Resident, m: ResidentModel) -> void:
 		m.set_face(String(p["face"]))
 	if p.has("anim"):
 		m.set_anim(String(p["anim"]), "social_scene")
+	var cm := m as CutoutResident
+	if cm == null:
+		return
+	if p.has("nod"):                         # (Q2-d) 듣는 이: 말하는 이 쪽으로 끄덕 (인형 전체 — 멀리서는 크게: TapReact.zoom_gain)
+		var k := nod_at(float(p["nod"])) * w
+		var to: Vector2 = p["nod_to"]
+		var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+		var gain := 1.0
+		var side := 1.0
+		if cam != null:
+			gain = TapReact.zoom_gain(TapReact.px_per_unit(cam, m.global_position))
+			side = signf(Vector3(to.x - r.x, 0.0, to.y - r.y).dot(cam.global_transform.basis.x))
+			if side == 0.0:
+				side = 1.0
+		if bool(p["nod_hop"]):
+			cm.set_body_warp(1.0 + NOD_SQ * k, 1.0 - NOD_SQ * 0.6 * k, 0.0)
+			cm.set_body_lift(NOD_HOP * gain * k / maxf(cm.scale.y, 0.01))
+		else:
+			cm.set_body_warp(1.0 - NOD_SQ * k * lerpf(1.0, gain, 0.5), 1.0 + NOD_SQ * 0.5 * k, NOD_LEAN * gain * side * k)
+			cm.set_body_lift(0.0)
+		_nodded[r.id] = true
+	elif _nodded.has(r.id):
+		_unnod(r.id)
 
 
 ## tick 뒤: 고개 들기 (꽃 올려다보기)
@@ -447,6 +559,11 @@ func _vignette_pose(sc: Dictionary, ppl: Array[Resident], li: int, w: float) -> 
 		"bench":
 			_pose(ppl[0], {"look": Vector2(ppl[1].x, ppl[1].y), "face": "happy", "anim": "sit_talk" if li % 2 == 0 else "sit", "w": w})
 			_pose(ppl[1], {"look": Vector2(ppl[0].x, ppl[0].y), "face": "happy", "anim": "sit_talk" if li % 2 == 1 else "sit", "w": w})
+			var ls: Array = ev["lines"]
+			if li >= 0 and li < ls.size():                   # (Q2-d) 듣는 쪽이 끄덕
+				var sp := li % 2
+				if _says.has(ppl[sp].id):
+					_listen(_poses[ppl[1 - sp].id], ppl[sp], fposmod(t, Social.LINE_REAL), String(ls[li][2]) if (ls[li] as Array).size() > 2 else "")
 		"admire":
 			var at: Vector2 = ev["at"]
 			_pose(ppl[0], {"look": at, "face": "happy", "anim": "look" if li < 0 else "idle", "tilt": Vector2(0.55, 0.12), "w": w})
