@@ -255,7 +255,7 @@ def hybrid(clip, view):
         colour = {"R": (TAN, BROWN), "L": (CYAN, NAVY)}
         for k in order:
             draw_leg(d, hips[k], (x0 + ft[k][0], y0 + ft[k][1]), colour[k][0], colour[k][1], g["fwd"], front)
-        sf = (f + 4) % 8 if view == "back" else f        # the earlier back sheets had the other leg phase
+        sf = (f + 4) % 8 if view == "back" and clip != "idle" else f        # the earlier back sheets had the other leg phase (the standing source is built per cell above)
         sx0, sy0 = (sf % 4) * CW, (sf // 4) * CH
         cell = src[sy0:sy0 + CH, sx0:sx0 + CW].astype(np.float32)
         r, gg, b, a = cell[..., 0], cell[..., 1], cell[..., 2], cell[..., 3]
@@ -308,7 +308,7 @@ if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "hybrid":
     for clip in ("walk", "carry"):
         for v in VIEWS:
             hybrid(clip, v).save(os.path.join(RAW, f"pose_{clip}_{v}.png"))
-    for v in ("q_front", "q_back"):          # v10: standing sheets of the 3/4 views (from the picked walk / carry sheets)
+    for v in VIEWS:          # v10: standing sheets of the 3/4 views (from the picked walk / carry sheets); v11: front / back too
         hybrid("idle", v).save(os.path.join(RAW, f"pose_idle_{v}.png"))
     print("hybrid ok")
     sys.exit(0)

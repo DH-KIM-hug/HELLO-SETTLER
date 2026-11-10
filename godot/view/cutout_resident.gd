@@ -26,7 +26,8 @@ const Doll := preload("res://proto/cutout_a/cut_doll.gd")
 ## 여자 평상복(a) 어른의 걷기·나르기·서기·안고 서기를 장면 그림 몸 + 머리 조각으로 (그 밖은 그대로 컷아웃). 기본값은 바뀌지 않음.
 const FrameLib := preload("res://proto/cutout_c/frame_lib.gd")
 const FrameDoll := preload("res://proto/cutout_c/frame_doll.gd")
-const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk"}
+const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk",
+	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather"}     # 2026-11-10 states4
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
@@ -441,7 +442,7 @@ func _refresh_doll() -> void:
 	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
 	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
 	if outfit != _d_outfit or hat != _d_hat:
-		if _d_outfit >= 0 and outfit != _d_outfit:
+		if _d_outfit >= 0 and outfit != _d_outfit and not _f_on:      # 방식 C 인형은 일 옷이 아직 없음 (평상복 그대로) → 연기도 없음
 			_swap_puff()
 		_d_outfit = outfit
 		_d_hat = hat
@@ -501,8 +502,8 @@ func set_body_lift(y := 0.0) -> void:
 ## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
 func _frames_ok() -> bool:
 	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
-	return on and not _baby and not on_shift and String(dlook.get("body", "")) == "adult" \
-		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip)
+	return on and not _baby and not carry_baby and String(dlook.get("body", "")) == "adult" \
+		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(FRAME_CLIPS[_d_clip]) >= 0
 
 
 func _refresh_frames() -> void:
@@ -527,7 +528,8 @@ func _refresh_frames() -> void:
 		_f_hat = _d_hat
 		fdoll.set_look(dlook, _d_hat)
 	var fc: String = FRAME_CLIPS[_d_clip]
-	var rate: float = Lib.CLIP_RATE["idle"] if fc == "idle" or fc == "hold" else 0.0
+	fdoll.set_prop(_d_prop)
+	var rate: float = 0.0 if fc == "walk" or fc == "carry" else Lib.CLIP_RATE[fc]
 	if fc == "walk" or fc == "carry":
 		var g := _ground
 		if g < 0.0:
@@ -617,6 +619,7 @@ func _update_view() -> void:
 	doll.update_view(cam)
 	if _f_on:
 		fdoll.move_dir = doll.move_dir
+		fdoll.view_lock = doll.view_lock
 		fdoll.update_view(cam)
 	if doll.view != v0 or doll.mirror != m0:
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
@@ -794,6 +797,6 @@ class SwapPuff extends Node3D:
 			b.scale = Vector3.ONE * (0.7 + 1.1 * u) * height
 			b.transparency = u
 		if doll != null and t >= SWAP_HIDE:
-			doll.visible = true
+			doll.visible = not bool(get_parent().get("_f_on"))      # 방식 C 인형이 나와 있으면 컷아웃 인형은 숨긴 채 (두 인형이 겹쳐 보였음)
 		if t >= SWAP_PUFF:
 			queue_free()

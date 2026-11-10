@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap"])
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -759,4 +759,78 @@ func test_speed_cap() -> void:
 	m.set_item("빵")
 	m.tick(0.0)
 	check(m._d_clip == "hold", "짐을 든 채 아주 빠르면 안고 선 자세")
+	m.free()
+
+
+## 방식 C 인형 (스파이크, proto/cutout_c — 기본 꺼짐): 다리·신 물감 다시 잇기 (2026-11-10: 그림에 없는 무늬 양말·끈 신 번호는 민무늬로),
+## frames.json의 동작마다 보기 4개 × 장면 수, 덮은 상태(앉기·먹기·올려다보기·무릎·괭이질·줍기)가 장면 그림으로 이어지는지
+func test_frames_c() -> void:
+	var FL := CutoutResident.FrameLib
+	var leg: int = Lib.OFF["leg"]
+	var shoe: int = Lib.OFF["shoe"]
+	check(FL.leg_dye(leg + 1) == leg and FL.leg_dye(leg + 3) == leg, "방식 C 다리 물감: +1 · +3 → 바탕 (%d)" % leg)
+	check(FL.leg_dye(leg) == leg and FL.leg_dye(leg + 2) == leg + 2 and FL.leg_dye(-1) == -1 and FL.leg_dye(shoe + 3) == shoe + 3,
+		"방식 C 다리 물감: 나머지는 그대로")
+	check(FL.shoe_dye(shoe + 3) == shoe + 1, "방식 C 신 물감: +3 → +1 (%d)" % (shoe + 1))
+	check(FL.shoe_dye(shoe) == shoe and FL.shoe_dye(shoe + 1) == shoe + 1 and FL.shoe_dye(shoe + 2) == shoe + 2 and FL.shoe_dye(-1) == -1
+		and FL.shoe_dye(leg + 1) == leg + 1, "방식 C 신 물감: 나머지는 그대로")
+	var L: Dictionary = FL.lib()
+	var clips: Array = L["clips"]
+	check(clips.size() <= FL.MAX_CLIPS, "방식 C 동작 %d개 ≤ 셰이더 배열 %d" % [clips.size(), FL.MAX_CLIPS])
+	var count := {}
+	for f: Dictionary in L["frames"]:
+		var k := "%s/%s" % [f["clip"], f["view"]]
+		count[k] = int(count.get(k, 0)) + 1
+	var whole := true
+	for c: String in clips:
+		for v: String in ["front", "q_front", "q_back", "back"]:
+			whole = whole and int(count.get("%s/%s" % [c, v], 0)) == int(L["frames_per_clip"][c])
+	check(whole, "방식 C: 동작마다 보기 4개 × frames_per_clip 장면")
+	var mapped := true
+	for c: String in ["sit", "eat", "lookup", "kneel", "hoe", "gather"]:
+		mapped = mapped and CutoutResident.FRAME_CLIPS.get(c, "") == c and FL.clip_index(c) >= 0 and Lib.CLIP_RATE.has(c)
+	for c: String in CutoutResident.FRAME_CLIPS:
+		mapped = mapped and Lib.CLIPS.has(c) and FL.clip_index(CutoutResident.FRAME_CLIPS[c]) >= 0
+	check(mapped, "방식 C: 앉기·먹기·올려다보기·무릎·괭이질·줍기가 장면 그림으로 이어짐 (없는 동작은 컷아웃 그대로)")
+	check(FL.spike != 1 and (OS.get_environment("NAZAKJI_FRAMES") == "1" or not FL.enabled()), "방식 C는 기본 꺼짐")
+	check(FL.prop_fit(-1) == Vector2.ZERO and FL.prop_fit(6).x > 0.0 and is_zero_approx(FL.prop_fit(6).y) and is_equal_approx(FL.prop_fit(9).y, PI),
+		"방식 C 소품: 괭이는 그대로 · 나무망치는 반 바퀴")
+	# 주민 인형: 켠 사람(어른 여자 평상복 a)만 덮은 상태에서 장면 그림, 나머지(잠·아기 안기·끈 사람)는 컷아웃 그대로
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 81
+	var m: CutoutResident = null
+	for i in 400:
+		var r := _resident(rng, 8100 + i)
+		r.age = 10.0
+		var c := _model(r)
+		if String(c.dlook.get("body", "")) == "adult" and int(c.dlook.get("personal", -1)) == 0:
+			m = c
+			break
+		c.free()
+	check(m != null, "어른 여자 평상복 a 주민을 찾음")
+	if m == null:
+		return
+	m.tick(0.0)
+	check(not m._f_on and m.fdoll == null, "끈 채로는 장면 그림 인형을 만들지 않음")
+	m.frames_force = 1
+	m.set_job("농장")
+	m.set_tool("농장")
+	var bad := []
+	for cs: Array in [["sit", true, "sit"], ["eat", true, "eat"], ["pray", true, "kneel"], ["work", true, "hoe"], ["idle", true, "idle"], ["sleep", false, ""]]:
+		m.set_anim(cs[0])
+		m.tick(0.0)
+		if m._f_on != bool(cs[1]) or m.doll.visible == m._f_on or (m._f_on and (m.fdoll.clip != cs[2] or not m.fdoll.visible)):
+			bad.append("%s → %s" % [cs[0], m._f_on])
+	check(bad.is_empty(), "방식 C: 덮은 상태는 장면 그림 · 잠은 컷아웃 %s" % [bad])
+	m.set_anim("work")
+	m.tick(0.0)
+	check(m._f_on and int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).w) == 6, "방식 C 괭이질: 괭이 소품 (6)")
+	m.set_anim("idle")
+	m.carry_baby = true
+	m.tick(0.0)
+	check(not m._f_on and m.doll.visible, "아기를 안으면 컷아웃 인형 (장면 그림엔 아기가 없음)")
+	m.carry_baby = false
+	m.frames_force = 0
+	m.tick(0.0)
+	check(not m._f_on and m.doll.visible and not m.fdoll.visible, "끄면 컷아웃 인형으로 돌아옴")
 	m.free()
