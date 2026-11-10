@@ -1795,6 +1795,10 @@ func _build_site_shape(n: Node3D, b: Building) -> void:
 			return
 		if _bld2d_on and st < 4:       # (2D · Q6) 벽이 서기 전 바닥·기둥·들보는 그림자 대역이 되면 그림과 어긋난 빗금·토막 그림자뿐 — 만들지 않음
 			return
+		if _bld2d_on:                  # (2D · Q6) 벽·지붕 단계 그림자 대역 = 그림 폭에 맞춰 화면 쪽으로 돌린 상자 하나 (건물 방위로 돌아간 벽·서까래 상자는 그림과 어긋난 네모 그림자)
+			var sh := 0.9 if st < 6 else 1.5
+			_box(n, Vector3(s * 2.0, sh, d * 0.9), Vector3(0, sh * 0.5, 0), Style.WOOD, deg_to_rad(JarCamera.BASE_YAW_DEG) - n.rotation.y)
+			return
 		if st >= 1:
 			_box(n, Vector3(s * 2.0, 0.1, d * 2.0), Vector3(0, 0.05, 0), Style.WOOD.lightened(0.25))
 	var h := 1.5
@@ -2040,6 +2044,8 @@ func _core_scale(key: String, x: float, z: float, s: float) -> float:
 
 func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: float, dy := 0.0) -> void:
 	s = _core_scale(key, x, z, s)
+	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 건물 앞 더미를 가리는 키 큰 그림은 낮춤 (화면만 — BldEcon.apron_scale)
+		s = econ.apron_scale(key, x, z, s)
 	var y := gy(x, z) + dy
 	_add(groups, key, Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * s), Vector3(x, y, z)))
 	if _rec != null and FloraPicks.pickable(key):
@@ -2086,7 +2092,7 @@ func _sync_trees() -> void:
 	if se != season and _flora2d_on:
 		Flora2D.keep_season(se)      # (2D) 다른 철 꽃 아틀라스를 놓아 줌
 	season = se
-	var key := "%d|%d|%d|%d|%s|%s|%.0f" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0]
+	var key := "%d|%d|%d|%d|%s|%s|%.0f|%d" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0, v.buildings.size() if _flora2d_on else 0]
 	if key == _tree_key:
 		return
 	_tree_key = key
