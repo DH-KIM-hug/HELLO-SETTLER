@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 종이 인형 강아지: 에셋 · 겉모습 · 동작 · 걸음")
-	run.timed(self, ["test_assets", "test_look_from_genes", "test_kkultteok", "test_clip_map", "test_trot_diagonal",
+	run.timed(self, ["test_assets", "test_look_from_genes", "test_kkultteok", "test_kk_sides", "test_kk_spots", "test_clip_map", "test_trot_diagonal",
 		"test_feet_on_ground", "test_walk_rate", "test_walk_from_motion", "test_view_pick", "test_switch", "test_view_only"])
 
 
@@ -98,9 +98,88 @@ func test_kkultteok() -> void:
 	var lk: Dictionary = p["look"]
 	check(int(lk["base"]) == Dogs.KK_GENES["base"] and int(lk["pat"]) == Dogs.KK_GENES["pat"] and int(lk["ear"]) == Dogs.KK_GENES["ear"],
 		"꿀떡이 = 하양 · 눈가면 · 끝 접힌 귀 (Dogs.KK_GENES)")
-	check((p["pat_c"] as Vector4).w > 0.5, "꿀떡이 표시 (이마 하얀 줄 · 한쪽 귀 주근깨)")
+	check(int(lk["tail"]) == Dogs.KK_GENES["tail"], "꿀떡이 꼬리는 늘 등 위로 말린 꼬리 (유전자 칸이 달라도)")
+	check((p["pat_c"] as Vector4).w > 0.5, "꿀떡이 표시 (눈 얼룩이 귀 뿌리까지 · 이마 흰 줄 · 제 왼쪽 귀만 황갈 · 꼬리 뿌리 점 · 갈색 코)")
+	# 표시는 '꿀떡이'라는 것에서만 — 같은 털 유전자를 물려받은 새끼·다른 강아지에겐 없다 (새끼는 보통 유전자만 물려받음)
+	var pup := {"id": 31, "genes": Dogs.KK_GENES.duplicate(), "special": "", "mother": 7, "father": 2}
+	check((CutoutDogs.doll_params(pup)["pat_c"] as Vector4).w < 0.5 and not bool(CutoutDogs.doll_params(pup)["look"]["kk"]),
+		"꿀떡이의 새끼 (같은 유전자)에겐 꿀떡이 표시가 없음")
+	var none := true
+	for b in 4:
+		for pt in 5:
+			none = none and (CutoutDogs.doll_params(_dg(500 + b * 10 + pt, b, pt))["pat_c"] as Vector4).w < 0.5
+	check(none, "다른 강아지는 어떤 털이어도 꿀떡이 표시 없음")
+	# 겉모습은 능력·성격 값을 읽지 않는다 (그런 칸이 있어도 그대로)
+	var kk2 := kk.duplicate(true)
+	kk2["skill"] = 9.0
+	kk2["traits"] = {"brave": 1.0}
+	kk2["state"] = "play"
+	check(CutoutDogs.doll_params(kk2) == p, "꿀떡이 겉모습은 능력·상태와 상관없음")
+	# 첫 병의 꿀떡이: 처음부터 있고, 저장했다 불러도 그 표시 그대로
+	var v := Village.new_prototype(63)
+	v.water.offline = true
+	v.chief_off = true
+	Notebook.begin(v)
+	v.advance(30.0)
+	var k := v.dogs.kkultteok()
+	check(not k.is_empty() and (CutoutDogs.doll_params(k)["pat_c"] as Vector4).w > 0.5, "첫 병: 꿀떡이가 처음부터 있고 꿀떡이 모습으로 그려짐")
+	var d2 := Dogs.from_dict(v.dogs.to_dict())
+	var k2 := d2.kkultteok()
+	check(not k2.is_empty() and CutoutDogs.doll_params(k2) == CutoutDogs.doll_params(k), "저장 → 불러오기: 꿀떡이 모습 그대로")
 	check((p["sel"] as Vector4).z < 0.5 and (CutoutDogs.doll_params(kk, true)["sel"] as Vector4).z > 0.5, "꿀떡이 니트는 겨울에만")
 	check((CutoutDogs.doll_params(_dg(3), true)["sel"] as Vector4).z < 0.5, "다른 강아지는 겨울에도 니트 없음")
+
+
+## 꿀떡이의 귀 색은 좌우가 다르다 (제 왼쪽 귀만 황갈) — 어느 보기·뒤집힌 그림에서도 제 왼쪽에 붙어 있어야 한다
+func test_kk_sides() -> void:
+	var sp := Lib.kk_spots()
+	var ears: PackedVector4Array = sp["ear"]
+	var ok := ears.size() == 4
+	var one := true
+	for view in 4:
+		var e := ears[view]
+		ok = ok and e.x != 0.0 and e.z != 0.0 and absf(e.x - e.z) > 20.0
+		# 그림에서 제 왼쪽 귀가 놓이는 쪽: 앞·비스듬히 앞 보기 (그림 오른쪽을 봄) = 그림 오른쪽, 비스듬히 뒤·뒤 보기 = 그림 왼쪽
+		var left_side := (1 if e.z > e.x else 0) if view < 2 else (1 if e.z < e.x else 0)
+		for side in 2:
+			ok = ok and Lib.kk_left_ear(side, view, 1.0) == (side == left_side)
+			ok = ok and Lib.kk_left_ear(side, view, -1.0) == (side != left_side)      # 뒤집힌 그림: 반대쪽 조각이 제 왼쪽
+		for mirror: float in [1.0, -1.0]:
+			one = one and (Lib.kk_left_ear(0, view, mirror) != Lib.kk_left_ear(1, view, mirror))
+	check(ok, "꿀떡이의 황갈 귀는 네 보기 · 뒤집힌 그림 모두에서 제 왼쪽 귀")
+	check(one, "어느 보기에서도 황갈 귀는 꼭 한 쪽")
+
+
+## 꿀떡이 무늬가 기대는 자리들 (귀 뿌리 · 꼬리 뿌리 · 코) — 조각 표에서 읽은 값이 다 있고, 코 자리는 그려진 코(어두운 잉크) 위
+func test_kk_spots() -> void:
+	var sp := Lib.kk_spots()
+	var tails: PackedVector2Array = sp["tail"]
+	var noses: PackedVector4Array = sp["nose"]
+	var ok := tails.size() == 4 and noses.size() == 6
+	for view in tails.size():
+		ok = ok and tails[view] != Vector2.ZERO
+	check(ok, "꿀떡이: 보기마다 꼬리 뿌리 · 앞 두 보기의 머리 셋마다 코 자리")
+	var mat := Lib.material()
+	check((mat.get_shader_parameter("kk_ear") as PackedVector4Array).size() == 4 and (mat.get_shader_parameter("kk_nose") as PackedVector4Array).size() == 6,
+		"꿀떡이 자리 값이 재질에 실림")
+	var img := Image.load_from_file(ProjectSettings.globalize_path("res://art/cutout/dog_a/dog_atlas.png"))
+	var dark := 0
+	var heads := 0
+	for q: Dictionary in Lib.lib()["quads"]:
+		if int(q["cls"]) != 1 or int(q["view"]) > 1 or noses.size() != 6:
+			continue
+		heads += 1
+		var n := noses[int(q["view"]) * 3 + int(q["kind"])]
+		var r: Array = q["rect"]
+		var uv: Array = q["uv"]
+		var fx := (n.x - float(r[0])) / (float(r[2]) - float(r[0]))
+		var fy := (float(r[3]) - n.y) / (float(r[3]) - float(r[1]))
+		var px := int(lerpf(minf(float(uv[0]), float(uv[2])), maxf(float(uv[0]), float(uv[2])), fx) * img.get_width())
+		var py := int(lerpf(minf(float(uv[1]), float(uv[3])), maxf(float(uv[1]), float(uv[3])), fy) * img.get_height())
+		var c := img.get_pixel(clampi(px, 0, img.get_width() - 1), clampi(py, 0, img.get_height() - 1))
+		if c.a > 0.5 and c.get_luminance() < 0.4:
+			dark += 1
+	check(heads == 6 and dark == heads, "꿀떡이 코 자리 = 그려진 코 위 (%d / %d)" % [dark, heads])
 
 
 func test_clip_map() -> void:
