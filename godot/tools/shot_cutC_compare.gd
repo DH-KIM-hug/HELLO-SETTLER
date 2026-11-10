@@ -372,6 +372,13 @@ func _live_setup(_dt: float, ppu: float) -> int:
 		m._d_prop = -2
 		m._f_hat = -9
 		m.frames_force = pair[1]
+		# CUTC_BOOTDBG=1 (2026-11-10 "발이 이상함" — 발 디딤 재기): 방식 C 사람의 신을 파란 물감(21), 양말을 크림(48)으로 —
+		# 화면에서 신만 색으로 골라 디딘 발이 제자리에 있는지 잰다 (tools 전용, 게임에는 영향 없음)
+		if int(pair[1]) == 1 and OS.get_environment("CUTC_BOOTDBG") == "1":
+			var dd: Array = (m.dlook["dye"] as Array).duplicate()
+			dd[6] = 48
+			dd[7] = 21
+			m.dlook["dye"] = dd
 		m.doll.set_look(m.dlook)
 	print("live ppu%d: A %d (cutout) B %d (frames), look %s" % [int(ppu), _A.id, _B.id, str(src["dye"])])
 	for cl in scene.find_children("*", "CanvasLayer", true, false):     # 화면 UI(단추·안내)는 이 사진에선 숨김
@@ -473,6 +480,8 @@ func _capture() -> void:
 	# 방식 C 사람만 가까이 (발 디딤 · 좌우 발 번갈기 점검): 발 자리 둘레 고정 크기
 	var bm: Node3D = scene.view.residents[_B.id]
 	var fp := cam.unproject_position(bm.global_position) * 3.0
+	if OS.get_environment("CUTC_BOOTDBG") == "1":        # 발 디딤 재기: 장면 번호 · 사람 발 자리 (찍힌 그림 좌표) · 동작
+		print("FP %d %d %.2f %.2f %s %.3f" % [int(_ppu), _cap_n, fp.x - ri.position.x, fp.y - ri.position.y, _B.anim, _lt])
 	var half := Vector2(1.0, 0.0) * _ppu * 3.0 * 0.75
 	var bri := Rect2i(Vector2i(int(fp.x - half.x), int(fp.y - _ppu * 3.0 * 1.45)), Vector2i(int(half.x * 2.0), int(_ppu * 3.0 * 1.6)))
 	bri.size.x -= bri.size.x % 2

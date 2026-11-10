@@ -1,8 +1,9 @@
-"""Pick / composite the v4 walk & carry sheets from the generated takes (2026-11-09).
+"""Pick the walk & carry sheets from the generated takes (2026-11-09; v8 2026-11-10: whole cells only).
 usage: python3 pick_pose.py            -> for every clip x view with takes raw/<clip>_<view>_p*.png:
-  check every take (check_pose.check), keep the take with the most passing frames as the base; frames that fail in the base are
-  replaced by a passing cell from another take (scaled to the base take's soles->chin height, aligned on head x + soles).
-  Writes raw/<clip>_<view>.png and prints the result; frames that pass in no take are listed (regenerate those)."""
+  check every take (check_pose.check), keep the take with the most passing frames as the base; a frame that fails in the base is
+  replaced by the WHOLE cell of another take that passes it (unscaled, unmoved: every take is traced from the same cell template).
+  No part of a drawing is ever cut, moved or pasted.  Writes raw/<clip>_<view>.png and prints the result; frames that pass in no
+  take are listed (regenerate those)."""
 import glob, os, re, sys
 import numpy as np
 from PIL import Image
@@ -29,11 +30,10 @@ def main():
             score = lambda t: (sum(r["ok"] for r in res[t]), -sum(r.get("err", 1.0) for r in res[t]))
             base = max(takes, key=score)
             im = Image.open(base).convert("RGB").resize((4 * P.CW, 2 * P.CH))
-            hb = np.median([r["H"] for r in res[base] if "H" in r])
             used = []
             for f in range(8):
                 if res[base][f]["ok"]:
-                    used.append(os.path.basename(base)[-6:-4])
+                    used.append(os.path.basename(base)[:-4].split("_")[-1])
                     continue
                 donors = [t for t in takes if res[t][f]["ok"]]
                 if not donors:
@@ -41,18 +41,12 @@ def main():
                     bad.append((clip, view, f + 1, res[base][f]["why"]))
                     continue
                 t = min(donors, key=lambda t: res[t][f]["err"])
-                ht = np.median([r["H"] for r in res[t] if "H" in r])
+                # v8 (2026-11-10): the WHOLE cell of another take, unscaled and unmoved — every take is traced from the same
+                # cell template (same root, same scale), and a cell is a complete drawing as generated (no part compositing)
                 src = Image.open(t).convert("RGB").resize((4 * P.CW, 2 * P.CH))
                 x0, y0 = cell_box(f)
-                c = src.crop((x0, y0, x0 + P.CW, y0 + P.CH))
-                k = hb / ht
-                c2 = c.resize((round(P.CW * k), round(P.CH * k)))
-                bg = Image.new("RGB", (P.CW, P.CH), (0, 255, 0))
-                # keep the ground line: scale about the bottom-centre of the cell's ground line
-                gx, gy = P.CW / 2, P.GROUND
-                bg.paste(c2, (round(gx - gx * k), round(gy - gy * k)))
-                im.paste(bg, (x0, y0))
-                used.append(os.path.basename(t)[-6:-4])
+                im.paste(src.crop((x0, y0, x0 + P.CW, y0 + P.CH)), (x0, y0))
+                used.append(os.path.basename(t)[:-4].split("_")[-1])
             out = os.path.join(P.RAW, f"{clip}_{view}.png")
             im.save(out)
             final = K.check(out, clip, view)

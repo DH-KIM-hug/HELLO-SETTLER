@@ -27,6 +27,7 @@ uniform vec3 lit_tint : source_color = vec3(1.0);
 uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;
 uniform float alpha_cut = 0.5;
+uniform float ground_pull = 1.3;   // 뿌리 아래(앞으로 디딘 발)를 땅 위로 당기는 배율 (1 = 딱 땅 높이, 그보다 크면 땅 위로 뜸)
 uniform float far_k = 0.68;       // 비스듬한 보기의 먼 다리 (frames_mask1.a)를 물감을 입힌 뒤 이만큼 어둡게 — 어떤 양말 색이든 두 다리가 갈림
 
 instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // -, 머리 묶음 T, 모자 묶음 U(-1 없음), -
@@ -95,6 +96,13 @@ void vertex() {
 		float k = misc.x / fig;
 		vec3 org = MODEL_MATRIX[3].xyz;
 		vec3 w = org + right * (p.x * k) + vec3(0.0, p.y * k / cu, 0.0) + back * (layer * layer_eps);
+		// 뿌리(땅 점)보다 아래에 그려진 발 (2026-11-10): 비스듬한 보기에서 앞으로 디딘 발은 화면에서 뿌리보다 아래 = 땅 위에서
+		// 카메라 쪽에 있다. 세운 판에서는 그 부분이 땅속(y < 0)이라 땅에 가려 장화 밑이 반듯하게 잘렸다 → 보는 줄기를 따라
+		// 땅 높이 조금 위까지 당긴다: 화면 자리는 그대로, 깊이만 땅 위. (몸 사각형은 뿌리 줄에서 둘로 나뉘어 있다 — frame_lib.mesh)
+		if (p.y < 0.0) {
+			vec3 ray = PROJECTION_MATRIX[3][3] > 0.5 ? back : normalize(INV_VIEW_MATRIX[3].xyz - w);
+			w += ray * ((-p.y) * k / cu * ground_pull / max(ray.y, 0.2));
+		}
 		VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
 		NORMAL = normalize((VIEW_MATRIX * vec4(back, 0.0)).xyz);
 		POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);

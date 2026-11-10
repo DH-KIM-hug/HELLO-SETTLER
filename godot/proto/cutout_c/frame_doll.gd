@@ -46,6 +46,10 @@ const HYST := 10.0
 ## 앞 보기 ↔ 비스듬한 앞 문턱 (2026-11-09 "사선 내려오기 좀 이상"): 30°는 화면에서 52° 아래로 가파르게 내려오는데 비스듬한 그림의
 ## 걸음 축은 29°라 발이 옆으로 미끄러져 보였음 → 38°까지 앞 보기 (화면 42°부터 비스듬한 그림)
 const FRONT_LIM := 38.0
+## 앞 ↔ 비스듬한 앞 문턱만 좁은 버팀 (2026-11-10 "발이 이상함"): HYST 10이면 앞 보기에서 48°까지 버텨, 딱 45° 사선으로 꺾은 주민이
+## 앞 그림(카메라 쪽으로 딛는 걸음)인 채 옆으로 미끄러졌다 (앞에서 꺾으면 앞 그림, 옆에서 꺾으면 비스듬한 그림 — 지나온 길에 따라 다름).
+## 5°면 33~43°만 겹치고 45° 사선은 언제나 비스듬한 그림.
+const HYST_FRONT := 5.0
 ## 비스듬한 그림의 걸음 축 (화면, 오른쪽 +x · 아래 +y — pose_ref.geometry fwd)
 const STEP_AXIS := {1: Vector2(1.0, 0.55), 2: Vector2(1.0, -0.33)}
 var step_k := 1.0          # 땅 빠르기 → 그림 걸음 축 위의 빠르기 (화면 움직임을 걸음 축에 투영, 그림 가로 보폭 기준) — 걸음 빠르기에 씀
@@ -63,10 +67,11 @@ func update_view(cam: Camera3D) -> void:
 	var a := absf(deg)
 	var lim := [FRONT_LIM, 110.0, 150.0]
 	for i in 3:
+		var h := HYST_FRONT if i == 0 else HYST
 		if view <= i:
-			lim[i] += HYST       # 지금 보기가 문턱 아래쪽이면 문턱을 올림 (더 버팀)
+			lim[i] += h          # 지금 보기가 문턱 아래쪽이면 문턱을 올림 (더 버팀)
 		else:
-			lim[i] -= HYST
+			lim[i] -= h
 	var v := 0 if a < lim[0] else (1 if a < lim[1] else (2 if a < lim[2] else 3))
 	var m := 1.0 if deg >= 0.0 else -1.0
 	if v == 0 or v == 3:

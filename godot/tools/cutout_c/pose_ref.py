@@ -45,8 +45,13 @@ def geometry(view):
     if view == "q_front":     # walking toward the lower right; right leg = near (lower on the image)
         # v7 (2026-11-09 "사선 내려오기 좀 이상"): step axis steeper (29 deg down instead of 18) — the 3/4-front view is used for
         # headings 38..110 deg from the camera, whose screen motion runs 0..42 deg down; she walks diagonally DOWN most of the time
-        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (16, -6)}, foot={"R": (-6, 10), "L": (12, -10)}, sack=-1, side=1)
-    return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-14, -6)}, foot={"R": (10, 10), "L": (-10, -10)}, sack=1, side=1)
+        # v8 (2026-11-10 "발이 이상함"): far foot only 5 px above the near one (was 10) so the back / forward far boot stays
+        # visible under the mid-shin hem in every frame; boots are rotated ovals with the toe along the step axis
+        # v8b: feet 24 px apart sideways (was 18) so the two boots overlap less when they pass (mean x unchanged); far foot 4 px
+        # BELOW the root line (was 5 above): at contact R the rear far boot peeks out under the hem (visible 140 -> 390 px of 940).
+        # It stays hidden in frames 2 and 8 (lifted under the hem / behind the swinging near leg) — real occlusion.
+        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (16, -6)}, foot={"R": (-9, 8), "L": (15, 4)}, sack=-1, side=1)
+    return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-14, -6)}, foot={"R": (13, 8), "L": (-13, -5)}, sack=1, side=1)
 
 
 def feet(clip, view, f):
@@ -74,7 +79,25 @@ def ik(hip, ankle, L, bend):
     return (hip[0] + L * math.cos(ang), hip[1] + L * math.sin(ang))
 
 
-def draw_leg(d, hip, foot, col, shoe, fwdx, front):
+BOOT_A, BOOT_B = 24.0, 12.0      # v8: 3/4 boot = oval 48 x 24 px, long axis along the step axis (toe toward the travel direction)
+
+
+def boot_oval(foot, fwd, grow=0.0, n=48):
+    """rotated oval: heel end near the foot point, toe 9 px further along fwd, lowest point on the foot's ground y"""
+    ang = math.atan2(fwd[1], fwd[0])
+    a, b = BOOT_A + grow, BOOT_B + grow
+    ymax = math.sqrt((a * math.sin(ang)) ** 2 + (b * math.cos(ang)) ** 2)
+    cx, cy = foot[0] + 9.0 * math.cos(ang), foot[1] - ymax
+    pts = []
+    for i in range(n):
+        t = 2 * math.pi * i / n
+        x, y = a * math.cos(t), b * math.sin(t)
+        pts.append((cx + x * math.cos(ang) - y * math.sin(ang), cy + x * math.sin(ang) + y * math.cos(ang)))
+    return pts
+
+
+def draw_leg(d, hip, foot, col, shoe, fwd, front):
+    fwdx = fwd[0]
     ankle = (foot[0], foot[1] - 16)
     L = (GROUND - 18 - HIP_Y) / 2 * 1.02          # subtle knee bend
     knee = ik(hip, ankle, L, 1 if fwdx >= 0 else -1) if not front else ((hip[0] + ankle[0]) / 2, (hip[1] + ankle[1]) / 2)
@@ -85,11 +108,11 @@ def draw_leg(d, hip, foot, col, shoe, fwdx, front):
         d.ellipse([p[0] - 18, p[1] - 18, p[0] + 18, p[1] + 18], fill=col)
     if front:
         box = [foot[0] - 24, foot[1] - 28, foot[0] + 24, foot[1]]          # rounded boot
+        d.ellipse([box[0] - 3, box[1] - 3, box[2] + 3, box[3] + 3], fill=INK)
+        d.ellipse(box, fill=shoe)
     else:
-        fx = 1 if fwdx >= 0 else -1
-        box = [min(foot[0] - 16 * fx, foot[0] + 34 * fx), foot[1] - 28, max(foot[0] - 16 * fx, foot[0] + 34 * fx), foot[1]]
-    d.ellipse([box[0] - 3, box[1] - 3, box[2] + 3, box[3] + 3], fill=INK)
-    d.ellipse(box, fill=shoe)
+        d.polygon(boot_oval(foot, fwd, 3.0), fill=INK)
+        d.polygon(boot_oval(foot, fwd), fill=shoe)
 
 
 def draw_frame(d, x0, y0, clip, view, f):
@@ -104,7 +127,7 @@ def draw_frame(d, x0, y0, clip, view, f):
     order = ["L", "R"] if not front else sorted(["L", "R"], key=lambda k: -ft[k][2])
     colour = {"R": (TAN, BROWN), "L": (CYAN, NAVY)}
     for k in order:
-        draw_leg(d, hips[k], pts[k], colour[k][0], colour[k][1], g["fwd"][0], front)
+        draw_leg(d, hips[k], pts[k], colour[k][0], colour[k][1], g["fwd"], front)
     # dress (bell to the knee — lower legs and both shoes must stay visible)
     top, hem = y0 + CHIN_Y - 6 + by, y0 + 372 + by
     poly = [(cx - 50, top), (cx + 50, top), (cx + 96, hem), (cx - 96, hem)]
@@ -172,7 +195,7 @@ def hybrid(clip, view):
         order = ["L", "R"] if not front else sorted(["L", "R"], key=lambda k: -ft[k][2])
         colour = {"R": (TAN, BROWN), "L": (CYAN, NAVY)}
         for k in order:
-            draw_leg(d, hips[k], (x0 + ft[k][0], y0 + ft[k][1]), colour[k][0], colour[k][1], g["fwd"][0], front)
+            draw_leg(d, hips[k], (x0 + ft[k][0], y0 + ft[k][1]), colour[k][0], colour[k][1], g["fwd"], front)
         sf = (f + 4) % 8 if view == "back" else f        # the earlier back sheets had the other leg phase
         sx0, sy0 = (sf % 4) * CW, (sf // 4) * CH
         cell = src[sy0:sy0 + CH, sx0:sx0 + CW].astype(np.float32)
@@ -185,6 +208,25 @@ def hybrid(clip, view):
         chin, hem, hx = my.max(), rows.max() + 3, mx.mean()
         keep = cell.copy()
         keep[hem + 1:, :, 3] = 0
+        # v8b (2026-11-10): the straight cut left pieces of the source sheet's own legs / boots beside and under the wavy hem
+        # (tan stubs, a kicked-back boot, hook strokes) and the image model copied them as a third foot. Per column: nothing
+        # below the lowest dress pixel (rose / cream apron) + its ink line; columns without dress near the hem are cleared.
+        cream = (L > 195) & (r - b < 85) & (a > 200)
+        dress = rose | cream
+        band = max(0, hem - 70)
+        W_ = cell.shape[1]
+        low_y = np.full(W_, -1.0)
+        for x in range(W_):
+            ys = np.nonzero(dress[band:hem + 1, x])[0]
+            if len(ys):
+                low_y[x] = band + ys.max()
+        for x in range(W_):
+            win = low_y[max(0, x - 5):x + 6]            # median over 11 columns: single stray columns leave no ticks
+            m = float(np.median(win))
+            if m >= 0:
+                keep[int(min(m, low_y[x] if low_y[x] >= 0 else m)) + 7:, x, 3] = 0
+            else:
+                keep[max(0, hem - 45):, x, 3] = 0
         # the source sheets' own legs (v3: cyan / navy far leg, tan / brown near leg) that poke out above the cut: drop them,
         # the puppet legs are the only legs in the reference
         low = np.zeros(cell.shape[:2], bool)

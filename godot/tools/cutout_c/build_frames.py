@@ -8,17 +8,26 @@ out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta he
      art/cutout/woman_c/frames.json       per frame: uv rect, head anchor (chin, rig units, origin = soles centre, y up),
                                           hand anchors, sack box; per clip: frame count, stride; base colours
      raw/check_<clip>_<view>.png          aligned frames | dye-class view (eyeball check, not used by the game)
-Per frame normalisation: soles (lowest opaque row) -> y 0; the head placeholder centre -> x 0 (the AI drifts figures
-inside their cells; the head is the steadiest point); scale per SHEET from the median placeholder diameter -> D_RIG, so
-every sheet / view has the same head size and the head overlay fits all of them."""
+Per frame normalisation:
+  walk / carry (traced from pose_ref.py, v4+): the cell template's ROOT — ground line y 470, cell centre x — is the origin and
+    the scale is the template's (soles->chin 258 px = CHIN_RIG). The model traces the reference within a few px (head centre,
+    chin and both boots), so the drawn frame's position inside its cell IS the animation (the puppet's 6 px bob included).
+    2026-11-10 limp fix ("절뚝이면서 걷는디"): the old rule "lowest opaque row -> y 0" took the LOWEST BOOT as the ground; in the
+    3/4 views the forward foot is drawn 30 px lower on the screen than the back foot (the step axis runs down the screen, the
+    near foot 10 px below the far one), so the body was hoisted 20-33 px (40-64 rig, 7% of the height) once per cycle — a hop
+    on one step. Front / back were symmetric (both feet on one depth line) but still bounced 2x per cycle.
+  idle (free drawings): soles (lowest opaque row) -> y 0 (3/4 views: minus the near-foot depth offset), head centre -> x 0,
+    scale per sheet from the median soles->chin -> CHIN_RIG."""
 import json, os, sys
 from collections import deque
 import numpy as np
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "..", "cutout_a"))
 import cut_sheets as C   # noqa: E402  key() + guide line removal (same 1536x1024 canvas)
+import pose_ref as PR    # noqa: E402  cell template geometry (root, ground line, step S, foot depth offsets)
 
 ART = os.path.normpath(os.path.join(HERE, "..", "..", "art", "cutout", "woman_c"))
 RAW = os.path.join(ART, "raw")
@@ -32,6 +41,10 @@ PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
          ("idle", "idle", [0, 1, 2, 3]), ("hold", "idle", [4, 5, 6, 7])]
 POSE_SHEETS = True      # v4: walk / carry sheets traced from pose_ref.py (frame 1 = contact R in every view)
+K_POSE = CHIN_RIG / float(PR.GROUND - PR.CHIN_Y)      # rig per template px (1.94): the traced sheets share the template's scale
+HEAD_DX = {v: (8.0 if v == "q_front" else (-4.0 if v == "q_back" else 0.0)) for v in VIEWS}   # template head centre - root (px)
+FOOT_DEPTH = {v: float(PR.geometry(v)["foot"]["R"][1]) for v in VIEWS}    # near foot below the root ground line (px, 3/4 views)
+HEAD_DRIFT_WARN = 6.0   # px: a traced cell whose head centre is further than this from the template's is reported
 CLIP_CELLS = {cl: cells for cl, _, cells in CLIPS}
 TIME_BLEND = 0.0        # frame timing from the measured planted-foot travel (v3) — 0 for the v4 pose-reference sheets (constant planted speed)
 CLASSES = ["none", "skin", "main", "second", "trim", "leg", "shoe", "sack"]
@@ -152,19 +165,27 @@ def frames_of(sheet):
         far_st &= legrows
         far_sh &= legrows
         far = far_st | far_sh
-        if far.sum() > 150:
+        far_c = None
+        if far.any():
             L_ = luma(rgb)
             st_ref = float(np.median(L_[far_st])) if far_st.any() else 150.0
             sh_ref = float(np.median(L_[far_sh])) if far_sh.any() else 60.0
+            # v8: the edge of the key-coloured leg (anti-aliased rim, navy ink outline, pale navy) misses the two tests above and
+            # used to stay blue in the atlas -> the same recolour for every bluish pixel within 4 px of the far leg. Colours
+            # only: no pixel is moved, added or removed.
+            rim = (a > 60) & legrows & (b > r + 10) & (b > g + 3) & ~far & dilate(far, 4)
+            mid = 0.5 * (st_ref + sh_ref)
+            far_st = far_st | (rim & (L_ >= mid))
+            far_sh = far_sh | (rim & (L_ < mid))
             # v5: repaint in the normal stocking / shoe colours; the 3/4 far leg is darkened AFTER the dye in the shader
             # (frames_mask1.a = far leg) so the near / far step survives any stocking colour
             STOCK, SHOE = np.array([224.0, 165.0, 113.0]), np.array([124.0, 72.0, 49.0])
             rgb[far_st] = np.clip(STOCK[None] * (L_[far_st] / st_ref)[:, None], 0, 255)
             rgb[far_sh] = np.clip(SHOE[None] * (L_[far_sh] / sh_ref)[:, None], 0, 255)
-            fy, fx = np.nonzero(far)
-            far_c = (float(fx.mean()), float(fy.max()))
-        else:
-            far_c = None
+            if far.sum() > 150:
+                fy, fx = np.nonzero(far)
+                far_c = (float(fx.mean()), float(fy.max()))
+            far = far_st | far_sh
         farm = dilate(far, 1) & (("q_front" in sheet) or ("q_back" in sheet))
         mag_core = (r > 170) & (b > 170) & (g < 110)
         mag = (r > 110) & (b > 90) & (b > g + 50) & (r > g + 50) & dilate(mag_core, 3)
@@ -204,7 +225,72 @@ def frames_of(sheet):
         dd = np.sqrt((xx - mx.mean()) ** 2 + (yy - my.mean()) ** 2)
         a2 = np.where((dd > R - 3) & (dd < R + 8) & (luma(rgb) < 100), 0, a2)
         feet = float(np.nonzero((a2 > 128).any(1))[0].max())
-        out.append(dict(rgb=rgb, a=a2, mag=mag, head=head, feet=feet, far=far_c, farm=farm))
+        out.append(dict(rgb=rgb, a=a2, mag=mag, head=head, feet=feet, far=far_c, farm=farm, err=foot_errors(rgb, a2, far, sheet, i)))
+    if any(f["err"] for f in out):
+        # symmetry report: drawn boot centre - reference boot centre (px, along x; visible part of the boot in both) per frame;
+        # '.' = swinging in the reference, '?' = hidden. Both stances should read small numbers of the same size (a limp = one
+        # leg's row drifting / jumping).
+        for leg in ("R", "L"):
+            print(f"  {sheet} {leg} boot x - ref: " + " ".join(
+                ("%+3d" % f["err"][leg]) if isinstance(f["err"].get(leg), int) else ("  " + str(f["err"].get(leg, "?"))) for f in out))
+    return out
+
+
+_ref_boot_cache = {}
+
+
+def ref_boot_x(clip, view):
+    """per frame {R: cx, L: cx}: centre x of the VISIBLE boot blob on the pose reference sheet (near = brown, far = navy), measured
+    the same way as on the drawing — a boot partly behind the other leg / the hem is compared like with like"""
+    key_ = (clip, view)
+    if key_ not in _ref_boot_cache:
+        rgba = C.key(os.path.join(RAW, f"pose_{clip}_{view}.png")).astype(np.float32)
+        res = []
+        for i in range(8):
+            x0, y0 = (i % 4) * CW, (i // 4) * CH
+            c = rgba[y0:y0 + CH, x0:x0 + CW]
+            rgb, a = c[..., :3], c[..., 3]
+            L = luma(rgb)
+            r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+            legrows = np.arange(CH)[:, None] > 330
+            fg = (a > 128) & legrows
+            masks = {"R": fg & (r > g + 18) & (g > b) & (L > 35) & (L < 115) & (r - b > 35),
+                     "L": fg & (b > r + 25) & (b > g + 5) & (L < 120)}
+            d = {}
+            for leg, m in masks.items():
+                bl = [b_ for b_ in blobs(m[::2, ::2], 6) if b_[0] * 4 >= 150]
+                if bl:
+                    d[leg] = max(bl, key=lambda b_: b_[3][3])[2] * 2.0
+            res.append(d)
+        _ref_boot_cache[key_] = res
+    return _ref_boot_cache[key_]
+
+
+def foot_errors(rgb, a, far, sheet, i):
+    """{R: dx px | '.' swing | '?' hidden, L: ...} — drawn boot blob centre x vs the reference sheet's boot blob centre x, both the
+    visible part only (3/4 traced sheets only; diagnostic, nothing is moved)"""
+    clip, view = sheet.split("_", 1)
+    if view not in ("q_front", "q_back") or clip not in PR.GAIT or not POSE_SHEETS:
+        return {}
+    L = luma(rgb)
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    legrows = np.arange(CH)[:, None] > 330
+    # boot brown (both boots: the far one is repainted to the shoe colour above), ink excluded — same rule as check_pose
+    dark = (a > 128) & legrows & (r > g + 18) & (g > b) & (L > 35) & (L < 115) & (r - b > 35)
+    refx = ref_boot_x(clip, view)[i]
+    out = {}
+    for leg, mask in (("R", dark & ~dilate(far, 1)), ("L", dark & far)):
+        ref = PR.feet(clip, view, i)[leg]
+        if ref[2] > 0.0:
+            out[leg] = "."
+            continue
+        bl = blobs(mask[::2, ::2], 6)
+        bl = [b_ for b_ in bl if b_[0] * 4 >= 150]
+        if not bl or leg not in refx:
+            out[leg] = "?"
+            continue
+        n, cy, cx, box, m = max(bl, key=lambda b_: b_[3][3])
+        out[leg] = int(round(cx * 2.0 - refx[leg]))
     return out
 
 
@@ -217,22 +303,37 @@ def main():
                 sheets[f"{clip}_{v}"] = frames_of(f"{clip}_{v}")
     # per sheet scale: placeholder diameter -> D_RIG
     placed = {}      # sheet -> list of (rgba_scaled, dye_lab, frame info in rig)
-    ext = [0.0, 0.0, 0.0]   # max |x|, max y (body top incl. sack), min y
+    ext = [0.0, 0.0, 0.0]   # max |x|, max y (body top incl. sack), min y (below the root ground line: the forward foot in 3/4 views)
     for name, frs in sheets.items():
+        clip_n, view_n = name.split("_", 1)
+        pose = POSE_SHEETS and clip_n in ("walk", "carry")
         dmed = float(np.median([f["head"]["d"] for f in frs]))
-        # scale per sheet from the body (soles -> chin, median over the frames): the model draws the placeholder at varying size
-        # relative to the body (walk q_back ~25% bigger than idle q_front), the head overlay is the same art for all sheets
-        chin = float(np.median([f["feet"] - f["head"]["bottom"] for f in frs]))
-        k = CHIN_RIG / chin                    # rig per sheet px
+        if pose:
+            # traced from the cell template: the template's scale, root = (cell centre, ground line 470) in every frame
+            k = K_POSE
+            drift = [f["head"]["cx"] - (CW / 2.0 + HEAD_DX[view_n]) for f in frs]
+            if max(abs(d) for d in drift) > HEAD_DRIFT_WARN:
+                print(f"  WARNING {name}: head centre drifts from the template by {[round(d) for d in drift]} px")
+        else:
+            # free drawings (idle): scale per sheet from the body (soles -> chin, median over the frames): the model draws the
+            # placeholder at varying size relative to the body, the head overlay is the same art for all sheets
+            chin = float(np.median([f["feet"] - f["head"]["bottom"] for f in frs]))
+            k = CHIN_RIG / chin                    # rig per sheet px
         info = []
         for f in frs:
             lab = classify(f["rgb"], f["a"], f["mag"], f["feet"], f["feet"] - f["head"]["top"])
-            ox, oy = f["head"]["cx"], f["feet"]
+            if pose:
+                ox, oy = CW / 2.0, float(PR.GROUND)
+            else:
+                # same root as the traced sheets: head centre - the view's head offset, soles - the near foot's depth offset
+                ox = f["head"]["cx"] - HEAD_DX[view_n] * K_POSE / k
+                oy = f["feet"] - FOOT_DEPTH[view_n] * K_POSE / k
             ys, xs = np.nonzero(f["a"] > 8)
             x0, x1 = (xs.min() - ox) * k, (xs.max() - ox) * k
             ytop = (oy - ys.min()) * k
             ext[0] = max(ext[0], -x0, x1)
             ext[1] = max(ext[1], ytop)
+            ext[2] = min(ext[2], (oy - ys.max()) * k)
             info.append(dict(k=k, ox=ox, oy=oy, lab=lab, f=f))
         placed[name] = info
         if any(f["far"] for f in frs):
@@ -267,7 +368,7 @@ def main():
               f"figure h {np.median([(f['feet'] - f['head']['top']) for f in frs]):.0f}px")
     W_RIG = 2 * (ext[0] + 20)
     H_RIG = ext[1] + 20
-    Y0 = -10.0
+    Y0 = min(-10.0, float(np.floor(ext[2])) - 10.0)      # the forward foot of the 3/4 views sits below the root ground line
     cw, ch = int(np.ceil(W_RIG * PX_PER_RIG)), int(np.ceil((H_RIG - Y0) * PX_PER_RIG))
     order = []
     for clip, sheet, cells in CLIPS:
@@ -372,9 +473,15 @@ def main():
                 f["t0"] = round(acc / tot, 4)
                 acc += dur[i]
             print(f"  timing {clip} {v}: far x {xs} -> durations {[round(d / tot * 8, 2) for d in dur]}")
-        strides[clip] = round(float(np.mean(st)), 1) if st else 600.0
-        # (v4: the drawn feet travel ~70% of the pose reference's half-steps, so the stride is measured on the drawing, not taken
-        # from pose_ref — otherwise the planted foot would slide backward)
+        measured = round(float(np.mean(st)), 1) if st else 600.0
+        if POSE_SHEETS:
+            # 2026-11-10: the traced sheets' planted foot moves exactly like the puppet's (2 S px per stance, checked ±2 px), so
+            # the stride is the template's: 4 S px per cycle (two steps), horizontal. The far-foot extremes measured on the
+            # drawing (incl. the swing overshoot at contact) ran 4-10% long -> the planted foot crept forward on one step.
+            strides[clip] = round(4.0 * PR.GAIT[clip]["S"] * K_POSE, 1)
+            print(f"  stride {clip}: template {strides[clip]} rig / cycle (far-foot extremes on the drawing {measured})")
+        else:
+            strides[clip] = measured
     base = {}
     for ci in range(1, len(CLASSES)):
         if cls_px[ci]:

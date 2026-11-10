@@ -51,15 +51,22 @@ static func mesh() -> ArrayMesh:
 	var c2 := PackedFloat32Array()
 	var idx := PackedInt32Array()
 	# 몸 장면 (group 0) + 짐 겹 (group 4): 귀퉁이만 (UV = 0~1, 셰이더가 장면 사각형으로)
+	# 뿌리 줄(rig y = 0)에서 위아래 둘로 나눔 (2026-11-10): 뿌리보다 아래 = 비스듬한 보기에서 앞으로 디딘 발. 셰이더가 그 아래
+	# 꼭짓점만 카메라 쪽으로 당겨 땅에 가려 잘리지 않게 한다 (frame_doll.gdshader ground_pull).
+	var rc: Array = lib()["rect"]
+	var y_root := clampf(float(rc[3]) / maxf(float(rc[3]) - float(rc[1]), 1.0), 0.0, 1.0)
 	for g in [0, 4]:
-		var b := verts.size()
-		for cr: Vector2 in [Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]:
-			verts.append(Vector3(cr.x, cr.y, 0))
-			uvs.append(cr)
-			c0.append_array([0, 0, 0, float(g)])
-			c1.append_array([0, 0, -1, -1])
-			c2.append_array([-1, 0, 0, 0])
-		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+		for band: Vector2 in [Vector2(0.0, y_root), Vector2(y_root, 1.0)]:
+			if band.y - band.x < 0.0001:
+				continue
+			var b := verts.size()
+			for cr: Vector2 in [Vector2(0, band.x), Vector2(1, band.x), Vector2(1, band.y), Vector2(0, band.y)]:
+				verts.append(Vector3(cr.x, cr.y, 0))
+				uvs.append(cr)
+				c0.append_array([0, 0, 0, float(g)])
+				c1.append_array([0, 0, -1, -1])
+				c2.append_array([-1, 0, 0, 0])
+			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함)
 	for q: Dictionary in Cut.lib()["quads"]:
 		var grp := int(q["group"])
