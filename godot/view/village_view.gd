@@ -138,6 +138,7 @@ const FAST_EVERY := 0.1
 var hidden_blds := {}           # 건물 id → true (그리지 않음)
 var hide_fire := false
 var social: SocialStage         # [마을의 삶] 이야기·다툼·사랑·혼례 모임·저녁 노래 (view/social_stage.gd)
+var econ: BldEcon               # [보이는 살림 Q6] 짓는 터 자재·말뚝, 일터 앞 더미, 일하는 김, 막힘 풍선 (view/bld2d/bld_econ.gd — 2D 건물일 때만)
 var staged := {}                # 주민 id → {"pos": Vector3, "rot": float, "anim": String, "vis": bool, "tilt": Vector2} (시뮬레이션 자리 대신)
 var pose_over: Dictionary = {}       # (E1-0 사건 연출) 주민 id → {anim, face, up(고개 젖힘 라디안), side, arm: Vector2} — 자리는 시뮬레이션 그대로, 몸짓만 연출이
                                      #   (E1-1) hold: true = 두 팔로 안음 (종이 인형 안기 팔) · to: 주민 id = 그 사람 곁으로 다가가 안김 (화면 자리만, 1초에 걸쳐)
@@ -235,6 +236,8 @@ func _ready() -> void:
 	add_child(kitchen_view)
 	social = SocialStage.new(v, self)   # [마을의 삶]
 	add_child(social)
+	econ = BldEcon.new(v, self)         # [보이는 살림 Q6]
+	add_child(econ)
 	_build_fire()
 	sync(0.0, true)
 
@@ -293,6 +296,8 @@ func sync(dt: float, force := false) -> void:
 	var s2 := Time.get_ticks_usec()
 	_animate_fire()
 	_animate_live(dt)
+	if econ != null:
+		econ.sync(dt, not sync_prof.is_empty())     # [보이는 살림 Q6] 건물을 살핀 화면이면 더미도 바로
 	var s3 := Time.get_ticks_usec()
 	if altar_view != null:
 		altar_view.sync(dt)
@@ -940,15 +945,21 @@ void fragment() {
 # ───────────────────────── 건물 ─────────────────────────
 func _bld_state(b: Building) -> String:
 	var piles := ""
-	for k in b.out:
-		piles += "%s%d" % [k, mini(6, int(b.out[k]))]
+	var dp := int(b.delivered["판자"])
+	var ds := int(b.delivered["돌"])
+	if _bld2d_on:                    # (2D · Q6) 더미는 BldEcon이 따로 그린다 — 짐이 오갈 때마다 건물 노드(와 멀리 묶음)를 다시 만들지 않음
+		dp = 0
+		ds = 0
+	else:
+		for k in b.out:
+			piles += "%s%d" % [k, mini(6, int(b.out[k]))]
 	var stage := SITE_STAGES
 	if b.is_site():
 		stage = site_stage(b)
 	var ripe := wheat_stage(b, v.t) if b.type == "농장" else 0
 	# 자리·병 방향도 키에 (병을 돌리면 건물 자리가 돈다)
 	var era := v.era if b.type == "나루터" else 0      # (E3-6) 나루터: 개척 시대는 갈대 뗏목, 그 뒤 잎 배
-	return "%s|%s|%s|%d|%d,%d|%d|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, int(b.delivered["판자"]), int(b.delivered["돌"]), ripe, piles, b.x, b.y, v.water.rot, era]
+	return "%s|%s|%s|%d|%d,%d|%d|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, dp, ds, ripe, piles, b.x, b.y, v.water.rot, era]
 
 
 func _sync_buildings() -> void:
@@ -1753,7 +1764,7 @@ func _build_site(n: Node3D, b: Building) -> void:
 			_add_card(n, b, "scaffold", b.size())
 		else:
 			_add_card(n, b, Bld2D.site_pic(site_stage(b), SITE_STAGES), b.size())
-	if b.site_type() != "농장":
+	if b.site_type() != "농장" and not _bld2d_on:      # (2D · Q6) 자재 더미는 BldEcon (화면 기준 자리 · 지으면서 줄어듦)
 		_build_site_piles(n, b)
 
 
@@ -1765,12 +1776,15 @@ func _build_site_shape(n: Node3D, b: Building) -> void:
 	var d := s * 0.8
 	var wall := Style.WOOD.lightened(0.12)
 	if not b.built:
-		for p: Vector2 in [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d)]:     # 말뚝
+		# (2D · Q6) 말뚝·줄은 그림에 그려져 있다 — 3D 것은 그림자 대역이 되어 그림과 어긋난 점선 네모 그림자만 남기므로 만들지 않음
+		for p: Vector2 in ([] if _bld2d_on else [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d)]):     # 말뚝
 			_box(n, Vector3(0.08, 0.3, 0.08), Vector3(p.x, 0.15, p.y), Style.WOOD)
-		for e: Array in [[Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, -d)], [Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, d)],
-				[Vector3(0.03, 0.03, d * 2.0), Vector3(-s, 0.26, 0)], [Vector3(0.03, 0.03, d * 2.0), Vector3(s, 0.26, 0)]]:     # 줄
+		for e: Array in ([] if _bld2d_on else [[Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, -d)], [Vector3(s * 2.0, 0.03, 0.03), Vector3(0, 0.26, d)],
+				[Vector3(0.03, 0.03, d * 2.0), Vector3(-s, 0.26, 0)], [Vector3(0.03, 0.03, d * 2.0), Vector3(s, 0.26, 0)]]):     # 줄
 			_box(n, e[0], e[1], Color("e8dcc0"))
 		if b.site_type() == "농장":                                                      # 밭: 고랑이 한 줄씩 늘고 마지막에 울타리
+			if _bld2d_on:                 # (2D · Q6) 고랑·울타리는 그림에 — 납작한 상자의 빗금 그림자를 남기지 않음
+				return
 			var rows := st + 1
 			for i in rows:
 				var z := -d + (d * 2.0) * (float(i) + 0.5) / float(SITE_STAGES)
@@ -1778,6 +1792,8 @@ func _build_site_shape(n: Node3D, b: Building) -> void:
 			if st >= SITE_STAGES - 2:
 				for p: Vector2 in [Vector2(-s, -d), Vector2(s, -d), Vector2(-s, d), Vector2(s, d), Vector2(0, -d), Vector2(0, d)]:
 					_box(n, Vector3(0.1, 0.55, 0.1), Vector3(p.x, 0.27, p.y), Style.WOOD)
+			return
+		if _bld2d_on and st < 4:       # (2D · Q6) 벽이 서기 전 바닥·기둥·들보는 그림자 대역이 되면 그림과 어긋난 빗금·토막 그림자뿐 — 만들지 않음
 			return
 		if st >= 1:
 			_box(n, Vector3(s * 2.0, 0.1, d * 2.0), Vector3(0, 0.05, 0), Style.WOOD.lightened(0.25))
@@ -1831,6 +1847,8 @@ func _build_piles(n0: Node3D, b: Building) -> void:
 	var n := Node3D.new()              # (P1 3차) 짐 더미는 "piles" 아래 — 멀리 묶음에 들면 숨김
 	n.name = "piles"
 	n0.add_child(n)
+	if _bld2d_on:                    # (2D · Q6) 산출 더미는 BldEcon (그림 앞 화면 기준 자리 · 세 단계)
+		return
 	var i := 0
 	if _flora2d_on:                  # (2D) 물건마다 더미 그림 하나 (많을수록 크게) — 멀리 묶음엔 Flora2D.multi로
 		for k in b.out:
@@ -2366,18 +2384,25 @@ func _sync_lilies(force: bool) -> void:
 ## 집 둘레 덤불 (앞쪽 양옆)
 func _decor_yards(groups: Dictionary) -> void:
 	for b in v.buildings:
-		if not b.built or b.type in ["농장", "소금밭", "우물", "채석장"]:
+		for e: Array in yard_bush_spots(b):
+			var hb: float = e[2]
+			_put(groups, "bush_flower" if hb > 0.8 else ("bush_b" if hb < 0.5 else "bush"), e[0], e[1], 0.65 + 0.4 * hb, hb * 9.0)
+
+
+## 집 둘레 덤불 자리 [[x, z, 해시]…] — BldEcon도 읽는다 (일터 앞 더미가 덤불 뒤에 숨지 않게)
+static func yard_bush_spots(b: Building) -> Array:
+	var out: Array = []
+	if not b.built or b.type in ["농장", "소금밭", "우물", "채석장"]:
+		return out
+	var base := deg_to_rad(JarCamera.BASE_YAW_DEG)
+	for i in 3:
+		var hb := _hash(b.x + i, b.y, 80.0)
+		if hb < 0.3:
 			continue
-		var base := deg_to_rad(JarCamera.BASE_YAW_DEG)
-		for i in 3:
-			var hb := _hash(b.x + i, b.y, 80.0)
-			if hb < 0.3:
-				continue
-			var a := base + PI * 0.5 + (i - 1) * 1.15 + hb * 0.4
-			var r := b.size() * BUILDING_SCALE * 1.45
-			var x := b.x + sin(a) * r
-			var z := b.y + cos(a) * r
-			_put(groups, "bush_flower" if hb > 0.8 else ("bush_b" if hb < 0.5 else "bush"), x, z, 0.65 + 0.4 * hb, hb * 9.0)
+		var a := base + PI * 0.5 + (i - 1) * 1.15 + hb * 0.4
+		var r := b.size() * BUILDING_SCALE * 1.45
+		out.append([b.x + sin(a) * r, b.y + cos(a) * r, hb])
+	return out
 
 
 ## 선착장 (마을 가까운 호숫가, 물 쪽으로) · 다리 (오솔길이 강을 건너는 곳)
