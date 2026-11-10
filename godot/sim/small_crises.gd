@@ -19,6 +19,11 @@
 class_name SmallCrises
 extends RefCounted
 
+## 먼지 뭉치가 물가에서 멈출 때 길을 짚어 보는 간격 (칸) · 물 위에서 마른 자리를 찾는 고리 수·방향 수 (난수 없음 — 2026-11-11 Q7)
+const SHORE_STEP := 0.25
+const SHORE_RINGS := 12
+const SHORE_DIRS := 16
+
 var rng := RandomNumberGenerator.new()
 var things: Array[CrisisThing] = []
 var next_id := 1
@@ -931,7 +936,8 @@ func _dust_roll(v: Village, dt: float) -> void:
 			c.state = "gone"
 			stats["settled"] += 1
 			continue
-		if v.water_at(c.x, c.y):                         # 물에 젖어 가라앉음
+		var wet := v.water_at(c.x, c.y)
+		if wet and c.touched:                            # 뜯기거나 불려 풀어진 뭉치는 물에 젖어 가라앉음
 			c.state = "gone"
 			continue
 		c.cover_b = -1
@@ -940,7 +946,9 @@ func _dust_roll(v: Village, dt: float) -> void:
 				c.cover_b = b.id
 				stats["covered_secs"] += dt
 				break
-		if c.pos().distance_to(Vector2(c.tx, c.ty)) < 0.2 or rng.randf() < 0.04:
+		if wet:                                          # 아직 아무도 손대지 않은 뭉치는 물에 들지 않는다 — 불어난 물에 잠겼으면 물가로 밀려 나온다 (2026-11-11 Q7)
+			_dust_ashore(v, c)
+		elif c.pos().distance_to(Vector2(c.tx, c.ty)) < 0.2 or rng.randf() < 0.04:
 			_dust_target(v, c)
 		if not dust_known:                               # 아이가 만져 보고 → 뜯어 실을 잣는다
 			for r in v.people:
@@ -969,8 +977,42 @@ func _dust_target(v: Village, c: CrisisThing) -> void:
 	var p := c.pos() + Vector2(cos(a), sin(a)) * (2.0 + rng.randf() * 3.0)
 	if not _inside(v, p, 3.0) or v.water_at(p.x, p.y) or p.distance_to(v.center) > 18.0:
 		p = c.pos() + (v.center - c.pos()).normalized() * 2.5
+	if not c.touched:                                    # 아무도 뜯기 전에 물로 굴러가 사라지지 않게 — 가는 길에 물이 있으면 물가에서 멈춘다 (2026-11-11 Q7 · docs/measure/opening_food_2026-11-11.md 2장)
+		p = _dust_dry(v, c.pos(), p)
 	c.tx = p.x
 	c.ty = p.y
+
+
+## from에서 to로 곧게 굴러갈 때 물에 닿기 전 마지막 마른 자리 (난수 없음 — 길을 SHORE_STEP 칸씩 짚어 본다)
+func _dust_dry(v: Village, from: Vector2, to: Vector2) -> Vector2:
+	var d := to - from
+	var n := maxi(1, ceili(d.length() / SHORE_STEP))
+	var last := from
+	for i in range(1, n + 1):
+		var q := from + d * (float(i) / float(n))
+		if v.water_at(q.x, q.y):
+			return last
+		last = q
+	return to
+
+
+## 물 위에 놓인 (아직 손대지 않은) 뭉치가 갈 가장 가까운 마른 자리 — 같은 거리면 마을 쪽. 둘레에 없으면 마을 한가운데 쪽 (난수 없음)
+func _dust_ashore(v: Village, c: CrisisThing) -> void:
+	var best := v.center
+	var bd := 1.0e9
+	for ring in range(1, SHORE_RINGS + 1):
+		for i in SHORE_DIRS:
+			var a := TAU * float(i) / float(SHORE_DIRS)
+			var q := c.pos() + Vector2(cos(a), sin(a)) * (SHORE_STEP * 2.0 * float(ring))
+			if _inside(v, q, 3.0) and not v.water_at(q.x, q.y):
+				var dc := q.distance_to(v.center)
+				if dc < bd:
+					bd = dc
+					best = q
+		if bd < 1.0e9:
+			break
+	c.tx = best.x
+	c.ty = best.y
 
 
 func _learn_dust(v: Village, r: Resident, child: bool) -> void:
@@ -1010,6 +1052,7 @@ func blow_dust(v: Village, dir: Vector2) -> int:
 			continue
 		n += 1
 		c.size *= 0.5
+		c.touched = true                                 # 거인의 숨에 풀어진 뭉치는 물에 닿으면 가라앉는다
 		c.startle = 2.0
 		var p := c.pos() + d * Balance.DUST_BLOW_PUSH
 		var k := 0
@@ -1165,6 +1208,7 @@ func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 			for c in things:
 				if c.id == int(o["id"]) and c.kind == "dust" and c.state != "gone":
 					c.size -= Balance.DUST_PULL
+					c.touched = true                         # 한 번 뜯긴 뭉치는 풀어져서 물에 닿으면 가라앉는다 (그 전엔 물가에서 멈춘다)
 					v.stock["먼지 실"] = float(v.stock.get("먼지 실", 0.0)) + Balance.DUST_YARN     # v5: 양 없이 양털이 생기지 않게 — 제 물건 '먼지 실'
 					stats["yarn"] += Balance.DUST_YARN
 					stats["pulled"] += 1

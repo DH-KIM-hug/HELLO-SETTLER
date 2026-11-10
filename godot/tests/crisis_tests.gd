@@ -24,7 +24,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 작은 위기 셋 — 날벌레 · 떠돌이 물방울 · 먼지 뭉치 (WORLD_EVENTS 2.2 · B5)")
 	run.timed(self, ["test_rules", "test_gnat_lifecycle", "test_gnat_omen_lid", "test_gnat_bites", "test_tweeze", "test_drop_lifecycle",
-		"test_drop_knock", "test_drop_pressure", "test_dust_lifecycle", "test_not_watching", "test_save_and_determinism", "test_words"])
+		"test_drop_knock", "test_drop_pressure", "test_dust_lifecycle", "test_dust_shore", "test_not_watching", "test_save_and_determinism", "test_words"])
 
 
 ## 4일차 낮 (첫 3일 보호가 지난 뒤) — 여름이면 날벌레가 들어온다
@@ -451,8 +451,7 @@ func test_dust_lifecycle() -> void:
 	# 뜯어 실을 잣는다 (아이가 만지거나 반나절 뒤 노인이 옛말을 떠올림)
 	var yarn0 := float(v.stock.get("먼지 실", 0.0))
 	# 반나절 뒤 옛말을 떠올린 때가 저녁이면 다음 일할 때(아침)까지 — 뜯기는 일할 시간에만.
-	# 하나뿐인 덩어리는 아무도 뜯기 전에 물로 굴러가 가라앉기도 한다 (그것도 병 안의 일 — 씨앗 24개에 두세 번, 2026-11-10 재어 봄).
-	# 여기서 보는 것은 '덩어리가 있으면 배워서 뜯는다'이므로, 아직 한 번도 못 뜯었는데 덩어리가 다 사라졌으면 다시 굴린다 (씨앗 하나의 굴러간 길에 걸지 않게)
+	# (2026-11-11 Q7) 아무도 손대지 않은 덩어리는 물에 들지 않으므로 뜯기 전에 사라지지 않는다 — 다시 굴릴 일이 없어야 한다 (예전엔 씨앗 24개에 두세 번 물로 굴러가 가라앉았다)
 	var again := 0
 	for i in ceili((Balance.DUST_LEARN + 12.0 * H) / H):
 		v.advance(H)
@@ -461,6 +460,7 @@ func test_dust_lifecycle() -> void:
 			again += 1
 	print("  뜯기 %d번 · 먼지 실 %.0f → %.0f · 남은 덩어리 %d · 다시 굴림 %d번" % [s.stats["pulled"], yarn0, float(v.stock.get("먼지 실", 0.0)), s.live("dust").size(), again])
 	check(s.dust_known and int(s.stats["pulled"]) >= 1 and float(v.stock.get("먼지 실", 0.0)) > yarn0, "주민이 뜯어 실을 잣는다 → 먼지 실 (작은 세계의 자원)")
+	check(again == 0, "아무도 뜯기 전에 덩어리가 다 사라지는 일은 없다 (다시 굴림 %d번)" % again)
 	# 거인이 불면 흩어져 날아감
 	if s.live("dust").is_empty():
 		s.force_dust(v)
@@ -474,6 +474,84 @@ func test_dust_lifecycle() -> void:
 	check(int(s.stats["blown"]) >= 1 and s.live("dust").size() < n0, "거인이 불면 흩어져 열린 하늘로 날아감 (%d → %d)" % [n0, s.live("dust").size()])
 	v.advance(Balance.DUST_LIFE)
 	check(s.dust_phase == "calm" and s.dust_episodes >= 1, "모두 사라지면 끝 (그대로 두어도 사흘 뒤 땅에 내려앉음)")
+
+
+## 아무도 손대지 않은 먼지 뭉치는 물에 들지 않는다 (2026-11-11 ROADMAP Q7 — docs/measure/opening_food_2026-11-11.md 2장):
+## 가는 길에 물이 있으면 물가에서 멈추고 (난수 없이 길을 짚음), 물 위에 놓여도 마른 땅으로 나온다. 한 번 뜯겼거나 거인이 분 뭉치는 예전처럼 가라앉는다
+func test_dust_shore() -> void:
+	var v := village("온대", 4, 15, 41)
+	var s := v.smalls
+	s.drop_rest = 1.0e12
+	# 마을에서 가장 가까운 물 칸과, 그 물에서 마을 쪽으로 물러난 마른 자리
+	var wet := Vector2.ZERO
+	var wd := 1.0e9
+	for ix in range(-56, 57):
+		for iy in range(-56, 57):
+			var q := v.center + Vector2(ix, iy) * 0.5
+			if s._inside(v, q, 3.0) and v.water_at(q.x, q.y) and q.distance_to(v.center) < wd:
+				wd = q.distance_to(v.center)
+				wet = q
+	check(wd < 1.0e9, "시험 병에 물이 있다 (마을에서 %.1f칸)" % wd)
+	if wd >= 1.0e9:
+		return
+	var back := (v.center - wet).normalized()
+	var dry := wet
+	while v.water_at(dry.x, dry.y):
+		dry += back * 0.25
+	dry += back * 2.0
+	var far := wet - back * 1.0                       # 물 안쪽
+	var stop := s._dust_dry(v, dry, far)
+	check(not v.water_at(dry.x, dry.y) and not v.water_at(stop.x, stop.y) and stop.distance_to(dry) < far.distance_to(dry) - 0.5,
+		"물 쪽으로 굴러가려 하면 물가에서 멈춘다 (가려던 %.1f칸 → %.1f칸)" % [far.distance_to(dry), stop.distance_to(dry)])
+	var same := s._dust_dry(v, dry, far)
+	check(same.is_equal_approx(stop), "같은 길은 같은 자리에서 멈춘다 (난수를 쓰지 않는다)")
+	# 물 위에 놓인 (손대지 않은) 뭉치: 가라앉지 않고 마른 땅으로 나온다
+	s.force_dust(v)
+	var ds := s.live("dust")
+	for i in range(1, ds.size()):
+		ds[i].state = "gone"
+	var c: CrisisThing = ds[0]
+	c.x = wet.x
+	c.y = wet.y
+	c.tx = wet.x
+	c.ty = wet.y
+	v.advance(60.0)
+	check(c.state != "gone" and not c.touched, "아무도 손대지 않은 뭉치는 물 위에 놓여도 가라앉지 않는다")
+	for i in 60:
+		if not v.water_at(c.x, c.y) or c.state == "gone":
+			break
+		v.advance(60.0)
+	check(c.state != "gone" and not v.water_at(c.x, c.y), "… 가까운 마른 땅으로 나온다")
+	# 한 번 뜯겼거나 거인이 분 뭉치는 물에 닿으면 가라앉는다 (예전 그대로)
+	c.touched = true
+	c.x = wet.x
+	c.y = wet.y
+	c.tx = wet.x
+	c.ty = wet.y
+	v.advance(120.0)
+	check(c.state == "gone", "뜯기거나 불린 뭉치는 물에 닿으면 가라앉는다")
+	# 굴러다니는 동안: 손대지 않은 뭉치가 물에 빠져 사라지는 일은 없다 (사흘 뒤 내려앉기 전에는) — 씨앗마다 병 하루
+	var lost := 0
+	var rolled := 0
+	var sunk := 0
+	for sd: int in ([5, 11] if quick else [5, 11, 21, 24]):
+		var w := village("온대", 4, 15, sd)
+		w.smalls.drop_rest = 1.0e12
+		w.smalls.force_dust(w)
+		var balls: Array = w.smalls.live("dust").duplicate()
+		var seen := {}
+		rolled += balls.size()
+		for i in int(D / 120.0):
+			w.advance(120.0)
+			for b: CrisisThing in balls:
+				if b.state == "gone" and not seen.has(b.id):
+					seen[b.id] = true
+					if b.touched:
+						sunk += 1
+					elif w.t - b.born < Balance.DUST_LIFE:
+						lost += 1
+	print("  뭉치 %d개 · 손댄 뒤 사라짐 %d · 손대기 전에 사라짐 %d" % [rolled, sunk, lost])
+	check(rolled >= 2 and lost == 0, "손대지 않은 뭉치는 물에 빠져 사라지지 않는다 (뭉치 %d개 가운데 %d개)" % [rolled, lost])
 
 
 # ───────────────────────── 거인이 없을 때 ─────────────────────────
