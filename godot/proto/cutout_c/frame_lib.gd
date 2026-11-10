@@ -104,6 +104,18 @@ static func mesh() -> ArrayMesh:
 
 
 ## 재질 (palette = 컷아웃 게임 재질의 물감 — 피부·머리 단계가 게임과 같게)
+## 양말·신 물감 (2026-11-10 메인 세션 결정, 위임: "신은 짙은 갈색 그대로, 양말은 두 단계쯤 밝은 따뜻한 색 — 기본 확대(ppu 20)에서 두 발이
+## 두 덩이로 읽히게"). 팔레트의 양말 네 가지 가운데 어두운 둘(짙은 갈색 6a4332 · 갈색 8a6a50)은 신과 한 덩이로 뭉쳤다 → 방식 C 인형은
+## 그 둘을 밝은 황갈(dba26d)로 입히고, 신 가운데 가장 밝은 것(9c7656)은 그린 신 색(7b442e)에 가장 가까운 짙은 갈색(744628)으로 입힌다. 팔레트 안의 색만 쓰고, 생김새 기록
+## (look["dye"])과 컷아웃 인형은 그대로 — 옷 물감(주색·크림·띠)은 이 함수를 지나지 않는다. -1(그린 색 그대로)은 그대로 둔다.
+static func leg_dye(i: int) -> int:
+	return Cut.OFF["leg"] if i == Cut.OFF["leg"] + 1 or i == Cut.OFF["leg"] + 3 else i
+
+
+static func shoe_dye(i: int) -> int:
+	return Cut.OFF["shoe"] + 1 if i == Cut.OFF["shoe"] + 3 else i
+
+
 static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	if _mat != null:
 		return _mat

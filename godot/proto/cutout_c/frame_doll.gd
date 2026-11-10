@@ -34,7 +34,7 @@ func set_look(l: Dictionary, hat: int) -> void:
 	set_instance_shader_parameter("sel", Vector4(0, int(l["head"]), hat, -1))
 	var d: Array = l["dye"]
 	set_instance_shader_parameter("dyes0", Vector4(d[0], d[1], d[2], d[3]))
-	set_instance_shader_parameter("dyes1", Vector4(d[4], d[5], d[6], d[7]))
+	set_instance_shader_parameter("dyes1", Vector4(d[4], d[5], FLib.leg_dye(int(d[6])), FLib.shoe_dye(int(d[7]))))
 
 
 func set_clip(c: String, r: float, ph: float) -> void:
