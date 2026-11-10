@@ -12,6 +12,9 @@ const BACK_SPEED := 3.4              # 제자리로 돌아가는 빠르기 (칸/
 const BACK_MIN := 0.5
 const BACK_MAX := 2.6
 const HOP_EDGE := 0.3                # 폴짝 앞뒤로 웅크렸다 펴는 시간 (폴짝 한 번의 몇 배)
+const WALK_BACK := 1.5               # (E1-5 장례) 걸어서 돌아가는 빠르기 (칸/초 — 깡충 뛰지 않음)
+const WALK_BACK_MAX := 3.6
+const DROOP := 0.07                  # 어깨를 늘어뜨림: 인형 키가 이만큼 줄어듦 (droop 1일 때)
 
 var view: VillageView
 var v: Village
@@ -49,7 +52,7 @@ func _act(rid: int) -> Dictionary:
 	if r == null:
 		return {}
 	var a := {"t": 0.0, "to": Vector2(r.x, r.y), "w": 1.0, "dur": 0.0, "back": false, "hops": [], "tip": Vector2(-1, 0),
-		"look": Vector2.INF, "face": "", "anim": "idle", "rot": r.facing}
+		"look": Vector2.INF, "face": "", "anim": "idle", "rot": r.facing, "gait": "", "droop": 0.0, "bows": []}
 	acts[rid] = a
 	return a
 
@@ -98,6 +101,27 @@ func tiptoe(rid: int, secs: float, delay := 0.0) -> void:
 		a["tip"] = Vector2(float(a["t"]) + delay, secs)
 
 
+## (E1-5 장례) 걸음새: "walk" = 깡충 뛰지 않고 천천히 걸음 (돌아갈 때도) · "" = 깡충 (기본)
+func gait(rid: int, g: String) -> void:
+	var a := _act(rid)
+	if not a.is_empty():
+		a["gait"] = g
+
+
+## 어깨를 늘어뜨림 0~1 (얼굴 그림이 없는 종이 인형의 '슬픔' — 인형 통째로 조금 움츠림)
+func droop(rid: int, amt: float) -> void:
+	var a := _act(rid)
+	if not a.is_empty():
+		a["droop"] = clampf(amt, 0.0, 1.0)
+
+
+## 고개 숙여 인사 한 번 (secs초 — 인형 통째로 깊이 depth만큼 숙였다 폄)
+func bow(rid: int, secs := 0.9, depth := 0.16, delay := 0.0) -> void:
+	var a := _act(rid)
+	if not a.is_empty():
+		(a["bows"] as Array).append([float(a["t"]) + delay, maxf(0.1, secs), depth])
+
+
 func look(rid: int, at: Vector2) -> void:
 	var a := _act(rid)
 	if not a.is_empty():
@@ -131,7 +155,12 @@ func release(rid: int, secs := -1.0) -> void:
 	a["hops"] = []
 	a["tip"] = Vector2(-1, 0)
 	var d := here.distance_to(Vector2(r.x, r.y)) if r != null else 0.0
-	a["dur"] = secs if secs >= 0.0 else clampf(d / BACK_SPEED, BACK_MIN, BACK_MAX)
+	a["bows"] = []
+	a["droop"] = 0.0
+	if String(a.get("gait", "")) == "walk":
+		a["dur"] = secs if secs >= 0.0 else clampf(d / WALK_BACK, BACK_MIN, WALK_BACK_MAX)
+	else:
+		a["dur"] = secs if secs >= 0.0 else clampf(d / BACK_SPEED, BACK_MIN, BACK_MAX)
 	if d < 0.05:
 		a["dur"] = minf(float(a["dur"]), 0.15)
 
@@ -222,7 +251,8 @@ func step(dt: float) -> void:
 		var dy := 0.0
 		var sy := 1.0
 		var sx := 1.0
-		if moving and far:
+		var walking := String(a.get("gait", "")) == "walk"
+		if moving and far and not walking:
 			var s := absf(sin(t * PI / SKIP_PER))
 			dy = SKIP_H * s
 			sy = lerpf(0.94, 1.04, s)
@@ -246,8 +276,17 @@ func step(dt: float) -> void:
 			var s := 0.5 + 0.5 * sin((t - tip.x) * 7.0)
 			sy = maxf(sy, 1.0 + 0.09 * s)
 			dy = maxf(dy, 0.03 * s)
+		var dr := float(a.get("droop", 0.0))
+		if dr > 0.0:
+			sy *= 1.0 - DROOP * dr
+		for bw: Array in a.get("bows", []):
+			var u := (t - float(bw[0])) / float(bw[1])
+			if u > 0.0 and u < 1.0:
+				var e := sin(PI * u)
+				sy *= 1.0 - float(bw[2]) * e
+				sx *= 1.0 + float(bw[2]) * 0.3 * e
 		var st := {"pos": Vector3(p.x, view.gy(p.x, p.y), p.y), "rot": float(a["rot"]),
-			"anim": ("run" if moving and far else String(a["anim"]))}
+			"anim": (("walk" if walking else "run") if moving and far else String(a["anim"]))}
 		if String(a["face"]) != "":
 			st["face"] = String(a["face"])
 		view.staged[rid] = st

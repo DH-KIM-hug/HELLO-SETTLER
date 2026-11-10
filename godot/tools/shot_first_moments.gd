@@ -4,6 +4,8 @@
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- baby     첫 아기 (깨닫기 전 병) → 둘째 아기의 짧은 판
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- naming   첫 아기 + 수첩의 아기 쪽지 → 끝나고 이름 짓기 칸
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- night    밤의 첫 아기 (엄마가 자다가 나옴) · 밤의 소원 (이웃이 대신 받음)
+##   godot --path godot -s res://tools/shot_first_moments.gd -- funeral  (E1-5) 첫 죽음과 장례 (박자마다 f1_<박자>) → 다음 날 또 한 사람 (짧은 판 f2 · 이웃이 곁에 있을 때 f2n)
+##                                                                        → 며칠 뒤의 무덤 (f3_grave_dayN_close · _village) — 결과는 godot_shots/funeral/
 ##   덧붙임: pfx=v2_ (파일 이름 앞머리) · zoom=16 (짧은 판을 볼 때의 화면 배율 — 기본 = 마을 기본 배율) · every=0.5 (긴 연출을 찍는 간격 초)
 ## 결과 (godot_shots/first_moments/): <이름>_NN.png (장면 띠) · <이름>_after.png · <이름>_strip.png (모아 보기)
 extends SceneTree
@@ -30,11 +32,12 @@ var _next := 0.0
 var _t0 := 0
 var _n := 0
 var _strip: PackedStringArray = []
+var _beats: Array = []               # (장례) 박자마다 한 장 [[연출 초, 이름]]
 
 
 func _initialize() -> void:
 	for a: String in OS.get_cmdline_user_args():
-		if a in ["wish", "baby", "naming", "night"]:
+		if a in ["wish", "baby", "naming", "night", "funeral"]:
 			mode = a
 		elif a.begins_with("pfx="):
 			pfx = a.substr(4)
@@ -42,10 +45,10 @@ func _initialize() -> void:
 			mini_ppu = maxf(1.0, a.substr(5).to_float())
 		elif a.begins_with("every="):
 			long_every = maxf(0.1, a.substr(6).to_float())
-	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/first_moments").simplify_path()
+	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/funeral" if mode == "funeral" else "../godot_shots/first_moments").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
-	Village.start_aware = mode == "wish" or mode == "night"      # 아기는 깨닫기 전 병에서 (지켜보는 이 이야기가 없어야 함)
+	Village.start_aware = mode == "wish" or mode == "night"      # 아기 · 장례는 깨닫기 전 병에서 (지켜보는 이 이야기가 없어야 함)
 	Market.reset(650.0)
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = 20261106
@@ -61,6 +64,13 @@ func _initialize() -> void:
 		"naming":
 			steps = [_s_natural, _s_note, _w_play.bind("first_baby"), _s_strip.bind("baby_naming", true, 2.0), _w_end,
 				_s_after.bind("baby_naming"), _s_end]
+		"funeral":
+			steps = [_s_start.bind(10.0), _s_death.bind(""), _w_play.bind("first_death"), _s_strip.bind("f1", true, long_every), _s_beats, _w_end, _s_after.bind("f1"),
+				_s_days.bind(1.0), _s_death.bind("more"), _s_strip.bind("f2", false, 0.5), _w_secs.bind(3.6), _s_after.bind("f2"),
+				_s_days.bind(1.0), _s_death.bind("near"), _s_strip.bind("f2n", false, 0.5), _w_secs.bind(3.6), _s_after.bind("f2n"),
+				_s_grave.bind("f3_grave_day2_close", 0.0, 60.0), _s_grave.bind("f3_grave_day2_village", 0.0, 16.0),
+				_s_grave.bind("f3_grave_day4_close", 1.6, 60.0), _s_grave.bind("f3_grave_day4_village", 0.0, 16.0),
+				_s_grave.bind("f3_grave_day7_close", 3.0, 60.0), _s_grave.bind("f3_grave_day7_village", 0.0, 16.0), _s_end]
 		"night":
 			steps = [_s_start.bind(23.5), _s_birth.bind(false), _w_play.bind("first_baby"), _s_strip.bind("night_baby", true, 1.0), _w_end, _s_after.bind("night_baby"),
 				_s_wish.bind(false), _w_play.bind("miracle"), _s_strip.bind("night_miracle", true, 1.0), _w_end, _s_after.bind("night_miracle"), _s_end]
@@ -127,6 +137,9 @@ func _process(_dt: float) -> bool:
 			_strip.append(_save("%s_%02d" % [_tag, _n]))
 			_n += 1
 			_next += _every
+	if not _beats.is_empty() and d().playing() and d().t >= float(_beats[0][0]):
+		_save(String(_beats[0][1]))
+		_beats.pop_front()
 	if _until.is_valid():
 		_guard += 1
 		if not bool(_until.call()) and _guard < 4000:
@@ -266,6 +279,106 @@ func _s_note() -> int:
 	v().notebook["shown"] = 0.0
 	v().notebook["baby"] = baby.id
 	return 1
+
+
+# ───────────────────────── (E1-5) 첫 죽음과 장례 ─────────────────────────
+## 한 사람이 떠남. how = "" 첫 죽음 (짝과 아이가 있는 어른 — 캡처용으로 가족을 맺어 줌) · "more" 그다음 (무덤을 보고 있는 것으로)
+## · "near" 그다음 + 이웃 셋이 무덤 곁에 있을 때 (캡처용으로 곁에 세움 — 병 시계는 멈춰 있음)
+func _s_death(how: String) -> int:
+	var vv := v()
+	var gone: Resident = null
+	if how == "":
+		var mate: Resident = null
+		for r in vv.people:
+			if r.is_adult() and r.partner >= 0 and vv.person(r.partner) != null:
+				gone = r
+				mate = vv.person(r.partner)
+				break
+		if gone == null:
+			for r in vv.people:
+				if r.is_adult() and r.partner < 0:
+					if gone == null:
+						gone = r
+					elif mate == null and r.sex != gone.sex:
+						mate = r
+			if gone != null and mate != null:
+				gone.partner = mate.id
+				mate.partner = gone.id
+		var kid: Resident = null
+		for r in vv.people:
+			if r.is_child() and gone != null and (gone.id in r.parents or (mate != null and mate.id in r.parents)):
+				kid = r
+		if kid == null and gone != null and mate != null:
+			for r in vv.people:
+				if r.is_child():
+					kid = r
+					kid.parents = [gone.id, mate.id]
+					break
+		print("가족: 떠나는 사람 %s · 짝 %s · 아이 %s · 집 %s" % [gone.name if gone != null else "?", mate.name if mate != null else "없음", kid.name if kid != null else "없음",
+			str(gone.home) if gone != null else "?"])
+	else:
+		for r in vv.people:
+			if r.is_adult() and r.partner < 0 and MomentCast.kin_of(vv, r).is_empty():
+				gone = r
+				break
+		if gone == null:
+			for r in vv.people:
+				if r.is_adult():
+					gone = r
+					break
+	if gone == null:
+		print("떠날 사람이 없음")
+		return 1
+	vv.kill(gone, "노환")
+	var g: Dictionary = vv.graves[vv.graves.size() - 1]
+	var gp := Vector2(float(g["x"]), float(g["y"]))
+	if how == "near":
+		var n := 0
+		var at := [Vector2(-1.3, -0.5), Vector2(1.2, -0.7), Vector2(0.2, -1.5)]
+		for r in vv.people:
+			if n < 3 and not r.is_baby() and not r.sleeping and r.age >= 2.5 and r.sick_left <= 0.0:
+				r.x = gp.x + (at[n] as Vector2).x
+				r.y = gp.y + (at[n] as Vector2).y
+				n += 1
+	if how != "":
+		_look(gp + Vector2(0.0, 0.8), mini_ppu if how == "more" else 48.0)
+		_settle()
+	scene._sync_views()
+	print("떠남: %s (%s) · 무덤 (%.1f, %.1f) 마을 가운데에서 %.1f칸 · 묘지 %s · 무덤 %d · 연대기: %s" % [gone.name, how, gp.x, gp.y, gp.distance_to(vv.center),
+		str(g.get("yard", false)), vv.graves.size(), String(vv.book[vv.book.size() - 1].get("text", ""))])
+	return 1
+
+
+## 박자마다 한 장 (연출 초 — Stagings "first_death")
+func _s_beats() -> int:
+	_beats = [[2.0, "f1_a_gather"], [4.4, "f1_b_family"], [5.9, "f1_c_procession"], [6.65, "f1_c2_veil"], [8.6, "f1_d_arrive"], [9.6, "f1_e_stone"],
+		[11.0, "f1_f_flowers"], [12.1, "f1_g_card"], [12.95, "f1_h_light"]]
+	return 0
+
+
+func _s_days(days: float) -> int:
+	_run(days * Balance.DAY)
+	_settle()
+	return 20
+
+
+## 무덤 한 장: days일 더 지난 뒤 첫 무덤을 ppu 배율로
+func _s_grave(name: String, days: float, ppu: float) -> int:
+	if days > 0.0:
+		_run(days * Balance.DAY)
+	var g: Dictionary = v().graves[0]
+	_look(Vector2(float(g["x"]), float(g["y"])) + Vector2(0.0, 0.5 if ppu > 30.0 else 2.0), ppu)
+	_settle()
+	var t1 := Time.get_ticks_msec() + 700
+	_guard = 0
+	_until = func() -> bool:
+		if Time.get_ticks_msec() < t1:
+			return false
+		var gv: GraveView = (scene.view as VillageView).get_node_or_null(GraveView.NODE_NAME)
+		print("무덤 %s: 묻힌 지 %.1f일 · %s" % [name, (v().t - float(g["t"])) / Balance.DAY, str(gv.shown(int(g["id"])) if gv != null else {})])
+		_save(name)
+		return true
+	return 0
 
 
 func _w_play(sid: String) -> int:

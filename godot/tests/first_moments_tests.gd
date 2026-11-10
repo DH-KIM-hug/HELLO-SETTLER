@@ -25,7 +25,9 @@ func all() -> void:
 	print("== 첫 기적 · 첫 아기 연출 (E1-4 · E1-6)")
 	_old_aware = Village.start_aware
 	run.timed(self, ["test_events", "test_tables_and_words", "test_cast", "test_miracle_scene", "test_miracle_skip", "test_baby_scene", "test_baby_naming",
-		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade"])
+		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade",
+		"test_death_tables", "test_death_cast", "test_death_scene", "test_death_skip_and_aware", "test_death_more_and_fold", "test_death_away",
+		"test_death_sim_same", "test_grave_stays"])
 	Village.start_aware = _old_aware
 	fs.reset()
 	Market.reset()
@@ -950,6 +952,490 @@ func test_door_and_shade() -> void:
 	_frames(scene, 0.5)
 	d.skip()
 	check(d.shadow_param().w == 0.0, "건너뛰면 그늘도 걷혀 있음")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+# ───────────────────────── (E1-5) 첫 죽음과 장례 · 그 짧은 판 · 무덤의 꽃 ─────────────────────────
+## (시험) 가족 하나: 짝이 있는 어른 (없으면 맺어 줌) + 그 아이 (아이가 있으면 그 부부의 아이로) → [떠날 사람, 짝, 아이 또는 null]
+func _family(v: Village) -> Array:
+	var a: Resident = null
+	var b: Resident = null
+	for r in v.people:
+		if r.is_adult() and r.partner >= 0 and v.person(r.partner) != null:
+			a = r
+			b = v.person(r.partner)
+			break
+	if a == null:
+		for r in v.people:
+			if r.is_adult() and r.partner < 0:
+				if a == null:
+					a = r
+				elif b == null and r.sex != a.sex:
+					b = r
+		if a == null or b == null:
+			return []
+		a.partner = b.id
+		b.partner = a.id
+	var kid: Resident = null
+	for r in v.people:
+		if r.is_child() and (a.id in r.parents or b.id in r.parents):
+			kid = r
+			break
+	if kid == null:
+		for r in v.people:
+			if r.is_child():
+				kid = r
+				kid.parents = [a.id, b.id]
+				break
+	return [a, b, kid]
+
+
+## 장면의 한 화면처럼 (무덤 화면도): 마을 화면 → 감독 → 꽃·빛
+func _gframes(scene: Node, secs: float, dt := 0.1) -> void:
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	for i in int(roundf(secs / dt)):
+		vw.sync(dt)
+		if d.playing():
+			d.step(dt)
+		else:
+			d.idle_step(dt)
+		var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+		if gv != null:
+			gv.step(dt)
+
+
+func _grown(v: Village, skip: Array) -> Resident:
+	for r in v.people:
+		if r.is_adult() and not r in skip:
+			return r
+	return null
+
+
+func test_death_tables() -> void:
+	var sp: Dictionary = Stagings.SCENES.get("first_death", {})
+	check(not sp.is_empty() and float(sp["dur"]) >= 12.0 and float(sp["dur"]) <= 16.0 and not bool(sp.get("popups", false)) and sp.has("card")
+		and float(sp["rate"]) <= 6.0 and not bool(sp.get("hud", true)), "첫 죽음: 12~16초 (%.1f초) · 건너뛸 수 있음 · 그림 카드 · 병 시간 느리게 · 띠 물러남" % float(sp.get("dur", 0.0)))
+	var has_back := false
+	var last := 0.0
+	var keys := {}
+	var kneel_bad := false
+	for b: Dictionary in sp.get("beats", []):
+		last = maxf(last, float(b["t"]))
+		has_back = has_back or b.has("back")
+		for kk: String in b:
+			keys[kk] = true
+		for dl: Dictionary in b.get("dolls", []):
+			if String(dl.get("anim", "")) == "pray" and String(dl.get("who", "")) != "pray":
+				kneel_bad = true
+			for kk: String in dl:
+				keys["d_" + kk] = true
+	check(has_back and last < float(sp["dur"]), "첫 죽음: 끝에 카메라가 돌아옴")
+	check(keys.has("hush") and keys.has("dark") and keys.has("veil") and keys.has("flowers") and keys.has("lay") and keys.has("grave") and keys.has("caption")
+		and keys.has("d_gait") and keys.has("d_droop") and keys.has("d_bow"), "첫 죽음의 박자: 소리 잦아듦 · 천천히 걸음 · 고개 숙임 · 꽃 · 돌 · 카드")
+	check(not kneel_bad, "무릎 꿇는 몸짓은 'pray' 역할만 (깨닫기 전엔 빈 역할)")
+	var mn: Dictionary = Stagings.MINIS.get("death_more", {})
+	var grabs := false
+	for b: Dictionary in mn.get("beats", []):
+		for key: String in ["cam", "back", "vignette", "caption", "dark", "hush", "page", "shake", "veil"]:
+			grabs = grabs or b.has(key)
+	check(not mn.is_empty() and float(mn["dur"]) >= 2.0 and float(mn["dur"]) <= 3.0 and not grabs and not mn.has("rate"),
+		"또 누군가 떠남: 2~3초 (%.1f초) · 카메라·병 시간·화면을 붙잡지 않음" % float(mn.get("dur", 0.0)))
+	var all_t := _texts(sp) + _texts(mn) + [MomentCast.names_line("가람", []), MomentCast.names_line("가람", ["나래"]), MomentCast.names_line("가람", ["나래", "다솜", "라온"])]
+	var bad := PackedStringArray()
+	for s: String in all_t:
+		for w: String in ["거인", "지폐", "상점", "사다", "하늘", "확률", "{w}", "{w:", "기도", "제단", "무서", "시체", "죽"]:
+			if s.contains(w):
+				bad.append(s)
+		for ch in "0123456789%":
+			if s.contains(ch):
+				bad.append(s)
+	check(run.words_ok(all_t) == "" and bad.is_empty(), "장례의 자막·말 (%d줄): 금지어·숫자·지켜보는 이 이야기 없음 %s%s" % [all_t.size(), run.words_ok(all_t), ", ".join(bad)])
+	var cap := " ".join(PackedStringArray(_texts(sp)))
+	check(cap.contains("{who:이/가} 세상을 떠났다") and cap.contains("처음으로 이별을 배웠다"), "첫 죽음의 카드 글 (EVENTS_STAGING 5)")
+	check(MomentCast.names_line("가람", []) == "가람" and MomentCast.names_line("가람", ["나래"]) == "가람, 나래"
+		and MomentCast.names_line("가람", ["나래", "다솜"]).begins_with("가람, 나래 그리고"), "여럿이 떠나면 이름을 한 줄로")
+	var missing := PackedStringArray()
+	var hushed := PackedStringArray()
+	for spec: Dictionary in [sp, mn]:
+		for id: String in Stagings.sound_ids(spec):
+			if not ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3"):
+				missing.append(id)
+	for b: Dictionary in sp["beats"]:
+		for r: Array in Stagings.fx_rows(b.get("fx", [])):
+			if r.size() < 3 or String(r[2]) in GameAudio.MUFFLED:
+				hushed.append(String(r[0]))
+	check(missing.is_empty() and hushed.is_empty(), "장례의 소리: 이미 있는 파일만 · 긴 연출은 낮춰지지 않는 버스로 %s %s" % [", ".join(missing), ", ".join(hushed)])
+	check(GraveView.flowers_at(0.0) == GraveView.FLOWER_MAX and GraveView.flowers_at(GraveView.FLOWER_FULL - 0.01) == GraveView.FLOWER_MAX
+		and GraveView.flowers_at((GraveView.FLOWER_FULL + GraveView.FLOWER_DAYS) * 0.5) < GraveView.FLOWER_MAX
+		and GraveView.flowers_at((GraveView.FLOWER_FULL + GraveView.FLOWER_DAYS) * 0.5) > 0 and GraveView.flowers_at(GraveView.FLOWER_DAYS) == 0,
+		"무덤의 꽃: 며칠은 그대로 → 한 송이씩 시듦 → 모두 사라짐")
+	var mono := true
+	for i in 60:
+		mono = mono and GraveView.flowers_at(float(i + 1) * 0.1) <= GraveView.flowers_at(float(i) * 0.1)
+	check(mono and is_equal_approx(GraveView.light_at(0.0), 1.0) and GraveView.light_at(GraveView.LIGHT_DAYS) <= 0.0, "꽃은 늘지 않음 · 작은 빛은 하루 머묾")
+
+
+func test_death_cast() -> void:
+	Village.start_aware = false
+	var v := proto()
+	v.advance(Balance.HOUR)
+	var fam := _family(v)
+	check(fam.size() == 3, "시험의 바탕: 가족이 있음")
+	if fam.size() < 3:
+		return
+	var gone: Resident = fam[0]
+	var mate: Resident = fam[1]
+	var kid: Resident = fam[2]
+	v.kill(gone, "노환")
+	check(v.graves.size() == 1 and int(v.graves[0]["id"]) == gone.id, "시뮬레이션이 무덤을 만듦 (Village.graves)")
+	var ctx := MomentCast.fill_ctx("funeral", v, {"grave": gone.id})
+	var c := MomentCast.build("funeral", v, ctx, Vector2(1, 0), Vector2(0, 1))
+	var rl: Dictionary = c["roles"]
+	var sl: Dictionary = c["slots"]
+	var mk: Dictionary = c["marks"]
+	var gp := Vector2(float(v.graves[0]["x"]), float(v.graves[0]["y"]))
+	check(rl["kin"] == [mate.id], "맨 앞 = 짝")
+	check(kid == null or rl["hand"] == [kid.id], "가족의 아이가 어른 손을 잡는 자리")
+	if kid != null:
+		var d0: float = (sl["front"][kid.id] as Vector2).distance_to(sl["front"][mate.id])
+		check(d0 > 0.2 and d0 < 0.6, "아이는 어른 바로 곁 (%.2f칸)" % d0)
+	var all: Array = rl["all"]
+	check(all.size() >= 1 and all.size() <= 1 + 1 + (MomentCast.MOURN_KIN - 1) + MomentCast.MOURN_CROWD and not gone.id in all, "모인 사람: 일곱까지 (%d) · 떠난 사람은 없음" % all.size())
+	var babies := all.filter(func(x: int) -> bool: return v.person(x) == null or v.person(x).is_baby())
+	check(babies.is_empty(), "아기는 나오지 않음")
+	var close := 9.0
+	var far := 0.0
+	var near_stone := 9.0
+	for nm: String in ["gather", "grave", "line", "approach"]:
+		for x: int in all:
+			for y: int in all:
+				if x < y and (sl[nm] as Dictionary).has(x) and (sl[nm] as Dictionary).has(y):
+					close = minf(close, (sl[nm][x] as Vector2).distance_to(sl[nm][y]))
+	for x: int in all:
+		far = maxf(far, (sl["grave"][x] as Vector2).distance_to(gp))
+		near_stone = minf(near_stone, (sl["grave"][x] as Vector2).distance_to(gp))
+	check(close > 0.25, "자리가 겹치지 않음 (가장 가까운 둘 %.2f칸)" % close)
+	check(far < 1.8 and near_stone > 0.6, "무덤가: 돌 둘레에 둥글게 (%.2f~%.2f칸) — 돌 위에 서지 않음" % [near_stone, far])
+	check((mk["grave"] as Vector2).is_equal_approx(gp) and mk.has("door") and mk.has("cam") and mk.has("grave_cam") and mk.has("ahead"), "표시: 문 앞 · 무덤")
+	check(String(c["names"]["who"]) == gone.name, "자막의 이름 = 떠난 사람")
+	var c2 := MomentCast.build("funeral", v, MomentCast.fill_ctx("funeral", v, {"grave": gone.id, "also": ["나래"]}), Vector2(1, 0), Vector2(0, 1))
+	check(String(c2["names"]["who"]) == "%s, 나래" % gone.name, "함께 떠난 사람의 이름도")
+	# 가족이 없는 사람: 가장 가까운 이웃 어른이 맨 앞
+	var lone: Resident = null
+	for r in v.people:
+		if r.is_adult() and r.partner < 0 and r.parents.is_empty() and MomentCast.kin_of(v, r).is_empty():
+			lone = r
+			break
+	if lone != null:
+		v.kill(lone, "병")
+		var c3 := MomentCast.build("funeral", v, MomentCast.fill_ctx("funeral", v, {"grave": lone.id}), Vector2(1, 0), Vector2(0, 1))
+		var k3: Array = c3["roles"]["kin"]
+		check(k3.is_empty() or (v.person(int(k3[0])) != null and not int(k3[0]) in [lone.id]), "가족이 없으면 가까운 이웃이 맨 앞 (%s)" % str(k3))
+		var c4 := MomentCast.build("grave", v, MomentCast.fill_ctx("grave", v, {"grave": lone.id}), Vector2(1, 0), Vector2(0, 1), MomentCast.MINI_NEAR)
+		check((c4["slots"] as Dictionary).is_empty() and (c4["roles"]["near"] as Array).size() <= MomentCast.MOURN_CROWD + 1
+			and (c4["marks"]["grave"] as Vector2).is_equal_approx(MomentCast.grave_at(v, {"grave": lone.id})), "짧은 판: 무덤 곁의 이웃만 · 아무도 옮기지 않음")
+	Village.start_aware = _old_aware
+
+
+func test_death_scene() -> void:
+	fs.reset()
+	Village.start_aware = false                       # 깨닫기 전 마을
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var cam: JarCamera = scene.get("cam")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	var fam := _family(v)
+	var gone: Resident = fam[0] if fam.size() == 3 else _grown(v, [])
+	v.kill(gone, "노환")
+	vw.sync(0.1)
+	d.watch(v, true)
+	check(d.playing() and d.id == "first_death", "첫 죽음 → 긴 연출 (%s)" % d.id)
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(gv != null and not bool(gv.shown(gone.id)["stone"]) and vw.grave_hide.has(gone.id), "돌은 아직 세워지지 않음 (화면만 — 무덤 줄엔 이미 있음)")
+	check((d._cast["roles"]["pray"] as Array).is_empty(), "깨닫기 전: 무릎 꿇는 사람 없음")
+	check(d.hud_alpha() <= 1.0 and not d._hud_stays() and d.mouse_filter == Control.MOUSE_FILTER_STOP, "가까이 보는 장면 — 띠가 물러나고 화면 톡 = 건너뛰기")
+	var all: Array = d._cast["roles"]["all"]
+	var ran := false
+	var walked := false
+	var knelt := false
+	var veil_max := 0.0
+	var held_max := 0
+	var hush_max := 0.0
+	var dark_max := 0.0
+	var seen := {}                                    # 박자마다 본 것
+	var cap := ""
+	var cam_at_grave := false
+	var gw: Vector3 = scene.ground_point(d._cast["marks"]["grave"])
+	var guard := 0
+	while d.playing() and guard < 400:
+		guard += 1
+		_gframes(scene, 0.1)
+		if not d.playing():
+			break
+		for rid: int in all:
+			var st: Dictionary = vw.staged.get(rid, {})
+			ran = ran or String(st.get("anim", "")) == "run"
+			walked = walked or String(st.get("anim", "")) == "walk"
+			knelt = knelt or String(st.get("anim", "")) == "pray"
+		veil_max = maxf(veil_max, d.tw_val("veil"))
+		hush_max = maxf(hush_max, d.tw_val("hush"))
+		dark_max = maxf(dark_max, d.dark)
+		held_max = maxi(held_max, gv._hands.size())
+		var sh := gv.shown(gone.id)
+		if d.t > 5.2 and d.t < 5.8:
+			seen["held"] = gv._hands.size()
+		if d.t > 8.6 and d.t < 9.0:
+			seen["before_stone"] = bool(sh["stone"])
+			if not cam.hold.is_empty():
+				cam_at_grave = (cam.hold["target"] as Vector3).distance_to(gw) < 2.0
+		if d.t > 9.3 and d.t < 9.65:
+			seen["stone"] = bool(sh["stone"])
+			seen["flowers0"] = int(sh["flowers"])
+		if d.t > 11.3 and d.t < 11.6:
+			seen["flowers1"] = int(sh["flowers"])
+			seen["held1"] = gv._hands.size()
+			cap = d._cap_l.text
+		if d.t > 12.8 and d.t < 13.2:
+			seen["light"] = float(sh["light"])
+	check(not d.playing() and d.log.size() == 1 and String(d.log[0]["id"]) == "first_death" and not bool(d.log[0]["skipped"]), "끝까지 봄 (%d걸음)" % guard)
+	check(walked and not ran, "사람들은 천천히 걷는다 — 깡충 달리지 않음")
+	check(not knelt, "깨닫기 전: 기도하는 몸짓 없음")
+	check(hush_max > 0.6 and dark_max > 0.1 and dark_max < 0.4, "마을 소리가 잦아듦 · 살짝만 어두워짐 (무섭지 않게 — %.2f)" % dark_max)
+	check(int(seen.get("held", 0)) == all.size() and all.size() > 0, "모두 꽃을 한 송이씩 듦 (%d / %d)" % [int(seen.get("held", 0)), all.size()])
+	check(veil_max > 0.9 and cam_at_grave, "화면이 잠깐 잠긴 사이 무덤가로 (카메라가 무덤을 봄)")
+	check(seen.get("before_stone") == false and seen.get("stone") == true and int(seen.get("flowers0", 9)) == 0, "돌이 세워짐 → 그다음에 꽃")
+	check(int(seen.get("flowers1", 0)) >= mini(GraveView.FLOWER_MAX, all.size()) and int(seen.get("held1", 9)) == 0, "꽃을 내려놓음 (%d송이 · 손에 남은 꽃 %d)" % [int(seen.get("flowers1", 0)), int(seen.get("held1", 9))])
+	check(cap.contains(gone.name) and cap.contains("세상을 떠났다") and cap.contains("이별") and not cap.contains("{"), "카드: %s" % cap.replace("\n", " / "))
+	check(float(seen.get("light", 0.0)) > 0.5, "돌 위에 작은 빛이 머묾")
+	var sh2 := gv.shown(gone.id)
+	check(bool(sh2["stone"]) and int(sh2["flowers"]) == GraveView.FLOWER_MAX and float(sh2["light"]) > 0.5 and vw.grave_hide.is_empty() and gv.stage.is_empty()
+		and gv._hands.is_empty(), "끝난 뒤: 돌 · 꽃 · 빛이 그대로 남음")
+	check(cam.hold.is_empty() and d.tw_val("veil") <= 0.0 and not d._veil.visible, "카메라·화면이 돌아옴")
+	var e := StageDirector._entry(v, "그 위에 돌을 세웠다")
+	check(e.is_empty() or String(e.get("card", "")) == "first_death", "연대기의 그 줄이 그림 카드로")
+	check(fs.play_count("first_death") == 1, "본 횟수")
+	_gframes(scene, 4.5)
+	check(not d._dolls.busy() and vw.staged.is_empty(), "사람들이 걸어서 제자리로 돌아감")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+func test_death_skip_and_aware() -> void:
+	fs.reset()
+	Village.start_aware = true                        # 지켜보는 이를 안 마을
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	var fam := _family(v)
+	var gone: Resident = fam[0] if fam.size() == 3 else _grown(v, [])
+	v.kill(gone, "굶주림")
+	vw.sync(0.1)
+	d.watch(v, true)
+	check(d.playing() and d.id == "first_death", "굶주림으로 떠나도 같은 연출")
+	check(v.aware == not (d._cast["roles"]["pray"] as Array).is_empty(), "안 뒤에는 짧게 무릎 꿇는 사람이 있음")
+	_gframes(scene, 5.4)
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(gv != null and not gv._hands.is_empty() and vw.grave_hide.has(gone.id), "행렬 중: 손에 꽃 · 돌은 아직")
+	d.tap()
+	check(d.playing() and d.skip_shown(), "첫 톡 = [건너뛰기]만")
+	d.tap()
+	check(not d.playing() and bool(d.log[0]["skipped"]), "두 번째 톡 = 건너뜀")
+	gv.step(0.1)
+	vw.sync(0.1)
+	var sh := gv.shown(gone.id)
+	check(bool(sh["stone"]) and int(sh["flowers"]) == GraveView.FLOWER_MAX and vw.grave_hide.is_empty() and gv._hands.is_empty() and gv.stage.is_empty(),
+		"건너뛰어도 무덤엔 돌과 꽃")
+	check(not d._dolls.busy() and vw.staged.is_empty() and vw.stage_say.is_empty() and (scene.get("cam") as JarCamera).hold.is_empty() and not d._veil.visible,
+		"건너뛰면 곧바로 제자리 (인형 · 말풍선 · 카메라 · 화면)")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+func test_death_more_and_fold() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var cam: JarCamera = scene.get("cam")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	# 같은 때 둘이 떠남 (첫 죽음): 연출 한 번 — 자막에 두 이름
+	var a := _grown(v, [])
+	var b := _grown(v, [a])
+	v.kill(a, "굶주림")
+	v.kill(b, "굶주림")
+	vw.sync(0.1)
+	d.watch(v, true)
+	check(d.playing() and d.id == "first_death" and String(d._cast["names"]["who"]) == "%s, %s" % [a.name, b.name], "같은 때 둘 → 연출 한 번 · 두 이름 (%s)" % String(d._cast.get("names", {}).get("who", "")))
+	d.skip()
+	d.watch(v, true)
+	_gframes(scene, 0.5)
+	check(not d.playing() and not d.minis_busy() and d.log.size() == 1, "다른 한 사람은 따로 연출하지 않음")
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(bool(gv.shown(b.id)["stone"]) and int(gv.shown(b.id)["flowers"]) == GraveView.FLOWER_MAX, "그 사람의 무덤에도 돌과 꽃")
+	# 조금 뒤 또 한 사람: 장례 연출 직후 (FOLD_T 안) — 연출 없이 연대기 줄만
+	var c := _grown(v, [])
+	var n_book := v.book.size()
+	v.kill(c, "병")
+	vw.sync(0.1)
+	d.watch(v, true)
+	_gframes(scene, 0.5)
+	check(not d.playing() and not d.minis_busy() and d.mini_log.is_empty() and v.book.size() > n_book, "잇달아 떠나면 연출은 접고 연대기 줄만")
+	# 한참 뒤: 짧은 판
+	d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+	var e := _grown(v, [])
+	var hold0 := cam.hold.duplicate()
+	var speed0: int = (scene.get("clock") as JarClock).speed_i
+	v.kill(e, "노환")
+	vw.sync(0.1)
+	d.watch(v, true)
+	_gframes(scene, 0.2)
+	check(not d.playing() and d.minis_busy() and d.mini_log.size() == 1 and String(d.mini_log[0]["id"]) == "death_more", "그다음부터는 짧은 판")
+	check(gv.stage.has(e.id) and bool(gv.shown(e.id)["stone"]) and int(gv.shown(e.id)["flowers"]) <= 1, "짧은 판: 돌은 있고 꽃이 한 송이씩")
+	check(cam.hold == hold0 and (scene.get("clock") as JarClock).speed_i == speed0 and d.mouse_filter == Control.MOUSE_FILTER_IGNORE and not d.visible,
+		"카메라 · 병 시간 · 입력을 붙잡지 않음")
+	_gframes(scene, 1.8)
+	check(int(gv.shown(e.id)["flowers"]) == GraveView.FLOWER_MAX, "꽃이 다 놓임")
+	_gframes(scene, 1.4)
+	check(not d.minis_busy() and gv.stage.is_empty() and gv._held.is_empty() and float(gv.shown(e.id)["light"]) > 0.5
+		and int(gv.shown(e.id)["flowers"]) == GraveView.FLOWER_MAX, "3초 뒤 끝 — 돌 · 꽃 · 빛은 남음 (짧은 판 %s · 쥐여 준 꽃 %d)" % [str(d.minis_busy()), gv._held.size()])
+	_gframes(scene, 3.0)
+	check(not d._dolls.busy() and vw.staged.is_empty(), "이웃은 제 일로")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+func test_death_away() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	var a := _grown(v, [])
+	v.kill(a, "노환")
+	vw.sync(0.1)
+	d.watch(v, false)                                 # 따라잡는 중
+	check(not d.playing() and not d.minis_busy(), "따라잡는 중엔 장례 연출 없음")
+	d.watch(v, true)
+	_gframes(scene, 0.5)
+	check(not d.playing() and not d.minis_busy() and d.log.is_empty() and d.mini_log.is_empty() and fs.play_count("first_death") == 0, "돌아와서 다시 틀지 않음")
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(gv != null and bool(gv.shown(a.id)["stone"]) and int(gv.shown(a.id)["flowers"]) == GraveView.FLOWER_MAX and vw.grave_hide.is_empty(), "그래도 무덤엔 돌과 꽃")
+	var b := _grown(v, [])
+	v.kill(b, "노환")
+	v.advance(StageDirector.STALE + 30.0)
+	d.watch(v, true)
+	_gframes(scene, 0.5)
+	check(not d.playing() and not d.minis_busy() and d.mini_log.is_empty(), "오래전 일은 짧은 판도 없음")
+	var d2 := StageDirector.new(scene)
+	d2.watch(v, true)
+	check(not d2.playing() and not d2.minis_busy() and (d2._pend.get(v, []) as Array).is_empty(), "막 연 병의 옛 무덤은 연출하지 않음")
+	d2.free()
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 장례를 다 봄 = 건너뜀 = 아무도 보지 않음: 자리·연대기·말·난수 상태가 같다 (ADR-0001)
+func test_death_sim_same() -> void:
+	Village.start_aware = false
+	var sigs: Array = []
+	var plays: Array = []
+	for mode: String in ["staged", "skipped", "unwatched"]:
+		fs.reset()
+		var scene := _scene()
+		var v: Village = scene.get("village")
+		var d: StageDirector = scene.get("director")
+		var vw: VillageView = scene.get("view")
+		v.advance(Balance.HOUR)
+		if mode != "unwatched":
+			d.watch(v, false)
+		var fam := _family(v)
+		v.kill(fam[0] if fam.size() == 3 else _grown(v, []), "노환")
+		for i in 420:                                  # 현실 42초
+			if mode != "unwatched":
+				_gframes(scene, 0.1)
+				if d.playing():
+					if mode == "skipped" and d.t > 2.0:
+						d.skip()
+				else:
+					d.watch(v, true)
+			if i % 10 == 9:
+				v.advance(Balance.STEP)
+			if i == 240:                               # 그 사이 또 한 사람 (짧은 판 — 시험은 접는 시간을 건너뜀)
+				d._last_death.clear()
+				v.kill(_grown(v, []), "병")
+		plays.append(d.log.map(func(x: Dictionary) -> String: return String(x["id"])) + d.mini_log.map(func(x: Dictionary) -> String: return String(x["id"])))
+		var sg := _book_sig(v)
+		for g: Dictionary in v.graves:
+			sg += "|%d,%.3f,%.3f,%.1f" % [int(g["id"]), float(g["x"]), float(g["y"]), float(g["t"])]
+		for p in v.people:
+			sg += "|%.4f,%.4f,%s,%s" % [p.x, p.y, p.action, p.doing]
+		sigs.append(sg)
+		_drop(scene)
+	check(sigs[0] == sigs[1], "장례를 다 본 병 = 건너뛴 병")
+	check(sigs[0] == sigs[2], "장례를 본 병 = 아무도 보지 않은 병 (자리·하는 일·무덤·연대기·말·난수 상태)")
+	check("first_death" in plays[0] and "death_more" in plays[0] and (plays[2] as Array).is_empty(), "본 병: 첫 죽음 · 짧은 판 (%s) · 안 본 병: 없음" % str(plays[0]))
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 무덤은 남는다: 꽃은 며칠 뒤 시들어 사라지고 돌은 그대로. 시뮬레이션의 장례 행렬은 꽃을 들고 걷는다
+func test_grave_stays() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	var a := _grown(v, [])
+	v.kill(a, "노환")
+	vw.sync(0.1)
+	d.watch(v, false)
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(gv != null, "무덤이 생기면 그 마을 화면에 꽃·빛이 붙음")
+	if gv == null:
+		_drop(scene)
+		return
+	gv.step(0.5)
+	var want := 0
+	var nm := "%s의 장례에 가는 중" % a.name
+	for r in v.people:
+		if r.action == "pray" and r.anim == "walk" and r.doing == nm:
+			want += 1
+	check(gv._hands.size() == want, "장례에 가는 사람은 꽃을 듦 (%d명)" % want)
+	check(gv._marks.has(a.id) and int(gv.shown(a.id)["flowers"]) == GraveView.FLOWER_MAX, "새 무덤: 꽃")
+	var g: Dictionary = v.graves[0]
+	var t0 := float(g["t"])
+	g["t"] = v.t - (GraveView.FLOWER_FULL + GraveView.FLOWER_DAYS) * 0.5 * Balance.DAY      # (시험) 며칠 지난 무덤으로
+	gv.step(0.5)
+	var mid := int(gv.shown(a.id)["flowers"])
+	check(mid > 0 and mid < GraveView.FLOWER_MAX and float(gv.shown(a.id)["light"]) <= 0.0 and gv._hands.is_empty(), "며칠 뒤: 꽃이 줄고 빛은 스러짐 (%d송이)" % mid)
+	g["t"] = v.t - (GraveView.FLOWER_DAYS + 0.5) * Balance.DAY
+	gv.step(0.5)
+	vw.sync(0.1)
+	check(int(gv.shown(a.id)["flowers"]) == 0 and bool(gv.shown(a.id)["stone"]) and not gv._marks.has(a.id) and v.graves.size() == 1 and vw.grave_hide.is_empty(),
+		"더 지나면: 꽃은 사라지고 돌은 남음")
+	g["t"] = t0
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()

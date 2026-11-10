@@ -76,6 +76,7 @@
 
 | kind | 내는 곳 | v | at / who | 읽는 곳 |
 |---|---|---|---|---|
+| `&"died"` (**아직 내지 않음 — 자리만**, E1-5 2026-11-10) | (없음) 지금은 `view/stage_director.gd`의 `_read_graves`가 `Village.graves`를 무리마다 커서로 읽어 같은 모양의 것을 화면 쪽에서만 만든다 (시뮬레이션 사건 줄에는 들어가지 않음). 시뮬레이션이 낸다면: `Village.kill` 끝, `VillageEra.on_death` 바로 뒤 (무덤이 생긴 다음) | `{"first": bool (이 마을의 첫 무덤), "name": String, "grave": int (무덤 id), "why": String}` | `who` = 떠난 사람 id · `at` = 무덤 자리 | `view/stage_director.gd` (처음이면 첫 죽음과 장례 연출 `first_death` · 그 뒤로는 짧은 판 `death_more` · 겹치면 하나로), `view/grave_view.gd` (돌 · 꽃 · 빛), `tests/first_moments_tests.gd` |
 | `&"born"` | `Village._give_birth` (아이가 태어남 — 연대기 줄 바로 뒤) | `{"first": bool (이 마을에서 처음 태어난 아이), "mom": int (엄마 id), "home": int (집 id)}` | `who` = 아기 · `at` = 집 | `view/stage_director.gd` (커서 — 보고 있는 무리면 첫 아기 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
 | `&"wish_granted"` | `Village.grant_wish` (별지기가 소원을 들어줌 — 연대기 줄 바로 뒤) | `{"id": int (편지 id), "how": StringName (&"help" — 짓는 법을 일러 줌), "type": String (지을 것)}` | `who` = 소원을 빈 사람 (세상을 떠났으면 그 id 그대로 — 읽는 쪽이 가까운 사람으로) | `view/stage_director.gd` (커서 — 처음이면 첫 기적 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
 
