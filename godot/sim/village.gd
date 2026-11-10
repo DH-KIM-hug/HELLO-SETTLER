@@ -2104,6 +2104,11 @@ func kill(p: Resident, why: String) -> void:
 			raise_fear(q, Balance.FEAR_SAW_DEATH)
 	recalc_fear()
 	VillageEra.on_death(self, p)          # 무덤 · 장례 행렬 · 발견 '장례' (A6 — DISCOVERIES P4)
+	# 사건 &"died" (event-kinds.md — E1-5): 무덤이 생긴 다음. 난수를 쓰지 않고, 지켜보는지 읽지 않는다 (연출은 화면이 — EVENTS_STAGING 5)
+	if not graves.is_empty() and int((graves[graves.size() - 1] as Dictionary)["id"]) == p.id:
+		var gr: Dictionary = graves[graves.size() - 1]
+		emit(&"died", {"who": p.id, "at": Vector2(float(gr["x"]), float(gr["y"])),
+			"v": {"first": graves.size() == 1, "name": p.name, "grave": p.id, "why": why}})
 
 
 func idle_chatter() -> void:

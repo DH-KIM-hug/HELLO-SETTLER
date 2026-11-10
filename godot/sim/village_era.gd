@@ -499,6 +499,15 @@ static func is_market_day(v: Village) -> bool:
 
 
 # ───────────────────────── 장례 · 묘지 (P4) ─────────────────────────
+const MOURN := "mourn"                           # 깨닫기 전 장례 행렬의 하는 일 (서서 고개 숙임 — 기도가 아님: 믿음·두려움 셈·저녁 기도 소리에 들지 않는다)
+const FUNERAL_DOING := "%s의 장례에 가는 중"
+
+
+## 장례 행렬에 낀 사람인가 (걷는 중 · 무덤가에 머무는 중) — 화면이 읽음 (꽃 · 고개 숙임)
+static func in_funeral(r: Resident) -> bool:
+	return (r.action == MOURN or r.action == "pray") and r.doing.ends_with(FUNERAL_DOING % "")
+
+
 ## 죽음 (Village.kill 끝): 무덤 자리 · 장례 행렬 · 첫 죽음이면 발견 '장례'
 static func on_death(v: Village, p: Resident) -> void:
 	var fam: Array[Resident] = []
@@ -528,9 +537,12 @@ static func on_death(v: Village, p: Resident) -> void:
 		v.log_line("사람들이 %s%s 묘지에 묻고 오래 곁에 서 있었다." % [p.name, Village.josa(p.name, "을", "를")])
 	else:
 		v.log_line("사람들이 %s%s 마을 끝에 묻고 돌을 하나 세웠다." % [p.name, Village.josa(p.name, "을", "를")])
-	# 장례 행렬: 가족 + 일손을 놓을 수 있는 어른 몇 (밤이면 없음)
+	# 장례 행렬: 가족 + 일손을 놓을 수 있는 어른 몇 (밤이면 없음).
+	# 깨닫기 전에는 기도가 없다 (GAME_DESIGN 6.5 · EVENTS_STAGING 5) — 무릎 꿇지 않고 돌 곁에 서서 고개를 숙인다 (MOURN: 믿음·기도 셈에 들지 않음).
+	# 지켜보는 이를 안 뒤에만 무릎 (기도 몸짓 "pray"). 누가 가는지·자리·머무는 시간은 둘 다 같다.
 	if v.is_night():
 		return
+	var kneel := v.aware
 	var walkers: Array[Resident] = []
 	for q in fam:
 		if not q.sleeping and not q.is_baby() and q.sick_left <= 0.0:
@@ -540,7 +552,7 @@ static func on_death(v: Village, p: Resident) -> void:
 			break
 		if q in walkers or q.sleeping or q.is_baby() or q.sick_left > 0.0 or q.age < 2.5:
 			continue
-		if q.action in Awakening.FREE_ACTIONS or q.action == "work":
+		if q.action in Awakening.FREE_ACTIONS or q.action == "work" or q.action == MOURN:     # 다른 무덤가에 서 있던 사람도 (전과 같이)
 			walkers.append(q)
 	var n := walkers.size()
 	for i in n:
@@ -548,13 +560,13 @@ static func on_death(v: Village, p: Resident) -> void:
 		ResidentAI.cancel(v, q)
 		var a := TAU * float(i) / float(maxi(1, n)) + 0.4
 		var sp := pos + Vector2(cos(a), sin(a)) * (1.0 + 0.4 * (i % 2))
-		q.action = "pray"
-		q.last_action = "pray"
-		q.doing = "%s의 장례에 가는 중" % p.name
+		q.action = "pray" if kneel else MOURN
+		q.last_action = q.action
+		q.doing = FUNERAL_DOING % p.name
 		q.steps.append(ResidentAI.walk(sp.x, sp.y))
 		var f := sp + (pos - sp).normalized() * 0.03
 		q.steps.append(ResidentAI.walk(f.x, f.y))
-		q.steps.append(ResidentAI.act(Balance.FUNERAL_TIME, "pray"))
+		q.steps.append(ResidentAI.act(Balance.FUNERAL_TIME, "pray" if kneel else "idle"))
 	if n > 0:
 		v.stats["funerals"] = int(v.stats.get("funerals", 0)) + 1
 		v.speak(walkers[0], "잘 가요, %s" % p.name, 7)

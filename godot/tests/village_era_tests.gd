@@ -23,7 +23,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 마을 시대 건물 (A6) · 등불 옮기기 (A11)")
 	run.timed(self, ["test_locked", "test_chief_priorities", "test_chief_builds", "test_herbalist", "test_clinic", "test_chapel",
-		"test_plaza", "test_funeral", "test_watchtower", "test_ferry", "test_era_save",
+		"test_plaza", "test_funeral", "test_funeral_mourn", "test_watchtower", "test_ferry", "test_era_save",
 		"test_lamp_rules", "test_lamp_preview_world", "test_lamp_preview_jar", "test_lamp_save", "test_lamp_ui", "test_fast_view"])
 
 
@@ -385,6 +385,90 @@ func test_funeral() -> void:
 	check(v.graves[0]["x"] == v.graves[0]["x"] and not bool(v.graves[0]["yard"]), "먼저 묻힌 무덤은 그 자리 그대로")
 	var c := through_bytes(v)
 	check(c.graves.size() == 2 and String(c.graves[1]["name"]) == q.name, "저장/불러오기: 무덤")
+
+
+## 장례 행렬의 몸짓 (E1-5): 깨닫기 전에는 기도가 없다 — 무릎 꿇지 않고 서서 고개 숙임 (하는 일 MOURN · 몸짓 idle), 믿음·기도 셈에 들지 않는다.
+## 지켜보는 이를 안 뒤에만 무릎 (하는 일 · 몸짓 "pray"). 누가 가는지 · 자리 · 머무는 시간은 둘 다 같다.
+func _funeral_of(v: Village, aware: bool) -> Dictionary:
+	var c := through_bytes(v)
+	c.water.offline = true
+	c.aware = aware
+	var p: Resident = null
+	for r in c.people:
+		if r.partner >= 0 and r.is_adult():
+			p = r
+			break
+	var belief := {}
+	for r in c.people:
+		belief[r.id] = r.belief
+	var f0 := int(c.stats.get("funerals", 0))
+	var b0 := c.book.size()
+	c.kill(p, "노환")
+	var ws: Array = c.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r))
+	var words: Array = []                         # 이 죽음이 남긴 연대기 줄 · 행렬의 말
+	for i in range(b0, c.book.size()):
+		words.append(String(c.book[i]["text"]))
+	for r: Resident in ws:
+		if r.say != "":
+			words.append(r.say)
+	var plan := []
+	for r: Resident in ws:
+		plan.append([r.id, r.steps.size(), Vector2(float(r.steps[0]["x"]), float(r.steps[0]["y"])), float(r.steps[r.steps.size() - 1]["left"])])
+	return {"v": c, "gone": p, "walkers": ws, "plan": plan, "belief": belief, "funerals": int(c.stats.get("funerals", 0)) - f0, "words": words}
+
+
+func test_funeral_mourn() -> void:
+	var v := proto(50)
+	v.advance(9.0 * Balance.HOUR)                 # 낮 (16시)
+	# 깨닫기 전
+	var a := _funeral_of(v, false)
+	var va: Village = a["v"]
+	var wa: Array = a["walkers"]
+	check(wa.size() >= 2 and wa.size() <= 8 and int(a["funerals"]) == 1, "깨닫기 전에도 장례 행렬은 감 (%d명)" % wa.size())
+	var plain := func(r: Resident) -> bool:
+		var last: Dictionary = r.steps[r.steps.size() - 1]
+		return r.action == VillageEra.MOURN and r.last_action == VillageEra.MOURN and String(last["anim"]) == "idle" and last["done"] == null
+	check(wa.all(plain),
+		"깨닫기 전: 하는 일은 기도가 아님 (%s) · 머무는 몸짓은 서 있기 · 끝나도 믿음 셈 없음" % (String((wa[0] as Resident).action) if not wa.is_empty() else "-"))
+	var knelt := 0
+	var prayed := 0
+	var stood := 0
+	for i in 360:                                 # 여섯 시간 (주민은 제 걸음 — 무덤까지 한참 걸린다)
+		va.advance(60.0)
+		for r: Resident in wa:
+			if not VillageEra.in_funeral(r):
+				continue
+			if r.anim == "pray":
+				knelt += 1
+			if r.action == "pray":
+				prayed += 1
+			if r.anim == "idle" and r.steps.size() == 1:
+				stood += 1
+	check(knelt == 0 and prayed == 0 and stood >= 3, "깨닫기 전: 행렬 내내 아무도 무릎 꿇지 않음 · 기도로 세지 않음 (돌 곁에 서 있던 걸음 %d)" % stood)
+	var gained := wa.filter(func(r: Resident) -> bool: return r.belief > float(a["belief"][r.id]) + 1e-6)
+	check(gained.is_empty(), "깨닫기 전: 장례로 믿음이 오르지 않음")
+	va.advance(8.0 * Balance.HOUR)
+	check(not wa.any(func(r: Resident) -> bool: return r.action == VillageEra.MOURN), "장례가 끝나면 제 일로 돌아감")
+	# 깨달은 뒤 — 같은 사람들이 같은 자리로, 무릎
+	var b := _funeral_of(v, true)
+	var wb: Array = b["walkers"]
+	check(b["plan"] == a["plan"], "깨닫기 전·뒤: 가는 사람 · 자리 · 머무는 시간이 같다 (%d · %d)" % [(a["plan"] as Array).size(), (b["plan"] as Array).size()])
+	check(wb.all(func(r: Resident) -> bool: return r.action == "pray" and String(r.steps[r.steps.size() - 1]["anim"]) == "pray" and r.steps[r.steps.size() - 1]["done"] == null),
+		"깨달은 뒤: 무덤가에서 무릎 (기도 몸짓) — 믿음 셈은 없음 (전과 같음)")
+	var vb: Village = b["v"]
+	var kn := 0
+	for i in 360:
+		vb.advance(60.0)
+		for r: Resident in wb:
+			if VillageEra.in_funeral(r) and r.anim == "pray":
+				kn += 1
+	check(kn >= 3, "깨달은 뒤: 무덤가에서 무릎 꿇고 머묾 (걸음 %d)" % kn)
+	# 말: 깨닫기 전 장례의 연대기 줄 · 말풍선에 기도·지켜보는 이 이야기 없음
+	var bad := ["기도", "제단", "거인", "하늘의 분", "게임", "플레이어"]
+	var words: Array = a["words"]
+	var hit := words.filter(func(x: String) -> bool: return bad.any(func(w: String) -> bool: return x.contains(w)))
+	check(hit.is_empty(), "깨닫기 전 장례: 말 · 연대기에 기도·제단 이야기 없음 (%d줄) %s" % [words.size(), str(hit)])
+	check(words.size() >= 2, "장례는 연대기 한 줄과 인사 한마디를 남김")
 
 
 # ───────────────────────── 망루 ─────────────────────────

@@ -120,6 +120,7 @@ var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Village.graves)
 var _grave_key := ""
 var grave_hide: Dictionary = {}     # (E1-5 첫 죽음 연출) 무덤 id → true: 돌을 세우는 박자까지 그 무덤을 그리지 않음 (화면만 — view/grave_view.gd가 넣고 뺌)
+var grave_k := 1.0                  # (E1-5 무덤이 남는다) 홀로 선 무덤 돌의 크기 몫 — 멀리서 봐도 화면에서 보이는 크기로 (화면만 — view/grave_view.gd가 확대에 맞춰 정함. 묘지 안의 돌은 그대로)
 var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
 var _raft_era := -1             # (E3-6) 뗏목 모양을 정한 시대 (바뀌면 다시 만듦: 개척 = 갈대 뗏목 · 그 뒤 = 잎 배)
 ## (E3-6) 물 건너는 자리 — [{"kind": "bridge"|"stones", "c": Vector2 가운데, "u": Vector2 건너는 방향, "half": 반 길이, "y": 높이}]
@@ -775,7 +776,7 @@ func _face_partner(r: Resident, m: ResidentModel) -> void:
 
 ## (A6) 무덤: 흙 둔덕 + 작은 비석 (묘지 안이면 줄지어, 묘지가 없을 땐 마을 끝에 홀로)
 func _sync_graves() -> void:
-	var key := "%d|%d|%s" % [v.graves.size(), v.water.rot, "" if grave_hide.is_empty() else str(grave_hide.keys())]
+	var key := "%d|%d|%s|%.2f" % [v.graves.size(), v.water.rot, "" if grave_hide.is_empty() else str(grave_hide.keys()), grave_k]
 	if key == _grave_key:
 		return
 	_grave_key = key
@@ -789,7 +790,7 @@ func _sync_graves() -> void:
 				continue
 			var gx := float(g["x"])
 			var gz := float(g["y"])
-			cards.append(["grave", Vector3(gx, gy(gx, gz), gz), 0.9 + fposmod(float(g["id"]) * 0.37, 0.2), int(g["id"]) % 2 == 1])
+			cards.append(["grave", Vector3(gx, gy(gx, gz), gz), (0.9 + fposmod(float(g["id"]) * 0.37, 0.2)) * GraveView.stone_k_of(g, grave_k), int(g["id"]) % 2 == 1])
 		if not cards.is_empty():
 			_graves.add_child(Bld2D.multi(cards))
 		return
@@ -805,7 +806,7 @@ func _sync_graves() -> void:
 		var x := float(g["x"])
 		var z := float(g["y"])
 		var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG) + fposmod(float(g["id"]) * 0.37, 0.3) - 0.15
-		xfs.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(x, gy(x, z), z)))
+		xfs.append(Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * GraveView.stone_k_of(g, grave_k)), Vector3(x, gy(x, z), z)))
 	if xfs.is_empty():
 		return
 	for p: Array in parts:
