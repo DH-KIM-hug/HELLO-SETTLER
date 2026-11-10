@@ -447,6 +447,8 @@ func _process(dt: float) -> void:
 		for vv: Array in village_views():
 			(vv[1] as VillageView).sync(dt)
 		_follow(dt)
+		for vv: Array in village_views():     # [하루의 흐름 E2-1] 어른의 작은 하루 장면 (기지개·세수·수다·별 보기) — 화면만 (view/daily_view.gd)
+			DailyView.of(vv[1]).step(dt, tap_react)
 		if tap_react != null:             # [톡 반응] 주민을 놓은 뒤에 인형만 움직임 (시뮬 자리는 그대로)
 			for vv: Array in village_views():          # (Q2-d) 강아지와 사람: 화면이 시킨 몸짓 (움찔·멍!·좋아서 납작 — view/dog_pals.gd)
 				var pals: DogPals = (vv[1] as VillageView).dog_pals
