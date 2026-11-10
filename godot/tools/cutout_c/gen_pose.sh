@@ -1,5 +1,5 @@
 #!/bin/zsh
-# usage: gen_pose.sh <walk|carry> <view> [tag]  — v4: pose reference sheet (pose_ref.py) as the 3rd image
+# usage: gen_pose.sh <walk|carry|idle> <view> [tag]  — v4: pose reference sheet (pose_ref.py) as the 3rd image (idle: 3/4 views only, v10)
 T=${0:A:h}; G=${T:h:h}
 D=$G/art/cutout/woman_c/raw
 OUT=$D/$1_$2${3:+_$3}.png

@@ -232,6 +232,12 @@ func _strip_setup(_dt: float) -> int:
 	plate.position = _g3(C) + Vector3(0, 0.02, 0)
 	_plate_y = plate.position.y + 0.005
 	var look := Lib.concept_look("woman")
+	# CUTC_DYE="4,12,28,32,36,45,49,53" (2026-11-10 양말·신 색 점검): 띠의 두 인형에 이 물감 8칸을 입힘 (없으면 그린 색 그대로)
+	if OS.get_environment("CUTC_DYE") != "":
+		var dd: Array = []
+		for t in OS.get_environment("CUTC_DYE").split(","):
+			dd.append(int(t))
+		look["dye"] = dd
 	var pal: PackedVector3Array = CutoutResident.game_material().get_shader_parameter("palette")
 	for i in 8:
 		var o: MeshInstance3D = Doll.new()
@@ -378,6 +384,11 @@ func _live_setup(_dt: float, ppu: float) -> int:
 		m._d_prop = -2
 		m._f_hat = -9
 		m.frames_force = pair[1]
+		if OS.get_environment("CUTC_DYE") != "":              # 살아 있는 장면에도 같은 물감 (두 사람 모두)
+			var de: Array = []
+			for t in OS.get_environment("CUTC_DYE").split(","):
+				de.append(int(t))
+			m.dlook["dye"] = de
 		# CUTC_BOOTDBG=1 (2026-11-10 "발이 이상함" — 발 디딤 재기): 방식 C 사람의 신을 파란 물감(21), 양말을 크림(48)으로 —
 		# 화면에서 신만 색으로 골라 디딘 발이 제자리에 있는지 잰다 (tools 전용, 게임에는 영향 없음)
 		if int(pair[1]) == 1 and OS.get_environment("CUTC_BOOTDBG") == "1":
@@ -451,10 +462,10 @@ func _live_loop(dt: float) -> int:
 	dt = 1.0 / 60.0               # 사진 시계: 장면마다 1/60초 (창 FPS와 무관하게 같은 걸음)
 	_lt += dt
 	_place(_lt, dt)
-	if OS.get_environment("CUTC_LOCK") == "0":          # 발 붙이기(frame_doll.gdshader foot_lock)를 끄고 찍기 — 앞뒤 비교
+	if OS.get_environment("CUTC_LOCK") != "":           # 발 붙이기 세기(frame_doll.gdshader foot_lock)를 이 값으로 찍기 — 0 / 0.5 / 1 비교
 		var fm := scene.view.residents[_B.id] as CutoutResident
 		if fm.fdoll != null:
-			(fm.fdoll.material_override as ShaderMaterial).set_shader_parameter("foot_lock", 0.0)
+			(fm.fdoll.material_override as ShaderMaterial).set_shader_parameter("foot_lock", float(OS.get_environment("CUTC_LOCK")))
 	if OS.get_environment("CUTC_REACT") == "1":         # 톡 반응 값(폴짝·찌그러짐·기울기·돌아섬)을 두 인형에 똑같이 — 방식 C 인형이 컷아웃과 같게 움직이는지 (2초 돌림)
 		var ph := fmod(_lt, 2.0) / 2.0
 		var sq := 0.2 * sin(ph * TAU * 2.0)

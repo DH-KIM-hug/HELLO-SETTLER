@@ -41,6 +41,7 @@ PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
          ("idle", "idle", [0, 1, 2, 3]), ("hold", "idle", [4, 5, 6, 7])]
 POSE_SHEETS = True      # v4: walk / carry sheets traced from pose_ref.py (frame 1 = contact R in every view)
+IDLE_POSE_VIEWS = ("q_front", "q_back")    # v10: standing sheets traced from the standing reference (pose_ref.py hybrid idle) — same scale / root as walk
 K_POSE = CHIN_RIG / float(PR.GROUND - PR.CHIN_Y)      # rig per template px (1.94): the traced sheets share the template's scale
 HEAD_DX = {v: (8.0 if v == "q_front" else (-4.0 if v == "q_back" else 0.0)) for v in VIEWS}   # template head centre - root (px)
 FOOT_DEPTH = {v: float(PR.geometry(v)["foot"]["R"][1]) for v in VIEWS}    # near foot below the root ground line (px, 3/4 views)
@@ -306,7 +307,7 @@ def main():
     ext = [0.0, 0.0, 0.0]   # max |x|, max y (body top incl. sack), min y (below the root ground line: the forward foot in 3/4 views)
     for name, frs in sheets.items():
         clip_n, view_n = name.split("_", 1)
-        pose = POSE_SHEETS and clip_n in ("walk", "carry")
+        pose = POSE_SHEETS and (clip_n in ("walk", "carry") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS))
         dmed = float(np.median([f["head"]["d"] for f in frs]))
         if pose:
             # traced from the cell template: the template's scale, root = (cell centre, ground line 470) in every frame
