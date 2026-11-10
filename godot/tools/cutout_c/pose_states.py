@@ -32,6 +32,8 @@ ARM = 95.0        # shoulder -> fist reach (px)
 #   head (f, h) centre of the head disc · hang = head tilt (rad, + = back, - = nodding forward) · sh / hip = shoulder / hip centre
 #   near / far = (elbow, fist) · boots = [(f, h, near?)] · mound = seated skirt outline (None = standing skirt from the hips)
 #   tool = blade direction (f, h) of a two-handed tool, grip = the fists' midpoint · food = True: bread in the near fist
+#   tool_short = the direction for the SHORT tools (sickle, mallet — v12): at the top of the swing the fists are beside the head,
+#     so a short tool lying back over the head (the hoe's direction) was hidden behind it; it points up and FORWARD instead
 #   ground = True: the whole figure rests on the ground (sit / kneel): every point is projected with the mild ground slope
 Q = {
     "sit_a": dict(head=(-18, 262), sh=(-22, 172), hip=(-40, 34), near=((6, 122), (42, 84)), far=((14, 126), (56, 88)),
@@ -54,7 +56,7 @@ Q = {
     "hoe_lift": dict(head=(6, 332), sh=(0, 240), hip=(-4, 85), near=((48, 196), (80, 214)), far=((30, 190), (58, 190)),
                      boots=[(-28, 0, True), (24, 0, False)], tool=(0.86, 0.5)),
     "hoe_top": dict(head=(-10, 340), sh=(-10, 247), hip=(-4, 87), near=((54, 262), (86, 304)), far=((40, 250), (70, 280)),
-                    boots=[(-28, 0, True), (24, 0, False)], tool=(-0.42, 0.9)),
+                    boots=[(-28, 0, True), (24, 0, False)], tool=(-0.42, 0.9), tool_short=(0.62, 0.78)),
     "hoe_strike": dict(head=(74, 290), hang=-0.3, sh=(40, 214), hip=(-12, 78), near=((84, 190), (106, 150)), far=((66, 196), (86, 174)),
                        boots=[(-28, 0, True), (24, 0, False)], tool=(0.74, -0.67)),
     "hoe_rest": dict(head=(40, 318), hang=-0.12, sh=(20, 232), hip=(-8, 84), near=((62, 196), (88, 170)), far=((46, 204), (70, 194)),
@@ -68,6 +70,19 @@ Q = {
                         boots=[(-9, 0, True), (16, 0, False)]),
     "gather_stand": dict(head=(6, 332), sh=(0, 240), hip=(0, 85), near=((6, 178), (36, 150)), far=((2, 180), (-8, 148)),
                          boots=[(-9, 0, True), (16, 0, False)]),
+    # v12 (states5: "bend deeper and for ~4 of 8 phases like the old doll"): the pick-up of its own sheets (gather_q_*). The deep
+    # bend folds at the hips until the back is level and the head hangs below the hips; the head never goes further forward than
+    # the v11 drawing did (the atlas cell stays 134 px wide), the hips go back instead.
+    "pick_half": dict(head=(70, 262), hang=-0.6, sh=(38, 204), hip=(-18, 84), near=((66, 138), (88, 76)), far=((2, 190), (-28, 164)),
+                      boots=[(-9, 0, True), (16, 0, False)]),
+    "pick_full": dict(head=(72, 162), hang=-1.2, sh=(30, 152), hip=(-44, 92), near=((62, 84), (86, 18)), far=((-6, 168), (-40, 156)),
+                      boots=[(-9, 0, True), (16, 0, False)]),
+    "pick_grab": dict(head=(72, 156), hang=-1.25, sh=(30, 148), hip=(-44, 92), near=((66, 80), (96, 16)), far=((-6, 166), (-40, 154)),
+                      boots=[(-9, 0, True), (16, 0, False)]),
+    "pick_rise": dict(head=(68, 250), hang=-0.55, sh=(36, 198), hip=(-18, 84), near=((58, 140), (72, 98)), far=((2, 190), (-28, 164)),
+                      boots=[(-9, 0, True), (16, 0, False)]),
+    "pick_stand": dict(head=(6, 332), sh=(0, 240), hip=(0, 85), near=((6, 178), (36, 150)), far=((2, 180), (-8, 148)),
+                       boots=[(-9, 0, True), (16, 0, False)]),
 }
 # front / back poses: x = image x from the cell centre, h = height. arms = [(elbow, fist) image-left, image-right]
 F = {
@@ -83,7 +98,19 @@ F = {
     "hoe_top": dict(head=(0, 341), sh=(0, 247), hip=(0, 87), arms=[((-64, 214), (-8, 236)), ((64, 220), (8, 252))], tool=(0.0, -1.0)),
     "hoe_strike": dict(head=(0, 314), sh=(0, 226), hip=(0, 76), arms=[((-56, 156), (-8, 134)), ((56, 162), (8, 150))], tool=(0.0, -1.0)),
     "hoe_rest": dict(head=(0, 326), sh=(0, 236), hip=(0, 83), arms=[((-58, 172), (-8, 160)), ((58, 178), (8, 176))], tool=(0.0, -1.0)),
+    # v12 sleep: drawn UPRIGHT (hands folded on the belly, as if lying on her back seen from above); the game lays the whole
+    # frame on its side (frame flag "lie", like the old doll's sleep) — a = breathed out, b = breathed in
+    "sleep_a": dict(head=(0, 336), sh=(0, 240), hip=(0, 85), arms=[((-70, 184), (-16, 164)), ((70, 184), (16, 168))]),
+    "sleep_b": dict(head=(0, 339), sh=(0, 243), hip=(0, 85), arms=[((-72, 188), (-16, 168)), ((72, 188), (16, 172))]),
 }
+# v12 (states5): the BACK view's tool. Seen from behind her fists are hidden in front of her body, so the tool drawn at the
+# fists was hidden too ("in the back view no tool is visible"). She now works at her image-right side: the tool is held at a
+# hand point beside the body (x = BACK_HAND_X px right of the root, the puppet fists' height) and swings in the image plane —
+# up beside the head at the top, down beside the skirt at the strike — behind her body, so whatever passes the body is hidden
+# and the rest shows in every phase. direction = hands -> blade / head of the tool (image x right, y up).
+BACK_HAND_X = 50.0
+BACK_TOOL = {"hoe_lift": (0.8, 0.6), "hoe_top": (0.45, 0.89), "hoe_strike": (0.78, -0.62), "hoe_rest": (0.86, -0.5)}
+BACK_TOOL_SHORT = {"hoe_top": (0.8, 0.6)}        # sickle / mallet: at the top the short tool would end behind the head -> more to the side
 
 SHEETS = {
     "sit_q_front": ("q_front", ["sit_a", "sit_b", "kneel_a", "kneel_b", "eat_lift", "eat_bite", "eat_rest_a", "eat_rest_b"]),
@@ -93,6 +120,10 @@ SHEETS = {
     "work_q_back": ("q_back", ["hoe_lift", "hoe_top", "hoe_strike", "hoe_rest", "gather_half", "gather_full", "gather_rise", "gather_stand"]),
     "work_front": ("front", ["hoe_lift", "hoe_top", "hoe_strike", "hoe_rest", "hoe_lift", "hoe_top", "hoe_strike", "hoe_rest"]),
     "work_back": ("back", ["hoe_lift", "hoe_top", "hoe_strike", "hoe_rest", "kneel_a", "kneel_b", "kneel_a", "kneel_b"]),
+    # v12: the pick-up on its own sheets (deeper, longer bend; the gather cells of work_q_* are no longer played)
+    "gather_q_front": ("q_front", ["pick_half", "pick_full", "pick_grab", "pick_rise", "pick_stand", "pick_half", "pick_full", "pick_rise"]),
+    "gather_q_back": ("q_back", ["pick_half", "pick_full", "pick_grab", "pick_rise", "pick_stand", "pick_half", "pick_full", "pick_rise"]),
+    "sleep_front": ("front", ["sleep_a", "sleep_b", "sleep_a", "sleep_b", "sleep_a", "sleep_b", "sleep_a", "sleep_b"]),
 }
 
 # clip -> entries (pose, start phase t0, extra head tilt). Timings follow the old doll's clips (cut_lib._pose).
@@ -100,12 +131,19 @@ ENTRIES = {
     "sit": [("sit_a", 0.0, 0.0), ("sit_b", 0.5, 0.0)],
     "eat": [("eat_lift", 0.0, 0.0), ("eat_bite", 0.22, 0.0), ("eat_bite", 0.33, -0.1), ("eat_bite", 0.44, 0.0), ("eat_lift", 0.55, 0.0),
             ("eat_rest_a", 0.66, 0.0), ("eat_rest_b", 0.78, 0.0), ("eat_rest_a", 0.9, 0.0)],
-    "lookup": [("look_stand", 0.0, 0.0), ("look_raise", 0.2, 0.0), ("look_a", 0.3, 0.0), ("look_b", 0.42, 0.0), ("look_a", 0.54, 0.0),
-               ("look_b", 0.66, 0.0), ("look_raise", 0.75, 0.0), ("look_stand", 0.9, 0.0)],
+    # v12: the head goes back while she looks up (+ = back). Front view: the overlaid head leans back about the chin toward the
+    # raised arm and lifts (build_frames.py LOOK_*), from the first beat (the old doll: head up 0-0.2, then the arm).
+    "lookup": [("look_stand", 0.0, 0.12), ("look_raise", 0.2, 0.2), ("look_a", 0.3, 0.26), ("look_b", 0.42, 0.3), ("look_a", 0.54, 0.26),
+               ("look_b", 0.66, 0.3), ("look_raise", 0.75, 0.2), ("look_stand", 0.9, 0.0)],
     "kneel": [("kneel_a", 0.0, 0.0), ("kneel_a", 0.2, -0.15), ("kneel_b", 0.35, 0.0), ("kneel_a", 0.65, -0.15), ("kneel_a", 0.8, 0.0)],
     "hoe": [("hoe_lift", 0.0, 0.0), ("hoe_top", 0.2, 0.0), ("hoe_strike", 0.45, 0.0), ("hoe_rest", 0.65, 0.0)],
-    "gather": [("gather_half", 0.0, 0.0), ("gather_full", 0.2, 0.0), ("gather_rise", 0.55, 0.0), ("gather_stand", 0.8, 0.0)],
+    # v12: bent over for 4 of 8 phases (the old doll: reach 0-0.35, hold -0.5, rise -0.8), half bent in 3 more
+    "gather": [("pick_half", 0.0, 0.0), ("pick_full", 0.12, 0.0), ("pick_grab", 0.3, 0.0), ("pick_full", 0.46, 0.0), ("pick_rise", 0.62, 0.0),
+               ("pick_stand", 0.82, 0.0)],
+    # v12: asleep — two drawings (breathed out / in), laid on the side by the game (LIE)
+    "sleep": [("sleep_a", 0.0, 0.0), ("sleep_b", 0.5, 0.0)],
 }
+LIE = ("sleep",)        # clips whose frames the game lays flat (frame flag: the whole doll turned 90 degrees, head to the image left)
 # which sheet holds a clip for a game view (0 front, 1 q_front, 2 q_back, 3 back) — the old doll shows sit / eat / gather only in
 # the 3/4 views and look-up only from the front (CutoutResident.SIDE_ONLY / FRONT_ONLY); the other views point at the same cells
 CLIP_SHEET = {
@@ -114,7 +152,8 @@ CLIP_SHEET = {
     "lookup": ["pray_front"] * 4,
     "kneel": ["pray_front", "sit_q_front", "sit_q_back", "work_back"],
     "hoe": ["work_front", "work_q_front", "work_q_back", "work_back"],
-    "gather": ["work_q_front", "work_q_front", "work_q_back", "work_q_back"],
+    "gather": ["gather_q_front", "gather_q_front", "gather_q_back", "gather_q_back"],
+    "sleep": ["sleep_front"] * 4,
 }
 # prop overlay per clip: (kind, grip shift along the tool from the fists' midpoint as a fraction of the prop height, over the head?)
 PROP = {"hoe": ("tool", 0.2, False), "eat": ("food", 0.0, True)}
@@ -154,6 +193,7 @@ def info(sheet, cell):
     if p.get("tool"):
         out["grip"] = ((ha[0] + hb[0]) / 2, (ha[1] + hb[1]) / 2)
         out["tool"] = p["tool"]
+        out["tool_short"] = p.get("tool_short", p["tool"])
     elif p.get("food"):
         out["grip"] = ha
     out["fists"] = (ha, hb)

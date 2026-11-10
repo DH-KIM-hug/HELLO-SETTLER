@@ -120,13 +120,85 @@ _WORK = """- TOP ROW = WORKING THE SOIL with a long two-handed tool (the tool is
 _WORK_FRONT = """- BOTH ROWS (cells 5-8 repeat cells 1-4) = WORKING THE SOIL with a long two-handed tool held upright in front of her (the tool is NOT drawn: both hands are closed fists, one directly above the other, in front of the middle of her body). The boots stay planted in the same place in all cells; the body squashes and stretches: 1) READY: both fists in front of her chest; 2) STRETCH: both fists raised to chin height, shoulders up, the body stretched a little taller; 3) STRIKE: both fists pushed down to hip height, knees bent, the whole body squashed lower (the head circle clearly lower); 4) RECOVER: fists at waist height, body halfway back up."""
 _WORK_BACK = """- TOP ROW = seen from behind, WORKING THE SOIL with a long two-handed tool held in front of her (the tool is NOT drawn; her hands are in front of her body and hidden by it — only the elbows and puffy sleeves show at the sides). The boots stay planted in the same place; the body squashes and stretches: 1) READY: standing, elbows out; 2) STRETCH: shoulders and elbows raised, the body stretched a little taller; 3) STRIKE: knees bent, the whole body squashed lower (the head circle clearly lower), elbows down; 4) RECOVER: halfway back up.
 - BOTTOM ROW = seen from behind, KNEELING: she kneels and sits back on her heels, the skirt pooled wide on the ground around her, the sash bow at the back of her waist, her hands pressed together in front of her chest (hidden by her body, elbows showing at the sides); the soles of her two boots may peek out from under the skirt at the bottom: 5) upright; 6) bowed a little: shoulders and head circle lower; 7) the same as 5; 8) the same as 6."""
-STATE_POSES = {"sit_q_front": _SIT, "sit_q_back": _SIT + _SIT_BACK, "pray_front": _PRAY, "work_q_front": _WORK,
+# v12: the pick-up on its own sheet (deep bend held for half the loop) and the sleep drawing (upright; the game lays it flat)
+_GATHER = """- ALL 8 CELLS = PICKING SOMETHING UP FROM THE GROUND (nothing is drawn in her hand). Both boots stay planted in exactly the same place in all 8 cells. 1) BENDING: bent forward at the hips about halfway, the head circle forward and lower, the near arm reaching down in front of her, the other arm held back at her hip; 2) DEEP BEND: folded far forward at the hips — her back slopes down toward the front, her bottom (the round skirt) sticks out behind, the head circle hangs LOW in front (down at the height of her hips and knees, exactly where the reference circle is), the near fist touches the ground in front of her boots; 3) the same deep bend, the head a few pixels lower and the near fist on the ground a little further forward (grabbing); 4) RISING: still bent halfway, the near fist coming up closed at knee height; 5) STANDING upright again, the near fist held at her waist; 6) the same as cell 1; 7) the same as cell 2; 8) the same as cell 4.
+- The deep bend must be really deep and round and cute: a soft ball of skirt with the big head down in front — do NOT straighten her up, the magenta circle stays exactly as low as in the reference."""
+_SLEEP = """- ALL 8 CELLS = ASLEEP ON HER BACK, DRAWN UPRIGHT (the game turns this drawing on its side later, so draw her standing straight as usual, like a doll laid flat and seen from above): feet together side by side, the body straight and relaxed, BOTH HANDS FOLDED ON HER BELLY, one mitten hand resting on the other over the apron just above the sash knot, elbows out a little. Cells 1, 3, 5, 7 = breathed OUT; cells 2, 4, 6, 8 = breathed IN: chest, shoulders, folded hands and the head circle a few pixels higher and the chest a touch fuller — everything else identical (copy the skirt, hem, legs and boots from cell to cell)."""
+STATE_POSES = {"gather_q_front": _GATHER,
+               "gather_q_back": _GATHER + "\n- Seen from three-quarter BACK: we see her back and the sash bow; she bends away from the viewer toward the upper right, the reaching arm is partly hidden by her body and skirt.",
+               "sleep_front": _SLEEP,
+               "sit_q_front": _SIT, "sit_q_back": _SIT + _SIT_BACK, "pray_front": _PRAY, "work_q_front": _WORK,
                "work_q_back": _WORK + "\n- Seen from three-quarter BACK: we see her back and the sash bow; the arms reach forward (away from the viewer, toward the upper right) and are partly hidden by her body.",
                "work_front": _WORK_FRONT, "work_back": _WORK_BACK}
 STATE_VIEW = {"front": "FRONT view: she faces the viewer squarely",
               "q_front": "THREE-QUARTER FRONT view: her body is turned about 45 degrees toward the RIGHT edge of the image (she faces the lower-right); we see her front and her right side",
               "q_back": "THREE-QUARTER BACK view: she faces AWAY from the viewer toward the upper-RIGHT; we see mostly her BACK and a little of her left side (the apron is hidden except a sliver of its edge and the apron strings tied in a bow at the back of the waist)",
               "back": "BACK view: seen from directly behind; we see the back of the dress and the apron strings tied in a small bow at the back of the waist; no apron front"}
+
+# v12 (2026-11-10 states5, "밀인지 밀가루인지 빵인지 모르겠다"): the load is no longer painted into the carry / hold frames — it is a
+# prop overlay chosen from what she carries. The carry sheets and the hold rows are REDRAWN WHOLE from the v11 sheets (third
+# image = the finished v11 sheet with the sack, kept only as the reference: raw/ref_sack_<carry|idle>_<view>.png) with the
+# sack removed and the arms left in the shoulder-carry pose.
+EMPTY = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
+
+{body}
+HEM: the dress is LONG, down to mid-shin; under it only her short rounded BOOTS (and a little ankle) show. The figure is short and chunky.
+
+The THIRD attached image is a FINISHED 8-cell sprite sheet (1536x1024, 2 rows x 4 cells) of her in {view}: {what}. REDRAW THIS SHEET with ONE change — REMOVE THE SACK:
+- Everything else stays EXACTLY as in the third image, cell by cell: the same figure position and size in each cell, the same flat solid MAGENTA (#FF00FF) head circle (same size, same position, no face, no hair, no outline), the same dress, apron, sash and sleeves, the same skirt shape, and above all the SAME LEGS AND BOOTS in each cell — trace each boot at exactly the same position and height, the same boot in front, including the colour code where the third image has it (one leg with a tan stocking and dark-brown boot, the other leg with a bright CYAN (#20A8FF) stocking and a dark NAVY (#203070) boot).
+- ARMS{rows}: both arms stay raised exactly as they are in the third image — the pose of carrying a big load on her shoulder with both hands. The hands stay where they are, as soft closed mitten hands (fingers gently curled as if still pressing against a big round load that is simply not drawn). The arm and hand positions are the same in all of these cells.{arms} The pose is NOT symmetric: do NOT draw both hands up at the two sides, do NOT draw hands clasped in the middle.
+- Where the sack was, draw what it was hiding: her shoulder and puffy cream sleeve, the gathered cream neckline, the rest of the magenta circle (a complete round circle; only her own raised hand may overlap its lower edge) and plain green background. There must be NO sack, NO grey-white cloth, NO blue stripe and NO other object anywhere: her hands are EMPTY. The load is added later by the game as a separate picture on her shoulder.
+- Background: flat uniform pure chroma green #00FF00 everywhere; the dark green cell frames and ground lines may stay or go; NO numbers, NO text, NO cast shadows. Exactly one figure per cell, same size in every cell.
+Thick dark-brown ink outline (#3A2A22) of even weight, flat cel colour with one soft shade step, cute, soft and rounded. Clean flat cel colour, NO gradients, NO texture noise, NO hatching."""
+EMPTY_WHAT = {"carry": ("an 8-frame walk cycle (walking in place) in which she carries a grey flour sack on her shoulder", " (all 8 cells)"),
+              "hold": ("a standing sheet — top row (cells 1-4): standing and breathing with the arms hanging at her sides; bottom row (cells 5-8): standing still holding a grey flour sack on her shoulder. The TOP ROW has no sack: redraw it exactly as it is", " (BOTTOM ROW, cells 5-8)")}
+
+# v12 load pictures (overlay props of the carry / hold clips): one prop per cell, drawn in the dolls' style. PROP_SHEETS[sheet] =
+# 8 x (name, description); build_frames.py cuts each cell's picture into the prop strip of the frame atlas.
+PROPS = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
+
+A sheet of 8 separate small OBJECT pictures for a cosy picture-book village game: things a villager carries on her shoulder. Layout: 2 rows x 4 cells (each cell 384x512), exactly ONE object per cell, centred in its cell, filling about 60% of the cell, never touching the cell edges. Background: one flat uniform pure chroma green #00FF00 everywhere, nothing else (no cell borders, no text, no numbers, no ground, no cast shadows).
+Style (the same for all 8): soft, rounded, chunky toy-like shapes; a THICK dark-brown ink outline (#3A2A22) of even weight around every shape; flat cel colour with ONE soft shade step, light from the upper-left; NO gradients, NO texture noise, NO hatching. Each object must be recognisable as a tiny 12-pixel icon: a big simple silhouette, 2-3 clear colours, no small details. Do NOT use pure green, bright magenta or chroma colours in the objects.
+Cells, left to right, top row then bottom row:
+{cells}"""
+PROP_SHEETS = {
+    "props_a": [("flour", "a plump soft cloth FLOUR SACK standing upright: light cool grey-white (#D9D9D2) with ONE wide muted blue (#5A7FB0) stripe across its middle and a tied gathered top"),
+                ("wheat", "a SHEAF OF WHEAT: a thick bundle of golden-yellow (#E3B341) stalks tied in the middle with a brown cord, standing upright, plump ears of wheat fanning out at the top"),
+                ("bread", "BREAD: a shallow brown wicker tray piled with three big round golden-brown (#C98A45) loaves with pale scored tops"),
+                ("logs", "LOGS: a bundle of three short thick round logs lying horizontally, tied with two rope bands, dark brown bark (#7A5236) and pale round cut ends with rings showing at the left end"),
+                ("planks", "PLANKS: a neat stack of four pale yellow-beige (#E2C48F) sawn boards lying horizontally, tied with one rope band, seen slightly from above so the flat top board and the stacked ends show"),
+                ("stone", "a STONE: one big rough rounded block of cool grey (#9A9A96) rock with two flat facets and a lighter top"),
+                ("tools", "a TOOL BUNDLE: a hammer, a small saw and an iron hoe head rolled together in a dark blue-green (#3E6B6B) cloth and tied with a cord, the wooden handles and grey iron heads sticking out at the top"),
+                ("water", "WATER: a wooden bucket (warm brown staves, two dark iron hoops, a rope handle) full to the brim with bright light-blue (#7CC4E8) water")],
+    "props_b": [("grain", "a GRAIN SACK: a plump coarse BROWN burlap sack (#B08A55) standing upright, tied at the neck, with a few golden grains spilling at its open top"),
+                ("fruit", "FRUIT: a round wicker basket heaped with big red and orange round fruits and one green leaf"),
+                ("fish", "FISH: three plump silvery-blue (#8FB3C9) fish hanging side by side from one short stick by a cord, tails down"),
+                ("meat", "MEAT: one big ham on the bone — a rosy-red (#C9605A) rounded drumstick shape with a creamy fat rim and a white bone end sticking out"),
+                ("cotton", "COTTON: a big fluffy white cloud-like puff of raw cotton held in a loose brown net, a few brown boll bits at the bottom"),
+                ("basket", "a BASKET: a round lidded wicker basket (warm straw colour #D6A85C) with a red-and-white checked cloth peeking out under the lid"),
+                ("silk", "SILK: three fat glossy skeins of thread — pale gold, soft pink and cream — twisted and laid together like braided loaves"),
+                ("jar", "a JAR: a round-bellied clay jar (terracotta #C77B4E) with a cork stopper and a honey-gold drip running down from its mouth")],
+}
+
+# where the two arms are in the v11 drawings, per view (e1 takes of the hold rows came back symmetric without this)
+EMPTY_ARMS = {
+    "front": " TRACE THEM: the load was on HER RIGHT shoulder = at the IMAGE LEFT beside the magenta circle. Her right arm (image left) is bent up with its fist at the image left at chest height, under where the load was; her left arm (image right) crosses in front of her chest, its hand ending just under the magenta circle on the image-left side of her chest. Both hands are on the image-LEFT half of her body.",
+    "q_front": " TRACE THEM: the load was on her far shoulder at the IMAGE LEFT beside the magenta circle. One fist is at the image left at chest height under where the load was; the other arm crosses in front of her chest with its hand just under the magenta circle. Both hands are on the image-LEFT half of her body.",
+    "q_back": " TRACE THEM: the load was at the IMAGE RIGHT beside the magenta circle. Only ONE hand is visible: at the image right, raised beside her shoulder at the height of the circle's lower edge, palm against where the load was. Her other arm reaches across in FRONT of her body and is hidden: on the image-left side only the puffy sleeve at the shoulder shows — NO second hand, NO forearm on the image-left side.",
+    "back": " TRACE THEM: the load was at the IMAGE RIGHT beside the magenta circle. Only ONE hand is clearly visible: at the image right, raised beside her shoulder at the height of the circle's lower edge. Her other arm is bent up in front of her and almost hidden by the magenta circle: on the image-left side only the puffy sleeve and at most the tip of the hand peeking out at the circle's lower-left edge — NO raised hand at the image left.",
+}
+
+if __name__ == "__main__" and sys.argv[1] == "empty":
+    kind, view, out = sys.argv[2], sys.argv[3], sys.argv[4]
+    what, rows = EMPTY_WHAT[kind]
+    print(EMPTY.format(out=out, body=BODY.replace("It bobs up and down with the walk", "it moves with her body"), view=STATE_VIEW[view], what=what, rows=rows,
+                       arms=EMPTY_ARMS[view]))
+    sys.exit(0)
+
+if __name__ == "__main__" and sys.argv[1] == "props":
+    sheet, out = sys.argv[2], sys.argv[3]
+    print(PROPS.format(out=out, cells="\n".join(f"{i + 1}) {d}." for i, (_n, d) in enumerate(PROP_SHEETS[sheet]))))
+    sys.exit(0)
 
 if __name__ == "__main__" and sys.argv[1] == "state":
     sheet, out = sys.argv[2], sys.argv[3]

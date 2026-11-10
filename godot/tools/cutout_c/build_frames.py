@@ -4,7 +4,7 @@ usage: python3 build_frames.py            (needs raw/{walk,carry,idle}_{front,q_
 in : art/cutout/woman_c/raw/<clip>_<view>.png  (gen.sh: 2x4 cells, magenta head placeholder, chroma green)
 out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed)
      art/cutout/woman_c/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
-     art/cutout/woman_c/frames_mask1.png  dye weights R legwear  G shoe  B sack(not dyed; drawn again over the head)  A far leg (3/4, darkened)
+     art/cutout/woman_c/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
      art/cutout/woman_c/frames.json       per frame: uv rect, head anchor (chin, rig units, origin = soles centre, y up),
                                           hand anchors, sack box; per clip: frame count, stride; base colours
      raw/check_<clip>_<view>.png          aligned frames | dye-class view (eyeball check, not used by the game)
@@ -39,14 +39,27 @@ D_RIG = 300.0          # nominal head placeholder diameter in rig units (head ov
 CHIN_RIG = 500.0      # v6: total figure no taller than the old cutout doll (was 560: +7..20% taller in game)       # soles -> chin in rig units (median per sheet) — same body size in every clip / view
 PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu 44 the figure is ~50 px on screen)
 # clips in the atlas: (name, sheet, cells)
+# v12 (states5): carry / hold are drawn with EMPTY arms in the carry pose (carry_<view>.png, hold_<view>.png rows 2) — the load is
+# an overlay picture chosen by what she carries (LOADS below), so wheat, flour and bread read differently
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
-         ("idle", "idle", [0, 1, 2, 3]), ("hold", "idle", [4, 5, 6, 7])]
+         ("idle", "idle", [0, 1, 2, 3]), ("hold", "hold", [4, 5, 6, 7])]
+# load pictures: raw/props_a.png, props_b.png (prompts.py PROP_SHEETS: 8 objects per sheet, cut by blob) -> (name, longer side in rig)
+LOAD_SHEETS = ["props_a", "props_b"]
+LOAD_SIZE = {"flour": 330, "wheat": 390, "bread": 300, "logs": 300, "planks": 300, "stone": 250, "tools": 350, "water": 290,
+             "grain": 330, "fruit": 290, "fish": 320, "meat": 300, "cotton": 300, "basket": 280, "silk": 290, "jar": 300}
+# where the load sits, per view: (dx, dy px from the chin anchor to the load's bottom centre — image x right, y DOWN; lean rad, + = top
+# to the image left). Front views: on her right shoulder at the image left, its bottom in the fist under it (the fists are drawn
+# again over the load: mask1.B). Back views: behind her shoulder at the image right, the raised hand against its side.
+LOAD_SEAT = {"front": (-104.0, 58.0, -0.1), "q_front": (-102.0, 62.0, -0.1), "q_back": (118.0, 30.0, 0.1), "back": (122.0, 24.0, 0.1)}
+HANDS_OVER = ("front", "q_front")      # views whose hands are drawn again over the load
+LOOK_LIFT = 100.0      # look up (front view): the head lifts this many rig per rad of tilt while it leans back about the chin
+LIE_ANGLE = 1.5708     # sleep: the whole doll is laid on its side by the shader (head to the image left)
 POSE_SHEETS = True      # v4: walk / carry sheets traced from pose_ref.py (frame 1 = contact R in every view)
 IDLE_POSE_VIEWS = ("front", "q_front", "q_back", "back")    # v10 3/4, v11 front / back: standing sheets traced from the standing reference (pose_ref.py hybrid idle) — same scale / root as walk
 BOOT_R = 46.0          # px: state cells class stockings / boots only this close to a puppet boot (a hand on the ground stays skin)
 FIST_R = 36.0          # px: a drawn fist (skin blob) is looked for this close to the puppet's fist
 GRIP_SIDE = 0.3        # tools in the 3/4 views: the fists hold the shaft this far (x prop height) above the sprite centre (cut_lib hoe)
-TOOL_HALF = 300.0     # half the tallest tool sprite (hoe 588 rig) — back view: keep the tool above the root line
+TOOL_LEN = 587.0      # the tallest tool sprite (hoe, rig) — back view: keep the blade end above the root line
 FOOD_AT = (6.0, 10.0, 0.95)    # bread at the near fist: dx, dy (rig), scale — the old doll's eat prop (cut_lib "eat")
 K_POSE = CHIN_RIG / float(PR.GROUND - PR.CHIN_Y)      # rig per template px (1.94): the traced sheets share the template's scale
 HEAD_DX = {v: (8.0 if v == "q_front" else (-4.0 if v == "q_back" else 0.0)) for v in VIEWS}   # template head centre - root (px)
@@ -101,11 +114,12 @@ def blobs(mask, min_n=30):
 
 
 LEG_ZONE = 0.3
+SHOE_L = 100         # below the hem: darker than this = shoe, lighter = stocking
 SPECK = 48           # px (sheet): islands of a dye class smaller than this take the class around them
 SPECK_IN = 220       # px (sheet): ... and up to this size when the island lies wholly inside the figure (no outside within 4 px)
 
 
-def classify(rgb, alpha, magenta, feet, fig_h, legzone=None):
+def classify(rgb, alpha, magenta, feet, fig_h, legzone=None, has_sack=False):
     """hard dye class per pixel (CLASSES index). Ink & magenta = none. Below the skirt hem (per column): tan -> leg, brown -> shoe."""
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     L = luma(rgb)
@@ -114,6 +128,9 @@ def classify(rgb, alpha, magenta, feet, fig_h, legzone=None):
     fg = (alpha > 128) & ~magenta
     ink = L < 72
     sack = (sat < 34) & (L > 150) | ((b > r + 15) & (b > g))          # grey-white sack + its blue stripe
+    if not has_sack:
+        # v12: no sheet has a load painted in any more — greyish / bluish shades are cloth and take the nearest dye class
+        sack = np.zeros_like(ink)
     rose = (r - g > 45) & (np.abs(g - b) < 28) & (L < 190) & (L > 100) & (r > 150)
     cream = (L > 196) & (r - b < 80) & (g - b > 22) & ~sack
     skin = (r - b > 85) & (L > 135) & ~rose
@@ -146,7 +163,7 @@ def classify(rgb, alpha, magenta, feet, fig_h, legzone=None):
         zone = legzone
         lab[zone & fg & ~ink & (lab == 4)] = 6
     below = zone & ((rows > hem[None, :] + 2) | (hem[None, :] < 0))
-    dark = (L < 100)
+    dark = (L < SHOE_L)
     # the apron's lower corner hangs past the dress hem in its own columns (3/4 back): cream that continues up out of the leg
     # rows is cloth, not a stocking (v11 — it took the legwear dye as a sliver beside the skirt)
     cloth = np.zeros_like(fg)
@@ -155,6 +172,15 @@ def classify(rgb, alpha, magenta, feet, fig_h, legzone=None):
             cloth |= m_
     lab[below & fg & ~ink & ~sack & dark & ~cloth] = 6
     lab[below & fg & ~ink & ~sack & ~dark & ~cloth] = 5
+    if legzone is not None:
+        # v12: an arm reaching to the ground crosses the boot circles (gather, deep bend) — a "stocking" that continues, with no
+        # ink line between, into skin outside the zone is that arm, not a leg (it took the legwear dye as a stripe on the forearm)
+        # (the skin it joins must lie outside the boot zone: a few skin pixels left right under the hem do not count)
+        sks = list(blobs(lab == 1, 1))
+        for n_, _cy, _cx, _box, m_ in blobs(lab == 5, 1):
+            ring = dilate(m_, 1)
+            if sum((ms & ~zone).sum() for _n, _a, _b, _c, ms in sks if (ring & ms).any()) >= 30:
+                lab[m_] = 1
     # edges: pixels next to ink / the silhouette take the majority class of the nearby core pixels
     core = fg & ~dilate(ink | ~fg, 1)
     edge = fg & ~ink & ~core
@@ -329,9 +355,44 @@ def foot_errors(rgb, a, far, sheet, i):
     return out
 
 
+def load_pictures():
+    """v12: the load pictures of raw/props_*.png -> [(name, RGBA float array at atlas density)], in sheet order.
+    The model does not keep a strict grid, so the 8 objects of a sheet are its 8 biggest blobs (small loose bits join the nearest
+    one), read row by row. Each picture is drawn whole — nothing is cut out of or pasted into it."""
+    out = []
+    import prompts as PT
+    for sname in LOAD_SHEETS:
+        p = os.path.join(RAW, sname + ".png")
+        if not os.path.exists(p):
+            continue
+        rgba = C.key(p).astype(np.float32)
+        bl = blobs((rgba[..., 3] > 128)[::2, ::2], 6)
+        big, rest = bl[:8], bl[8:]
+        boxes = [list(b[3]) for b in big]
+        for n, cy, cx, bx, _m in rest:
+            j = int(np.argmin([(cx - b[2]) ** 2 + (cy - b[1]) ** 2 for b in big]))
+            B = boxes[j]
+            if bx[0] > B[0] - 30 and bx[2] < B[2] + 30 and bx[1] > B[1] - 30 and bx[3] < B[3] + 30:
+                boxes[j] = [min(B[0], bx[0]), min(B[1], bx[1]), max(B[2], bx[2]), max(B[3], bx[3])]
+        items = sorted(zip(big, boxes), key=lambda t: (t[0][1] * 2 > rgba.shape[0] / 2, t[0][2]))
+        for (name, _desc), (_b, bx) in zip(PT.PROP_SHEETS[sname], items):
+            x0, y0, x1, y1 = bx[0] * 2 - 3, bx[1] * 2 - 3, bx[2] * 2 + 5, bx[3] * 2 + 5
+            crop = rgba[max(y0, 0):y1, max(x0, 0):x1].copy()
+            k = LOAD_SIZE[name] * PX_PER_RIG / max(crop.shape[0], crop.shape[1])
+            w, h = max(2, int(round(crop.shape[1] * k))), max(2, int(round(crop.shape[0] * k)))
+            pm = crop.copy(); pm[..., :3] *= pm[..., 3:4] / 255.0
+            chans = [np.asarray(Image.fromarray(np.ascontiguousarray(pm[..., i]), "F").resize((w, h), Image.BOX)) for i in range(4)]
+            al = np.clip(chans[3], 0, 255)
+            col = np.where(al[..., None] > 1, np.dstack(chans[:3]) / np.maximum(al[..., None], 1) * 255.0, 0)
+            pic = np.zeros((h + 2, w + 2, 4), np.float32)          # 1 px clear rim (mipmaps)
+            pic[1:-1, 1:-1] = np.dstack([col, al])
+            out.append((name, pic))
+    return out
+
+
 def main():
     sheets = {}
-    for clip in ["walk", "carry", "idle"]:
+    for clip in ["walk", "carry", "idle", "hold"]:
         for v in VIEWS:
             p = os.path.join(RAW, f"{clip}_{v}.png")
             if os.path.exists(p):
@@ -341,13 +402,30 @@ def main():
             sheets[sname] = frames_of(sname)
     # a state clip goes in only when all its sheets are drawn (the game falls back to the old doll for a missing clip)
     state_clips = [cl for cl in PS.ENTRIES if all(sh in sheets for sh in PS.CLIP_SHEET[cl])]
+    # entries = the frames the game plays: (clip, view, sheet, cell, t0 | None, extra head tilt, pose name | None). v11: several
+    # entries may show the same drawn cell (ping-pong, nod, a view that borrows another view's sheet) — the atlas holds each cell once.
+    entries = []
+    for clip, sheet, cells in CLIPS:
+        for v in VIEWS:
+            for c in cells:
+                entries.append((clip, v, f"{sheet}_{v}", c, None, 0.0, None))
+    for clip in state_clips:
+        for vi, v in enumerate(VIEWS):
+            sh = PS.CLIP_SHEET[clip][vi]
+            for pose_n, t0, dang in PS.ENTRIES[clip]:
+                entries.append((clip, v, sh, PS.cell_of(sh, pose_n), t0, dang, pose_n))
+    order = []
+    for e in entries:
+        if (e[2], e[3]) not in order:
+            order.append((e[2], e[3]))
+    used = set(order)           # v12: cells nobody plays (the old sack rows of idle_*, the old gather cells) are skipped
     # per sheet scale: placeholder diameter -> D_RIG
     placed = {}      # sheet -> list of (rgba_scaled, dye_lab, frame info in rig)
     ext = [0.0, 0.0, 0.0]   # max |x|, max y (body top incl. sack), min y (below the root ground line: the forward foot in 3/4 views)
     for name, frs in sheets.items():
         clip_n, view_n = name.split("_", 1)
         state = name in PS.SHEETS
-        pose = state or (POSE_SHEETS and (clip_n in ("walk", "carry") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS)))
+        pose = state or (POSE_SHEETS and (clip_n in ("walk", "carry", "hold") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS)))
         dmed = float(np.median([f["head"]["d"] for f in frs]))
         if state:
             # v11: traced from pose_states.py puppets — the same template scale and root; the head moves per pose
@@ -369,6 +447,9 @@ def main():
             k = CHIN_RIG / chin                    # rig per sheet px
         info = []
         for fi_, f in enumerate(frs):
+            if (name, fi_) not in used:
+                info.append(None)
+                continue
             lz = None
             if state:
                 yy, xx = np.mgrid[0:CH, 0:CW]
@@ -398,7 +479,7 @@ def main():
     med = {}
     for name, info in placed.items():
         for ci in range(1, len(CLASSES)):
-            px = [it["f"]["rgb"][(it["lab"] == ci) & (it["f"]["a"] > 250)] for it in info]
+            px = [it["f"]["rgb"][(it["lab"] == ci) & (it["f"]["a"] > 250)] for it in info if it]
             px = np.concatenate(px) if px else np.zeros((0, 3))
             if len(px) > 50:
                 med[(name, ci)] = np.median(px, 0)
@@ -414,6 +495,8 @@ def main():
                 continue
             ratio = np.clip(g / np.maximum(med[(name, ci)], 1.0), 0.6, 1.6)
             for it in info:
+                if it is None:
+                    continue
                 sel = it["lab"] == ci
                 it["f"]["rgb"][sel] = np.clip(it["f"]["rgb"][sel] * ratio, 0, 255)
             if np.abs(ratio - 1).max() > 0.06:
@@ -424,30 +507,31 @@ def main():
     H_RIG = ext[1] + 20
     Y0 = min(-10.0, float(np.floor(ext[2])) - 10.0)      # the forward foot of the 3/4 views sits below the root ground line
     cw, ch = int(np.ceil(W_RIG * PX_PER_RIG)), int(np.ceil((H_RIG - Y0) * PX_PER_RIG))
-    # entries = the frames the game plays: (clip, view, sheet, cell, t0 | None, extra head tilt). v11: several entries may show
-    # the same drawn cell (ping-pong, nod, a view that borrows another view's sheet) — the atlas holds each cell once.
-    entries = []
-    for clip, sheet, cells in CLIPS:
-        for v in VIEWS:
-            cs = list(cells)
-            if v == "back" and clip in ("walk", "carry") and not POSE_SHEETS:
-                # same leg phase in every view (frames 1-4 = her RIGHT foot planted, as in the 3/4 sheets and the front sheet):
-                # the back sheets were drawn the other way round -> start at their frame 5 (no pop when the view changes)
-                cs = cs[4:] + cs[:4]
-            for c in cs:
-                entries.append((clip, v, f"{sheet}_{v}", c, None, 0.0))
-    for clip in state_clips:
-        for vi, v in enumerate(VIEWS):
-            sh = PS.CLIP_SHEET[clip][vi]
-            for pose_n, t0, dang in PS.ENTRIES[clip]:
-                entries.append((clip, v, sh, PS.cell_of(sh, pose_n), t0, dang))
-    order = []
-    for e in entries:
-        if (e[2], e[3]) not in order:
-            order.append((e[2], e[3]))
     cols = 12
     rows = (len(order) + cols - 1) // cols
     AW, AH = cols * cw, rows * ch
+    # v12 load pictures: shelf-packed (tallest first) into the unused end of the last cell row; a strip under the cells if they
+    # do not fit there
+    loads = load_pictures()
+
+    def pack(width):
+        x = y = shelf = 0
+        at = {}
+        for name_, pic_ in sorted(loads, key=lambda t: -t[1].shape[0]):
+            ph_, pw_ = pic_.shape[:2]
+            if x + pw_ + 2 > width:
+                x, y, shelf = 0, y + shelf + 2, 0
+            at[name_] = (x + 1, y + 1)
+            x += pw_ + 2
+            shelf = max(shelf, ph_)
+        return at, y + shelf + 2
+    free_x = (len(order) % cols) * cw
+    load_at, need = pack(AW - free_x) if free_x else ({}, ch + 1)
+    load_org = (free_x, (rows - 1) * ch)
+    if need > ch:
+        load_at, need = pack(AW)
+        load_org = (0, AH)
+        AH += int(np.ceil(need / 4.0) * 4)
     atlas = np.zeros((AH, AW, 4), np.float32)
     m0 = np.zeros((AH, AW, 4), np.float32)
     m1 = np.zeros((AH, AW, 4), np.float32)
@@ -479,7 +563,13 @@ def main():
         onehot = np.stack([(lab == ci).astype(np.float32) * 255.0 for ci in range(1, len(CLASSES))], -1)
         oh = rs(onehot)
         m0[ay0:ay0 + ch, ax0:ax0 + cw] = oh[..., [0, 1, 2, 3]]
-        m1[ay0:ay0 + ch, ax0:ax0 + cw, :3] = oh[..., [4, 5, 6]]
+        m1[ay0:ay0 + ch, ax0:ax0 + cw, :2] = oh[..., [4, 5]]
+        sheet_clip, sheet_view = sheet.split("_", 1)
+        if sheet_clip in ("carry", "hold") and sheet_view in HANDS_OVER:
+            # v12: the hands and forearms (skin + their ink outline) are drawn once more over the load picture, so she HOLDS it
+            skin_m = (lab == 1) & (f["a"] > 128)
+            hand_m = dilate(skin_m, 4) & (f["a"] > 128) & ((lab == 1) | (luma(f["rgb"]) < 110))
+            m1[ay0:ay0 + ch, ax0:ax0 + cw, 2] = rs((hand_m.astype(np.float32) * 255.0)[..., None])[..., 0]
         m1[ay0:ay0 + ch, ax0:ax0 + cw, 3] = rs((f["farm"].astype(np.float32) * 255.0)[..., None])[..., 0]
         for ci in range(1, len(CLASSES)):
             sel = (lab == ci) & (f["a"] > 250)
@@ -506,7 +596,7 @@ def main():
     # the frames the game plays (clip by clip, view by view): cell data + timing + head tilt + prop grip
     frames = []
     pos = {}
-    for clip, v, sheet, c, t0, dang in entries:
+    for clip, v, sheet, c, t0, dang, pose_n in entries:
         fr = dict(clip=clip, view=v, **cellinfo[(sheet, c)])
         it = placed[sheet][c]
         if t0 is None:
@@ -514,15 +604,31 @@ def main():
             key = (clip, v)
             fr["t0"] = pos.get(key, 0) / len(CLIP_CELLS[clip])
             pos[key] = pos.get(key, 0) + 1
+            if clip in ("carry", "hold"):
+                # v12: the load overlay's seat (bottom centre of the load picture, rig) — it rides on the frame's chin anchor, so
+                # it bobs with the drawn body (the drawn fists stay within 3 px of the chin in every frame)
+                dx, dy, lean = LOAD_SEAT[v]
+                fr["prop"] = [lean, round(fr["head"][0] + dx * it["k"], 1), round(fr["head"][1] - dy * it["k"], 1), 1.0, 0.0]
         else:
             fr["t0"] = t0
+            fr["pose"] = pose_n
             inf = PS.info(sheet, c)
             side = inf["view"] in ("q_front", "q_back")
             # head tilt (rad, about the head centre; - = nodding toward where she faces) — 3/4 drawings only; seen from the
             # front / back a nod is a few rig lower instead
             fr["hang"] = round(inf["hang"] + dang, 3) if side else 0.0
-            if not side and dang != 0.0:
+            if clip == "lookup":
+                # v12 ("head should tilt back"): the overlaid head leans back about the CHIN toward the raised arm (image left) and
+                # lifts. The shader turns the head about its centre (head_r above the chin), so the chin anchor is moved to where
+                # a turn about the chin would have put that centre.
+                r_head = D_RIG * 0.5 - 7.0
+                fr["hang"] = round(dang, 3)
+                fr["head"] = [round(fr["head"][0] - r_head * float(np.sin(dang)), 1),
+                              round(fr["head"][1] + r_head * (float(np.cos(dang)) - 1.0) + LOOK_LIFT * dang, 1)]
+            elif not side and dang != 0.0:
                 fr["head"] = [fr["head"][0], round(fr["head"][1] - 60.0 * abs(dang), 1)]
+            if clip in PS.LIE:
+                fr["lie"] = LIE_ANGLE
             if clip in PS.PROP and inf["grip"] is not None:
                 # the drawn fists (skin blobs next to the puppet's fists); a fist hidden by the body falls back to the puppet's
                 skin = (it["lab"] == 1) & (it["f"]["a"] > 128)
@@ -534,13 +640,21 @@ def main():
                 gx, gy = sum(g_[0] for g_ in got) / len(got), sum(g_[1] for g_ in got) / len(got)
                 hx, hy = (gx - it["ox"]) * it["k"], (it["oy"] - gy) * it["k"]
                 if inf["tool"]:
-                    ang = float(np.arctan2(inf["tool"][0], -inf["tool"][1]))      # sprite = shaft upright, blade down
+                    tool, short, grip = inf["tool"], inf["tool_short"], (GRIP_SIDE if side else 0.0)
                     if inf["view"] == "back":
-                        # seen from behind the tool is beyond her (behind the body): its lower end must not dip under the root
-                        # line — the shader pulls anything below the root toward the camera (boots), which put the blade
-                        # in front of the skirt on the strike frame (2026-11-10 states4 strip)
-                        hy = max(hy, TOOL_HALF)
-                    fr["prop"] = [round(ang, 3), round(hx, 1), round(hy, 1), 1.0, GRIP_SIDE if side else 0.0]
+                        # v12 ("in the back view no tool is visible"): her fists are hidden in front of her, so the tool was too.
+                        # She works at her image-right side: the hand point is beside the body and the tool swings in the image
+                        # plane behind her (pose_states.BACK_TOOL) — the part that passes her body is hidden, the rest shows.
+                        tool = PS.BACK_TOOL[pose_n]
+                        short = PS.BACK_TOOL_SHORT.get(pose_n, tool)
+                        grip = GRIP_SIDE
+                        hx = PS.BACK_HAND_X * it["k"]
+                        # the blade end must not dip under the root line — the shader pulls anything below the root toward the
+                        # camera (boots), which put the blade in front of the skirt on the strike frame (states4 strip)
+                        hy = max(hy, (grip + 0.5) * TOOL_LEN * max(0.0, -tool[1]) + 10.0)
+                    ang = float(np.arctan2(tool[0], -tool[1]))      # sprite = shaft upright, blade down
+                    fr["prop"] = [round(ang, 3), round(hx, 1), round(hy, 1), 1.0, grip]
+                    fr["prop_short"] = round(float(np.arctan2(short[0], -short[1])), 3)     # sickle / mallet (FrameLib.PROP_HEAD_UP)
                 else:
                     fr["prop"] = [0.0, round(hx + FOOD_AT[0], 1), round(hy + FOOD_AT[1], 1), FOOD_AT[2], 0.0]
                 fr["fists_seen"] = [bool(g_[2]) for g_ in got]
@@ -579,6 +693,14 @@ def main():
             print(f"  stride {clip}: template {strides[clip]} rig / cycle (far-foot extremes on the drawing {measured})")
         else:
             strides[clip] = measured
+    # v12 load pictures (not dyed: the masks stay empty there)
+    load_tab = []
+    for lname, pic in loads:
+        ph, pw = pic.shape[:2]
+        ax0, ay0 = load_org[0] + load_at[lname][0], load_org[1] + load_at[lname][1]
+        atlas[ay0:ay0 + ph, ax0:ax0 + pw] = pic
+        load_tab.append(dict(name=lname, uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH],
+                             size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)]))
     base = {}
     for ci in range(1, len(CLASSES)):
         if cls_px[ci]:
@@ -596,7 +718,7 @@ def main():
             print(f"  {cl}: fists found on the drawing in {sum(all(x) for x in seen)} of {len(seen)} frames (else the puppet's)")
     lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], cell=[cw, ch], views=VIEWS,
                clips=[cl for cl, _, _ in CLIPS] + state_clips, frames_per_clip=nclip, stride=strides, base=base, cells=len(order),
-               frames=frames)
+               loads=load_tab, frames=frames)
     with open(os.path.join(ART, "frames.json"), "w") as fh:
         json.dump(lib, fh, indent=0)
     print("atlas", AW, AH, "cell", cw, ch, "cells", len(order), "frames", len(frames), "rect", lib["rect"], "stride", strides, "base", base)
@@ -605,6 +727,8 @@ def main():
     for name, info in placed.items():
         tiles = []
         for it in info:
+            if it is None:
+                continue
             f = it["f"]
             lab = it["lab"]
             vis = np.dstack([pal[lab], np.where(f["a"] > 128, 255, 0)])

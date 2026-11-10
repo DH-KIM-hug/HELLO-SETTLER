@@ -349,7 +349,8 @@ func _sync_stones() -> void:
 			st.global_position = feet + toward * 0.14 + Vector3(0, rad * 0.75, 0)
 		else:                            # 안고 나름: 가슴 앞 손에
 			st.global_position = feet + toward * 0.09 + Vector3(0, CutoutResident.DOLL_H * m.scale.y * 0.42, 0)
-		st.visible = true
+		# 방식 C 인형은 돌을 어깨에 그린다 (frame_doll 짐 그림) — 가슴 앞 돌을 겹쳐 그리지 않음 (줍기·내려놓기의 땅 위 돌은 그대로)
+		st.visible = r.anim == "gather" or not (m is CutoutResident and (m as CutoutResident).frame_load() != "")
 	for id: int in _stones.keys():
 		if not seen.has(id):
 			(_stones[id] as Node3D).queue_free()

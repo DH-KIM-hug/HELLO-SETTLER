@@ -278,6 +278,65 @@ states4_speckfix_dyed_{walk,hold}_ppu{20,44}.png, states4_sit_eat_stand_ppu44.mp
 Tool: `shot_cutC_compare.gd` env `CUTC_CLIPS=<clips>`, `CUTC_PROP=<prop index for hoe>`, `CUTC_SEQ=sit_eat|hoe|pray|gather`
 (live, scripted), `CUTC_TOOL=<tool id>`.
 
+## 2026-11-10 v12 (states5) — readable loads, tool always visible, head tilt, deeper gather, sleep
+No parts pasted: the carry / hold / gather / sleep sheets are whole-sheet drawings over a puppet reference, whole cells only.
+What is laid over a frame is a separate picture (load, tool, head) placed at that frame's own anchor.
+
+Loads ("can't tell whether they carry wheat, flour or bread"): the sack is no longer part of the body drawing. The carry (8)
+and hold (4) sheets of all 4 views were redrawn whole with EMPTY arms in the carrying pose (`gen_empty.sh`, prompts.py), and
+the load is one of 16 separate pictures (`raw/props_a.png`, `raw/props_b.png`; prompts.py `PROP_SHEETS`): flour, wheat,
+bread, logs, planks, stone, tools, water, grain, fruit, fish, meat, cotton, basket, silk, jar. Which one = what the resident
+really carries (`frame_lib.gd` `LOAD_OF`, the same item kind the old doll's `CARRY_PROP` reads; anything unlisted = basket).
+Seat per view = `build_frames.py` `LOAD_SEAT` (px from the chin anchor to the load's bottom centre + lean), size
+`LOAD_SIZE`; front views carry it on the shoulder at the image left, back views behind the shoulder at the image right.
+In the front views the frame's OWN hands / forearms are drawn once more over the load (mask1.B, `HANDS_OVER`) so the fist
+holds it — the same frame's pixels, not a limb from another frame. Shader: load quads are group 5 (`frame_doll.gdshader`).
+
+Hoe: (a) short tools at the top of the swing — sickle (7) and mallet (9) get their own angle per frame (`prop_short`,
+`pose_states.py` `tool_short`, `BACK_TOOL_SHORT`), so the head of the tool stands clear of her head instead of behind it;
+(b) back view — the tool is held at a hand point beside the body (`BACK_HAND_X`) and swings in the image plane behind her
+(`BACK_TOOL`), so it shows in every phase; the blade end is kept above the root line.
+
+Look up: the overlaid head rolls back about the chin and lifts (`LOOK_LIFT` rig per rad) on the look_a / look_b frames —
+an anchor change of the head piece, the body cells are as drawn. Gather: its own sheets now (`raw/gather_q_{front,back}.png`,
+6 entries from 5 drawn cells: half, full, grab, full, rise, stand; was 4 cells of the work sheets) — deep bend on 3 of 6.
+Sleep: `raw/sleep_front.png`, 2 breathing frames drawn upright (hands folded), laid on its side by the shader (frame flag
+`lie`, `LIE_ANGLE`), placed as the old doll's sleep. Baby in arms: not drawn — stays on the old cutout (`_frames_ok()`).
+
+Classifier: an arm reaching to the ground crosses the boot circles (gather) and took the legwear dye as a stripe on the
+forearm. `classify()`: a "stocking" blob that joins, with no ink line between, skin lying outside the boot zone (>= 30 px)
+is that arm -> skin. Changes exactly the pick_full / pick_grab cells of one 3/4 gather sheet; every other mask cell is identical.
+
+Atlas 1608x2112 -> 1548x1976 (cell 134x176 -> 129x152; 144 -> 148 cells, 220 -> 236 frame records), x3 textures. No second
+page: cells nobody plays any more (sack rows of idle, the old gather cells) are skipped and the 16 load pictures are shelf-
+packed into the unused end of the last cell row. Files: atlas 2,327,354 -> 2,331,498 B, mask0 231,508 -> 236,221 B,
+mask1 71,552 -> 57,775 B, frames.json 67,389 -> 80,584 B.
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/pose_gather_q_{front,back}.png, raw/pose_sleep_front.png | v12 references | pose_states.py | - | 1536x1024 | 2026-11-10 | yes | gather: 6 poses per 3/4 view; sleep: 2 poses, upright |
+| raw/carry_{front,q_front,q_back,back}.png | take e1 of 1 | codex-cli (built-in image gen) | - | 1536x1024 | 2026-11-10 | yes | empty arms; replaces the sack sheets (v4 / v10) |
+| raw/hold_{front,q_back,back}.png | take e2 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | standing with empty arms (4 frames); replaces the carry-idle rows of idle_* |
+| raw/hold_q_front.png | take e1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/props_a.png, raw/props_b.png | take e1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | 8 load pictures each (2 rows x 4 cells, one object per cell) |
+| raw/gather_q_{front,back}.png | take g1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/sleep_front.png | take s1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+
+Extra takes (hold e1 x3), the sack reference copies (`raw/ref_sack_*`) and `raw/check_*.png` deleted; logs of the chosen
+takes kept (`tools/cutout_c/logs/log_empty_*`, `log_props_{a,b}_e1.txt`, `log_state_gather_q_*_g1.txt`,
+`log_state_sleep_front_s1.txt`).
+
+Still weak: back-view loads are small at ppu 20 and a wide-brim hat covers most of one; the hold back sheet's raised arm is
+bare skin (no puff sleeve); look up is an in-plane head roll only (no drawn chin-up face); sleep has open eyes (as the old
+doll — no eye states); baby in arms is still the old cutout; the near boot's shoe mask is still ragged (not touched);
+work is still shown in the personal dress.
+
+Shots: godot_shots/cutC/states5_{carry,hold}_loads_{a,b}_ppu{20,44}.png, states5_hoe_{hoe,sickle,mallet}_ppu{20,44}.png,
+states5_{lookup,gather,sleep}_ppu{20,44}.png, states5_dyed_{carry,hold,hoe,gather,lookup,sleep}_ppu{20,44}.png,
+states5_live_loads_ppu{20,44}.png (12 women, 12 different loads, in the village).
+Tool: `shot_cutC_compare.gd` env `CUTC_LOAD=<item kinds, comma separated>`, `CUTC_TAG=<file tag>`, `CUTC_MODE=loads` (live
+capture); `tools/cutout_c/compose_states5.py` builds the named sheets from the strip captures.
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to

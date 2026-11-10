@@ -17,6 +17,11 @@ const PPUS := [20.0, 44.0]
 var CLIPS := ["walk", "carry", "idle"]      # CUTC_CLIPS="sit,eat,lookup,kneel,hoe,gather" (2026-11-10 states4): 띠에 찍을 동작
 ## 띠에서 옛 인형이 드는 소품 (게임의 CutoutResident와 같게): 먹기 = 빵, 괭이질 = 괭이 (CUTC_PROP=9 → 나무망치 등)
 const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6}
+## (2026-11-10 states5) CUTC_LOAD="밀,밀가루,빵": 나르기·안고 서기 띠의 짐 (칸마다 차례로 — 하나면 모든 칸이 그 짐). 옛 인형은 게임과 같은
+## 소품 (CutoutResident.CARRY_PROP, 없으면 바구니), 방식 C 인형은 그 짐의 그림. 없으면 밀가루.
+## CUTC_TAG=flour: 띠 파일 이름에 붙임 (strip_tmp_flour_ppu20_carry_0.png) — 여러 번 찍어도 덮어쓰지 않게
+## CUTC_MODE=loads: 방식 C 여자 여럿이 저마다 다른 짐을 지고 걷고·서 있는 장면 (loads_tmp_ppu<P>_<n>.png)
+const LOAD_KINDS := ["밀", "밀가루", "빵", "통나무", "판자", "돌", "물", "낟알", "과일", "생선", "솜", "버섯"]
 const SP := 0.7            # 띠의 칸 간격 (세계)
 const ROW := 1.5          # 위·아래 줄의 깊이 차 (세계, 카메라 쪽)
 const LEG := 0.8           # 살아 있는 장면 팔각형 한 변 (세계)
@@ -68,9 +73,12 @@ func _initialize() -> void:
 				_job.append([p, c, vv])
 	var mode := OS.get_environment("CUTC_MODE")     # "" 둘 다 · strip · live
 	plan = [_build, _live_hour]
-	if mode != "live":
+	if mode == "loads":
+		for lp in [20.0, 44.0]:
+			plan.append_array([_loads_setup.bind(float(lp)), _loads_loop])
+	elif mode != "live":
 		plan.append_array([_strip_setup, _strip_loop])
-	if mode != "strip":
+	if mode != "strip" and mode != "loads":
 		# CUTC_PPUS="20,44,60" (2026-11-10): 라이브 사진의 확대 (기본 44·60) — 실제 기본 확대(ppu 20)에서 두 발이 읽히는지 볼 때
 		var lps: Array = [44.0, 60.0]
 		if OS.get_environment("CUTC_PPUS") != "":
@@ -278,8 +286,11 @@ func _strip_loop(_dt: float) -> int:
 		var ax := _cam_axes()
 		var right: Vector2 = ax[0]
 		var toward: Vector2 = ax[1]
+		var kinds: PackedStringArray = (OS.get_environment("CUTC_LOAD") if OS.get_environment("CUTC_LOAD") != "" else "밀가루").split(",")
 		for i in 8:
 			var x := (float(i) - 3.5) * SP
+			if clip == "sleep":                        # 누운 사람은 넓다: 네 칸만 (뒤 네 칸은 숨김)
+				x = (float(i % 4) - 1.5) * SP * 1.9
 			var po := C + right * x - toward * ROW * 0.5
 			var pn := C + right * x + toward * ROW * 0.5
 			var o = olds[i]
@@ -294,19 +305,25 @@ func _strip_loop(_dt: float) -> int:
 				oc = "idle" if i < 4 else "hold"
 				nc = oc
 				ph = (float(i % 4) + 0.5) / 4.0
+			if clip == "sleep":
+				ph = (float(i % 4) + 0.5) / 4.0
+			o.visible = clip != "sleep" or i < 4
 			o.view = view
 			o.mirror = 1.0
 			var pr := int(STRIP_PROP.get(oc, -1))
 			if oc == "hoe" and OS.get_environment("CUTC_PROP") != "":
 				pr = int(OS.get_environment("CUTC_PROP"))
+			var kind := ""
+			if oc == "carry" or oc == "hold":
+				kind = kinds[i % kinds.size()]
+				pr = int(CutoutResident.CARRY_PROP.get(kind, CutoutResident.PROP_BASKET))
 			o.set_prop(pr)
 			o.set_clip(oc, 0.0, ph)
 			n.view = view
 			n.mirror = 1.0
-			n.visible = FLib.clip_index(nc) >= 0          # 아직 그리지 않은 동작은 아래 줄을 비움
+			n.visible = FLib.clip_index(nc) >= 0 and (clip != "sleep" or i < 4)         # 아직 그리지 않은 동작은 아래 줄을 비움
 			if n.visible:
-				if n.has_method("set_prop"):
-					n.set_prop(pr if oc != "carry" and oc != "hold" else -1)
+				n.set_prop(pr if kind == "" else -1, kind)
 				n.set_clip(nc, 0.0, ph)
 		_pending = j
 		_hid_pass = false
@@ -335,10 +352,136 @@ func _strip_loop(_dt: float) -> int:
 				r = r.expand(sp)
 	r = r.grow(12.0)
 	var ri := Rect2i(r).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
-	var name := "strip_tmp_ppu%d_%s_%d.png" % [int(j[0]), j[1], j[2]]
+	var tag := OS.get_environment("CUTC_TAG")
+	var name := "strip_tmp_%sppu%d_%s_%d.png" % [tag + "_" if tag != "" else "", int(j[0]), j[1], j[2]]
 	img.get_region(ri).save_png(out_dir.path_join(name))
 	print("saved ", name, " ", ri)
 	return -2
+
+
+# ───────────────────────── (c) 짐 장면 (states5) ─────────────────────────
+var _lp: Array = []            # [Resident, 시작 자리 (C 기준), 걷는 쪽, 동작, 짐]
+const LOADS_T := 2.4
+
+
+## 방식 C 여자 여럿 (저마다 제 머리·물감, 평상복 a)이 저마다 다른 짐을 지고: 앞 두 줄은 걷고 (앞·비스듬한 앞·비스듬한 뒤·뒤), 셋째 줄은 서 있음
+func _loads_setup(_dt: float, ppu: float) -> int:
+	_ppu = ppu
+	_look(C, ppu)
+	var moms := {}
+	for q: Resident in v.people:
+		if q.is_baby():
+			for pid in q.parents:
+				moms[pid] = true
+	var ax := _cam_axes()
+	var right: Vector2 = ax[0]
+	var toward: Vector2 = ax[1]
+	var heads := [0.0, 60.0, -60.0, 130.0, -130.0, 180.0]
+	# 짐 가짓수만큼 어른 여자가 모자라면 사진용으로 더 둠 (나이 6~15 — 어른은 4~20)
+	var have := 0
+	for q: Resident in v.people:
+		if q.sex == "f" and q.is_adult() and not q.sleeping and not moms.has(q.id):
+			have += 1
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	while have < LOAD_KINDS.size():
+		v.add_person("짐%d" % have, "f", rng.randf_range(6.0, 15.0), "", C.x + rng.randf_range(-1.0, 1.0), C.y + rng.randf_range(-1.0, 1.0), null, null)
+		have += 1
+	scene.refresh()
+	_lp.clear()
+	for r: Resident in v.people:
+		if _lp.size() >= LOAD_KINDS.size():
+			break
+		if not (r.sex == "f" and r.is_adult() and not r.is_baby() and r.age < Balance.AGE_ELDER and not r.sleeping and not moms.has(r.id)):
+			continue
+		var i := _lp.size()
+		var row := i / 4
+		var col := i % 4
+		var start := right * (float(col) - 1.5) * 1.25 + toward * (float(row) - 1.0) * 1.45
+		var dir := toward.rotated(-deg_to_rad(heads[(i * 5 + row) % heads.size()]))
+		_lp.append([r, start, dir, "carry" if row < 2 else "idle", LOAD_KINDS[i]])
+	_lt = 0.0
+	_cap_n = 0
+	_loads_place(0.0)
+	scene.view.sync(0.0, true)
+	for e: Array in _lp:
+		var m := scene.view.residents[(e[0] as Resident).id] as CutoutResident
+		m.dlook = m.dlook.duplicate(true)
+		m.dlook["personal"] = 0
+		m._d_outfit = -2
+		m._d_hat = -2
+		m._d_prop = -2
+		m._f_hat = -9
+		m.frames_force = 1
+		m.doll.set_look(m.dlook)
+	print("loads ppu%d: %d women" % [int(ppu), _lp.size()])
+	for cl in scene.find_children("*", "CanvasLayer", true, false):
+		(cl as CanvasLayer).visible = false
+	_live_hide = 10
+	return 20
+
+
+func _loads_place(t: float) -> void:
+	for e: Array in _lp:
+		var r: Resident = e[0]
+		var d: Vector2 = e[2]
+		var q: Vector2 = C + (e[1] as Vector2)
+		if String(e[3]) == "carry":
+			q += d * Balance.WALK_SCREEN * (t - LOADS_T * 0.5)
+		r.x = q.x
+		r.y = q.y
+		r.px = q.x
+		r.py = q.y
+		r.anim = e[3]
+		r.carry = e[4]
+		r.action = ""
+		r.facing = atan2(d.x, d.y)
+
+
+func _loads_loop(_dt: float) -> int:
+	if _live_hide > 0:
+		_live_hide -= 1
+		if _live_hide == 0:
+			_flora(false)
+			_clear_area(C, 7.0)
+		_loads_place(0.0)
+		return -1
+	# 멀리 볼 때(ppu 20)는 건물의 '멀리 모양'(통나무·돌 더미 등)과 한 덩어리 묶음(far_batch)이 새로 켜져 사람을 가림
+	# (_clear_area 는 그때 보이던 것만 숨김): 이 장면에서만 장면마다 둘레 9칸 안의 것을 그리기 층에서 뺌
+	var bx := AABB(Vector3(C.x - 9.0, -100.0, C.y - 9.0), Vector3(18.0, 200.0, 18.0))
+	for n in scene.view.find_children("*", "GeometryInstance3D", true, false):
+		var g := n as GeometryInstance3D
+		var gs: Script = g.get_script()
+		if g.layers == 0 or not g.is_visible_in_tree() or g is CutoutShadows or (gs != null and gs.resource_path.contains("cutout")):
+			continue
+		if g.get_parent() is ResidentModel or g.get_parent().get_parent() is ResidentModel:
+			continue
+		if String(g.get_parent().name).begins_with("far_batch") or (g.global_transform * g.get_aabb()).intersects(bx):
+			g.layers = 0
+	_lt += 1.0 / 60.0
+	_loads_place(_lt)
+	if _lt >= LOADS_T:
+		return 4
+	if int(_lt * 60.0 + 0.5) % 36 == 30:
+		var img := vp.get_texture().get_image()
+		var cam: Camera3D = scene.cam.camera
+		var ax := _cam_axes()
+		var r := Rect2()
+		var first := true
+		for corner in [Vector2(-3.0, -2.6), Vector2(3.0, -2.6), Vector2(-3.0, 2.6), Vector2(3.0, 2.6)]:
+			var p: Vector2 = C + (ax[0] as Vector2) * corner.x + (ax[1] as Vector2) * corner.y
+			for hh in [0.0, 1.3]:
+				var sp: Vector2 = cam.unproject_position(_g3(p) + Vector3(0, float(hh), 0)) * 3.0
+				if first:
+					r = Rect2(sp, Vector2.ZERO)
+					first = false
+				else:
+					r = r.expand(sp)
+		var ri := Rect2i(r.grow(6.0)).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+		img.get_region(ri).save_png(out_dir.path_join("loads_tmp_ppu%d_%d.png" % [int(_ppu), _cap_n]))
+		print("saved loads_tmp_ppu%d_%d.png " % [int(_ppu), _cap_n], ri)
+		_cap_n += 1
+	return -1
 
 
 # ───────────────────────── (b) 살아 있는 장면 ─────────────────────────

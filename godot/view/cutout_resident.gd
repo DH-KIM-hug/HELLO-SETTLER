@@ -27,7 +27,7 @@ const Doll := preload("res://proto/cutout_a/cut_doll.gd")
 const FrameLib := preload("res://proto/cutout_c/frame_lib.gd")
 const FrameDoll := preload("res://proto/cutout_c/frame_doll.gd")
 const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk",
-	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather"}     # 2026-11-10 states4
+	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather", "sleep": "sleep"}     # 2026-11-10 states4 · states5 (sleep)
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
@@ -528,7 +528,7 @@ func _refresh_frames() -> void:
 		_f_hat = _d_hat
 		fdoll.set_look(dlook, _d_hat)
 	var fc: String = FRAME_CLIPS[_d_clip]
-	fdoll.set_prop(_d_prop)
+	fdoll.set_prop(_d_prop, _item_kind if fc == "carry" or fc == "hold" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
 	var rate: float = 0.0 if fc == "walk" or fc == "carry" else Lib.CLIP_RATE[fc]
 	if fc == "walk" or fc == "carry":
 		var g := _ground
@@ -550,6 +550,11 @@ func _refresh_frames() -> void:
 		_f_clip = fc
 		_f_rate = rate
 		fdoll.set_clip(fc, rate, _f_phase)
+
+
+## 방식 C 인형이 지금 어깨에 그리고 있는 짐 그림 ("" = 컷아웃 인형이거나 빈손) — 짐을 따로 그리는 곳(제단 돌)이 겹쳐 그리지 않게
+func frame_load() -> String:
+	return FrameLib.load_name(_item_kind) if _f_on and (_f_clip == "carry" or _f_clip == "hold") else ""
 
 
 ## 방식 C 발 붙이기 (frame_doll.gdshader lockv): 걸음 한 주기에 땅에서 가는 길 (세계) — 걷지 않거나 멈춘 보폭이면 0

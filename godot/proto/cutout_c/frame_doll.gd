@@ -22,7 +22,8 @@ var _lock_us := 0
 var _react := Vector3(1.0, 1.0, 0.0)
 ## 보기 잠금 (컷아웃 인형 cut_doll.view_lock과 같음): "" 걷는 쪽대로 · "front" 늘 앞 (올려다보기) · "side" 앞·뒤를 비스듬한 보기로 (앉기·먹기·줍기)
 var view_lock := ""
-var _sel := Vector4(0, 0, -1, -1)
+var _sel := Vector4(-1, 0, -1, -1)       # 짐 그림 번호 (-1 없음) · 머리 묶음 · 모자 묶음 (-1 없음) · 소품 (컷아웃 PROPS 번호, -1 없음)
+var _load := ""
 
 
 func setup(mat: ShaderMaterial) -> void:
@@ -34,22 +35,25 @@ func setup(mat: ShaderMaterial) -> void:
 
 ## look = 컷아웃 생김새 기록 (Lib.look_from): 머리 묶음·모자·물감은 그대로, 몸은 이 장면 그림 (여자 평상복 a)
 func set_look(l: Dictionary, hat: int) -> void:
-	_sel = Vector4(0, int(l["head"]), hat, _sel.w)
+	_sel = Vector4(_sel.x, int(l["head"]), hat, _sel.w)
 	set_instance_shader_parameter("sel", _sel)
 	var d: Array = l["dye"]
 	set_instance_shader_parameter("dyes0", Vector4(d[0], d[1], d[2], d[3]))
 	set_instance_shader_parameter("dyes1", Vector4(d[4], d[5], FLib.leg_dye(int(d[6])), FLib.shoe_dye(int(d[7]))))
 
 
-## 소품 (컷아웃 PROPS 번호, -1 없음): 그 장면에 쥘 자리가 있는 동작(먹기 = 빵, 괭이질 = 괭이·낫·망치)에서만 보인다 —
-## 나르기·안고 서기는 짐이 그림에 있어 소품을 얹지 않는다 (frames.json의 prop이 없는 장면)
-func set_prop(id: int) -> void:
-	if int(_sel.w) == id:
+## 소품 (컷아웃 PROPS 번호, -1 없음): 그 장면에 쥘 자리가 있는 동작(먹기 = 빵, 괭이질 = 괭이·낫·망치)에서만 보인다.
+## load (v12) = 나르는 짐 이름 (시뮬의 carry, "" 없음): 나르기·안고 서기에서 그 짐의 그림을 어깨 자리에 얹는다 (FLib.load_index) —
+## 그 두 동작에서는 컷아웃 소품을 그리지 않는다.
+func set_prop(id: int, load := "") -> void:
+	if int(_sel.w) == id and load == _load:
 		return
+	_load = load
+	_sel.x = FLib.load_index(load)
 	_sel.w = id
 	set_instance_shader_parameter("sel", _sel)
 	var pf := FLib.prop_fit(id)
-	set_instance_shader_parameter("prop", Vector4(pf.x, pf.y, 0, 0))
+	set_instance_shader_parameter("prop", Vector4(pf.x, pf.y, 1.0 if FLib.PROP_HEAD_UP.has(id) else 0.0, 0))
 
 
 func set_clip(c: String, r: float, ph: float) -> void:

@@ -1,17 +1,18 @@
 // 방식 C 주민 시험판 (docs/RESIDENTS_2D.md 7장, 2026-11-08 — 스파이크, 기본값은 그대로 컷아웃):
 // 몸+옷 = 장면마다 그린 그림 한 장 (frames_atlas, 걸음·숨쉬기가 그림에 있음), 옷 색 = 물감 마스크 두 장 (frames_mask0/1),
 // 머리·얼굴·모자 = 지금 컷아웃 라이브러리의 머리 조각 (doll_atlas)을 그 장면의 턱 자리(fdata)에 얹음 → 머리·모자 조합은 그대로.
-// 한 사람 = 메시 하나 = 그리기 1번 (몸 사각형 + 짐 겹 + 모든 머리·모자 사각형, 고르지 않은 것은 점으로 접힘).
+// 한 사람 = 메시 하나 = 그리기 1번 (몸 사각형 + 손 겹 + 짐 그림 + 모든 머리·모자·소품 사각형, 고르지 않은 것은 점으로 접힘).
+// v12 (2026-11-10): 나르는 짐은 몸 장면에 그려 넣지 않고 따로 그린 그림(group 5)을 그 장면의 짐 자리에 얹음 — 밀·밀가루·빵이 갈림.
 shader_type spatial;
 render_mode skip_vertex_transform, cull_disabled, ambient_light_disabled, specular_disabled, depth_draw_opaque;
 
 uniform sampler2D atlas : filter_linear_mipmap, repeat_disable;          // 머리 조각 (컷아웃 라이브러리)
 uniform sampler2D dye_mask : hint_default_black, filter_linear_mipmap, repeat_disable;
-uniform sampler2D frames_atlas : filter_linear_mipmap, repeat_disable;   // 몸 장면들
+uniform sampler2D frames_atlas : filter_linear_mipmap, repeat_disable;   // 몸 장면들 + 짐 그림들 (v12)
 uniform sampler2D fmask0 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 피부 · 옷 주색 · 둘째(크림) · 장식(띠)
-uniform sampler2D fmask1 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 다리(양말) · 신 · 짐(물감 없음)
+uniform sampler2D fmask1 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 다리(양말) · 신 · 짐을 받친 손 (앞쪽 보기의 나르기·안고 서기 — 짐 위에 다시 그릴 곳) · 먼 다리
 uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
-                                                                         // [2] 소품 (기울기 rad, 손 x, y, 배율 — 0 = 소품 없음), [3] (쥐는 자리: 소품 키의 몇 배, -, -, -)
+                                                                         // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, -)
 // 동작 = frames.json의 clips 차례 (걷기·나르기·서기·안고 서기 + 2026-11-10 앉기·먹기·올려다보기·무릎·괭이질·줍기) — frame_lib.material이 채움
 uniform int clip_off[16];        // 동작의 첫 장면 번호
 uniform int clip_n[16];          // 동작의 장면 수 (보기마다)
@@ -19,7 +20,9 @@ uniform float head_r = 143.0;    // 머리 자리 표시 원의 반지름 (rig) 
 uniform vec4 body_rect = vec4(-400.0, -10.0, 400.0, 1020.0);   // 몸 장면 사각형 (rig, 발바닥 가운데 = 0)
 uniform vec4 head_k = vec4(1.3);                  // 보기마다 머리 배율 (자리 표시 원 지름에 맞춤)
 uniform vec4 body_layer = vec4(5.0, 7.0, 6.0, 4.0);   // 보기마다 몸의 겹 (컷아웃 라이브러리의 몸 겹 — 머리꼬리·매듭 앞뒤가 그대로)
-uniform vec4 sack_layer = vec4(12.0, 12.0, -1.0, -1.0);   // 짐을 머리 위에 다시 그리는 겹 (-1 = 안 그림: 짐이 머리 뒤)
+uniform vec4 sack_layer = vec4(12.0, 12.0, -1.0, -1.0);   // 짐 그림의 겹: 머리 위 (그 위 +0.5에 짐을 받친 손을 다시 그림) · -1 = 몸·머리 뒤 (뒤쪽 보기)
+uniform vec2 lie_at = vec2(400.0, 190.0);         // 누운 장면 (자기): 눕힌 뒤 옮김 (rig — 컷아웃 인형의 SLEEP_SHIFT · SLEEP_LIFT와 같음)
+uniform float breath = 0.03;                      // 누운 장면의 숨쉬기 (몸통 두께가 이만큼 부풀었다 꺼짐)
 uniform vec3 palette[64];
 uniform vec3 base_col[64];       // 머리 조각 묶음의 그린 바탕색 (컷아웃과 같음)
 uniform vec3 fbase[8];           // 몸 장면의 그린 바탕색 (물감 슬롯 0~7)
@@ -36,15 +39,15 @@ uniform float foot_lock = 0.5;     // 발 붙이기 세기 (0 = 끔, 1 = 다 붙
                                    // 0.5가 둘을 반씩 (몸 sd 1.0px, 디딘 발 ±1px; ppu 20에서는 둘 다 1px 이하)
 uniform float far_k = 0.68;       // 비스듬한 보기의 먼 다리 (frames_mask1.a)를 물감을 입힌 뒤 이만큼 어둡게 — 어떤 양말 색이든 두 다리가 갈림
 
-instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // -, 머리 묶음 T, 모자 묶음 U(-1 없음), 소품 P(-1 없음 — 컷아웃 PROPS 번호)
-instance uniform vec4 prop = vec4(0.0);                    // x = 소품의 키 (rig — 쥐는 자리 계산), y = 더 돌림 (rad: 머리가 위에 그려진 낫·망치 = PI)
+instance uniform vec4 sel = vec4(-1.0, 0.0, -1.0, -1.0);   // 짐 그림 L(-1 없음), 머리 묶음 T, 모자 묶음 U(-1 없음), 소품 P(-1 없음 — 컷아웃 PROPS 번호)
+instance uniform vec4 prop = vec4(0.0);                    // x = 소품의 키 (rig — 쥐는 자리 계산), y = 더 돌림 (rad: 머리가 위에 그려진 낫·망치 = PI), z = 1: 짧은 연장 (fdata[3].y 기울기)
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작(0 걷기 1 나르기 2 서기 3 안고 서기), 시작 위상
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);
 instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 동작 빠르기(주기/초), 기울기(rad, 발끝 중심) — 컷아웃 인형과 같음
 instance uniform vec4 lockv = vec4(0.0);                   // xy = 걸음 한 주기에 땅에서 가는 길 (세계 x, z — frame_doll.gd가 걷는 쪽 × 땅 빠르기 ÷ 걸음 빠르기)
 
-varying flat vec4 v_dye;     // 머리 조각: 물감 슬롯 xyz, w = 묶음 · 몸: w = 50 (몸) / 60 (짐 겹)
+varying flat vec4 v_dye;     // 머리 조각: 물감 슬롯 xyz, w = 묶음 · 몸: w = 50 (몸) / 60 (손 겹) / 70 (짐 그림)
 varying flat float v_show;
 
 void vertex() {
@@ -71,10 +74,15 @@ void vertex() {
 	float f_len = max(t_b - fd.z, 0.0001);
 	vec2 hold = lockv.xy * (f_len * (clamp((u - fd.z) / f_len, 0.0, 1.0) - 0.5) * foot_lock);
 	bool show;
+	bool loaded = sel.x >= 0.0 && (clip == 1 || clip == 3);                // 나르기·안고 서기 + 짐
 	if (group == 0) {
 		show = true;
 	} else if (group == 4) {
-		show = sack_layer[cur_view] >= 0.0 && (clip == 1 || clip == 3);      // 나르기·안고 서기만 (짐이 그림에 있음)
+		show = loaded && sack_layer[cur_view] >= 0.0;                        // 짐이 머리 위에 그려지는 보기만: 짐을 받친 손을 그 위에
+	} else if (group == 5) {
+		show = loaded && abs(set_i - sel.x) < 0.5;
+	} else if (group == 3 && (clip == 1 || clip == 3)) {
+		show = false;                                                        // 나르기·안고 서기의 짐은 group 5
 	} else if (group == 3) {
 		// 소품 (컷아웃 인형과 같은 그림·같은 번호): 그 장면에 쥘 자리가 있을 때만. 빵·나뭇가지·바구니는 비스듬한 그림이 따로 (+3)
 		float pid = sel.w;
@@ -88,7 +96,8 @@ void vertex() {
 		show = sel.z >= 0.0 && abs(set_i - sel.z) < 0.5 && view == cur_view;
 	}
 	v_show = show ? 1.0 : 0.0;
-	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 0 ? 50.0 : (group == 4 ? 60.0 : (group == 3 ? 0.0 : set_i)));
+	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 0 ? 50.0 : (group == 4 ? 60.0 : (group == 5 ? 70.0 : (group == 3 ? 0.0 : set_i))));
+	vec4 fx = texelFetch(fdata, ivec2(fi, 3), 0);
 	if (!show) {
 		VERTEX = vec3(0.0);
 		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
@@ -100,15 +109,23 @@ void vertex() {
 			p = vec2(mix(body_rect.x, body_rect.z, c.x), mix(body_rect.w, body_rect.y, c.y));
 			vec4 r = texelFetch(fdata, ivec2(fi, 0), 0);
 			UV = mix(r.xy, r.zw, c);
-			layer = group == 0 ? body_layer[cur_view] : sack_layer[cur_view];
+			layer = group == 0 ? body_layer[cur_view] : sack_layer[cur_view] + 0.5;
+		} else if (group == 5) {
+			// 짐 그림: 밑변 가운데가 원점 → 기울임·배율 → 그 장면의 짐 자리 (어깨 위 손 옆). 앞쪽 보기 = 머리 위, 뒤쪽 보기 = 몸·머리 뒤
+			vec4 pr = texelFetch(fdata, ivec2(fi, 2), 0);
+			float tc = cos(pr.x), ts = sin(pr.x);
+			p = vec2(tc * VERTEX.x - ts * VERTEX.y, ts * VERTEX.x + tc * VERTEX.y) * pr.w + pr.yz;
+			layer = sack_layer[cur_view] >= 0.0 ? sack_layer[cur_view] : -0.5;
 		} else if (group == 3) {
 			// 소품: 원점 둘레 그림 → 돌림·배율 → 손 자리. 자루를 쥐는 연장(비스듬한 보기)은 손에서 날 쪽으로 (쥐는 자리 × 소품 키)만큼 밀어
 			// 자루 위쪽이 손에 오게 (컷아웃 인형의 괭이와 같은 식). 겹: 앞쪽 보기 = 몸 바로 앞 (머리 뒤), 뒤쪽 보기 = 몸 뒤.
+			// 짧은 연장 (낫·망치 — v12): 휘두름 꼭대기에서 괭이처럼 머리 뒤로 넘기면 머리에 가려 안 보였다 → 그 장면만 따로 정한 기울기 (위·앞쪽)
 			vec4 pr = texelFetch(fdata, ivec2(fi, 2), 0);
-			float th = pr.x + prop.y;
+			float ang = prop.z > 0.5 ? fx.y : pr.x;
+			float th = ang + prop.y;
 			float tc = cos(th), ts = sin(th);
 			p = vec2(tc * VERTEX.x - ts * VERTEX.y, ts * VERTEX.x + tc * VERTEX.y) * pr.w + pr.yz;
-			p += texelFetch(fdata, ivec2(fi, 3), 0).x * prop.x * vec2(sin(pr.x), -cos(pr.x));
+			p += fx.x * prop.x * vec2(sin(ang), -cos(ang));
 			layer = cur_view < 2 ? body_layer[cur_view] + 0.5 : -0.5;
 		} else {
 			p = VERTEX.xy;
@@ -123,6 +140,11 @@ void vertex() {
 			}
 			p += fd.xy;
 			layer = VERTEX.z;
+		}
+		if (fx.z != 0.0) {                             // 누운 장면 (자기 — v12): 선 채로 그린 그림을 통째로 눕힘 (머리 = 왼쪽, 뒤집기로 오른쪽 — 컷아웃 인형과 같음) + 숨쉬기
+			p.x *= 1.0 - breath * sin(u * 6.2831853);
+			float lc = cos(fx.z), ls = sin(fx.z);
+			p = vec2(lc * p.x - ls * p.y, ls * p.x + lc * p.y) + lie_at;
 		}
 		p.x *= st.y * misc.y;
 		if (misc.w != 0.0) {                           // [톡 반응] 발끝을 중심으로 인형 전체를 기울임 (view/tap_react.gd — 화면만, 컷아웃 인형과 같은 식)
@@ -193,7 +215,7 @@ void fragment() {
 		vec4 t = texture(frames_atlas, UV);
 		vec4 m0 = texture(fmask0, UV);
 		vec4 m1 = texture(fmask1, UV);
-		if (t.a < alpha_cut || (v_dye.w > 55.0 && m1.b < 0.5)) {
+		if (t.a < alpha_cut || (v_dye.w > 55.0 && v_dye.w < 65.0 && m1.b < 0.5)) {
 			discard;
 		}
 		c = t.rgb;
