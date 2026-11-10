@@ -19,6 +19,9 @@
 ## (E1-4 첫 아기 · E1-6 첫 기적 — 2026-11-10) 사건 &"born" · &"wish_granted" 구독: 처음이면 긴 연출 (Stagings "first_baby" · "miracle" — 배역은
 ## view/moment_cast.gd, 인형 통째 몸짓은 view/stage_dolls.gd), 그다음부터는 짧은 판 (Stagings.MINIS — 카메라·병 시간·입력을 붙잡지 않음).
 ## 자리를 비운 동안·따라잡는 중에 일어난 일은 연출하지 않는다 (깨달음과 같은 잣대 STALE). 시뮬레이션은 읽기만 — 보든 건너뛰든 안 보든 결과가 같다.
+## (2026-11-10 다듬기) 콘티에 "hud": false인 연출(첫 기적 · 첫 아기)은 가까이 보는 동안 위·아래 띠 · 지도 · 단추가 HUD_FADE초에 물러난다
+## (staging.md '띠 물러남' — 장면의 것을 이름으로 찾아 투명도만 바꿈: HUD_PARTS). '천천히' 띠도 띄우지 않고 작은 건너뛰기 귀띔만.
+## 카메라가 돌아올 때(back) · 끝날 때 · 건너뛸 때 다시 나타난다. 짧은 판은 띠를 건드리지 않는다.
 class_name StageDirector
 extends Control
 
@@ -60,8 +63,11 @@ var _aw_ev: Dictionary = {}          # 무리 → 사건으로 받은 깨달음 
 
 # (E1-4 · E1-6) 작은 순간
 const MINI_WAIT := 12.0              # 짧은 판: 큰 시트가 열려 있으면 이만큼(현실 초)까지 닫히길 기다림 — 그래도 열려 있으면 그만둠
-const MINI_PX := 56.0                # 짧은 판의 빛·하트: 한 칸이 이만큼(화면 점)보다 작게 보이면 그만큼 키움
-const MINI_BIG := 3.5
+const MINI_PX := 112.0               # 짧은 판의 빛·하트: 한 칸이 이만큼(화면 점 — 긴 연출이 가까이 볼 때의 한 칸)으로 보일 때의 크기를 1로,
+const MINI_BIG := 8.0                # 멀리서 보면 그만큼 키움 (어느 확대에서나 화면에서 비슷한 크기 — 가장 멀리서도 이 배수까지만)
+const MINI_LIFT_POW := 0.5           # 짧은 판의 빛 높이는 크기 배수의 이 제곱만큼만 올라감 (크기는 그대로 big배)
+const MINI_HOP_PX := 10.0            # 짧은 판의 폴짝: 화면에서 적어도 이만큼(점) 뛰어 보이게 높이를 키움
+const MINI_HOP_MAX := 3.0            # … 이 배수까지만 (아주 멀리서는 사람이 점이라 더 키우지 않음)
 const MINI_MAX := 2                  # 짧은 판은 한 번에 이만큼까지
 const MINI_SHEETS := ["altar_sheet", "shop_sheet", "chronicle", "settings_sheet", "shelf_sheet", "people_sheet", "return_letter", "baby_sheet"]
 var mini_log: Array = []             # (시험) 지금까지 한 짧은 판 [{id, t}]
@@ -76,6 +82,17 @@ var _minis: Array = []               # 짧은 판 [{id, v, ctx, spec, t, bi, wai
 var _mq: Array = []                  # 조금 뒤에 할 일 [때(_now), Callable] (사람마다 조금씩 늦게)
 var _now := 0.0                      # 이 감독의 현실 시계 (초)
 var _light_r := LIGHT_R
+
+# (2026-11-10) 띠 물러남 — "hud": false인 연출
+const HUD_FADE := 0.4                # 띠·지도·단추가 물러나고 돌아오는 시간 (staging.md — 400ms)
+const HUD_HINT_A := 0.62             # 건너뛰기 귀띔의 짙기
+## 물러나는 것 (장면의 것을 이름으로 — 없는 것은 건너뜀. "a.b" = a의 b). 말풍선 · 병 안 공기 그림 · 톡 반응은 그대로
+const HUD_PARTS := ["top_bar", "bottom_bar", "stack", "speed_btn", "speed_list", "store_strip", "site_marks_ctl", "ui_label", "lamp_ctl.badge",
+	"minimap", "goto_btn", "out_btn", "goto_list", "split_bar"]
+var _hud_a := 1.0                    # 띠의 짙기 (1 = 평소)
+var _hud_goal := 1.0
+var _hint: Label                     # "톡톡 — 건너뛰기" (띠가 물러난 동안만, 작게)
+var _shooting := false               # 연대기 그림 카드를 찍는 화면 — 귀띔도 감춤
 
 var sc: Node                         # 장면 (TestVillage 계열)
 var id := ""                         # 지금 연출 (없으면 "")
@@ -179,6 +196,15 @@ void fragment() {
 	_skip_btn.custom_minimum_size = Vector2(UiTheme.TOUCH * 2, UiTheme.TOUCH)
 	_skip_btn.pressed.connect(skip)
 	add_child(_skip_btn)
+	# 띠가 물러난 연출의 작은 귀띔 (거인 UI — [건너뛰기]가 뜨면 비켜 줌)
+	_hint = Label.new()
+	_hint.text = "톡톡 — 건너뛰기"
+	_hint.theme_type_variation = "Small"
+	_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint.add_theme_color_override("font_color", UiTheme.CHIP_TEXT)
+	_hint.add_theme_stylebox_override("normal", UiTheme._box(Color(UiTheme.TOAST_BG, 0.5), Color(0, 0, 0, 0), 0, 10, 4))
+	_hint.visible = false
+	add_child(_hint)
 	_build_page()
 
 
@@ -260,6 +286,8 @@ func _layout() -> void:
 	_skip_btn.position = Vector2(vs.x - _skip_btn.size.x - 6.0, row_y)
 	_chip.size = _chip.get_combined_minimum_size()
 	_chip.position = Vector2(10.0, roundf(row_y + (_skip_btn.size.y - _chip.size.y) * 0.5))
+	_hint.size = _hint.get_combined_minimum_size()
+	_hint.position = Vector2(vs.x - _hint.size.x - 10.0, roundf(row_y + (_skip_btn.size.y - _hint.size.y) * 0.5))
 	_cap.position = Vector2(roundf((vs.x - w) * 0.5), roundf(row_y - _cap.size.y - 10.0))
 	var m := Vector2(minf(18.0, vs.x * 0.05), minf(40.0, vs.y * 0.05))     # 화면 가득 (가장자리 조금 — 종이 그림자가 보이게)
 	var lw := maxf(80.0, vs.x - m.x * 2.0 - 60.0)     # 감기는 글은 폭을 정해 줘야 한 글자씩 세로로 늘어나지 않음
@@ -408,6 +436,7 @@ func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 	dark = 0.0
 	_shadow_t = -1.0
 	_skip_arm = 0.0
+	_shooting = false                          # 앞 연출의 그림 찍기가 덜 끝났어도 새 연출의 귀띔은 보이게
 	_page_a = 0.0
 	_page_goal = 0.0
 	_page.visible = false
@@ -435,7 +464,8 @@ func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 		_roles = roles(q, _focus_point(q))
 	_slow_down()
 	_chip_l.text = "천천히 — %s" % String(spec.get("reason", ""))
-	_chip.visible = String(spec.get("reason", "")) != ""
+	_chip.visible = _chip_wanted()
+	_hud_goal = 1.0 if _hud_stays() else 0.0       # 가까이 보는 장면은 띠·지도·단추가 물러남 (끝나면 · 건너뛰면 돌아옴)
 	visible = true
 	# 짧은 장면은 화면 두 번 톡 = 건너뛰기 (첫 톡은 [건너뛰기]를 띄우기만). 길고 조용한 장면(popups)은 아래 띠를 그대로 쓰게 — [건너뛰기]가 늘 떠 있음
 	mouse_filter = Control.MOUSE_FILTER_IGNORE if bool(spec.get("popups", false)) else Control.MOUSE_FILTER_STOP
@@ -471,6 +501,49 @@ func tap() -> void:
 
 func skip_shown() -> bool:
 	return _skip_btn.visible
+
+
+# ───────────────────────── 띠 물러남 ("hud": false) ─────────────────────────
+## 이 연출은 띠를 그대로 두나 (콘티에 "hud": false가 없으면 그대로)
+func _hud_stays() -> bool:
+	return bool(spec.get("hud", true))
+
+
+## '천천히 — 무슨 일' 띠를 띄우나: 까닭이 있고 띠가 그대로인 연출만 (띠가 물러난 가까운 장면 위에는 띄우지 않음)
+func _chip_wanted() -> bool:
+	return playing() and String(spec.get("reason", "")) != "" and _hud_stays()
+
+
+## (시험 · 장면) 띠의 짙기 0~1
+func hud_alpha() -> float:
+	return _hud_a
+
+
+func hint_shown() -> bool:
+	return _hint.visible
+
+
+## 물러나는 것들 (지금 장면에 있는 것만)
+func hud_parts() -> Array:
+	var out: Array = []
+	if sc == null:
+		return out
+	for nm: String in HUD_PARTS:
+		var o: Variant = sc
+		for key: String in nm.split("."):
+			o = (o as Object).get(key) if o is Object and is_instance_valid(o) else null
+		if o is CanvasItem and is_instance_valid(o):
+			out.append(o)
+	return out
+
+
+## 한 화면: 짙기를 목표로 (연출 중 · 끝난 뒤 모두). 물러나 있는 동안엔 매 화면 다시 씀 (장면이 색을 다시 칠하는 단추가 있음 — 배속 칩)
+func _hud_step(dt: float) -> void:
+	if _hud_a >= 1.0 and _hud_goal >= 1.0:
+		return
+	_hud_a = move_toward(_hud_a, _hud_goal, dt / HUD_FADE)
+	for n: CanvasItem in hud_parts():
+		n.modulate.a = _hud_a
 
 
 func _gui_input(e: InputEvent) -> void:
@@ -528,6 +601,7 @@ func step(dt: float) -> void:
 	if _gift != null and is_instance_valid(_gift) and not _gift.is_queued_for_deletion():
 		_gift.step(dt)
 	_step_moment(dt)
+	_hud_step(dt)
 	if _skip_arm > 0.0:
 		_skip_arm -= dt
 		if _skip_arm <= 0.0 and not bool(spec.get("popups", false)):
@@ -553,6 +627,8 @@ func _apply() -> void:
 	_page.modulate.a = _page_a
 	_page.visible = _page_a > 0.001
 	_chip.modulate.a = 1.0 - _page_a                  # 연대기 한 쪽 위에 '천천히' 띠를 겹치지 않게
+	_hint.visible = playing() and not _hud_stays() and not _skip_btn.visible and not _shooting and _hud_a < 0.999
+	_hint.modulate.a = (1.0 - _hud_a) * HUD_HINT_A
 	var view := _view()
 	if view != null:
 		view.pose_over = _poses
@@ -563,6 +639,7 @@ func _beat(b: Dictionary) -> void:
 		_go_to(b["cam"])
 	if b.has("back"):
 		_go_back(float(b["back"]) * maxf(k, 0.6))
+		_hud_goal = 1.0                            # 카메라가 돌아오는 동안 띠도 돌아옴
 		if _naming_due():                          # 이름 짓기 칸으로 이어질 땐 돌아가지 않고 그 칸이 보여 줄 자리로 (끝날 때 화면이 튀지 않게)
 			var nb := v.person(int(v.notebook.get("baby", -1)))
 			if nb != null and sc.has_method("ground_point"):
@@ -582,8 +659,7 @@ func _beat(b: Dictionary) -> void:
 			_beam.peak = float(b.get("beam_peak", 1.0))
 			_beam.width = float(b.get("beam_width", 1.0))
 	if b.has("fx"):
-		var fx: Array = b["fx"]
-		GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0)
+		_play_fx(b["fx"])
 	for key: String in ["dark", "hush", "light"]:
 		if b.has(key):
 			var g: Array = b[key]
@@ -667,6 +743,7 @@ func _end() -> void:
 	_page_a = 0.0
 	_page_goal = 0.0
 	_skip_arm = 0.0
+	_hud_goal = 1.0                                # 건너뛰어도 띠는 돌아온다 (idle_step이 이어서 짙게)
 	if _beam != null and is_instance_valid(_beam) and skipped:
 		_beam.queue_free()
 	if _gift != null and is_instance_valid(_gift):
@@ -674,6 +751,7 @@ func _end() -> void:
 	_beam = null
 	_gift = null
 	_apply()
+	_hint.visible = false
 	t = -1.0
 	visible = false
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -722,9 +800,10 @@ func shadow_param() -> Vector4:
 		return Vector4(0, 0, 1, 0)
 	var still := JarCamera.reduce_motion()
 	var s := sin(PI * u)
-	var c := _shadow_c if still else _shadow_c + shadow_dir * lerpf(-SHADOW_RUN, SHADOW_RUN, u)
-	var strength := (s * s if still else clampf(s * 1.6, 0.0, 1.0))
-	return Vector4(c.x, c.y, SHADOW_R, strength)
+	var run := float(spec.get("shadow_run", SHADOW_RUN))
+	var c := _shadow_c if still else _shadow_c + shadow_dir * lerpf(-run, run, u)
+	var strength := (s * s if still else clampf(s * 1.6, 0.0, 1.0)) * float(spec.get("shadow_k", 1.0))
+	return Vector4(c.x, c.y, float(spec.get("shadow_r", SHADOW_R)), strength)
 
 
 ## 화면 셰이더의 빛기둥 웅덩이 (세계 x, z, 반지름, 세기)
@@ -1028,6 +1107,13 @@ func _mark3(c: Dictionary, nm: String) -> Vector3:
 	return Vector3(p.x, view.gy(p.x, p.y), p.y)
 
 
+## 소리: 한 줄 [소리, dB, 버스(기본 Village), 높낮이(0 = 조금씩 다르게)] 또는 여러 줄 [[…], […]] (Stagings.fx_rows)
+func _play_fx(x: Variant) -> void:
+	for fx: Array in Stagings.fx_rows(x):
+		GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0,
+			null, float(fx[3]) if fx.size() > 3 else 0.0)
+
+
 ## 배역이 있는 장면의 할 일 (긴 연출 · 짧은 판 공통): dolls · says · wbeam · wgift · fxs · bundle · fxr
 func _moment_beat(c: Dictionary, b: Dictionary, kk: float) -> void:
 	var view: VillageView = c.get("view")
@@ -1107,14 +1193,14 @@ func _moment_beat(c: Dictionary, b: Dictionary, kk: float) -> void:
 			if p3 == Vector3.INF:
 				continue
 			var big := float(c.get("big", 1.0))
-			p3.y += (float(f[3]) if f.size() > 3 else 0.0) * big
+			p3.y += (float(f[3]) if f.size() > 3 else 0.0) * pow(big, MINI_LIFT_POW)    # 멀리서 볼 때도 그 사람 머리 위쯤에 (빛만 크게 — 너무 높이 뜨지 않게)
 			var fx := MomentFx.spawn(view, String(f[0]), p3, float(f[2]) * dk, big)
 			fx.driven = true
 			_props.append(fx)
-	if b.has("fxr"):
-		var fr: Array = b["fxr"]
-		if not (rl.get(String(fr[0]), []) as Array).is_empty():
-			GameAudio.fx(String(fr[1]), String(fr[3]) if fr.size() > 3 else "Village", float(fr[2]))
+	if b.has("fxr"):                                   # 그 역할이 있을 때만 나는 소리 (한 줄 또는 여러 줄)
+		for fr: Array in Stagings.fx_rows(b["fxr"]):
+			if not (rl.get(String(fr[0]), []) as Array).is_empty():
+				_play_fx(fr.slice(1))
 
 
 func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
@@ -1135,7 +1221,10 @@ func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
 		_dolls.anim(rid, String(d["anim"]))
 	if d.has("hop"):
 		var h: Array = d["hop"]
-		_dolls.hop(rid, int(h[0]), float(h[1]), float(h[2]))
+		var hh := float(h[1])
+		if c.has("ppu"):                               # 짧은 판: 멀리서도 뛰는 게 보이게 (화면 MINI_HOP_PX점 — 인형 통째로 더 높이)
+			hh *= clampf(MINI_HOP_PX / maxf(0.01, hh * float(c["ppu"])), 1.0, MINI_HOP_MAX)
+		_dolls.hop(rid, int(h[0]), hh, float(h[2]))
 	if d.has("tiptoe"):
 		_dolls.tiptoe(rid, float(d["tiptoe"]) * dk)
 	if d.has("back"):
@@ -1270,6 +1359,7 @@ func _sheet_open() -> bool:
 
 ## 연출이 없을 때의 한 화면 (시험은 직접 부른다): 짧은 판 + 끝난 연출의 인형·빛이 제자리로
 func idle_step(dt: float) -> void:
+	_hud_step(dt)                                  # 끝난 · 건너뛴 연출의 띠가 돌아오는 걸음
 	if _minis.is_empty() and _mq.is_empty() and _props.is_empty() and not _dolls.busy() and _bundle == null and _wgift == null:
 		return
 	_now += dt
@@ -1295,8 +1385,7 @@ func idle_step(dt: float) -> void:
 			var b: Dictionary = beats[int(m["bi"])]
 			m["bi"] = int(m["bi"]) + 1
 			if b.has("fx"):
-				var fx: Array = b["fx"]
-				GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0)
+				_play_fx(b["fx"])
 			_moment_beat(m["cast"], b, 1.0)
 		if float(m["t"]) >= float((m["spec"] as Dictionary).get("dur", 3.0)):
 			_end_mini(m)
@@ -1323,7 +1412,9 @@ func _start_mini(m: Dictionary) -> bool:
 	c["touched"] = []
 	c["beams"] = []
 	var jc := _cam()
-	c["big"] = clampf(MINI_PX / maxf(1.0, float(jc.ppu)), 1.0, MINI_BIG) if jc != null else 1.0     # 멀리서 보고 있으면 빛·하트를 그만큼 크게
+	var ppu := maxf(1.0, float(jc.ppu)) if jc != null else MINI_PX
+	c["big"] = clampf(MINI_PX / ppu, 1.0, MINI_BIG)    # 멀리서 보고 있으면 빛·하트를 그만큼 크게 (화면에서 비슷한 크기)
+	c["ppu"] = ppu                                     # 폴짝도 화면에서 보이는 높이로 (_doll_act)
 	c["fast"] = view.fast                              # 빠른 흐름(주민이 점처럼 순간이동)에선 몸짓 없이 빛과 말풍선만
 	_dolls.bind(view, q)
 	m["cast"] = c
@@ -1428,6 +1519,8 @@ func _capture() -> void:
 		e0["card"] = id                      # 그림이 없어도 카드로 (그림은 다음 화면에 찍어 붙임)
 	_cap.visible = false
 	_chip.visible = false
+	_hint.visible = false
+	_shooting = true
 	var skip_was := _skip_btn.visible
 	_skip_btn.visible = false
 	var who := v
@@ -1435,8 +1528,9 @@ func _capture() -> void:
 	var find := String(spec.get("card", {}).get("find", ""))
 	await RenderingServer.frame_post_draw
 	_save_pic(who, sid, find)
+	_shooting = false
 	_skip_btn.visible = skip_was and playing() and (_skip_arm > 0.0 or bool(spec.get("popups", false)))
-	_chip.visible = playing() and _chip_l.text != "천천히 — "
+	_chip.visible = _chip_wanted()
 
 
 func _capture_now() -> void:

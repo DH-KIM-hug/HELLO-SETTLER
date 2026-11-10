@@ -1667,7 +1667,7 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		l.add_theme_stylebox_override("normal", sb)
 		bubbles.add_child(l)
 		var ms := l.get_minimum_size()
-		l.position = Vector2(roundf(p.x - ms.x * 0.5), roundf(p.y - ms.y - 2.0))
+		l.position = bubble_pos(p, ms, mood in SocialEmote.KINDS, vs)
 		if mood in SocialEmote.KINDS:              # 말풍선 오른쪽 위 작은 그림
 			var em := SocialEmote.new()
 			em.kind = mood
@@ -1678,6 +1678,20 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 
 
 const BUBBLE_SCENE_PPU := 11.0
+const BUBBLE_EDGE := 6.0                           # 말풍선과 화면 옆 가장자리 사이 (px)
+const BUBBLE_EMOTE_EXT := Vector2(10.0, 9.0)       # 기분 그림(SocialEmote 14px)이 말풍선 오른쪽·위로 나오는 만큼
+
+
+## 말풍선이 들어가야 하는 네모: 옆은 화면 가장자리 안쪽, 위·아래는 띠(노치·제스처 막대 여백 포함 — top_h · bottom_h) 사이.
+## 화면 끝에 선 사람의 말풍선이 잘리지 않게 이 안으로 밀어 넣는다 (2026-11-10 — 첫 아기 연출의 맨 오른쪽 이웃)
+func bubble_rect(vs: Vector2) -> Rect2:
+	return Rect2(BUBBLE_EDGE, top_h + 2.0, maxf(0.0, vs.x - BUBBLE_EDGE * 2.0), maxf(0.0, vs.y - top_h - bottom_h - 4.0))
+
+
+## 말풍선의 왼쪽 위 자리: 머리 위 점 p에 가운데를 맞추되, 네모(bubble_rect) 밖으로 나가면 안으로 (기분 그림이 붙으면 그만큼 더)
+func bubble_pos(p: Vector2, ms: Vector2, emote: bool, vs: Vector2) -> Vector2:
+	var ext := BUBBLE_EMOTE_EXT if emote else Vector2.ZERO
+	return SafeArea.keep_in(Vector2(roundf(p.x - ms.x * 0.5), roundf(p.y - ms.y - 2.0)) - Vector2(0.0, ext.y), ms + ext, bubble_rect(vs)) + Vector2(0.0, ext.y)
 ## 기분 → [바탕, 테두리, 글자]
 const BUBBLE_MOOD := {"": [Color("fffbea"), Color("252122"), Color("252122")],
 	"angry": [Color("ffe1d8"), Color("b8321f"), Color("7d1a0c")],

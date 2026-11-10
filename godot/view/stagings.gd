@@ -10,6 +10,9 @@
 ##   until    : (있으면) 이 조건이 되면 끝 — "altar_built" (dur은 최대 길이)
 ##   after    : 끝나면 띄울 안내 창 (Firsts.POPUPS id)
 ##   popups   : true면 연출 중에도 안내 창을 띄워도 됨 (길고 조용한 장면 — 제단 짓기)
+##   hud      : false면 연출 동안 화면 띠(위·아래 띠 · 작은 지도 · 병 밖으로 · 안내 쪽지)가 물러남 — 가까이 보는 장면 (자막 카드와 작은 '톡톡 — 건너뛰기'만 남음,
+##              '천천히 — …' 칩도 안 뜸). 카메라가 돌아올 때(back) · 끝 · 건너뛰기에 돌아옴. 기본 true (2026-11-10 — StageDirector.HUD_PARTS)
+##   shadow_r · shadow_run · shadow_k : 지나가는 그림자의 반지름(칸) · 길의 반(칸) · 짙기 배수 (기본 = 깨달음의 큰 그림자)
 ##   card     : 연대기 그림 카드 — {find: 연대기 줄에서 찾을 글, at: 몇 초에 찍나}
 ##   beats    : [{t, ...할 일}] — 할 일 (StageDirector._beat):
 ##       cam: {size 화면 세로(칸), pitch 내려다보는 각, yaw 방위 더하기, lift 바라보는 점 높이, dur 미끄러지는 초} · back: 미끄러져 돌아옴 (초)
@@ -20,7 +23,8 @@
 ##       (StageDirector.roles — 사람이 적으면 빈 역할). pose의 hold: 두 팔로 안음 · to: 역할 이름 (그 사람 곁으로). say의 mood: 말풍선 기분 ("sad" …)
 ##       dark: [목표 0~1, 초] 세상이 어두워짐 (밤 색 + 해가 가려짐) · hush: [목표, 초] 마을 소리 잦아듦 · shadow: 초 (큰 그림자가 마을 위를 지나감)
 ##       shake: [크기, 초] · light: [목표, 초] 빛기둥 바닥의 따뜻한 웅덩이 · beam_rise: 빛기둥이 켜지는 초 · gift: 초 (빛을 타고 선물이 내려옴)
-##       page: {sub, lines} 화면 가득 손글씨 연대기 한 쪽 (제목 = 마을 이름) · page_off: 사라지는 초 · fx: [소리, dB, 버스(기본 Village)]
+##       page: {sub, lines} 화면 가득 손글씨 연대기 한 쪽 (제목 = 마을 이름) · page_off: 사라지는 초 · fx: [소리, dB, 버스(기본 Village), 높낮이(0 = 조금씩 다르게)]
+##       fx는 여러 줄도 됨: [[소리, dB, 버스], [소리, dB, 버스]] (fx_rows). 긴 연출은 hush가 Village·Voice 버스를 낮추므로 연출의 소리는 "Room" 버스로.
 ##   (E1-4 · E1-6 작은 순간 — 2026-11-10) 배역이 따로 있는 장면:
 ##   at: "ctx" + cast: "wish" | "baby" — 사건의 사람·집에서 배역과 자리를 만든다 (view/moment_cast.gd — 화면 기준 자리)
 ##   light_r  : 빛 웅덩이 반지름 (칸) · naming: true면 끝난 뒤 수첩의 아기 이름 칸으로 이어짐 (연출 동안엔 그 칸을 접어 둠)
@@ -28,8 +32,8 @@
 ##              (view/stage_dolls.gd: 깡충 달려감 · 폴짝 · 발돋움 · 돌아봄 — 새 뼈대 동작 없음)
 ##       says: [{who, texts [사람마다 한 줄], moods, secs, stagger, delay}] — 여러 사람의 화면 말풍선 (기분 그림 = SocialEmote)
 ##       wbeam: [초, 밝기, 굵기, 표시(기본 "gift")] 가는 빛줄기 · wgift: 내려오는 초 (대답 두루마리 — view/wish_gift.gd)
-##       fxs: [[종류 "glow"·"sparkle"·"hearts", 표시 이름("bundle" = 강보 자리), 초, 높이]] (view/moment_fx.gd)
-##       bundle: "show"·"lift"·"down"·"hide" (강보 — view/baby_bundle.gd) · fxr: [역할, 소리, dB, 버스] 그 역할이 있을 때만 나는 소리
+##       fxs: [[종류 "glow"·"sparkle"·"hearts"·"door"(문틈에서 땅으로 번지는 빛), 표시 이름("bundle" = 강보 자리), 초, 높이]] (view/moment_fx.gd)
+##       bundle: "show"·"lift"·"down"·"hide" (강보 — view/baby_bundle.gd) · fxr: [역할, 소리, dB, 버스, 높낮이] 그 역할이 있을 때만 나는 소리 (여러 줄도 됨)
 ##       자막·말의 {who}·{home}·{baby}·{line} = 배역의 이름 (MomentCast names — 조사는 {who:이/가}처럼)
 ##       who = "wisher" 소원을 빈 사람(없으면 대신 받는 이웃) · "friend" · "crowd" 어른 이웃 · "kids" · "near" 이웃 모두 · "holder" 아기를 안은 사람 · "mate" 그 짝 · "mom"
 ## MINIS = 두 번째부터의 짧은 판 (2~3초): 카메라·병 시간·입력을 붙잡지 않는다 — 몸짓과 말풍선 그림, 작은 빛만. 같은 할 일 표.
@@ -97,14 +101,16 @@ const SCENES := {
 	# 6. 첫 기적 — 처음으로 소원을 들어줌 (약 12초, 2026-11-10 메인 판단 · 사용자 위임). 들어준 소원 = 짓는 법을 일러 줌 →
 	#   가는 빛줄기(깨달음보다 옅게)를 타고 대답 두루마리가 소원을 빈 사람 곁에 내려와 펼쳐진다 → 폴짝폴짝 → 친구에게 달려가 자랑
 	#   → 이웃이 둘러서서 환호 (하트·반짝 그림 말풍선) → 손글씨 카드. 손은 보이지 않는다 (A24).
-	"miracle": {"dur": 11.8, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "wish", "light_r": 3.2,
+	#   (다듬기 2026-11-10) 화면 띠가 물러남 · 빛보다 먼저 크고 부드러운 그늘이 한 번 지나감 (모양 없는 둥근 그늘 — 손 모양 아님) · 반짝이는 소리 · 작은 환호
+	"miracle": {"dur": 11.8, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "wish", "light_r": 3.2, "hud": false,
+		"shadow_r": 4.6, "shadow_run": 10.0, "shadow_k": 0.7,
 		"reason": "소원이 이루어졌어요",
 		"card": {"find": "의 소원을 들어주셨다", "at": 9.1},
 		"beats": [
-			{"t": 0.0, "cam": {"size": 7.5, "pitch": 34.0, "lift": 1.3, "dur": 1.3}, "vignette": 0.5, "hush": [0.6, 1.2],
+			{"t": 0.0, "cam": {"size": 7.5, "pitch": 34.0, "lift": 1.3, "dur": 1.3}, "vignette": 0.5, "hush": [0.6, 1.2], "shadow": 1.7,
 				"dolls": [{"who": "wisher", "go": "in", "secs": 1.0, "look": "gift", "anim": "lookup", "face": "surprised"}]},
 			{"t": 0.6, "wbeam": [10.4, 0.24, 0.36], "light": [0.4, 1.4], "dark": [0.16, 1.6], "fx": ["chime", -10.0, "Room"]},
-			{"t": 1.0, "wgift": 3.4,
+			{"t": 1.0, "wgift": 3.4, "fx": ["gift_twinkle", -6.0, "Room"],
 				"dolls": [{"who": "friend", "go": "out", "secs": 2.2, "look": "gift", "face": "surprised"},
 					{"who": "crowd", "go": "out", "secs": 2.6, "look": "gift", "face": "surprised", "stagger": 0.25},
 					{"who": "kids", "go": "out", "secs": 2.8, "look": "gift", "face": "surprised", "stagger": 0.2}]},
@@ -121,7 +127,7 @@ const SCENES := {
 					{"who": "friend", "go": "in", "secs": 0.9, "look": "gift"},
 					{"who": "crowd", "go": "in", "secs": 1.0, "look": "gift", "face": "happy", "stagger": 0.15},
 					{"who": "kids", "go": "in", "secs": 1.0, "look": "gift", "face": "happy", "stagger": 0.15}]},
-			{"t": 8.4, "fxs": [["hearts", "gift", 2.6, 0.9]], "fxr": ["kids", "child_laugh", -8.0, "Village"],
+			{"t": 8.4, "fxs": [["hearts", "gift", 2.6, 0.9]], "fxr": [["kids", "child_laugh", -10.0, "Room"], ["crowd", "small_cheer", -5.0, "Room"]],
 				"dolls": [{"who": "all", "hop": [2, 0.28, 0.38], "stagger": 0.12}],
 				"says": [{"who": "crowd", "texts": ["와아!", "좋겠다!"], "moods": ["cheer", "love"], "secs": 2.6, "stagger": 0.3},
 					{"who": "kids", "texts": ["나도 빌래!"], "moods": ["cheer"], "secs": 2.6, "delay": 0.5}]},
@@ -131,24 +137,28 @@ const SCENES := {
 	# 4. 첫 아기 — 이 병에서 처음 태어난 아이 (약 11초, 2026-11-10 메인 판단 · 사용자 위임). 저녁처럼 따뜻한 빛이 문간에 →
 	#   엄마(없으면 아빠)가 강보를 안고 문 앞에, 이웃이 깡충 모여듦 → 강보를 들어 보여 줌 (하트) · 아이들은 발돋움 → 손글씨 카드
 	#   → 끝나면 수첩의 이름 짓기 칸으로 이어짐. 깨닫기 전에도 일어나므로 하늘·지켜보는 이 이야기 없음. 부모가 곁에 없으면 문간의 바구니.
-	"first_baby": {"dur": 11.4, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "baby", "naming": true, "light_r": 3.4,
+	#   (다듬기 2026-11-10) 화면 띠가 물러남 · 문이 열리며 문틈의 빛이 땅으로 번진 뒤에 엄마가 나옴 (문 삐걱) · 아기 옹알이·웃음 · 이웃의 "아아~"
+	"first_baby": {"dur": 11.4, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "baby", "naming": true, "light_r": 3.4, "hud": false,
 		"reason": "아기가 태어났어요",
 		"card": {"find": "낳았다", "at": 8.1},
 		"beats": [
 			{"t": 0.0, "cam": {"size": 7.2, "pitch": 32.0, "lift": 1.35, "dur": 1.3}, "vignette": 0.5, "hush": [0.6, 1.2],
-				"dark": [0.3, 1.6], "light": [0.6, 1.6], "fxs": [["glow", "glow", 9.6, 0.0]],
-				"dolls": [{"who": "holder", "go": "door", "secs": 1.6, "look": "cam"}, {"who": "mate", "go": "door", "secs": 1.9, "look": "cam"}]},
+				"dark": [0.3, 1.6], "light": [0.6, 1.6], "fxs": [["door", "glow", 9.6, 0.0]], "fx": ["door_creak", -8.0, "Room"],
+				"dolls": [{"who": "holder", "go": "door", "secs": 1.4, "look": "cam", "delay": 0.7}, {"who": "mate", "go": "door", "secs": 1.6, "look": "cam", "delay": 0.8}]},
+			{"t": 0.5, "fxs": [["glow", "glow", 9.1, 0.0]]},
 			{"t": 0.9, "dolls": [{"who": "crowd", "go": "door", "secs": 1.9, "look": "door", "face": "surprised", "stagger": 0.3},
 					{"who": "kids", "go": "door", "secs": 2.3, "look": "door", "face": "surprised", "stagger": 0.3, "delay": 0.4}],
 				"says": [{"who": "crowd", "texts": ["어? 저 집에…"], "secs": 2.0}]},
-			{"t": 2.8, "bundle": "show", "fxs": [["sparkle", "bundle", 1.2, 0.0]], "fx": ["chime", -6.0, "Room"],
+			{"t": 2.8, "bundle": "show", "fxs": [["sparkle", "bundle", 1.2, 0.0]], "fx": [["chime", -6.0, "Room"], ["baby_coo_0", -4.0, "Room"]],
 				"says": [{"who": "holder", "texts": ["우리 아기야."], "moods": ["love"], "secs": 2.6}]},
-			{"t": 3.6, "dolls": [{"who": "crowd", "hop": [2, 0.24, 0.38], "face": "happy", "stagger": 0.14}, {"who": "kids", "tiptoe": 3.4}]},
-			{"t": 4.5, "bundle": "lift", "fxs": [["hearts", "bundle", 3.2, 0.25]], "fxr": ["kids", "child_laugh", -8.0, "Village"]},
+			{"t": 3.6, "dolls": [{"who": "crowd", "hop": [2, 0.24, 0.38], "face": "happy", "stagger": 0.14}, {"who": "kids", "tiptoe": 3.4}],
+				"fxr": ["crowd", "crowd_aww", -5.0, "Room"]},
+			{"t": 4.5, "bundle": "lift", "fxs": [["hearts", "bundle", 3.2, 0.25]], "fx": ["baby_giggle_0", -3.0, "Room"],
+				"fxr": ["kids", "child_laugh", -10.0, "Room"]},
 			{"t": 5.0, "says": [{"who": "crowd", "texts": ["아기다!", "어머, 조그매라."], "moods": ["cheer", "love"], "secs": 2.8, "stagger": 0.5},
 					{"who": "kids", "texts": ["나도 볼래!"], "moods": ["cheer"], "secs": 2.6, "delay": 0.9}],
 				"dolls": [{"who": "kids", "hop": [3, 0.22, 0.34], "delay": 0.9, "stagger": 0.2}]},
-			{"t": 7.2, "bundle": "down", "says": [{"who": "mate", "texts": ["…안녕, 아가."], "moods": ["love"], "secs": 2.6}],
+			{"t": 7.2, "bundle": "down", "fx": ["baby_coo_1", -5.0, "Room"], "says": [{"who": "mate", "texts": ["…안녕, 아가."], "moods": ["love"], "secs": 2.6}],
 				"dolls": [{"who": "near", "hop": [1, 0.2, 0.4], "stagger": 0.1, "delay": 0.5}]},
 			{"t": 8.4, "caption": "{home}에 아기가 태어났다.\n이 마을의 첫 아기.", "fx": ["paper", -8.0, "Room"]},
 			{"t": 10.2, "back": 1.2, "vignette": 0.0, "dark": [0.0, 1.0], "light": [0.0, 1.0], "hush": [0.0, 1.2]},
@@ -160,19 +170,19 @@ const MINIS := {
 	# 소원을 또 들어줌: 가는 빛 한 번 + 반짝 → 소원을 빈 사람이 폴짝폴짝 · 가까운 이웃이 돌아보며 폴짝 (그림 말풍선)
 	"wish_more": {"dur": 2.9, "cast": "wish",
 		"beats": [
-			{"t": 0.0, "wbeam": [2.2, 0.2, 0.3, "spot"], "fxs": [["sparkle", "spot", 1.2, 0.5]], "fx": ["chime", -10.0, "Room"],
+			{"t": 0.0, "wbeam": [2.2, 0.34, 0.3, "spot"], "fxs": [["sparkle", "spot", 1.2, 0.5]], "fx": [["chime", -10.0, "Room"], ["gift_twinkle", -9.0]],
 				"dolls": [{"who": "wisher", "hop": [3, 0.32, 0.36], "face": "happy", "delay": 0.25}],
 				"says": [{"who": "wisher", "texts": ["{w:이/가} 들어주셨다!"], "moods": ["cheer"], "secs": 2.6}]},
-			{"t": 0.5, "dolls": [{"who": "near", "look": "spot", "face": "happy", "hop": [2, 0.24, 0.38], "stagger": 0.18, "delay": 0.2}],
+			{"t": 0.5, "fxr": ["near", "small_cheer", -9.0], "dolls": [{"who": "near", "look": "spot", "face": "happy", "hop": [2, 0.24, 0.38], "stagger": 0.18, "delay": 0.2}],
 				"says": [{"who": "near", "texts": ["와!", "잘됐다!"], "moods": ["cheer", "love"], "secs": 2.0, "stagger": 0.35, "delay": 0.3}]},
 			{"t": 1.4, "fxs": [["hearts", "spot", 1.4, 1.0]]},
 		]},
 	# 아기가 또 태어남: 문간의 따뜻한 빛 + 하트 → 가까운 이웃이 문 쪽을 돌아보며 폴짝 (하트 말풍선)
 	"baby_more": {"dur": 3.0, "cast": "baby",
 		"beats": [
-			{"t": 0.0, "fxs": [["glow", "glow", 2.4, 0.0], ["sparkle", "door", 1.2, 0.7]], "fx": ["chime", -10.0, "Room"],
+			{"t": 0.0, "fxs": [["glow", "glow", 2.4, 0.0], ["sparkle", "door", 1.2, 0.7]], "fx": [["chime", -10.0, "Room"], ["baby_giggle_1", -6.0]],
 				"says": [{"who": "mom", "texts": ["{baby}, 반가워!"], "moods": ["love"], "secs": 2.8}]},
-			{"t": 0.4, "dolls": [{"who": "near", "look": "door", "face": "happy", "hop": [2, 0.24, 0.38], "stagger": 0.2, "delay": 0.2}],
+			{"t": 0.4, "fxr": ["near", "crowd_aww", -8.0], "dolls": [{"who": "near", "look": "door", "face": "happy", "hop": [2, 0.24, 0.38], "stagger": 0.2, "delay": 0.2}],
 				"says": [{"who": "near", "texts": ["아기다!", "축하해!", "와아!"], "moods": ["love", "cheer", "love"], "secs": 2.2, "stagger": 0.35, "delay": 0.3}]},
 			{"t": 0.9, "fxs": [["hearts", "door", 2.0, 0.9]]},
 		]},
@@ -185,3 +195,23 @@ static func has(id: String) -> bool:
 
 static func get_scene(id: String) -> Dictionary:
 	return SCENES.get(id, {})
+
+
+## fx · fxr 값 → 줄들: 한 줄 ["소리", dB, …]이면 [그 줄], 여러 줄 [[…], […]]이면 그대로
+static func fx_rows(x: Variant) -> Array:
+	if not x is Array or (x as Array).is_empty():
+		return []
+	return x if (x as Array)[0] is Array else [x]
+
+
+## 한 장면(긴 연출 · 짧은 판)의 표가 쓰는 소리 이름 (시험: 파일이 있는지 · 무슨 소리가 어느 박자에)
+static func sound_ids(spec: Dictionary) -> Array:
+	var out: Array = []
+	for b: Dictionary in spec.get("beats", []):
+		for r: Array in fx_rows(b.get("fx", [])):
+			if not String(r[0]) in out:
+				out.append(String(r[0]))
+		for r: Array in fx_rows(b.get("fxr", [])):
+			if not String(r[1]) in out:
+				out.append(String(r[1]))
+	return out

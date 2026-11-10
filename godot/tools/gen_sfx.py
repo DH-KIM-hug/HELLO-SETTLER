@@ -87,11 +87,20 @@ SFX = {
     "dizzy_whoa_0":    (0.8, -24, False, "a cute small cartoon character's short wobbly dizzy whoa-oa, soft small voice, playful"),
     "dizzy_whoa_1":    (0.8, -24, False, "a small cute voice making one short wavering dizzy woo-oo-oh, gentle and comical"),
     "pout_hmph":       (0.6, -24, False, "a cute small child's short pouty hmph with puffed cheeks, soft, playful, not angry"),
+    # 작은 순간 (view/stagings.gd 첫 아기 · 첫 기적과 그 짧은 판 — 2026-11-10 다듬기): 조용하고 짧게 (1초 안), 말(단어)은 없음
+    "crowd_aww":       (1.0, -27, False, "three or four small gentle people softly saying aww together, one short tender wordless group aww, warm, quiet and adorable"),
+    "small_cheer":     (1.0, -26, False, "three or four small happy people giving one short soft wordless cheer together, a gentle little yay, quiet, cute and warm"),
+    "gift_twinkle":    (1.0, -25, False, "a tiny soft magical shimmer, a few delicate high glassy twinkles descending gently, quiet and sweet"),
+    "door_creak":      (0.9, -27, False, "a small wooden cottage door opening slowly, one short soft gentle creak, cozy and quiet"),
 }
 # 톡 반응 소리 — 짧게 (TAP_MAX초에서 끊음), 무음 문턱 −42dB
 TAP = {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf", "sneeze_0", "sneeze_1", "sigh_0", "sigh_1",
        "baby_giggle_0", "baby_giggle_1", "baby_coo_0", "baby_coo_1", "sleep_mumble_0", "sleep_mumble_1",
        "dizzy_whoa_0", "dizzy_whoa_1", "pout_hmph"}
+# 작은 순간 소리 — 톡 반응처럼 짧게 끊음 (1초 안). 여럿이 내는 입소리(GROUP)는 작은 사람 처리 + 여럿 꼬리말
+MOMENT = {"crowd_aww", "small_cheer", "gift_twinkle", "door_creak"}
+GROUP = {"crowd_aww", "small_cheer"}
+STYLE_GROUP = "clean close-up recording, a few small soft voices together, one short wordless vocal sound, no speech, no words, no music, no background noise"
 TAP_MAX = 0.95       # mp3 채움(약 0.05초)까지 1초 안
 TAP_FADE = 0.08
 # 그 가운데 사람 입소리 — 'no voice' 꼬리말 대신 + 작은 사람 처리 (+4반음·1.08배)
@@ -127,6 +136,8 @@ def style_of(sid):
         return STYLE_MUSIC
     if sid in FAR:
         return STYLE_FAR
+    if sid in GROUP:
+        return STYLE_GROUP
     if sid in TINY:
         return STYLE_VOICE
     if sid in ANIMAL:
@@ -187,7 +198,7 @@ def gen(sid, force=False):
         f.write(data)
         raw = f.name
     try:
-        dur, gain = process(raw, dst, rms, loop, sid in TAP, sid in TINY)
+        dur, gain = process(raw, dst, rms, loop, sid in TAP or sid in MOMENT, sid in TINY or sid in GROUP)
     finally:
         os.unlink(raw)
     print(f"ok {sid:16s} {dur:.2f}s gain {gain:+.1f}dB {os.path.getsize(dst)} B")
