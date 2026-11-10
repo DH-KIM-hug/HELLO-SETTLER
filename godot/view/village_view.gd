@@ -119,6 +119,7 @@ var _torches := {}              # 주민 id → 횃불 노드 (곰팡이 쫓는 
 var _torch_glows := {}          # 주민 id → 발밑 횃불 빛
 var _graves: Node3D             # (A6) 무덤 돌 — 묘지 안·마을 끝 (Village.graves)
 var _grave_key := ""
+var grave_hide: Dictionary = {}     # (E1-5 첫 죽음 연출) 무덤 id → true: 돌을 세우는 박자까지 그 무덤을 그리지 않음 (화면만 — view/grave_view.gd가 넣고 뺌)
 var _rafts := {}                # (A6) 주민 id → 나루터 뗏목 (뗏목 길을 건너는 동안)
 var _raft_era := -1             # (E3-6) 뗏목 모양을 정한 시대 (바뀌면 다시 만듦: 개척 = 갈대 뗏목 · 그 뒤 = 잎 배)
 ## (E3-6) 물 건너는 자리 — [{"kind": "bridge"|"stones", "c": Vector2 가운데, "u": Vector2 건너는 방향, "half": 반 길이, "y": 높이}]
@@ -774,7 +775,7 @@ func _face_partner(r: Resident, m: ResidentModel) -> void:
 
 ## (A6) 무덤: 흙 둔덕 + 작은 비석 (묘지 안이면 줄지어, 묘지가 없을 땐 마을 끝에 홀로)
 func _sync_graves() -> void:
-	var key := "%d|%d" % [v.graves.size(), v.water.rot]
+	var key := "%d|%d|%s" % [v.graves.size(), v.water.rot, "" if grave_hide.is_empty() else str(grave_hide.keys())]
 	if key == _grave_key:
 		return
 	_grave_key = key
@@ -784,6 +785,8 @@ func _sync_graves() -> void:
 	if _bld2d_on and Bld2D.has("grave"):        # (2D) 무덤 그림 — 아틀라스 MultiMesh 하나 (그리기 1번, 그림자 없음 그대로)
 		var cards: Array = []
 		for g: Dictionary in v.graves:
+			if grave_hide.has(int(g["id"])):
+				continue
 			var gx := float(g["x"])
 			var gz := float(g["y"])
 			cards.append(["grave", Vector3(gx, gy(gx, gz), gz), 0.9 + fposmod(float(g["id"]) * 0.37, 0.2), int(g["id"]) % 2 == 1])
@@ -797,6 +800,8 @@ func _sync_graves() -> void:
 		[Vector3(0.22, 0.06, 0.1), Vector3(0, 0.42, -0.22), Style.STONE.lightened(0.15)]]
 	var xfs: Array[Transform3D] = []
 	for g: Dictionary in v.graves:
+		if grave_hide.has(int(g["id"])):
+			continue
 		var x := float(g["x"])
 		var z := float(g["y"])
 		var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG) + fposmod(float(g["id"]) * 0.37, 0.3) - 0.15
@@ -2067,11 +2072,42 @@ func _core_scale(key: String, x: float, z: float, s: float) -> float:
 	return s * CORE_H / h if h > CORE_H else s
 
 
+## (E1-5 무덤이 남는다) 무덤 둘레와 그 앞(카메라 쪽) 띠에서는 키 큰 그림을 낮춰 돌과 꽃이 보이게 한다 — 앞쪽으로 갈수록 조금씩 높아짐.
+## 화면만 — 시뮬레이션 나무 자리·수는 그대로 (ADR-0001). 마을 한가운데 줄이기(_core_scale)와 같은 방식.
+const GRAVE_H := 0.9              # 무덤 곁 그림 높이 상한 (칸 — 주민 키쯤)
+const GRAVE_R := 2.6              # 무덤 둘레
+const GRAVE_FRONT := 9.0          # 카메라 쪽 띠 길이
+const GRAVE_RISE := 0.45          # 띠에서 한 칸 멀어질 때마다 더 허락하는 높이
+
+
+func _grave_scale(key: String, x: float, z: float, s: float) -> float:
+	if not _flora2d_on or v.graves.is_empty():
+		return s
+	var pic := Flora2D.pic_for(key)
+	if pic == "":
+		return s
+	var h := float(Flora2D.info(pic).get("h", 0.0)) * s
+	if h <= GRAVE_H:
+		return s
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG + 90.0 * float(econ.step if econ != null else 0))
+	var tw := Vector2(sin(yaw), cos(yaw))
+	var cap := h
+	for g: Dictionary in v.graves:
+		var p := Vector2(x, z) - Vector2(float(g["x"]), float(g["y"]))
+		if p.length() < GRAVE_R:
+			cap = minf(cap, GRAVE_H)
+			continue
+		var along := p.dot(tw)
+		if along > 0.0 and along < GRAVE_FRONT and absf(p.dot(Vector2(tw.y, -tw.x))) < GRAVE_R + 0.8:
+			cap = minf(cap, GRAVE_H + (along - GRAVE_R * 0.5) * GRAVE_RISE)
+	return s * maxf(cap, GRAVE_H) / h if cap < h else s
+
+
 var _put_s := 1.0                 # 방금 _put이 놓은 크기 (마을 한가운데·더미 앞마당에서 줄인 뒤)
 
 
 func _put(groups: Dictionary, key: String, x: float, z: float, s: float, yaw: float, dy := 0.0) -> void:
-	s = _core_scale(key, x, z, s)
+	s = _grave_scale(key, x, z, _core_scale(key, x, z, s))
 	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 건물 앞 더미를 가리는 키 큰 그림은 낮춤 (화면만 — BldEcon.apron_scale)
 		s = econ.apron_scale(key, x, z, s)
 	_put_s = s
@@ -2122,6 +2158,8 @@ func _sync_trees() -> void:
 		Flora2D.keep_season(se)      # (2D) 다른 철 꽃 아틀라스를 놓아 줌
 	season = se
 	var key := "%d|%d|%d|%d|%s|%s|%.0f|%d" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0, v.buildings.size() if _flora2d_on else 0]
+	if _flora2d_on:                       # (E1-5) 무덤이 생기면 그 곁의 키 큰 그림을 낮춰 다시
+		key += "|g%d" % v.graves.size()
 	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 카메라 방위·더미 앞마당·채집 일꾼 자리가 바뀌면 다시 (낮출 꽃이 달라짐)
 		key += "|" + econ.place_key()
 		if key != _tree_key:
@@ -2228,7 +2266,7 @@ const FAR_MAX := 200.0            # 이 반지름 밖의 숲은 지도에만 (�
 func _sync_props() -> void:
 	if v.water is WorldWater:
 		_sync_far()
-	var key := "%d|%d|%d|%s|%s" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0), season, _decor_sig]
+	var key := "%d|%d|%d|%s|%s|g%d" % [v.buildings.size(), v.water.rot, int(v.t / 21600.0), season, _decor_sig, v.graves.size() if _flora2d_on else 0]
 	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 방위·앞마당이 바뀌면 다시
 		key += "|" + econ.place_key()
 	if key == _prop_key:

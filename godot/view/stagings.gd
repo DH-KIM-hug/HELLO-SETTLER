@@ -36,6 +36,15 @@
 ##       bundle: "show"·"lift"·"down"·"hide" (강보 — view/baby_bundle.gd) · fxr: [역할, 소리, dB, 버스, 높낮이] 그 역할이 있을 때만 나는 소리 (여러 줄도 됨)
 ##       자막·말의 {who}·{home}·{baby}·{line} = 배역의 이름 (MomentCast names — 조사는 {who:이/가}처럼)
 ##       who = "wisher" 소원을 빈 사람(없으면 대신 받는 이웃) · "friend" · "crowd" 어른 이웃 · "kids" · "near" 이웃 모두 · "holder" 아기를 안은 사람 · "mate" 그 짝 · "mom"
+##   (E1-5 첫 죽음과 장례 — 2026-11-10) cast: "funeral" (집 앞 → 무덤가) | "grave" (짧은 판 — 무덤 곁의 이웃만). 무덤은 Village.graves (view/grave_view.gd)
+##       cam의 mark: 카메라가 볼 표시 이름 (기본 = at) · cut: true면 미끄러지지 않고 곧바로 (화면이 가려진 동안)
+##       veil: [목표 0~1, 초] 화면이 따뜻한 어둠에 잠깐 잠김 (자리를 옮길 때) · light_at: 빛 웅덩이를 옮길 표시 이름
+##       dolls의 gait: "walk" 깡충 뛰지 않고 천천히 걸음 · droop: 0~1 어깨를 늘어뜨림 · bow: [초, 깊이] 고개 숙임 · place: 자리 이름 (곧바로 그 자리에)
+##       flowers: 역할 — 손에 꽃을 쥠 · lay: {who, n, stagger, delay} 무덤에 꽃을 한 송이씩 놓음 (who가 있으면 그 사람이 쥔 꽃을 내려놓음)
+##       grave: "stone" 돌을 세움 (그때까지 돌은 보이지 않음) · "light" 돌 위에 작은 빛이 머묾
+##       who = "kin" 맨 앞에 서는 가족 어른 (없으면 가장 가까운 이웃) · "hand" 그 손을 잡은 아이 · "family" 다른 가족 · "mourners" 가족 모두 · "crowd" 이웃 어른
+##             · "pray" 무릎 꿇는 사람들 (마을이 지켜보는 이를 안 뒤에만 — 그 전엔 빈 역할)
+##       자막의 {who} = 떠난 사람의 이름 (같은 때 여럿이면 "○○, △△" · 더 많으면 "… 그리고 다른 이들" — 숫자 없음)
 ## MINIS = 두 번째부터의 짧은 판 (2~3초): 카메라·병 시간·입력을 붙잡지 않는다 — 몸짓과 말풍선 그림, 작은 빛만. 같은 할 일 표.
 ## 말 규칙: 자막·주민의 말엔 거인 UI 말(지폐·상점…)이나 '게임·앱·키트·상자' 같은 말을 쓰지 않는다. 깨닫기 전엔 거인 이야기 없음.
 class_name Stagings
@@ -163,6 +172,36 @@ const SCENES := {
 			{"t": 8.4, "caption": "{home}에 아기가 태어났다.\n이 마을의 첫 아기.", "fx": ["paper", -8.0, "Room"]},
 			{"t": 10.2, "back": 1.2, "vignette": 0.0, "dark": [0.0, 1.0], "light": [0.0, 1.0], "hush": [0.0, 1.2]},
 		]},
+	# 5. 첫 죽음과 장례 (E1-5 — 마을마다 한 번, 약 14초. 무섭지 않게 — 조용하고 따뜻하게)
+	#   ① 병 시간이 느려지고 마을 소리가 잦아듦 · 바람 — 이웃이 그 집 앞으로 천천히 걸어 모임 (깡충 뛰지 않음 · 어깨를 늘어뜨림)
+	#   → ② 가족이 맨 앞으로, 아이는 어른 손을 잡은 거리에 (고개 숙임 · 눈물 말풍선 그림 하나) → ③ 모두 꽃 한 송이씩 들고 줄지어 걸음
+	#   → (화면이 따뜻한 어둠에 잠깐 잠김) → ④ 무덤가로 걸어 들어와 둥글게 섬 → 돌 하나가 세워짐 → 꽃을 한 송이씩 내려놓음 (고개 숙임)
+	#   → ⑤ 손글씨 카드 · 낮은 종 → ⑥ 사람들이 천천히 흩어지고 돌 위에 작은 빛이 머묾.
+	#   깨닫기 전에도 일어나므로 기도·제단·지켜보는 이 이야기 없음 ("pray" 역할은 안 뒤에만 채워짐 — 짧게 무릎).
+	"first_death": {"dur": 14.4, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "funeral", "light_r": 2.4, "hud": false,
+		"reason": "마을이 이별을 배워요",
+		"card": {"find": "그 위에 돌을 세웠다", "at": 10.9},
+		"beats": [
+			{"t": 0.0, "cam": {"size": 8.6, "pitch": 34.0, "lift": 0.9, "dur": 1.6}, "vignette": 0.55, "hush": [0.8, 1.6], "dark": [0.22, 2.2],
+				"fx": ["seeds_wind", -10.0, "Room", 0.8],
+				"dolls": [{"who": "crowd", "gait": "walk", "droop": 1.0, "go": "gather", "secs": 2.1, "look": "door", "stagger": 0.3},
+					{"who": "mourners", "gait": "walk", "droop": 1.0, "go": "gather", "secs": 1.7, "look": "cam", "delay": 0.4, "stagger": 0.25}]},
+			{"t": 2.2, "cam": {"size": 6.8, "pitch": 32.0, "lift": 0.9, "dur": 1.5}, "fx": ["sigh_0", -13.0, "Room"],
+				"dolls": [{"who": "mourners", "go": "front", "secs": 1.2, "look": "cam", "stagger": 0.15}, {"who": "crowd", "look": "door"}]},
+			{"t": 3.4, "dolls": [{"who": "kin", "bow": [1.5, 0.12]}, {"who": "hand", "bow": [1.3, 0.1], "delay": 0.35}, {"who": "crowd", "bow": [1.2, 0.1], "delay": 0.5, "stagger": 0.2}],
+				"says": [{"who": "hand", "texts": ["…"], "moods": ["sad"], "secs": 2.0}]},
+			{"t": 4.7, "flowers": "all", "cam": {"size": 8.4, "pitch": 34.0, "lift": 0.8, "dur": 1.7},
+				"dolls": [{"who": "all", "go": "line", "secs": 1.3, "look": "ahead", "stagger": 0.1}]},
+			{"t": 6.0, "dolls": [{"who": "all", "go": "off", "secs": 2.0, "look": "ahead"}], "veil": [1.0, 0.6]},
+			{"t": 6.7, "cam": {"mark": "grave_cam", "size": 7.0, "pitch": 34.0, "lift": 0.7, "cut": true}, "light_at": "grave",
+				"dolls": [{"who": "all", "place": "approach", "look": "grave"}, {"who": "all", "go": "grave", "secs": 2.2, "look": "grave", "stagger": 0.12}], "veil": [0.0, 0.7]},
+			{"t": 9.2, "grave": "stone", "fxs": [["glow", "grave", 2.2, 0.3]], "fx": ["finger_place", -9.0, "Room", 0.85], "light": [0.45, 1.4]},
+			{"t": 9.8, "lay": {"who": "all", "stagger": 0.22}, "dolls": [{"who": "all", "bow": [1.0, 0.16], "stagger": 0.22}]},
+			{"t": 10.6, "dolls": [{"who": "pray", "anim": "pray", "stagger": 0.1}]},
+			{"t": 11.2, "caption": "{who:이/가} 세상을 떠났다.\n사람들은 처음으로 이별을 배웠다.", "fx": [["paper", -9.0, "Room"], ["funeral", -9.0, "Room"]]},
+			{"t": 12.4, "grave": "light", "dolls": [{"who": "pray", "anim": "idle"}, {"who": "crowd", "back": 3.0, "stagger": 0.3}]},
+			{"t": 13.0, "back": 1.3, "vignette": 0.0, "dark": [0.0, 1.2], "light": [0.0, 1.2], "hush": [0.0, 1.3]},
+		]},
 }
 
 ## 두 번째부터의 짧은 판 — 들어준 소원·태어난 아기마다 (카메라를 붙잡지 않음, 2~3초)
@@ -185,6 +224,16 @@ const MINIS := {
 			{"t": 0.4, "fxr": ["near", "crowd_aww", -8.0], "dolls": [{"who": "near", "look": "door", "face": "happy", "hop": [2, 0.24, 0.38], "stagger": 0.2, "delay": 0.2}],
 				"says": [{"who": "near", "texts": ["아기다!", "축하해!", "와아!"], "moods": ["love", "cheer", "love"], "secs": 2.2, "stagger": 0.35, "delay": 0.3}]},
 			{"t": 0.9, "fxs": [["hearts", "door", 2.0, 0.9]]},
+		]},
+	# 또 누군가 떠남 (E1-5): 무덤 곁에 있던 이웃 몇이 꽃을 들고 돌아봄 → 꽃이 한 송이씩 놓임 · 고개 숙임 (눈물 말풍선 그림 하나) → 돌 위의 작은 빛.
+	# 글은 연대기의 그 줄뿐 (카드 없음). 무덤 곁에 아무도 없으면 꽃과 빛만.
+	"death_more": {"dur": 3.0, "cast": "grave",
+		"beats": [
+			{"t": 0.0, "flowers": "near", "fx": ["finger_place", -13.0, "Village", 0.8],
+				"dolls": [{"who": "near", "look": "grave", "droop": 1.0, "stagger": 0.12}]},
+			{"t": 0.4, "lay": {"who": "near", "stagger": 0.28}, "dolls": [{"who": "near", "bow": [1.5, 0.14], "stagger": 0.28}],
+				"says": [{"who": "near", "texts": ["…"], "moods": ["sad"], "secs": 2.2, "delay": 0.3}]},
+			{"t": 1.7, "grave": "light", "fxs": [["glow", "grave", 1.2, 0.35]]},
 		]},
 }
 

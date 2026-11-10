@@ -22,6 +22,9 @@
 ## (2026-11-10 다듬기) 콘티에 "hud": false인 연출(첫 기적 · 첫 아기)은 가까이 보는 동안 위·아래 띠 · 지도 · 단추가 HUD_FADE초에 물러난다
 ## (staging.md '띠 물러남' — 장면의 것을 이름으로 찾아 투명도만 바꿈: HUD_PARTS). '천천히' 띠도 띄우지 않고 작은 건너뛰기 귀띔만.
 ## 카메라가 돌아올 때(back) · 끝날 때 · 건너뛸 때 다시 나타난다. 짧은 판은 띠를 건드리지 않는다.
+## (E1-5 첫 죽음과 장례 — 2026-11-10) 죽음은 사건 줄에 없어서 Village.graves(무덤 줄)를 커서로 읽어 &"died" 꼴의 일로 줄 세운다 (_read_graves —
+## 시뮬레이션은 읽기만). 그 마을의 첫 무덤 = 긴 연출 "first_death", 그다음부터 = 짧은 판 "death_more". 같은 때 여럿이 떠나면 한 번만 (이름은 자막에),
+## 장례 연출 뒤 FOLD_T 안의 죽음은 연출 없이 연대기 줄만. 꽃 · 돌 위의 빛 · 손에 든 꽃은 view/grave_view.gd.
 class_name StageDirector
 extends Control
 
@@ -39,6 +42,8 @@ const SHADOW_R := 9.0                # 큰 그림자 반지름 (칸 — 마을 �
 const SHADOW_RUN := 26.0             # 그림자가 지나가는 길의 반 (칸)
 const LIGHT_R := 4.5                 # 빛기둥 웅덩이 반지름 (칸)
 const HUG_R := 4.0                   # 아이를 끌어안는 사람: 아이와 이만큼 안 (칸)
+const FOLD_T := 6.0 * 3600.0         # 장례 연출 뒤 이만큼(병 초 — 병의 반나절의 반) 안에 또 누가 떠나면 연출 없이 연대기 줄만 (잇달아 떠날 때)
+const VEIL := Color(0.16, 0.11, 0.09)  # 자리를 옮길 때 화면이 잠기는 따뜻한 어둠
 
 var dark := 0.0                      # (장면이 읽음) 세상이 어두워진 정도 0~1
 var shadow_dir := Vector2(1, 0)      # (장면이 읽음) 그림자가 지나가는 쪽 (세계 xz)
@@ -59,6 +64,9 @@ var _page_goal := 0.0
 var _page_rate := 1.0
 var _said: Array = []                # 이 연출이 띄운 말풍선 주민 id (끝나면 지움)
 var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" · &"born" · &"wish_granted" 구독)
+var _grave_cur: Dictionary = {}      # 무리 → 본 무덤 수 (Village.graves 커서 — 죽음은 사건 줄에 없음)
+var _last_death: Dictionary = {}     # 무리 → 마지막으로 장례를 연출한 죽음의 병 시각
+var _veil: ColorRect                 # 자리를 옮길 때 잠깐 화면을 덮음 (veil)
 var _aw_ev: Dictionary = {}          # 무리 → 사건으로 받은 깨달음 시각
 
 # (E1-4 · E1-6) 작은 순간
@@ -154,6 +162,12 @@ void fragment() {
 	m.shader = sh
 	_vignette.material = m
 	add_child(_vignette)
+	_veil = ColorRect.new()
+	_veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_veil.color = Color(VEIL, 0.0)
+	_veil.visible = false
+	add_child(_veil)
 	# 손글씨 자막 카드
 	_cap = PanelContainer.new()
 	_cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -341,8 +355,60 @@ func watch(q: Village, can_stage := true) -> void:
 	play(due, q)
 
 
+## (E1-5) 무덤 줄에서 새 죽음을 읽는다 — &"died" 사건 꼴로 줄 세움 (시뮬레이션이 그 사건을 내면 이 함수만 바꾸면 됨). 첫 무덤 = first.
+## 처음 보는 무리의 지난 무덤은 흘려보냄 (방금 것만). 무덤이 있으면 그 마을 화면에 꽃·빛(GraveView)을 붙여 둔다.
+func _read_graves(q: Village) -> void:
+	var n := q.graves.size()
+	if not _grave_cur.has(q):
+		var st := n
+		while st > 0 and q.t - float(q.graves[st - 1]["t"]) < JUST:
+			st -= 1
+		_grave_cur[q] = st
+	if n > 0:
+		GraveView.of(_view_of(q), q)
+	var cur := mini(int(_grave_cur[q]), n)
+	for i in range(cur, n):
+		var g: Dictionary = q.graves[i]
+		if not _pend.has(q):
+			_pend[q] = []
+		(_pend[q] as Array).append({"kind": &"died", "t": float(g["t"]), "who": int(g["id"]), "village": q.sid,
+			"v": {"first": i == 0, "name": String(g["name"])}})
+	_grave_cur[q] = n
+
+
+## 같은 때 떠난 여럿 = 연출 한 번 (그 마을의 첫 죽음이 있으면 그것을, 이름은 자막에 함께). 조금 전(FOLD_T)에 장례를 연출했으면 연출 없이 흘려보냄.
+func _fold_deaths(q: Village, pend: Array, can_stage: bool) -> void:
+	var died: Array = []
+	for i in range(pend.size() - 1, -1, -1):
+		if (pend[i] as Dictionary)["kind"] == &"died":
+			died.push_front(pend[i])
+			pend.remove_at(i)
+	var live: Array = died.filter(func(e: Dictionary) -> bool: return can_stage and q.t - float(e["t"]) < STALE)
+	if live.is_empty():
+		return
+	var lead: Dictionary = {}
+	for e: Dictionary in live:
+		if bool(e["v"]["first"]):
+			lead = e
+	if lead.is_empty():
+		if _last_death.has(q) and float(live[0]["t"]) - float(_last_death[q]) < FOLD_T:
+			return
+		lead = live[0]
+	var also: Array = []
+	var last := float(lead["t"])
+	for e: Dictionary in live:
+		last = maxf(last, float(e["t"]))
+		if not is_same(e, lead):
+			also.append(String(e["v"]["name"]))
+	lead = lead.duplicate(true)
+	lead["v"]["also"] = also
+	_last_death[q] = last
+	pend.push_front(lead)
+
+
 ## 사건 줄에서 이 무리의 &"awakened"를 읽는다 (ADR-0001 — 구독은 커서로, 시뮬레이션은 구독자를 모른다)
 func _read_events(q: Village) -> void:
+	_read_graves(q)
 	if q.events == null:
 		return
 	var first := not _ev_cur.has(q)
@@ -590,6 +656,9 @@ func step(dt: float) -> void:
 		_cam_t += dt
 		var u := clampf(_cam_t / _cam_dur, 0.0, 1.0)
 		cam.hold = blend(_cam_a, _cam_b, u * u * (3.0 - 2.0 * u))
+	elif cam != null and _cam_dur < 0.0:          # 곧바로 (cut — 화면이 가려진 동안)
+		cam.hold = _cam_b
+		_cam_dur = 0.0
 	_vig = move_toward(_vig, _vig_goal, dt * 1.2)
 	_cap_a = move_toward(_cap_a, 1.0 if _cap_on else 0.0, dt / CAP_FADE)
 	for key: String in _tw:
@@ -626,6 +695,9 @@ func _apply() -> void:
 	_cap.visible = _cap_a > 0.001
 	_page.modulate.a = _page_a
 	_page.visible = _page_a > 0.001
+	var va := tw_val("veil")
+	_veil.color.a = va * va * (3.0 - 2.0 * va)
+	_veil.visible = va > 0.001
 	_chip.modulate.a = 1.0 - _page_a                  # 연대기 한 쪽 위에 '천천히' 띠를 겹치지 않게
 	_hint.visible = playing() and not _hud_stays() and not _skip_btn.visible and not _shooting and _hud_a < 0.999
 	_hint.modulate.a = (1.0 - _hud_a) * HUD_HINT_A
@@ -660,7 +732,12 @@ func _beat(b: Dictionary) -> void:
 			_beam.width = float(b.get("beam_width", 1.0))
 	if b.has("fx"):
 		_play_fx(b["fx"])
-	for key: String in ["dark", "hush", "light"]:
+	if b.has("light_at") and not _cast.is_empty():   # 빛 웅덩이를 옮김 (무덤가로)
+		var lp: Variant = (_cast["marks"] as Dictionary).get(String(b["light_at"]))
+		if lp is Vector2:
+			var lw: Vector3 = sc.ground_point(lp) if sc != null and sc.has_method("ground_point") else Vector3(lp.x, 0, lp.y)
+			_light_c = Vector2(lw.x, lw.z)
+	for key: String in ["dark", "hush", "light", "veil"]:
 		if b.has(key):
 			var g: Array = b[key]
 			var cur := tw_val(key)
@@ -926,6 +1003,8 @@ func _go_to(c: Dictionary) -> void:
 	if cam == null or sc == null:
 		return
 	var p := _focus_point(v)
+	if c.has("mark") and not _cast.is_empty() and (_cast["marks"] as Dictionary).has(String(c["mark"])):
+		p = _cast["marks"][String(c["mark"])]          # (E1-5) 다른 자리로 — 무덤가
 	var tg: Vector3 = sc.ground_point(p) if sc.has_method("ground_point") else Vector3(p.x, 0, p.y)
 	tg.y += float(c.get("lift", 0.0))
 	var size := float(c.get("size", 14.0))
@@ -942,6 +1021,8 @@ func _go_to(c: Dictionary) -> void:
 	_cam_b = {"target": tg, "size": size, "pitch": pitch, "yaw": yaw, "dist": dist, "near": 0.5}
 	_cam_t = 0.0
 	_cam_dur = maxf(0.05, float(c.get("dur", 1.4)) * maxf(k, 0.6))
+	if bool(c.get("cut", false)):
+		_cam_dur = -1.0                                # 다음 화면에 곧바로 그 자리 (step)
 
 
 ## 카메라 방위 더하기 (도): 사건 자리와 카메라 사이에 집·큰 버섯·큰 민들레가 가장 적게 끼는 쪽 (같으면 지금 방위에 가까운 쪽)
@@ -1001,6 +1082,8 @@ func _go_back(secs: float) -> void:
 func moment_id(e: Dictionary) -> String:
 	if e["kind"] == &"wish_granted":
 		return "miracle" if _firsts().play_count("miracle") == 0 else "wish_more"
+	if e["kind"] == &"died":                           # 그 마을의 첫 죽음 (첫 무덤) = 긴 연출
+		return "first_death" if bool((e.get("v", {}) as Dictionary).get("first", false)) else "death_more"
 	return "first_baby" if bool((e.get("v", {}) as Dictionary).get("first", false)) else "baby_more"
 
 
@@ -1008,6 +1091,8 @@ static func moment_ctx(e: Dictionary) -> Dictionary:
 	var d: Dictionary = e.get("v", {})
 	if e["kind"] == &"wish_granted":
 		return {"who": int(e.get("who", -1)), "id": int(d.get("id", -1))}
+	if e["kind"] == &"died":
+		return {"grave": int(e.get("who", -1)), "name": String(d.get("name", "")), "also": d.get("also", [])}
 	return {"baby": int(e.get("who", -1)), "mom": int(d.get("mom", -1)), "home": int(d.get("home", -1))}
 
 
@@ -1015,6 +1100,7 @@ static func moment_ctx(e: Dictionary) -> Dictionary:
 ## (아기 안내 창·이름 짓기는 Firsts.check · 수첩이 따로 챙김)
 func _watch_moments(q: Village, can_stage: bool) -> void:
 	var pend: Array = _pend.get(q, [])
+	_fold_deaths(q, pend, can_stage)
 	while not pend.is_empty():
 		var e: Dictionary = pend.pop_front()
 		if not can_stage or q.t - float(e["t"]) >= STALE:
@@ -1048,6 +1134,9 @@ func _begin_moment(ctx: Dictionary) -> void:
 	_cast["fast"] = false
 	_roles = _cast["roles"]
 	_dolls.bind(view, v)
+	if kind == "funeral":                          # 돌은 세우는 박자까지 보이지 않음 · 무릎은 지켜보는 이를 안 마을만
+		_grave_stage(_cast, view, v, true)
+		(_cast["roles"] as Dictionary)["pray"] = (_cast["roles"]["all"] as Array).duplicate() if v.aware else []
 	var st: Dictionary = (_cast["slots"] as Dictionary).get("start", {})
 	for rid: int in st:                            # 집 안에서 나오는 사람 (자고 있던 · 멀리 있던 엄마 — 화면만)
 		_dolls.place(rid, st[rid])
@@ -1197,10 +1286,75 @@ func _moment_beat(c: Dictionary, b: Dictionary, kk: float) -> void:
 			var fx := MomentFx.spawn(view, String(f[0]), p3, float(f[2]) * dk, big)
 			fx.driven = true
 			_props.append(fx)
+	var gv := _gv(c)
+	if gv != null:                                     # (E1-5) 무덤 · 꽃
+		var gid := int(c.get("grave", -1))
+		if b.has("grave"):
+			if String(b["grave"]) == "stone":
+				gv.stage_stone(gid)
+			elif String(b["grave"]) == "light":
+				gv.stage_light(gid)
+		if b.has("flowers") and not bool(c.get("fast", false)):
+			for rid: int in rl.get(String(b["flowers"]), []):
+				if view.residents.has(rid):
+					gv.give(rid)
+					if not rid in (c["hands"] as Array):
+						(c["hands"] as Array).append(rid)
+		if b.has("lay"):                                   # 한 송이씩 — 사람이 있으면 그 사람이 쥔 꽃을 내려놓음 (모자라면 한 번 더)
+			var ly: Dictionary = b["lay"]
+			var who: Array = rl.get(String(ly.get("who", "")), [])
+			var n := maxi(GraveView.FLOWER_MAX, who.size()) if not ly.has("n") else int(ly["n"])
+			for i in n:
+				var rid := int(who[i % who.size()]) if not who.is_empty() else -1
+				var wait := float(ly.get("delay", 0.0)) * dk + float(ly.get("stagger", 0.0)) * dk * i
+				if wait > 0.0:
+					_mq.append([_now + wait, _lay_act.bind(c, rid)])
+				else:
+					_lay_act(c, rid)
 	if b.has("fxr"):                                   # 그 역할이 있을 때만 나는 소리 (한 줄 또는 여러 줄)
 		for fr: Array in Stagings.fx_rows(b["fxr"]):
 			if not (rl.get(String(fr[0]), []) as Array).is_empty():
 				_play_fx(fr.slice(1))
+
+
+## (E1-5) 그 장면의 무덤 화면 (꽃·빛) — 장례가 아닌 장면은 null
+func _gv(c: Dictionary) -> GraveView:
+	var g: Variant = c.get("gv")
+	return g if g != null and is_instance_valid(g) else null
+
+
+## 장례 장면 시작: 그 무덤은 연출이 정하는 대로 (돌을 아직 세우지 않음 · 꽃 없음 · 빛 없음)
+func _grave_stage(c: Dictionary, view: VillageView, q: Village, hide_stone: bool) -> void:
+	var gv := GraveView.of(view, q)
+	c["hands"] = []
+	if gv == null or int(c.get("grave", -1)) < 0:
+		return
+	c["gv"] = gv
+	gv.stage_begin(int(c["grave"]), hide_stone)
+
+
+## 장례 장면 끝 (건너뛰기 포함): 무덤은 묻힌 날의 모습으로 (돌 · 꽃 · 빛), 손의 꽃은 거둠
+func _grave_done(c: Dictionary, long_one: bool) -> void:
+	var gv := _gv(c)
+	if gv == null:
+		return
+	for rid: int in c.get("hands", []):
+		gv.take(rid)
+	gv.stage_end(int(c.get("grave", -1)))
+	if long_one:                                       # 긴 연출에서 꽃을 놓았으니 시뮬레이션 행렬은 빈손으로
+		var g := GraveView.grave_of(c["v"], int(c.get("grave", -1)))
+		if not g.is_empty():
+			gv.staged_for(String(g["name"]))
+	c.erase("gv")
+
+
+func _lay_act(c: Dictionary, rid: int) -> void:
+	var gv := _gv(c)
+	if gv == null or not bool(c.get("on", false)):
+		return
+	if rid >= 0:
+		gv.take(rid)
+	gv.stage_lay(int(c.get("grave", -1)))
 
 
 func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
@@ -1209,6 +1363,17 @@ func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
 	if not rid in (c["touched"] as Array):
 		(c["touched"] as Array).append(rid)
 	var mk: Dictionary = c["marks"]
+	if d.has("gait"):
+		_dolls.gait(rid, String(d["gait"]))
+	if d.has("droop"):
+		_dolls.droop(rid, float(d["droop"]))
+	if d.has("place"):
+		var ps: Dictionary = (c["slots"] as Dictionary).get(String(d["place"]), {})
+		if ps.has(rid):
+			_dolls.place(rid, ps[rid])
+	if d.has("bow"):
+		var bw: Array = d["bow"]
+		_dolls.bow(rid, float(bw[0]) * dk, float(bw[1]))
 	if d.has("go"):
 		var slot: Dictionary = (c["slots"] as Dictionary).get(String(d["go"]), {})
 		if slot.has(rid):
@@ -1303,6 +1468,7 @@ func _end_moment() -> void:
 		return
 	_mq.clear()
 	_cast["on"] = false
+	_grave_done(_cast, true)
 	var view: VillageView = _cast.get("view")
 	if view != null and is_instance_valid(view):
 		for rid: int in _cast["said"]:
@@ -1417,6 +1583,8 @@ func _start_mini(m: Dictionary) -> bool:
 	c["ppu"] = ppu                                     # 폴짝도 화면에서 보이는 높이로 (_doll_act)
 	c["fast"] = view.fast                              # 빠른 흐름(주민이 점처럼 순간이동)에선 몸짓 없이 빛과 말풍선만
 	_dolls.bind(view, q)
+	if kind == "grave":
+		_grave_stage(c, view, q, false)
 	m["cast"] = c
 	m["t"] = 0.0
 	mini_log.append({"id": String(m["id"]), "t": q.t})
@@ -1428,6 +1596,7 @@ func _end_mini(m: Dictionary) -> void:
 	if c.is_empty():
 		return
 	c["on"] = false
+	_grave_done(c, false)
 	if _dolls.v == c["v"]:
 		for rid: int in c["touched"]:
 			_dolls.release(rid)                        # 말풍선은 제 시간에 스스로 사라짐 (VillageView.stage_say)
@@ -1440,6 +1609,7 @@ func _stop_minis() -> void:
 		if c.is_empty():
 			continue
 		c["on"] = false
+		_grave_done(c, false)
 		for bm: Variant in c.get("beams", []):
 			if is_instance_valid(bm):
 				(bm as Node).queue_free()
