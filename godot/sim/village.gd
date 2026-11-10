@@ -1845,6 +1845,7 @@ func _wild_grow(dt: float) -> void:
 
 
 ## 맨손 채집을 나갈 때인가: 일터 없는 어른이 남은 연장보다 많고 (연장이 모자람), 창고 먹을 것이 FORAGE_ENOUGH_DAYS 날치에 못 미친다.
+## 첫 며칠 (2026-11-11 Q7-b · Production.forage_first): 연장은 남아 있어도 쥘 일터가 아직 없다 — 먹을 것이 반나절치 아래면 연장 수와 상관없이 연다.
 ## 같은 걸음 안에서는 한 번만 센다
 func forage_open() -> bool:
 	if _fg_t == t:
@@ -1857,6 +1858,8 @@ func forage_open() -> bool:
 			idle += 1
 	if float(idle) > float(stock.get("도구", 0.0)):
 		_fg_ok = food_total() < Balance.FORAGE_ENOUGH_DAYS * Production.day_need(self)
+	if not _fg_ok and idle > 0:
+		_fg_ok = Production.forage_first(self)
 	return _fg_ok
 
 

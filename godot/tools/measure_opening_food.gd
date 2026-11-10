@@ -218,12 +218,16 @@ func _trace(v: Village, fd: float, idle: int) -> void:
 	for p: Resident in v.people:
 		if p.is_adult():
 			acts[p.action] = int(acts.get(p.action, 0)) + 1
+	var chain := ""                      # 맷돌간·화덕: 입구에 온 것 / 오는 중 / 앞에 쌓인 것 / 일꾼 (2026-11-11 Q7-b — 첫 빵이 왜 밀리는지 보려고)
+	for b: Building in v.buildings:
+		if b.built and (b.type == "맷돌간" or b.type == "화덕"):
+			chain += " %s=in%s/inc%s/out%s/w%d" % ["mill" if b.type == "맷돌간" else "oven", JSON.stringify(b.in_buf), JSON.stringify(b.in_inc), JSON.stringify(b.out), b.worker]
 	print("HOUR seed=%d t=%.0fh clock=%04.1f day=%d fd=%.2f short=%d dry=%.0f wheat=%.0f(+%.0f) flour=%.0f bread=%.0f shroom=%.0f manna=%.0f farms=%d/%d sites=%s built=%s plank=%.0f stone=%.0f log=%.0f tools=%.0f idle=%d pop=%d hungermax=%.2f acts=%s" % [
 		seed_v, v.t / H, fmod(v.start_clock + v.t, D) / H, v.cal_day(v.t - 1.0), fd, 1 if (v.deficit > 0.0 or v.t - v.last_short_t < H) else 0,
 		float(v.stock.get("건량", 0.0)), float(v.stock.get("밀", 0.0)), field, float(v.stock.get("밀가루", 0.0)), float(v.stock.get("빵", 0.0)), float(v.stock.get("버섯", 0.0)),
 		v.manna.reduce(func(a: float, m: Dictionary) -> float: return a + float(m["amt"]), 0.0),
 		farm_w, farms, ",".join(sites), ",".join(built), float(v.stock["판자"]), float(v.stock["돌"]), float(v.stock.get("통나무", 0.0)), float(v.stock.get("도구", 0.0)),
-		idle, v.people.size(), hunger_max, JSON.stringify(acts)])
+		idle, v.people.size(), hunger_max, JSON.stringify(acts)] + chain)
 
 
 func _line(v: Village, days: int, secs: float) -> void:

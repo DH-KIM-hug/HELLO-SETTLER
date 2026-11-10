@@ -334,8 +334,14 @@ static func decide(v: Village, r: Resident) -> void:
 	var cand := {}
 	if night:
 		cand["sleep"] = Balance.ACT_BASE["sleep"] * Balance.W_NIGHT_SLEEP
+	var eat_hungry := 0.0             # 배고플 때의 먹기 점수 — 먹을 것이 없어 후보에 못 올라도 맨손 채집이 이 점수를 쓴다
 	if r.hunger >= Balance.HUNGRY_AT:
-		cand["eat"] = Balance.ACT_BASE["eat"] * (1.0 + r.hunger)
+		eat_hungry = Balance.ACT_BASE["eat"] * (1.0 + r.hunger)
+		if Production.food_at_hand(v):
+			cand["eat"] = eat_hungry
+		else:                         # (2026-11-11 Q7-b) 먹을 것이 없으면 빈 창고 앞에서 기다리지 않는다 — 배고프다고 말하고 하던 일(밭·나르기·짓기)을 잇는다. 할 일이 없는 사람만 창고를 들여다본다
+			cand["eat"] = Balance.EAT_EMPTY_SCORE
+			v.speak(r, "배고파요…", 5)
 	elif not night:
 		var mk := _meal_key(v, h)
 		if mk >= 0 and r.meal_done != mk:
@@ -363,8 +369,10 @@ static func decide(v: Village, r: Resident) -> void:
 			# 맨손 채집 (design/gdd/daily-schedule.md R4.6): 연장이 모자라 일터가 없는 어른 — 짓기·나르기가 없을 때 바구니를 들고 들·숲 가로
 			if r.job < 0 and not opening and v.wild_food >= Balance.FORAGE_LOAD * Balance.FORAGE_LOAD_MIN and v.forage_open():
 				cand["forage"] = Balance.FORAGE_SCORE * Balance.W_DAY_WORK
-				if r.hunger >= Balance.HUNGRY_AT and cand.has("eat"):     # 배고픈데 창고가 비었다 — 빈 창고 앞에서 기다리느니 바구니를 들고 나간다
-					cand["forage"] = float(cand["eat"]) * Balance.FORAGE_HUNGRY_MULT
+				if Production.forage_first(v) and Production.foragers_out(v, r) < Balance.FORAGE_FIRST_HANDS:     # (Q7-b) 첫 며칠 먹을 것이 모자라면 몇 사람은 나르기·짓기보다 앞세워 나간다 (나머지는 맷돌간·화덕·밭을 마저 짓는다)
+					cand["forage"] = Balance.FORAGE_FIRST_SCORE * Balance.W_DAY_WORK
+				if eat_hungry > 0.0:          # 배고프다 — 창고 앞에서 기다리느니 바구니를 들고 나간다 (먹을 것이 없어 '먹기'가 후보에 없어도)
+					cand["forage"] = eat_hungry * Balance.FORAGE_HUNGRY_MULT
 	# [상점] 하늘에서 내려온 바깥 크기의 물건: 몰려와 깎아 창고로 (WORLD_EVENTS 1.1) — 낮에, 어른 (아이는 먹을 것만 조금씩)
 	if work_t and not hurt and r.age >= 2.5 and not v.drops.is_empty() and SkyDrops.carve_open(v):
 		cand["carve"] = Balance.ACT_BASE["haul"] * 1.4 * Balance.W_DAY_WORK * (1.0 if r.is_adult() else 0.5)
@@ -542,8 +550,12 @@ static func _forage(v: Village, r: Resident) -> bool:
 	r.doing = "들과 숲 가에서 먹을 것을 찾는 중"
 	if v.t - v.forage_note_t >= Balance.FORAGE_NOTE_DAYS * Balance.DAY:
 		v.forage_note_t = v.t
-		v.log_line("일손은 남는데 연장이 모자랐다. %s%s 빈 바구니를 들고 숲 가로 나갔다." % [r.name, Village.josa(r.name, "은", "는")])
-		v.speak(r, "손 놓고 있느니 숲 가라도 돌아보고 올게요", 5)
+		if Production.forage_first(v):     # (Q7-b) 첫 며칠은 연장이 모자라서가 아니다 — 밭 하나가 아직 마을을 다 먹이지 못해서
+			v.log_line("밭이 아직 마을을 다 먹이지 못했다. 몇 사람이 빈 바구니를 들고 숲 가로 나갔다.")
+			v.speak(r, "숲 가에 먹을 만한 것이 있나 보고 올게요", 5)
+		else:
+			v.log_line("일손은 남는데 연장이 모자랐다. %s%s 빈 바구니를 들고 숲 가로 나갔다." % [r.name, Village.josa(r.name, "은", "는")])
+			v.speak(r, "손 놓고 있느니 숲 가라도 돌아보고 올게요", 5)
 	r.steps.append(walk(p.x, p.y))
 	r.steps.append(act(Balance.FORAGE_TIME, "gather", op("forage_take", {"amt": amt}), false, op("forage_undo", {"amt": amt})))
 	_drop_at_store(v, r, s, Balance.FORAGE_ITEM, 0.0)
@@ -986,14 +998,20 @@ static func haul_task(v: Village, r: Resident) -> bool:
 
 static func _haul_out(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ① 건물 앞 산출물 → 바로 다음 건물 (입구가 REFILL_AT 아래인 가장 가까운 곳 — production-chain R3) · 없으면 창고
+	# (2026-11-11 Q7-b) 다음 건물이 기다리는 짐이 먼저다 — 밭 앞 밀을 창고로 나르느라 맷돌간 앞 밀가루가 화덕으로 못 가던 일 (첫 빵이 하루 밀림)
+	for b in v.buildings:
+		if not b.built or b.is_store:
+			continue
+		for k: String in b.out:
+			var n0 := float(b.out[k])
+			if n0 >= haul_min(k) and _haul_direct(v, r, b, k, n0):
+				return true
 	for b in v.buildings:
 		if not b.built or b.is_store:
 			continue
 		for k: String in b.out:
 			var n := float(b.out[k])
 			if n >= haul_min(k):
-				if _haul_direct(v, r, b, k, n):
-					return true
 				var take := minf(load_of(r, k), floorf(n))
 				b.out[k] = n - take
 				r.doing = "%s 나르는 중" % k
