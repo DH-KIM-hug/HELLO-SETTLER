@@ -1382,6 +1382,29 @@ func move_to(p: Vector3, dt: float) -> void:
 	_gpos = p
 
 
+## [톡 반응] (view/tap_react.gd) 몸 전체에 얹는 화면만의 움직임 — 3D 주민은 폴짝·찌그러짐·숙이기·돌기만 (제자리 붙들기·동작 바꾸기는 종이 인형만).
+## 자리(이 노드)는 건드리지 않는다. 기본값(0, 1, 0, 0)이 오면 체형 배율로 되돌림.
+var _react_base := Vector3.ZERO     # 반응 전의 체형 배율 (0 = 반응 중 아님)
+
+
+func set_react(off: Vector3, squash: Vector2, roll: float, turn: float, _hint: String) -> void:
+	if pose == null:
+		return
+	var rest := is_zero_approx(off.y) and squash.is_equal_approx(Vector2.ONE) and is_zero_approx(roll) and is_zero_approx(turn)
+	if _react_base == Vector3.ZERO:
+		if rest:
+			return
+		_react_base = pose.scale
+	pose.position = Vector3(0, off.y / maxf(absf(scale.y), 0.001), 0)
+	pose.scale = _react_base * Vector3(squash.x, squash.y, squash.x)
+	pose.rotation = Vector3(roll, turn * TAU, 0)
+	if rest:
+		pose.position = Vector3.ZERO
+		pose.scale = _react_base
+		pose.rotation = Vector3.ZERO
+		_react_base = Vector3.ZERO
+
+
 ## 동작 자세 — 그 동작의 t초 자세 (섞지 않음: 사진 도구 · 시험)
 func apply_pose(a: String, t: float) -> void:
 	if pose == null:

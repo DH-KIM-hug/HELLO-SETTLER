@@ -29,7 +29,7 @@
 ### v5-1 숫자 (data/balance.gd 이름)
 
 - 시간·걸음: `WALK` 1.5/288 칸/병초 · `WALK_OPENING` 1.25 (첫 한 시간·제단 장면) · `PACE_FIRST_DAY` 12 · `BUILD_K` 40 · `GATHER_K` 20 · `BUILD_CHUNK` 1,800 · `BULK` 밀·가루·빵·물 100 · 생선·고기·버섯 16 · `MEALS` 창 1시간 · `PRAY_TIME` 1,800 · `SOCIAL_TIME` 1,200~3,000 · `REST_TIME` 2,400~4,800 · `CHORE_TIME` 1,500~3,000.
-- 일생: `AGE_K` 4 (일생 날 하나 = 병 4일) · `MARRY_RATE` 0.3 · `BIRTH_RATE` 0.1 · `BIRTH_FOOD_DAYS` 2 · `FIRST_BIRTH_AT` 1시간 · `CARE_DAYS` 0.8 · `CARE_ELDER_DAYS` 0.15 · `STROLL_P` 0.25 · `STARVE_HEALTH_TIME` 1일 · `SKILL_RATE` 0.15 · `INJURY_DAYS` 1.
+- 일생: `AGE_K` 4 (일생 날 하나 = 병 4일; **2026-11-10 사용자 결정: 어른부터 `AGE_K_ADULT` 12** — 일생 병 약 260일 ≈ 현실 약 3주, 측정 `docs/measure/lifespan_2026-11-10.md`) · `MARRY_RATE` 0.3 · `BIRTH_RATE` 0.1 · `BIRTH_FOOD_DAYS` 2 · `FIRST_BIRTH_AT` 1시간 · `CARE_DAYS` 0.8 · `CARE_ELDER_DAYS` 0.15 · `STROLL_P` 0.25 · `STARVE_HEALTH_TIME` 1일 · `SKILL_RATE` 0.15 · `INJURY_DAYS` 1.
 - 먹을 것: `PORRIDGE_YIELD` 0.75 · `BREAD_YIELD` 1.5 · `SPOIL_DAY` 밀 3% · 가루 1% · 빵 0.4% · 생선 15% · 고기 12% · `HAPPY_BREAD` +0.06 · `HAPPY_PORRIDGE_ONLY` −0.04 · `FARM_ENOUGH_DAYS` 3 · `START_STOCK` 건량 1,000 · 돌 12 · `MILL_PER` 11 · `OVEN_PER` 8 · `AUTO_MANNA` false · `GRAIN_DAYS` 0.5.
 - 건물: 맷돌간 (판자 1 · 돌 2, 밀 → 가루 120초) · 공용 화덕 (판자 1 · 돌 1, 가루 → 빵 1.5, 90초) · 방앗간 40초 · 빵집 40초 (읍내) · 제재소 1,800초 · 우물 120초 · 제단 짓기 6,000.
 - 나무·자재: `TREE_LOGS` 4 · `ENOUGH` 바탕 + `ENOUGH_PER` × 인구 (통나무 20+1 · 판자 30+1 · 돌 20+0.8) · 빵 1.5일치 · 가루 0.6일치 · 땔감 `FUEL_EVERY` 4시간 · `FUEL_TARGET` 4.

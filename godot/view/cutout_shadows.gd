@@ -60,4 +60,11 @@ func refresh(residents: Dictionary) -> void:
 	for i in list.size():
 		var m: Node3D = list[i]
 		var s := absf(m.scale.x) if m.visible and (m as CutoutResident).baby_mode != "carried" else 0.0     # 품에 안긴 아기는 부모 그림자 안
-		multimesh.set_instance_transform(i, Transform3D(b.scaled(Vector3.ONE * s), m.position + Vector3(0, LIFT, 0)))
+		var o := (m as CutoutResident).react_off      # [톡 반응] 그림자는 인형 발밑에 (폴짝 뛰면 작아짐) — view/tap_react.gd
+		s *= hop_shrink(o.y)
+		multimesh.set_instance_transform(i, Transform3D(b.scaled(Vector3.ONE * s), m.position + Vector3(o.x, LIFT, o.z)))
+
+
+## 폴짝 뛴 높이(세계) → 그림자 크기 배율 (높이 뜰수록 작게)
+static func hop_shrink(y: float) -> float:
+	return 1.0 / (1.0 + maxf(y, 0.0) * 1.8)

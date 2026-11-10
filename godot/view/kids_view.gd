@@ -198,7 +198,7 @@ func _warp_reset(id: int) -> void:
 	if cm != null and is_instance_valid(cm):
 		cm.set_body_warp()
 		if cm.doll != null:
-			cm.doll.position.y = 0.0
+			cm.set_body_lift(0.0)
 
 
 # ───────────────────────── 매 화면: 앞 (주민을 놓기 전) ─────────────────────────
@@ -429,7 +429,7 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 	if not here and k.w <= 0.0:
 		if cm != null:
 			cm.set_body_warp()
-			cm.doll.position.y = 0.0
+			cm.set_body_lift(0.0)
 		_kid.erase(r.id)
 		return
 	var g := k.g
@@ -523,7 +523,7 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 		m._ground = snappedf(clampf(k.sp, 0.3, RUN_LEGS), 0.15)
 	m.set_anim(anim, r.action)
 	if cm != null:
-		cm.doll.position.y = hop / maxf(cm.scale.y, 0.01)     # 폴짝은 인형만 (그림자는 땅에)
+		cm.set_body_lift(hop / maxf(cm.scale.y, 0.01))     # 폴짝은 인형만 (그림자는 땅에)
 		cm.set_body_warp(sy, sx, 0.0)
 	else:
 		m.position.y = y + hop
@@ -587,7 +587,7 @@ func babies(dt: float, fast: bool) -> void:
 		else:
 			b.has = false
 			bm.set_body_warp()
-			bm.doll.position.y = 0.0
+			bm.set_body_lift(0.0)
 
 
 func _free_baby(id: int) -> void:
@@ -626,7 +626,7 @@ func _cradle(r: Resident, bm: CutoutResident, b: Baby, dt: float) -> void:
 	var h := pic_h("cradle_back", CRADLE_W)
 	var lying := _sleep_lift() * bm._doll_h
 	bm.position.y = base.y
-	bm.doll.position.y = (h * CRADLE_RIM + 0.012 - lying + wig) / _cu / maxf(bm.scale.y, 0.01)
+	bm.set_body_lift((h * CRADLE_RIM + 0.012 - lying + wig) / _cu / maxf(bm.scale.y, 0.01))
 	bm.set_body_warp(1.0, 1.0, 0.0)
 
 
@@ -712,6 +712,6 @@ func _toddle(r: Resident, bm: CutoutResident, b: Baby, dt: float) -> void:
 	bm.rotation.y = b.yaw
 	if b.moving:
 		bm._ground = snappedf(b.sp, 0.1)
-	bm.doll.position.y = hop / maxf(bm.scale.y, 0.01)
+	bm.set_body_lift(hop / maxf(bm.scale.y, 0.01))
 	bm.set_body_warp(sy, sx, lean)
 	bm._refresh_doll()

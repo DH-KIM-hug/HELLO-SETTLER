@@ -72,6 +72,13 @@
 | `&"egg_feast"` | `Kitchen.crack` (`kit_egg_crack` — 굴려 와 창고 곁에서 깸, 아무도 못 굴리면 `EGG_WAIT` 뒤 그 자리에서) | `{"food": float (알 = 식량 3일치, 전부 거인 몫), "shell": &"basin"·&"boat"}` | `who` = 깬 사람 (−1 = 그 자리) · `at` = 깬 자리 = 껍데기 자리 | `tests/kitchen_tests.gd` (화면은 `Kitchen.shells` — `props/pf_eggshell`) |
 | `&"seed_pressed"` | `Kitchen._press` (하루 한 번 `PRESS_HOUR`, 맷돌간·방앗간 일꾼이 해바라기씨를 빻음) | `{"seeds": float, "milk": float, "oil": float, "binder": float}` | `who` = 일꾼 · `at` = 맷돌간 | `tests/kitchen_tests.gd` |
 | `&"fine_bread"` | `Kitchen.on_bake` (화덕·빵집 한 판 — 재료마다 처음 한 번만: 단물 빵·우유 빵·기름 빵) | `{"k": &"단물"·&"씨앗 우유"·&"씨앗 기름"}` | `who` = 빵 굽는 사람 · `at` = 화덕 | `tests/kitchen_tests.gd` |
+- 2026-11-10 (E1-4 첫 아기 · E1-6 첫 기적 — docs/EVENTS_STAGING.md 4 · 6): 아래 kind를 냄. 저장 순번 아니오 · 연대기는 `log_line` (이미 있던 줄 그대로). `emit` 앞뒤로 난수를 쓰지 않는다 (아기의 성별·이름 굴림은 그 앞에서 끝남). 지켜보는지 읽지 않는다. 내려 주기로 들어준 소원(`how: &"drop"`)은 아직 내지 않음 (이름만 예약).
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"born"` | `Village._give_birth` (아이가 태어남 — 연대기 줄 바로 뒤) | `{"first": bool (이 마을에서 처음 태어난 아이), "mom": int (엄마 id), "home": int (집 id)}` | `who` = 아기 · `at` = 집 | `view/stage_director.gd` (커서 — 보고 있는 무리면 첫 아기 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
+| `&"wish_granted"` | `Village.grant_wish` (별지기가 소원을 들어줌 — 연대기 줄 바로 뒤) | `{"id": int (편지 id), "how": StringName (&"help" — 짓는 법을 일러 줌), "type": String (지을 것)}` | `who` = 소원을 빈 사람 (세상을 떠났으면 그 id 그대로 — 읽는 쪽이 가까운 사람으로) | `view/stage_director.gd` (커서 — 처음이면 첫 기적 연출 · 그 뒤로는 짧은 판), `tests/first_moments_tests.gd` |
+
 - 2026-11-10 (Q2-b 귀여움 묶음 ② 아이·아기 — docs/ROADMAP.md Q2-b · E2-2 · E2-3, `sim/child_play.gd`): 아래 kind를 냄. 모두 저장 순번 아니오 · 연대기는 첫걸음마만 `log_line` 한 줄. 굴림(놀이를 열지·무슨 놀이·술래·돌탑이 무너질 높이)은 마을 씨앗·놀이 번호의 해시로 정하고 마을 난수 흐름을 쓰지 않는다 — `emit` 앞뒤로 난수 없음. 지켜보는지 읽지 않는다. 행복·경제 값은 바꾸지 않는다 (놀이는 아이의 `play` 행동 그대로 — 놀 자리와 하는 일 이름만, 들여다보기는 쉬는 사람의 짧은 멈춤).
 
 | kind | 내는 곳 | v | at / who | 읽는 곳 |

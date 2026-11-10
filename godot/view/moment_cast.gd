@@ -1,0 +1,209 @@
+## 작은 순간의 배역 (EVENTS_STAGING 4 첫 아기 · 6 첫 기적 — 2026-11-10): 누가 나오고 · 어디에 서고 · 무엇이 어디에 놓이나.
+## 시뮬레이션을 읽기만 한다 (난수 없음 — 사건 자리에서 가까운 차례로만 정함). 자리는 화면 기준 (R = 화면 오른쪽 · B = 카메라 쪽, 둘 다 마을 데이터 좌표)
+## — 세로로 긴 화면이라 옆으로는 좁게(±1.5칸), 앞뒤로 겹쳐 세운다. StageDirector가 연출을 시작할 때 한 번 만든다.
+## 돌려줌 = {roles: 역할 → [주민 id], slots: 자리 이름 → {주민 id → Vector2}, marks: 이름 → Vector2, names: 자막·말에 넣을 이름}
+class_name MomentCast
+extends RefCounted
+
+const NEAR := 7.5                    # 사건 자리에서 이만큼 안의 깨어 있는 사람이 모여듦 (칸)
+const MINI_NEAR := 5.5               # 짧은 판: 이만큼 안의 사람만 돌아봄
+const DOOR_OUT := 0.55               # 문 앞: 집 가운데에서 앞(+y)으로 집 크기의 반 + 이만큼 (CutoutResident._door와 같은 쪽)
+
+
+static func door(h: Building) -> Vector2:
+	return Vector2(h.x, h.y) + Vector2(0.0, h.size() * 0.5 + DOOR_OUT)
+
+
+static func square(q: Village) -> Vector2:
+	return q.fire if q.fire.distance_to(q.center) < 30.0 else q.center
+
+
+## 사건 기록에서 빠진 것을 채움 (장면이 play(id, 무리)만 불렀을 때): 소원 = 가장 최근에 들어준 편지 · 아기 = 가장 어린 아기
+static func fill_ctx(kind: String, q: Village, ctx: Dictionary) -> Dictionary:
+	var c := ctx.duplicate()
+	if kind == "wish":
+		var best: Dictionary = {}
+		for l: Dictionary in q.letters:
+			if String(l.get("kind", "")) != "wish":
+				continue
+			if c.has("id") and int(l["id"]) == int(c["id"]):
+				best = l
+				break
+			if not c.has("id") and String(l.get("state", "")) == "granted" and (best.is_empty() or float(l.get("t", 0.0)) >= float(best.get("t", 0.0))):
+				best = l
+		if not best.is_empty():
+			if not c.has("who"):
+				c["who"] = int(best["from"])
+			c["name"] = String(best.get("name", ""))
+	elif kind == "baby":
+		var b := q.person(int(c.get("baby", -1)))
+		if b == null:
+			b = Firsts.living_baby(q)
+			if b != null:
+				c["baby"] = b.id
+		if b != null:
+			if not c.has("mom") and b.parents.size() > 0:
+				c["mom"] = int(b.parents[0])
+			if not c.has("home"):
+				c["home"] = b.home
+	return c
+
+
+## 카메라가 볼 곳 {at: 자리, front: 이쪽에서 봐야 함 (문 앞 — 없으면 Vector2.ZERO)}
+static func focus(kind: String, q: Village, ctx: Dictionary) -> Dictionary:
+	if kind == "baby":
+		var h := q.bld(int(ctx.get("home", -1)))
+		if h != null:
+			return {"at": door(h), "front": Vector2(0, 1)}
+		var b := q.person(int(ctx.get("baby", -1)))
+		return {"at": Vector2(b.x, b.y) if b != null else square(q), "front": Vector2.ZERO}
+	return {"at": _receiver(q, ctx)["at"], "front": Vector2.ZERO}
+
+
+static func build(kind: String, q: Village, ctx: Dictionary, right: Vector2, back: Vector2, near := NEAR) -> Dictionary:
+	return _baby(q, ctx, right, back, near) if kind == "baby" else _wish(q, ctx, right, back, near)
+
+
+## 사건 자리에서 가까운 차례의 깨어 있는 사람 (near칸 안, skip 빼고)
+static func _nearby(q: Village, at: Vector2, near: float, skip: Array) -> Array[Resident]:
+	var out: Array[Resident] = []
+	for r in Awakening.witnesses(q):
+		if not r.id in skip and Vector2(r.x, r.y).distance_to(at) <= near:
+			out.append(r)
+	out.sort_custom(func(a: Resident, b: Resident) -> bool:
+		var da := Vector2(a.x, a.y).distance_squared_to(at)
+		var db := Vector2(b.x, b.y).distance_squared_to(at)
+		return da < db if da != db else a.id < b.id)
+	return out
+
+
+## 선물을 받는 사람: 소원을 빈 사람이 깨어 있으면 그 사람. 자고 있으면 그 집 문 앞 (가까운 이웃이 대신 받음) ·
+## 세상을 떠났으면 광장에서 가장 가까운 사람이 대신 (그 자리에서)
+static func _receiver(q: Village, ctx: Dictionary) -> Dictionary:
+	var w := q.person(int(ctx.get("who", -1)))
+	if w != null and w.dead:
+		w = null
+	if w != null and w in Awakening.witnesses(q):
+		return {"r": w, "self": true, "at": Vector2(w.x, w.y)}
+	var at := square(q)
+	if w != null:
+		var h := q.bld(w.home) if w.home >= 0 else null
+		at = door(h) if h != null else Vector2(w.x, w.y)
+	var skip: Array = [w.id] if w != null else []
+	var near := _nearby(q, at, NEAR if w != null else 1.0e6, skip)
+	var best: Resident = null
+	for r in near:                              # 어른이 먼저
+		if not r.is_child():
+			best = r
+			break
+	if best == null and not near.is_empty():
+		best = near[0]
+	if best != null and w == null:
+		at = Vector2(best.x, best.y)
+	return {"r": best, "self": false, "at": at}
+
+
+## 첫 기적: 받는 사람(wisher) 왼쪽 · 선물 가운데 · 친구(friend) 오른쪽, 이웃(crowd)은 뒤에 · 아이들(kids)은 앞에
+static func _wish(q: Village, ctx: Dictionary, right: Vector2, back: Vector2, near: float) -> Dictionary:
+	var rc := _receiver(q, ctx)
+	var who: Resident = rc["r"]
+	var at: Vector2 = rc["at"]
+	var others := _nearby(q, at, near, [who.id] if who != null else [])
+	var grown: Array = []
+	var kids: Array = []
+	for r in others:
+		if r.is_child():
+			if kids.size() < 2:
+				kids.append(r.id)
+		elif grown.size() < 4:
+			grown.append(r.id)
+	var friend: Array = []
+	if not grown.is_empty():
+		friend = [grown.pop_front()]
+	elif not kids.is_empty():
+		friend = [kids.pop_front()]
+	var wisher: Array = [who.id] if who != null else []
+	var gift := at + right * 0.75 + back * 0.05      # 받는 사람과 나란히 (받는 사람의 얼굴이 보이게 — 뒤에 두면 등을 보임)
+	var s_in := {}
+	var s_out := {}
+	var s_show := {}
+	for rid: int in wisher:
+		s_in[rid] = at
+		s_show[rid] = at + right * 1.4 + back * 0.85
+	for rid: int in friend:
+		s_in[rid] = at + right * 1.55 + back * 0.1
+		s_out[rid] = at + right * 1.95 + back * 1.0
+	var behind := [Vector2(0.1, -1.05), Vector2(1.4, -1.0), Vector2(-0.55, -0.6)]
+	for i in mini(grown.size(), behind.size()):
+		var o: Vector2 = behind[i]
+		s_in[int(grown[i])] = at + right * o.x + back * o.y
+		s_out[int(grown[i])] = at + right * (o.x * 1.05) + back * (o.y - 0.95)
+	grown.resize(mini(grown.size(), behind.size()))
+	var before := [Vector2(0.3, 1.0), Vector2(1.2, 1.15)]
+	for i in kids.size():
+		var o: Vector2 = before[i]
+		s_in[int(kids[i])] = at + right * o.x + back * o.y
+		s_out[int(kids[i])] = at + right * o.x + back * (o.y + 0.9)
+	var nm := String(ctx.get("name", ""))
+	if nm == "" and who != null and bool(rc["self"]):
+		nm = who.name
+	var mine := bool(rc["self"])
+	return {"roles": {"wisher": wisher, "friend": friend, "crowd": grown, "kids": kids, "all": wisher + friend + grown + kids,
+			"near": friend + grown + kids},
+		"slots": {"in": s_in, "out": s_out, "show": s_show},
+		"marks": {"spot": at, "gift": gift, "cam": at + right * 0.75},
+		"names": {"who": nm if nm != "" else "누군가", "line": "정말… 들어주셨어!" if mine else "%s의 소원이야…!" % (nm if nm != "" else "누군가")},
+		"self": mine}
+
+
+## 첫 아기: 문 앞에 아기를 안은 사람(holder — 엄마, 없으면 아빠) · 곁에 짝(mate) · 이웃(crowd)은 양옆 · 아이들(kids)은 앞에서 발돋움.
+## 엄마는 자고 있거나 멀리 있어도 집 안에서 나온다 (slots "start" — 화면만. 끝나면 인형이 시뮬레이션 자리로 돌아감).
+## 부모가 둘 다 없으면 문간의 바구니 (holder 없음)
+static func _baby(q: Village, ctx: Dictionary, right: Vector2, back: Vector2, near: float) -> Dictionary:
+	var baby := q.person(int(ctx.get("baby", -1)))
+	var mom := q.person(int(ctx.get("mom", -1)))
+	var dad := q.person(mom.partner) if mom != null and mom.partner >= 0 else null
+	var f := focus("baby", q, ctx)
+	var at: Vector2 = f["at"]
+	var ws := Awakening.witnesses(q)
+	var holder: Array = []
+	var mate: Array = []
+	var start := {}                           # 집 안에서 나오는 사람 (화면만 — 막 아기를 낳은 엄마는 자고 있거나 멀리 있어도 문 앞에)
+	var hb := q.bld(int(ctx.get("home", -1)))
+	if mom != null and not mom.dead:
+		holder = [mom.id]
+		if not mom in ws or Vector2(mom.x, mom.y).distance_to(at) > near:
+			start[mom.id] = Vector2(hb.x, hb.y) if hb != null else at
+	if dad != null and not dad.dead and dad in ws and Vector2(dad.x, dad.y).distance_to(at) <= near:
+		if holder.is_empty():
+			holder = [dad.id]
+		else:
+			mate = [dad.id]
+	var grown: Array = []
+	var kids: Array = []
+	for r in _nearby(q, at, near, holder + mate + ([baby.id] if baby != null else [])):
+		if r.is_child():
+			if kids.size() < 2:
+				kids.append(r.id)
+		elif grown.size() < 4:
+			grown.append(r.id)
+	var s := {}
+	for rid: int in holder:
+		s[rid] = at + back * 0.12
+	for rid: int in mate:
+		s[rid] = at + right * 0.62 + back * 0.28
+	var sides := [Vector2(-1.05, 0.45), Vector2(1.05 if mate.is_empty() else 1.35, 0.5 if mate.is_empty() else 0.7), Vector2(-1.2, 1.3), Vector2(1.15, 1.5)]
+	for i in grown.size():
+		var o: Vector2 = sides[i]
+		s[int(grown[i])] = at + right * o.x + back * o.y
+	var before := [Vector2(-0.45, 1.35), Vector2(0.5, 1.55)]
+	for i in kids.size():
+		var o: Vector2 = before[i]
+		s[int(kids[i])] = at + right * o.x + back * o.y
+	var mom_awake: Array = [mom.id] if mom != null and mom in ws else []
+	return {"roles": {"holder": holder, "mate": mate, "crowd": grown, "kids": kids, "all": holder + mate + grown + kids,
+			"near": grown + kids, "mom": mom_awake},
+		"slots": {"door": s, "start": start},
+		"marks": {"door": at, "spot": at, "cam": at + back * 0.55, "glow": at - back * 0.3, "basket": at + back * 0.12},
+		"names": {"home": ("%s네 집" % mom.name) if mom != null else "마을", "baby": baby.name if baby != null else "아기"},
+		"baby": baby.id if baby != null else -1}
