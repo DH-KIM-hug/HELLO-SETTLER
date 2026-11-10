@@ -639,38 +639,101 @@ func test_first_offering() -> void:
 
 ## 밀의 넉넉한 양: 농장도 넉넉하면 멈춘다 → 쌓이는 밀·날마다 바치는 밀이 인구에 묶인다 (굶지 않음)
 func test_wheat_bounded() -> void:
-	Market.reset()
-	var v := Village.new_prototype(2)
-	v.water.offline = true
-	v.step_dt = 30.0
-	v.auto_reveal = true
-	var worst := 0.0
-	var offered: Array = []
 	var days := 8 if not quick else 6
-	var farmer_rest := false
-	for d in days:
-		for hh in 24:
-			v.advance(H)
-			var w := float(v.stock["밀"])
-			for b in v.buildings:
-				w += float(b.out.get("밀", 0.0))
-				if b.type == "농장" and b.worker >= 0 and v.person(b.worker) != null:
-					farmer_rest = farmer_rest or not ResidentAI.work_task(v, v.person(b.worker), true)
-			worst = maxf(worst, w / v.enough("밀"))
-		var it := v.altar_items()
-		offered.append(int(it.get("밀", 0)))
-		v.take_all()
+	var a := _wheat_run(2, days)
+	var v: Village = a["v"]
+	var worst: float = a["worst"]
+	var offered: Array = a["offered"]
+	var farmer_rest: bool = a["farmer_rest"]
 	var need := v._food_people() * D / Balance.FOOD_IV
 	var max_off := 0
 	for o: int in offered:
 		max_off = maxi(max_off, o)
 	check(worst <= 1.3, "밀(창고 + 밭)이 넉넉한 양을 크게 넘지 않음 — 인구가 줄면 기준도 줄어듦 (최대 ×%.2f, 넉넉한 양 %.0f = 인구 %d × %.1f일치)" % [worst, v.enough("밀"), v.people.size(), Balance.FARM_ENOUGH_DAYS])
 	check(max_off < 1000 and max_off <= need * 0.35, "날마다 바친 밀 %s — 1,000개 넘게 쌓여 바치지 않음 (하루 먹는 양 %.0f)" % [str(offered), need])
-	check(v.stats["starved"] == 0 and v.last_short_t < 0.0, "농장이 멈춰도 굶지 않음")
+	# 굶지 않음 — 보는 것은 '농장이 멈춘 탓에' 창고가 비거나 굶는 일이 없는가이다. 씨앗 하나가 굴러간 길에 걸지 않게 두 가지로 본다:
+	# ① 이 판에서 농부가 처음 쉰 뒤로는 창고가 빈 적도 굶어 죽은 이도 없다 (쉰 적이 없으면 볼 것이 없음)
+	# ② 창고를 넉넉한 양 바로 위까지 채워 농장을 멈춰 세운 뒤 이틀 — 농부는 바로 쉬고, 그 이틀 동안 창고가 비지도 굶어 죽지도 않는다
+	# (재어 봄 2026-11-10 — 시험 묶음과 같은 조건, 씨앗 1~32, 이 시험의 _wheat_run · _wheat_stop 그대로: 아이 놀이를 켜고 8일 32판 · 끄고 6일 32판,
+	#  64판 모두 ①② 그대로 — 농부가 쉰 뒤 창고가 빈 적 0 · 굶어 죽음 0, 멈춰 세운 이틀 동안 창고가 빈 시간 0 · 굶어 죽음 0.
+	#  예전의 '판 내내 창고가 한 번도 안 빔'은 씨앗 2의 운이었다. 만나가 끝난 3~5일째 아침, 농장이 아직 넉넉함에 닿기 전에 창고가 잠깐 비는 씨앗이
+	#  32개에 켬 12개 · 끔 13~14개 — 농장이 멈춰서가 아니라 첫 수확이 늦어서이고 놀이와도 상관없다. 그쪽은 밸런스가 볼 일 (이 시험은 보지 않음))
+	check(not a["short_after"] and int(a["starved_after"]) == 0, "농부가 쉰 뒤로 창고가 비지 않음 (처음 쉰 때 %s · 마지막으로 창고가 빈 때 %s · 그 뒤 굶어 죽음 %d · 판 전체 굶어 죽음 %d)" % [
+		v.fmt_time(a["rest_t"]) if float(a["rest_t"]) >= 0.0 else "쉰 적 없음", v.fmt_time(v.last_short_t) if v.last_short_t >= 0.0 else "빈 적 없음", a["starved_after"], v.stats["starved"]])
+	var st := _wheat_stop(v)
+	check(st["farmer"] and st["rested"], "창고 밀이 넉넉한 양을 넘으면 농부가 바로 쉰다 (밀 %.0f → %.0f)" % [st["before"], st["filled"]])
+	check(int(st["short_hours"]) == 0 and int(st["starved"]) == 0, "농장이 멈춰도 굶지 않음 (멈춰 세운 뒤 이틀: 창고가 빈 시간 %d · 굶어 죽음 %d · 창고 밀이 가장 적을 때 넉넉한 양의 ×%.2f · 농부가 다시 일한 때 %d시간 뒤)" % [
+		st["short_hours"], st["starved"], st["lowest"], st["resumed"]])
 	# v5: 농부는 창고 밀로 넉넉함을 본다 (밭 앞 밀은 4분의 1 수레가 차야 나르므로 창고 + 밭이 넉넉함을 10%쯤 넘을 수 있다 — 밭 자체는 넘으면 멈춤)
 	# (E3-7 이슬이 새벽에 몰아서 → 밭 습기가 하루 안에서 조금 출렁여 최대가 ×1.11쯤까지)
 	check(farmer_rest or worst < 1.15, "넉넉하면 농부도 일을 쉰다 (넉넉한 양의 최대 ×%.2f — v5: 넉넉함 = 죽 값 사흘치, 빵 사슬이 밀을 꾸준히 써서 거의 닿지 않음)" % worst)
 	Market.reset()
+
+
+## test_wheat_bounded의 한 판: 씨앗 하나로 며칠 (시간마다 창고 + 밭의 밀 · 농부가 쉬는지, 날마다 제단을 비움)
+func _wheat_run(sd: int, days: int) -> Dictionary:
+	Market.reset()
+	var v := Village.new_prototype(sd)
+	v.water.offline = true
+	v.step_dt = 30.0
+	v.auto_reveal = true
+	var worst := 0.0
+	var offered: Array = []
+	var farmer_rest := false
+	var rest_t := -1.0  # 농부가 처음 쉰 것을 본 시간의 첫머리 (그 시간 안에 빈 창고도 '쉰 뒤'로 센다)
+	var rest_starved := 0
+	for d in days:
+		for hh in 24:
+			var t0: float = v.t
+			var starved0 := int(v.stats["starved"])
+			v.advance(H)
+			var w := float(v.stock["밀"])
+			for b in v.buildings:
+				w += float(b.out.get("밀", 0.0))
+				if b.type == "농장" and b.worker >= 0 and v.person(b.worker) != null:
+					farmer_rest = farmer_rest or not ResidentAI.work_task(v, v.person(b.worker), true)
+			if farmer_rest and rest_t < 0.0:
+				rest_t = t0
+				rest_starved = starved0
+			worst = maxf(worst, w / v.enough("밀"))
+		var it := v.altar_items()
+		offered.append(int(it.get("밀", 0)))
+		v.take_all()
+	return {"seed": sd, "v": v, "worst": worst, "offered": offered, "farmer_rest": farmer_rest, "rest_t": rest_t,
+		"short_after": rest_t >= 0.0 and v.last_short_t > rest_t,
+		"starved_after": int(v.stats["starved"]) - rest_starved if rest_t >= 0.0 else 0}
+
+
+## test_wheat_bounded의 둘째 판: 창고 밀을 넉넉한 양 바로 위까지 채워 농장을 멈춰 세우고 이틀 (시간마다 창고가 비는지 · 농부가 다시 일하는지)
+func _wheat_stop(v: Village) -> Dictionary:
+	var starved0 := int(v.stats["starved"])
+	var before := float(v.stock.get("밀", 0.0))
+	var filled := maxf(before, v.enough("밀") * 1.05)
+	v.stock["밀"] = filled
+	var farmer := false
+	var rested := false
+	for b in v.buildings:
+		if b.type == "농장" and b.worker >= 0 and v.person(b.worker) != null:
+			farmer = true
+			rested = rested or not ResidentAI.work_task(v, v.person(b.worker), true)
+	var short_hours := 0
+	var lowest := 1.0e9
+	var resumed := -1
+	for hh in 48:
+		var t0: float = v.t
+		v.advance(H)
+		if v.last_short_t > t0:
+			short_hours += 1
+		lowest = minf(lowest, float(v.stock.get("밀", 0.0)) / v.enough("밀"))
+		if resumed < 0:
+			for b in v.buildings:
+				if b.type == "농장" and b.worker >= 0 and v.person(b.worker) != null and ResidentAI.work_task(v, v.person(b.worker), true):
+					resumed = hh + 1
+		if hh % 24 == 23:
+			v.altar_items()
+			v.take_all()
+	return {"before": before, "filled": filled, "farmer": farmer, "rested": rested, "short_hours": short_hours,
+		"starved": int(v.stats["starved"]) - starved0, "lowest": lowest, "resumed": resumed}
 
 
 # ───────────────────────── 결정성 · 말 ─────────────────────────
