@@ -108,6 +108,9 @@ def measure_bases(pieces):
     return out
 
 
+SEAM_TOL = 0.16      # how far (chromaticity, L1) a seam pixel may sit from the coat - light coat line
+
+
 def dye_mask(img, bases, tol=0.2):
     """(h, w, 3) weights: R coat, G light coat. Tighter than the resident mask so the cheek blush / nose / ink stay drawn."""
     rgb = img[..., :3].astype(np.float32) / 255.0
@@ -122,6 +125,21 @@ def dye_mask(img, bases, tol=0.2):
     w = np.zeros(rgb.shape[:2] + (3,), np.float32)
     for i in range(len(bases)):
         w[..., i] = idx == i
+    if len(bases) >= 2:
+        # seam between coat and light coat (a blend of the two — matches neither): share it between both by where it sits on the
+        # line between their colours, so a white / dark dye does not leave a dashed tan seam around the bib, belly and paws
+        l = np.maximum(lum(rgb), 1e-3)
+        ch = rgb / l[..., None]
+        c0 = bases[0] / max(float(lum(bases[0])), 1e-3)
+        c1 = bases[1] / max(float(lum(bases[1])), 1e-3)
+        dv = c1 - c0
+        t = np.clip(((ch - c0) * dv).sum(-1) / float((dv * dv).sum()), 0.0, 1.0)
+        res = np.abs(ch - (c0 + t[..., None] * dv)).sum(-1)
+        lb = float(lum(bases[0])) * (1.0 - t) + float(lum(bases[1])) * t
+        r = l / lb
+        seam = (idx < 0) & (res < SEAM_TOL) & (r > 0.6) & (r < 1.2) & (t > 0.02) & (t < 0.98)
+        w[..., 0] = np.where(seam, 1.0 - t, w[..., 0])
+        w[..., 1] = np.where(seam, t, w[..., 1])
     return w
 
 

@@ -10,8 +10,17 @@ const DIR := "res://art/cutout/woman_c/"
 const MAX_CLIPS := 16
 ## 머리가 위에 그려진 연장 (낫·나무망치 — 괭이·갈퀴는 날이 아래): 괭이질 장면의 날 쪽으로 머리가 가게 반 바퀴 더 돌림
 const PROP_HEAD_UP := [7, 9]
-## 짐을 머리 위에 다시 그리는 보기 (앞·비스듬한 앞: 오른 어깨의 자루가 얼굴 옆 앞쪽) — 뒤쪽 보기는 머리가 자루 앞
+## 짐을 머리 위에 그리는 보기 (앞·비스듬한 앞: 오른 어깨의 짐이 얼굴 옆 앞쪽, 그 위에 짐을 받친 손을 다시 그림) — 뒤쪽 보기는 짐이 몸·머리 뒤
 const SACK_OVER := [true, true, false, false]
+## 나르는 짐 그림 (v12, 2026-11-10 "밀인지 밀가루인지 빵인지 모르겠다"): 짐을 몸 장면에 그려 넣지 않고 따로 그린 그림(frames.json의 loads)을
+## 그 장면의 짐 자리(frames의 prop)에 얹는다. 짐 이름(시뮬의 carry — ":" 뒤는 뗌) → 그림 이름, 표에 없으면 LOAD_ELSE (바구니).
+const LOAD_OF := {
+	"밀": "wheat", "밀가루": "flour", "빵": "bread", "통나무": "logs", "판자": "planks",
+	"돌": "stone", "철광석": "stone", "석탄": "stone", "철": "stone", "도구": "tools", "물": "water",
+	"낟알": "grain", "건량": "grain", "소금": "grain", "씨앗": "grain", "과일": "fruit", "생선": "fish", "고기": "meat",
+	"솜": "cotton", "비단 실": "silk", "단물": "jar", "꿀": "jar", "죽": "jar",
+}
+const LOAD_ELSE := "basket"
 ## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
 ## 밉맵에서 점선으로 끊김 — 1.06에서 보였음)
 const HEAD_FIT := 1.17
@@ -39,6 +48,23 @@ static func clip_index(c: String) -> int:
 	return (lib()["clips"] as Array).find(c)
 
 
+## 짐 이름 → 짐 그림 이름 ("" = 짐 없음)
+static func load_name(kind: String) -> String:
+	if kind == "":
+		return ""
+	return String(LOAD_OF.get(kind.split(":")[0], LOAD_ELSE))
+
+
+## 짐 이름 → frames.json loads의 번호 (-1 = 짐 없음 · 그림 없음)
+static func load_index(kind: String) -> int:
+	var nm := load_name(kind)
+	var ls: Array = lib().get("loads", [])
+	for i in ls.size():
+		if String(ls[i]["name"]) == nm:
+			return i
+	return -1
+
+
 ## 소품의 키 (rig) · 더 돌림 (rad) — frame_doll.gdshader prop
 static func prop_fit(id: int) -> Vector2:
 	if id < 0 or id >= Cut.PROPS.size():
@@ -60,7 +86,7 @@ static func mesh() -> ArrayMesh:
 	var c1 := PackedFloat32Array()
 	var c2 := PackedFloat32Array()
 	var idx := PackedInt32Array()
-	# 몸 장면 (group 0) + 짐 겹 (group 4): 귀퉁이만 (UV = 0~1, 셰이더가 장면 사각형으로)
+	# 몸 장면 (group 0) + 짐을 받친 손을 짐 위에 다시 그리는 겹 (group 4): 귀퉁이만 (UV = 0~1, 셰이더가 장면 사각형으로)
 	# 뿌리 줄(rig y = 0)에서 위아래 둘로 나눔 (2026-11-10): 뿌리보다 아래 = 비스듬한 보기에서 앞으로 디딘 발. 셰이더가 그 아래
 	# 꼭짓점만 카메라 쪽으로 당겨 땅에 가려 잘리지 않게 한다 (frame_doll.gdshader ground_pull).
 	var rc: Array = lib()["rect"]
@@ -77,6 +103,21 @@ static func mesh() -> ArrayMesh:
 				c1.append_array([0, 0, -1, -1])
 				c2.append_array([-1, 0, 0, 0])
 			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	# 짐 그림 (group 5, v12): 밑변 가운데가 원점인 사각형 (rig), 묶음 번호 = loads의 번호
+	var ls: Array = lib().get("loads", [])
+	for li in ls.size():
+		var sz: Array = ls[li]["size"]
+		var luv: Array = ls[li]["uv"]
+		var hw := float(sz[0]) * 0.5
+		var hh := float(sz[1])
+		var b := verts.size()
+		for cr: Array in [[-hw, hh, luv[0], luv[1]], [hw, hh, luv[2], luv[1]], [hw, 0.0, luv[2], luv[3]], [-hw, 0.0, luv[0], luv[3]]]:
+			verts.append(Vector3(cr[0], cr[1], 0))
+			uvs.append(Vector2(cr[2], cr[3]))
+			c0.append_array([0, 0, 0, 5.0])
+			c1.append_array([float(li), 0, -1, -1])
+			c2.append_array([-1, 0, 0, 0])
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함) + 소품 (group 3: 빵·괭이·낫·망치 …
 	# 컷아웃 인형과 같은 그림, 묶음 번호 = PROPS 번호 — 2026-11-10 먹기·괭이질)
 	for q: Dictionary in Cut.lib()["quads"]:
@@ -176,8 +217,8 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	return _mat
 
 
-## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품 (기울기, 손 x, y, 배율),
-## [3] = 쥐는 자리 (소품 키의 몇 배)
+## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품·짐 (기울기, 손 x, y, 배율),
+## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, -)
 static func _fdata() -> ImageTexture:
 	var fr: Array = lib()["frames"]
 	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
@@ -188,5 +229,5 @@ static func _fdata() -> ImageTexture:
 		img.set_pixel(i, 1, Color(f["head"][0], f["head"][1], float(f.get("t0", 0.0)), float(f.get("hang", 0.0))))
 		var pr: Array = f.get("prop", [0.0, 0.0, 0.0, 0.0, 0.0])
 		img.set_pixel(i, 2, Color(pr[0], pr[1], pr[2], pr[3]))
-		img.set_pixel(i, 3, Color(pr[4], 0, 0, 0))
+		img.set_pixel(i, 3, Color(pr[4], float(f.get("prop_short", pr[0])), float(f.get("lie", 0.0)), 0))
 	return ImageTexture.create_from_image(img)

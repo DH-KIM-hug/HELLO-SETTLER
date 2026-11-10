@@ -4,7 +4,8 @@
 ##
 ##   · 놀이: 아이의 `play` 행동(ResidentAI._do)에 붙는다. 아이가 놀기로 마음먹을 때마다 (제 걸음 그대로 — 마을 난수 순서도 그대로)
 ##     벌어진 놀이에 끼거나(가까우면) 새 놀이를 연다. 놀이 = 술래잡기(tag) · 나비 쫓기(bfly) · 돌탑 쌓기(stack), 2~4명
-##     (나비·돌탑은 혼자서도). 아이는 여전히 짧게 놀고 다시 마음을 정하므로 (밥·꽃잎·낟알·기도·피하기가 그대로 먼저)
+##     (나비·돌탑은 혼자서도). 저녁(밥 먹은 뒤)엔 모닥불 곁에 앉아 쉬는 어르신 둘레로 이야기(story)를 들으러 모인다 —
+##     어르신의 걸음·하는 일은 건드리지 않는다 (어르신이 없거나 일어나면 없음). 아이는 여전히 짧게 놀고 다시 마음을 정하므로 (밥·꽃잎·낟알·기도·피하기가 그대로 먼저)
 ##     균형은 바뀌지 않는다 — 놀 자리와 하는 일 이름만 바뀐다.
 ##   · 놀이 속 자리는 저장된 놀이 상태와 놀이 시계 c의 순수 함수 (spot) — 시뮬 자리(r.x, r.y)는 제 자리(seat)에 그대로.
 ##   · 난수: 마을 흐름(rng·social_rng…)을 쓰지 않는다. 마을 씨앗과 놀이 번호의 해시 (_roll) — emit 앞뒤로 난수 없음.
@@ -24,8 +25,8 @@ const GRACE := 1500.0             # 자리를 비운 아이를 기다려 주는 
 const EMPTY_MAX := 900.0          # 아무도 없으면 이만큼 뒤 흩어짐
 const COME_MAX := 6000.0          # 연 뒤 이만큼 지나도록 아무도 닿지 못하면 (길이 막힘 등) 접음
 const REST := Vector2(1200.0, 2400.0)     # 놀이가 끝난 뒤 다음 놀이까지 (병 초)
-const SECS := {"tag": Vector2(6000.0, 2400.0), "bfly": Vector2(4500.0, 1800.0), "stack": Vector2(5400.0, 2100.0)}     # 길이 [바탕, 덤] (놀이 시계 — 보통 빠르기 288 = 현실 1초)
-const LABEL := {"tag": "술래잡기하는 중", "bfly": "나비를 쫓는 중", "stack": "돌탑을 쌓는 중"}
+const SECS := {"tag": Vector2(6000.0, 2400.0), "bfly": Vector2(4500.0, 1800.0), "stack": Vector2(5400.0, 2100.0), "story": Vector2(3300.0, 900.0)}     # 길이 [바탕, 덤] (놀이 시계 — 보통 빠르기 288 = 현실 1초)
+const LABEL := {"tag": "술래잡기하는 중", "bfly": "나비를 쫓는 중", "stack": "돌탑을 쌓는 중", "story": "이야기를 듣는 중"}
 const PLAIN := "노는 중"
 # 술래잡기: 구불구불한 고리를 돈다. 술래는 잠깐 서 있다(PAUSE) 한 아이를 쫓아 rt 뒤에 잡는다 → 잡힌 아이가 술래
 const TAG_RX := 1.25
@@ -49,6 +50,24 @@ const STACK_DOWN := 800.0
 const STACK_MIN := 3
 const STACK_MAX := 6
 const STACK_FALL_P := 0.3
+# 저녁 이야기: 해 질 무렵~저녁, 앉아 쉬는 어르신 둘레에 반원으로 앉아 듣는다. 어르신은 건드리지 않는다 (제 쉼 그대로 — 일어나면 흩어짐)
+const STORY_HOURS := Vector2(17.0, 20.1)     # 해 질 무렵부터 — 깨달은 마을은 19시부터 저녁 기도라 어르신이 모닥불 곁에 앉아 쉬는 때는 저녁밥 앞 (17~18.5시)
+const BENCH_R := 1.85                         # 모닥불 걸상 (view/campfire.gd SEAT_R와 같은 값·같은 자리 규칙 — kids_view 시험이 맞춰 봄)
+const STORY_R := 8.0              # 아이에게서 이만큼 안에 앉은 어르신
+const STORY_REST := 7200.0        # 이야기를 한 번 열면 다음 이야기까지 (병 초) — 놀던 아이들을 거듭 불러내지 않게
+const STORY_RETRY := 600.0        # 아무도 앉기 전에 끝난 이야기 뒤엔 이만큼만 쉼 (병 초)
+const STORY_LEFT := 900.0         # 아이가 걸어와 앉은 뒤에도 어르신의 쉼·아이의 놀 시간이 이만큼은 남아야 (병 초)
+const STORY_RING := [[-0.25, 1.0], [0.45, 1.2], [-0.95, 1.15], [1.15, 1.05], [-1.65, 1.2], [1.85, 1.1]]     # 앉을 자리 후보 [화면 앞에서 벗어난 각, 어르신과의 거리] — 가운데부터, 가지런하지 않게
+const STORY_KID_LEFT := 300.0     # 부를 아이의 놀 시간이 이만큼은 남아야 (걷는 동안은 줄지 않고, 앉은 뒤 놀기를 이어 고르면 그 자리에 그대로)
+const STORY_KIDS := 2             # 놀던 아이들을 부를 때: 닿을 수 있는 아이가 이만큼은 있어야
+const STORY_MIN := 2              # 열린 자리가 이만큼은 있어야 둘러앉음
+const STORY_FIRE := 0.9           # 앉는 자리는 모닥불에서 이만큼 떨어져야
+const STORY_MOVED := 0.6          # 어르신이 이만큼 옮기면 끝
+const STORY_SETTLE := 300.0       # 첫 아이가 앉고 이만큼 뒤 첫 그림 (놀이 시계)
+const STORY_PIC := 640.0          # 그림 하나가 떠 있는 동안
+const STORY_GAP := 0.0            # 그림 사이 (없음 — 어르신 머리 위 그림은 이야기 내내 떠 있고 그림만 바뀐다)
+const STORY_PICS := ["star", "moon", "fish", "tree"]     # 들려주는 것 (그림 이름 — 글 없음)
+const STORY_NOD := 1500.0         # 이만큼 듣고 나면 한 아이가 꾸벅
 # 아기
 const MIND_R := 7.0               # 아기를 안고·데리고 다니는 곳: 집에서 이만큼 안
 const MIND_ACTS := {"care": true, "chores": true, "rest": true, "idle": true, "social": true, "eat": true, "": true}
@@ -106,6 +125,14 @@ static func game_of(v: Village, id: int) -> Dictionary:
 	return {}
 
 
+## 벌어진 저녁 이야기의 어르신이거나 거기 낀 아이인가 (오는 길인 아이도) — 화면이 이 사람들에겐 말 장면을 얹지 않는다
+static func in_story(v: Village, id: int) -> bool:
+	for g: Dictionary in games(v):
+		if String(g["kind"]) == "story" and (int(g.get("el", -1)) == id or idx(g, id) >= 0):
+			return true
+	return false
+
+
 ## 지금 놀이 자리에서 놀고 있나 (걸어오는 중·잠깐 딴 일은 아님)
 static func playing(v: Village, r: Resident) -> bool:
 	if r.steps.is_empty():
@@ -128,7 +155,7 @@ static func try_play(v: Village, r: Resident, p: Vector2, dur: float) -> bool:
 	var best: Dictionary = {}
 	var bd := JOIN_R
 	for g: Dictionary in gs:
-		if (g["who"] as Array).size() >= MAX_KIDS or float(g["c"]) > float(g["c1"]) - MIN_LEFT:
+		if (g["who"] as Array).size() >= int(g.get("cap", MAX_KIDS)) or float(g["c"]) > float(g["c1"]) - MIN_LEFT:
 			continue
 		var d := Vector2(float(g["x"]) - r.x, float(g["y"]) - r.y).length()
 		if d < bd:
@@ -136,6 +163,13 @@ static func try_play(v: Village, r: Resident, p: Vector2, dur: float) -> bool:
 			bd = d
 	if not best.is_empty():
 		return _attach(r, best, _add(best, r.id), dur)
+	if _story_ready(v, st, gs):               # 저녁: 앉아 쉬는 어르신이 가까우면 이야기를 들으러 (다른 놀이가 벌어져 있어도)
+		var el := _story_elder(v, r)
+		if el != null:
+			var sn := int(st["n"])
+			st["n"] = sn + 1
+			var sg := open_story(v, r, el, sn)
+			return _attach(r, sg, _add(sg, r.id), dur)
 	if gs.size() >= max_games(v) or v.t < float(st["next"]) or not _time_ok(v):
 		return false
 	var n := int(st["n"])
@@ -295,6 +329,7 @@ static func step(v: Village, dt: float) -> void:
 		st["acc"] = 0.0
 		if not gs.is_empty():
 			_tick_games(v, st, gs)
+		_story_call(v, st, gs)
 	st["cacc"] = float(st["cacc"]) + dt
 	if float(st["cacc"]) >= CARE_IV:
 		st["cacc"] = 0.0
@@ -312,9 +347,12 @@ static func _tick_games(v: Village, st: Dictionary, gs: Array) -> void:
 		if n_on > 0 and int(g.get("go", 0)) == 0:     # 첫 아이가 자리에 닿음: 놀이 길이는 이때부터 셈 (걸어오는 동안은 빼 줌)
 			g["go"] = 1
 			g["c1"] = float(g["c1"]) + float(g["c"])
+			if String(g["kind"]) == "story":       # 이야기는 첫 아이가 앉은 때부터
+				g["rs"] = float(g["c"])
 		# 아무도 없는 시간: 오는 길인 아이가 있으면 세지 않는다 (몇 칸 걷는 데도 병 시계로 꽤 걸림) — 다만 끝내 아무도 안 닿으면 접음
 		g["e"] = 0.0 if n_on > 0 or (n_coming > 0 and (int(g.get("go", 0)) == 1 or float(g["c"]) < COME_MAX)) else float(g["e"]) + IV
-		if not ok or float(g["c"]) >= float(g["c1"]) or float(g["e"]) >= EMPTY_MAX or (g["who"] as Array).is_empty():
+		if not ok or float(g["c"]) >= float(g["c1"]) or float(g["e"]) >= EMPTY_MAX or (g["who"] as Array).is_empty() \
+				or (String(g["kind"]) == "story" and not _story_on(v, g)):
 			_end(v, st, g)
 			gs.remove_at(gi)
 			continue
@@ -383,6 +421,8 @@ static func _end(v: Village, st: Dictionary, g: Dictionary) -> void:
 	var id := int(g["id"])
 	st["next"] = v.t + REST.x + (REST.y - REST.x) * _roll(v, id, 41)
 	st["last"] = String(g["kind"])
+	if String(g["kind"]) == "story" and int(g.get("go", 0)) == 0:     # 아무도 앉기 전에 어르신이 일어남: 곧 다시 모일 수 있다
+		st["snext"] = v.t + STORY_RETRY
 	for w: Variant in g["who"]:
 		var r := v.person(int(w))
 		if r == null:
@@ -392,6 +432,260 @@ static func _end(v: Village, st: Dictionary, g: Dictionary) -> void:
 				r.steps.remove_at(k)
 		if r.doing == String(LABEL[g["kind"]]):
 			r.doing = PLAIN
+
+
+# ───────────────────────── 저녁 이야기 ─────────────────────────
+static func _story_time(v: Village) -> bool:
+	var h := v.hour_now()
+	return h >= STORY_HOURS.x and h < STORY_HOURS.y
+
+
+## 깨어서 앉아 쉬는 어르신인가 (맨 앞 걸음이 앉아 있기, 그 쉼이 left 넘게 남음)
+static func _story_sits(q: Resident, left: float) -> bool:
+	if q == null or q.dead or q.sleeping or not q.is_elder() or q.steps.is_empty():
+		return false
+	var s: Dictionary = q.steps[0]
+	return String(s["k"]) == "do" and String(s.get("anim", "")) == "sit" and float(s.get("left", 0.0)) >= left
+
+
+## 어르신(자리 e) 둘레에 아이들이 앉을 수 있는 자리 (어르신에게서 벗어난 만큼, 많아야 MAX_KIDS) — 어르신이 가려져 있거나 자리가 STORY_MIN보다 적으면 []
+## 화면 앞쪽(기본 방향 +x+y) 고리에서 물·모닥불·건물·제단·걸상·나무에 걸리지 않는 것만 가운데부터 고른다
+static func story_seats(v: Village, e: Vector2) -> Array:
+	var benches := fire_benches(v)
+	if _story_hidden(v, e, benches):
+		return []
+	var out: Array = []
+	for s: Array in STORY_RING:
+		var a := PI * 0.25 + float(s[0])
+		var d := Vector2(cos(a), sin(a)) * float(s[1])
+		var q := e + d
+		if v.water_at(q.x, q.y) or Vector2(q.x - v.fire.x, q.y - v.fire.y).length() < STORY_FIRE or _story_hidden(v, q, benches):
+			continue
+		out.append(d)
+		if out.size() >= MAX_KIDS:
+			break
+	return out if out.size() >= STORY_MIN else []
+
+
+## 이야기 때, 앉아 쉬는 어르신 가까이에서 그냥 놀던 아이들이 들으러 모인다 (놀던 시간은 그대로 — 자리와 하는 일 이름만 바뀜).
+## 아이가 놀이를 새로 시작할 때(try_play)만 열리면, 놀이가 한창인 해 질 무렵엔 열릴 틈이 없다 → IV마다 한 번 살핌. 이야기는 한 번에 하나
+static func _story_call(v: Village, st: Dictionary, gs: Array) -> void:
+	if not v.is_work_time() or v.in_opening() or v.staged() or not _story_ready(v, st, gs):
+		return
+	for el in v.people:
+		if not _story_sits(el, STORY_LEFT):
+			continue
+		var e := Vector2(el.x, el.y)
+		var cap := story_seats(v, e).size()
+		if cap == 0:
+			continue
+		var left := float((el.steps[0] as Dictionary)["left"])
+		var near: Array[Resident] = []
+		var n_kids := 0
+		for k in v.people:
+			if k.is_child() and not k.is_baby() and not k.dead:
+				n_kids += 1
+				if _story_free(v, k) and _story_reach(v, k, e, left):
+					near.append(k)
+		if near.size() < mini(STORY_KIDS, n_kids):     # 둘은 모여야 (아이가 하나뿐인 마을은 그 아이만)
+			continue
+		near.sort_custom(func(a: Resident, b: Resident) -> bool:      # 가까운 아이부터 자리만큼
+			var da := Vector2(a.x - e.x, a.y - e.y).length_squared()
+			var db := Vector2(b.x - e.x, b.y - e.y).length_squared()
+			return da < db or (da == db and a.id < b.id))
+		near = near.slice(0, cap)
+		var sn := int(st["n"])
+		st["n"] = sn + 1
+		var sg := open_story(v, near[0], el, sn)
+		var id := int(sg["id"])
+		for k in near:
+			var old := game_of(v, k.id)
+			if not old.is_empty():               # 하던 놀이에서 빠져나옴 (남은 아이들은 그대로 놀거나, 아무도 없으면 다음 살핌에 접힘)
+				_remove(old, idx(old, k.id))
+			var sp := seat(sg, int(sg["sl"][_add(sg, k.id)]))
+			while k.steps.size() > 1:              # 놀 자리로 가던 길: 이야기 자리로 바꿈
+				k.steps.remove_at(0)
+			(k.steps[0] as Dictionary)["g"] = id     # 놀던 걸음 그대로 (남은 시간 같음) — 이야기 자리에서 이어감
+			if Vector2(sp.x - k.x, sp.y - k.y).length() > 0.25:
+				var w := ResidentAI.walk(sp.x, sp.y)
+				w["g"] = id
+				k.steps.insert(0, w)
+			k.doing = String(LABEL["story"])
+		return
+
+
+## 이야기를 열 수 있는 때인가: 이야기 시간 · 이야기가 벌어져 있지 않음 · 지난 이야기에서 STORY_REST가 지남.
+## 다른 놀이의 칸(max_games)·쉬는 틈(next)과 따로 센다 — 해 질 무렵엔 술래잡기가 거의 늘 벌어져 있어서, 같은 칸을 쓰면 이야기가 열릴 틈이 없다
+static func _story_ready(v: Village, st: Dictionary, gs: Array) -> bool:
+	if not _story_time(v) or v.t < float(st.get("snext", 0.0)):
+		return false
+	for g: Dictionary in gs:
+		if String(g["kind"]) == "story":
+			return false
+	return true
+
+
+## 이야기를 들으러 갈 수 있는 아이인가: 놀고 있거나 놀 자리로 가는 길이고 (그냥 놀기든 다른 놀이든) 놀 시간이 남음
+static func _story_free(_v: Village, k: Resident) -> bool:
+	if not k.is_child() or k.is_baby() or k.dead or k.sleeping or k.action != "play" or k.steps.is_empty():
+		return false
+	for i in k.steps.size() - 1:
+		if String((k.steps[i] as Dictionary)["k"]) != "walk":
+			return false
+	var s: Dictionary = k.steps[k.steps.size() - 1]
+	return String(s["k"]) == "do" and String(s.get("anim", "")) == "play" and float(s.get("left", 0.0)) >= STORY_KID_LEFT
+
+
+## 아이 k가 어르신(자리 e, 쉼이 left 남음) 곁까지 걸어가서 STORY_LEFT만큼은 앉아 들을 수 있나.
+## 병 시계로는 걷는 데 오래 걸린다 (한 시간에 여덟 칸쯤) — 어르신의 쉼(40~80분)보다 먼 아이를 부르면 닿기 전에 어르신이 일어난다
+static func _story_reach(v: Village, k: Resident, e: Vector2, left: float) -> bool:
+	var d := Vector2(k.x - e.x, k.y - e.y).length()
+	return d < STORY_R and d / maxf(k.walk_speed() * v.pace_walk(), 1.0e-6) + STORY_LEFT <= left
+
+
+## 둘러앉을 수 있나: 1 = 있음 · 0 = 없음
+static func story_side(v: Village, e: Vector2) -> int:
+	return 0 if story_seats(v, e).is_empty() else 1
+
+
+## 모닥불 둘레 걸상 자리 (그림은 view/campfire.gd가 같은 규칙으로 놓는다 — 제단 반대쪽부터 셋)
+static func fire_benches(v: Village) -> Array:
+	var out: Array = []
+	var used: Array[float] = []
+	var away := v.altar_pos - v.fire
+	var a0 := atan2(away.y, away.x) + PI if away.length() > 0.1 else 0.6
+	for ki in 16:
+		if used.size() >= 3:
+			break
+		var k: int = [0, 1, -1, 2, -2, 3, -3, 4][ki % 8]
+		var sr := BENCH_R if ki < 8 else BENCH_R - 0.3
+		var a := a0 + k * 0.62
+		if used.any(func(u: float) -> bool: return absf(angle_difference(u, a)) < 1.0):
+			continue
+		var p := v.fire + Vector2(cos(a), sin(a)) * sr
+		if p.distance_to(v.altar_pos) < Village.ALTAR_CLEAR:
+			continue
+		var blocked := false
+		for b in v.buildings:
+			var hs := b.size() * 0.5 + 0.3
+			if absf(b.x - p.x) < hs and absf(b.y - p.y) < hs:
+				blocked = true
+				break
+		if blocked:
+			continue
+		used.append(a)
+		out.append(p)
+	return out
+
+
+## 건물 속이거나 건물 그림 뒤인가 (_open처럼 '건물 뒤'를 피함 — 보는 방향은 기본 방향으로 침: 화면 아래 = +x+y. 카메라를 읽지 않는다)
+static func _story_hidden(v: Village, p: Vector2, benches: Array = []) -> bool:
+	for bp: Vector2 in benches:               # 걸상 바로 뒤 (걸상 그림에 가려짐) — 걸상 앞쪽에 걸터앉은 것은 보임
+		if _story_behind(p, bp, 0.9, 0.15, 1.0):
+			return true
+	for b in v.buildings:
+		if b.type == "광장" or b.type == "제단":     # 바닥뿐인 것 · 제단은 아래에서 따로
+			continue
+		var hs := b.size() * 0.5
+		var rx := p.x - b.x
+		var ry := p.y - b.y
+		var front := (rx + ry) * 0.7071
+		if absf(rx - ry) * 0.7071 < hs + 0.6 and front < 0.25 and front > -(hs * 2.0 + 1.2):     # 건물 그림보다 앞(화면 아래)이면 보임
+			return true
+	if _story_behind(p, v.altar_pos, 1.8, 1.3, 2.4):     # 제단 위·뒤 (낮고 넓음)
+		return true
+	for tr: Dictionary in v.trees:
+		if _story_behind(p, Vector2(float(tr["x"]), float(tr["y"])), 0.9, 0.3, 2.0):
+			return true
+	for rk: Dictionary in v.rocks:
+		if _story_behind(p, Vector2(float(rk["x"]), float(rk["y"])), 0.9, 0.4, 1.2):
+			return true
+	if v.flora != null and v.flora.blocks(p.x, p.y, 0.5):
+		return true
+	if SkyDrops.blocks(v, p.x, p.y, 0.8) or GreatTrees.blocks(v.water, p.x, p.y, 1.2) or GiantPlants.blocks(v.water, p.x, p.y, 1.2):
+		return true
+	return false
+
+
+## p가 o에 있는 것의 곁(옆 w, 앞 f)이거나 그 뒤(b)인가 — 기본 방향 기준
+static func _story_behind(p: Vector2, o: Vector2, w: float, f: float, b: float) -> bool:
+	var rx := p.x - o.x
+	var ry := p.y - o.y
+	var front := (rx + ry) * 0.7071
+	return absf(rx - ry) * 0.7071 < w and front < f and front > -b
+
+
+## 아이 r 가까이에서 이야기를 들려줄 어르신 (없으면 null) — 이미 아이들이 둘러앉은 어르신은 빼고 (그 자리는 끼는 쪽으로)
+static func _story_elder(v: Village, r: Resident) -> Resident:
+	var best: Resident = null
+	var bd := STORY_R
+	for q in v.people:
+		if not _story_sits(q, STORY_LEFT):
+			continue
+		var d := Vector2(q.x - r.x, q.y - r.y).length()
+		if d >= bd or not _story_reach(v, r, Vector2(q.x, q.y), float((q.steps[0] as Dictionary)["left"])) or story_side(v, Vector2(q.x, q.y)) == 0:
+			continue
+		var taken := false
+		for g: Dictionary in games(v):
+			if int(g.get("el", -1)) == q.id:
+				taken = true
+		if not taken:
+			best = q
+			bd = d
+	return best
+
+
+## 이야기 자리를 엶 (어르신 el 둘레 — 어르신의 걸음·하는 일은 그대로). 시험·촬영 도구도 부름
+static func open_story(v: Village, r: Resident, el: Resident, n: int) -> Dictionary:
+	var g := open_game(v, r, Vector2(el.x, el.y), "story", n)
+	var seats := story_seats(v, Vector2(el.x, el.y))
+	if seats.is_empty():                       # (시험·찍기에서 바로 부를 때) 막힘을 보지 않은 고리
+		for s: Array in STORY_RING.slice(0, MAX_KIDS):
+			seats.append(Vector2(cos(PI * 0.25 + float(s[0])), sin(PI * 0.25 + float(s[0]))) * float(s[1]))
+	var sx: Array = []
+	var sy: Array = []
+	for d: Vector2 in seats:
+		sx.append(d.x)
+		sy.append(d.y)
+	_state(v)["snext"] = v.t + STORY_REST
+	g["el"] = el.id
+	g["sx"] = sx
+	g["sy"] = sy
+	g["cap"] = sx.size()
+	return g
+
+
+## 이야기가 이어지나: 어르신이 그 자리에 그대로 앉아 있음
+static func _story_on(v: Village, g: Dictionary) -> bool:
+	var q := v.person(int(g.get("el", -1)))
+	return _story_sits(q, 0.0) and Vector2(q.x - float(g["x"]), q.y - float(g["y"])).length() < STORY_MOVED
+
+
+## 지금 어르신이 들려주는 것 (놀이 시계 c): [그림 이름, 그 그림 속 0~1] — 시작 전·그림 사이엔 ["", 0.0]
+static func story_pic(g: Dictionary, c: float) -> Array:
+	if int(g.get("go", 0)) == 0:
+		return ["", 0.0]
+	var u := c - float(g["rs"]) - STORY_SETTLE
+	if u < 0.0:
+		return ["", 0.0]
+	var span := STORY_PIC + STORY_GAP
+	var k := int(u / span)
+	var f := (u - float(k) * span) / STORY_PIC
+	if f > 1.0:
+		return ["", 0.0]
+	return [String(STORY_PICS[(k + int(float(g["sd"]) * 16.0)) % STORY_PICS.size()]), f]
+
+
+## 꾸벅 조는 아이 (-1 없음): 둘 넘게 듣고 있을 때, 앞쪽 한 자리의 아이가 한참 듣고 나서
+static func story_nod(g: Dictionary, c: float) -> int:
+	var who: Array = g["who"]
+	if int(g.get("go", 0)) == 0 or c - float(g["rs"]) < STORY_NOD or who.size() < 2:
+		return -1
+	var slot := int(float(g["sd"]) * 8.0) % 2
+	for i in who.size():
+		if int(g["sl"][i]) == slot and int(g["on"][i]) == 1:
+			return int(who[i])
+	return -1
 
 
 # ───────────────────────── 술래잡기 ─────────────────────────
@@ -533,6 +827,12 @@ static func seat(g: Dictionary, slot: int) -> Vector2:
 		"bfly":
 			var a := float(g["sd"]) * TAU + float(slot) * TAU / 4.0
 			return c + Vector2(cos(a) * 1.1, sin(a) * 0.75)
+		"story":
+			var sx: Array = g.get("sx", [])
+			if sx.is_empty():
+				return c
+			var si := slot % sx.size()
+			return c + Vector2(float(sx[si]), float((g["sy"] as Array)[si]))
 	return _loop(g, slot, float(g["sd"]) * TAU + float(slot) * TAU / 4.0)
 
 

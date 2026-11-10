@@ -106,8 +106,50 @@ static func material() -> ShaderMaterial:
 	_mat.set_shader_parameter("coat_base", Vector3(cb.r, cb.g, cb.b))
 	_mat.set_shader_parameter("light_base", Vector3(lb.r, lb.g, lb.b))
 	_mat.set_shader_parameter("lit_tint", Style.LIT_TINT)
+	# 꿀떡이 겉모습이 쓰는 자리 (접힌 귀 뿌리 · 말린 꼬리 뿌리 · 코)
+	var ke := kk_spots()
+	_mat.set_shader_parameter("kk_ear", ke["ear"])
+	_mat.set_shader_parameter("kk_tail", ke["tail"])
+	_mat.set_shader_parameter("kk_nose", ke["nose"])
 	_mat.set_shader_parameter("shade_tint", Style.SHADE_TINT)
 	return _mat
+
+
+## 꿀떡이 겉모습 (dog_doll.gdshader의 kk_*)이 쓰는 자리 — 조각 표에서: 보기마다 접힌 귀 두 쪽의 뿌리 · 말린 꼬리의 뿌리,
+## 코는 그림에서 잰 값 (KK_NOSE — 그림을 다시 만들면 다시 잼: tests/cutdog_tests.gd가 코 자리에 어두운 그림이 있는지 본다)
+const KK_NOSE := [
+	Vector4(-1.0, 269.5, 18.0, 12.5), Vector4(-1.8, 270.0, 18.0, 12.5), Vector4(-1.8, 280.0, 18.0, 12.5),       # 앞: 보통 · 잠 · 짖음
+	Vector4(228.5, 283.5, 17.0, 17.0), Vector4(227.0, 283.5, 17.0, 17.0), Vector4(228.0, 303.5, 17.0, 17.0),   # 비스듬히 앞
+]
+
+
+static func kk_spots() -> Dictionary:
+	var ear := PackedVector4Array()
+	var tail := PackedVector2Array()
+	ear.resize(4)
+	tail.resize(4)
+	for q: Dictionary in lib()["quads"]:
+		var v := int(q["view"])
+		var pv: Array = q["pivot"]
+		if int(q["cls"]) == 2 and int(q["kind"]) == 1:
+			var e := ear[v]
+			if int(q.get("side", 0)) == 0:
+				e.x = float(pv[0])
+				e.y = float(pv[1])
+			else:
+				e.z = float(pv[0])
+				e.w = float(pv[1])
+			ear[v] = e
+		elif int(q["cls"]) == 3 and int(q["kind"]) == 0:
+			tail[v] = Vector2(float(pv[0]), float(pv[1]))
+	return {"ear": ear, "tail": tail, "nose": PackedVector4Array(KK_NOSE)}
+
+
+## 꿀떡이의 귀가 '제 왼쪽 귀'(생강빛)인가 — 셰이더와 같은 규칙. side: 0 = a · 1 = b, view 0~3, mirror ±1 (그림 뒤집기).
+## 앞·비스듬히 앞 보기에선 b쪽이, 비스듬히 뒤·뒤 보기에선 a쪽이 제 왼쪽 — 뒤집힌 그림에선 반대.
+static func kk_left_ear(side: int, view: int, mirror: float) -> bool:
+	var left := (side == 1) != (view >= 2)
+	return (not left) if mirror < 0.0 else left
 
 
 static func _v2(a: Array) -> Vector2:
@@ -316,7 +358,8 @@ const COATS := [
 
 
 ## 털 유전자 (Dogs: base·pat·ear·tail·size) 또는 E3-13b의 look 사전 {base, pattern, ears, tail, size}를 읽어 겉모습 기록으로.
-## 없는 값은 씨앗(강아지 번호)에서 정함 — 같은 강아지면 늘 같다. 꿀떡이 = 하양 + 눈가면 + 접힌 귀 + 이마 하얀 줄 + 한쪽 귀 주근깨.
+## 없는 값은 씨앗(강아지 번호)에서 정함 — 같은 강아지면 늘 같다. 꿀떡이 = 하양 + 눈가면 + 접힌 귀 + 말린 꼬리에
+## 그 한 마리만의 겉모습 (kk — 눈마다 생강빛 얼룩·이마 하얀 줄·제 왼쪽 귀만 생강빛·꼬리 뿌리 얼룩·간색 코: dog_doll.gdshader).
 static func look_of(dg: Dictionary) -> Dictionary:
 	var g: Dictionary = dg.get("genes", {}) if dg.get("genes") is Dictionary else {}
 	var lk: Dictionary = dg.get("look", {}) if dg.get("look") is Dictionary else {}
@@ -333,6 +376,7 @@ static func look_of(dg: Dictionary) -> Dictionary:
 		base = 0
 		pat = 2
 		ear = 1
+		tail = 0
 	return {"base": base, "pat": pat, "ear": ear, "tail": tail, "size": clampf(size, 0.7, 1.3), "kk": kk,
 		"seed": float(posmod(hash([id, "coat"]), 997)) * 0.37}
 

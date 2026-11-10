@@ -46,6 +46,25 @@ const TODDLE_STOP := 0.12
 const TODDLE_SPEED := Vector2(0.3, 1.0)
 const PLOP_SECS := 1.35
 const PLOP_EVERY := Vector2(4.5, 9.0)     # 걷다가 털썩 주저앉기까지 (현실 초)
+# 첫걸음마 (Q2-b 남은 것 — 짧은 순간: 카메라·병 시간을 붙잡지 않음, 현실 초). first_steps 사건 → 부모가 몇 걸음 물러나 쪼그려 앉아 두 팔을 벌림
+# → 아기가 뒤뚱뒤뚱 몇 걸음 (가운데서 한 번 휘청) → 털썩 → 부모가 안아 올림 · 하트 → 내려놓음. 보는 사람이 없으면 아기 혼자 몇 걸음 · 털썩 · 반짝
+const FS_SECS := 3.8
+const FS_BACK := 0.6              # 부모가 물러나는 동안 (아기는 일어서서 흔들흔들)
+const FS_WALK_END := 2.45
+const FS_PLOP_END := 2.85
+const FS_LIFT_END := 3.25
+const FS_DOWN := 3.52             # 여기부터 아기를 내려놓음
+const FS_RELEASE := 0.45          # 끝난 뒤 부모 인형이 시뮬 자리로 돌아가는 시간
+const FS_GAP := 1.0               # 부모와 아기 사이 (칸 — 화면 가로)
+const FS_SHORT := 0.27            # 부모 앞 이만큼에서 털썩
+const FS_SOLO := 0.7              # 혼자일 때 걷는 거리
+const FS_WAIT := 2.5              # 아기 인형이 걸음마 모습이 되길 기다리는 시간 (넘으면 그만둠)
+const FS_CROUCH := Vector2(0.84, 1.06)     # 쪼그려 앉은 부모 (키 배율, 폭 배율)
+const FS_HOLD := 0.27             # 안긴 아기의 높이 (부모 인형 키의 비율)
+const FS_SPARK := 0.4             # 혼자 걸었을 때의 반짝임 크기 (아기 키에 맞춰 작게)
+const FS_FX_PX := 72.0            # 하트·반짝임의 크기 기준 (짧은 판 MINI_PX보다 작게 — 마을의 작은 순간)
+const NOD_SECS := 3.4             # 꾸벅 한 번 (천천히 숙였다가 화들짝)
+const FS_CLEAR := 0.3             # 건물 그림 밑변에서 이만큼 앞이어야 보임
 
 var v: Village
 var vw: VillageView               # residents · gy · stage_say
@@ -62,6 +81,12 @@ var _kid := {}                    # 주민 id → Kid
 var _props := {}                  # 놀이 id → Props
 var _baby := {}                   # 아기 id → Baby
 var _peek := {}                   # 들여다보는 사람 id → Peek
+var _steps := {}                  # 첫걸음마: 아기 id → Steps
+var _steps_par := {}              # 첫걸음마: 부모 id → 아기 id
+var _back := Vector3.BACK         # 카메라 쪽 (땅 위)
+var bub: KidBubbles               # 그림 말풍선 (저녁 이야기 — 글 없음)
+var _story := {}                  # 이야기하는 어르신 id → 놀이
+var fx_log: Array = []            # (시험) 놓은 빛·하트 [종류, 자리]
 var _puffs: Array[MeshInstance3D] = []
 var _puff_t := PackedFloat32Array()
 var _puff_i := 0
@@ -115,9 +140,25 @@ class Peek extends RefCounted:
 	var said := false
 
 
+class Steps extends RefCounted:
+	var par := -1                 # 팔 벌린 부모 (없으면 -1: 혼자)
+	var t := -1.0                 # 지난 시간 (현실 초 — -1 = 아직 시작 전)
+	var wait := 0.0
+	var at := Vector2.ZERO        # 아기가 있던 자리 (건물 그림에 가려 있을 수 있음)
+	var from := Vector2.ZERO      # 아기가 일어서는 자리 (트인 곳)
+	var to := Vector2.ZERO        # 털썩 앉는 자리
+	var p0 := Vector2.ZERO        # 부모가 있던 자리
+	var p1 := Vector2.ZERO        # 부모가 물러나 앉는 자리
+	var side := 1.0               # 부모가 아기의 어느 쪽 (화면 오른쪽 +1)
+	var bpos := Vector2.ZERO      # 지금 아기의 화면 자리
+	var done := 0                 # 한 번만 하는 것 (1 말 · 2 털썩 · 4 하트)
+
+
 func _init(village: Village = null, view: VillageView = null) -> void:
 	v = village
 	vw = view
+	bub = KidBubbles.new()
+	add_child(bub)
 	if v != null:
 		_cursor = v.events.clear_to_end()
 
@@ -214,6 +255,9 @@ func begin(dt: float, fast: bool) -> void:
 		var rx := Vector3(bs.x.x, 0.0, bs.x.z)
 		if rx.length_squared() > 1.0e-6:
 			_right = rx.normalized()
+		var bz := Vector3(bs.z.x, 0.0, bs.z.z)
+		if bz.length_squared() > 1.0e-6:
+			_back = bz.normalized()
 	if fast != _was_fast:
 		_was_fast = fast
 		if fast:                               # 빠른 흐름: 몸짓을 멈추고 시뮬 자리로 (소품만 그대로)
@@ -223,7 +267,29 @@ func begin(dt: float, fast: bool) -> void:
 			for id: int in _peek.keys():
 				_warp_reset(id)
 			_peek.clear()
+			for id: int in _steps.keys():
+				_steps_end(id)
 	_events(fast)
+	bub.clear()
+	var tell := {}
+	if not fast:
+		for g: Dictionary in v.kids.get("g", []):
+			if String(g["kind"]) == "story" and int(g.get("go", 0)) == 1:
+				tell[int(g.get("el", -1))] = g
+	for id: int in _story.keys():              # 이야기가 끝난 어르신: 제 모습으로
+		if not tell.has(id):
+			_warp_reset(id)
+	_story = tell
+	for id: int in _steps.keys():              # 첫걸음마의 시계
+		var st: Steps = _steps[id]
+		if st.t < 0.0:
+			st.wait += dt
+			if st.wait > FS_WAIT:
+				_steps_end(id)
+		else:
+			st.t += dt
+			if st.t >= FS_SECS + FS_RELEASE:
+				_steps_end(id)
 	var gs: Array = v.kids.get("g", [])
 	for g: Dictionary in gs:
 		var who: Array = g["who"]
@@ -321,11 +387,10 @@ func _events(fast: bool) -> void:
 			_peek[int(e["who"])] = p
 		elif kind == &"first_steps":
 			var d: Dictionary = e["v"]
-			var b: Baby = _baby.get(int(e["who"]))
-			if b != null:
-				b.hop_t = 0.0
-			_say(int(d["with"]), "first", "love", 2.6)
-			_say(int(e["who"]), "baby", "cheer", 2.0)
+			if _steps.size() < 2 and not _steps.has(int(e["who"])):     # 짧은 순간으로 보여 줌 (babies → _steps_start)
+				var st := Steps.new()
+				st.par = int(d["with"])
+				_steps[int(e["who"])] = st
 
 
 # ───────────────────────── 소품: 돌탑 · 나비 ─────────────────────────
@@ -418,6 +483,12 @@ func _props_tick(g: Dictionary, dt: float) -> void:
 
 # ───────────────────────── 매 화면: 놀이 속 아이 (주민마다, social.pose 뒤) ─────────────────────────
 func pose(r: Resident, m: ResidentModel, dt: float) -> void:
+	if not _steps_par.is_empty() and _steps_par.has(r.id):
+		_steps_parent(r, m)
+		return
+	if not _story.is_empty() and _story.has(r.id):
+		_story_tell(r, m, _story[r.id])
+		return
 	var k: Kid = _kid.get(r.id)
 	if k == null:
 		if not _peek.is_empty() and _peek.has(r.id):
@@ -454,6 +525,9 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 	var anim := "walk" if moving else "idle"
 	var hop := 0.0
 	var look := Vector2.INF                    # 서 있을 때 바라볼 곳
+	var sy := 1.0
+	var sx := 1.0
+	var lean := 0.0
 	if here:
 		match kind:
 			"tag":
@@ -489,6 +563,29 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 					k.said = int(c / 1700.0)
 					if k.said % 2 == 1:
 						_say(r.id, "bfly", "", 1.4)
+			"story":                               # 저녁 이야기: 어르신 쪽으로 앉아 몸을 기울여 듣는다 — 한 아이는 꾸벅
+				var ep := Vector2(float(g["x"]), float(g["y"]))
+				look = ep
+				if not moving:
+					anim = "sit"
+					var side := signf((ep - p).dot(Vector2(_right.x, _right.z)))
+					var pic: Array = ChildPlay.story_pic(g, c)
+					if ChildPlay.story_nod(g, c) == r.id:
+						var q := fposmod(_clock + k.ph, NOD_SECS) / NOD_SECS
+						var droop := smoothstep(0.0, 0.78, q) if q < 0.8 else 1.0 - smoothstep(0.8, 0.88, q)
+						lean = side * (0.05 + 0.2 * droop)
+						sy = 1.0 - 0.07 * droop
+						if q >= 0.8 and q < 0.9:           # 화들짝
+							hop = 0.035 * sin((q - 0.8) / 0.1 * PI)
+						elif cm != null and not _says(r):
+							bub.add(m, "zzz", 0.12 + 0.7 * q / 0.8, true, _clock)
+					else:
+						var f := float(pic[1])
+						var lead := sin(f * PI) if String(pic[0]) != "" else 0.0
+						lean = side * (0.07 + 0.06 * lead)     # 그림이 뜨면 더 바짝
+						sy = 1.0 + 0.012 * sin(_clock * 2.3 + k.ph)
+						if String(pic[0]) != "" and f < 0.12:  # 새 그림: 들썩
+							hop = 0.03 * sin(f / 0.12 * PI)
 			"stack":
 				look = Vector2(float(g["x"]), float(g["y"]))
 				if not moving:
@@ -501,8 +598,6 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 						_say(r.id, "stack_again", "cheer", 1.4)
 	if look != Vector2.INF and not moving and dt > 0.0:
 		k.yaw = lerp_angle(k.yaw, atan2(look.x - p.x, look.y - p.y), clampf(dt * 8.0, 0.0, 1.0))
-	var sy := 1.0
-	var sx := 1.0
 	if k.hop_t >= 0.0:                         # 잡혔다! · 와르르! — 크게 폴짝, 내려앉으며 눌림
 		k.hop_t += dt
 		var t := k.hop_t / HOP_SECS
@@ -524,9 +619,34 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 	m.set_anim(anim, r.action)
 	if cm != null:
 		cm.set_body_lift(hop / maxf(cm.scale.y, 0.01))     # 폴짝은 인형만 (그림자는 땅에)
-		cm.set_body_warp(sy, sx, 0.0)
+		cm.set_body_warp(sy, sx, lean)
 	else:
 		m.position.y = y + hop
+
+
+## 이야기하는 어르신 (화면만 — 자리·앉은 모습은 시뮬 그대로): 아이들 쪽을 보고 느릿느릿 몸을 흔들며, 머리 위에 그림 (글 없음)
+func _story_tell(r: Resident, m: ResidentModel, g: Dictionary) -> void:
+	if not m.visible or vw.stage_say.has(r.id) or vw.pose_over.has(r.id):
+		_warp_reset(r.id)                      # 연출·조짐이 먼저
+		return
+	var e := Vector2(float(g["x"]), float(g["y"]))
+	var mid := (ChildPlay.seat(g, 0) + ChildPlay.seat(g, 1)) * 0.5
+	m.rotation.y = atan2(mid.x - e.x, mid.y - e.y)
+	m.set_anim("sit", r.action)            # 돌린 쪽으로 인형 보기(앞·비스듬)를 다시 고름
+	var pic: Array = ChildPlay.story_pic(g, float(g["c"]))
+	var on := String(pic[0]) != ""
+	var cm := m as CutoutResident
+	if cm != null:
+		var side := signf((mid - e).dot(Vector2(_right.x, _right.z)))
+		var lead := sin(float(pic[1]) * PI) if on else 0.0
+		cm.set_body_warp(1.0 + 0.018 * sin(_clock * 3.1) * (1.0 if on else 0.3), 1.0, side * (0.03 + 0.05 * lead) + 0.02 * sin(_clock * 1.7))
+	if on and not _says(r):
+		bub.add(m, String(pic[0]), clampf(float(pic[1]), 0.08, 0.88), false, _clock)     # 말풍선은 이야기 내내 떠 있음 (그림이 바뀔 때만 살짝 톡)
+
+
+## 글 말풍선이 떠 있는가 (그림 말풍선을 그 위에 겹치지 않음)
+func _says(r: Resident) -> bool:
+	return (r.say_t > 0.0 and r.say != "") or vw.stage_say.has(r.id) or (vw.social != null and not vw.social.say_of(r.id).is_empty())
 
 
 ## 요람을 들여다보는 이웃: 요람 쪽으로 몸을 기울이고 말풍선 하나, 아기는 까르르
@@ -583,7 +703,11 @@ func babies(dt: float, fast: bool) -> void:
 			b.back.visible = false
 			b.front.visible = false
 		if bm.baby_mode == "toddle" and not fast:
-			_toddle(r, bm, b, dt)
+			var st: Steps = _steps.get(r.id) if not _steps.is_empty() else null
+			if st != null and (st.t >= 0.0 or _steps_start(r, bm, b, st)) and st.t < FS_SECS:
+				_steps_baby(r, bm, b, st)
+			else:
+				_toddle(r, bm, b, dt)
 		else:
 			b.has = false
 			bm.set_body_warp()
@@ -715,3 +839,247 @@ func _toddle(r: Resident, bm: CutoutResident, b: Baby, dt: float) -> void:
 	bm.set_body_lift(hop / maxf(bm.scale.y, 0.01))
 	bm.set_body_warp(sy, sx, lean)
 	bm._refresh_doll()
+
+
+# ───────────────────────── 첫걸음마 (짧은 순간 — first_steps 사건) ─────────────────────────
+## 설 수 있는 자리인가 (화면만): 물 · 건물 속·뒤가 아님
+func _stand_ok(p: Vector2) -> bool:
+	if v.water_at(p.x, p.y):
+		return false
+	var r2 := Vector2(_right.x, _right.z)
+	var b2 := Vector2(_back.x, _back.z)
+	var carded := {}
+	for id: int in vw._card_items:             # 2D 건물 그림: 카메라를 보고 선 판 — 밑변(front)보다 뒤는 가려짐
+		for it: Array in vw._card_items[id]:
+			var d := Bld2D.info(String(it[0]))
+			if d.is_empty() or int(d.get("mode", 0)) != 0:
+				continue
+			carded[id] = true
+			var k := float(it[2])
+			var c: Vector3 = it[1]
+			var rel := p - Vector2(c.x, c.z)
+			var dc := rel.dot(b2)
+			if absf(rel.dot(r2)) < float(d.get("w", 2.5)) * k * 0.5 + 0.1 and dc < float(d.get("front", 1.1)) * k + FS_CLEAR and dc > -(float(d.get("h", 2.5)) * k * 1.6 + 0.6):
+				return false
+	for b in v.buildings:                      # 그림 판이 없는 건물 (3D · 시험): 발자리
+		if carded.has(b.id):
+			continue
+		var hs := b.size() * 0.5
+		var rel := p - Vector2(b.x, b.y)
+		var dc := rel.dot(b2)
+		if absf(rel.dot(r2)) < hs + 0.25 and dc < hs + 0.15 and dc > -(hs + 1.8):
+			return false
+	return true
+
+
+## 짧은 순간의 빛·하트 (view/moment_fx.gd — 짧은 판과 같은 규칙: 멀리서 보면 그만큼 크게, 높이는 덜)
+func _fx(kind: String, at: Vector2, up: float, secs: float, k := 1.0) -> void:
+	var p3 := Vector3(at.x, _gy(at.x, at.y), at.y)
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	var ppu := TapReact.px_per_unit(cam, to_global(p3)) if cam != null else 0.0
+	var big := clampf(FS_FX_PX / ppu, 1.0, StageDirector.MINI_BIG) if ppu > 0.0 else 1.0
+	p3.y += up * pow(big, StageDirector.MINI_LIFT_POW)
+	MomentFx.spawn(self, kind, p3, secs, big * k)
+	fx_log.append([kind, at])
+
+
+## 시작: 아기가 걸음마 인형으로 서 있을 때. 부모(사건의 with, 없으면 지금 보는 사람)가 화면에 있고 다른 장면에 묶여 있지 않으면 함께, 아니면 혼자
+func _steps_start(r: Resident, bm: CutoutResident, b: Baby, st: Steps) -> bool:
+	var at := b.pos if b.has else Vector2(bm.position.x, bm.position.z)
+	var r2 := Vector2(_right.x, _right.z)
+	var b2 := Vector2(_back.x, _back.z)
+	var par := st.par if st.par >= 0 else bm.minder_id
+	var pr := v.person(par) if par >= 0 else null
+	var pm := vw.residents.get(par) as CutoutResident if par >= 0 else null
+	if pr == null or pm == null or not pm.visible or pr.dead or pr.sleeping or pr.anim == "sleep" or vw.staged.has(par) or vw.pose_over.has(par) \
+			or (vw.social != null and vw.social.busy(par)) or _peek.has(par) or _steps_par.has(par):
+		par = -1
+	st.par = par
+	st.at = at
+	st.bpos = at
+	# 걷는 줄 (화면 가로)이 건물 그림에 가리지 않는 가장 가까운 자리: 카메라 쪽으로 조금씩 나오며 양쪽을 봄
+	var span := FS_GAP if par >= 0 else FS_SOLO + 0.2
+	var s := 1.0
+	if par >= 0:
+		st.p0 = Vector2(pm.position.x, pm.position.z)
+		s = 1.0 if (st.p0 - at).dot(r2) >= 0.0 else -1.0
+	var from := at
+	var found := false
+	for k in 9:
+		var f := at + b2 * 0.2 * float(k)
+		for sd: float in [s, -s]:
+			if _stand_ok(f) and _stand_ok(f + r2 * sd * span * 0.5) and _stand_ok(f + r2 * sd * span):
+				from = f
+				s = sd
+				found = true
+				break
+		if found:
+			break
+	st.from = from
+	st.side = s
+	if par >= 0:
+		st.p1 = from + r2 * s * (FS_GAP if found else 0.6)
+		st.to = st.p1 - r2 * s * FS_SHORT + b2 * 0.03
+		_steps_par[par] = r.id
+	else:
+		st.to = from + r2 * s * FS_SOLO + b2 * 0.12
+	st.t = 0.0
+	b.has = true
+	b.plop_t = -1.0
+	b.moving = false
+	return true
+
+
+func _steps_end(id: int) -> void:
+	var st: Steps = _steps[id]
+	if st.par >= 0:
+		_warp_reset(st.par)
+		_steps_par.erase(st.par)
+	_steps.erase(id)
+
+
+## 아기: 일어섬 → 뒤뚱뒤뚱 (가운데서 휘청) → 털썩 → (부모가 있으면) 안겨 올라갔다 내려옴
+func _steps_baby(r: Resident, bm: CutoutResident, b: Baby, st: Steps) -> void:
+	var t := st.t
+	var r2 := Vector2(_right.x, _right.z)
+	var b2 := Vector2(_back.x, _back.z)
+	var p := st.from
+	var clip := "idle"
+	var sy := 1.0
+	var sx := 1.0
+	var lean := 0.0
+	var hop := 0.0
+	var lift := 0.0
+	var pm := vw.residents.get(st.par) as CutoutResident if st.par >= 0 else null
+	if t < FS_BACK:
+		if (st.from - st.at).length() > 0.08:                 # 가려진 곳에 있었으면 먼저 트인 곳으로 아장아장
+			p = st.at.lerp(st.from, smoothstep(0.0, 1.0, t / FS_BACK))
+			clip = "walk"
+			lean = sin(_clock * 10.0) * 0.15
+		else:
+			clip = "sit" if t < 0.22 else "idle"
+			lean = sin(_clock * 7.0) * 0.07
+			hop = 0.05 * sin(clampf((t - 0.22) / 0.2, 0.0, 1.0) * PI)     # 영차, 일어섬
+	elif t < FS_WALK_END:
+		var u := (t - FS_BACK) / (FS_WALK_END - FS_BACK)
+		var stall := u > 0.4 and u < 0.58                     # 두어 걸음 → 휘청 → 남은 걸음은 와다다
+		p = st.from.lerp(st.to, 0.46 * smoothstep(0.0, 0.4, u) + 0.54 * smoothstep(0.58, 1.0, u))
+		var wob := sin(_clock * 10.0)
+		lean = wob * (0.27 if stall else 0.17)
+		hop = 0.0 if stall else absf(wob) * 0.028
+		clip = "idle" if stall else "walk"
+		if st.done & 1 == 0 and u > 0.12:
+			st.done |= 1
+			if st.par >= 0:
+				_say(st.par, "first", "love", 2.6)
+	elif t < FS_PLOP_END or pm == null:
+		p = st.to
+		clip = "sit"
+		var q := clampf((t - FS_WALK_END) / 0.28, 0.0, 1.0)
+		sy = 1.0 - 0.22 * sin(q * PI)
+		sx = 1.0 + 0.2 * sin(q * PI)
+		if q >= 1.0 and pm == null:
+			hop = absf(sin(_clock * 9.0)) * 0.022                 # 까르르 (혼자)
+		if st.done & 2 == 0:
+			st.done |= 2
+			_puff(Vector3(p.x, _gy(p.x, p.y), p.y))
+			GameAudio.fx("baby_giggle_%d" % (r.id % 2), "Village", -6.0)
+			if pm == null:
+				_say(r.id, "baby", "cheer", 1.8)
+				_fx("sparkle", p, 0.4, 1.2, FS_SPARK)
+	else:
+		var hold := st.p1 + b2 * 0.07 - r2 * st.side * 0.04
+		var down := st.p1 - r2 * st.side * 0.3 + b2 * 0.04
+		clip = "sit"
+		if t < FS_LIFT_END:
+			var k := smoothstep(0.0, 1.0, (t - FS_PLOP_END) / (FS_LIFT_END - FS_PLOP_END))
+			p = st.to.lerp(hold, k)
+			lift = k
+		elif t < FS_DOWN:
+			p = hold
+			lift = 1.0
+		else:
+			var k := smoothstep(0.0, 1.0, (t - FS_DOWN) / (FS_SECS - FS_DOWN))
+			p = hold.lerp(down, k)
+			lift = 1.0 - k
+		lift *= FS_HOLD * pm._doll_h / _cu
+		if t < FS_DOWN:
+			hop = pm._lift * pm.scale.y                         # 들썩이는 부모 품에서 함께
+		if st.done & 4 == 0 and t > FS_PLOP_END + 0.2:
+			st.done |= 4
+			_fx("hearts", st.p1, 0.8, 1.3)
+			GameAudio.fx("chime", "Room", -12.0)
+	if pm != null and t >= FS_BACK and t < FS_SECS:
+		pm.carry_baby = true                               # 두 팔을 앞으로 (안기 팔 — place_babies가 매번 지우므로 매 화면)
+		pm._refresh_doll()
+	var d := st.to - st.from
+	st.bpos = p
+	b.pos = p
+	b.yaw = atan2(d.x, d.y)
+	b.sp = 0.4 if clip == "walk" else 0.0
+	bm.toddle_clip = clip
+	bm.position = Vector3(p.x, _gy(p.x, p.y), p.y)
+	bm.rotation.y = b.yaw
+	if clip == "walk":
+		bm._ground = 0.4
+	bm.set_body_lift((hop + lift) / maxf(bm.scale.y, 0.01))
+	bm.set_body_warp(sy, sx, lean)
+	bm._refresh_doll()
+
+
+## 부모: 몇 걸음 물러남 → 돌아서 쪼그려 앉아 두 팔을 벌림 → 안아 올리며 일어섬 → 들썩 → 끝나면 시뮬 자리로 (화면 자리만 — 시뮬은 그대로)
+func _steps_parent(r: Resident, m: ResidentModel) -> void:
+	var st: Steps = _steps.get(int(_steps_par[r.id]))
+	if st == null or st.t < 0.0:
+		_steps_par.erase(r.id)
+		return
+	var t := st.t
+	var cm := m as CutoutResident
+	var simp := Vector2(m.position.x, m.position.z)
+	var p := st.p1
+	var anim := "idle"
+	var sy := 1.0
+	var sx := 1.0
+	var lean := 0.0
+	var hop := 0.0
+	var look := st.bpos
+	var toward := -st.side                         # 아기 쪽 (화면 가로)
+	if t < FS_BACK:
+		var d := st.p1 - st.p0
+		p = st.p0.lerp(st.p1, smoothstep(0.0, 1.0, t / FS_BACK))
+		if d.length() > 0.12:
+			anim = "walk"
+			look = p + d
+			m._ground = snappedf(clampf(d.length() / FS_BACK, 0.3, RUN_LEGS), 0.15)
+	elif t < FS_PLOP_END:
+		var k := smoothstep(0.0, 1.0, (t - FS_BACK) / 0.25)
+		sy = lerpf(1.0, FS_CROUCH.x + 0.02 * sin(_clock * 6.0), k)     # 까딱까딱 부름
+		sx = lerpf(1.0, FS_CROUCH.y, k)
+		lean = 0.12 * k * toward
+	elif t < FS_LIFT_END:
+		var k := (t - FS_PLOP_END) / (FS_LIFT_END - FS_PLOP_END)
+		var up := smoothstep(0.3, 1.0, k)
+		sy = lerpf(FS_CROUCH.x, 1.0, up) - 0.05 * sin(clampf(k / 0.3, 0.0, 1.0) * PI)
+		sx = lerpf(FS_CROUCH.y, 1.0, up)
+		lean = 0.16 * toward * (1.0 - up)
+	elif t < FS_SECS:
+		if t < FS_DOWN:
+			hop = absf(sin((t - FS_LIFT_END) * 11.5)) * 0.04      # 좋아서 들썩
+		else:
+			var k := sin((t - FS_DOWN) / (FS_SECS - FS_DOWN) * PI)
+			sy = 1.0 - 0.1 * k
+			lean = 0.1 * toward * k
+	else:
+		var k := smoothstep(0.0, 1.0, (t - FS_SECS) / FS_RELEASE)
+		p = st.p1.lerp(simp, k)
+		if (simp - st.p1).length() > 0.12:
+			anim = "walk"
+			look = simp
+			m._ground = snappedf(clampf((simp - st.p1).length() / FS_RELEASE, 0.3, RUN_LEGS), 0.15)
+	m.position = Vector3(p.x, _gy(p.x, p.y), p.y)
+	if (look - p).length() > 0.02:
+		m.rotation.y = atan2(look.x - p.x, look.y - p.y)
+	m.set_anim(anim, r.action)
+	if cm != null:
+		cm.set_body_lift(hop / maxf(cm.scale.y, 0.01))
+		cm.set_body_warp(sy, sx, lean)

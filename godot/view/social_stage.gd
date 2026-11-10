@@ -65,6 +65,8 @@ func sync(dt: float, fast: bool) -> void:
 			continue
 		if String(ev["kind"]) != "wedding" and _any_in_scene(ev["who"]):
 			continue                   # (Q2-d) 이미 이야기 중인 사람 — 한 사람 머리 위에 두 장면의 말이 겹쳐 뜨지 않게 (말은 관계 값으로 이미 남음)
+		if String(ev["kind"]) != "wedding" and _any_in_story(ev["who"]):
+			continue                   # (Q2-b) 저녁 이야기 자리의 어르신·아이들 — 그 자리의 말은 이야기 그림뿐 (말은 관계 값으로 이미 남음)
 		start(ev)
 	_next_v -= dt
 	if _next_v <= 0.0:
@@ -74,8 +76,8 @@ func sync(dt: float, fast: bool) -> void:
 	var keep: Array = []
 	for sc: Dictionary in scenes:
 		sc["t"] = float(sc["t"]) + dt
-		if float(sc["t"]) > float(sc["dur"]) or not _alive(sc):
-			_end(sc)
+		if float(sc["t"]) > float(sc["dur"]) or not _alive(sc) or (String(sc["ev"]["kind"]) != "wedding" and _any_in_story(sc["ev"]["who"])):
+			_end(sc)                   # (Q2-b) 말하던 사람이 저녁 이야기 자리에 끼면 그 장면은 접음
 			continue
 		_play(sc)
 		keep.append(sc)
@@ -88,6 +90,14 @@ func _alive(sc: Dictionary) -> bool:
 		if r == null or r.dead:
 			return false
 	return true
+
+
+## (Q2-b) 그 사람들 가운데 누가 벌어진 저녁 이야기 자리에 있나 (어르신·둘러앉은 아이·오는 길인 아이)
+func _any_in_story(who: Array) -> bool:
+	for id: Variant in who:
+		if ChildPlay.in_story(v, int(id)):
+			return true
+	return false
 
 
 ## 그 사람들 가운데 누가 지금 펼쳐지는 장면에 있나
@@ -460,8 +470,8 @@ func _try_vignette() -> void:
 	var opts: Array = []
 	var free: Array[Resident] = []
 	for r in v.people:
-		if r.sleeping or r.is_baby() or r.anim == "walk" or _in_scene(r.id) or not Social.FREE_ACTS.has(r.action):
-			continue
+		if r.sleeping or r.is_baby() or r.anim == "walk" or _in_scene(r.id) or not Social.FREE_ACTS.has(r.action) or ChildPlay.in_story(v, r.id):
+			continue                   # (Q2-b) 저녁 이야기 자리의 어르신·아이들은 화면 장면에 뽑지 않는다
 		free.append(r)
 	# 저녁 모닥불: 앉은 사람 중 하나가 노래, 곁의 둘셋이 손뼉
 	if h >= Balance.EVENING_FROM and h < Balance.NIGHT_FROM and _clock - _sing_t > 20.0:

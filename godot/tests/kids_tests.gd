@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end",
+	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_story",
 		"test_minder", "test_peek", "test_first_steps", "test_save", "test_village_day", "test_watch_determinism", "test_view"])
 
 
@@ -351,6 +351,238 @@ func test_leave_and_end() -> void:
 	_set_hour(v, 21.0)
 	ChildPlay.step(v, 30.0)
 	check(ChildPlay.games(v).is_empty(), "일 시간이 끝나면 흩어짐")
+
+
+func _elder(v: Village, x: float, y: float) -> Resident:
+	var e := v.add_person("할매", "f", Balance.AGE_ELDER + 1.0, "", x, y, null, null)
+	e.action = "rest"
+	e.anim = "sit"
+	e.sleeping = false
+	e.doing = "모닥불 곁에서 쉬는 중"
+	e.steps = [ResidentAI.act(3000.0, "sit")]
+	return e
+
+
+func _elder_sig(e: Resident) -> String:
+	return "%s|%s|%d|%.3f,%.3f|%s|%s" % [e.action, e.anim, e.steps.size(), e.x, e.y, e.doing, str(e.steps[0]) if not e.steps.is_empty() else ""]
+
+
+func test_story() -> void:
+	print("== 아이·아기: 저녁 이야기 — 저녁에 앉아 쉬는 어르신 둘레로 반원, 어르신이 없으면 없음, 일어나면 흩어짐")
+	var v := _village(19.3)
+	var e := Vector2(v.fire.x + 1.4, v.fire.y + 1.4)
+	for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:     # 모닥불 곁 쉬는 자리(두 칸) 가운데 열린 곳
+		var q := Vector2(v.fire.x, v.fire.y) + Vector2(cos(a), sin(a)) * 2.0
+		if ChildPlay.story_side(v, q) != 0:
+			e = q
+			break
+	var b0: Vector2 = ChildPlay.fire_benches(v)[0]
+	check(ChildPlay.story_side(v, b0 - Vector2(0.7071, 0.7071) * 0.4) == 0, "걸상 바로 뒤(화면에서 걸상에 가려지는 자리)의 어르신에게는 모이지 않음")
+	for r in v.people:                         # 어른들은 멀리서 일함
+		r.x = e.x + 14.0 + float(r.id % 5)
+		r.y = e.y - 10.0
+		r.action = "work"
+		r.anim = "work"
+		r.sleeping = false
+		r.steps = [ResidentAI.act(1.0e6, "work")]
+	var kids: Array = []
+	for i in 5:
+		kids.append(_kid(v, ["보리", "새별", "한솔", "다래", "가람"][i], 1.5 + 0.3 * i, e.x + 2.0 + 0.3 * i, e.y + 1.0))
+	var p := e + Vector2(3.0, 1.0)
+	check(ChildPlay.story_side(v, e) != 0, "모닥불 곁 어르신 자리 둘레에 앉을 곳이 있음")
+	check(not ChildPlay.try_play(v, kids[0], p, 900.0) and ChildPlay.games(v).is_empty(), "저녁이어도 어르신이 없으면 이야기 없음")
+	var el := _elder(v, e.x, e.y)
+	var sig := _elder_sig(el)
+	var st := ChildPlay._state(v)
+	_set_hour(v, 10.0)                         # 낮: 이야기 아님 (다른 놀이는 열릴 수 있음)
+	for i in 6:
+		ChildPlay.try_play(v, kids[0], p, 900.0)
+	var day_story := false
+	for g0: Dictionary in ChildPlay.games(v):
+		day_story = day_story or String(g0["kind"]) == "story"
+	check(not day_story, "낮에는 이야기 없음")
+	(st["g"] as Array).clear()
+	for k: Resident in kids:
+		k.steps.clear()
+	_set_hour(v, 19.3)
+	el.sleeping = true
+	check(not ChildPlay.try_play(v, kids[0], p, 900.0), "잠든 어르신: 없음")
+	el.sleeping = false
+	el.steps = [ResidentAI.walk(e.x + 5.0, e.y)]
+	check(not ChildPlay.try_play(v, kids[0], p, 900.0), "걸어가는 어르신: 없음")
+	el.steps = [ResidentAI.act(3000.0, "sit")]
+	kids[0].x += 20.0
+	check(not ChildPlay.try_play(v, kids[0], p, 900.0), "멀리 있는 아이: 없음")
+	kids[0].x -= 20.0
+	sig = _elder_sig(el)
+	var from := v.events.serial
+	check(ChildPlay.try_play(v, kids[0], p, 900.0), "저녁 · 앉아 쉬는 어르신 곁: 이야기를 들으러 감")
+	var gs := ChildPlay.games(v)
+	check(gs.size() == 1 and String(gs[0]["kind"]) == "story" and int(gs[0]["el"]) == el.id, "이야기 자리가 열림 (어르신 둘레)")
+	var g: Dictionary = gs[0]
+	check(kids[0].doing == String(ChildPlay.LABEL["story"]) and run.words_ok([kids[0].doing]) == "", "하는 일: %s" % kids[0].doing)
+	var evs := _events(v, from, &"kid_play_started")
+	check(evs.size() == 1 and String(evs[0]["v"]["kind"]) == "story" and int(evs[0]["who"]) == kids[0].id, "사건 kid_play_started (story)")
+	for i in range(1, 5):
+		ChildPlay.try_play(v, kids[i], p, 900.0)
+	var cap := int(g["cap"])
+	check(cap >= ChildPlay.STORY_MIN and cap <= ChildPlay.MAX_KIDS and cap == ChildPlay.story_seats(v, e).size(), "앉을 자리는 열린 곳만 (%d자리)" % cap)
+	check((g["who"] as Array).size() == cap and ChildPlay.idx(g, kids[4].id) < 0, "자리만큼만 둘러앉음 (다섯째는 못 낌)")
+	var seats: Array = []
+	var benches := ChildPlay.fire_benches(v)
+	var ok_open := not ChildPlay._story_hidden(v, e, benches)
+	for i in cap:
+		var s := ChildPlay.seat(g, int(g["sl"][i]))
+		seats.append(s)
+		ok_open = ok_open and not ChildPlay._story_hidden(v, s, benches)
+	check(ok_open, "어르신도 아이들도 걸상·건물·제단·나무 뒤가 아님")
+	var ok_d := true
+	var ok_side := true
+	var ok_apart := true
+	for i in seats.size():
+		var s: Vector2 = seats[i]
+		var d := (s - e).length()
+		ok_d = ok_d and d > 0.8 and d < 1.4 and not v.water_at(s.x, s.y) and (s - Vector2(v.fire.x, v.fire.y)).length() >= ChildPlay.STORY_FIRE
+		ok_side = ok_side and (s - e).dot(Vector2(0.7071, 0.7071)) > -0.4     # 화면 앞쪽 (어르신 뒤로 돌아가 앉지 않음)
+		for j in i:
+			ok_apart = ok_apart and (s - (seats[j] as Vector2)).length() > 0.5
+	check(ok_d, "자리: 어르신에게서 한 칸쯤 · 물·모닥불 밖")
+	check(ok_side and ok_apart, "어르신 앞쪽에 둘러앉음 (서로 겹치지 않게)")
+	check(_elder_sig(el) == sig, "어르신의 걸음·하는 일은 그대로")
+	for k: Resident in kids:                   # 걸어온 셈 치고 자리에 앉힘
+		var gi := ChildPlay.idx(g, k.id)
+		if gi < 0:
+			continue
+		var s := ChildPlay.seat(g, int(g["sl"][gi]))
+		k.x = s.x
+		k.y = s.y
+		while not k.steps.is_empty() and String(k.steps[0]["k"]) != "do": k.steps.remove_at(0)
+	for i in 3:
+		ChildPlay.step(v, ChildPlay.IV)
+	var n_on := 0
+	for o: Variant in g["on"]:
+		n_on += int(o)
+	check(int(g["go"]) == 1 and n_on == cap, "다 앉아 이야기 시작")
+	var rs := float(g["rs"])
+	var pics := {}
+	var gaps := 0
+	var c := rs
+	while c < rs + 4200.0:
+		var pc: Array = ChildPlay.story_pic(g, c)
+		if String(pc[0]) == "":
+			gaps += 1
+		else:
+			pics[String(pc[0])] = true
+		c += 20.0
+	var known := true
+	for nm: String in pics:
+		known = known and KidBubbles.PICS.has(nm) and ChildPlay.STORY_PICS.has(nm)
+	check(pics.size() >= 4 and gaps > 0 and gaps < 20 and known, "그림이 차례로 바뀜 (글 없음 · 앉은 뒤 잠깐만 비고 내내 떠 있음): %s" % str(pics.keys()))
+	check(String(ChildPlay.story_pic(g, rs + 10.0)[0]) == "", "앉자마자는 아직")
+	check(ChildPlay.story_nod(g, rs + 100.0) < 0, "처음엔 다 듣는다")
+	var nod := ChildPlay.story_nod(g, rs + ChildPlay.STORY_NOD + 10.0)
+	check(ChildPlay.idx(g, nod) >= 0, "한참 듣고 나면 한 아이가 꾸벅")
+	check(_elder_sig(el) == sig, "이야기 동안에도 어르신은 그대로")
+	el.steps = [ResidentAI.walk(e.x + 5.0, e.y)]     # 어르신이 일어남 → 흩어짐
+	ChildPlay.step(v, ChildPlay.IV)
+	var tagged := 0
+	var plain := 0
+	for k: Resident in kids:
+		for sd: Dictionary in k.steps:
+			tagged += int(sd.has("g"))
+		plain += int(k.doing == ChildPlay.PLAIN)
+	check(ChildPlay.games(v).is_empty() and tagged == 0 and plain == cap, "어르신이 일어나면 끝 (아이들은 그냥 놂)")
+	check(not ChildPlay._story_ready(v, st, st["g"]), "이야기가 끝난 바로 뒤엔 다시 열지 않음")
+	# 부름: 놀이를 새로 시작하지 않아도, 놀던 아이들이 앉아 쉬는 어르신에게 모인다 (술래잡기 하던 아이도)
+	st["snext"] = 0.0
+	el.steps = [ResidentAI.act(3000.0, "sit")]
+	sig = _elder_sig(el)
+	for k: Resident in kids:
+		k.action = "play"
+		k.sleeping = false
+		k.doing = ChildPlay.PLAIN
+		k.steps = [ResidentAI.act(2000.0, "play")]
+	var tg := ChildPlay.open_game(v, kids[0], p, "tag", 77)
+	for i in 2:
+		ChildPlay._add(tg, (kids[i] as Resident).id)
+		((kids[i] as Resident).steps[0] as Dictionary)["g"] = int(tg["id"])
+	kids[4].steps = [ResidentAI.act(300.0, "play")]     # 곧 놀이를 마칠 아이는 부르지 않음
+	from = v.events.serial
+	st["acc"] = 0.0
+	ChildPlay.step(v, ChildPlay.IV)
+	var sg: Dictionary = {}
+	for g3: Dictionary in ChildPlay.games(v):
+		if String(g3["kind"]) == "story":
+			sg = g3
+	check(not sg.is_empty() and _events(v, from, &"kid_play_started").size() == 1, "놀던 아이들 곁에 어르신이 앉아 쉬면 이야기가 열림")
+	if not sg.is_empty():
+		var ok_same := true
+		for id: Variant in sg["who"]:
+			var k := v.person(int(id))
+			var last: Dictionary = k.steps[k.steps.size() - 1]
+			ok_same = ok_same and k.action == "play" and String(last["k"]) == "do" and float(last["left"]) == 2000.0 and int(last["g"]) == int(sg["id"]) \
+				and k.doing == String(ChildPlay.LABEL["story"])
+		check((sg["who"] as Array).size() == int(sg["cap"]) and ok_same, "놀던 걸음 그대로 (하는 일·남은 시간 같음) 이야기 자리로")
+		check(ChildPlay.idx(sg, kids[4].id) < 0 and ChildPlay.idx(tg, kids[0].id) < 0 and ChildPlay.idx(sg, kids[0].id) >= 0, "술래잡기 하던 아이도 옴 · 곧 마칠 아이는 안 옴")
+		check(_elder_sig(el) == sig, "부를 때도 어르신은 그대로")
+		st["acc"] = 0.0
+		ChildPlay.step(v, ChildPlay.IV)
+		var n_st := 0
+		for g3: Dictionary in ChildPlay.games(v):
+			n_st += int(String(g3["kind"]) == "story")
+		check(n_st == 1, "이야기는 한 번에 하나")
+	# 마을의 나흘 (어르신 한 분 · 아이 넷) — 저절로 열린다, 저녁에만, 같은 씨앗이면 같은 결과
+	var res: Array = []
+	for pass_i in 3:
+		var seed_v: int = [7, 7, 11][pass_i]
+		var w := Village.new_prototype(seed_v)
+		w.water.offline = true
+		w.stock["빵"] = 300.0
+		var mom: Resident = null
+		var dad: Resident = null
+		for r in w.people:
+			if r.is_adult() and r.sex == "f" and mom == null:
+				mom = r
+			elif r.is_adult() and r.sex == "m" and dad == null:
+				dad = r
+		for i in 4:
+			var kc := w.add_person(["보리", "새별", "한솔", "다래"][i], "f" if i % 2 == 0 else "m", 1.6 + 0.5 * i, "", w.fire.x + 2.0 + 0.3 * i, w.fire.y + 2.5, mom, dad)
+			kc.parents = PackedInt32Array([mom.id, dad.id])
+		var gran := w.add_person("할매", "f", Balance.AGE_ELDER + 1.0, "", w.fire.x + 1.5, w.fire.y + 1.0, null, null)
+		gran.home = mom.home                   # 아이들 집에 함께 삶
+		var bad := 0
+		var seen := 0
+		var sat := 0
+		var hid := 0
+		for i in 4 * 24 * 60:
+			w.advance(60.0)
+			for g2: Dictionary in ChildPlay.games(w):
+				if String(g2["kind"]) == "story":
+					seen += 1
+					var h := w.hour_now()
+					if h < ChildPlay.STORY_HOURS.x or h >= ChildPlay.STORY_HOURS.y + 0.2 or not w.is_work_time():
+						bad += 1
+					var n2 := 0
+					for o: Variant in g2["on"]:
+						n2 += int(o)
+					sat = maxi(sat, n2)
+					hid += int(ChildPlay._story_hidden(w, Vector2(float(g2["x"]), float(g2["y"])), ChildPlay.fire_benches(w)))
+		var n_story := _events(w, 0, &"kid_play_started").filter(func(ev: Dictionary) -> bool: return String(ev["v"]["kind"]) == "story").size()
+		var parts := PackedStringArray()
+		for r in w.people:
+			parts.append("%d:%.3f,%.3f:%s:%.4f" % [r.id, r.x, r.y, r.action, r.hunger])
+		parts.append(SaveCodec.digest(SaveCodec.enc(w.kids)))
+		parts.append(SaveCodec.digest(SaveCodec.enc(w.stock)))
+		parts.append(str(w.rng.state))
+		res.append("|".join(parts))
+		if pass_i != 1:
+			print("   마을의 저녁 (씨앗 %d): 이야기 %d번 (살핀 틱 %d · 함께 앉은 아이 많을 때 %d)" % [seed_v, n_story, seen, sat])
+			check(n_story >= 1 and seen >= 1, "나흘 사이 저녁 이야기가 저절로 열림 (씨앗 %d)" % seed_v)
+			if pass_i == 2:                    # 씨앗 7에선 아이들이 닿기 전에 어르신이 다른 일로 일어난다 (어르신의 걸음은 건드리지 않음) — 씨앗 11에서 봄
+				check(sat >= 2, "아이 둘 넘게 함께 앉아 들음 (씨앗 %d)" % seed_v)
+			check(bad == 0, "이야기는 해 질 무렵~저녁에만 (일 시간 안)")
+			check(hid == 0, "가려진 자리의 어르신에게는 모이지 않음")
+	check(res[0] == res[1], "같은 씨앗 → 같은 결과 (이야기가 있어도 결정적)")
 
 
 func test_minder() -> void:

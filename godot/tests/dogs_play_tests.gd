@@ -24,7 +24,7 @@ func all() -> void:
 	var old := CutoutResident.override
 	var aware0 := Village.start_aware
 	CutoutResident.override = 1
-	run.timed(self, ["test_follow_sit", "test_join_play", "test_sim_same", "test_tap_zoom", "test_dog_cues", "test_bubbles", "test_same_words", "test_talk"])
+	run.timed(self, ["test_follow_sit", "test_join_play", "test_sim_same", "test_tap_zoom", "test_dog_cues", "test_bubbles", "test_same_words", "test_talk", "test_kk_in_view"])
 	CutoutResident.override = old
 	Village.start_aware = aware0
 
@@ -624,4 +624,41 @@ func test_talk() -> void:
 	check(soc._nodded.is_empty(), "이야기가 끝나면 몸을 제자리로")
 	check(SaveCodec.digest(v.to_dict()) == sig, "이야기 장면을 펼쳐도 마을 저장 지문 그대로 (화면만)")
 	soc._clear_all()
+	_drop(scene)
+
+
+
+## 첫 병의 시작 그대로: 꿀떡이가 처음부터 있고, 2D 화면이 꿀떡이 모습(표시)으로 그린다 — 다른 강아지에겐 그 표시가 없다
+func test_kk_in_view() -> void:
+	var keep := Village.start_aware
+	Village.start_aware = false
+	var scene := _scene()
+	Village.start_aware = keep
+	var v: Village = scene.get("village")
+	var vw: VillageView = scene.get("view")
+	v.water.offline = true
+	if not v.aware:
+		Notebook.begin(v)                       # 새 첫 병의 시작 (view/test_village.gd _start_save의 두 줄)
+	Dogs.give_kkultteok(v)
+	var kk := v.dogs.kkultteok()
+	check(Dogs.is_first_jar(v) and not kk.is_empty() and int(kk.get("owner", -1)) >= 0, "첫 병의 시작: 꿀떡이가 처음부터 집 강아지로 있다")
+	if kk.is_empty():
+		_drop(scene)
+		return
+	_aim(scene, Vector2(float(kk["x"]), float(kk["y"])), 44.0)
+	scene.call("refresh")
+	vw.sync(0.0)
+	var cd := vw.fauna_view.get_node_or_null("CutoutDogs") as CutoutDogs
+	var e: Dictionary = cd.dogs.get(int(kk["id"]), {}) if cd != null else {}
+	var flag := -1.0
+	var others := 0
+	var plain := true
+	if not e.is_empty():
+		flag = ((e["doll"] as MeshInstance3D).get_instance_shader_parameter("pat_c") as Vector4).w
+		for id: int in cd.dogs:
+			if id != int(kk["id"]):
+				others += 1
+				plain = plain and (((cd.dogs[id]["doll"] as MeshInstance3D).get_instance_shader_parameter("pat_c") as Vector4).w < 0.5)
+	check(not e.is_empty() and (e["doll"] as MeshInstance3D).visible and flag > 0.5, "2D 화면: 꿀떡이 인형이 꿀떡이 모습으로 그려짐 (표시 %.1f)" % flag)
+	check(plain, "2D 화면: 다른 강아지 %d마리에겐 꿀떡이 표시 없음" % others)
 	_drop(scene)
