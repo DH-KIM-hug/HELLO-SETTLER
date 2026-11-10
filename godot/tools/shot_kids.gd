@@ -102,7 +102,23 @@ func _initialize() -> void:
 			plan.append(_until.bind(_plop_on, 1800))
 			_seq("toddle_plop", 44.0, 3, 22)
 			_seq("toddle_far", 22.0, 2, 30)
-		plan.append(_sheet)
+		# ── 귀여움 묶음 ⑤ (Q2-b 남은 것): k2_* — KIDS_ONLY=first·circle·hop·skip 로 하나씩
+		if only == "" or only.contains("first"):
+			plan.append(_baby_house.bind(1))
+			plan.append(_s_first.bind(true))
+			_seq("k2_first", 44.0, 9, 44)
+			plan.append(_s_first.bind(true))
+			_seq("k2_first_far", 20.0, 6, 66)
+			plan.append(_s_first.bind(false))
+			_seq("k2_first_solo", 44.0, 5, 58)
+			plan.append(_sheet_k2.bind("k2_first"))
+		if only == "" or only.contains("circle"):
+			plan.append(_s_circle.bind(4))
+			_seq("k2_circle", 44.0, 9, 95)
+			_seq("k2_circle_far", 20.0, 4, 95)
+			plan.append(_sheet_k2.bind("k2_circle"))
+		if only == "":
+			plan.append(_sheet)
 		plan.append(_finish)
 
 
@@ -356,6 +372,15 @@ func _shot(name: String) -> int:
 		note = " %s 시뮬 (%.1f, %.1f) 모델 (%.1f, %.1f) 보임 %s · %s · 보는 이 %d · 집 %d" % [_follow.name, _follow.x, _follow.y, fm.position.x, fm.position.z, fm.visible, fm.baby_mode, fm.minder_id, _follow.home]
 	if not _game.is_empty():
 		note = " c=%.0f 술래 %d → %d · 잡음 %d · 탑 %d (단계 %d)" % [float(_game["c"]), int(_game["it"]), int(_game["run"]), int(_game["tags"]), int(_game["h"]), int(_game["ph"])]
+	if _first_dbg:
+		var kv: KidsView = scene.view.kids_view
+		var bm := _model(toddler) as CutoutResident
+		var pm := _model(mum_t) as CutoutResident
+		note = " 아기 (%.2f, %.2f) 보임 %s %s 보는 이 %d · 엄마 시뮬 (%.2f, %.2f) 모델 (%.2f, %.2f) 보임 %s" % [bm.position.x, bm.position.z, bm.visible, bm.baby_mode, bm.minder_id,
+			mum_t.x, mum_t.y, pm.position.x, pm.position.z, pm.visible]
+		for id: int in kv._steps:
+			var st: KidsView.Steps = kv._steps[id]
+			note += " | t %.2f 기다림 %.2f 부모 %d p1 (%.2f, %.2f) to (%.2f, %.2f)" % [st.t, st.wait, st.par, st.p1.x, st.p1.y, st.to.x, st.to.y]
 	print("  %s  %.1f초%s" % [name, Time.get_ticks_msec() / 1000.0, note])
 	return 1
 
@@ -548,6 +573,114 @@ func _baby_house(fam: int) -> int:
 
 var _hb: Building
 var _home0 := -1
+
+
+## 첫걸음마 (짧은 순간): 문 앞에서 쉬는 엄마 곁의 걸음마 아기 — with_mum이 아니면 엄마는 일하러 가고 아기 혼자
+func _s_first(with_mum: bool) -> int:
+	scene.paused = true
+	var d := ChildPlay.door(v, toddler)
+	var dad := v.person(mum_t.partner)
+	_kids_away()
+	_hold(dad, "work", d.x + 14.0, d.y - 9.0, "일하는 중")
+	_hold(mum_i, "work", d.x + 15.0, d.y + 9.0, "일하는 중")
+	if with_mum:
+		_hold(mum_t, "rest", d.x + 1.3, d.y + 1.2, "쉬는 중")
+	else:
+		_hold(mum_t, "work", d.x + 15.0, d.y - 9.0, "일하는 중")
+	_c = Vector2(d.x + 0.15, d.y - 0.35)
+	_follow = null
+	_game = {}
+	_first_dbg = true
+	var kv: KidsView = scene.view.kids_view
+	for id: int in kv._steps.keys():
+		kv._steps_end(id)
+	scene.refresh()
+	scene.view.stage_say.clear()
+	(ChildPlay._state(v)["walked"] as Dictionary).erase(str(toddler.id))
+	ChildPlay._first_steps(v, toddler)
+	print("첫걸음마 — 엄마 %s · 문 (%.1f, %.1f)" % ["곁에" if with_mum else "없음", d.x, d.y])
+	scene.paused = false
+	return 2
+
+
+var _first_dbg := false
+
+
+## 저녁 이야기: 모닥불 곁에 앉아 쉬는 할매 둘레로 아이 n명 (어른들은 멀리서 일함)
+func _s_circle(n: int) -> int:
+	_to_hour(19.03)
+	scene.paused = true
+	_clear_games()
+	_first_dbg = false
+	var e := Vector2(v.fire.x + 1.4, v.fire.y + 1.4)
+	for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:     # 모닥불 둘레 두 칸 (쉬는 자리) 중 아이들이 앉을 수 있는 곳
+		var q := Vector2(v.fire.x + cos(a) * 2.0, v.fire.y + sin(a) * 2.0)
+		if ChildPlay.story_side(v, q) != 0:
+			e = q
+			break
+	for r in v.people:
+		if r.is_adult() and r != elder:
+			_hold(r, "work", v.fire.x + 16.0 + float(r.id % 5), v.fire.y + 12.0, "일하는 중")
+	_hold(elder, "rest", e.x, e.y, "모닥불 곁에서 쉬는 중")
+	elder.anim = "sit"
+	elder.steps = [ResidentAI.act(1.0e6, "sit")]
+	var g := ChildPlay.open_story(v, kids[0], elder, 3 + step)
+	g["c1"] = 1.0e9
+	n = mini(n, int(g["cap"]))                # 열린 자리만큼만
+	for i in n:
+		var k := kids[i]
+		var gi := ChildPlay._add(g, k.id)
+		var s := ChildPlay.seat(g, int(g["sl"][gi]))
+		k.x = s.x
+		k.y = s.y
+		k.action = "play"
+		k.anim = "play"
+		k.sleeping = false
+		k.steps.clear()
+		ChildPlay._attach(k, g, gi, 1.0e6)
+	for i in range(n, kids.size()):
+		_hold(kids[i], "rest", v.fire.x - 9.0 - float(i), v.fire.y - 8.0, "쉬는 중")
+	for r in v.people:                        # 앞 장면의 말이 남지 않게
+		r.say = ""
+		r.say_t = 0.0
+	scene.view.stage_say.clear()
+	_game = g
+	_c = e + (ChildPlay.seat(g, 0) + ChildPlay.seat(g, 1) - e * 2.0) * 0.3
+	_follow = null
+	scene.refresh()
+	scene.paused = false
+	print("저녁 이야기 — 어르신 (%.1f, %.1f) · 자리 %d · 아이 %d · 모닥불 (%.1f, %.1f) · 제단 (%.1f, %.1f)" % [e.x, e.y, int(g["cap"]), n, v.fire.x, v.fire.y, v.altar_pos.x, v.altar_pos.y])
+	return 60
+
+
+## k2 묶음의 한 장 모음 (이름이 prefix로 시작하는 것만)
+func _sheet_k2(prefix: String) -> int:
+	var mine := PackedStringArray()
+	for path: String in sheet:
+		if path.get_file().begins_with(prefix):
+			mine.append(path)
+	var out := out_dir.path_join("k2_sheet_%s.png" % prefix.trim_prefix("k2_"))
+	var cols := 4
+	var cw := 0
+	var chh := 0
+	var imgs: Array[Image] = []
+	for path in mine:
+		var img := Image.load_from_file(path)
+		img.convert(Image.FORMAT_RGB8)
+		img.resize(int(img.get_width() * 0.5), int(img.get_height() * 0.5), Image.INTERPOLATE_LANCZOS)
+		imgs.append(img)
+		cw = maxi(cw, img.get_width())
+		chh = maxi(chh, img.get_height())
+	if imgs.is_empty():
+		return 1
+	var rows := int(ceil(imgs.size() / float(cols)))
+	var sh := Image.create(cols * (cw + 4) + 4, rows * (chh + 4) + 4, false, Image.FORMAT_RGB8)
+	sh.fill(Color(0.12, 0.12, 0.12))
+	for i in imgs.size():
+		sh.blit_rect(imgs[i], Rect2i(Vector2i.ZERO, imgs[i].get_size()), Vector2i(4 + (i % cols) * (cw + 4), 4 + int(i / float(cols)) * (chh + 4)))
+	sh.save_png(out)
+	print("모음: %s (%d장)" % [out, mine.size()])
+	return 1
 
 
 func _plop_on() -> bool:
