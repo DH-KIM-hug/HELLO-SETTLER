@@ -4,6 +4,7 @@
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- baby     첫 아기 (깨닫기 전 병) → 둘째 아기의 짧은 판
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- naming   첫 아기 + 수첩의 아기 쪽지 → 끝나고 이름 짓기 칸
 ##   godot --path godot -s res://tools/shot_first_moments.gd -- night    밤의 첫 아기 (엄마가 자다가 나옴) · 밤의 소원 (이웃이 대신 받음)
+##   덧붙임: pfx=v2_ (파일 이름 앞머리) · zoom=16 (짧은 판을 볼 때의 화면 배율 — 기본 = 마을 기본 배율) · every=0.5 (긴 연출을 찍는 간격 초)
 ## 결과 (godot_shots/first_moments/): <이름>_NN.png (장면 띠) · <이름>_after.png · <이름>_strip.png (모아 보기)
 extends SceneTree
 
@@ -18,6 +19,9 @@ var si := 0
 var _until: Callable = Callable()
 var _guard := 0
 var mode := "wish"
+var pfx := ""                        # 파일 이름 앞머리 (pfx=v2_)
+var mini_ppu := 16.0                 # 짧은 판을 볼 때의 배율 (마을 기본 배율 — zoom=9 · zoom=32로 다른 단계도)
+var long_every := 1.0                # 긴 연출을 찍는 간격 (every=0.5)
 
 var _tag := ""                       # 지금 찍는 장면 띠 이름 ("" = 안 찍음)
 var _full := true                    # 긴 연출 (감독의 시간) · 짧은 판 (현실 시간)
@@ -32,6 +36,12 @@ func _initialize() -> void:
 	for a: String in OS.get_cmdline_user_args():
 		if a in ["wish", "baby", "naming", "night"]:
 			mode = a
+		elif a.begins_with("pfx="):
+			pfx = a.substr(4)
+		elif a.begins_with("zoom="):
+			mini_ppu = maxf(1.0, a.substr(5).to_float())
+		elif a.begins_with("every="):
+			long_every = maxf(0.1, a.substr(6).to_float())
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/first_moments").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
@@ -43,10 +53,10 @@ func _initialize() -> void:
 	scene.firsts.reset()
 	match mode:
 		"wish":
-			steps = [_s_start.bind(10.0), _s_wish.bind(false), _w_play.bind("miracle"), _s_strip.bind("miracle", true, 1.0), _w_end, _s_after.bind("miracle"),
+			steps = [_s_start.bind(10.0), _s_wish.bind(false), _w_play.bind("miracle"), _s_strip.bind("miracle", true, long_every), _w_end, _s_after.bind("miracle"),
 				_s_wish.bind(true), _s_strip.bind("wish_more", false, 0.5), _w_secs.bind(3.6), _s_after.bind("wish_more"), _s_end]
 		"baby":
-			steps = [_s_natural, _w_play.bind("first_baby"), _s_strip.bind("first_baby", true, 1.0), _w_end, _s_after.bind("first_baby"),
+			steps = [_s_natural, _w_play.bind("first_baby"), _s_strip.bind("first_baby", true, long_every), _w_end, _s_after.bind("first_baby"),
 				_s_birth.bind(true), _s_strip.bind("baby_more", false, 0.5), _w_secs.bind(3.6), _s_after.bind("baby_more"), _s_end]
 		"naming":
 			steps = [_s_natural, _s_note, _w_play.bind("first_baby"), _s_strip.bind("baby_naming", true, 2.0), _w_end,
@@ -66,7 +76,7 @@ func d() -> StageDirector:
 
 func _save(name: String) -> String:
 	var img := root.get_texture().get_image()
-	var p := out_dir.path_join(name + ".png")
+	var p := out_dir.path_join(pfx + name + ".png")
 	img.save_png(p)
 	var dd := d()
 	print("saved %s %s (연출 %s %.1f초 · 짧은 판 %d · 어둠 %.2f · 카메라 %s · 인형 %d · 말풍선 %d · 빛 %d)" % [name, img.get_size(), dd.id, dd.t, dd._minis.size(), dd.dark,
@@ -195,7 +205,7 @@ func _s_wish(more: bool) -> int:
 	print("소원: %s (%s) — %s · 모닥불에서 %.1f칸" % [String(l["name"]), String(l["type"]), String(l["text"]),
 		Vector2(who.x, who.y).distance_to(v().fire) if who != null else -1.0])
 	if more and who != null:
-		_look(Vector2(who.x, who.y) + Vector2(0.0, 1.2), 24.0)
+		_look(Vector2(who.x, who.y) + Vector2(0.0, 1.2), mini_ppu)
 		_settle()
 	v().grant_wish(int(l["id"]))
 	scene._sync_views()
@@ -233,7 +243,7 @@ func _s_birth(more: bool) -> int:
 		print("집이 없음")
 		return 1
 	if more:
-		_look(MomentCast.door(h) + Vector2(0.0, 1.4), 24.0)
+		_look(MomentCast.door(h) + Vector2(0.0, 1.4), mini_ppu)
 		_settle()
 	else:
 		v().stats["born"] = 0             # (캡처) 이 병의 첫 아기로 — 시뮬레이션은 첫날 아침에 이미 낳았을 수 있음
@@ -297,7 +307,7 @@ func _s_after(tag: String) -> int:
 		if Time.get_ticks_msec() < t1:
 			return false
 		_strip.append(_save(tag + "_after"))
-		Sheet.make(_strip, out_dir.path_join(tag + "_strip.png"), 0.5)
+		Sheet.make(_strip, out_dir.path_join(pfx + tag + "_strip.png"), 0.5)
 		print("saved %s_strip (%d장)" % [tag, _strip.size()])
 		return true
 	return 0

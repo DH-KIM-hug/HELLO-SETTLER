@@ -25,7 +25,7 @@ func all() -> void:
 	print("== 첫 기적 · 첫 아기 연출 (E1-4 · E1-6)")
 	_old_aware = Village.start_aware
 	run.timed(self, ["test_events", "test_tables_and_words", "test_cast", "test_miracle_scene", "test_miracle_skip", "test_baby_scene", "test_baby_naming",
-		"test_away_no_replay", "test_sim_same"])
+		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade"])
 	Village.start_aware = _old_aware
 	fs.reset()
 	Market.reset()
@@ -626,5 +626,330 @@ func test_sim_same() -> void:
 	check("miracle" in plays[0] and "first_baby" in plays[0] and "wish_more" in plays[0] and "baby_more" in plays[0],
 		"본 병: 첫 기적 · 첫 아기 · 짧은 판 둘 (%s)" % str(plays[0]))
 	check((plays[2] as Array).is_empty(), "안 본 병: 연출 없음")
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+# ───────────────────────── 다듬기 (2026-11-10): 띠 물러남 · 말풍선 · 소리 · 짧은 판 크기 · 문 · 그늘 ─────────────────────────
+func _hud_as(d: StageDirector) -> Array:
+	return d.hud_parts().map(func(n: CanvasItem) -> float: return n.modulate.a)
+
+
+## 가까이 보는 긴 연출("hud": false)은 화면 띠가 물러나고, 끝·건너뛰기 뒤엔 돌아온다. 짧은 판은 띠를 건드리지 않는다
+func test_hud_retreat() -> void:
+	fs.reset()
+	Market.reset()
+	Village.start_aware = true
+	for sid: String in ["miracle", "first_baby"]:
+		check(Stagings.SCENES[sid].get("hud", true) == false, "%s: 띠가 물러나는 연출 (\"hud\": false)" % sid)
+	for sid: String in ["awakening", "altar_build", "first_prayer"]:
+		check(bool(Stagings.SCENES[sid].get("hud", true)), "%s: 띠는 그대로 (아래 띠 단추를 쓰는 연출)" % sid)
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	var parts := d.hud_parts()
+	check(parts.size() >= 4 and scene.get("top_bar") in parts and scene.get("bottom_bar") in parts and scene.get("stack") in parts and scene.get("speed_btn") in parts
+		and not d._cap in parts and not d in parts, "물러나는 것: 위·아래 띠 · 안내 쪽지 줄 · 배속 칩 … (%d개 — 자막 카드는 아님)" % parts.size())
+	check(_hud_as(d).all(func(a: float) -> bool: return a == 1.0) and d.hud_alpha() == 1.0, "연출 전: 띠가 다 보임")
+	var l := _wish(v)
+	var who := v.person(int(l.get("from", -1)))
+	if who == null:
+		check(false, "소원 편지")
+		_drop(scene)
+		return
+	who.sleeping = false
+	vw.sync(0.1)
+	v.grant_wish(int(l["id"]))
+	d.watch(v, true)
+	_frames(scene, 0.2)
+	check(d.playing() and d.hud_alpha() < 1.0 and d.hud_alpha() > 0.0, "연출이 시작되면 띠가 스르르 (%.2f)" % d.hud_alpha())
+	_frames(scene, 0.8)
+	check(d.hud_alpha() == 0.0 and _hud_as(d).all(func(a: float) -> bool: return a == 0.0), "1초 안에 띠가 다 물러남 (%.1f초 동안)" % StageDirector.HUD_FADE)
+	check(not d._chip.visible, "'천천히 — …' 띠는 가까운 장면 위에 뜨지 않음")
+	check(d.hint_shown() and d._hint.modulate.a > 0.3 and d._hint.modulate.a < 0.8 and d._hint.text.contains("건너뛰기"), "작은 '%s' 귀띔만 남음" % d._hint.text)
+	(scene.get("speed_btn") as CanvasItem).modulate = Color(1, 1, 1, 1)      # 장면이 매 화면 색을 다시 칠하는 단추
+	_frames(scene, 0.1)
+	check((scene.get("speed_btn") as CanvasItem).modulate.a == 0.0, "장면이 단추 색을 다시 칠해도 연출 동안엔 물러나 있음")
+	d.tap()
+	_frames(scene, 0.1)
+	check(d.skip_shown() and not d.hint_shown(), "첫 톡: [건너뛰기]가 뜨면 귀띔은 비킴")
+	_frames(scene, StageDirector.SKIP_HOLD + 0.3)
+	check(d.playing() and not d.skip_shown() and d.hint_shown(), "[건너뛰기]가 사라지면 귀띔이 다시")
+	_frames(scene, 5.0)
+	check(d.playing() and d.hud_alpha() == 0.0, "연출 내내 물러나 있음 (%.1f초)" % d.t)
+	_frames(scene, 2.6)
+	check(not d.playing(), "첫 기적이 끝남")
+	_frames(scene, 0.5)
+	check(d.hud_alpha() == 1.0 and _hud_as(d).all(func(a: float) -> bool: return a == 1.0) and not d.hint_shown(), "끝나면 띠가 다 돌아옴")
+	_frames(scene, 3.0)
+	# 짧은 판: 띠 그대로
+	var l2 := _wish(v)
+	if not l2.is_empty():
+		v.grant_wish(int(l2["id"]))
+		d.watch(v, true)
+		_frames(scene, 1.0)
+		check(not d.playing() and d.mini_log.size() == 1 and d.hud_alpha() == 1.0 and _hud_as(d).all(func(a: float) -> bool: return a == 1.0) and not d.hint_shown(),
+			"짧은 판(wish_more) 동안 띠는 그대로")
+		_frames(scene, 5.0)
+	# 건너뛰기: 곧바로 돌아오기 시작 → 다 돌아옴
+	var baby := _birth(v)
+	d.watch(v, true)
+	if baby == null or not d.playing():
+		check(false, "첫 아기 연출 (%s)" % d.id)
+		_drop(scene)
+		return
+	_frames(scene, 3.0)
+	check(d.id == "first_baby" and d.hud_alpha() == 0.0 and not d._chip.visible and d.hint_shown(), "첫 아기: 띠가 물러남 · 귀띔만 (%s %.2f 칩 %s 귀띔 %s 건너뛰기 %s)" % [d.id, d.hud_alpha(), str(d._chip.visible), str(d.hint_shown()), str(d.skip_shown())])
+	d.tap()
+	d.tap()
+	check(not d.playing() and not d.hint_shown(), "건너뜀 — 귀띔도 곧바로 사라짐")
+	_frames(scene, 0.2)
+	check(d.hud_alpha() > 0.0 and d.hud_alpha() < 1.0, "건너뛰면 띠가 돌아오기 시작 (%.2f)" % d.hud_alpha())
+	_frames(scene, 0.4)
+	check(d.hud_alpha() == 1.0 and _hud_as(d).all(func(a: float) -> bool: return a == 1.0), "건너뛴 뒤에도 띠가 다 돌아옴")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 말풍선은 안전한 네모(옆 가장자리 안 · 위·아래 띠와 노치 여백 사이) 안에 — 화면 끝에 선 이웃의 말이 잘리지 않게
+func test_bubbles_safe() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var safe := Rect2(6, 40, 378, 700)
+	check(SafeArea.keep_in(Vector2(380, 5), Vector2(60, 20), safe) == Vector2(324, 40) and SafeArea.keep_in(Vector2(100, 100), Vector2(60, 20), safe) == Vector2(100, 100)
+		and SafeArea.keep_in(Vector2(-30, 900), Vector2(60, 20), safe) == Vector2(6, 720), "SafeArea.keep_in: 밖이면 안으로 · 안이면 그대로")
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var old_fake := SafeArea.fake
+	SafeArea.fake = Vector2(32, 16)                    # 노치 32 · 제스처 막대 16
+	scene.call("layout_bars")
+	var vs: Vector2 = scene.get_viewport().get_visible_rect().size
+	var rect: Rect2 = scene.call("bubble_rect", vs)
+	var top_h := float(scene.get("top_h"))
+	var bottom_h := float(scene.get("bottom_h"))
+	check(rect.position.x > 0.0 and rect.end.x < vs.x and rect.position.y >= 32.0 + UiTheme.TOUCH and rect.end.y <= vs.y - 16.0 - 54.0,
+		"말풍선 네모 %s: 옆 가장자리 안 · 위 띠(노치 포함) 아래 · 아래 띠(제스처 막대 포함) 위" % str(rect))
+	var ms := Vector2(118, 21)
+	var inside := true
+	for emote: bool in [false, true]:
+		for p: Vector2 in [Vector2(vs.x - 1.0, 300), Vector2(1, 300), Vector2(vs.x * 0.5, top_h + 21.0), Vector2(vs.x - 1.0, top_h + 21.0), Vector2(1, vs.y - bottom_h - 9.0)]:
+			var pos: Vector2 = scene.call("bubble_pos", p, ms, emote, vs)
+			var ext: Vector2 = scene.get("BUBBLE_EMOTE_EXT") if emote else Vector2.ZERO
+			inside = inside and rect.encloses(Rect2(pos - Vector2(0, ext.y), ms + ext))
+	check(inside, "화면 끝에 선 사람의 말풍선(기분 그림 포함)도 네모 안")
+	var mid: Vector2 = scene.call("bubble_pos", Vector2(vs.x * 0.5, 400), ms, true, vs)
+	check(mid == Vector2(roundf(vs.x * 0.5 - ms.x * 0.5), roundf(400 - ms.y - 2.0)), "가운데 선 사람의 말풍선은 머리 위 그대로")
+	# 첫 아기 연출의 말풍선들
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	vw.sync(0.1)
+	var baby := _birth(v)
+	d.watch(v, true)
+	if baby == null or not d.playing():
+		check(false, "첫 아기 연출")
+	else:
+		_frames(scene, 5.8)
+		var box: Control = scene.get("bubbles")
+		for c in box.get_children():
+			box.remove_child(c)
+			c.free()
+		var shown: int = scene.call("_bubbles_of", v, vw, vs, 0)
+		var all_in := true
+		var labels := 0
+		for c in box.get_children():
+			if c is Label:
+				labels += 1
+				all_in = all_in and rect.encloses(Rect2((c as Label).position, (c as Label).get_minimum_size()))
+			elif c is Control:
+				all_in = all_in and rect.grow(0.5).encloses(Rect2((c as Control).position, (c as Control).size))
+		check(all_in and labels == shown, "첫 아기 연출의 말풍선 %d개(기분 그림 포함)가 모두 네모 안 (연출의 말 %d줄)" % [labels, vw.stage_say.size()])
+		d.skip()
+	SafeArea.fake = old_fake
+	scene.call("layout_bars")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 연출의 소리: 표가 부르는 소리 파일이 모두 있고, 아기 옹알이·웃음과 새 소리 넷이 제 박자에 걸려 있다
+func test_moment_sounds() -> void:
+	var specs := {"miracle": Stagings.SCENES["miracle"], "first_baby": Stagings.SCENES["first_baby"],
+		"wish_more": Stagings.MINIS["wish_more"], "baby_more": Stagings.MINIS["baby_more"]}
+	var missing := PackedStringArray()
+	for sid: String in specs:
+		for id: String in Stagings.sound_ids(specs[sid]):
+			if not ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3"):
+				missing.append("%s:%s" % [sid, id])
+	check(missing.is_empty(), "연출이 부르는 소리 파일이 모두 있음 %s" % ", ".join(missing))
+	check(Stagings.fx_rows(["chime", -6.0]).size() == 1 and Stagings.fx_rows([["chime", -6.0], ["paper", -8.0, "Room"]]).size() == 2 and Stagings.fx_rows([]).is_empty(),
+		"소리 한 줄 · 여러 줄 · 없음 (Stagings.fx_rows)")
+	var fb: Array = Stagings.sound_ids(specs["first_baby"])
+	check("baby_coo_0" in fb and "baby_coo_1" in fb and "baby_giggle_0" in fb and "crowd_aww" in fb and "door_creak" in fb,
+		"첫 아기: 문 삐걱 · 옹알이 · 웃음 · 이웃의 '아아~' (%s)" % str(fb))
+	var bm: Array = Stagings.sound_ids(specs["baby_more"])
+	check("baby_giggle_1" in bm and "crowd_aww" in bm, "둘째부터: 아기 웃음 · '아아~' (%s)" % str(bm))
+	var mi: Array = Stagings.sound_ids(specs["miracle"])
+	check("gift_twinkle" in mi and "small_cheer" in mi, "첫 기적: 반짝이는 소리 · 작은 환호 (%s)" % str(mi))
+	var wm: Array = Stagings.sound_ids(specs["wish_more"])
+	check("gift_twinkle" in wm and "small_cheer" in wm, "소원 또 들어줌: 반짝이는 소리 · 작은 환호 (%s)" % str(wm))
+	# 긴 연출은 마을 소리(Village·Voice 버스)를 낮추므로 연출의 소리는 Room 버스로 — 안 그러면 들리지 않음
+	var hushed := PackedStringArray()
+	for sid: String in ["miracle", "first_baby"]:
+		for b: Dictionary in specs[sid]["beats"]:
+			for r: Array in Stagings.fx_rows(b.get("fx", [])):
+				if r.size() < 3 or String(r[2]) in GameAudio.MUFFLED:
+					hushed.append(String(r[0]))
+			for r: Array in Stagings.fx_rows(b.get("fxr", [])):
+				if r.size() < 4 or String(r[3]) in GameAudio.MUFFLED:
+					hushed.append(String(r[1]))
+	check(hushed.is_empty(), "긴 연출의 소리는 낮춰지지 않는 버스로 %s" % ", ".join(hushed))
+	var lic := FileAccess.get_file_as_string("res://audio/LICENSES.csv")
+	var bad := PackedStringArray()
+	for id: String in ["crowd_aww", "small_cheer", "gift_twinkle", "door_creak"]:
+		var st: AudioStream = load(GameAudio.SFX_DIR + id + ".mp3") if ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3") else null
+		if st == null or st.get_length() > 1.2 or not lic.contains(id):
+			bad.append(id)
+	check(bad.is_empty(), "새 소리 넷: 1.2초 안 · 라이선스 목록에 있음 %s" % ", ".join(bad))
+	# 그 역할이 없으면 그 소리도 없음 (이웃이 없는 마을에 환호가 나지 않게)
+	var role_only := true
+	for sid: String in specs:
+		for b: Dictionary in specs[sid]["beats"]:
+			for r: Array in Stagings.fx_rows(b.get("fx", [])):
+				role_only = role_only and not String(r[0]) in ["crowd_aww", "small_cheer", "child_laugh"]
+	check(role_only, "여럿의 소리('아아~' · 환호 · 아이 웃음)는 그 사람들이 있을 때만 (fxr)")
+
+
+## 짧은 판은 마을 기본 배율에서도 보인다: 빛·하트는 화면에서 비슷한 크기 (멀수록 크게), 폴짝도 화면에서 보이는 높이
+func test_mini_readable() -> void:
+	fs.reset()
+	Village.start_aware = true
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var cam: JarCamera = scene.get("cam")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	var bigs := {}
+	var hop_px := {}
+	var fx_px := {}
+	var held := false
+	for ppu: float in [9.0, 16.0, 32.0, 120.0]:
+		var l := _wish(v)
+		var who := v.person(int(l.get("from", -1)))
+		if who == null:
+			continue
+		who.sleeping = false
+		v.grant_wish(int(l["id"]))
+		cam.ppu = ppu
+		cam.ppu_goal = ppu
+		vw.sync(0.1)
+		d._queue_mini("wish_more", v, {"id": int(l["id"]), "who": who.id})
+		_frames(scene, 0.1)
+		var c: Dictionary = d._minis[0]["cast"] if d.minis_busy() else {}
+		bigs[ppu] = float(c.get("big", 0.0))
+		for p: Variant in d._props:
+			if is_instance_valid(p) and (p as MomentFx).kind == "sparkle":
+				fx_px[ppu] = (p as MomentFx).size * ppu
+		var m: Node3D = vw.residents.get(who.id)
+		var top := 0.0
+		for i in 26:
+			_frames(scene, 0.05, 0.05)
+			if m != null:
+				top = maxf(top, m.position.y - vw.gy(m.position.x, m.position.z))
+		hop_px[ppu] = top * ppu
+		held = held or not cam.hold.is_empty() or d.playing()
+		_frames(scene, 6.0)
+	check(bigs.size() == 4 and is_equal_approx(float(bigs[16.0]) * 16.0, StageDirector.MINI_PX) and is_equal_approx(float(bigs[32.0]) * 32.0, StageDirector.MINI_PX),
+		"마을 기본 배율(16)과 가까운 배율(32): 빛·하트가 화면에서 같은 크기 (배수 %s)" % str(bigs))
+	check(is_equal_approx(float(bigs.get(9.0, 0.0)), StageDirector.MINI_BIG) and is_equal_approx(float(bigs.get(120.0, 0.0)), 1.0),
+		"가장 멀리서는 %.0f배까지만 · 가까이서는 제 크기" % StageDirector.MINI_BIG)
+	check(fx_px.size() == 4 and float(fx_px[16.0]) >= 100.0 and is_equal_approx(float(fx_px[16.0]), float(fx_px[32.0])), "반짝임의 화면 크기 %s" % str(fx_px))
+	check(float(hop_px.get(16.0, 0.0)) >= StageDirector.MINI_HOP_PX * 0.8 and float(hop_px.get(9.0, 0.0)) >= 6.0 and float(hop_px.get(32.0, 0.0)) >= StageDirector.MINI_HOP_PX * 0.8,
+		"폴짝이 화면에서 보이는 높이 (화면 점 %s)" % str(hop_px))
+	check(not held, "그래도 카메라를 붙잡지 않음")
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 빠졌던 콘티: 첫 아기 — 문이 열리며 빛이 번진 뒤에 엄마가 나옴 · 첫 기적 — 빛보다 먼저 부드러운 그늘이 지나감 (화면만)
+func test_door_and_shade() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	vw.sync(0.1)
+	var baby := _birth(v)
+	d.watch(v, true)
+	if baby == null or not d.playing():
+		check(false, "첫 아기 연출")
+		_drop(scene)
+		return
+	var mom := v.person(int(baby.parents[0]))
+	var mm: Node3D = vw.residents.get(mom.id)
+	_frames(scene, 0.1)                                # 엄마 인형이 집 안 자리에 놓임
+	var p0: Vector3 = mm.position if mm != null else Vector3.ZERO
+	_frames(scene, 0.2)
+	var door: MomentFx = null
+	for p: Variant in d._props:
+		if is_instance_valid(p) and (p as MomentFx).kind == "door":
+			door = p
+	check(door != null and door.door_open() > 0.0 and door.door_open() < 0.6 and door._door.scale.x < 0.6, "문이 열리기 시작: 가는 빛 한 줄 (%.2f)" % (door.door_open() if door != null else -1.0))
+	var early: float = Vector2(mm.position.x - p0.x, mm.position.z - p0.z).length() if mm != null else 0.0
+	_frames(scene, 1.1)
+	check(door != null and is_instance_valid(door) and door.door_open() >= 0.99 and is_equal_approx(door._door.scale.x, 1.0), "1초쯤에 문이 다 열림 (빛이 부채꼴로 번짐)")
+	var later: float = Vector2(mm.position.x - p0.x, mm.position.z - p0.z).length() if mm != null else 1.0
+	check(early < 0.05 and later > 0.1, "엄마는 문이 열리기 시작한 뒤에 나옴 (0.3초 %.2f칸 → 1.4초 %.2f칸 — 인형을 통째로 옮김)" % [early, later])
+	check(door != null and door.get_child_count() == 1 and door._door.mesh is QuadMesh, "문 빛은 그림 한 장 (집 그림·사람 그림을 자르지 않음)")
+	d.skip()
+	_frames(scene, 0.3)
+	check(d._props.is_empty(), "건너뛰면 문 빛도 곧바로 치움")
+	_drop(scene)
+	# 첫 기적의 그늘
+	fs.reset()
+	Village.start_aware = true
+	scene = _scene()
+	v = scene.get("village")
+	d = scene.get("director")
+	vw = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, false)
+	var l := _wish(v)
+	var who := v.person(int(l.get("from", -1)))
+	if who == null:
+		check(false, "소원 편지")
+		_drop(scene)
+		return
+	who.sleeping = false
+	vw.sync(0.1)
+	v.grant_wish(int(l["id"]))
+	d.watch(v, true)
+	var peak := 0.0
+	var mid := Vector4.ZERO
+	for i in 24:
+		_frames(scene, 0.1)
+		var sh := d.shadow_param()
+		peak = maxf(peak, sh.w)
+		if i == 7:
+			mid = sh
+	check(mid.w > 0.3 and mid.z < StageDirector.SHADOW_R and mid.z >= 3.0, "빛보다 먼저 부드러운 그늘이 지나감 (반지름 %.1f칸 — 깨달음의 큰 그림자 %.0f칸보다 작게)" % [mid.z, StageDirector.SHADOW_R])
+	check(peak > 0.4 and peak <= 0.75 and d.shadow_param().w == 0.0 and d._wgift != null and not d._wgift.landed,
+		"그늘은 옅게(%.2f) 한 번 지나가고, 두루마리가 닿기 전에 걷힘" % peak)
+	check(not (Stagings.SCENES["first_baby"]["beats"] as Array).any(func(b: Dictionary) -> bool: return b.has("shadow")), "첫 아기엔 그늘 없음 (깨닫기 전에도 태어남)")
+	_frames(scene, 0.5)
+	d.skip()
+	check(d.shadow_param().w == 0.0, "건너뛰면 그늘도 걷혀 있음")
+	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()
