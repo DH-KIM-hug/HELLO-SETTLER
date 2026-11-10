@@ -1,7 +1,9 @@
-## 꿀떡이 (Q2-e — 사용자의 강아지를 닮게) 한 장 모음 — 창이 필요: godot --path godot -s res://tools/shot_refdog.gd -- <이름표> [village]
+## 꿀떡이 (Q2-e — 사용자의 강아지를 닮게) 한 장 모음 — 창이 필요: godot --path godot -s res://tools/shot_refdog.gd -- <이름표> [studio|village] [파일 머리말]
+##   파일 머리말 (기본 refdog): 아래 이름의 'refdog' 자리 — 두 번째 손질은 refdog2 (godot_shots/dogs/refdog2_*.png)
 ##   → godot_shots/dogs/refdog_kk_views_<이름표>.png  네 보기 (윗줄 그대로 · 아랫줄 뒤집힘 — 제 왼쪽 귀가 늘 생강빛인지)
 ##   → godot_shots/dogs/refdog_kk_poses_<이름표>.png  동작 · 겨울 니트 · 마을 크기 두 가지 (가까이 44 · 기본 20) · 다른 강아지와 견줌
 ##   → godot_shots/dogs/refdog_coats_<이름표>.png  다른 털 조합 여덟 (고치기 전후로 나빠지지 않았는지)
+##   → godot_shots/dogs/refdog_kk_acts_<이름표>.png  네 보기 × 걷기 · 앉기 · 놀자 절 · 짖기 (가까이) + 같은 열여섯을 마을 크기 둘 (가까이 44 · 기본 20)로
 ##   village: 첫 병 마을 그대로 (수첩이 펼쳐진 병 — 꿀떡이는 처음부터 있다)에서 꿀떡이를 찾아 가까이 44 · 기본 20으로
 ##   → godot_shots/dogs/refdog_village_<이름표>_sheet.png  (윗줄 가까이 44 · 아랫줄 기본 20 — 앞 · 비스듬히 앞 좌우 · 비스듬히 뒤 · 뒤, 1.5배)
 ## 게임과 같은 내려다보는 카메라 · 해 하나. 장면을 멈춰(빠르기 0) 위상을 골라 찍는다. 게임 그림만 담는다 (바깥 그림 없음).
@@ -16,6 +18,7 @@ const PX := 650.0                # 화면 px / 세계 1
 var out_dir := ""
 var tag := "now"
 var mode := "studio"
+var pre := "refdog"
 var frame := 0
 var plan: Array[Callable] = []
 var step := 0
@@ -37,6 +40,8 @@ func _initialize() -> void:
 		tag = String(args[0])
 	if args.size() > 1:
 		mode = String(args[1])
+	if args.size() > 2:
+		pre = String(args[2])
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/dogs").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	if mode == "village":
@@ -62,7 +67,8 @@ func _initialize() -> void:
 	w.add_child(holder)
 	ui = CanvasLayer.new()
 	root.add_child(ui)
-	plan = [_kk_views, _shot.bind("refdog_kk_views_" + tag), _kk_poses, _shot.bind("refdog_kk_poses_" + tag), _coats, _shot.bind("refdog_coats_" + tag)]
+	plan = [_kk_views, _shot.bind(pre + "_kk_views_" + tag), _kk_poses, _shot.bind(pre + "_kk_poses_" + tag), _coats, _shot.bind(pre + "_coats_" + tag),
+		_kk_acts, _shot.bind(pre + "_kk_acts_" + tag)]
 
 
 func _process(_dt: float) -> bool:
@@ -178,6 +184,25 @@ func _kk_poses() -> int:
 	return 8
 
 
+## 네 보기 × 걷기 · 앉기 · 놀자 절 · 짖기 — 가까이 (윗 네 줄) + 마을에서 보이는 크기 그대로 (아래 두 줄: 가까이 44 → 61px · 기본 20 → 28px)
+func _kk_acts() -> int:
+	_clear()
+	_frame_cam(0.0)
+	var dg := kk_dog()
+	var acts := [["walk", 0.12, "걷기"], ["sit", 0.25, "앉기"], ["bow", 0.25, "놀자 절"], ["bark", 0.3, "짖기"]]
+	var names := ["앞", "비스듬히 앞", "비스듬히 뒤", "뒤"]
+	for a in acts.size():
+		for view in 4:
+			var cx := 450.0 * (view + 0.5)
+			_at(cx, 200.0 * a + 192.0, dg, String(acts[a][0]), view, 1.0, float(acts[a][1]), 172.0)
+			_text(450.0 * view + 10.0, 200.0 * a + 4.0, "%s · %s" % [acts[a][2], names[view]], 16)
+			var sx := 62.0 + 110.0 * (a * 4 + view)
+			_at(sx, 895.0, dg, String(acts[a][0]), view, 1.0, float(acts[a][1]), 61.0)
+			_at(sx, 985.0, dg, String(acts[a][0]), view, 1.0, float(acts[a][1]), 28.0)
+	_text(8.0, 806.0, "마을 크기: 가까이 (44) · 기본 (20) — 걷기 · 앉기 · 놀자 절 · 짖기 × 네 보기", 16)
+	return 8
+
+
 func _coats() -> int:
 	_clear()
 	_frame_cam(430.0)
@@ -282,7 +307,7 @@ func _v_shot(name: String) -> int:
 	var sp := c3.unproject_position(scene.ground_point(Vector2(kk["x"], kk["y"])) + Vector3(0, 0.25, 0)) * 3.0
 	var h := Vector2(140, 113)            # 실제 화면 280×226 픽셀을 1.5배로 (꿀떡이: 가까이 61 · 기본 28 픽셀 키)
 	var rect := Rect2i(Vector2i(sp - h), Vector2i(h * 2.0)).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
-	var path := out_dir.path_join("refdog_village_%s_%s.png" % [tag, name])
+	var path := out_dir.path_join("%s_village_%s_%s.png" % [pre, tag, name])
 	var cut := img.get_region(rect)
 	cut.resize(420, 340, Image.INTERPOLATE_LANCZOS)
 	cut.save_png(path)
@@ -309,7 +334,7 @@ func _v_sheet() -> int:
 	sheet.fill(Color("1e1f2a"))
 	for i in imgs.size():
 		sheet.blit_rect(imgs[i], Rect2i(Vector2i.ZERO, imgs[i].get_size()), Vector2i((i % cols) * (cw + 6), (i / cols) * (ch + 6)))
-	var out := out_dir.path_join("refdog_village_%s_sheet.png" % tag)
+	var out := out_dir.path_join("%s_village_%s_sheet.png" % [pre, tag])
 	sheet.save_png(out)
 	for p in shots:
 		DirAccess.remove_absolute(p)
