@@ -45,7 +45,10 @@ const EMOTE_BUBS := ["love", "cheer", "sad", "song", "angry"]
 ## 반응 표. dur = 길이(초). 길(track) = [[때(0~1), 값], …] — 사이는 부드럽게 잇는다:
 ##   y 폴짝 높이(몸 키 배) · st 세로 늘어남(가로는 부피가 같게 줄어듦) · w 가로만 · k 전체 크기 · roll 바라보는 쪽으로 숙임(rad) · turn 도는 바퀴 수.
 ##   끝 값은 모두 제자리(0 또는 1, turn은 정수) — rollover만 0.5에서 멈춘다 (latch: 자는 동안 돌아누운 채).
-## bub = 말풍선 그림 후보 (bub_aware = 깨달은 뒤 후보) · voice = [줄, 몇째 녹음] (voice_aware) · sfx = [효과음, 음높이, 크기 dB] · hint = 인형에게 부탁.
+## bub = 말풍선 그림 후보 (bub_aware = 깨달은 뒤 후보) · voice = [줄, 몇째 녹음] (voice_aware · voice_if = 그 모습일 때만) · hint = 인형에게 부탁.
+## snd = [[작은 소리 후보 (res://audio/sfx/<id>.mp3 — 말 없는 소리만)…], 크기 dB] · snd_at = 나오는 때 (0~1, 없으면 바로 — 재채기는 '취!'가 터질 때에 맞춤)
+##   · snd_by = "voice"면 그 사람 목소리 높이로 고름 (높음 = 첫째, 낮음 = 마지막), 아니면 번갈아 · snd_pitch = 음높이 배.
+##   voice_if가 맞아 제 목소리를 낸 반응은 snd를 내지 않는다 (앓는 기침이 한숨을 대신함).
 const DEFS := {
 	# ── 눌림 (손가락이 닿은 순간) · 놓임 (끌어서 톡이 아니게 됨) ──
 	"press": {"dur": 0.06, "stay": true, "st": [[0, 1], [1, 0.88]]},
@@ -66,7 +69,7 @@ const DEFS := {
 	"wobble": {"dur": 0.95, "hint": "still", "bub": ["q"], "voice": ["hello", 0],
 		"st": [[0, 1], [0.1, 0.92], [0.26, 1.04], [0.5, 1]],
 		"roll": [[0, 0], [0.13, 0.22], [0.32, -0.19], [0.5, 0.14], [0.67, -0.09], [0.83, 0.04], [1, 0]]},
-	"sneeze": {"dur": 1.05, "hint": "still", "bub": ["sneeze"], "bub_at": 0.5,
+	"sneeze": {"dur": 1.05, "hint": "still", "bub": ["sneeze"], "bub_at": 0.5, "snd": [["sneeze_0", "sneeze_1"], 0.0], "snd_at": 0.34, "snd_by": "voice",
 		"y": [[0.52, 0], [0.62, 0.10], [0.74, 0]],
 		"st": [[0, 1], [0.18, 1.05], [0.34, 1.10], [0.46, 1.13], [0.54, 0.78], [0.68, 1.06], [0.82, 0.98], [1, 1]],
 		"roll": [[0, 0], [0.2, -0.05], [0.46, -0.13], [0.54, 0.16], [0.7, 0.02], [0.85, 0]]},
@@ -89,14 +92,14 @@ const DEFS := {
 		"st": [[0, 1], [0.2, 0.9], [0.4, 1.0], [0.6, 0.92], [0.8, 1.0]],
 		"roll": [[0, 0], [0.2, 0.08], [0.4, 0.0], [0.6, 0.07], [0.8, 0]]},
 	# ── 아기 · 잠 · 짐 · 아픔 ──
-	"giggle": {"dur": 0.9, "bub": ["giggle"], "sfx": ["child_laugh", 1.35, -8.0],
+	"giggle": {"dur": 0.9, "bub": ["giggle"], "snd": [["baby_giggle_0", "baby_giggle_1"], -1.0],
 		"y": [[0, 0], [0.1, 0.1], [0.2, 0], [0.34, 0.08], [0.46, 0]],
 		"st": [[0, 1], [0.06, 0.88], [0.14, 1.08], [0.24, 0.94], [0.36, 1.04], [0.5, 1]],
 		"roll": [[0, 0], [0.1, 0.2], [0.26, -0.2], [0.42, 0.17], [0.58, -0.14], [0.74, 0.08], [0.9, 0]]},
-	"coo": {"dur": 0.9, "bub": ["song"], "sfx": ["child_laugh", 1.5, -9.0],
+	"coo": {"dur": 0.9, "bub": ["song"], "snd": [["baby_coo_0", "baby_coo_1"], -1.0],
 		"y": [[0.02, 0], [0.12, 0.14], [0.24, 0], [0.36, 0.12], [0.48, 0], [0.6, 0.09], [0.72, 0]],
 		"st": [[0, 1], [0.03, 0.88], [0.12, 1.1], [0.24, 0.9], [0.36, 1.08], [0.48, 0.92], [0.6, 1.05], [0.74, 0.95], [0.88, 1]]},
-	"rollover": {"dur": 1.0, "latch": true, "bub": ["zzz"],
+	"rollover": {"dur": 1.0, "latch": true, "bub": ["zzz"], "snd": [["sleep_mumble_0", "sleep_mumble_1"], -7.0], "snd_at": 0.12,
 		"y": [[0.1, 0], [0.3, 0.12], [0.5, 0]],
 		"st": [[0, 1], [0.1, 0.92], [0.3, 1.06], [0.52, 0.9], [0.7, 1.03], [0.85, 1]],
 		"turn": [[0.12, 0], [0.5, 0.5]]},
@@ -108,46 +111,49 @@ const DEFS := {
 		"st": [[0, 1], [0.06, 0.9], [0.16, 1.05], [0.26, 1]],
 		"turn": [[0.2, 0], [0.32, 0.5], [0.52, 0.5], [0.64, 1.0]],
 		"roll": [[0.2, 0], [0.32, 0.06], [0.7, 0.06], [0.88, 0]]},
-	"sigh": {"dur": 1.15, "hint": "still", "bub": ["sigh"], "bub_at": 0.3, "voice": ["sick", 0], "voice_if": "sick",
+	"sigh": {"dur": 1.15, "hint": "still", "bub": ["sigh"], "bub_at": 0.3, "snd": [["sigh_0", "sigh_1"], -2.0], "snd_at": 0.22, "snd_by": "voice",
 		"st": [[0, 1], [0.22, 1.04], [0.5, 0.92], [0.72, 0.92], [0.92, 1]],
 		"roll": [[0.22, 0], [0.5, 0.06], [0.72, 0.06], [0.92, 0]]},
-	"droop": {"dur": 1.1, "hint": "still", "bub": ["sad"], "voice": ["sick", 0], "voice_if": "sick",
+	"droop": {"dur": 1.1, "hint": "still", "bub": ["sad"], "voice": ["sick", 0], "voice_if": "sick", "snd": [["sigh_0", "sigh_1"], -4.0], "snd_at": 0.1, "snd_by": "voice",
 		"st": [[0, 1], [0.3, 0.94], [0.7, 0.95], [0.9, 1]],
 		"roll": [[0, 0], [0.3, 0.05], [0.6, -0.04], [0.85, 0]]},
 	# ── 잇달아 누름 (웃긴 반응) ──
-	"dizzy": {"dur": 1.35, "hint": "still", "bub": ["swirl"], "bub_at": 0.25, "voice": ["seeds", 1],
+	"dizzy": {"dur": 1.35, "hint": "still", "bub": ["swirl"], "bub_at": 0.25, "snd": [["dizzy_whoa_0", "dizzy_whoa_1"], -1.0], "snd_at": 0.1,
 		"y": [[0.04, 0], [0.14, 0.08], [0.6, 0.05], [0.68, 0]],
 		"turn": [[0.04, 0], [0.62, 2.0]],
 		"roll": [[0.62, 0], [0.72, 0.14], [0.82, -0.11], [0.9, 0.06], [0.97, 0]]},
-	"plop": {"dur": 1.25, "hint": "still", "bub": ["swirl"], "bub_at": 0.4, "voice": ["tap", 1],
+	"plop": {"dur": 1.25, "hint": "still", "bub": ["swirl"], "bub_at": 0.4, "voice": ["tap", 1], "snd": [["drop_thud"], -9.0], "snd_at": 0.42, "snd_pitch": 1.5,
 		"y": [[0.05, 0], [0.2, 0.2], [0.36, 0]],
 		"st": [[0, 1], [0.05, 0.85], [0.18, 1.12], [0.36, 1.0], [0.42, 0.62], [0.5, 0.72], [0.58, 0.66], [0.78, 0.68], [0.9, 1.05], [1, 1]],
 		"roll": [[0.42, 0], [0.52, 0.06], [0.62, -0.05], [0.72, 0.03], [0.8, 0]]},
-	"puff": {"dur": 1.2, "hint": "still", "bub": ["angry"], "bub_at": 0.2, "voice": ["hello", 0],
+	"puff": {"dur": 1.2, "hint": "still", "bub": ["angry"], "bub_at": 0.2, "snd": [["pout_hmph"], -1.0], "snd_at": 0.2,
 		"w": [[0, 1], [0.14, 0.94], [0.3, 1.3], [0.7, 1.28], [0.8, 0.94], [0.9, 1.03], [1, 1]],
 		"st": [[0, 1], [0.3, 1.05], [0.7, 1.05], [0.8, 0.98], [1, 1]],
 		"roll": [[0.3, 0], [0.36, 0.04], [0.42, -0.04], [0.48, 0.04], [0.54, -0.04], [0.6, 0.04], [0.66, -0.04], [0.72, 0]]},
 	# ── 강아지 ──
-	"dog_wag": {"dur": 0.85, "hint": "bark", "bub": ["bark"],
+	"dog_wag": {"dur": 0.85, "hint": "bark", "bub": ["bark"], "snd": [["dog_yip_0", "dog_yip_1"], -2.0],
 		"y": [[0.05, 0], [0.28, 0.4], [0.5, 0], [0.62, 0.1], [0.74, 0]],
 		"st": [[0, 1], [0.05, 0.82], [0.2, 1.15], [0.5, 1], [0.56, 0.86], [0.68, 1.04], [0.8, 1]],
 		"roll": [[0.5, 0], [0.56, 0.12], [0.64, -0.12], [0.72, 0.1], [0.8, -0.08], [0.88, 0.04], [0.95, 0]]},
-	"dog_spin": {"dur": 0.95, "hint": "still", "bub": ["bark", "song"],
+	"dog_spin": {"dur": 0.95, "hint": "still", "bub": ["bark", "song"], "snd": [["dog_yip_1", "dog_yip_0"], -3.0],
 		"y": [[0.04, 0], [0.2, 0.2], [0.4, 0.08], [0.7, 0.12], [0.84, 0]],
 		"st": [[0, 1], [0.04, 0.86], [0.2, 1.1], [0.84, 1.0], [0.9, 0.9], [1, 1]],
 		"turn": [[0.06, 0], [0.7, 1.0]]},
-	"dog_bounce": {"dur": 0.9, "hint": "bark", "bub": ["song"], "bub_aware": ["love", "song"],
+	"dog_bounce": {"dur": 0.9, "hint": "bark", "bub": ["song"], "bub_aware": ["love", "song"], "snd": [["dog_yip_0", "dog_yip_1"], -2.0],
 		"y": [[0.04, 0], [0.2, 0.3], [0.38, 0], [0.46, 0], [0.62, 0.24], [0.8, 0]],
 		"st": [[0, 1], [0.04, 0.84], [0.14, 1.14], [0.34, 1.0], [0.42, 0.86], [0.54, 1.12], [0.76, 1.0], [0.84, 0.9], [0.94, 1.02], [1, 1]],
 		"roll": [[0.8, 0], [0.86, 0.08], [0.92, -0.06], [0.98, 0]]},
-	"dog_sleep": {"dur": 0.9, "bub": ["zzz"],
+	"dog_sleep": {"dur": 0.9, "bub": ["zzz"], "snd": [["dog_whine"], -5.0],
 		"st": [[0, 1], [0.15, 1.06], [0.4, 0.97], [0.6, 1]],
 		"roll": [[0, 0], [0.15, 0.06], [0.3, -0.04], [0.45, 0.03], [0.6, 0]]},
-	"dog_dizzy": {"dur": 1.3, "hint": "still", "bub": ["swirl"], "bub_at": 0.25,
+	"dog_dizzy": {"dur": 1.3, "hint": "still", "bub": ["swirl"], "bub_at": 0.25, "snd": [["dog_arf"], -2.0], "snd_at": 0.3,
 		"y": [[0.03, 0], [0.14, 0.12], [0.6, 0.06], [0.7, 0]],
 		"turn": [[0.03, 0], [0.66, 3.0]],
 		"roll": [[0.66, 0], [0.75, 0.13], [0.84, -0.1], [0.92, 0.05], [0.98, 0]]},
 }
+
+## 작은 소리의 음높이 배 — 나이대로 (그 위에 대상마다 ±1반음: GameAudio.resident_pitch)
+const SND_PITCH := {"baby": 1.12, "child": 1.1, "adult": 1.0, "elder": 0.94, "dog": 1.0}
 
 ## 화면 쪽 난수 (시뮬 난수와 무관 — 시험은 seed를 정해 씀)
 var rng := RandomNumberGenerator.new()
@@ -234,6 +240,23 @@ static func bubble_of(kind: String, aware: bool, r: RandomNumberGenerator) -> St
 
 static func duration(kind: String) -> float:
 	return float(DEFS[kind]["dur"])
+
+
+## 그 반응의 작은 소리 후보 (효과음 id — res://audio/sfx/<id>.mp3). 없으면 빈 배열
+static func sound_ids(kind: String) -> Array:
+	var d: Dictionary = DEFS.get(kind, {})
+	return (d["snd"] as Array)[0] if d.has("snd") else []
+
+
+## 후보 가운데 하나 — 난수를 쓰지 않는다 (시뮬 난수는 물론 화면 난수의 흐름도 그대로): 대상 번호 + 지금까지의 반응 수로 번갈아.
+## snd_by = "voice"인 소리(재채기·한숨)는 그 사람 목소리 높이로: high(여자·아이) = 첫째, 아니면 마지막
+static func sound_pick(kind: String, id: int, turn: int, high := false) -> String:
+	var pool := sound_ids(kind)
+	if pool.is_empty():
+		return ""
+	if String(DEFS[kind].get("snd_by", "")) == "voice":
+		return String(pool[0] if high else pool[pool.size() - 1])
+	return String(pool[posmod(id + turn, pool.size())])
 
 
 ## 길 하나의 u(0~1) 때 값. arc = 폴짝: 오를 땐 점점 느리게, 내릴 땐 점점 빠르게 (던져 올린 공처럼)
@@ -361,7 +384,7 @@ func react_resident(vw: VillageView, r: Resident, forced := "") -> String:
 	var e: Dictionary = _active[key]
 	if _holdable(m) and not e.has("anchor"):
 		e["anchor"] = m.position
-	_voice(kind, ctx, r)
+	_voice(kind, ctx, r, e)
 	return kind
 
 
@@ -379,7 +402,7 @@ func react_dog(vw: VillageView, id: int, forced := "") -> String:
 	var dn := _dog_node(vw, id)
 	if not dn.is_empty() and dn["cd"] != null and not e.has("anchor"):
 		e["anchor"] = (dn["cd"] as CutoutDogs).dogs[id]["last"]
-	_voice(kind, ctx, null)
+	_voice(kind, ctx, null, e)
 	return kind
 
 
@@ -446,18 +469,36 @@ func _start(key: String, e: Dictionary) -> void:
 	_active[key] = e
 
 
-func _voice(kind: String, ctx: Dictionary, r: Resident) -> void:
+## 반응의 소리: 제 목소리 한마디(voice) · 말 없는 작은 소리(snd — 바로, 또는 snd_at 때에 step이 냄). 모두 GameAudio의 톡 규칙을 탄다
+## (Voice 버스 = 효과음 음량 설정, ×8부터 없음, 짧은 쉼). 고르는 데 난수를 쓰지 않는다.
+func _voice(kind: String, ctx: Dictionary, r: Resident, e: Dictionary) -> void:
 	if not sound:
 		return
 	var d: Dictionary = DEFS[kind]
-	if d.has("sfx"):
-		var s: Array = d["sfx"]
-		GameAudio.fx(String(s[0]), "Voice", float(s[2]), null, float(s[1]))
+	var spoke := d.has("voice") and not (d.has("voice_if") and not bool(ctx[String(d["voice_if"])]))
+	if spoke and r != null:
+		var line: Array = d["voice_aware"] if bool(ctx["aware"]) and d.has("voice_aware") else d["voice"]
+		GameAudio.tap_voice(r, String(line[0]), int(line[1]))
+	if not d.has("snd") or (spoke and d.has("voice_if")):
 		return
-	if r == null or not d.has("voice") or (d.has("voice_if") and not bool(ctx[String(d["voice_if"])])):
-		return
-	var v: Array = d["voice_aware"] if bool(ctx["aware"]) and d.has("voice_aware") else d["voice"]
-	GameAudio.tap_voice(r, String(v[0]), int(v[1]))
+	var id := int(e["id"])
+	var high := r != null and (r.sex == "f" or r.is_child())
+	var pitch := float(SND_PITCH.get(String(ctx["stage"]), 1.0)) * float(d.get("snd_pitch", 1.0)) * GameAudio.resident_pitch(id)
+	var s := [sound_pick(kind, id, reactions, high), float((d["snd"] as Array)[1]), pitch]
+	var at := float(d.get("snd_at", 0.0)) * float(e["dur"])
+	if at <= 0.0:
+		GameAudio.tap_sound(String(s[0]), float(s[1]), float(s[2]))
+	else:
+		e["snd"] = s                               # 몸짓의 그 순간에 (step) — 다른 반응이 이어받으면 나지 않음
+		e["snd_t"] = at
+
+
+func _late_sound(e: Dictionary) -> void:
+	if e.has("snd") and float(e["t"]) >= float(e["snd_t"]):
+		var s: Array = e["snd"]
+		e.erase("snd")
+		if sound:
+			GameAudio.tap_sound(String(s[0]), float(s[1]), float(s[2]))
 
 
 # ───────────────────────── 매 화면 ─────────────────────────
@@ -470,6 +511,7 @@ func step(dt: float, cam: Camera3D = null, top := 0.0, bottom := 0.0) -> void:
 	for key: String in _active.keys():
 		var e: Dictionary = _active[key]
 		e["t"] = float(e["t"]) + dt
+		_late_sound(e)
 		if not _step_entry(key, e, dt, cam):
 			_drop_bubble(e)
 			_active.erase(key)

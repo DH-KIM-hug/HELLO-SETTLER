@@ -1,6 +1,8 @@
 """ElevenLabs Sound Effects로 효과음 생성 (docs/AUDIO.md 3장). 키: ~/.config/elevenlabs/key
 사용: python3 godot/tools/gen_sfx.py [id ...]   (없으면 전부, 이미 있는 파일은 건너뜀; --force 로 다시)
-처리: ffmpeg로 앞뒤 무음 자르기 → 모노 44.1kHz → 음량 맞춤(RMS 목표, 피크 −1dB 제한) → mp3 (libmp3lame)."""
+처리: ffmpeg로 앞뒤 무음 자르기 → 모노 44.1kHz → 음량 맞춤(RMS 목표, 피크 −1dB 제한) → mp3 (libmp3lame).
+톡 반응 소리(TAP): 무음 문턱을 더 높게(−42dB) 자르고 1초를 넘으면 1초에서 살짝 줄여 끊음. 그 가운데 입소리(TINY)는
+주민 목소리와 같은 '작은 사람' 처리 (+4반음·1.08배 — tools/gen_voice.py의 tiny와 같은 식)."""
 import array, json, math, os, re, subprocess, sys, tempfile, urllib.request, wave
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -65,7 +67,41 @@ SFX = {
     # E1-1 깨달음 (EVENTS_STAGING 1 — 2026-11-08 극적인 판): 큰 그림자가 지나갈 때 땅울림 · 빛이 돌아올 때 음악이 크게
     "deep_rumble":     (6.0, -22, False, "a deep low soft earth rumble, slow heavy vibration as if something enormous passes far overhead, swelling in and fading out, no thunder crack"),
     "awaken_swell":    (8.0, -20, False, "a warm tender cinematic swell of soft strings and wordless airy pads rising slowly into one bright hopeful major chord that rings out, sacred and gentle"),
+    # 톡 반응 (view/tap_react.gd — 귀여움 묶음 ①): 아주 작고 부드럽고 장난감 같은 소리, 0.2~1.0초. 말(단어)은 없음
+    # (2026-11-10 세 번씩 해 보고 뺀 것: dog_yip_2 '한 번 짖는 끽' = 0.17~0.19초로 너무 짧거나 꼬리 무음, sit_plop '인형이 털썩' = 0.04~0.08초 —
+    #  털썩은 있는 drop_thud를 높고 작게 씀. 다시 해 보려면 무음 문턱(−42dB)을 그 소리만 낮추거나 프롬프트를 길게.)
+    "dog_yip_0":       (0.5, -23, False, "a tiny puppy giving one short happy high-pitched yip, small, soft and cute"),
+    "dog_yip_1":       (0.6, -23, False, "a very small puppy barking two quick playful little yips, soft, cute, toy-like"),
+    "dog_whine":       (0.8, -27, False, "a sleepy small puppy making one short soft drowsy whimpering grumble, quiet and gentle"),
+    "dog_arf":         (0.6, -24, False, "a confused dizzy small puppy making one short wobbly questioning arf with rising pitch, soft and cute"),
+    "sneeze_0":        (0.7, -23, False, "a small child's tiny cute sneeze, one soft high-pitched achoo, short, gentle, adorable"),
+    "sneeze_1":        (0.7, -23, False, "a young man's tiny cute soft sneeze, one gentle ah-choo, small, short, cartoon-like"),
+    "sigh_0":          (0.8, -27, False, "a young woman's small soft sigh, one short gentle breathy exhale, quiet"),
+    "sigh_1":          (0.8, -27, False, "one short soft tired little sigh, haah, gentle breathy exhale, quiet and small"),
+    "baby_giggle_0":   (0.8, -24, False, "a baby giggling once, one short soft happy giggle, adorable"),
+    "baby_giggle_1":   (0.8, -24, False, "a tiny baby's short bubbly little chuckle, soft and sweet"),
+    "baby_coo_0":      (0.8, -25, False, "a baby cooing softly once, one short gentle happy coo, sweet"),
+    "baby_coo_1":      (0.8, -25, False, "a happy baby babbling one short soft ooh sound, gentle and cute"),
+    "sleep_mumble_0":  (0.8, -28, False, "a sleeping person mumbling one short soft sleepy mmh with closed mouth, drowsy, very quiet and gentle"),
+    "sleep_mumble_1":  (0.8, -28, False, "one short sleepy soft closed-mouth hum, mm-mmh, of someone turning over in bed, drowsy and gentle"),
+    "dizzy_whoa_0":    (0.8, -24, False, "a cute small cartoon character's short wobbly dizzy whoa-oa, soft small voice, playful"),
+    "dizzy_whoa_1":    (0.8, -24, False, "a small cute voice making one short wavering dizzy woo-oo-oh, gentle and comical"),
+    "pout_hmph":       (0.6, -24, False, "a cute small child's short pouty hmph with puffed cheeks, soft, playful, not angry"),
 }
+# 톡 반응 소리 — 짧게 (TAP_MAX초에서 끊음), 무음 문턱 −42dB
+TAP = {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf", "sneeze_0", "sneeze_1", "sigh_0", "sigh_1",
+       "baby_giggle_0", "baby_giggle_1", "baby_coo_0", "baby_coo_1", "sleep_mumble_0", "sleep_mumble_1",
+       "dizzy_whoa_0", "dizzy_whoa_1", "pout_hmph"}
+TAP_MAX = 0.95       # mp3 채움(약 0.05초)까지 1초 안
+TAP_FADE = 0.08
+# 그 가운데 사람 입소리 — 'no voice' 꼬리말 대신 + 작은 사람 처리 (+4반음·1.08배)
+TINY = TAP - {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf"}
+STYLE_VOICE = "clean close-up recording, one single short wordless vocal sound, no speech, no music, no background noise"
+# 강아지 소리
+ANIMAL = {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf"}
+STYLE_ANIMAL = "clean close-up recording, single animal sound, no music, no human voice, no background noise"
+TINY_RATE = 2 ** (4 / 12)
+TINY_AF = f"asetrate=44100*{TINY_RATE:.4f},aresample=44100,atempo={1.08 / TINY_RATE:.4f},"
 # 음악 한 마디 — 'no music' 꼬리말 대신
 MUSICAL = {"awaken_swell"}
 STYLE_MUSIC = "cinematic underscore, a single musical phrase, no voice, no lyrics, no drums, no background noise"
@@ -86,12 +122,25 @@ def ff(args):
     return subprocess.run(["ffmpeg", "-hide_banner", "-nostats", "-y"] + args, capture_output=True, text=True)
 
 
-def process(raw, dst, rms_target, loop):
+def style_of(sid):
+    if sid in MUSICAL:
+        return STYLE_MUSIC
+    if sid in FAR:
+        return STYLE_FAR
+    if sid in TINY:
+        return STYLE_VOICE
+    if sid in ANIMAL:
+        return STYLE_ANIMAL
+    return STYLE
+
+
+def process(raw, dst, rms_target, loop, tap=False, tiny=False):
     with tempfile.TemporaryDirectory() as td:
         wav = os.path.join(td, "a.wav")
-        trim = "" if loop else ("silenceremove=start_periods=1:start_threshold=-50dB,areverse,"
-                                "silenceremove=start_periods=1:start_threshold=-50dB,areverse,")
-        ff(["-i", raw, "-af", trim + "aformat=channel_layouts=mono", "-ar", "44100", wav])
+        th = "-42dB" if tap else "-50dB"
+        trim = "" if loop else (f"silenceremove=start_periods=1:start_threshold={th},areverse,"
+                                f"silenceremove=start_periods=1:start_threshold={th},areverse,")
+        ff(["-i", raw, "-af", (TINY_AF if tiny else "") + trim + "aformat=channel_layouts=mono", "-ar", "44100", wav])
         if loop:
             wav = loop_crossfade(wav, os.path.join(td, "x.wav"))
         r = ff(["-i", wav, "-af", "volumedetect", "-f", "null", "-"])
@@ -100,6 +149,8 @@ def process(raw, dst, rms_target, loop):
         gain = min(rms_target - mean, -1.0 - peak)
         dur = float(re.search(r"Duration: (\d+):(\d+):([\d.]+)", ff(["-i", wav]).stderr).group(3))
         fade = "" if loop else f",afade=t=out:st={max(0.0, dur - 0.04):.3f}:d=0.04"
+        if tap and dur > TAP_MAX:
+            fade = f",atrim=0:{TAP_MAX},afade=t=out:st={TAP_MAX - TAP_FADE:.3f}:d={TAP_FADE}"
         ff(["-i", wav, "-af", f"volume={gain:.2f}dB{fade}", "-c:a", "libmp3lame", "-b:a", "80k", dst])
         return dur, gain
 
@@ -127,8 +178,8 @@ def gen(sid, force=False):
     secs, rms, loop, prompt = SFX[sid]
     dst = os.path.join(OUT, f"{sid}.mp3")
     if os.path.exists(dst) and not force:
-        return
-    body = {"text": f"{prompt}. {STYLE_MUSIC if sid in MUSICAL else (STYLE_FAR if sid in FAR else STYLE)}", "duration_seconds": secs, "prompt_influence": 0.5}
+        return None
+    body = {"text": f"{prompt}. {style_of(sid)}", "duration_seconds": secs, "prompt_influence": 0.5}
     if loop:
         body["loop"] = True
     data = api("/v1/sound-generation?output_format=mp3_44100_128", body)
@@ -136,10 +187,11 @@ def gen(sid, force=False):
         f.write(data)
         raw = f.name
     try:
-        dur, gain = process(raw, dst, rms, loop)
+        dur, gain = process(raw, dst, rms, loop, sid in TAP, sid in TINY)
     finally:
         os.unlink(raw)
     print(f"ok {sid:16s} {dur:.2f}s gain {gain:+.1f}dB {os.path.getsize(dst)} B")
+    return dur          # 자른 뒤(끊기 전) 길이 — 톡 반응 소리가 TAP_MAX보다 많이 길면 다시 만든다
 
 
 if __name__ == "__main__":
