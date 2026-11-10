@@ -1,6 +1,7 @@
 ## 톡 반응 (view/tap_react.gd — 귀여움 묶음 ①, ROADMAP Q2-a). tests/run.gd가 부름 (`-- tap_react` = 이것만, 몇 초).
 ## 반응 표(끝나면 제자리) · 이야기 규칙(깨닫기 전엔 올려다보기·손 흔들기·하트 없음) · 같은 반응을 잇달아 하지 않음 · 잇달아 누르면 웃긴 반응 ·
 ## 화면만 (ADR-0001 — 누르든 안 누르든 시뮬 지문이 같음) · 끝나면 시뮬 자리 · 자는 사람은 깨지 않고 돌아누움 · 3D 주민 · 강아지 · 장면 누르기.
+## 작은 소리 (재채기·한숨·까르르·잠꼬대·멍 …): 파일이 디스크에 있음 · 난수 없이 고름 · 짧은 쉼 · ×8부터 없음 · 소리를 켜도 시뮬 지문이 같음.
 extends RefCounted
 
 var run: SceneTree
@@ -20,7 +21,7 @@ func all() -> void:
 	print("== 톡 반응: 반응 표 · 이야기 규칙 · 돌려 쓰기 · 화면만 · 장면")
 	var aware0 := Village.start_aware
 	run.timed(self, ["test_table", "test_story_rule", "test_rotation", "test_streak", "test_sim_untouched", "test_ends_in_place",
-		"test_sleep_rollover", "test_fallback_3d", "test_dog_doll", "test_voice", "test_source", "test_scene"])
+		"test_sleep_rollover", "test_fallback_3d", "test_dog_doll", "test_voice", "test_sounds", "test_source", "test_scene"])
 	if _sc != null:
 		_sc.queue_free()
 		_sc = null
@@ -120,8 +121,8 @@ func test_table() -> void:
 			if d.has(vk):
 				var line := String(d[vk][0])
 				voices = voices and GameAudio.LINES.has(line)
-		if d.has("sfx"):
-			voices = voices and ResourceLoader.exists("res://audio/sfx/%s.mp3" % String(d["sfx"][0]))
+		for id: String in TapReact.sound_ids(kind):
+			voices = voices and ResourceLoader.exists(GameAudio.tap_sound_path(id))
 	check(ends, "반응이 끝나면 인형은 제자리 (폴짝 0 · 배율 1 · 기울기 0 · 한 바퀴) — 돌아눕기만 반 바퀴")
 	check(sane, "자세가 지나치지 않음 (폴짝 < 0.6 몸 · 배율 0.5~1.45 · 기울기 < 0.3 rad)")
 	check(lens, "반응 길이 0.6~1.4초")
@@ -225,23 +226,33 @@ func test_streak() -> void:
 
 
 func test_sim_untouched() -> void:
+	var res := _sim_same(null, 6 if quick else 16)
+	check(int(res[1]) > 100, "주민을 실제로 눌렀음 (%d번)" % int(res[1]))
+	check(bool(res[0]), "누르든 안 누르든 시뮬 지문이 같음 (저장 지문 · 난수 · 사건 번호 — ADR-0001)")
+
+
+## 같은 씨앗의 두 마을 — 한쪽만 마구 누른다. a = 소리 관리자 (null이면 소리 끔, 있으면 소리를 켜고 그 시계를 돌림).
+## [지문이 내내 같았나, 누른 횟수, 난 소리 수]
+func _sim_same(a: GameAudio, rounds: int) -> Array:
 	var old := CutoutResident.override
 	CutoutResident.override = 1
 	var same := true
 	var n_react := 0
+	var n_snd := 0
 	for aware: bool in [false, true]:
-		var a := proto(aware, 20261111)
-		var b := proto(aware, 20261111)
-		var vw := _view(b)
+		var va := proto(aware, 20261111)
+		var vb := proto(aware, 20261111)
+		var vw := _view(vb)
 		var tr := TapReact.new()
-		tr.sound = false
+		tr.sound = a != null
 		tr.rng.seed = 99
-		for round in (6 if quick else 16):
-			a.advance(0.02 * Balance.DAY)
-			b.advance(0.02 * Balance.DAY)
+		for round in rounds:
+			va.advance(0.02 * Balance.DAY)
+			vb.advance(0.02 * Balance.DAY)
 			vw.sync(0.1, true)
 			for i in 12:
-				for r: Resident in b.people:
+				var before := a._tap_voice_t if a != null else 0.0
+				for r: Resident in vb.people:
 					if (i + r.id) % 4 == 0:
 						if tr.react_resident(vw, r) != "":
 							n_react += 1
@@ -249,17 +260,21 @@ func test_sim_untouched() -> void:
 						tr.press_resident(vw, r)
 					elif (i + r.id) % 7 == 2:
 						tr.cancel_press()
-				for dg: Dictionary in b.dogs.list:
+				for dg: Dictionary in vb.dogs.list:
 					if tr.react_dog(vw, int(dg["id"])) != "":
 						n_react += 1
 				vw.sync(0.1)
 				tr.step(0.1)
-			same = same and SaveCodec.digest(a.to_dict()) == SaveCodec.digest(b.to_dict()) and a.rng.state == b.rng.state and a.events.serial == b.events.serial
+				if a != null:
+					if a._tap_voice_t != before:
+						n_snd += 1
+					a.clock_override += 0.5
+			same = same and SaveCodec.digest(va.to_dict()) == SaveCodec.digest(vb.to_dict()) and va.rng.state == vb.rng.state and va.events.serial == vb.events.serial
 		tr.clear()
 		tr.free()
 		vw.free()
-	check(n_react > 100, "주민을 실제로 눌렀음 (%d번)" % n_react)
-	check(same, "누르든 안 누르든 시뮬 지문이 같음 (저장 지문 · 난수 · 사건 번호 — ADR-0001)")
+	CutoutResident.override = old
+	return [same, n_react, n_snd]
 
 
 func test_ends_in_place() -> void:
@@ -437,6 +452,137 @@ func test_voice() -> void:
 					most = maxi(most, int(GameAudio.LINES[line][vn]))
 				ok = ok and int(d[vk][1]) < most
 	check(ok, "반응 표의 녹음 번호가 있는 범위")
+
+
+# ───────────────────────── 작은 소리 (재채기·한숨·까르르·잠꼬대·멍 …) ─────────────────────────
+func test_sounds() -> void:
+	# ① 반응마다 소리가 있고, 그 파일이 디스크에 있다 (0.15~1.1초의 작은 소리)
+	var files := true
+	var every := true
+	var short := true
+	var kinds_ok := true
+	var ids := {}
+	for kind: String in TapReact.DEFS:
+		var d: Dictionary = TapReact.DEFS[kind]
+		var pool := TapReact.sound_ids(kind)
+		for id: String in pool:
+			var p := GameAudio.tap_sound_path(id)
+			ids[id] = true
+			var st := load(p) as AudioStreamMP3 if FileAccess.file_exists(p) and ResourceLoader.exists(p) else null
+			if st == null:
+				files = false
+				print("    소리 파일이 없음: %s → %s" % [kind, p])
+			elif st.get_length() < 0.15 or st.get_length() > 1.1:
+				short = false
+				print("    소리 길이: %s %.2f초" % [id, st.get_length()])
+			kinds_ok = kinds_ok and id.begins_with("dog_") == kind.begins_with("dog_")
+		for vk: String in ["voice", "voice_aware"]:
+			if d.has(vk):
+				var line := String(d[vk][0])
+				for vn: String in GameAudio.LINES[line]:
+					if int(d[vk][1]) < int(GameAudio.LINES[line][vn]) and not FileAccess.file_exists(GameAudio.voice_path(line, vn, int(d[vk][1]))):
+						files = false
+						print("    목소리 파일이 없음: %s → %s" % [kind, GameAudio.voice_path(line, vn, int(d[vk][1]))])
+		if kind != "press" and kind != "rest" and pool.is_empty() and not d.has("voice"):
+			every = false
+			print("    소리가 없는 반응: %s" % kind)
+		if d.has("snd_at"):
+			kinds_ok = kinds_ok and float(d["snd_at"]) > 0.0 and float(d["snd_at"]) < 0.6
+	check(files, "반응의 소리 파일이 모두 디스크에 있음 (작은 소리 %d개 + 목소리 녹음)" % ids.size())
+	check(short, "작은 소리는 0.15~1.1초")
+	check(every, "눌림·놓임 말고는 반응마다 소리가 있음")
+	check(kinds_ok, "강아지 반응엔 강아지 소리 · 주민 반응엔 주민 소리 · 늦게 나는 소리는 몸짓 앞쪽에서")
+	var sn: Dictionary = TapReact.DEFS["sneeze"]
+	check(TapReact.sound_ids("sneeze") == ["sneeze_0", "sneeze_1"] and float(sn["snd_at"]) * float(sn["dur"]) > 0.2 and float(sn["snd_at"]) < 0.54,
+		"재채기 소리는 몸이 터지기(0.54) 조금 앞에 시작")
+	check(float(TapReact.DEFS["rollover"]["snd"][1]) <= -6.0 and float(TapReact.DEFS["dog_sleep"]["snd"][1]) <= -4.0, "자는 이의 소리는 작게")
+	check(not TapReact.DEFS["giggle"].has("voice") and str(TapReact.sound_ids("giggle")).contains("baby_giggle") and str(TapReact.sound_ids("coo")).contains("baby_coo"),
+		"아기: 까르르 · 옹알 소리")
+	# ② 고르기: 난수 없이 — 번갈아 · 목소리 높이로
+	var seen := {}
+	for turn in 6:
+		seen[TapReact.sound_pick("dog_wag", 3, turn)] = true
+	check(seen.size() == 2 and TapReact.sound_pick("dog_wag", 3, 4) == TapReact.sound_pick("dog_wag", 3, 4) and TapReact.sound_pick("press", 1, 1) == "",
+		"소리 후보를 번갈아 (같은 물음엔 같은 답 · 소리 없는 반응은 \"\")")
+	check(TapReact.sound_pick("sneeze", 1, 0, true) == "sneeze_0" and TapReact.sound_pick("sneeze", 1, 0, false) == "sneeze_1"
+		and TapReact.sound_pick("sneeze", 2, 5, false) == "sneeze_1", "재채기·한숨은 그 사람 목소리 높이로 (높음 · 낮음)")
+	# ③ 소리 관리자의 톡 규칙: 짧은 쉼 · ×8부터 없음 · Voice 버스 (효과음 음량 설정을 따름)
+	var a := GameAudio.get_instance()
+	var mine := a == null
+	if mine:
+		a = GameAudio.new()
+		run.root.add_child(a)
+		GameAudio._inst = a
+	var old_clock := a.clock_override
+	var old_speed := a.speed
+	var old_t := a._tap_voice_t
+	a.clock_override = 5000.0
+	a.speed = 1.0
+	a._tap_voice_t = -10.0
+	var first := a.tap_fx("sneeze_0")
+	var again := a.tap_fx("sigh_0")
+	a.clock_override = 5000.0 + GameAudio.TAP_VOICE_GAP + 0.05
+	var later := GameAudio.tap_sound("dog_yip_0", -2.0, 1.1)
+	check(first and not again and later, "작은 소리도 톡 한마디의 짧은 쉼을 탐 (마구 눌러도 쌓이지 않음)")
+	var on_voice := false
+	for pl: AudioStreamPlayer in a._voice_pool:
+		on_voice = on_voice or (pl.bus == "Voice" and pl.stream != null and pl.stream.resource_path.ends_with("dog_yip_0.mp3") and is_equal_approx(pl.volume_db, -2.0))
+	check(on_voice and AudioServer.get_bus_send(AudioServer.get_bus_index("Voice")) == "SFX", "Voice 버스로 (→ SFX: 설정의 효과음 음량을 따름)")
+	a.clock_override = 5010.0
+	a.speed = GameAudio.FAST_SPEED
+	var fast_snd := a.tap_fx("sneeze_0")
+	a.speed = 1.0
+	check(not fast_snd and not a.tap_fx("no_such_sound") and a.tap_fx("sneeze_1"), "빨리 돌릴 땐(×8부터) 없음 · 없는 소리는 나지 않음")
+	# ④ 재채기는 몸짓의 그 순간에 · 소리를 켜도 화면 난수의 흐름이 같음
+	var old := CutoutResident.override
+	CutoutResident.override = 1
+	var v := proto(false)
+	var r := _awake_adult(v)
+	var vw := _view(v)
+	vw.sync(0.0, true)
+	var tr := TapReact.new()
+	var tq := TapReact.new()
+	tq.sound = false
+	tr.rng.seed = 31
+	tq.rng.seed = 31
+	a.clock_override = 6000.0
+	a._tap_voice_t = -10.0
+	tr.react_resident(vw, r, "sneeze")
+	tq.react_resident(vw, r, "sneeze")
+	var at_tap := a._tap_voice_t
+	tr.step(0.2)
+	var mid := a._tap_voice_t
+	tr.step(0.2)
+	check(at_tap == -10.0 and mid == -10.0 and a._tap_voice_t == 6000.0, "재채기 소리는 누른 때가 아니라 '취!' 앞에서 남")
+	a.clock_override = 6010.0
+	a.speed = GameAudio.FAST_SPEED
+	tr.react_resident(vw, r, "dizzy")
+	tq.react_resident(vw, r, "dizzy")
+	tr.step(0.5)
+	a.speed = 1.0
+	check(a._tap_voice_t == 6000.0, "빨리 돌릴 땐 톡 반응도 소리 없이 몸짓만")
+	a.clock_override = 6020.0
+	tr.react_resident(vw, r, "plop")
+	tq.react_resident(vw, r, "plop")
+	check(tr.rng.state == tq.rng.state, "소리를 고르는 데 화면 난수를 쓰지 않음 (소리를 켜든 끄든 같은 흐름)")
+	tr.clear()
+	tq.clear()
+	tr.free()
+	tq.free()
+	vw.free()
+	CutoutResident.override = old
+	# ⑤ 소리를 켜고 마구 눌러도 시뮬 지문이 같음
+	a.clock_override = 7000.0
+	a._tap_voice_t = -10.0
+	var res := _sim_same(a, 3)
+	check(int(res[2]) > 10, "소리를 켜고 누름 — 실제로 소리가 남 (%d번 누름 · 소리 %d번)" % [int(res[1]), int(res[2])])
+	check(bool(res[0]), "소리를 켜고 눌러도 시뮬 지문이 같음 (저장 지문 · 난수 · 사건 번호 — ADR-0001)")
+	a.clock_override = old_clock
+	a.speed = old_speed
+	a._tap_voice_t = old_t
+	if mine:
+		GameAudio._inst = null
+		a.free()
 
 
 func test_source() -> void:

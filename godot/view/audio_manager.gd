@@ -143,6 +143,18 @@ static func tap_voice_path(r: Resident, line: String, n: int) -> String:
 	return voice_path("hello", v, 0)
 
 
+## [톡 반응] 누른 주민·강아지의 말 없는 작은 소리 (재채기·한숨·까르르·잠꼬대·멍 … — res://audio/sfx/<id>.mp3, AUDIO.md 3 '톡 반응').
+## 효과음 파일이지만 목소리처럼 다룬다: Voice 버스 (설정의 효과음 음량 · 유리 너머 먹먹함), 빨리 돌릴 땐(×8부터) 없음,
+## 톡 한마디와 같은 짧은 쉼(TAP_VOICE_GAP)을 함께 씀 — 마구 눌러도 소리가 겹쳐 쌓이지 않는다. 났으면 true
+static func tap_sound(id: String, vol_db := 0.0, pitch := 1.0) -> bool:
+	var a := get_instance()
+	return a != null and a.tap_fx(id, vol_db, pitch)
+
+
+static func tap_sound_path(id: String) -> String:
+	return SFX_DIR + id + ".mp3"
+
+
 ## 진동 (설정이 켜져 있을 때만 — 유리 톡·물건 떨어뜨림에만 쓴다)
 static func buzz() -> void:
 	GameSettings.buzz(30)
@@ -542,6 +554,22 @@ func tap_blip(r: Resident, line: String, n: int, pitch_mul := 1.0) -> bool:
 		return false
 	_tap_voice_t = t
 	_play_voice(path, resident_pitch(r.id) * pitch_mul)
+	return true
+
+
+func tap_fx(id: String, vol_db := 0.0, pitch := 1.0) -> bool:
+	var t := now()
+	if fast() or t - _tap_voice_t < TAP_VOICE_GAP:
+		return false
+	var s := _stream(tap_sound_path(id))
+	if s == null:
+		return false
+	_tap_voice_t = t
+	var p := _free_player(_voice_pool)
+	p.stream = s
+	p.pitch_scale = clampf(pitch, 0.5, 2.0)
+	p.volume_db = vol_db
+	_play(p)
 	return true
 
 
