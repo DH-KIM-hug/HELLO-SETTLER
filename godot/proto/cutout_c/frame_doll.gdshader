@@ -12,10 +12,11 @@ uniform sampler2D frames_atlas : filter_linear_mipmap, repeat_disable;   // 몸 
 uniform sampler2D fmask0 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 피부 · 옷 주색 · 둘째(크림) · 장식(띠)
 uniform sampler2D fmask1 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 다리(양말) · 신 · 짐을 받친 손 (앞쪽 보기의 나르기·안고 서기 — 짐 위에 다시 그릴 곳) · 먼 다리
 uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
-                                                                         // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, -)
+                                                                         // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, 눈 감음 1 — v13)
 // 동작 = frames.json의 clips 차례 (걷기·나르기·서기·안고 서기 + 2026-11-10 앉기·먹기·올려다보기·무릎·괭이질·줍기) — frame_lib.material이 채움
 uniform int clip_off[16];        // 동작의 첫 장면 번호
 uniform int clip_n[16];          // 동작의 장면 수 (보기마다)
+uniform int load_clip[16];       // 그 동작의 팔에 얹는 그림: 0 없음 · 1 짐 (나르기·안고 서기) · 2 아기 (안고 걷기·안고 서기 — v13)
 uniform float head_r = 143.0;    // 머리 자리 표시 원의 반지름 (rig) — 고개 기울기는 그 가운데(턱 위 head_r)를 중심으로
 uniform vec4 body_rect = vec4(-400.0, -10.0, 400.0, 1020.0);   // 몸 장면 사각형 (rig, 발바닥 가운데 = 0)
 uniform vec4 head_k = vec4(1.3);                  // 보기마다 머리 배율 (자리 표시 원 지름에 맞춤)
@@ -26,6 +27,7 @@ uniform float breath = 0.03;                      // 누운 장면의 숨쉬기 
 uniform vec3 palette[64];
 uniform vec3 base_col[64];       // 머리 조각 묶음의 그린 바탕색 (컷아웃과 같음)
 uniform vec3 fbase[8];           // 몸 장면의 그린 바탕색 (물감 슬롯 0~7)
+uniform vec3 bbase[2];           // 아기 그림의 그린 바탕색 (피부 · 머리카락 — v13)
 uniform vec2 head_top[32];
 uniform float fig = 920.0;
 uniform float layer_eps = 0.004;
@@ -45,10 +47,12 @@ instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);
 instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 동작 빠르기(주기/초), 기울기(rad, 발끝 중심) — 컷아웃 인형과 같음
+instance uniform vec4 baby = vec4(-1.0);                   // 품에 안긴 아기의 물감 (x 피부 · y 머리카락, -1 = 그린 색 그대로) — 아기 그림의 피부·머리카락만 물들임 (v13)
 instance uniform vec4 lockv = vec4(0.0);                   // xy = 걸음 한 주기에 땅에서 가는 길 (세계 x, z — frame_doll.gd가 걷는 쪽 × 땅 빠르기 ÷ 걸음 빠르기)
 
-varying flat vec4 v_dye;     // 머리 조각: 물감 슬롯 xyz, w = 묶음 · 몸: w = 50 (몸) / 60 (손 겹) / 70 (짐 그림)
+varying flat vec4 v_dye;     // 머리 조각: 물감 슬롯 xyz, w = 묶음 · 몸: w = 50 (몸 · 감은 눈) / 60 (손 겹) / 70 (짐·아기 그림)
 varying flat float v_show;
+varying flat vec4 v_win;     // 감은 눈: 눈꺼풀 그림의 아틀라스 창 (u0, v0, u1, v1) — 이 밖은 그리지 않음. 그 밖의 조각은 (-1, -1, 2, 2)
 
 void vertex() {
 	int group = int(CUSTOM0.w + 0.5);
@@ -74,14 +78,16 @@ void vertex() {
 	float f_len = max(t_b - fd.z, 0.0001);
 	vec2 hold = lockv.xy * (f_len * (clamp((u - fd.z) / f_len, 0.0, 1.0) - 0.5) * foot_lock);
 	bool show;
-	bool loaded = sel.x >= 0.0 && (clip == 1 || clip == 3);                // 나르기·안고 서기 + 짐
+	bool arms = load_clip[clip] > 0;                                       // 팔에 무언가를 얹는 동작
+	bool loaded = sel.x >= 0.0 && arms;                                    // 나르기·안고 서기 + 짐 · 안고 걷기·안고 서기 + 아기
+	vec4 fx = texelFetch(fdata, ivec2(fi, 3), 0);
 	if (group == 0) {
 		show = true;
 	} else if (group == 4) {
 		show = loaded && sack_layer[cur_view] >= 0.0;                        // 짐이 머리 위에 그려지는 보기만: 짐을 받친 손을 그 위에
 	} else if (group == 5) {
-		show = loaded && abs(set_i - sel.x) < 0.5;
-	} else if (group == 3 && (clip == 1 || clip == 3)) {
+		show = loaded && abs(set_i - sel.x) < 0.5 && (CUSTOM1.y < -0.5 || view == cur_view);    // 아기 그림은 보기마다 따로 (v13)
+	} else if (group == 3 && arms) {
 		show = false;                                                        // 나르기·안고 서기의 짐은 group 5
 	} else if (group == 3) {
 		// 소품 (컷아웃 인형과 같은 그림·같은 번호): 그 장면에 쥘 자리가 있을 때만. 빵·나뭇가지·바구니는 비스듬한 그림이 따로 (+3)
@@ -90,14 +96,20 @@ void vertex() {
 			pid += 3.0;
 		}
 		show = pid >= 0.0 && abs(set_i - pid) < 0.5 && texelFetch(fdata, ivec2(fi, 2), 0).w > 0.0;
+	} else if (group == 6) {
+		// 감은 눈 (v13): 자는 장면(fdata[3].w)에서만, 그 머리 묶음의 앞 얼굴 위에 — 머리 조각과 같은 자리·배율·기울기.
+		// 사각형은 머리 조각과 똑같은 네 귀퉁이 (frame_lib.mesh): 누운 머리 조각은 한쪽 끝이 뿌리 줄 아래로 조금 내려가 아래의
+		// '땅 위로 당기기'로 깊이가 기울어진다 — 작은 사각형을 따로 얹으면 그 기울기가 없어 머리 뒤에 숨었다 (눈이 뜬 채로 보임).
+		// 같은 귀퉁이면 깊이가 어디서나 머리 조각 + 반 겹. 눈꺼풀 그림 밖(v_win)은 버린다.
+		show = abs(set_i - sel.y) < 0.5 && view == cur_view && fx.w > 0.5;
 	} else if (group == 1) {
 		show = abs(set_i - sel.y) < 0.5 && view == cur_view;
 	} else {
 		show = sel.z >= 0.0 && abs(set_i - sel.z) < 0.5 && view == cur_view;
 	}
 	v_show = show ? 1.0 : 0.0;
-	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, group == 0 ? 50.0 : (group == 4 ? 60.0 : (group == 5 ? 70.0 : (group == 3 ? 0.0 : set_i))));
-	vec4 fx = texelFetch(fdata, ivec2(fi, 3), 0);
+	v_win = group == 6 ? vec4(CUSTOM0.xy, CUSTOM1.zw) : vec4(-1.0, -1.0, 2.0, 2.0);
+	v_dye = vec4(CUSTOM1.zw, CUSTOM2.x, (group == 0 || group == 6) ? 50.0 : (group == 4 ? 60.0 : (group == 5 ? 70.0 : (group == 3 ? 0.0 : set_i))));
 	if (!show) {
 		VERTEX = vec3(0.0);
 		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
@@ -215,19 +227,30 @@ void fragment() {
 		vec4 t = texture(frames_atlas, UV);
 		vec4 m0 = texture(fmask0, UV);
 		vec4 m1 = texture(fmask1, UV);
+		if (UV.x < v_win.x || UV.y < v_win.y || UV.x > v_win.z || UV.y > v_win.w) {
+			discard;
+		}
 		if (t.a < alpha_cut || (v_dye.w > 55.0 && v_dye.w < 65.0 && m1.b < 0.5)) {
 			discard;
 		}
 		c = t.rgb;
-		float wsum = min(m0.r + m0.g + m0.b + m0.a + m1.r + m1.g, 1.0);
-		vec3 o = c * (1.0 - wsum);
-		o += m0.r * dye_with(c, 0, fbase[0]);
-		o += m0.g * dye_with(c, 2, fbase[2]);
-		o += m0.b * dye_with(c, 3, fbase[3]);
-		o += m0.a * dye_with(c, 4, fbase[4]);
-		o += m1.r * dye_with(c, 6, fbase[6]);
-		o += m1.g * dye_with(c, 7, fbase[7]);
-		c = o * mix(1.0, far_k, m1.a);
+		if (v_dye.w > 65.0) {
+			// 짐 그림은 그린 색 그대로. 아기 그림(v13)만 피부(m0.r)·머리카락(m0.g)을 그 아기의 물감으로 — 주민과 같은 규칙 (피부 = 채널별 비율, 머리 = 밝기 옮기기)
+			vec3 o = c * (1.0 - min(m0.r + m0.g, 1.0));
+			o += m0.r * (baby.x < -0.5 ? c : c * clamp(palette[int(baby.x + 0.5)] / max(bbase[0], vec3(0.04)), vec3(0.0), vec3(5.0)));
+			o += m0.g * (baby.y < -0.5 ? c : palette[int(baby.y + 0.5)] * (luma(c) / max(luma(bbase[1]), 0.04)));
+			c = o;
+		} else {
+			float wsum = min(m0.r + m0.g + m0.b + m0.a + m1.r + m1.g, 1.0);
+			vec3 o = c * (1.0 - wsum);
+			o += m0.r * dye_with(c, 0, fbase[0]);
+			o += m0.g * dye_with(c, 2, fbase[2]);
+			o += m0.b * dye_with(c, 3, fbase[3]);
+			o += m0.a * dye_with(c, 4, fbase[4]);
+			o += m1.r * dye_with(c, 6, fbase[6]);
+			o += m1.g * dye_with(c, 7, fbase[7]);
+			c = o * mix(1.0, far_k, m1.a);
+		}
 	} else {
 		vec4 t = texture(atlas, UV);
 		if (t.a < alpha_cut) {

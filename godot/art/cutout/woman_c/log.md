@@ -337,6 +337,78 @@ states5_live_loads_ppu{20,44}.png (12 women, 12 different loads, in the village)
 Tool: `shot_cutC_compare.gd` env `CUTC_LOAD=<item kinds, comma separated>`, `CUTC_TAG=<file tag>`, `CUTC_MODE=loads` (live
 capture); `tools/cutout_c/compose_states5.py` builds the named sheets from the strip captures.
 
+## 2026-11-10 v13 (states6) — closed eyes asleep, baby in arms, hold back sleeve, back-view loads
+No parts pasted: the new cradle / rock sheets and the hold back row are whole-sheet drawings over the existing sheets as
+reference, whole cells only. What is laid over a frame is a separate picture (baby, load, closed-eye lids, head) at that
+frame's own anchor; the front-view "hands over the bundle" overlay is the same frame's own pixels (mask1.B), as for loads.
+
+Sleep ("the sleeping doll had open eyes"): nothing in the project had an eye state (old cutout and the kids' nod-off only
+tilt the head), so closed eyes are new. Per head set (a, b) and per eye the build makes one small lid picture
+(`build_frames.py` `lid_pictures()`): a skin-coloured patch over the drawn open eye plus a long thin sagging lash line
+(`LID_W` 1.1 eye widths, `LID_SAG` 5, `LID_TH` 10 rig) — the first take, a U as wide as the open eye, read as the open-eye
+dot again at ppu 44. The patch takes the skin dye (mask0.R), the line stays ink. Shown only on frames with `shut` (the two
+sleep frames; `frames.json` `lids`, shader group 6). Breathing is unchanged (`breath`).
+Depth finding: a lying head piece has one edge about 14 rig below the root line, so the shader's "pull above the ground"
+tilts that quad's depth by far more than a layer step; a separate small lid quad has no such tilt and hid behind the head
+(eyes stayed open in the first captures). The lid quad is now built from the host head quad's own four corners
+(`frame_lib.gd` mesh; same depth everywhere + half a layer, below the hat) with extrapolated UVs, and the fragment shader
+discards outside the lid picture's atlas window (`v_win`).
+
+Baby in arms (was the old cutout): `raw/cradle_{front,q_front,q_back,back}.png` (8 walking frames, arms cradling in front
+of the chest, empty) and `raw/rock_{...}.png` (4 standing frames) — clips `cradle` / `rock`, stride measured as carry.
+The baby bundle is its own picture (`raw/props_c.png`; `BABY_PIC`: a front bundle for the two front views, a back-of-the-
+head bundle peeking past the arm for the two back views), seat per view `BABY_SEAT`, size `BABY_SIZE` 250 rig. The baby
+takes its own skin and hair colours (mask0 R / G on the baby pictures, bases `baby_skin` / `baby_hair` in frames.json;
+instance uniform `baby`, `frame_doll.gd` `set_baby()`), the swaddle stays as drawn. Resident hook
+(`view/cutout_resident.gd`): `place_babies` sets `baby_held` + `baby_dye`; `_frame_clip()` picks rock (standing) /
+cradle (walking); the small old baby doll is hidden while its carrier is on frames. `carry_baby` WITHOUT a baby (the hug
+staging) and sitting with a baby stay on the old cutout. Rock sheets were generated under the prompt key
+`cradle_hold_<view>` (logs `log_redraw_cradle_hold_*_r1.txt`) and installed as `rock_<view>.png`.
+
+Hold, back view: `raw/hold_back.png` was regenerated as a whole sheet — the bottom row (cells 4-7, the only ones the build
+plays as `hold`) now has puff sleeves on both arms, no bare arm; the top row was redrawn with it and is not used (idle
+comes from `idle_back.png`). Back-view loads: `LOAD_SEAT` gets a 4th value (scale of
+the whole picture); q_back (118, 30, 0.10) -> (132, 66, 0.16, x1.15), back (122, 24, 0.10) -> (136, 62, 0.16, x1.15) —
+the load sits lower and further out beside the body and is 15% larger, so it shows below / beside a wide brim (hat not
+touched). Front seats unchanged.
+
+Texture sizes (x3 textures, one page):
+
+| | v12 | v13 |
+|---|---|---|
+| atlas / masks | 1548x1976 | 1548x2584 |
+| cell, columns x rows | 129x152, 12 x 13 | 129x152, 12 x 17 |
+| cells / frame records | 148 / 236 | 196 / 284 |
+| frames_atlas.png | 2,331,498 B | 3,059,052 B |
+| frames_mask0.png | 236,221 B | 305,026 B |
+| frames_mask1.png | 57,775 B | 82,619 B |
+| frames.json | 80,584 B | 97,107 B |
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/hold_back.png | take r1 of 1 | codex-cli (built-in image gen) | - | 1536x1024 | 2026-11-10 | yes | whole sheet regenerated; bottom row (hold) with puff sleeves, top row unused |
+| raw/cradle_{front,q_front,q_back,back}.png | take r1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | 8 walking frames, arms cradling, no baby drawn |
+| raw/rock_{front,q_front,q_back,back}.png | take r1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | 4 standing frames; prompt key `cradle_hold_<view>` |
+| raw/props_c.png | take r1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | baby bundle pictures; only the two of `BABY_PIC` go into the atlas |
+
+No rejected takes this round. `raw/check_*.png`, temporary capture strips and `__pycache__` deleted; logs of the takes
+kept (`tools/cutout_c/logs/log_redraw_*_r1.txt`, `log_props_c_r1.txt`); generator `tools/cutout_c/gen_redraw.sh`.
+
+Still weak: at ppu 20 the closed eyes are about one pixel (the eye dots are gone, the lash line is only a faint mark);
+the lid depth relies on sharing the head quad's corners (a hat on a lying head still depends on the ground pull, as in
+v12); in the back views the baby is a small dark-haired bump beside the arm — readable as "holding something", less
+clearly a baby at ppu 20; hold back: the image-right hand hangs at the hip rather than reaching up to the load; a wide
+brim still overlaps the top edge of a back-view load; hug staging and sitting with a baby stay on the old cutout; the
+atlas grew 31% in height (still one page); the near boot's ragged shoe mask was not touched (item 5 skipped).
+
+Shots: godot_shots/cutC/states6_sleep_ppu{20,44}.png, states6_sleep_headb_ppu{20,44}.png (head set b),
+states6_cradle_{walk,stand}_ppu{20,44}.png, states6_cradle_{walk,stand}_dyed_ppu{20,44}.png (dress / skin / baby dyes),
+states6_hold_back_ppu{20,44}.png, states6_backload_{walk,stand}_ppu{20,44}.png (brim hat + flour, wheat, bread, logs),
+states6_live_family_ppu{20,44}.png (village: sleeping residents and residents holding a baby, 4 camera headings).
+Tool: `shot_cutC_compare.gd` env `CUTC_HEAD`, `CUTC_HAT`, `CUTC_BABY="skin,hair;skin,hair"`, clips `cradle` / `rock`,
+`CUTC_MODE=family` (live capture). The sheets were stacked from the strip captures with a scratch script (same layout as
+`compose_states5.py`; not kept in the repo).
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to

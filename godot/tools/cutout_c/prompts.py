@@ -157,7 +157,7 @@ EMPTY_WHAT = {"carry": ("an 8-frame walk cycle (walking in place) in which she c
 # 8 x (name, description); build_frames.py cuts each cell's picture into the prop strip of the frame atlas.
 PROPS = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
 
-A sheet of 8 separate small OBJECT pictures for a cosy picture-book village game: things a villager carries on her shoulder. Layout: 2 rows x 4 cells (each cell 384x512), exactly ONE object per cell, centred in its cell, filling about 60% of the cell, never touching the cell edges. Background: one flat uniform pure chroma green #00FF00 everywhere, nothing else (no cell borders, no text, no numbers, no ground, no cast shadows).
+A sheet of 8 separate small OBJECT pictures for a cosy picture-book village game: {topic}. Layout: 2 rows x 4 cells (each cell 384x512), exactly ONE object per cell, centred in its cell, filling about 60% of the cell, never touching the cell edges. Background: one flat uniform pure chroma green #00FF00 everywhere, nothing else (no cell borders, no text, no numbers, no ground, no cast shadows).
 Style (the same for all 8): soft, rounded, chunky toy-like shapes; a THICK dark-brown ink outline (#3A2A22) of even weight around every shape; flat cel colour with ONE soft shade step, light from the upper-left; NO gradients, NO texture noise, NO hatching. Each object must be recognisable as a tiny 12-pixel icon: a big simple silhouette, 2-3 clear colours, no small details. Do NOT use pure green, bright magenta or chroma colours in the objects.
 Cells, left to right, top row then bottom row:
 {cells}"""
@@ -188,6 +188,61 @@ EMPTY_ARMS = {
     "back": " TRACE THEM: the load was at the IMAGE RIGHT beside the magenta circle. Only ONE hand is clearly visible: at the image right, raised beside her shoulder at the height of the circle's lower edge. Her other arm is bent up in front of her and almost hidden by the magenta circle: on the image-left side only the puffy sleeve and at most the tip of the hand peeking out at the circle's lower-left edge — NO raised hand at the image left.",
 }
 
+# v13 (2026-11-10 states6): (1) the baby in arms — cradle (walking) and cradle_hold (standing) sheets are the finished v12 carry /
+# hold sheets REDRAWN WHOLE with one change (the arms cradle in front of the chest, empty — the baby bundle is its own picture,
+# seated by the game like the loads); (2) hold_back redrawn whole with the puffy sleeve on the raised arm (it was bare skin);
+# (3) the baby bundle pictures (props_c). Third image = the finished sheet named in REDRAW_REF (gen_redraw.sh).
+REDRAW = """Use your built-in image generation tool to create ONE landscape image, exactly 1536x1024, then save it (copy the generated PNG) to {out} and print the path.
+
+{body}
+HEM: the dress is LONG, down to mid-shin; under it only her short rounded BOOTS (and a little ankle) show. The figure is short and chunky.
+
+The THIRD attached image is a FINISHED 8-cell sprite sheet (1536x1024, 2 rows x 4 cells) of her in {view}: {what}. REDRAW THIS WHOLE SHEET with ONE change — {title}:
+- Everything else stays EXACTLY as in the third image, cell by cell: the same figure position and size in each cell, the same flat solid MAGENTA (#FF00FF) head circle (same size, same position, a complete round circle, no face, no hair, no outline), the same dress, sash and bow, the same skirt shape, and above all the SAME LEGS AND BOOTS in each cell — trace each boot at exactly the same position and height, the same boot in front, including the colour code where the third image has it (one leg with a tan stocking and dark-brown boot, the other leg with a bright CYAN (#20A8FF) stocking and a dark NAVY (#203070) boot).
+- {change}
+- Her hands are EMPTY: NO baby, NO bundle, NO cloth, NO sack and NO other object anywhere.
+- Background: flat uniform pure chroma green #00FF00 everywhere; the dark green cell frames and ground lines may stay or go; NO numbers, NO text, NO cast shadows. Exactly one figure per cell, same size in every cell.
+Thick dark-brown ink outline (#3A2A22) of even weight, flat cel colour with one soft shade step, cute, soft and rounded. Clean flat cel colour, NO gradients, NO texture noise, NO hatching."""
+_CRADLE_WHY = "as if she were gently rocking a swaddled baby that is simply NOT DRAWN (the game adds the baby later as a separate picture lying in her arms)"
+CRADLE_ARMS = {
+    "front": "both arms are bent in front of her body and make a soft round CRADLE at the height of her lower chest, " + _CRADLE_WHY + ": both elbows out at her sides at waist height, the puffy cream sleeves covering both upper arms down to the elbows, both bare forearms coming in horizontally across the front of her body, one just above the other. Her left forearm (the one at the image RIGHT) lies across her belly and its mitten hand ends a little to the image-left of the centre; her right forearm (image LEFT) comes in just below it and its mitten hand is cupped palm-up at the centre of her belly. Both hands are low, at belly height, clearly below the gathered neckline; nothing is raised to the shoulders. Above and below the arms we see her dress, apron and sash as usual.",
+    "q_front": "both arms are bent and held in FRONT of her chest (toward the image RIGHT, the way she faces) and make a soft round CRADLE, " + _CRADLE_WHY + ": the near arm (her arm on the image-left, viewer side) has its puffy cream sleeve at the shoulder, the elbow bent at waist height and the bare forearm reaching forward horizontally across the front of her belly, its mitten hand cupped palm-up in front of her belly at the image right; the far arm comes around the far side of her body: only its bare forearm and mitten hand show, just above the near hand in front of her chest. Both hands are close together in front of her belly on the image-RIGHT side of her body, clearly below the gathered neckline; nothing is raised to the shoulders.",
+    "q_back": "both arms are bent and held in front of her chest (on the far side of her body, toward the image right) " + _CRADLE_WHY + ". Seen from behind we see the near arm's puffy cream sleeve at the shoulder and its bent elbow at her side at waist height, with the bare forearm going forward (toward the image right) and disappearing in front of her body; of the far arm at most a bit of puffy sleeve shows at the image right. NO hands are visible and NOTHING is raised beside or above the shoulders.",
+    "back": "both arms are bent and held in front of her chest " + _CRADLE_WHY + " — hidden in front of her body. Seen from behind, symmetric: the two puffy cream sleeves at the shoulders and the two bent elbows sticking out a little at her sides at waist height, the bare forearms going forward and disappearing in front of her body. NO hands are visible and NOTHING is raised beside or above the shoulders.",
+}
+_WALK_REF = "an 8-frame walk cycle (walking in place) in which she walks with her arms raised to one shoulder (the pose of carrying a load that is not drawn)"
+_HOLD_REF = "a standing sheet — top row (cells 1-4): standing and breathing with the arms hanging at her sides; bottom row (cells 5-8): standing still with her arms raised to one shoulder (the pose of holding a load that is not drawn), breathing"
+# sheet -> (reference sheet in raw/, view, what the reference shows, title of the change, the change)
+REDRAW_SHEETS = {"hold_back": ("hold_back", "back", _HOLD_REF, "GIVE THE RAISED ARM ITS PUFFY SLEEVE (bottom row)",
+                               "BOTTOM ROW (cells 5-8): the arm raised at the IMAGE RIGHT is drawn wrong in the third image — it is a bare skin-coloured arm from the shoulder up. Draw it properly: a BIG PUFFY CREAM (#F3E6CC) SHORT SLEEVE with a gathered band, the same size and shape as the puffy sleeve on the image-left side, covering her shoulder and upper arm down to the elbow at the image right; from the sleeve band only the short bare forearm and the soft mitten hand rise up beside the lower-right edge of the magenta circle. The upper arm must NOT be bare. The image-left side stays as it is (puffy sleeve, hand almost hidden behind the circle). The TOP ROW (cells 1-4) is redrawn exactly as it is.")}
+for _v in ("front", "q_front", "q_back", "back"):
+    REDRAW_SHEETS["cradle_" + _v] = ("carry_" + _v, _v, _WALK_REF, "THE ARMS CRADLE (all 8 cells)",
+                                     "ARMS (all 8 cells): instead of being raised to the shoulder, " + CRADLE_ARMS[_v] + " The arms keep this same pose in all 8 cells (they only bob up and down with the body as she walks); where the raised arms were, draw what they were hiding: her shoulders, puffy sleeves, neckline and plain green background.")
+    REDRAW_SHEETS["cradle_hold_" + _v] = ("hold_" + _v, _v, _HOLD_REF, "THE ARMS CRADLE (bottom row)",
+                                          "ARMS, BOTTOM ROW (cells 5-8): instead of being raised to the shoulder, " + CRADLE_ARMS[_v] + " The arms keep this same pose in cells 5-8 (they only rise a few pixels with her breathing); where the raised arms were, draw what they were hiding: her shoulders, puffy sleeves, neckline and plain green background. The TOP ROW (cells 1-4) is redrawn exactly as it is.")
+_BABY = "a SWADDLED SLEEPING BABY lying on its side like a plump little bean, wrapped snugly in a soft light sky-blue (#A9D3EA) blanket with a cream (#F3E6CC) folded edge around the face; the bundle is a short fat rounded shape about twice as long as it is thick, with NO arms or legs showing; "
+_BABY_FACE = "only the BIG round head shows at one end (the head is as thick as the bundle): warm light-tan skin (#F0AD6F), two CLOSED eyes drawn as small downward-curved dark-brown lines, round rosy cheeks, a tiny smile, and one small curl of dark brown (#77482F) hair on the forehead"
+PROP_SHEETS["props_c"] = [
+    ("baby", _BABY + _BABY_FACE + ". The bundle lies HORIZONTALLY with the head at the RIGHT end, the face turned toward the viewer"),
+    ("baby_b", _BABY + _BABY_FACE + ". The bundle lies tilted, the head end at the RIGHT raised about 25 degrees, the face turned toward the viewer"),
+    ("baby_c", _BABY + _BABY_FACE + ". The bundle lies HORIZONTALLY with the head at the LEFT end, the face turned toward the viewer"),
+    ("baby_d", _BABY + _BABY_FACE + ". The bundle lies tilted, the head end at the LEFT raised about 25 degrees, the face turned toward the viewer"),
+    ("baby_back", _BABY + "seen from BEHIND: we see the back of the blanket and, at the RIGHT end, the round back of the baby's head — warm light-tan skin (#F0AD6F) with a small cap of dark brown (#77482F) hair on top and one little ear; NO face. The bundle lies horizontally"),
+    ("baby_back_b", _BABY + "seen from BEHIND: we see the back of the blanket and, at the LEFT end, the round back of the baby's head — warm light-tan skin (#F0AD6F) with a small cap of dark brown (#77482F) hair on top and one little ear; NO face. The bundle lies horizontally"),
+    ("baby_e", _BABY + _BABY_FACE + ". The bundle stands almost UPRIGHT, the head at the top, the face turned toward the viewer (a baby held against a shoulder)"),
+    ("baby_f", _BABY + "seen from BEHIND, standing almost UPRIGHT with the round back of the head at the top: warm light-tan skin (#F0AD6F) with a small cap of dark brown (#77482F) hair; NO face"),
+]
+
+if __name__ == "__main__" and sys.argv[1] == "redraw":
+    sheet, out = sys.argv[2], sys.argv[3]
+    _ref, view, what, title, change = REDRAW_SHEETS[sheet]
+    print(REDRAW.format(out=out, body=BODY.replace("It bobs up and down with the walk", "it moves with her body"), view=STATE_VIEW[view], what=what, title=title, change=change))
+    sys.exit(0)
+
+if __name__ == "__main__" and sys.argv[1] == "redraw_ref":
+    print(REDRAW_SHEETS[sys.argv[2]][0])
+    sys.exit(0)
+
 if __name__ == "__main__" and sys.argv[1] == "empty":
     kind, view, out = sys.argv[2], sys.argv[3], sys.argv[4]
     what, rows = EMPTY_WHAT[kind]
@@ -197,7 +252,7 @@ if __name__ == "__main__" and sys.argv[1] == "empty":
 
 if __name__ == "__main__" and sys.argv[1] == "props":
     sheet, out = sys.argv[2], sys.argv[3]
-    print(PROPS.format(out=out, cells="\n".join(f"{i + 1}) {d}." for i, (_n, d) in enumerate(PROP_SHEETS[sheet]))))
+    print(PROPS.format(out=out, topic="a mother's baby bundle, drawn 8 ways" if sheet == "props_c" else "things a villager carries on her shoulder", cells="\n".join(f"{i + 1}) {d}." for i, (_n, d) in enumerate(PROP_SHEETS[sheet]))))
     sys.exit(0)
 
 if __name__ == "__main__" and sys.argv[1] == "state":

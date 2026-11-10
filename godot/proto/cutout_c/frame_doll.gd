@@ -24,6 +24,7 @@ var _react := Vector3(1.0, 1.0, 0.0)
 var view_lock := ""
 var _sel := Vector4(-1, 0, -1, -1)       # 짐 그림 번호 (-1 없음) · 머리 묶음 · 모자 묶음 (-1 없음) · 소품 (컷아웃 PROPS 번호, -1 없음)
 var _load := ""
+var _baby := Vector4(-1, -1, -1, -1)
 
 
 func setup(mat: ShaderMaterial) -> void:
@@ -54,6 +55,14 @@ func set_prop(id: int, load := "") -> void:
 	set_instance_shader_parameter("sel", _sel)
 	var pf := FLib.prop_fit(id)
 	set_instance_shader_parameter("prop", Vector4(pf.x, pf.y, 1.0 if FLib.PROP_HEAD_UP.has(id) else 0.0, 0))
+
+
+## 품에 안긴 아기의 물감 (v13): 피부 · 머리카락 (팔레트 번호, -1 = 그린 색 그대로) — 아기 그림의 피부·머리카락만 물들인다
+func set_baby(skin: int, hair: int) -> void:
+	var b := Vector4(skin, hair, -1, -1)
+	if b != _baby:
+		_baby = b
+		set_instance_shader_parameter("baby", b)
 
 
 func set_clip(c: String, r: float, ph: float) -> void:

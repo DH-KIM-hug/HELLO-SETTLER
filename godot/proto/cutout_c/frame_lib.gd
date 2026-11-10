@@ -21,6 +21,12 @@ const LOAD_OF := {
 	"솜": "cotton", "비단 실": "silk", "단물": "jar", "꿀": "jar", "죽": "jar",
 }
 const LOAD_ELSE := "basket"
+## 품에 안은 아기 (v13, 2026-11-10): 짐 이름 자리에 이 표시를 넣으면 아기 그림 (frames.json loads의 "baby" — 보기마다 한 장).
+## 안고 걷기(cradle)·안고 서기(rock) 장면의 아기 자리에 얹고, 앞쪽 보기는 그 장면의 팔을 그 위에 다시 그린다 (짐과 같은 식).
+const BABY_LOAD := "#baby"
+const BABY_NAME := "baby"
+## 팔에 그림을 얹는 동작 → 종류 (셰이더 load_clip): 1 짐 · 2 아기
+const LOAD_CLIP := {"carry": 1, "hold": 1, "cradle": 2, "rock": 2}
 ## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
 ## 밉맵에서 점선으로 끊김 — 1.06에서 보였음)
 const HEAD_FIT := 1.17
@@ -52,6 +58,8 @@ static func clip_index(c: String) -> int:
 static func load_name(kind: String) -> String:
 	if kind == "":
 		return ""
+	if kind == BABY_LOAD:
+		return BABY_NAME
 	return String(LOAD_OF.get(kind.split(":")[0], LOAD_ELSE))
 
 
@@ -105,7 +113,10 @@ static func mesh() -> ArrayMesh:
 			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 짐 그림 (group 5, v12): 밑변 가운데가 원점인 사각형 (rig), 묶음 번호 = loads의 번호
 	var ls: Array = lib().get("loads", [])
+	var first := {}          # 그림 이름 → 묶음 번호 (같은 이름의 첫 번호: 아기 그림은 보기마다 한 장씩 같은 번호를 씀 — v13)
 	for li in ls.size():
+		if not first.has(ls[li]["name"]):
+			first[ls[li]["name"]] = li
 		var sz: Array = ls[li]["size"]
 		var luv: Array = ls[li]["uv"]
 		var hw := float(sz[0]) * 0.5
@@ -115,7 +126,7 @@ static func mesh() -> ArrayMesh:
 			verts.append(Vector3(cr[0], cr[1], 0))
 			uvs.append(Vector2(cr[2], cr[3]))
 			c0.append_array([0, 0, 0, 5.0])
-			c1.append_array([float(li), 0, -1, -1])
+			c1.append_array([float(first[ls[li]["name"]]), float(ls[li].get("view", -1)), -1, -1])
 			c2.append_array([-1, 0, 0, 0])
 		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 머리·모자 조각 (컷아웃 라이브러리의 group 1·2 — 목 조각 제외: 몸 장면의 깃이 대신함) + 소품 (group 3: 빵·괭이·낫·망치 …
@@ -137,6 +148,30 @@ static func mesh() -> ArrayMesh:
 			c0.append_array([q["pivot"][0], q["pivot"][1], float(q["slot"]), float(grp)])
 			c1.append_array([s_i, float(q["view"]), float(q["dye"][0]), float(q["dye"][1])])
 			c2.append_array([float(q["dye"][2]), 0, 0, 0])
+		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
+	# 감은 눈 (group 6, v13 — 자는 장면): 머리 묶음마다 앞 얼굴 위에 얹는 작은 그림. 사각형은 그 머리 조각과 똑같은 네 귀퉁이로 만들고
+	# (겹만 반 겹 위) 그림은 UV를 늘여 제자리에 오게 한다 — 셰이더가 눈꺼풀 그림 창(c0.xy · c1.zw) 밖은 버림. 작은 사각형을 따로 얹으면
+	# 누운 머리 조각의 기울어진 깊이(셰이더의 땅 위로 당기기) 뒤에 숨는다.
+	for e: Dictionary in lib().get("lids", []):
+		var r: Array = e["rect"]
+		var uv: Array = e["uv"]
+		var host: Array = r
+		var host_layer := -1.0
+		for q: Dictionary in Cut.lib()["quads"]:
+			var qr: Array = q["rect"]
+			if int(q["group"]) == 1 and q["set"] == e["set"] and int(q["view"]) == int(e["view"]) and float(q["layer"]) <= float(e["layer"]) \
+					and float(q["layer"]) > host_layer and qr[0] <= r[0] and qr[1] <= r[1] and qr[2] >= r[2] and qr[3] >= r[3]:
+				host = qr
+				host_layer = float(q["layer"])
+		var du := (float(uv[2]) - float(uv[0])) / (float(r[2]) - float(r[0]))      # 아틀라스 u / rig
+		var dv := (float(uv[3]) - float(uv[1])) / (float(r[3]) - float(r[1]))      # 아틀라스 v / rig (위 = r[3] = uv[1])
+		var b := verts.size()
+		for cr: Array in [[host[0], host[3]], [host[2], host[3]], [host[2], host[1]], [host[0], host[1]]]:
+			verts.append(Vector3(cr[0], cr[1], float(e["layer"])))
+			uvs.append(Vector2(float(uv[0]) + (float(cr[0]) - float(r[0])) * du, float(uv[1]) + (float(r[3]) - float(cr[1])) * dv))
+			c0.append_array([uv[0], uv[1], 0, 6.0])
+			c1.append_array([float(Cut.SETS.find(e["set"])), float(e["view"]), uv[2], uv[3]])
+			c2.append_array([-1, 0, 0, 0])
 		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	var arr := []
 	arr.resize(Mesh.ARRAY_MAX)
@@ -184,17 +219,26 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 	_mat.set_shader_parameter("fdata", _fdata())
 	var off := PackedInt32Array()
 	var nn := PackedInt32Array()
+	var lc := PackedInt32Array()
 	off.resize(MAX_CLIPS)
 	nn.resize(MAX_CLIPS)
+	lc.resize(MAX_CLIPS)
 	var o := 0
 	var clips: Array = L["clips"]
 	for i in mini(clips.size(), MAX_CLIPS):
 		var n := int(L["frames_per_clip"][clips[i]])
 		off[i] = o
 		nn[i] = n
+		lc[i] = int(LOAD_CLIP.get(clips[i], 0))
 		o += n * 4
 	_mat.set_shader_parameter("clip_off", off)
 	_mat.set_shader_parameter("clip_n", nn)
+	_mat.set_shader_parameter("load_clip", lc)
+	var bb := PackedVector3Array()
+	for nm: String in ["baby_skin", "baby_hair"]:
+		var bc := Color(String(L["base"].get(nm, "ffffff")))
+		bb.append(Vector3(bc.r, bc.g, bc.b))
+	_mat.set_shader_parameter("bbase", bb)
 	var r: Array = L["rect"]
 	_mat.set_shader_parameter("body_rect", Vector4(r[0], r[1], r[2], r[3]))
 	var k := HEAD_FIT * float(L["d_rig"]) / 248.0
@@ -218,7 +262,7 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 
 
 ## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품·짐 (기울기, 손 x, y, 배율),
-## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, -)
+## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13)
 static func _fdata() -> ImageTexture:
 	var fr: Array = lib()["frames"]
 	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
@@ -229,5 +273,5 @@ static func _fdata() -> ImageTexture:
 		img.set_pixel(i, 1, Color(f["head"][0], f["head"][1], float(f.get("t0", 0.0)), float(f.get("hang", 0.0))))
 		var pr: Array = f.get("prop", [0.0, 0.0, 0.0, 0.0, 0.0])
 		img.set_pixel(i, 2, Color(pr[0], pr[1], pr[2], pr[3]))
-		img.set_pixel(i, 3, Color(pr[4], float(f.get("prop_short", pr[0])), float(f.get("lie", 0.0)), 0))
+		img.set_pixel(i, 3, Color(pr[4], float(f.get("prop_short", pr[0])), float(f.get("lie", 0.0)), float(f.get("shut", 0.0))))
 	return ImageTexture.create_from_image(img)
