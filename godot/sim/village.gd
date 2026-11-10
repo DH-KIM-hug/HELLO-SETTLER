@@ -134,6 +134,7 @@ var econ_rng := RandomNumberGenerator.new()   # 소원 편지·제물 전용 (�
 var social := {}                      # {"p": 짝마다 관계 값, "wed": 혼례 모임 약속, "story": 사랑 이야기 …} (저장됨)
 var social_rng := RandomNumberGenerator.new()
 var kids := {}                        # [아이·아기] 벌어진 놀이·요람 들여다보기·첫걸음마 (sim/child_play.gd — 저장됨)
+var milestones: Dictionary = {}      # [자람의 보상] 넘은 고비·기다리는 잔치 (sim/milestones.gd — 저장됨, 병의 첫 정착지 것)
 # [인구] 이주민의 조각 (design/gdd/population.md R6-6 · STORY 1) — 따로 흐름 (혼인·출산 흐름 rng를 흔들지 않게)
 var pop_rng := RandomNumberGenerator.new()
 var hint_bag: Array = []              # 아직 나오지 않은 조각 id (네 가지가 다 나오면 다시 섞어 채움 — 저장됨, 옛 저장은 빈 채로)
@@ -959,6 +960,8 @@ func step(dt: float) -> void:
 	SimProf.mark("resident_ai")
 	Social.step(self, dt)             # [마을의 삶] 쉬는 둘이 만나면 이야기·다툼·사랑 (sim/social.gd)
 	ChildPlay.step(self, dt)          # [아이·아기] 술래잡기·나비 쫓기·돌탑, 요람 들여다보기, 첫걸음마 (sim/child_play.gd)
+	if owns_water:
+		Milestones.step(self, dt)    # [자람의 보상] 고비(첫 빵·식구·첫 겨울)·별명·저녁 잔치 — 병마다 한 번 (sim/milestones.gd)
 	_update_trees(dt)
 	SimProf.mark("trees")
 	# 주기 처리

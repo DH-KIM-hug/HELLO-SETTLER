@@ -25,6 +25,7 @@ var panel: PanelContainer
 var scroll: ScrollContainer
 var portrait: ResidentPortrait
 var name_l: Label
+var nick_l: Label                   # 별명 (sim/milestones.gd)
 var info_l: Label
 var job_l: Label
 var bars := {}                      # 키 → [줄 HBox, ProgressBar]
@@ -85,6 +86,9 @@ func _build() -> void:
 	hv.alignment = BoxContainer.ALIGNMENT_CENTER
 	hv.add_theme_constant_override("separation", 4)
 	head.add_child(hv)
+	nick_l = _label(hv, "", "Small")         # [자람의 보상] 별명 ("첫 빵을 구운") — 이름 위 작은 줄, 없으면 숨김
+	nick_l.name = "Nickname"
+	nick_l.visible = false
 	name_l = _label(hv, "", "Title")
 	info_l = _label(hv, "")
 	job_l = _label(hv, "")
@@ -320,6 +324,8 @@ func _refresh() -> void:
 	var jb: Building = jv.bld(r.job) if jv != null and not r.dead else null
 	portrait.show_resident(r, jb.type if jb != null else "", jv != null and jv.chief() == r)
 	name_l.text = r.name
+	nick_l.text = r.nickname
+	nick_l.visible = not r.nickname.is_empty()
 	info_l.text = "%s · %s" % [ResidentText.age_word(r), ResidentText.sex_word(r)]
 	var job := ResidentText.job_word(r, village)
 	if r.grade > 0:

@@ -280,7 +280,8 @@ func _state_sig() -> String:
 		0:
 			return "0|%d|%d" % [Chronicle.line_count(vs), limit]
 		1:
-			return "1|%d|%d" % [village.myth.size() + mini(village.book.size(), 12), jar_notes().size()]
+			var mv := Milestones.owner(vs)              # [자람의 보상] 도장이 늘면 다시 그린다
+			return "1|%d|%d|%d" % [village.myth.size() + mini(village.book.size(), 12), jar_notes().size(), Milestones.count(mv) if mv != null else 0]
 		2:
 			return "2|%d|%d|%d|%d" % [village.people.size(), village.dead.size(), village.departed.size(), int(village.t / Balance.DAY * 10.0)]
 		3:
@@ -512,6 +513,9 @@ func _fill_jar() -> void:
 	var head := _label(col, "별지기의 수첩", "Small")
 	head.add_theme_font_override("font", UiTheme.font(true))
 	head.add_theme_color_override("font_color", UiTheme.INK_BROWN)
+	var mv := Milestones.owner(villages())          # [자람의 보상] 고비 도장 줄 + 다음 고비 한 줄 (PROGRESSION 4.5)
+	if mv != null:
+		col.add_child(MilestoneStamps.make(mv))
 	if notes.is_empty():
 		var l := _hand(col, "아직 이 병만의 버릇은 모르겠다. 지켜보다 보면 알게 되겠지.")
 		l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))

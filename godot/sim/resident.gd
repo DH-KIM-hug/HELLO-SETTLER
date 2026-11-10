@@ -86,6 +86,8 @@ var latent_until := -1.0              # 잠복이 끝나고 앓기 시작하는 
 # 이주민의 조각 (design/gdd/population.md R6-6 · STORY 1) — Balance.IMMIGRANT_HINTS id, 없으면 "" (거인 UI 사람 상세에 작은 물건·버릇으로)
 var hint := ""
 var hint_said := false                # 조각 말풍선을 한 번 했나 (Immigrants.say_hints)
+# 별명 (docs/PROGRESSION.md 4.5 — 고비를 이끈 주민. 이름 앞에 붙는 말 "첫 빵을 구운", 없으면 "". sim/milestones.gd가 붙인다)
+var nickname := ""
 
 
 func is_adult() -> bool:
