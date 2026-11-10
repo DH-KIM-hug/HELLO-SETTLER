@@ -44,6 +44,21 @@ func _village(scene: Node) -> Array:
 	return [a, vw]
 
 
+## 마을 전체가 보이는 위 카메라 — 풍선은 화면 안에서만 뜨므로, 앞 묶음이 남긴 카메라에 기대지 않게 제 카메라를 둔다
+func _wide_cam(scene: Node, vw: VillageView) -> void:
+	var c := Vector3.ZERO
+	for id: int in vw._blds:
+		c = (vw._blds[id] as Node3D).global_position
+		break
+	var cam := Camera3D.new()
+	cam.projection = Camera3D.PROJECTION_ORTHOGONAL
+	cam.size = 4000.0
+	cam.far = 4000.0
+	scene.add_child(cam)
+	cam.look_at_from_position(c + Vector3(0.0, 1000.0, 0.0), c, Vector3(0.0, 0.0, -1.0))
+	cam.make_current()
+
+
 func _add(a: Village, type: String, built: bool) -> Building:
 	var sp: Variant = a.find_spot(type)
 	if sp == null:
@@ -251,6 +266,7 @@ func test_bubbles() -> void:
 	var a: Village = av[0]
 	var vw: VillageView = av[1]
 	var econ: BldEcon = vw.econ
+	_wide_cam(scene, vw)
 	var saw := _add(a, "제재소", true)
 	if saw == null:
 		check(false, "제재소를 놓음")
