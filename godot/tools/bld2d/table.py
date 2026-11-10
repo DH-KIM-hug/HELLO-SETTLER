@@ -9,8 +9,14 @@ PICS: picture name -> dict
          pasture — residents walk over them) — the picture centre sits on the building centre
   shadow contact-shadow ellipse scale (0 = none); ellipse = w * 0.42 wide
   atlas  far-atlas pixels per world unit (default FAR_PPU; small things get more so they stay sharp in the atlas)
+  sway   wind: how far the top edge leans left-right (world units; 0 = still) — the wheat rows
+  lean   depth only: the card's foot is pulled toward the camera along the view ray by this much (world units), the top stays —
+         the picture does not move on screen. The wheat rows lean so that together they are one surface (wheat_field.py LEAN_S)
+  ink    the picture's own outline colour (r, g, b) for the shrunk rim (default: the dark ink) — the wheat rows
 TYPES: building type (Balance.B key) -> picture names by variant (b.id % n, same rule as VillageView.BUILDING_MODELS)
 """
+
+import wheat_field as _wf      # the wheat field's geometry (rows on the soil ridges) — single source there
 
 NEAR_PPU = 150      # near picture pixels per world unit (zoom step 4, ppu 40-48 x 3 device px)
 FAR_PPU = 64        # far atlas pixels per world unit (zoom step 3, ppu 16-24 x 3)
@@ -52,10 +58,14 @@ PICS = {
     "pasture": dict(w=4.6, mode="ground"),
     "ferry_raft": dict(w=3.2, mode="ground", shadow=0),
     "ferry": dict(w=3.2, mode="ground", shadow=0),
-    # wheat field stages (A27-c A choice: opaque, stalks ~10x a villager)
-    "wheat_sprout": dict(w=4.4),
-    "wheat_green": dict(w=4.4),
-    "wheat_ripe": dict(w=4.4),
+    # wheat field (Q8, GAME_DESIGN 104: sprouts -> green wheat -> the dense golden wheat forest). The three stage pictures are
+    # the whole field flattened (thumbnail · line-up · layout numbers); in the village the field is drawn in layers:
+    # wheat_soil (flat) + one upright strip per ridge (WHEAT_ROWS, added below) + wheat_fence. Built by wheat_field.py.
+    "wheat_sprout": dict(w=_wf.SOIL_W, front=_wf.field_front()),
+    "wheat_green": dict(w=_wf.SOIL_W, front=_wf.field_front()),
+    "wheat_ripe": dict(w=_wf.SOIL_W, front=_wf.field_front()),
+    "wheat_soil": dict(w=_wf.SOIL_W, mode="ground", shadow=0),
+    "wheat_fence": dict(w=_wf.fence_w(), front=_wf.fence_front(), shadow=0),
     # building sites (generic, scaled by the building size at run time — these widths are for size 1.0)
     "site_0": dict(w=2.4),
     "site_1": dict(w=2.4),
@@ -107,5 +117,27 @@ TYPES = {
     "농장": ["wheat_green"],      # stage pictures: WHEAT
 }
 WHEAT = ["wheat_sprout", "wheat_green", "wheat_ripe"]
+# the field in layers: per stage, the row strips back to front (each its own picture: its ridge's front / dx / width)
+# (+ the same ridges reaped: WHEAT_STUBBLE — the harvest view swaps ripe rows for these, front to back)
+WHEAT_ROWS = []
+WHEAT_STUBBLE = []
+for _stage in _wf.STAGES + ["stubble"]:
+    _names = []
+    for _i, _g in enumerate(_wf.rows(_stage)):
+        _n = f"wrow_{_stage}_{_i}"
+        PICS[_n] = dict(w=_g["w"], front=_g["front"], dx=_g["dx"], shadow=0, sway=_wf.SWAY[_stage], lean=_wf.lean(_stage, _i),
+                        ink=_wf.line_ink("ripe" if _stage == "stubble" else _stage))
+        _names.append(_n)
+    if _stage == "stubble":
+        WHEAT_STUBBLE = _names
+    else:
+        WHEAT_ROWS.append(_names)
+WHEAT_SOIL = "wheat_soil"
+WHEAT_FENCE = "wheat_fence"
+# optional corner decoration (VillageView.wheat_accent — off by default): short name -> picture
+WHEAT_ACCENTS = {}
+for _n in _wf.ACCENTS:
+    PICS[_n] = dict(shadow=0, **_wf.accent_place(_n))
+    WHEAT_ACCENTS[_n.split("_", 1)[1]] = _n
 SITES = ["site_0", "site_1", "site_2", "site_3"]
 ALTAR = ["altar_0", "altar_1", "altar_2", "altar_3", "altar_done", "altar_lv1", "altar_lv2", "altar_lv3"]

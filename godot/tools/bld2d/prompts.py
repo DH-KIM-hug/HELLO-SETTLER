@@ -31,16 +31,20 @@ LAYOUTS = {
     (2, 1): "the image is split into TWO equal cells side by side (LEFT half, RIGHT half) — an invisible divider at the vertical centre line. One drawing per cell.",
     (3, 1): "the image is split into THREE equal cells side by side (LEFT third, MIDDLE third, RIGHT third) — invisible dividers. One drawing per cell.",
     (2, 2): "the image is split into FOUR equal cells, 2 columns x 2 rows (TOP-LEFT, TOP-RIGHT, BOTTOM-LEFT, BOTTOM-RIGHT) — invisible dividers at the vertical and horizontal centre lines. One drawing per cell.",
+    (1, 3): "the image is split into THREE equal horizontal BANDS stacked on top of each other (TOP band, MIDDLE band, BOTTOM band) — invisible dividers. One long, wide drawing per band, running almost the full width of the image.",
 }
 CELL_NAMES = {
     (2, 1): ["LEFT cell", "RIGHT cell"],
     (3, 1): ["LEFT cell", "MIDDLE cell", "RIGHT cell"],
     (2, 2): ["TOP-LEFT cell", "TOP-RIGHT cell", "BOTTOM-LEFT cell", "BOTTOM-RIGHT cell"],
     (1, 1): ["the image"],
+    (1, 3): ["TOP band", "MIDDLE band", "BOTTOM band"],
 }
 
 SERIES_NOTE = """SERIES: all cells show the SAME thing at different stages, drawn at EXACTLY the same scale and the same position inside its cell (the same footprint / base ellipse at the same place, same width), as if the same camera photographed it at different times. Only what is described changes between cells.
 """
+
+WHEAT_ROW = """ONE STRAIGHT ROW OF A WHEAT FIELD, drawn alone as a long horizontal strip that runs almost the full width of the image (about 1400 px wide), seen FRONT-ON from the game camera: the plants stand upright side by side, all their feet on ONE straight horizontal line (the bottom of the strip is a clean straight line of stem ends — NO soil band, NO ground under it unless said). This strip will be repeated to build a whole field, so keep it simple, chunky and regular, with the SAME bold dark-brown outline weight as the buildings in the second attached image (do not draw thin, fine lines). The wheat is a small, low, garden-sized kind: fully grown it only reaches a villager's chest. """
 
 # sheet -> (size, (cols, rows), series?, [(picture name, description)])
 SHEETS = {
@@ -117,10 +121,22 @@ SHEETS = {
         ("ferry_raft", """a small FERRY LANDING (pioneer era): a narrow walkway of twig planks on short posts running from the LOWER-LEFT (shore end) toward the UPPER-RIGHT (water end), and moored beside its far end a RAFT made of bundled dry REEDS tied with grass string, with a long pushing pole lying on it. Do NOT draw the water (leave it magenta); posts simply end at the bottom."""),
         ("ferry", """a small FERRY LANDING (village era): the same narrow walkway of twig planks on short posts running from the LOWER-LEFT toward the UPPER-RIGHT, a little mooring post with rope, and moored beside its far end a BOAT made of one big dried curled LEAF (olive-brown, its midrib as a keel) with a pushing pole. Do NOT draw the water (leave it magenta)."""),
     ]),
-    "wheat": ("1536x1024", (3, 1), True, [
-        ("wheat_sprout", """WHEAT FIELD, stage 1 SPROUTS: a round patch of dark tilled soil (seen from above as a flattened ellipse) with five small mounds, from each mound a few fresh bright-green seedling blades (short, about one villager tall); a low twig fence segment at the front edge."""),
-        ("wheat_green", """WHEAT FIELD, stage 2 GROWING: the same tilled soil patch; from the five mounds rise FIVE giant wheat stalks (in this tiny world a wheat stalk is a tower about TEN villagers tall, so they nearly fill the cell height), thin smooth yellow-green stems with narrow ribbon leaves peeling off and drooping, GREEN unripe ears with fanned awns at the top; a few shorter side tillers with ears at the bottom; the low twig fence at the front."""),
-        ("wheat_ripe", """WHEAT FIELD, stage 3 RIPE: the same patch and five giant stalks, now straw-GOLD with big heavy golden ears NODDING over at the top, fanned golden awns; a grass-rope LADDER leaning against the front stalk, a small basket at its foot; the low twig fence at the front."""),
+    # the low golden field (2026-11-11 "낮고 노란 개량 밀밭", GAME_DESIGN 3.0): the field is built from ROWS (wheat_field.py) —
+    # one soil picture on the ground + six upright row strips per growth stage + a low fence, so a farmer stands waist-deep
+    # between the rows. These sheets are the raw material; the old tall "wheat forest" sheet is gone.
+    "wheat_rows": ("1536x1024", (1, 3), False, [
+        ("wrow_sprout", WHEAT_ROW + """Stage 1 SPROUTS: a row of about 18 tiny wheat SEEDLINGS, evenly spaced with small gaps between them, each one a little tuft of three short fresh LIGHT-GREEN blades (yellow-green, like new spring grass) coming out of a tiny low mound of brown soil. Very small and low: the tufts are only about 60 px tall. Simple and cute."""),
+        ("wrow_green", WHEAT_ROW + """Stage 2 GREEN WHEAT: a dense row of about 18 young wheat plants standing shoulder to shoulder (they touch and overlap a little, so the row is one continuous lush band about 190 px tall). Fresh GRASS-GREEN stems and long soft blade leaves that arch outward; at the top of each plant a small slim GREEN ear that is just forming (pale yellow-green, a short braid of little grains). The top line of the row is lively and uneven, the tips lean softly to alternating sides."""),
+        ("wrow_ripe", WHEAT_ROW + """Stage 3 RIPE WHEAT: the same dense row of about 18 wheat plants, shoulder to shoulder (one continuous band about 210 px tall), now BRIGHT GOLDEN YELLOW — a clear, sunny, saturated YELLOW (like lemon-gold, butter and ripe corn: #F6C93A lit, #E3A62B in the one shade step), definitely NOT orange, NOT brown, NOT tan. Each plant ends in ONE big PLUMP ear: a chubby braid of 7 to 9 fat rounded grains with a few short soft awns, heavy, its tip softly DROOPING to the left or to the right (alternating, some more, some less). The ears are large and cute (each about 60 px wide and 100 px tall) and fill the upper half of the band; below them pale straw-yellow stems and two or three drooping straw-yellow blade leaves. Inner lines between the grains are a warm golden-brown (lighter than the outline) so the whole row reads as bright yellow from far away."""),
+    ]),
+    "wheat_base": ("1536x1024", (2, 1), False, [
+        ("wheat_soil", """a FIELD PLOT of bare soil, EMPTY (nothing planted yet) """ + GROUND_NOTE + """ A wide OVAL patch (a soft rounded shape between an ellipse and a rounded rectangle) of freshly tilled warm dark-brown soil, about HALF as tall as it is wide in the picture. Across it run eight neat, straight, parallel FURROWS from left to right (gentle ridges: a slightly lighter brown line on top of each ridge and a slightly darker line in each groove), evenly spaced from the back edge to the front edge. A low soft rim of crumbly soil around the edge, three or four tiny pebbles on the rim. NO plants, NO fence, NO tools, nothing standing on it. Fill most of the cell width (about 650 px wide)."""),
+        ("wheat_fence", """a LOW TWIG FENCE, drawn alone (NO ground, NO soil under it): a straight fence seen front-on, about 650 px wide and only about 110 px tall — it is knee-high for a villager. SIX short stout twig posts (round-topped honey-brown twig pegs with a pale cut top), joined by ONE slim, slightly wobbly twig rail tied to every post with a little cream grass-string cross knot. The rail is MISSING between the two middle posts (an open gateway in the centre, about one fifth of the width). The posts all stand on one straight horizontal line. Nothing else."""),
+    ]),
+    # optional accents for the field (the main session picks: plain / poppies + cornflowers / scarecrow)
+    "wheat_accent": ("1536x1024", (2, 1), False, [
+        ("wheat_scarecrow", """a TINY TWIG SCARECROW, drawn alone (NO ground): a cross of two twigs tied with grass string, wearing a little woven STRAW HAT with a wide brim and a faded dusty-blue patched cloth shirt stuffed with straw (straw tufts sticking out of the sleeves and the neck), a round cream cloth head with two dot eyes and a small stitched smile, a tiny red-brown patch on the shirt; friendly and cute, NOT scary. Its single twig pole goes straight down to the bottom. Tall and narrow: about 300 px wide and 520 px tall, centred in its cell."""),
+        ("wheat_flowers", """a LOW ROW OF WILD FIELD FLOWERS, drawn alone (NO ground): a loose straight row, about 620 px wide and about 150 px tall, of small flowers that grow at the edge of a wheat field — about five red POPPIES (four rounded petals, dark centre, soft poppy-red) and about five blue CORNFLOWERS (ragged cornflower-blue heads), mixed, on thin green stems with a few small green leaves, different heights, all standing on one straight horizontal line, with small gaps between little groups. Nothing else."""),
     ]),
     "sites": ("1536x1024", (2, 2), True, [
         ("site_0", """BUILDING SITE, stage 1 (just started): four short wooden stakes at the corners of a rectangle with grass-string lines between them, the ground inside levelled to bare light-brown dirt, and a floor of straight twig planks half laid on it. No material piles, no tools."""),

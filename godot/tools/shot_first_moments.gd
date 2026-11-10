@@ -399,7 +399,8 @@ func _s_wheat(name: String) -> int:
 	var gp := Vector2(float(g["x"]), float(g["y"]))
 	var vw := scene.view as VillageView
 	var tw: Vector2 = BldEcon.step_dirs(vw.econ.step if vw.econ != null else 0)[0]
-	var at := gp + tw * 3.6
+	var ahead := 3.6 if name.find("near") < 0 else 1.6      # 이름에 near가 들면 밭이 무덤 바로 앞 (줄을 베어 낸 창이 보이는 자리)
+	var at := gp + tw * ahead
 	var farm := vv.add_building("농장", at.x, at.y, true)
 	farm.built_t = vv.t
 	farm.ready_at = vv.t - 1.0
@@ -413,7 +414,8 @@ func _s_wheat(name: String) -> int:
 		if Time.get_ticks_msec() < int(w["t1"]):
 			return false
 		if int(w["stage"]) == 0:
-			print("밀밭: 무덤 앞 %.1f칸 · 그림 크기 몫 %.2f" % [3.6, BldEcon.wheat_cap(vv, farm, vw.econ.step if vw.econ != null else 0)])
+			var cuts := BldEcon.grave_cuts(vv, farm, vw.econ.step if vw.econ != null else 0, VillageView.wheat_stage(farm, vv.t))
+			print("밀밭: 무덤 앞 %.1f칸 · 낮춰 그린 줄 %d장 %s" % [ahead, cuts.filter(func(c: Array) -> bool: return not c.is_empty()).size(), [cuts]])
 			_save(name + "_village")
 			_look(gp + Vector2(0.0, 1.2), 34.0)
 			_settle()

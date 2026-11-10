@@ -49,8 +49,9 @@ var _near_shadow: Node3D        # 그림자 전용 묶음 (가까이 LOD일 때�
 var _shadow_items := {}         # 건물 id → [노드 변환, [[메시, 재질, 건물 기준 Transform3D]…]]
 var _shadow_dirty := false
 ## (2D 그림 건물 — view/bld2d/bld2d.gd, RENDERING.md 확정 2026-11-08) 건물마다 그림 판 + 3D 모델은 그림자 대역
+var wheat_accent := ""            # (Q8) 밀밭 꾸밈 그림 — "" 없음 · Bld2D.Pics.WHEAT_ACCENTS의 이름 ("scarecrow" · "flowers"). 바꾸면 _bld_key를 비워 다시 그림
 var _bld2d_on := false            # 지금 그림으로 그리는가 (Bld2D.enabled — 바뀌면 건물을 다시 만듦)
-var _card_items := {}             # 건물 id → [[그림, 마을 기준 원점(올림 포함), k, flip]…] (멀리 묶음 · 접촉 그림자)
+var _card_items := {}             # 건물 id → [[그림, 마을 기준 원점(올림 포함), k, flip, 낮춘 창, pull]…] (멀리 묶음 · 접촉 그림자)
 var _contact: MultiMeshInstance3D # 접촉 그림자 타원 (모든 건물 = 그리기 1번, 늘 보임)
 var _contact_dirty := false
 ## (2D 그림책 꽃·소품 — view/flora2d, RENDERING.md 확정 2026-11-08) 건물 노드에 단 꽃·소품 그림 (짐 더미·짓는 터 더미·화분 집·찾은 물건):
@@ -520,6 +521,12 @@ func _sync_residents(dt: float) -> void:
 			x = sp.x
 			z = sp.y
 			face = sp.z
+		if econ != null and not econ.fields.is_empty():     # (Q8) 익은 밀 숲 안에 든 사람은 숲 앞 가장자리에 (화면만 — BldEcon.wheat_stand)
+			var ws := econ.wheat_stand(r, x, z)
+			x = ws.x
+			z = ws.y
+			if not is_nan(ws.z):
+				face = ws.z
 		if not cut_baby:
 			m.move_to(Vector3(x, gy(x, z), z), dt)     # 땅 빠르기를 재어 걸음 동작을 맞춤 (발 미끄러짐 없음)
 		elif fresh:
@@ -985,6 +992,14 @@ func _bld_state(b: Building) -> String:
 	if b.is_site():
 		stage = site_stage(b)
 	var ripe := wheat_stage(b, v.t) if b.type == "농장" else 0
+	if b.type == "농장" and _bld2d_on and ripe == 2:
+		var rows := BldEcon.wheat_rows(v, b)      # (Q8) 거두는 동안 앞줄부터 그루터기 — 줄이 바뀌면 다시
+		var st: int = econ.step if econ != null else 0
+		var cuts: Array = BldEcon.grave_cuts(v, b, st, ripe, wheat_accent, rows) if not v.graves.is_empty() else []      # (E1-5) 무덤 앞의 밀 줄은 낮춰 그림 — 무덤·방위가 바뀌면 다시
+		ripe += 10 * (1 + hash([st if not cuts.is_empty() else 0, cuts, rows]) % 99991)
+	elif b.type == "농장" and _bld2d_on and not v.graves.is_empty():
+		var st: int = econ.step if econ != null else 0
+		ripe += 10 * (1 + hash([st, BldEcon.grave_cuts(v, b, st, ripe, wheat_accent)]) % 99991)
 	# 자리·병 방향도 키에 (병을 돌리면 건물 자리가 돈다)
 	var era := v.era if b.type == "나루터" else 0      # (E3-6) 나루터: 개척 시대는 갈대 뗏목, 그 뒤 잎 배
 	return "%s|%s|%s|%d|%d,%d|%d|%s|%.2f,%.2f|%d|%d" % [b.type, b.built, b.upgrade_to, stage, dp, ds, ripe, piles, b.x, b.y, v.water.rot, era]
@@ -1483,15 +1498,24 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	far.name = "far"
 	n.add_child(far)
 	if b.type == "농장":
-		_build_wheat(near, far, b)
-		if _bld2d_on:                 # (2D) 밀밭 그림 (자람 단계 셋) — 3D 줄기는 그림자만
-			Bld2D.proxify(near)
-			Bld2D.proxify(far)
-			# [보이는 살림 Q6] 뒤쪽 건물의 더미 줄을 가리는 밭은 그림을 줄여 놓는다 (화면만 — BldEcon.wheat_cap. 밭 자리·수확은 그대로)
-			var wk := econ.wheat_build_k(b) if econ != null else 1.0
-			near.scale = Vector3.ONE * wk
-			far.scale = Vector3.ONE * wk
-			_add_card(n, b, Bld2D.wheat_pic(wheat_stage(b, v.t)), wk)
+		if _bld2d_on:
+			# (2D · Q8 밀밭: 싹 → 푸른 밀 → 금빛 밀 숲) 눕힌 흙 + 이랑마다 세운 밀 줄 + 앞 울타리 — 모두 흙 그림과 같은 높이에.
+			# 싹·푸른 밀은 줄마다 제 깊이에 서서 밭 안의 주민이 앞줄에 묻힌다. 익은 밀 숲은 앞면 가까이로 당겨 한 덩어리 (Bld2D.wheat_pull) —
+			# 거두는 동안은 앞줄부터 그루터기 (BldEcon.wheat_rows). 키 큰 3D 줄기(긴 그림자 대역)는 만들지 않는다
+			# (E1-5) 밭 뒤에 무덤이 있으면 그 앞의 줄만 무덤 폭만큼 낮춰 그린다 (BldEcon.grave_cut) · 그 자리의 꾸밈(허수아비·꽃)은 두지 않음
+			var st: int = econ.step if econ != null else 0
+			var wc := BldEcon.wheat_cards(v, b, wheat_accent)
+			var face := Bld2D.wheat_face(wc)
+			for pic: String in wc:
+				var cut := BldEcon.grave_cut(v, b, st, pic)
+				if not cut.is_empty() and Bld2D.is_wheat_accent(pic):
+					continue
+				_add_card(n, b, pic, 1.0, false, true, cut, Bld2D.wheat_pull(pic, face))
+				var under := Bld2D.row_stubble(pic) if not cut.is_empty() else ""
+				if under != "":         # 낮춘 줄 밑에는 그루터기 — 줄 그림 바로 뒤에 (낮아진 자리에서만 드러남)
+					_add_card(n, b, under, 1.0, false, true, BldEcon.grave_cut(v, b, st, under), -Bld2D.STUBBLE_BACK)
+		else:
+			_build_wheat(near, far, b)
 		_set_yard(far, b, far.get_child_count() > 0)
 		_apply_bld_lod(n)
 		return
@@ -1538,20 +1562,21 @@ static func _cam_right2() -> Vector2:
 
 
 ## (2D) 건물 노드에 그림 판을 달고 기록 (멀리 묶음 · 접촉 그림자). 땅에 눕힌 그림은 발자리 네 귀퉁이 중 가장 높은 곳 위로
-func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false) -> void:
+## on_ground = 세운 그림도 그 높이에 (눕힌 그림 위에 서는 것 — 밭 흙 위의 밀 줄·울타리)
+func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false, on_ground := false, cut: Array = [], pull := 0.0) -> void:
 	if not Bld2D.has(pic):
 		return
 	var lift := 0.0
-	if int(Bld2D.info(pic).get("mode", 0)) == 1:
+	if on_ground or int(Bld2D.info(pic).get("mode", 0)) == 1:
 		var s := b.size()
 		var top := gy(b.x, b.y)
 		for a in 4:
 			top = maxf(top, gy(b.x + cos(a * PI / 2.0 + PI / 4.0) * s, b.y + sin(a * PI / 2.0 + PI / 4.0) * s))
 		lift = top - n.position.y + Bld2D.GROUND_LIFT
-	n.add_child(Bld2D.card(pic, k, flip, lift))
+	n.add_child(Bld2D.card(pic, k, flip, lift, cut, pull))
 	if not _card_items.has(b.id):
 		_card_items[b.id] = []
-	(_card_items[b.id] as Array).append([pic, n.position + Vector3(0, lift, 0), k, flip])
+	(_card_items[b.id] as Array).append([pic, n.position + Vector3(0, lift, 0), k, flip, cut, pull])
 	_contact_dirty = true
 
 
