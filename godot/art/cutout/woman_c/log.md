@@ -168,6 +168,64 @@ feet2_{diag,oct}_close_{before,after}_ppu20_x4.mp4, feet2_live_cutout_vs_frames_
 feet2_footlock_off_vs_on_bluedye_ppu{60,44}.mp4, feet2_tap_react_cutout_vs_frames_ppu44.png.
 Tool: `shot_cutC_compare.gd` env `CUTC_PPUS=20,44,60`, `CUTC_LOCK=0` (lock off), `CUTC_REACT=1` (same reaction values on both dolls).
 
+## 2026-11-10 v10 — legwear vs boots at ppu 20, carry 3/4 back far boot, standing 3/4 sheets, foot lock 0.5
+No parts pasted: one reference redrawn, whole sheets regenerated, one take per sheet.
+
+Legwear / boots (art decision of the main session, delegated: dark brown boots, legwear about two value steps lighter, inside
+the palette). View only, method C doll only (`frame_lib.gd` `leg_dye()` / `shoe_dye()`, used in `frame_doll.gd` `set_look`):
+legwear entries 47 `6a4332` and 49 `8a6a50` -> 46 `dba26d`; shoe entry 53 `9c7656` -> 51 `744628`; cream legwear 48 and the
+painted colours (dye -1) unchanged. The look record and the cutout doll are not changed. Dye masks: main-cloth mask and
+(shoe + legwear) masks share 0 px in all 96 frames; checked in game with a second clothes dye (pink) — boots and legwear keep
+their own colours.
+
+Carry 3/4 back (`pose_ref.py` `geometry(view, clip)`): carry-only swing path — arc 18 px sideways and the swinging foot passes
+12 px outside the planted one (`over`), so the far boot is not hidden behind the near leg when the legs pass.
+Far boot visible px per frame: reference 947 942 725 723 922 660 702 971; chosen take 911 902 717 683 870 573 654 905;
+before (v9) 886 830 543 383 854 250 496 834.
+
+Standing 3/4 sheets (idle 4 frames top row, carry-idle 4 frames bottom row): the old ones were free drawings at their own
+scale. New reference (`pose_ref.py hybrid`, idle): upper body of frame 2 of the traced walk sheet (top row) / carry sheet
+(bottom row), standing feet from `STAND`, chin rise 0 / -3 / -6 / 0 px (`BREATH`); `build_frames.py` `IDLE_POSE_VIEWS` roots
+them like walk / carry (same scale, hem height and boots as the walking frames). First stance (34-38 px between the boots):
+at ppu 20 the two boots touched and read as one lump -> 70 px (about 2 screen px of grass between the boots at ppu 20).
+Front / back standing sheets unchanged. Frame-to-frame silhouette overlap of the lower body: 3/4 front 0.984-0.997,
+3/4 back 0.986-0.995 (front 0.969-0.996, back 0.968-0.995) — no more boil than the existing sheets.
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/pose_carry_q_back.png | v10 reference (swing passes outside) | pose_ref.py | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/carry_q_back.png | take p36 of 8 (p31-p38) | codex-cli 0.163.0 (built-in image gen) | - | 1536x1024 | 2026-11-10 | yes | 8/8, whole sheet |
+| raw/pose_idle_{q_front,q_back}.png | v10 standing references | pose_ref.py | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/idle_q_front.png | take p4 of 6 | same | - | 1536x1024 | 2026-11-10 | yes | p1-p3 narrow stance (one lump at ppu 20); p5 oversized head disc + feet turned to the front |
+| raw/idle_q_back.png | take p4 of 6 | same | - | 1536x1024 | 2026-11-10 | yes | 8/8; p1-p3 narrow stance, p3 kept the walking arm swing |
+
+Extra takes deleted; logs of the chosen takes kept (`tools/cutout_c/logs/log_pose_carry_q_back_p36.txt`,
+`log_pose_idle_{q_front,q_back}_p4.txt`). Atlas rebuilt (1608x1384, cell 134x173, strides unchanged; standing boots within
++-6 px of the reference).
+
+Foot lock strength (`frame_doll.gdshader` `foot_lock` default 1.0 -> 0.5), from 30 fps captures of the sideways leg, dark look.
+Sideways wobble of the body against its simulation position (sd, device px; the drawn sway alone is ~0.5):
+
+| foot_lock | ppu 44 body sd / range | ppu 20 body sd / range | planted boot at ppu 44 |
+|---|---|---|---|
+| 0 | 0.53 / 2.1 | 0.54 / 2.1 | slides ~2-3 px inside every held frame |
+| 0.5 | 1.09 / 4.5 | 0.58 / 1.9 | ~1-2 px |
+| 1 | 1.65 / 6.6 | 0.82 / 2.9 | still (<= 1 px) |
+
+Judged from frame sequences and these numbers (not from watching the clips): 1 = visible 16-per-second hops of the whole
+figure at ppu 44; 0 = the boots skate; 0.5 keeps both under about 2 device px at ppu 44 and under 1 px at ppu 20.
+
+Still weak: the cutout doll keeps the look's own legwear / shoe colours, so a resident whose legwear entry is 47 / 49 changes
+leg colour when she switches dolls (work, sit, eat ...) — moving the rule into the look / palette is a game-wide art decision;
+front / back standing sheets are still free drawings (slightly different hem than the walking frames); the hanging arms of the
+3/4 standing frames are plain; carry / carry-idle always show the flour sack whatever she carries.
+
+Shots: godot_shots/cutC/feet3_before_after_{walk,carry,idle}_ppu{20,44}.png, feet3_carry_back34_boots_before_after_ppu{20,44}.png,
+feet3_clothes_dye_pink_ppu{20,44}.png, feet3_footlock_0_05_1_ppu44_x2.mp4, feet3_footlock_0_05_1_ppu20_x4.mp4,
+feet3_footlock_close_0_05_1_ppu44_x3.mp4, feet3_footlock_close_0_05_1_ppu20_x6.mp4, feet3_footlock_frames_ppu{20,44}.png,
+feet3_live_cutout_vs_frames_ppu44_x2.mp4, feet3_live_cutout_vs_frames_ppu20_x4.mp4.
+Tool: `shot_cutC_compare.gd` env `CUTC_DYE=<8 dye entries>` (both dolls), `CUTC_LOCK=<0..1>`.
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to

@@ -85,8 +85,21 @@ Thick dark-brown ink outline, flat cel colour with one soft shade step, cute and
 Clean flat cel colour, NO gradients, NO texture noise, NO hatching."""
 
 
+# v10 (2026-11-10): standing sheet of the 3/4 views traced from a standing reference (pose_ref.py hybrid idle): top row = standing
+# and breathing, bottom row = standing with the sack. Same body size / hem / boots as the traced walk and carry sheets.
+POSE_IDLE_ARMS = """- STANDING STILL (most important): she does NOT walk. Both boots stand flat on the ground exactly where the reference boots are, and the legs and boots are IDENTICAL in all 8 cells (same position, same size, same shape — copy them from cell to cell). The skirt hangs straight down and evenly, its hem at the same height in all 8 cells; no swinging skirt, no lifted foot.
+- TOP ROW (cells 1-4) = STANDING AND BREATHING: her arms hang relaxed at her sides, slightly away from the body, the mitten hands beside the hips (NOT swung forward or back, NOT raised, nothing in her hands). 1) neutral; 2) breathing in: shoulders and head a little higher; 3) full breath: shoulders and head highest (the head circle is a few pixels higher, exactly as in the reference); 4) back to neutral, the same as cell 1. The changes are SMALL — only the shoulders, sleeves and head rise a few pixels; hips, skirt, hem, legs and boots do not move at all.
+- BOTTOM ROW (cells 5-8) = STANDING STILL HOLDING THE FLOUR SACK ON HER RIGHT SHOULDER with both hands (a big plump soft cloth flour sack, light cool grey-white #D9D9D2 with ONE wide muted blue #5A7FB0 stripe and a tied gathered top, exactly where the reference sack is, the same size and shape in all four cells), breathing the same small way (5 neutral, 6 in, 7 full, 8 = 5)."""
+
 if __name__ == "__main__" and sys.argv[1] == "pose":
     clip, view, out = sys.argv[2], sys.argv[3], sys.argv[4]
+    if clip == "idle":
+        txt = POSE.format(out=out, body=BODY, view=VIEWS[view].replace("she walks toward", "she faces").replace("she walks AWAY", "she faces AWAY"), what="STANDING (idle, breathing)",
+                          sack=" (bottom row: with a grey sack with a blue stripe)", sack2="")
+        lines = [POSE_IDLE_ARMS if ln.startswith("- Arms") else ln for ln in txt.split("\n")]
+        print("\n".join(lines).replace("The boots still step: the lifted boot is lifted only as little as the puppet's (never hidden under the hem) and the boots alternate exactly as in the reference.", "Both boots stand flat on the ground.")
+              .replace("but the POSES (especially the leg and foot positions) must match the reference cells one by one", "and the STANDING pose (boot positions, hem height, body size, head circle) must match the reference cells one by one"))
+        sys.exit(0)
     sk = clip == "carry"
     print(POSE.format(out=out, body=BODY, view=VIEWS[view],
                       what="WALK CYCLE (walking in place, treadmill)" if not sk else "WALK CYCLE CARRYING A FLOUR SACK ON HER RIGHT SHOULDER (walking in place)",

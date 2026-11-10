@@ -54,7 +54,7 @@ def _leg_zone(clip, view, f, grow=20):
     from PIL import Image, ImageDraw, ImageFilter
     im = Image.new("RGB", (P.CW, P.CH), (0, 0, 0))
     d = ImageDraw.Draw(im)
-    g, by, ft = P.geometry(view), P.bob(clip, f), P.feet(clip, view, f)
+    g, by, ft = P.geometry(view, clip), P.bob(clip, f), P.feet(clip, view, f)
     for k in ("L", "R"):
         hip = (P.CW / 2 + g["hip"][k][0], P.HIP_Y + by + g["hip"][k][1])
         P.draw_leg(d, hip, (ft[k][0], ft[k][1]), (255, 255, 255), (255, 255, 255), g["fwd"], g["side"] == 0)
@@ -80,7 +80,7 @@ def _stray(rgb, fg, clip, view, f):
 
 def _check(path, clip, view, skip=frozenset(), partial=frozenset()):
     rgba = C.key(path).astype(np.float32)
-    g = P.geometry(view)
+    g = P.geometry(view, clip)
     out = []
     for f in range(8):
         x0, y0 = (f % 4) * P.CW, (f // 4) * P.CH

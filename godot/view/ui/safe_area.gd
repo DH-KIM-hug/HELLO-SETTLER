@@ -36,3 +36,9 @@ static func pad_sheet(panel: PanelContainer, bottom: float) -> void:
 	var s2 := sb.duplicate() as StyleBox
 	s2.content_margin_bottom = sb.get_margin(SIDE_BOTTOM) + bottom
 	panel.add_theme_stylebox_override("panel", s2)
+
+
+## 화면 조각(말풍선 등)을 안전한 네모 안으로 밀어 넣은 자리 (네모보다 크면 왼쪽·위에 맞춤)
+static func keep_in(pos: Vector2, size: Vector2, safe: Rect2) -> Vector2:
+	return Vector2(clampf(pos.x, safe.position.x, maxf(safe.position.x, safe.end.x - size.x)),
+		clampf(pos.y, safe.position.y, maxf(safe.position.y, safe.end.y - size.y)))

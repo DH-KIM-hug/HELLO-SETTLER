@@ -35,6 +35,7 @@
 | 작은 세계 | 곰팡이 퐁(포자), 곰팡이 털 곤두섬, 날벌레 윙윙, 꽃씨 날림(반짝이는 바람), 버섯 솟음 | `puff`, `fluffy pop`, `fly buzz`, `magic sparkle wind` |
 | UI | 버튼, 시트 열기·닫기, 지폐 받기(짤랑), 편지 도착(종이), 소원 들어줌(맑은 차임) | `ui click soft`, `paper`, `coins`, `chime` |
 | 톡 반응 (2026-11-10) | 강아지 멍(`dog_yip` 2)·잠결 낑(`dog_whine`)·어질 "앙?"(`dog_arf`), 재채기(`sneeze` 높음·낮음), 한숨(`sigh` 2), 아기 까르르·옹알(`baby_giggle`·`baby_coo` 2씩), 잠꼬대 "음…"(`sleep_mumble` 2), 어질 "어어~"(`dizzy_whoa` 2), 볼 빵빵 "흥"(`pout_hmph`) — 17개, 0.2~0.7초, 작고 부드럽게 | ElevenLabs 생성 (`gen_sfx.py`의 톡 반응 묶음) |
+| 첫 순간 연출 (2026-11-10) | 이웃의 "아아~"(`crowd_aww`)·작은 환호(`small_cheer`)·선물 반짝임(`gift_twinkle`)·문 삐걱(`door_creak`) — 4개, 0.4~1.0초, 작고 부드럽게. 쓰임: 첫 기적 = 빛이 내릴 때 반짝임 + 이웃이 있으면 환호 · 첫 아기 = 문 삐걱 → 아기 옹알(`baby_coo`) → 이웃이 있으면 "아아~" → 아기 까르르(`baby_giggle`) · 짧은 판(둘째부터)도 같은 소리를 더 작게. 긴 연출은 마을 소리를 낮추므로 Room 버스로, 여럿의 소리는 그 사람들이 화면에 있을 때만 | ElevenLabs 생성 (`gen_sfx.py`의 첫 순간 묶음) |
 
 ## 4. 전환 규칙
 - 곡 바꿈은 **2초 크로스페이드**. 위기·축제는 4초.
@@ -66,5 +67,5 @@
   - 규칙: 깨닫기 전에도 건네는 말이 없는 소리뿐 · 목소리와 같은 버스(효과음 음량 설정) · ×8 이상에선 끔 · 0.3초 쉼을 목소리와 함께 씀 (마구 눌러도 쌓이지 않음) · 고를 때 난수를 쓰지 않음 (화면만 — ADR-0001).
 - 금지: 게임·앱·플레이어·휴대폰 같은 말, 실존 인물 목소리 흉내.
 - **ElevenLabs 이용 조건**: 상업 이용은 **유료 요금제**(Starter 이상)에서 만든 음성만. 보이스 라이브러리의 목소리를 쓰면 그 목소리의 이용 조건도 확인. 만든 목소리 id·요금제·날짜를 `godot/audio/LICENSES.csv`에 기록.
-- 생성: 키는 `~/.config/elevenlabs/key` (저장소 밖, 팥죽 게임과 공용). `python3 tools/gen_voice.py` (목소리 id는 스크립트에 기본값) → `godot/audio/voice/*.mp3` (118개, 받아쓰기로 검사). 효과음 `godot/tools/gen_sfx.py` (63개 — 톡 반응 17개 포함), 음악 `tools/gen_music.py` (6곡).
+- 생성: 키는 `~/.config/elevenlabs/key` (저장소 밖, 팥죽 게임과 공용). `python3 tools/gen_voice.py` (목소리 id는 스크립트에 기본값) → `godot/audio/voice/*.mp3` (118개, 받아쓰기로 검사). 효과음 `godot/tools/gen_sfx.py` (67개 — 톡 반응 17개 · 첫 순간 연출 4개 포함), 음악 `tools/gen_music.py` (6곡).
 - 참고: ElevenLabs는 **효과음 생성**(Sound Effects)도 된다 — 픽사베이에서 못 찾은 작은 세계 소리(곰팡이 퐁, 꽃씨 바람, 코르크 뽁)는 거기서 만들어도 된다.

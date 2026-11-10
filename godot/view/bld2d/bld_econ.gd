@@ -31,12 +31,28 @@ const LAYOUT := {
 	"saltpan": {"out": Vector2(1.5, 0.9), "fx": &"stars", "fx_at": Vector2(0.0, 0.55)},
 	"mushroom_hut": {"out": Vector2(1.3, 0.3)},
 	"wheat_green": {"out": Vector2(1.5, 0.35)},
+	"lumber": {"out": Vector2(-1.35, 0.4), "fx_at": Vector2(0.1, 0.5)},      # 움직임 = 도끼 박힌 그루터기 위
+	"quarry": {"out": Vector2(1.85, 0.45), "fx_at": Vector2(-0.35, 1.45)},    # 움직임 = 구덩이 속 바위 위
 }
+## 채집 일터 (건물에 쌓이는 것이 없다 — 일꾼이 나무·바위에서 일하고 바로 창고로): 종류 → [모으는 것, 일하는 자리의 움직임]
+## 더미 = 마을 창고에 든 그 물건 (창고 앞 더미와 같은 기준) · 움직임 = 그 일터 일꾼이 나무·바위에서 일하는 동안,
+## 일꾼이 선 자리(나무·바위 곁 — 숲에 가려 안 보일 때가 많다)와 일터 그림(LAYOUT fx_at — "지금 일하는 중" 표시) 두 곳에
+const GATHER := {"나무꾼": ["통나무", &"chips"], "채석장": ["돌", &"pebbles"]}
+const GATHER_AT_CAMP := true     # false = 일꾼이 선 자리에만 (일터 그림에는 움직임 없음)
+const GATHER_LIFT := 0.55        # 일꾼 손 높이 (조각이 튀는 자리)
+const GATHER_FRONT := 0.35       # 일꾼보다 카메라 쪽으로 (조각이 일꾼·꽃 그림 앞에 보이게)
+const HOUSE_WOOD := Vector2(0.8, 0.1)     # 집 땔감: 그림 왼쪽 끝에서 바깥으로 · 그림 밑변에서 카메라 쪽 (문 옆 단지를 가리지 않게 벽 옆에)
+## 더미 앞마당: 건물·짓는 터의 카메라 쪽에 선 키 큰 꽃·풀 그림은 더미를 가리지 않는 키까지만 (VillageView._put이 물음)
+const APRON_MIN_H := 0.45        # 이 키까지는 그대로 (더미보다 낮은 풀) — 더미 바로 앞에 선 것은 여기까지 낮춤
+const APRON_BACK := 0.3          # 더미 줄보다 이만큼 뒤에 선 것부터 살핌 (그림 밑변이 줄 앞으로 나오는 것)
+const APRON_SIDE := 1.4          # 건물 그림 반 폭 + 이것 = 옆으로 살피는 폭 (그림 옆에 놓는 집 땔감까지)
+const APRON_SIN := 0.743         # sin 48° (카메라 기울기 — 그림 판은 화면에 제 키 그대로 서므로 키 h는 뒤쪽 땅을 h / sin 만큼 가린다)
 ## 일할 때 움직임: 그림 · 개수 · 크기 · [오르는 높이, 옆으로 흐름, 한 바퀴(초)] · 퍼지는 폭
 const FX := {
 	&"smoke": {"pic": "puff", "n": 3, "k": 0.8, "rise": 1.0, "drift": 0.3, "period": 2.8, "spread": 0.0},
 	&"flour": {"pic": "puff", "n": 2, "k": 0.5, "rise": 0.4, "drift": -0.25, "period": 1.7, "spread": 0.5},
-	&"chips": {"pic": "chip", "n": 4, "k": 1.7, "rise": 0.4, "drift": 0.6, "period": 0.9, "spread": 0.5},
+	&"chips": {"pic": "chip", "n": 3, "k": 1.35, "rise": 0.45, "drift": 0.6, "period": 0.9, "spread": 0.5},
+	&"pebbles": {"pic": "pebble", "n": 3, "k": 1.2, "rise": 0.4, "drift": 0.5, "period": 0.8, "spread": 0.4},
 	&"drops": {"pic": "drop", "n": 2, "k": 1.3, "rise": -0.45, "drift": 0.0, "period": 1.2, "spread": 0.3},
 	&"stars": {"pic": "star", "n": 3, "k": 1.1, "rise": 0.2, "drift": 0.0, "period": 1.5, "spread": 1.8},
 }
@@ -78,6 +94,8 @@ var _prod := {}                  # 건물 id → [지난 timer, 마지막으로 
 var _sites := {}                 # 짓는 중이던 건물 id (다 지어지면 퐁)
 var _pops: Array = []            # [{t, org, w, h, id}]
 var _bounces := {}               # 건물 id → 튀기 시작한 때
+var _aprons: Array = []          # 더미 앞마당 목록 (apron_list) — 한 화면에 한 번
+var _apron_frame := -1
 var _seen_once := false          # 처음 살필 때는 통·퐁 없음 (불러온 마을이 한꺼번에 튀지 않게)
 var _r2 := Vector2.RIGHT         # 화면 오른쪽 (마을 기준 땅 위 x·z)
 var _f2 := Vector2.DOWN          # 카메라 쪽
@@ -301,16 +319,13 @@ func _rebuild() -> void:
 		var org := n.position
 		if absf(org.y - float(vw.gy(org.x, org.z))) > 1.0:      # 하늘에서 내려오는 중
 			continue
-		var pic := ""
-		var k := 1.0
+		var pk := pic_k(v, b)
+		var pic := String(pk[0])
+		var k := float(pk[1])
 		if b.is_site():
 			sites2[b.id] = true
-			pic = "field_site" if b.site_type() == "농장" else ("scaffold" if b.built else "site_0")
-			k = b.size() / 1.8 if b.site_type() == "농장" else b.size()
-		else:
-			pic = "wheat_green" if b.type == "농장" else Bld2D.type_pic(b.type, b.id, v.era)
-			if _sites.has(b.id) and _seen_once:
-				_pop(b, org, pic)
+		elif _sites.has(b.id) and _seen_once:
+			_pop(b, org, pic)
 		var d := Bld2D.info(pic)
 		if d.is_empty():
 			continue
@@ -380,9 +395,23 @@ func _work(list: Array, lv2: Dictionary, b: Building, org: Vector3, pic: String,
 	if b.is_house():
 		var fl := level(float(b.in_buf.get("통나무", 0.0)), Balance.FUEL_TARGET)
 		if fl > 0:
-			_pile(list, lv2, "%d:f" % b.id, goods_pic("통나무", fl), _slot(org, in_at.x, base + in_at.y, bushes))
+			_pile(list, lv2, "%d:f" % b.id, goods_pic("통나무", fl), _slot(org, -(w * 0.5 + HOUSE_WOOD.x), base + HOUSE_WOOD.y, bushes))
 		if b.fuel_on:
 			_fx(list, b.id, &"smoke", _at(org, 0.0, base + 0.05), h * 0.8)
+		return
+	if GATHER.has(b.type):
+		var g: Array = GATHER[b.type]
+		var gl := level(float(v.stock.get(g[0], 0.0)), store_full(g[0]))
+		if gl > 0:
+			_pile(list, lv2, "%d:o0" % b.id, goods_pic(g[0], gl), _slot(org, out_at.x, base + out_at.y, bushes))
+		var wk := gather_worker(v, b)
+		if wk != null:
+			var wx := wk.x + _f2.x * GATHER_FRONT
+			var wz := wk.y + _f2.y * GATHER_FRONT
+			_fx(list, b.id, g[1], Vector3(wx, float(vw.gy(wx, wz)) + 0.02, wz), GATHER_LIFT)
+			if GATHER_AT_CAMP and lay.has("fx_at"):
+				var ga: Vector2 = lay["fx_at"]
+				_fx(list, b.id, g[1], _at(org, ga.x, base + 0.05), ga.y)
 		return
 	var j := 0
 	for k: String in d.get("in", {}):
@@ -399,6 +428,76 @@ func _work(list: Array, lv2: Dictionary, b: Building, org: Vector3, pic: String,
 	if lay.has("fx") and _producing(b):
 		var fa: Vector2 = lay["fx_at"]
 		_fx(list, b.id, lay["fx"], _at(org, fa.x, base + 0.05), fa.y)
+
+
+## 채집 일터의 일꾼이 지금 나무·바위에서 일하는 중이면 그 주민 (아니면 null) — 읽기만
+static func gather_worker(vil: Village, b: Building) -> Resident:
+	if not b.built or b.worker < 0 or not GATHER.has(b.type):
+		return null
+	var r := vil.person(b.worker)
+	if r == null or r.dead or r.sleeping or r.job != b.id or r.anim != "work" or r.action != "work" or r.carry != "":
+		return null
+	return r
+
+
+## 건물의 그림과 배율 [그림 이름, k] — 짓는 터는 터 그림
+static func pic_k(vil: Village, b: Building) -> Array:
+	if b.is_site():
+		var farm := b.site_type() == "농장"
+		return ["field_site" if farm else ("scaffold" if b.built else "site_0"), b.size() / 1.8 if farm else b.size()]
+	return ["wheat_green" if b.type == "농장" else Bld2D.type_pic(b.type, b.id, vil.era), 1.0]
+
+
+## 더미 앞마당 목록 [[건물 x, y, 더미 줄(건물 자리에서 카메라 쪽으로), 옆 폭]] — 제단·그림 없는 건물은 뺌
+static func apron_list(vil: Village) -> Array:
+	var out: Array = []
+	for b: Building in vil.buildings:
+		if b.site_type() == Awakening.ALTAR:
+			continue
+		var pk := pic_k(vil, b)
+		var d := Bld2D.info(pk[0])
+		if d.is_empty():
+			continue
+		var k := float(pk[1])
+		var front := float(d["h"]) * k * 0.5 if int(d.get("mode", 0)) == 1 else float(d["front"]) * k
+		out.append([b.x, b.y, front + FRONT_GAP, float(d["w"]) * k * 0.5 + APRON_SIDE])
+	return out
+
+
+## 더미 앞마당에 선 그림의 키 상한: (x, z)에 키 h인 그림이 서면 뒤쪽 건물 앞 더미(줄 위에 놓인 것)를 가리지 않는 키
+## (가리지 않으면 h 그대로). aprons = apron_list · half_w = 그림 반 폭 어림. 기본 방위(JarCamera.BASE_YAW_DEG) 기준 —
+## VillageView._core_scale과 같은 어림
+static func apron_h(aprons: Array, x: float, z: float, h: float, half_w := 0.0) -> float:
+	if h <= APRON_MIN_H:
+		return h
+	var yaw := deg_to_rad(JarCamera.BASE_YAW_DEG)
+	var tw := Vector2(sin(yaw), cos(yaw))
+	var rt := Vector2(cos(yaw), -sin(yaw))
+	var lim := h
+	for e: Array in aprons:
+		var d := Vector2(x - float(e[0]), z - float(e[1]))
+		var along := d.dot(tw) - float(e[2])
+		if along <= -APRON_BACK or along * APRON_SIN >= lim or absf(d.dot(rt)) > float(e[3]) + half_w:
+			continue
+		lim = maxf(APRON_MIN_H, along * APRON_SIN)
+	return lim
+
+
+## 꽃·풀 모델(key)을 (x, z)에 크기 s로 놓을 때 더미 앞마당이면 줄인 크기 (세워 놓는 그림만 — 땅에 눕힌 것은 그대로).
+## 앞마당 목록은 한 화면(프레임)·건물 수에 한 번만 만든다 (장식·나무를 다시 놓는 화면에서만 불림)
+func apron_scale(key: String, x: float, z: float, s: float) -> float:
+	var pic := Flora2D.pic_for(key)
+	if pic == "":
+		return s
+	var inf := Flora2D.info(pic)
+	var h := float(inf.get("h", 0.0)) * s
+	if int(inf.get("mode", 0)) != 0 or h <= APRON_MIN_H:
+		return s
+	var fr := Engine.get_process_frames() * 4096 + v.buildings.size()      # 같은 화면이라도 건물 수가 바뀌면 다시
+	if fr != _apron_frame:
+		_apron_frame = fr
+		_aprons = apron_list(v)
+	return s * apron_h(_aprons, x, z, h, float(inf.get("w", 0.0)) * s * 0.25) / h
 
 
 ## 더미 자리: 화면 옆으로 가까운 마당 덤불이 앞을 가리면 그 덤불 앞으로 (덤불 뒤에 숨지 않게)
