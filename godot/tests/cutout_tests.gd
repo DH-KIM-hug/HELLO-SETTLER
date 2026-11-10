@@ -764,6 +764,7 @@ func test_speed_cap() -> void:
 
 ## 방식 C 인형 (스파이크, proto/cutout_c — 기본 꺼짐): 다리·신 물감 다시 잇기 (2026-11-10: 그림에 없는 무늬 양말·끈 신 번호는 민무늬로),
 ## frames.json의 동작마다 보기 4개 × 장면 수, 덮은 상태(앉기·먹기·올려다보기·무릎·괭이질·줍기)가 장면 그림으로 이어지는지
+## (states5) 나르는 짐 그림 · 짐 자리 · 괭이질 꼭대기의 연장이 머리 밖 · 장면 수 · 잠도 장면 그림 · 아기 안기는 컷아웃 그대로
 func test_frames_c() -> void:
 	var FL := CutoutResident.FrameLib
 	var leg: int = Lib.OFF["leg"]
@@ -795,6 +796,81 @@ func test_frames_c() -> void:
 	check(FL.spike != 1 and (OS.get_environment("NAZAKJI_FRAMES") == "1" or not FL.enabled()), "방식 C는 기본 꺼짐")
 	check(FL.prop_fit(-1) == Vector2.ZERO and FL.prop_fit(6).x > 0.0 and is_zero_approx(FL.prop_fit(6).y) and is_equal_approx(FL.prop_fit(9).y, PI),
 		"방식 C 소품: 괭이는 그대로 · 나무망치는 반 바퀴")
+	# (states5, 2026-11-10) 장면 수: 안고 서기 4 · 줍기 6 (깊이 숙인 장면 4) · 잠 2 · 괭이질 4 · 올려다보기 8
+	var fpc: Dictionary = L["frames_per_clip"]
+	check(int(fpc.get("walk", 0)) == 8 and int(fpc.get("carry", 0)) == 8 and int(fpc.get("hold", 0)) == 4 and int(fpc.get("hoe", 0)) == 4
+		and int(fpc.get("lookup", 0)) == 8 and int(fpc.get("gather", 0)) == 6 and int(fpc.get("sleep", 0)) == 2,
+		"방식 C 장면 수: 걷기·나르기 8 · 안고 서기 4 · 괭이질 4 · 올려다보기 8 · 줍기 6 · 잠 2 (%s)" % [fpc])
+	var deep := 0
+	var deep_t := 0.0
+	var gfs: Array = []
+	for f: Dictionary in L["frames"]:
+		if f["clip"] == "gather" and f["view"] == "q_front":
+			gfs.append(f)
+	for i in gfs.size():
+		var t1: float = float(gfs[i + 1]["t0"]) if i + 1 < gfs.size() else 1.0
+		if String(gfs[i].get("pose", "")) in ["pick_full", "pick_grab"]:
+			deep += 1
+			deep_t += t1 - float(gfs[i]["t0"])
+	check(deep >= 3 and deep_t >= 0.45, "방식 C 줍기: 깊이 숙인 장면이 한 바퀴의 절반쯤 (%d장 · %.2f)" % [deep, deep_t])
+	# 나르는 짐: 짐 이름마다 짐 그림 (없는 이름은 바구니), 나르기·안고 서기 장면마다 보기 4개 모두 짐 자리
+	var loads: Array = L.get("loads", [])
+	var load_bad := []
+	var kinds: Array = FL.LOAD_OF.keys()
+	kinds.append_array(CutoutResident.CARRY_PROP.keys())
+	kinds.append_array(["버섯", "생선:앞", "처음 보는 것"])
+	for kind: String in kinds:
+		var li := FL.load_index(kind)
+		if li < 0 or li >= loads.size():
+			load_bad.append(kind)
+			continue
+		var e: Dictionary = loads[li]
+		var uv: Array = e["uv"]
+		if String(e["name"]) != FL.load_name(kind) or float(uv[2]) <= float(uv[0]) or float(uv[3]) <= float(uv[1]) or float(e["size"][0]) <= 0.0 or float(e["size"][1]) <= 0.0:
+			load_bad.append(kind)
+	for kind: String in CutoutResident.CARRY_PROP:
+		if FL.load_name(kind) == FL.LOAD_ELSE:       # 옛 인형이 따로 그리던 짐은 방식 C에서도 제 그림
+			load_bad.append(kind + " (바구니)")
+	check(load_bad.is_empty() and loads.size() >= 12, "방식 C 짐: 짐 이름마다 짐 그림 %d가지 %s" % [loads.size(), load_bad])
+	check(FL.load_name("밀") != FL.load_name("밀가루") and FL.load_name("밀가루") != FL.load_name("빵") and FL.load_name("밀") != FL.load_name("빵"),
+		"방식 C 짐: 밀 · 밀가루 · 빵이 서로 다른 그림")
+	check(FL.load_index("") == -1 and FL.load_name("") == "" and FL.load_name("버섯") == FL.LOAD_ELSE, "방식 C 짐: 빈 손은 짐 없음 · 모르는 짐은 바구니")
+	var seat_bad := []
+	var seats := {}
+	for f: Dictionary in L["frames"]:
+		if f["clip"] != "carry" and f["clip"] != "hold":
+			continue
+		var k := "%s/%s" % [f["clip"], f["view"]]
+		seats[k] = int(seats.get(k, 0)) + 1
+		var pr: Array = f.get("prop", [])
+		if pr.size() < 5 or float(pr[3]) <= 0.0:
+			seat_bad.append(k)
+			continue
+		# 짐 밑변 가운데가 턱에서 60~300 rig (어깨 위 손 옆 — 손에서 떨어져 떠다니지 않게), 발보다 한참 위
+		var dd := Vector2(float(pr[1]) - float(f["head"][0]), float(pr[2]) - float(f["head"][1])).length()
+		if dd < 60.0 or dd > 300.0 or float(pr[2]) < 250.0:
+			seat_bad.append("%s 거리 %.0f" % [k, dd])
+	var seat_all := true
+	for c: String in ["carry", "hold"]:
+		for v: String in ["front", "q_front", "q_back", "back"]:
+			seat_all = seat_all and int(seats.get("%s/%s" % [c, v], 0)) == int(fpc[c])
+	check(seat_bad.is_empty() and seat_all, "방식 C 짐: 나르기·안고 서기 장면마다 보기 4개에 짐 자리 %s" % [seat_bad])
+	# 괭이질 꼭대기: 연장 머리(날)가 머리 네모 밖 — 괭이(6)는 장면의 기울기, 짧은 연장 낫(7)·나무망치(9)는 따로 정한 기울기 (prop_short)
+	var head_h: float = FL.HEAD_FIT * float(L["d_rig"])
+	var tool_bad := []
+	var tops := 0
+	for f: Dictionary in L["frames"]:
+		if f["clip"] != "hoe" or String(f.get("pose", "")) != "hoe_top":
+			continue
+		tops += 1
+		var pr: Array = f["prop"]
+		var head := Rect2(float(f["head"][0]) - head_h * 0.5, float(f["head"][1]), head_h, head_h)
+		for id: int in [6, 7, 9]:
+			var ang: float = float(f.get("prop_short", pr[0])) if FL.PROP_HEAD_UP.has(id) else float(pr[0])
+			var blade := Vector2(float(pr[1]), float(pr[2])) + (float(pr[4]) + 0.5) * FL.prop_fit(id).x * Vector2(sin(ang), -cos(ang))
+			if head.has_point(blade):
+				tool_bad.append("%s 소품 %d" % [f["view"], id])
+	check(tops == 4 and tool_bad.is_empty(), "방식 C 괭이질 꼭대기: 보기 4개 모두 괭이·낫·나무망치의 날이 머리 밖 %s" % [tool_bad])
 	# 주민 인형: 켠 사람(어른 여자 평상복 a)만 덮은 상태에서 장면 그림, 나머지(잠·아기 안기·끈 사람)는 컷아웃 그대로
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 81
@@ -816,15 +892,29 @@ func test_frames_c() -> void:
 	m.set_job("농장")
 	m.set_tool("농장")
 	var bad := []
-	for cs: Array in [["sit", true, "sit"], ["eat", true, "eat"], ["pray", true, "kneel"], ["work", true, "hoe"], ["idle", true, "idle"], ["sleep", false, ""]]:
+	for cs: Array in [["sit", true, "sit"], ["eat", true, "eat"], ["pray", true, "kneel"], ["work", true, "hoe"], ["idle", true, "idle"], ["sleep", true, "sleep"], ["lookup", true, "lookup"], ["gather", true, "gather"]]:
 		m.set_anim(cs[0])
 		m.tick(0.0)
 		if m._f_on != bool(cs[1]) or m.doll.visible == m._f_on or (m._f_on and (m.fdoll.clip != cs[2] or not m.fdoll.visible)):
 			bad.append("%s → %s" % [cs[0], m._f_on])
-	check(bad.is_empty(), "방식 C: 덮은 상태는 장면 그림 · 잠은 컷아웃 %s" % [bad])
+	check(bad.is_empty(), "방식 C: 덮은 상태는 장면 그림 (잠도 — states5) %s" % [bad])
 	m.set_anim("work")
 	m.tick(0.0)
 	check(m._f_on and int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).w) == 6, "방식 C 괭이질: 괭이 소품 (6)")
+	check(m.frame_load() == "", "방식 C: 나르지 않으면 짐 그림 없음")
+	var carry_bad := []
+	for cs: Array in [["idle", "밀", "hold", "wheat"], ["walk", "밀가루", "carry", "flour"], ["walk", "빵:앞", "carry", "bread"], ["idle", "버섯", "hold", "basket"]]:
+		m.set_item(cs[1])
+		m.set_anim(cs[0])
+		m.tick(0.0)
+		var sx := int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x)
+		if not m._f_on or m.fdoll.clip != cs[2] or m.frame_load() != cs[3] or sx != FL.load_index(cs[1]) or sx < 0:
+			carry_bad.append("%s %s → %s %s %d" % [cs[0], cs[1], m.fdoll.clip, m.frame_load(), sx])
+	check(carry_bad.is_empty(), "방식 C: 든 것에 맞는 짐 그림 (밀 · 밀가루 · 빵 · 그 밖은 바구니) %s" % [carry_bad])
+	m.set_item("")
+	m.set_anim("idle")
+	m.tick(0.0)
+	check(m._f_on and m.frame_load() == "" and int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x) == -1, "방식 C: 내려놓으면 짐 그림 없음")
 	m.set_anim("idle")
 	m.carry_baby = true
 	m.tick(0.0)
