@@ -49,7 +49,7 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
 	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd", "social": "res://tests/social_tests.gd",
 	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd", "touch": "res://tests/touch_tests.gd",
-	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
+	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "opening_food": "res://tests/opening_food_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
 	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
 	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd",
@@ -91,7 +91,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting", "kids"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "opening_food", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting", "kids"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()
@@ -256,8 +256,9 @@ func test_rotation() -> void:
 
 # ───────────────────────── 3단계 — 주민 ─────────────────────────
 const POP_SEEDS := [1, 2, 3]
-# tools/sim_life.py (판매 없음, 병 하나, 하루 2시간 지켜봄, 60번 평균)의 10%~90% 범위
-const POP_RANGE := {10: [16, 28], 20: [18, 49], 30: [32, 52]}   # 10일 상한 28: v3.6 아침 7시 시작으로 초반이 빨라짐 (메인 세션 승인)
+# (2026-11-11 Q7 · docs/measure/opening_food_2026-11-11.md 4장) 출생 속도를 늦춘 뒤(Q5) 이 시험과 같은 설정으로 다시 잰 값: 씨앗 1·2·3 = 10일 13·13·12 / 20일 16·16·15 / 30일 19·18·17 (평균 12.7 / 15.7 / 18.0)
+# 범위는 평균에서 두세 명 (10일) ~ 서너 명 (30일) 여유. 예전 값 {10: [16, 28], 20: [18, 49], 30: [32, 52]}은 tools/sim_life.py (출생이 빠르던 때)의 10%~90% 범위였다
+const POP_RANGE := {10: [11, 15], 20: [13, 19], 30: [15, 22]}
 
 
 func words_ok(texts: Array) -> String:
@@ -942,7 +943,7 @@ func test_village_population() -> void:
 	for d: int in POP_RANGE:
 		var avg: float = sums[d] / POP_SEEDS.size()
 		var rg: Array = POP_RANGE[d]
-		check(avg >= rg[0] and avg <= rg[1], "%d일째 평균 인구 %.1f — sim_life 범위 %d~%d" % [d, avg, rg[0], rg[1]])
+		check(avg >= rg[0] and avg <= rg[1], "%d일째 평균 인구 %.1f — 잰 범위 %d~%d" % [d, avg, rg[0], rg[1]])
 	check(all_ok, "30일 내내 물자·주민 값이 음수/NaN 아님, 집 정원 초과 없음")
 	check(room_ok, "모든 출생 때 집에 빈자리 (집 크기 병목)")
 	check(cap_ok, "집 정원 합계 ≤ 품을 수 있는 인구 × 1.1 (땅이 한계)")
