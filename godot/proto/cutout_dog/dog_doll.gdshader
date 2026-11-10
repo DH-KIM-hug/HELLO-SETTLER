@@ -21,18 +21,27 @@ uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;
 uniform float alpha_cut = 0.5;
 uniform float far_shade = 0.84;
+// 꿀떡이 (사용자의 강아지를 닮게, Q2-e) — pat_c.w가 켜진 강아지만 씀. 값은 dog_lib.gd가 조각 표에서 채움.
+uniform vec4 kk_ear[4];               // 보기마다 접힌 귀 두 쪽의 뿌리 (a.xy, b.xy — rig)
+uniform vec2 kk_tail[4];              // 보기마다 말린 꼬리의 뿌리 (rig)
+uniform vec4 kk_nose[6];              // 보기 0·1 × 머리 셋 (보통·잠·짖음): 코 (x, y, 가로 반지름, 세로 반지름)
+uniform vec3 kk_nose_col = vec3(0.56, 0.34, 0.27);     // 간색(밤빛) 코 (sRGB 값 그대로)
+uniform vec3 kk_pink = vec3(0.97, 0.76, 0.74);         // 흰 귀 안쪽의 분홍 (sRGB 값 그대로)
+uniform float kk_ear_scale = 1.28;    // 귀가 크고 넓게 벌어짐
+uniform float kk_tail_scale = 1.16;   // 풍성한 꼬리
 
 instance uniform vec4 sel = vec4(1.0, 0.0, 0.0, 0.0);      // 귀 종류 0~2, 꼬리 종류 0~1, 니트 0/1, -
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작 번호, 시작 위상
 instance uniform vec4 misc = vec4(0.5, 1.0, 1.0, 0.0);     // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 빠르기(주기/초), 기울기(rad, 발끝 중심)
 instance uniform vec4 coat = vec4(0.79, 0.54, 0.31, 0.0);  // 바탕 털 rgb (sRGB), 무늬 종류 (0 없음 1 얼룩 2 눈가면 3 주근깨 4 양말발)
 instance uniform vec4 light_c = vec4(0.95, 0.9, 0.8, 0.0); // 밝은 털 rgb, 무늬 씨앗
-instance uniform vec4 pat_c = vec4(0.5, 0.3, 0.2, 0.0);    // 무늬 rgb, 꿀떡이 표시 (1 = 이마~코 하얀 줄 + 한쪽 귀 주근깨)
+instance uniform vec4 pat_c = vec4(0.5, 0.3, 0.2, 0.0);    // 무늬 rgb, 꿀떡이 표시 (1 = 아래 '꿀떡이' 겉모습 — 유전자가 아니라 그 한 마리만)
 
 varying flat vec4 v_info;     // x 조각 종류 (0 몸 1 머리 2 귀 3 꼬리 4 다리 5 옷), y 먼 쪽(1), z 귀 쪽 (0 a 1 b), w 보기
 varying vec2 v_loc;           // 그린 자세의 rig 좌표 (무늬)
 varying flat vec4 v_eyes;     // 머리: 두 눈 자리 (rig)
-varying flat vec4 v_head;     // 머리: 가운데 x, 폭, 아래 y, 위 y
+varying flat vec4 v_head;     // 머리: 가운데 x, 폭, 머리 종류 (0 보통 1 잠 2 짖음), -
+varying flat vec2 v_piv;      // 조각의 돌림 중심 (귀 = 뿌리)
 varying flat float v_show;
 
 vec4 anim(int slot, int row0, float f) {
@@ -60,7 +69,12 @@ void vertex() {
 	float f = fract(TIME * misc.z + st.w) * float(frames);
 	bool show = view == cur_view;
 	if (group == 1) {
-		show = show && abs(kind - floor(anim(10, row0, f).x + 0.5)) < 0.5;
+		float hk = floor(anim(10, row0, f).x + 0.5);
+		int clip = int(st.z + 0.5);
+		if (pat_c.w > 0.5 && hk < 0.5 && (clip == 1 || clip == 4)) {
+			hk = 2.0;                              // 꿀떡이: 걷거나 놀자고 할 때 입을 벌리고 웃음 (혀)
+		}
+		show = show && abs(kind - hk) < 0.5;
 	} else if (group == 2) {
 		show = show && abs(kind - sel.x) < 0.5;
 	} else if (group == 3) {
@@ -72,12 +86,21 @@ void vertex() {
 	v_info = vec4(CUSTOM1.z, CUSTOM1.w, CUSTOM2.w, float(view));
 	v_loc = VERTEX.xy;
 	v_eyes = CUSTOM3;
-	v_head = vec4(CUSTOM2.xy, 0.0, 0.0);
+	v_head = vec4(CUSTOM2.xy, kind, 0.0);
+	v_piv = piv;
 	if (!show) {
 		VERTEX = vec3(0.0);
 		POSITION = vec4(2.0, 2.0, 2.0, 1.0);
 	} else {
 		vec2 p = VERTEX.xy;
+		if (group == 2 && pat_c.w > 0.5) {             // 꿀떡이: 큰 귀 (뿌리에서 키움), 앞·뒤 보기에선 바깥으로 조금 벌림
+			p = piv + (p - piv) * kk_ear_scale;
+			if (cur_view == 0 || cur_view == 3) {
+				p += vec2(sign(piv.x - CUSTOM2.x) * 7.0, -5.0);
+			}
+		} else if (group == 3 && pat_c.w > 0.5) {      // 꿀떡이: 등 위로 말린 풍성한 꼬리
+			p = piv + (p - piv) * kk_tail_scale;
+		}
 		vec2 bp = body_pivot[cur_view];
 		vec4 a_body = anim(1, row0, f);
 		if (slot >= 6 && slot <= 9) {
@@ -151,7 +174,6 @@ float dots(vec2 p, float cell, float r, float seed) {
 
 // 이 화소의 바탕 털이 무늬 색이 되는 정도 (0~1)
 float pattern(float pk, float part, vec2 p, float seed) {
-	float kk = pat_c.w;
 	if (pk > 0.5 && pk < 1.5) {          // 얼룩: 몸·머리·꼬리에 큰 덩어리
 		if (part > 4.5) { return 0.0; }
 		float n = vnoise(p / 95.0 + seed) * 0.65 + vnoise(p / 40.0 + seed * 1.7) * 0.35;
@@ -169,14 +191,57 @@ float pattern(float pk, float part, vec2 p, float seed) {
 				vec2 d = (p - e) / vec2(r, r * 1.1);
 				m = max(m, 1.0 - smoothstep(0.85, 1.0, length(d)));
 			}
-			// 꿀떡이: 이마~코의 하얀 줄은 가면이 덮지 않음
-			float blaze = 1.0 - smoothstep(0.05 * hw, 0.075 * hw, abs(p.x - v_head.x));
-			if (kk > 0.5) { m *= 1.0 - blaze; }
 			return m;
 		}
 		return 0.0;
 	}
 	return 0.0;
+}
+
+// 두 점을 잇는 둥근 띠까지의 거리 (반지름이 ra → rb로 바뀜)
+float band_sd(vec2 p, vec2 a, vec2 b, float ra, float rb) {
+	vec2 ab = b - a;
+	float t = clamp(dot(p - a, ab) / max(dot(ab, ab), 0.001), 0.0, 1.0);
+	return length(p - a - ab * t) - mix(ra, rb, t);
+}
+
+// 꿀떡이 머리의 생강빛: 눈마다 눈 둘레에서 귀 뿌리까지 올라가는 얼룩, 그 사이 이마~주둥이는 하얀 줄
+float kk_head(vec2 p, int vw) {
+	float hw = max(v_head.y, 1.0);
+	vec4 eb = kk_ear[vw];
+	float m = 0.0;
+	if (vw == 0) {
+		for (int i = 0; i < 2; i++) {
+			vec2 e = i == 0 ? v_eyes.xy : v_eyes.zw;
+			if (e.x > 9000.0) { continue; }
+			float os = sign(e.x - v_head.x);
+			vec2 root = os < 0.0 ? eb.xy : eb.zw;
+			// 눈 둘레에서 귀 뿌리로 (바깥 띠) + 이마 쪽으로 (안쪽 띠) — 둘이 합쳐 얼굴 위쪽 반을 덮는 한 덩어리
+			float sd = band_sd(p, e + vec2(os * 0.035, 0.05) * hw, root + vec2(-os * 0.035, -0.04) * hw, 0.13 * hw, 0.15 * hw);
+			sd = min(sd, band_sd(p, e + vec2(0.0, 0.07) * hw, vec2(v_head.x + os * 0.17 * hw, e.y + 0.4 * hw), 0.11 * hw, 0.11 * hw));
+			m = max(m, 1.0 - smoothstep(-2.5, 2.5, sd));
+		}
+		float dy = (p.y - v_eyes.y) / hw;
+		float bw = mix(0.042, 0.1, smoothstep(0.04, 0.42, dy)) * hw + smoothstep(0.0, -0.1, dy) * 0.1 * hw;   // 눈 사이는 좁고 정수리로 갈수록 넓은 흰 줄
+		m *= smoothstep(bw, bw + 5.0, abs(p.x - v_head.x));
+	} else if (vw == 1) {
+		vec2 e = v_eyes.xy;
+		if (e.x < 9000.0) {
+			float sd = band_sd(p, e + vec2(-0.03, 0.045) * hw, eb.xy + vec2(0.08, -0.05) * hw, 0.13 * hw, 0.17 * hw);
+			sd = min(sd, band_sd(p, e + vec2(-0.03, 0.06) * hw, e + vec2(-0.1, 0.27) * hw, 0.115 * hw, 0.115 * hw));
+			m = 1.0 - smoothstep(-2.5, 2.5, sd);
+			float front = e.x + 0.085 * hw - (p.y - e.y) * 0.15;       // 눈 앞쪽 (이마~코)은 하얀 줄
+			m *= 1.0 - smoothstep(front - 3.0, front + 3.0, p.x);
+		}
+	} else {
+		// 뒤에서: 귀 뿌리 아래에 얼룩의 끝자락만 조금
+		for (int i = 0; i < 2; i++) {
+			vec2 root = i == 0 ? eb.xy : eb.zw;
+			vec2 d = (p - (root + vec2(0.0, -0.05 * hw))) / vec2(0.1 * hw, 0.075 * hw);
+			m = max(m, 1.0 - smoothstep(0.8, 1.0, length(d)));
+		}
+	}
+	return m;
 }
 
 void fragment() {
@@ -192,7 +257,7 @@ void fragment() {
 		float seed = light_c.w;
 		float lc = luma(c);
 		vec3 cb = coat.rgb * (lc / max(luma(coat_base), 0.04));
-		float pm = pattern(pk, part, v_loc, seed);
+		float pm = pat_c.w > 0.5 ? 0.0 : pattern(pk, part, v_loc, seed);
 		vec3 pb = pat_c.rgb * (lc / max(luma(coat_base), 0.04));
 		cb = mix(cb, pb, pm);
 		vec3 lb = light_c.rgb * (lc / max(luma(light_base), 0.04));
@@ -207,14 +272,56 @@ void fragment() {
 		}
 		vec3 frc = pat_c.rgb * (lc / max(luma(light_base), 0.04));
 		vec3 lbf = mix(lb, frc, fr);
-		if (pat_c.w > 0.5 && part > 1.5 && part < 2.5 && v_info.z > 0.5) {
-			cb = mix(cb, cb * 0.62, dots(v_loc, 13.0, 4.0, 5.0));
+		if (pat_c.w > 0.5) {
+			// 꿀떡이 (그 한 마리만 — 강아지가 물려받는 건 보통 유전자뿐): 눈마다 생강빛 얼룩 + 이마 하얀 줄, 제 왼쪽 귀는 생강빛 ·
+			// 오른쪽 귀는 희고 안쪽이 분홍 · 끝에 생강빛 주근깨, 꼬리 뿌리의 작은 얼룩, 다리의 옅은 주근깨, 간색 코.
+			int vw = int(v_info.w + 0.5);
+			float g = 0.0;
+			float pink = 0.0;
+			float dim = 1.0;
+			if (part < 0.5) {
+				if (vw > 0) {
+					vec2 off = vw == 1 ? vec2(12.0, 15.0) : (vw == 2 ? vec2(20.0, 12.0) : vec2(0.0, 6.0));
+					float rr = vw == 3 ? 27.0 : 19.0;
+					g = 1.0 - smoothstep(rr - 3.0, rr + 2.0, length((v_loc - kk_tail[vw] - off) * vec2(1.0, 1.25)));
+				}
+			} else if (part < 1.5) {
+				g = kk_head(v_loc, vw);
+			} else if (part < 2.5) {
+				bool left = (v_info.z > 0.5) != (vw >= 2);          // 앞·비스듬히 앞: b쪽이 제 왼쪽 / 비스듬히 뒤·뒤: a쪽
+				if (st.y * misc.y < 0.0) { left = !left; }          // 뒤집힌 그림에선 반대
+				float tip = clamp(length(v_loc - v_piv) / 70.0, 0.0, 1.0);
+				if (left) {
+					g = 1.0;
+					dim = mix(1.0, 0.86, smoothstep(0.45, 1.0, tip));
+				} else {
+					g = max(dots(v_loc, 9.0, 3.4, 5.0) * smoothstep(0.3, 0.65, tip), smoothstep(0.82, 1.02, tip) * 0.75);
+					pink = (1.0 - smoothstep(0.2, 0.62, tip)) * 0.55;
+				}
+			} else if (part > 3.5) {
+				g = dots(v_loc, 15.0, 2.8, 9.0) * 0.38;
+			}
+			float kc = lc / max(luma(coat_base), 0.04);
+			float kl = lc / max(luma(light_base), 0.04);
+			cb = mix(cb, kk_pink * kc, pink);
+			cb = mix(cb, pat_c.rgb * kc * dim, g);
+			lbf = mix(lbf, pat_c.rgb * kl * dim, g);
 		}
-		vec3 o = c * (1.0 - min(m.r + m.g, 1.0));      // 물감 아닌 것 (선·코·볼 붉은기·눈)은 그린 그대로
+		float ink = 1.0 - min(m.r + m.g, 1.0);
+		vec3 o = c * ink;                              // 물감 아닌 것 (선·코·볼 붉은기·눈)은 그린 그대로
 		o += m.r * cb + m.g * lbf;
+		if (pat_c.w > 0.5 && part > 0.5 && part < 1.5 && v_info.w < 1.5) {
+			vec4 n = kk_nose[int(v_info.w + 0.5) * 3 + int(v_head.z + 0.5)];
+			float nm = (1.0 - smoothstep(0.85, 1.0, length((v_loc - n.xy) / n.zw))) * ink * (1.0 - smoothstep(0.3, 0.5, lc));
+			o = mix(o, kk_nose_col * (0.72 + lc * 1.3), nm);
+		}
 		c = o;
 	}
-	c *= mix(1.0, far_shade, v_info.y);
+	float far = v_info.y;
+	if (pat_c.w > 0.5 && part > 1.5 && part < 2.5) {
+		far *= 0.45;                                   // 꿀떡이의 흰 귀가 먼 쪽에서 잿빛으로 보이지 않게
+	}
+	c *= mix(1.0, far_shade, far);
 	ALBEDO = srgb_to_linear(clamp(c, 0.0, 1.0));
 	ROUGHNESS = 1.0;
 }
