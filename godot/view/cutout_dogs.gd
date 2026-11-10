@@ -24,6 +24,7 @@ const SHADOW := Vector2(0.4, 0.22)    # DOG_H 강아지의 발밑 타원 (세계
 static var override := -1       # -1 = 주민 인형 스위치를 따름 · 0 = 늘 3D · 1 = 늘 종이 인형
 
 var dogs := {}                   # 강아지 id → 상태 사전 (아래 _entry)
+var react := {}                  # [톡 반응] 강아지 id → {off, sq, roll, turn, hint} (view/tap_react.gd — 화면만, 반응이 끝나면 지워짐)
 var shown := 0
 var _shadows: MultiMeshInstance3D
 
@@ -164,11 +165,14 @@ func sync(fv: FaunaView, dt: float, c: Vector2, vr: float, _fast: bool) -> void:
 			_update(e, dg, pos, dt, grow, winter, cam)
 			shown += 1
 			var s := float(e["h"]) / DOG_H
-			shadow_xf.append(Transform3D(Basis().scaled(Vector3.ONE * s), pos + Vector3(0, CutoutShadows.LIFT, 0)))
+			var ro: Vector3 = (react[id] as Dictionary)["off"] if react.has(id) else Vector3.ZERO
+			s *= CutoutShadows.hop_shrink(ro.y)       # [톡 반응] 폴짝 뛰면 그림자가 작아짐
+			shadow_xf.append(Transform3D(Basis().scaled(Vector3.ONE * s), pos + Vector3(ro.x, CutoutShadows.LIFT, ro.z)))
 	for id: int in dogs.keys():
 		if not seen.has(id):
 			(dogs[id]["doll"] as Node).queue_free()
 			dogs.erase(id)
+			react.erase(id)
 	_sync_shadows(shadow_xf, cam)
 
 
@@ -213,8 +217,9 @@ func _update(e: Dictionary, dg: Dictionary, pos: Vector3, dt: float, grow: float
 		var f := float(dg.get("face", 0.0))
 		e["dir"] = Vector3(sin(f), 0, cos(f))
 	e["last"] = pos
-	m.position = pos
-	var clip := clip_for(String(dg.get("state", "idle")), bool(e["walking"]), float(e["still_t"]), int(e["id"]))
+	var rx: Dictionary = react.get(int(e["id"]), {})
+	m.position = pos + (rx["off"] as Vector3) if not rx.is_empty() else pos
+	var clip := react_clip(clip_for(String(dg.get("state", "idle")), bool(e["walking"]), float(e["still_t"]), int(e["id"])), String(rx.get("hint", "")))
 	var h := float(e["h"])
 	var rate: float = Lib.CLIP_RATE[clip]
 	if clip == "walk":
@@ -228,7 +233,7 @@ func _update(e: Dictionary, dg: Dictionary, pos: Vector3, dt: float, grow: float
 			e["phase"] = fposmod(float(posmod(hash([e["id"], clip]), 997)) / 997.0 - now * rate, 1.0)
 		e["clip"] = clip
 		e["rate"] = rate
-		m.set_instance_shader_parameter("misc", Vector4(h, 1, rate, 0))
+		_push_misc(e)
 		push = true
 	if cam != null:
 		var vm := view_of(cam.global_transform.basis, e["dir"], float(e["mirror"]))
@@ -238,6 +243,52 @@ func _update(e: Dictionary, dg: Dictionary, pos: Vector3, dt: float, grow: float
 			push = true
 	if push:
 		m.set_instance_shader_parameter("st", Vector4(int(e["view"]), float(e["mirror"]), Lib.CLIPS.find(clip), float(e["phase"])))
+		if not rx.is_empty():
+			_push_misc(e)
+
+
+# ───────────────────────── 톡 반응 (view/tap_react.gd) ─────────────────────────
+## 인형 전체에 얹는 화면만의 움직임 (주민 인형의 set_react와 같은 뜻): off = 옮김(y 폴짝·xz 제자리 붙들기), squash = (가로, 세로) 배율,
+## roll = 바라보는 쪽으로 숙이기(rad), turn = 세로 축으로 도는 바퀴 수, hint = "" · still · bark. 반응이 끝나면 clear_react.
+func set_react(id: int, off: Vector3, squash: Vector2, roll: float, turn: float, hint: String) -> void:
+	if not dogs.has(id):
+		return
+	react[id] = {"off": off, "sq": squash, "roll": roll, "turn": turn, "hint": hint}
+	var e: Dictionary = dogs[id]
+	(e["doll"] as MeshInstance3D).position = (e["last"] as Vector3) + off
+	_push_misc(e)
+
+
+func clear_react(id: int) -> void:
+	if not react.has(id):
+		return
+	react.erase(id)
+	if dogs.has(id):
+		var e: Dictionary = dogs[id]
+		(e["doll"] as MeshInstance3D).position = e["last"]
+		_push_misc(e)
+
+
+## 반응하는 동안의 동작: 자는 강아지는 그대로 눕고, 걷던 발은 멈춤 · bark = 짖는 동작
+static func react_clip(clip: String, hint: String) -> String:
+	if hint == "" or clip == "lie":
+		return clip
+	if hint == "bark":
+		return "bark"
+	return "idle" if clip == "walk" else clip
+
+
+func _push_misc(e: Dictionary) -> void:
+	var rx: Dictionary = react.get(int(e["id"]), {})
+	var sq: Vector2 = rx.get("sq", Vector2.ONE)
+	var c := cos(float(rx.get("turn", 0.0)) * TAU)
+	if absf(c) < 0.16:                              # 돌 때 선으로 사라지지 않게 (주민 인형과 같게)
+		c = 0.16 if c >= 0.0 else -0.16
+	var w := sq.x * c
+	var sy := maxf(sq.y, 0.05)
+	var face := float(e["mirror"]) * (-1.0 if w < 0.0 else 1.0)       # 화면에서 바라보는 쪽 (오른쪽 +1)
+	(e["doll"] as MeshInstance3D).set_instance_shader_parameter("misc",
+		Vector4(float(e["h"]) * sy, w / sy, maxf(float(e["rate"]), 0.0), -float(rx.get("roll", 0.0)) * face))
 
 
 func _sync_shadows(list: Array, cam: Camera3D) -> void:

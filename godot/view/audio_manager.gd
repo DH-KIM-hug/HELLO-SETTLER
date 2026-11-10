@@ -126,6 +126,23 @@ static func say(line: String, who: Array = []) -> void:
 		a.shout(line, who)
 
 
+## [톡 반응] (view/tap_react.gd) 누른 주민의 짧은 한마디 — 줄 line의 n번째 녹음. 같은 줄 30초 쉼(LINE_COOLDOWN)을 타지 않고
+## 제 짧은 쉼(TAP_VOICE_GAP)만 둔다 (누를 때마다 대답). 빨리 돌릴 땐 없음. 말했으면 true
+static func tap_voice(r: Resident, line: String, n: int, pitch_mul := 1.0) -> bool:
+	var a := get_instance()
+	return a != null and a.tap_blip(r, line, n, pitch_mul)
+
+
+## 그 주민 제 목소리에 그 줄·그 녹음이 있으면 그것, 없으면 "응?"(hello 0) — 남의 목소리를 빌리지 않는다. 갓난아기는 ""
+static func tap_voice_path(r: Resident, line: String, n: int) -> String:
+	var v := voice_of(r)
+	if v == "":
+		return ""
+	if LINES.has(line) and (LINES[line] as Dictionary).has(v) and n >= 0 and n < int(LINES[line][v]):
+		return voice_path(line, v, n)
+	return voice_path("hello", v, 0)
+
+
 ## 진동 (설정이 켜져 있을 때만 — 유리 톡·물건 떨어뜨림에만 쓴다)
 static func buzz() -> void:
 	GameSettings.buzz(30)
@@ -510,6 +527,22 @@ func shout(line: String, who: Array = []) -> void:
 			_play_voice(path, pitch)
 		else:
 			_pending.append([t + rng.randf_range(0.3, 0.6), path, pitch])
+
+
+const TAP_VOICE_GAP := 0.3           # [톡 반응] 누른 주민의 한마디 사이 (초)
+var _tap_voice_t := -10.0
+
+
+func tap_blip(r: Resident, line: String, n: int, pitch_mul := 1.0) -> bool:
+	var t := now()
+	if fast() or r == null or t - _tap_voice_t < TAP_VOICE_GAP:
+		return false
+	var path := tap_voice_path(r, line, n)
+	if path == "":
+		return false
+	_tap_voice_t = t
+	_play_voice(path, resident_pitch(r.id) * pitch_mul)
+	return true
 
 
 func _play_voice(path: String, pitch: float) -> void:

@@ -1393,12 +1393,19 @@ func _do_split(p: Vector2) -> void:
 
 func _on_tap(sp: Vector2) -> void:
 	if split_from != null:
+		_react_cancel()
 		_do_split(screen_to_ground(sp))
 		return
 	if room_zoom != null and cam.stage() >= 4:
 		_room_tap(sp)
+		_react_cancel()
 		return
 	super(sp)
+
+
+## [톡 반응] 무리 나누기 자리 고르기 중·병 밖(방)에서는 주민 톡이 아님
+func _react_can_tap(sp: Vector2) -> bool:
+	return split_from == null and not (room_zoom != null and cam.stage() >= 4) and super(sp)
 
 
 ## (B1) 뒤로 가기 → 거인의 방으로 날아 나간 뒤 타이틀 (타이틀은 같은 방 ⑤ — 끊김 없이)

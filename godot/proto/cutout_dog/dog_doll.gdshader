@@ -24,7 +24,7 @@ uniform float far_shade = 0.84;
 
 instance uniform vec4 sel = vec4(1.0, 0.0, 0.0, 0.0);      // 귀 종류 0~2, 꼬리 종류 0~1, 니트 0/1, -
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작 번호, 시작 위상
-instance uniform vec4 misc = vec4(0.5, 1.0, 1.0, 0.0);     // 화면 키(세계), -, 빠르기(주기/초), -
+instance uniform vec4 misc = vec4(0.5, 1.0, 1.0, 0.0);     // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 빠르기(주기/초), 기울기(rad, 발끝 중심)
 instance uniform vec4 coat = vec4(0.79, 0.54, 0.31, 0.0);  // 바탕 털 rgb (sRGB), 무늬 종류 (0 없음 1 얼룩 2 눈가면 3 주근깨 4 양말발)
 instance uniform vec4 light_c = vec4(0.95, 0.9, 0.8, 0.0); // 밝은 털 rgb, 무늬 씨앗
 instance uniform vec4 pat_c = vec4(0.5, 0.3, 0.2, 0.0);    // 무늬 rgb, 꿀떡이 표시 (1 = 이마~코 하얀 줄 + 한쪽 귀 주근깨)
@@ -94,7 +94,11 @@ void vertex() {
 			}
 		}
 		p = xf(p, vec2(0.0), anim(0, row0, f));
-		p.x *= st.y;
+		p.x *= st.y * misc.y;
+		if (misc.w != 0.0) {                           // [톡 반응] 발끝을 중심으로 인형 전체를 기울임 (view/tap_react.gd — 화면만)
+			float rc = cos(misc.w), rs = sin(misc.w);
+			p = vec2(rc * p.x - rs * p.y, rs * p.x + rc * p.y);
+		}
 		vec3 right = INV_VIEW_MATRIX[0].xyz;
 		right = normalize(vec3(right.x, 0.0, right.z));
 		vec3 back = INV_VIEW_MATRIX[2].xyz;

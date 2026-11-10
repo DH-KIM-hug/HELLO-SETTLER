@@ -99,6 +99,12 @@ var _f_clip := ""
 var _f_rate := -1.0
 var _f_phase := 0.0
 var _f_hat := -9
+## [톡 반응] (view/tap_react.gd) 인형 전체에 얹는 화면만의 움직임 — 이 노드의 자리(= 시뮬 자리)는 그대로, 인형(doll)만 움직인다
+var react_off := Vector3.ZERO    # 부모(VillageView) 틀 기준 옮김: y = 폴짝, xz = 반응하는 동안 제자리에 붙들기
+var react_sq := Vector2.ONE      # (가로, 세로) 배율 — 찌그러짐·늘어남
+var react_roll := 0.0            # 바라보는 쪽으로 숙이는 기울기 (rad, 발끝 중심)
+var react_turn := 0.0            # 종이 인형이 세로 축으로 도는 바퀴 수 (0.5 = 반대쪽을 봄)
+var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴)
 
 
 static func enabled() -> bool:
@@ -301,6 +307,54 @@ func apply_pose(a: String, _t: float) -> void:
 	_refresh_doll()
 
 
+## [톡 반응] 인형 전체 움직임 입히기 (TapReact가 반응하는 동안 매 화면, 끝나면 기본값으로). 어떤 주민 인형이든 이 함수 하나만 있으면 된다.
+func set_react(off: Vector3, squash: Vector2, roll: float, turn: float, hint: String) -> void:
+	react_off = off
+	react_sq = squash
+	react_roll = roll
+	react_turn = turn
+	if hint != react_hint:
+		react_hint = hint
+		_refresh_doll()
+	_push_misc()
+
+
+## 인형 자리 + 키·폭·빠르기·기울기를 GPU에 (셰이더는 인형 노드의 원점만 읽는다 — 배율·회전은 여기 값으로)
+func _push_misc() -> void:
+	if doll == null:
+		return
+	doll.position = transform.basis.inverse() * react_off
+	var c := cos(react_turn * TAU)
+	if absf(c) < 0.16:                              # 종이 인형이 돌 때 선으로 사라지지 않게 (옆모습 두께)
+		c = 0.16 if c >= 0.0 else -0.16
+	var w := react_sq.x * c
+	var sy := maxf(react_sq.y, 0.05)
+	var face := float(doll.mirror) * (-1.0 if w < 0.0 else 1.0)      # 화면에서 바라보는 쪽 (오른쪽 +1)
+	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -react_roll * face))
+
+
+## [톡 반응] 지금 그려진 인형의 머리 높이 (세계, 찌그러짐 전) — 말풍선 자리. 누웠으면 낮게, 앉았으면 조금 낮게
+func react_top() -> float:
+	if _infant or _d_clip == "sleep":
+		return _doll_h * 0.42
+	if _d_clip == "sit" or _d_clip == "eat" or _d_clip == "kneel":
+		return _doll_h * 0.78
+	return _doll_h
+
+
+## 반응하는 동안의 동작: 걷던 발은 멈추고(짐은 든 채), 올려다보기는 서 있을 때만 — 일·앉기·잠은 그대로
+func _react_clip(clip: String) -> String:
+	if react_hint == "" or _baby:
+		return clip
+	if react_hint == "lookup" and (clip == "idle" or clip == "walk"):
+		return "lookup"
+	if clip == "walk":
+		return "idle"
+	if clip == "carry":
+		return "hold"
+	return clip
+
+
 func tick(dt: float) -> void:
 	_t += dt * Style.ANIM_SPEED
 	_refresh_doll()
@@ -392,7 +446,7 @@ func _refresh_doll() -> void:
 	if int(s["prop"]) != _d_prop:
 		_d_prop = int(s["prop"])
 		doll.set_instance_shader_parameter("sel", Vector4(_d_outfit, int(dlook["head"]), _d_hat, _d_prop))
-	var clip: String = s["clip"]
+	var clip: String = _react_clip(s["clip"])
 	var rate: float = Lib.CLIP_RATE[clip]
 	if clip == "walk" or clip == "carry":
 		# 발이 미끄러지지 않게: 주기/초 = 땅 빠르기 ÷ (한 주기 걸음 × 키 배율). 모르면 보통 걸음
@@ -414,7 +468,7 @@ func _refresh_doll() -> void:
 		_d_clip = clip
 		_d_rate = rate
 		doll.clip = clip
-		doll.set_instance_shader_parameter("misc", Vector4(_doll_h, 1, rate, 0))
+		_push_misc()
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(clip), _d_phase))
 	_refresh_frames()
 	_update_view()
@@ -589,7 +643,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 				taken[best.id] = true
 				pm.carry_baby = true
 				pm._refresh_doll()
-				pos = pm.position
+				pos = pm.position + pm.react_off       # [톡 반응] 폴짝 뛰는 부모 품에서 함께
 				yaw = pm.rotation.y
 			elif not infant:
 				mode = "toddle"
