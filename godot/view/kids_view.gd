@@ -2,6 +2,8 @@
 ## 여기서는 저장된 놀이 상태(Village.kids)와 사건(kid_tagged · kid_stack_fell · kid_play_started · baby_peeked · first_steps)을 읽어
 ##   · 놀이 속 아이의 화면 자리 (ChildPlay.spot — 놀이 시계의 순수 함수) + 인형 통째 몸짓 (폴짝 · 눌림 · 기울임) + 그림 말풍선
 ##   · 작은 소품 그림 (돌탑 · 나비 · 먼지 · 요람 — art/kids2d/kids_props.png, tools/kids/make_props.py가 그림)
+##   · 사방치기: 땅에 그은 칸 (납작한 판 — 놀이가 끝나면 한동안 남았다가 닳아 없어짐) · 깨금발 뜀 · 조약돌/별 그림 말풍선
+##   · 물수제비: 날아가는 조약돌 · 물 위의 고리 (점점 촘촘히) — 아이는 물가 자리에서 움직이지 않는다
 ##   · 아기: 문 옆 요람(2D 바구니) · 들여다보는 이웃 · 걸음마 아기의 아장아장·털썩
 ## 을 보여 준다. 시뮬레이션 값(자리·하는 일·난수)은 건드리지 않는다 (ADR-0001). 새 인형 동작(rig clip)은 없다.
 ## 값을 싸게: 아이마다 상태 하나를 한 번만 만들고, 매 화면에는 숫자 계산과 바뀐 instance uniform만.
@@ -65,6 +67,24 @@ const FS_SPARK := 0.4             # 혼자 걸었을 때의 반짝임 크기 (�
 const FS_FX_PX := 72.0            # 하트·반짝임의 크기 기준 (짧은 판 MINI_PX보다 작게 — 마을의 작은 순간)
 const NOD_SECS := 3.4             # 꾸벅 한 번 (천천히 숙였다가 화들짝)
 const FS_CLEAR := 0.3             # 건물 그림 밑변에서 이만큼 앞이어야 보임
+# 사방치기 · 물수제비 (Q2-b 놀이 3 — 화면만)
+const GROUND_SHADER := "res://view/kids/kid_ground.gdshader"
+const GRID_FILL := Color("f1e6c4")     # 칸 바탕 (발로 다진 밝은 흙)
+const GRID_INK := Color("6e4a2c")      # 나뭇가지로 그은 금
+const GRID_LIFT := 0.04           # 칸을 땅에서 띄우는 높이
+const GRID_LINE := 0.06           # 금의 굵기 (칸)
+const GRID_DRAW := 1.5            # 긋는 데 걸리는 시간 (현실 초)
+const GRID_HOLD := 7.0            # 놀이가 끝난 뒤 그대로 남는 시간
+const GRID_FADE := 5.0            # 그 뒤 닳아 없어지는 시간
+const HOPSCOTCH_H := 0.21         # 깨금발 뜀 높이 (칸)
+const CHEER_SECS := 0.95          # 기다리던 아이의 들썩들썩 (두 번)
+const STAR_SECS := 1.7            # 깨끗이 다녀온 아이 머리 위의 별
+const RING_COL := Color("f6fcff")
+const RING_SECS := 1.3
+const RING_R := 0.5              # 첫 물결 고리의 반지름 (칸)
+const RING_LIFT := 0.03
+const RING_MAX := 14
+const PEBBLE_W := 0.16
 
 var v: Village
 var vw: VillageView               # residents · gy · stage_say
@@ -87,6 +107,15 @@ var _back := Vector3.BACK         # 카메라 쪽 (땅 위)
 var bub: KidBubbles               # 그림 말풍선 (저녁 이야기 — 글 없음)
 var _story := {}                  # 이야기하는 어르신 id → 놀이
 var fx_log: Array = []            # (시험) 놓은 빛·하트 [종류, 자리]
+var _grids := {}                  # 사방치기 칸: 놀이 id → Grid (놀이가 끝난 뒤에도 한동안 남음)
+var _gmat: ShaderMaterial         # 칸 재질
+var _rmat: ShaderMaterial         # 물결 고리 재질
+var _ring_mesh: ArrayMesh
+var _rings: Array[MeshInstance3D] = []
+var _ring_t := PackedFloat32Array()
+var _ring_r := PackedFloat32Array()
+var _ring_i := 0
+var ring_log: Array = []          # (시험) 놓은 물결 고리 [자리, 반지름] — 가장 새 것 몇 개만
 var _puffs: Array[MeshInstance3D] = []
 var _puff_t := PackedFloat32Array()
 var _puff_i := 0
@@ -105,11 +134,24 @@ class Kid extends RefCounted:
 	var ph := 0.0
 	var hop_t := -1.0
 	var said := -1
+	var cheer_t := -9.0           # 들썩들썩 (−9 = 없음 · 음수 = 조금 뒤에 시작)
+	var star_t := -1.0            # 머리 위 별
+	var land := -1                # 사방치기: 마지막으로 내려선 뜀
+
+
+class Grid extends RefCounted:
+	var node: MeshInstance3D
+	var t := 0.0                  # 긋기 시작한 뒤 (현실 초)
+	var gone := -1.0              # 놀이가 끝난 뒤 (−1 = 놀이 중)
+	var seen := -1
 
 
 class Props extends RefCounted:
 	var stones: Array[MeshInstance3D] = []
 	var bfly: MeshInstance3D
+	var stone: MeshInstance3D     # 물수제비 돌
+	var touch := 0                # 이번 돌이 물에 닿은 횟수 (고리를 놓은 만큼)
+	var cheer_hs := -1.0          # 멀리 간 돌에 폴짝한 차례 (그 차례가 시작된 놀이 시계)
 	var h := 0
 	var pop_t := 9.0
 	var fall_t := -1.0
@@ -320,7 +362,36 @@ func begin(dt: float, fast: bool) -> void:
 					s.queue_free()
 				if pr.bfly != null:
 					pr.bfly.queue_free()
+				if pr.stone != null:
+					pr.stone.queue_free()
 				_props.erase(gid)
+	for gid: int in _grids.keys():             # 사방치기 칸: 긋는 중 → 그대로 → (놀이가 끝나고 한참 뒤) 닳아 없어짐
+		var gr: Grid = _grids[gid]
+		if gr.seen == _frame:
+			gr.t += dt
+			gr.gone = -1.0
+		else:
+			gr.gone = maxf(gr.gone, 0.0) + dt
+			if gr.gone >= GRID_HOLD + GRID_FADE:
+				gr.node.queue_free()
+				_grids.erase(gid)
+				continue
+		gr.node.set_instance_shader_parameter("reveal", 1.0 if fast else clampf(gr.t / GRID_DRAW, 0.0, 1.0))
+		gr.node.set_instance_shader_parameter("tint", Vector4(1.0, 1.0, 1.0, clampf((gr.gone - GRID_HOLD) / GRID_FADE, 0.0, 1.0)))
+	for i in _rings.size():                    # 물결 고리: 퍼지며 흩어짐
+		var t := _ring_t[i]
+		if t >= RING_SECS:
+			continue
+		t += dt
+		_ring_t[i] = t
+		if t < 0.0 or t >= RING_SECS:
+			_rings[i].visible = false
+			continue
+		var u := t / RING_SECS
+		var sc := _ring_r[i] * (0.22 + 0.78 * (1.0 - (1.0 - u) * (1.0 - u)))
+		_rings[i].visible = true
+		_rings[i].scale = Vector3(sc, 1.0, sc)
+		_rings[i].set_instance_shader_parameter("tint", Vector4(1.0, 1.0, 1.0, smoothstep(0.5, 1.0, u) * 0.96))
 	for i in _puffs.size():
 		var t := _puff_t[i]
 		if t < 0.0:
@@ -380,6 +451,19 @@ func _events(fast: bool) -> void:
 			var d: Dictionary = e["v"]
 			if String(d["kind"]) == "bfly":
 				_say(int(e["who"]), "bfly", "cheer", 2.0)
+		elif kind == &"kid_hop_done":            # 사방치기 한 판: 깨끗이 다녀오면 별 · 기다리던 아이들이 들썩들썩, 금을 밟았으면 깔깔
+			var d: Dictionary = e["v"]
+			if bool(d["clean"]):
+				var hk: Kid = _kid.get(int(e["who"]))
+				if hk != null:
+					hk.star_t = 0.0
+				for id: int in _kid:
+					var k: Kid = _kid[id]
+					if id != int(e["who"]) and k.seen >= _frame - 1 and int(k.g.get("id", -1)) == int(d["game"]):
+						k.cheer_t = -0.22 * _h01(id, 9)
+				GameAudio.fx("small_cheer", "Village", -11.0, e["at"])
+			else:
+				GameAudio.fx("child_laugh", "Village", -13.0, e["at"])
 		elif kind == &"baby_peeked":
 			var d: Dictionary = e["v"]
 			var p := Peek.new()
@@ -415,6 +499,19 @@ func _props_tick(g: Dictionary, dt: float) -> void:
 			0.5 + 0.09 * sin(_clock * 3.1 + float(gid)))
 	elif pr.bfly != null:
 		pr.bfly.visible = false
+	# 사방치기 칸 (첫 아이가 닿으면 긋기 시작)
+	if kind == "hop" and int(g.get("go", 0)) == 1:
+		var gr: Grid = _grids.get(gid)
+		if gr == null:
+			gr = Grid.new()
+			gr.node = _grid_node(g)
+			_grids[gid] = gr
+		gr.seen = _frame
+	# 물수제비: 돌 · 물결 고리
+	if kind == "skip":
+		_skip_tick(g, pr, n_on)
+	elif pr.stone != null:
+		pr.stone.visible = false
 	# 돌탑
 	if kind != "stack":
 		for s: MeshInstance3D in pr.stones:
@@ -479,6 +576,201 @@ func _props_tick(g: Dictionary, dt: float) -> void:
 			_put(s, pic, from.lerp(base + _right * jx, e), STONE_W, 0.0, 0.06, 1.0, 1.0, 0.0, lerpf(0.2, float(i) * STONE_PITCH, e) + 0.1 * sin(e * PI))
 		else:
 			s.visible = false
+
+
+# ───────────────────────── 소품: 사방치기 칸 · 물수제비 ─────────────────────────
+## 사방치기 칸들 [가운데, 줄] — 한 칸 줄은 가운데, 두 칸 줄은 양옆 (ChildPlay.HOP_ROWS)
+static func hop_cells(g: Dictionary) -> Array:
+	var ax := Vector2(float(g["ax"]), float(g["ay"]))
+	var perp := Vector2(-ax.y, ax.x)
+	var c := Vector2(float(g["x"]), float(g["y"]))
+	var n := ChildPlay.HOP_ROWS.size()
+	var out: Array = []
+	for i in n:
+		var q := c + ax * ((float(i) + 0.5 - float(n) * 0.5) * ChildPlay.HOP_CELL)
+		if int(ChildPlay.HOP_ROWS[i]) == 1:
+			out.append([q, i])
+		else:
+			out.append([q + perp * ChildPlay.HOP_CELL * 0.5, i])
+			out.append([q - perp * ChildPlay.HOP_CELL * 0.5, i])
+	return out
+
+
+func _ground_mat(fill: Color, line: Color) -> ShaderMaterial:
+	var mt := ShaderMaterial.new()
+	mt.shader = load(GROUND_SHADER)
+	mt.set_shader_parameter("col_fill", fill)
+	mt.set_shader_parameter("col_line", line)
+	return mt
+
+
+## 땅에 눕힌 네모 하나 (꼭짓점마다 땅 높이를 따라감). ink = 0 바탕 · 1 금, UV.x = 긋는 차례 (첫 칸 0 → 끝 칸 1)
+func _flat_quad(vs: PackedVector3Array, cs: PackedColorArray, us: PackedVector2Array, ix: PackedInt32Array,
+		o: Vector2, ex: Vector2, ey: Vector2, lift: float, ink: float, g: Dictionary) -> void:
+	var c := Vector2(float(g["x"]), float(g["y"]))
+	var ax := Vector2(float(g["ax"]), float(g["ay"]))
+	var span := ChildPlay.HOP_CELL * float(ChildPlay.HOP_ROWS.size())
+	var n := vs.size()
+	for q: Vector2 in [o - ex - ey, o + ex - ey, o + ex + ey, o - ex + ey]:
+		vs.append(Vector3(q.x, _gy(q.x, q.y) + lift, q.y))
+		cs.append(Color(ink, 0.0, 0.0))
+		us.append(Vector2(clampf(((q - c).dot(ax) + span * 0.5) / span, 0.0, 1.0) * 0.97, 0.0))
+	ix.append_array(PackedInt32Array([n, n + 1, n + 2, n, n + 2, n + 3]))
+
+
+## 사방치기 칸 그림 (판 하나 — 칸마다 바탕 네모 + 네 변의 금)
+func _grid_node(g: Dictionary) -> MeshInstance3D:
+	if _gmat == null:
+		_gmat = _ground_mat(GRID_FILL, GRID_INK)
+	var ax := Vector2(float(g["ax"]), float(g["ay"]))
+	var perp := Vector2(-ax.y, ax.x)
+	var h := ChildPlay.HOP_CELL * 0.5
+	var lw := GRID_LINE * 0.5
+	var vs := PackedVector3Array()
+	var cs := PackedColorArray()
+	var us := PackedVector2Array()
+	var ix := PackedInt32Array()
+	var cells := hop_cells(g)
+	for cl: Array in cells:
+		_flat_quad(vs, cs, us, ix, cl[0], ax * h, perp * h, GRID_LIFT, 0.0, g)
+	for cl: Array in cells:
+		var o: Vector2 = cl[0]
+		for sg: float in [-1.0, 1.0]:
+			_flat_quad(vs, cs, us, ix, o + perp * h * sg, ax * (h + lw), perp * lw, GRID_LIFT + 0.012, 1.0, g)
+			_flat_quad(vs, cs, us, ix, o + ax * h * sg, ax * lw, perp * (h + lw), GRID_LIFT + 0.012, 1.0, g)
+	var arr := []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = vs
+	arr[Mesh.ARRAY_COLOR] = cs
+	arr[Mesh.ARRAY_TEX_UV] = us
+	arr[Mesh.ARRAY_INDEX] = ix
+	var nm := PackedVector3Array()
+	nm.resize(vs.size())
+	nm.fill(Vector3.UP)
+	arr[Mesh.ARRAY_NORMAL] = nm
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	var n := MeshInstance3D.new()
+	n.mesh = mesh
+	n.material_override = _gmat
+	n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(n)
+	n.set_instance_shader_parameter("reveal", 0.0)
+	return n
+
+
+## 물 높이 (호수의 수면 — VillageView의 뗏목과 같은 셈)
+func _wy(x: float, z: float) -> float:
+	var k := v.water.idx(x, z)
+	return (v.water.ground(k) + v.water.depth(k)) * JarTerrain.HS - JarTerrain.WATER_SINK
+
+
+## 물결 고리 하나 (at = 수면 위 자리, r = 다 퍼졌을 때 반지름, delay = 조금 늦게)
+func _ring(at: Vector3, r: float, delay := 0.0) -> void:
+	if _ring_mesh == null:
+		_rmat = _ground_mat(RING_COL, RING_COL)
+		_rmat.set_shader_parameter("grain", 44.0)
+		var vs := PackedVector3Array()
+		var cs := PackedColorArray()
+		var us := PackedVector2Array()
+		var nm := PackedVector3Array()
+		var ix := PackedInt32Array()
+		var seg := 28
+		for i in seg:
+			var a := TAU * float(i) / float(seg)
+			for rr: float in [0.74, 1.0]:
+				vs.append(Vector3(cos(a) * rr, 0.0, sin(a) * rr))
+				cs.append(Color(0.0, 0.0, 0.0))
+				us.append(Vector2.ZERO)
+				nm.append(Vector3.UP)
+			var j := (i + 1) % seg
+			ix.append_array(PackedInt32Array([i * 2, i * 2 + 1, j * 2 + 1, i * 2, j * 2 + 1, j * 2]))
+		var arr := []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = vs
+		arr[Mesh.ARRAY_COLOR] = cs
+		arr[Mesh.ARRAY_TEX_UV] = us
+		arr[Mesh.ARRAY_NORMAL] = nm
+		arr[Mesh.ARRAY_INDEX] = ix
+		_ring_mesh = ArrayMesh.new()
+		_ring_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	if _rings.size() < RING_MAX:
+		var n := MeshInstance3D.new()
+		n.mesh = _ring_mesh
+		n.material_override = _rmat
+		n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		n.visible = false
+		add_child(n)
+		_rings.append(n)
+		_ring_t.append(RING_SECS)
+		_ring_r.append(r)
+		_ring_i = _rings.size() - 1
+	else:
+		_ring_i = (_ring_i + 1) % _rings.size()
+	_rings[_ring_i].position = at + Vector3(0.0, RING_LIFT, 0.0)
+	_rings[_ring_i].visible = false
+	_ring_t[_ring_i] = -delay
+	_ring_r[_ring_i] = r
+	ring_log.append([at, r])
+	if ring_log.size() > 48:
+		ring_log = ring_log.slice(24)
+
+
+## 물수제비 (놀이 시계의 순수 함수 ChildPlay.skip_stone을 그대로 그림): 손의 돌 → 날아가는 돌 → 닿는 곳마다 고리 · 퐁 소리
+func _skip_tick(g: Dictionary, pr: Props, n_on: int) -> void:
+	if pr.stone == null:
+		pr.stone = _card("stone_b")
+	if n_on == 0 or int(g["turn"]) < 0:
+		pr.stone.visible = false
+		return
+	var c := float(g["c"])
+	var st: Array = ChildPlay.skip_stone(g, c)
+	var state := int(st[0])
+	var d := Vector2(float(g["ax"]), float(g["ay"]))
+	var from := ChildPlay.skip_from(g)
+	if state == 0:                             # 아직 손에: 뒤로 젖힐 때부터 보임
+		pr.touch = 0
+		var u := clampf((c - float(g["hs"])) / ChildPlay.SKIP_WIND, 0.0, 1.0)
+		var tk: Kid = _kid.get(int(g["turn"]))
+		if tk == null or not tk.has or u < 0.22 or _was_fast:
+			pr.stone.visible = false
+		else:
+			var back := smoothstep(0.22, 0.78, u) - 2.0 * smoothstep(0.84, 1.0, u)
+			var hp := tk.pos - d * 0.13 * back
+			_put(pr.stone, "stone_b", Vector3(hp.x, _gy(tk.pos.x, tk.pos.y), hp.y), PEBBLE_W, 0.0, 0.08, 1.0, 0.7, 1.0, ChildPlay.SKIP_HAND)
+		return
+	var tc: Array = ChildPlay.skip_touches(g)
+	var done := mini(int(st[3]), tc.size()) if state == 1 else tc.size()
+	var wl := _wy(from.x + d.x * float(tc[0][0]), from.y + d.y * float(tc[0][0]))
+	if _was_fast:
+		pr.touch = done
+	for j in range(pr.touch, done):
+		var q := from + d * float(tc[j][0])
+		var last := j == tc.size() - 1
+		var rad := RING_R * pow(0.9, float(j)) * (1.12 if last else 1.0)
+		_ring(Vector3(q.x, wl, q.y), rad)
+		_ring(Vector3(q.x, wl, q.y), rad * 0.55, 0.17)     # 안쪽 고리 하나 더 (조금 늦게)
+		GameAudio.fx("drip", "Village", -8.0 if not last else -11.0, q, 0.8 if last else 1.05 + 0.09 * float(j))
+	pr.touch = done
+	if state == 1 and not _was_fast:
+		var q := from + d * float(st[1])
+		var f := float(st[4])
+		var y := (lerpf(_gy(from.x, from.y) + ChildPlay.SKIP_HAND, wl, f) if int(st[3]) == 0 else wl) + float(st[2])
+		_put(pr.stone, "stone_b", Vector3(q.x, y, q.y), PEBBLE_W, _clock * 9.0, 0.05, 1.0, 0.62, 1.0, 0.03)
+	else:
+		pr.stone.visible = false
+	if int(g["h"]) >= ChildPlay.SKIP_FAR and done >= ChildPlay.SKIP_FAR and pr.cheer_hs != float(g["hs"]) and not _was_fast:
+		pr.cheer_hs = float(g["hs"])           # 멀리 갔다! 지켜보던 아이 하나가 폴짝 (혼자면 던진 아이가)
+		var best: Kid = null
+		for id: int in _kid:
+			var k: Kid = _kid[id]
+			if k.seen >= _frame - 1 and int(k.g.get("id", -1)) == int(g["id"]) and (best == null or id != int(g["turn"])):
+				best = k
+				if id != int(g["turn"]):
+					break
+		if best != null:
+			best.hop_t = 0.0
+		GameAudio.fx("small_cheer", "Village", -13.0, Vector2(float(g["x"]), float(g["y"])))
 
 
 # ───────────────────────── 매 화면: 놀이 속 아이 (주민마다, social.pose 뒤) ─────────────────────────
@@ -586,6 +878,84 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 						sy = 1.0 + 0.012 * sin(_clock * 2.3 + k.ph)
 						if String(pic[0]) != "" and f < 0.12:  # 새 그림: 들썩
 							hop = 0.03 * sin(f / 0.12 * PI)
+			"hop":                                 # 사방치기: 제 차례엔 깨금발로 칸을 따라 갔다가 돌아오고, 나머지는 곁에서 지켜봄
+				var ax := Vector2(float(g["ax"]), float(g["ay"]))
+				if int(g["turn"]) == r.id:
+					var a: Array = ChildPlay.hop_at(g, c)
+					var j := int(a[1])
+					var f := float(a[2])
+					var out_yaw := atan2(ax.x, ax.y)
+					var n_rows := ChildPlay.HOP_ROWS.size()
+					match int(a[0]):
+						0:                                 # 첫 칸 앞으로: 조약돌을 던져 놓고 움찔
+							k.land = -1
+							if not moving:
+								look = p + ax
+							var bk: Kid = _kid.get(int(g["by"]))      # 방금 깨끗이 다녀온 아이의 별이 떠 있으면 조약돌 그림은 쉼 (두 그림이 겹치지 않게)
+							if f > 0.25 and cm != null and not _says(r) and (bk == null or bk.star_t < 0.0):
+								bub.add(m, "pebble", clampf((f - 0.25) / 0.75, 0.0, 1.0), true, _clock)
+							if f > 0.84:
+								sy = 1.0 - 0.09 * sin((f - 0.84) / 0.16 * PI)
+						1:                                 # 폴짝 — 한 칸 줄은 깨금발(기우뚱), 두 칸 줄은 두 발을 벌려 착
+							moving = false
+							anim = "idle"
+							var row := ChildPlay.hop_row(j)
+							var two := row >= 0 and int(ChildPlay.HOP_ROWS[row]) == 2
+							var foot := 0.0 if two else (1.0 if j % 2 == 0 else -1.0)
+							var q := f / ChildPlay.HOP_AIR
+							if q < 1.0:
+								hop = HOPSCOTCH_H * 4.0 * q * (1.0 - q)
+								sy = 1.0 + 0.09 * sin(q * PI)
+								sx = 1.0 - 0.06 * sin(q * PI)
+								lean = 0.1 * foot
+							else:
+								var sq := sin((f - ChildPlay.HOP_AIR) / (1.0 - ChildPlay.HOP_AIR) * PI)
+								sy = 1.0 - (0.15 if two else 0.1) * sq
+								sx = 1.0 + (0.18 if two else 0.07) * sq
+								lean = 0.1 * foot * (1.0 - 0.6 * sq)
+								if k.land != j:                    # 착! (발소리 한 번)
+									k.land = j
+									GameAudio.fx("finger_place", "Village", -13.0, p, 1.25 if two else 1.45)
+							k.yaw = out_yaw if j <= n_rows else out_yaw + PI
+						2:                                 # 끝 칸: 폴짝 돌아섬
+							moving = false
+							anim = "idle"
+							hop = 0.11 * sin(f * PI)
+							sy = 1.0 + 0.05 * sin(f * PI)
+							k.yaw = out_yaw + PI * smoothstep(0.1, 0.9, f)
+						3:                                 # 금을 밟음: 휘청휘청
+							moving = false
+							anim = "idle"
+							lean = 0.22 * sin(f * 5.0 * PI) * (1.0 - f)
+							sy = 1.0 - 0.07 * sin(f * PI)
+				elif not moving:
+					var tk: Kid = _kid.get(int(g["turn"]))
+					if tk != null and tk.has:
+						look = tk.pos
+						if tk.land >= 0 and absf(tk.pos.x - k.pos.x) + absf(tk.pos.y - k.pos.y) > 0.2:     # 박자 맞춰 살짝 들썩
+							hop = 0.012 * absf(sin(_clock * 7.0 + k.ph))
+					else:
+						look = Vector2(float(g["x"]), float(g["y"]))
+			"skip":                                # 물수제비: 물가 제 자리에서 — 차례인 아이는 젖혔다가 휙, 나머지는 물을 내다봄
+				var d := Vector2(float(g["ax"]), float(g["ay"]))
+				if not moving:
+					look = p + d * 2.0
+					var side := signf(d.dot(Vector2(_right.x, _right.z)))
+					if int(g["turn"]) == r.id:
+						var u := (c - float(g["hs"])) / ChildPlay.SKIP_WIND
+						if u < 1.0:                        # 뒤로 젖혀 웅크렸다가 → 휙
+							var wd := smoothstep(0.18, 0.78, u)
+							var th := smoothstep(0.84, 1.0, u)
+							lean = side * (-0.2 * wd * (1.0 - th) + 0.26 * th)
+							sy = 1.0 - 0.1 * wd * (1.0 - th) + 0.04 * th
+							sx = 1.0 + 0.06 * wd * (1.0 - th)
+						else:                              # 던진 팔을 따라 숙였다가, 돌을 눈으로 좇음
+							var q := smoothstep(0.0, 1.0, clampf((u - 1.0) * ChildPlay.SKIP_WIND / 300.0, 0.0, 1.0))
+							lean = side * lerpf(0.26, 0.06, q)
+							sy = 1.0 + 0.04 * (1.0 - q)
+					else:
+						lean = side * 0.05
+						sy = 1.0 + 0.012 * sin(_clock * 2.6 + k.ph)
 			"stack":
 				look = Vector2(float(g["x"]), float(g["y"]))
 				if not moving:
@@ -598,6 +968,21 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 						_say(r.id, "stack_again", "cheer", 1.4)
 	if look != Vector2.INF and not moving and dt > 0.0:
 		k.yaw = lerp_angle(k.yaw, atan2(look.x - p.x, look.y - p.y), clampf(dt * 8.0, 0.0, 1.0))
+	if k.cheer_t > -9.0:                       # 와! — 두 번 들썩이며 손뼉 (몸이 좁아졌다 넓어졌다)
+		k.cheer_t += dt
+		if k.cheer_t >= CHEER_SECS:
+			k.cheer_t = -9.0
+		elif k.cheer_t >= 0.0:
+			var t := k.cheer_t / CHEER_SECS
+			hop += 0.1 * absf(sin(t * TAU))
+			sx *= 1.0 + 0.06 * sin(t * TAU * 3.0)
+			sy *= 1.0 + 0.04 * absf(sin(t * TAU))
+	if k.star_t >= 0.0:                        # 깨끗이 다녀옴: 머리 위에 별
+		k.star_t += dt
+		if k.star_t >= STAR_SECS:
+			k.star_t = -1.0
+		elif here and cm != null and not _says(r):
+			bub.add(m, "star", clampf(k.star_t / STAR_SECS, 0.0, 1.0), true, _clock)
 	if k.hop_t >= 0.0:                         # 잡혔다! · 와르르! — 크게 폴짝, 내려앉으며 눌림
 		k.hop_t += dt
 		var t := k.hop_t / HOP_SECS
@@ -646,7 +1031,7 @@ func _story_tell(r: Resident, m: ResidentModel, g: Dictionary) -> void:
 
 ## 글 말풍선이 떠 있는가 (그림 말풍선을 그 위에 겹치지 않음)
 func _says(r: Resident) -> bool:
-	return (r.say_t > 0.0 and r.say != "") or vw.stage_say.has(r.id) or (vw.social != null and not vw.social.say_of(r.id).is_empty())
+	return (r.say_t > 0.0 and r.say != "" and not ChildPlay.story_seated(v, r.id)) or vw.stage_say.has(r.id) or (vw.social != null and not vw.social.say_of(r.id).is_empty())     # 이야기 자리의 혼잣말은 화면에 안 뜸 (test_village._bubbles_of)
 
 
 ## 요람을 들여다보는 이웃: 요람 쪽으로 몸을 기울이고 말풍선 하나, 아기는 까르르

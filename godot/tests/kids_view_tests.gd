@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	var old := CutoutResident.override
 	CutoutResident.override = 1
-	run.timed(self, ["test_first_steps_view", "test_story_view"])
+	run.timed(self, ["test_first_steps_view", "test_story_view", "test_bubble_dodge", "test_hop_view", "test_skip_view"])
 	CutoutResident.override = old
 
 
@@ -378,5 +378,262 @@ func test_story_view() -> void:
 		var km := vw.residents.get(k.id) as CutoutResident
 		reset = reset and km != null and km._warp.is_equal_approx(Vector3(1, 1, 0)) and is_zero_approx(km._lift)
 	check(kv.bub.items.is_empty() and kv._story.is_empty() and reset, "끝나면 그림이 사라지고 모두 제 모습으로")
+	_drop(scene)
+
+
+# ───────────────────────── 놀이 ③: 그림 말풍선 비키기 · 사방치기 · 물수제비 ─────────────────────────
+func _join_all(g: Dictionary, kids: Array) -> void:
+	for k: Resident in kids:
+		var i := ChildPlay._add(g, k.id)
+		var sp := ChildPlay.seat(g, int(g["sl"][i]))
+		k.x = sp.x
+		k.y = sp.y
+		k.action = "play"
+		k.anim = "play"
+		k.sleeping = false
+		k.steps.clear()
+		ChildPlay._attach(k, g, i, 1.0e7)
+
+
+func _far_away(v: Village, c: Vector2) -> void:
+	for r in v.people:
+		r.x = c.x + 15.0 + float(r.id % 5)
+		r.y = c.y - 11.0
+		r.action = "work"
+		r.anim = "work"
+		r.sleeping = false
+		r.steps = [ResidentAI.act(1.0e7, "work")]
+
+
+func test_bubble_dodge() -> void:
+	print("== 아이·아기: 작은 그림 말풍선(쿨쿨)은 큰 말풍선(어르신 그림)에 닿지 않게 비킴")
+	var vs := Vector2(480.0, 270.0)
+	var worst := 1.0e9
+	var moved := 0
+	var n := 0
+	for dx: float in [-40.0, -26.0, -14.0, -6.0, 0.0, 5.0, 12.0, 22.0, 34.0, 60.0]:
+		for dy: float in [-10.0, 0.0, 8.0, 18.0]:
+			var big: Array = KidBubbles.box_of(Vector2(240.0, 120.0), 0.5, false, 0.0, vs)
+			var small: Array = KidBubbles.box_of(Vector2(240.0 + dx, 120.0 + dy), 0.5, true, 0.0, vs)
+			var rb: Rect2 = big[0]
+			var rs: Rect2 = small[0]
+			var sh := KidBubbles.dodge(rs, [rb])
+			var out := Rect2(rs.position + Vector2(sh, 0.0), rs.size)
+			n += 1
+			moved += int(sh != 0.0)
+			if out.grow(KidBubbles.DODGE_GAP - 0.01).intersects(rb):
+				worst = -1.0
+			if sh == 0.0 and rs.grow(KidBubbles.DODGE_GAP).intersects(rb):
+				worst = -1.0
+	check(worst > 0.0 and moved >= 8 and moved < n, "가까우면 옆으로 비켜 틈을 둠 · 멀면 그대로 (%d곳 중 %d곳 비킴)" % [n, moved])
+	var two := KidBubbles.dodge(Rect2(100.0, 50.0, 20.0, 16.0), [Rect2(90.0, 48.0, 31.0, 26.0), Rect2(124.0, 48.0, 31.0, 26.0)])
+	var r2 := Rect2(100.0 + two, 50.0, 20.0, 16.0)
+	check(not r2.grow(KidBubbles.DODGE_GAP - 0.01).intersects(Rect2(90.0, 48.0, 31.0, 26.0)) and not r2.grow(KidBubbles.DODGE_GAP - 0.01).intersects(Rect2(124.0, 48.0, 31.0, 26.0)),
+		"큰 풍선 둘 사이에 끼어도 둘 다 비킴 (%.0f화소)" % two)
+
+
+func test_hop_view() -> void:
+	print("== 아이·아기: 사방치기 장면 (화면만) — 땅에 칸, 깨금발로 폴짝, 곁의 아이는 제자리, 조약돌·별 그림, 끝나면 칸이 닳아 사라짐")
+	var v := _village(10.0)
+	var c0 := Vector2(v.fire.x + 6.0, v.fire.y + 6.0)
+	for k in 200:
+		var q := Vector2(v.fire.x + 4.0 + float(k % 14), v.fire.y + 4.0 + float(k / 14))
+		if ChildPlay._open(v, q):
+			c0 = q
+			break
+	_far_away(v, c0)
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.8 + 0.4 * i, c0.x + 0.2 * i, c0.y))
+	var hp := {}
+	for n in 60:
+		hp = ChildPlay.hop_spot(v, kids[0], Vector2(kids[0].x, kids[0].y) + Vector2(1.5, 0.0).rotated(float(n) * 0.9), n)
+		if not hp.is_empty():
+			break
+	check(not hp.is_empty(), "칸을 그을 자리가 있음")
+	if hp.is_empty():
+		return
+	var c: Vector2 = hp["c"]
+	var g := ChildPlay.open_hop(v, kids[0], c, int(hp["dir"]), 3)
+	g["c1"] = 1.0e9
+	_join_all(g, kids)
+	for i in 3:
+		ChildPlay.step(v, ChildPlay.IV)
+	check(int(g.get("go", 0)) == 1 and int(g["turn"]) >= 0, "셋이 모여 놀이 시작")
+	var scene := _scene()
+	var vw := VillageView.new(v, scene.get("terrain"))
+	scene.add_child(vw)
+	var kv := vw.kids_view
+	_aim(scene, c, 44.0)
+	var gid := int(g["id"])
+	var dt := 0.05
+	var from := v.events.serial
+	var lift := 0.0
+	var wait_lift := 0.0
+	var wait_off := 0.0
+	var pics := {}
+	var both := false
+	var cheer := false
+	var clean := 0
+	var grid_on := false
+	var stages := {}
+	for i in 1500:
+		ChildPlay.step(v, dt * 288.0)
+		vw.sync(dt)
+		var st: Array = ChildPlay.hop_at(g, float(g["c"]))
+		stages[int(st[0])] = true
+		grid_on = grid_on or (kv._grids.has(gid) and (kv._grids[gid].node as Node).is_inside_tree())
+		var has_p := false
+		var has_s := false
+		for it: Array in kv.bub.items:
+			pics[String(it[1])] = true
+			has_p = has_p or String(it[1]) == "pebble"
+			has_s = has_s or String(it[1]) == "star"
+		both = both or (has_p and has_s)
+		for k: Resident in kids:
+			var km := vw.residents.get(k.id) as CutoutResident
+			if km == null:
+				continue
+			var kk: Variant = kv._kid.get(k.id)
+			if int(g["turn"]) == k.id:
+				if int(st[0]) == 1:
+					lift = maxf(lift, km._lift * km.scale.y)
+			elif i > 40 and k.id != int(g["by"]):
+				var sp := ChildPlay.seat(g, int(g["sl"][ChildPlay.idx(g, k.id)]))
+				wait_off = maxf(wait_off, Vector2(km.position.x - sp.x, km.position.z - sp.y).length())
+				if kk != null and kk.cheer_t <= -9.0:
+					wait_lift = maxf(wait_lift, km._lift * km.scale.y)
+			if kk != null and kk.cheer_t > -9.0 and int(g["turn"]) != k.id:
+				cheer = true
+		clean = 0
+		for ev: Dictionary in _events(v, from, &"kid_hop_done"):
+			clean += int(bool(ev["v"]["clean"]))
+		if clean >= 1 and pics.has("star") and cheer and stages.has(2) and i > 300:
+			break
+	check(grid_on, "놀이가 벌어지면 땅에 칸이 그려짐")
+	check(lift > KidsView.HOPSCOTCH_H * 0.8, "차례인 아이가 폴짝 뜀 (%.2f칸)" % lift)
+	check(wait_off < 0.1 and wait_lift < 0.08, "기다리는 아이는 곁에 제자리 (%.2f칸 · 들썩 %.2f)" % [wait_off, wait_lift])
+	check(pics.has("pebble") and pics.has("star") and clean >= 1, "조약돌 그림 · 깨끗이 다녀오면 별 (%s)" % str(pics.keys()))
+	check(not both, "조약돌과 별 그림이 함께 뜨지 않음")
+	check(cheer, "깨끗이 다녀오면 곁의 아이가 들썩들썩")
+	var sig := _sim_sig(v)
+	for i in 12:
+		vw.sync(dt)
+	check(_sim_sig(v) == sig, "시뮬은 그대로 (화면만)")
+	vw.fast = true
+	vw.sync(0.1, true)
+	check(kv.bub.items.is_empty(), "빠른 흐름에서는 그림을 접음")
+	vw.fast = false
+	(ChildPlay._state(v)["g"] as Array).clear()      # 놀이가 끝남: 칸은 한동안 남았다가 닳아 사라짐
+	for k: Resident in kids:
+		k.steps = [ResidentAI.act(1.0e7, "idle")]
+	for i in 8:
+		vw.sync(0.25)
+	var stays: bool = kv._grids.has(gid) and kv._grids[gid].gone >= 0.0
+	for i in int((KidsView.GRID_HOLD + KidsView.GRID_FADE) / 0.25) + 4:
+		vw.sync(0.25)
+	check(stays and not kv._grids.has(gid), "끝난 뒤 칸이 한동안 남았다가 사라짐")
+	_drop(scene)
+
+
+func test_skip_view() -> void:
+	print("== 아이·아기: 물수제비 장면 (화면만) — 돌이 닿는 곳마다 수면에 고리, 아이들은 마른 땅")
+	var v: Village = null
+	var sk := {}
+	for seed_v: int in [11, 7, 3, 5, 13]:
+		v = _village(10.0, seed_v)
+		for ring in range(2, 16):
+			for k in 16:
+				var q := Vector2(v.fire.x, v.fire.y) + Vector2(float(ring), 0.0).rotated(TAU * float(k) / 16.0)
+				if sk.is_empty() and v.water.inside(q.x, q.y, 2.0) and not v.water_at(q.x, q.y):
+					sk = ChildPlay.skip_spot(v, q, 1)
+					if not sk.is_empty():
+						sk["p"] = q
+		if not sk.is_empty():
+			break
+	check(not sk.is_empty(), "호숫가 자리가 있음")
+	if sk.is_empty():
+		return
+	var c: Vector2 = sk["c"]
+	var d: Vector2 = sk["d"]
+	_far_away(v, c)
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.8 + 0.4 * i, c.x, c.y))
+	var g := ChildPlay.open_skip(v, kids[0], c, d, float(sk["len"]), 1)
+	g["c1"] = 1.0e9
+	_join_all(g, kids)
+	for i in 3:
+		ChildPlay.step(v, ChildPlay.IV)
+	check(int(g.get("go", 0)) == 1 and int(g["turn"]) >= 0, "셋이 물가에 섬")
+	var scene := _scene()
+	var vw := VillageView.new(v, scene.get("terrain"))
+	scene.add_child(vw)
+	var kv := vw.kids_view
+	_aim(scene, c, 44.0)
+	var dt := 0.05
+	kv.ring_log.clear()
+	var rings := 0
+	var prev := 0
+	var want := 0
+	var throws := 0
+	var hs := float(g["hs"])
+	var h_now := int(g["h"])
+	var match_n := true
+	var on_water := true
+	var level := true
+	var shrink := true
+	var dry := true
+	var stone_seen := false
+	var far := false
+	var cheer := false
+	var last_r := 0.0
+	for i in 2400:
+		ChildPlay.step(v, dt * 288.0)
+		if float(g["hs"]) != hs:                  # 새 차례: 지난 돌의 고리 수 = 튄 수 × 2 (바깥·안쪽)
+			want += h_now * 2
+			throws += 1
+			match_n = match_n and rings == want
+			far = far or h_now >= ChildPlay.SKIP_FAR
+			hs = float(g["hs"])
+			h_now = int(g["h"])
+			last_r = 0.0
+			if throws >= 4:
+				break
+		vw.sync(dt)
+		var sz := kv.ring_log.size()
+		if sz < prev:
+			prev -= 24
+		for j in range(prev, sz):
+			var at: Vector3 = kv.ring_log[j][0]
+			var rr := float(kv.ring_log[j][1])
+			on_water = on_water and v.water_at(at.x, at.z)
+			var wi := v.water.idx(at.x, at.z)
+			level = level and absf(at.y - kv._wy(at.x, at.z)) < 0.03 and at.y > v.water.ground(wi) * JarTerrain.HS
+			if (rings + j - prev) % 2 == 0:
+				if last_r > 0.0 and (rings + j - prev) < want + h_now * 2 - 2:
+					shrink = shrink and rr < last_r
+				last_r = rr
+		rings += sz - prev
+		prev = sz
+		var pr: Variant = kv._props.get(int(g["id"]))
+		stone_seen = stone_seen or (pr != null and pr.stone != null and pr.stone.visible and int(g["ph"]) == 1)
+		for k: Resident in kids:
+			var km := vw.residents.get(k.id) as CutoutResident
+			if km != null:
+				dry = dry and not v.water_at(km.position.x, km.position.z)
+			var kk: Variant = kv._kid.get(k.id)
+			cheer = cheer or (kk != null and kk.hop_t >= 0.0)
+	check(throws >= 4 and rings > 0 and match_n, "돌이 닿는 곳마다 고리 둘 (던짐 %d번 · 고리 %d개)" % [throws, rings])
+	check(on_water and level, "고리는 물 위 · 수면 높이")
+	check(shrink, "뒤로 갈수록 고리가 작아짐")
+	check(stone_seen, "날아가는 돌이 보임")
+	check(dry, "아이들 인형은 마른 땅에")
+	if far:
+		check(cheer, "멀리 튀면 한 아이가 폴짝")
+	var sig := _sim_sig(v)
+	for i in 12:
+		vw.sync(dt)
+	check(_sim_sig(v) == sig, "시뮬은 그대로 (화면만)")
 	_drop(scene)
 

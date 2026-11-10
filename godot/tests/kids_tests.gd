@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_story",
+	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc",
 		"test_minder", "test_peek", "test_first_steps", "test_save", "test_village_day", "test_watch_determinism", "test_view"])
 
 
@@ -102,7 +102,7 @@ func test_source_and_words() -> void:
 			check(not tx.contains(wd), "거인 이야기 없음: %s" % tx)
 	var doc := FileAccess.get_file_as_string("res://../docs/architecture/event-kinds.md")
 	if doc != "":
-		for k: String in ["kid_play_started", "kid_tagged", "kid_stack_fell", "baby_peeked", "first_steps"]:
+		for k: String in ["kid_play_started", "kid_tagged", "kid_stack_fell", "baby_peeked", "first_steps", "kid_hop_done", "kid_skip_thrown"]:
 			check(doc.contains("`&\"%s\"`" % k), "event-kinds.md에 %s" % k)
 
 
@@ -157,12 +157,13 @@ func test_when_and_who() -> void:
 	var baby := _kid(v, "아람", 0.3, c.x, c.y)
 	check(not ChildPlay.try_play(v, baby, c, 900.0), "아기는 놀이에 끼지 않음")
 	var tries := 0
+	ChildPlay._state(v)["last"] = "skip"                     # 물수제비는 셋까지 (test_skip이 따로 봄) — 여기선 넷까지 끼는 놀이만
 	while ChildPlay.games(v).is_empty() and tries < 40:      # 굴림(START_P)에 따라 몇 번 만에 열림
 		ChildPlay.try_play(v, kids[0], c, 900.0)
 		tries += 1
 	check(ChildPlay.games(v).size() == 1, "낮: 놀이가 열림 (%d번째)" % tries)
 	var g: Dictionary = ChildPlay.games(v)[0]
-	check(String(g["kind"]) in ["tag", "bfly", "stack"], "놀이 종류 %s" % g["kind"])
+	check(String(g["kind"]) in ["tag", "bfly", "stack", "hop"], "놀이 종류 %s" % g["kind"])
 	check(kids[0].steps.size() >= 1 and int((kids[0].steps[kids[0].steps.size() - 1] as Dictionary).get("g", -1)) == int(g["id"]), "연 아이의 걸음에 놀이 표시")
 	for i in range(1, 6):
 		ChildPlay.try_play(v, kids[i], c, 900.0)
@@ -533,8 +534,11 @@ func test_story() -> void:
 		check(n_st == 1, "이야기는 한 번에 하나")
 	# 마을의 나흘 (어르신 한 분 · 아이 넷) — 저절로 열린다, 저녁에만, 같은 씨앗이면 같은 결과
 	var res: Array = []
+	var nat_hops := 0
+	var nat_throws := 0
+	var nat_wet := 0
 	for pass_i in 3:
-		var seed_v: int = [7, 7, 11][pass_i]
+		var seed_v: int = [31, 31, 3][pass_i]      # 저녁 이야기는 드물다 (나흘에 0~2번) — 이야기가 열리는 씨앗 둘 (k3: 새 놀이가 끼며 굴림 차례가 바뀌어 다시 고름)
 		var w := Village.new_prototype(seed_v)
 		w.water.offline = true
 		w.stock["빵"] = 300.0
@@ -554,8 +558,19 @@ func test_story() -> void:
 		var seen := 0
 		var sat := 0
 		var hid := 0
+		var cur := w.events.serial
 		for i in 4 * 24 * 60:
 			w.advance(60.0)
+			for ev: Dictionary in w.events.since(cur):
+				if ev["kind"] == &"kid_hop_done":
+					nat_hops += 1
+				elif ev["kind"] == &"kid_skip_thrown":
+					nat_throws += 1
+			cur = w.events.serial
+			for r in w.people:
+				if r.is_child() and not r.is_baby() and w.water_at(r.x, r.y):
+					var gk := ChildPlay.game_of(w, r.id)
+					nat_wet += int(not gk.is_empty() and String(gk["kind"]) in ["hop", "skip"])
 			for g2: Dictionary in ChildPlay.games(w):
 				if String(g2["kind"]) == "story":
 					seen += 1
@@ -578,11 +593,14 @@ func test_story() -> void:
 		if pass_i != 1:
 			print("   마을의 저녁 (씨앗 %d): 이야기 %d번 (살핀 틱 %d · 함께 앉은 아이 많을 때 %d)" % [seed_v, n_story, seen, sat])
 			check(n_story >= 1 and seen >= 1, "나흘 사이 저녁 이야기가 저절로 열림 (씨앗 %d)" % seed_v)
-			if pass_i == 2:                    # 씨앗 7에선 아이들이 닿기 전에 어르신이 다른 일로 일어난다 (어르신의 걸음은 건드리지 않음) — 씨앗 11에서 봄
+			if pass_i == 0:                    # 씨앗 3에선 아이 하나만 닿는다 (다른 아이는 오는 길에 어르신이 일어남 — 어르신의 걸음은 건드리지 않음) — 씨앗 31에서 봄
 				check(sat >= 2, "아이 둘 넘게 함께 앉아 들음 (씨앗 %d)" % seed_v)
 			check(bad == 0, "이야기는 해 질 무렵~저녁에만 (일 시간 안)")
 			check(hid == 0, "가려진 자리의 어르신에게는 모이지 않음")
 	check(res[0] == res[1], "같은 씨앗 → 같은 결과 (이야기가 있어도 결정적)")
+	print("   같은 나흘: 사방치기 %d판 · 물수제비 %d번 던짐 (세 번 돈 합)" % [nat_hops, nat_throws])
+	check(nat_hops >= 2 and nat_throws >= 1, "나흘 사이 사방치기·물수제비도 저절로 벌어짐")
+	check(nat_wet == 0, "사방치기·물수제비 하는 아이는 물에 들어가지 않음 (%d틱)" % nat_wet)
 
 
 func test_minder() -> void:
@@ -927,3 +945,409 @@ func test_view() -> void:
 						ink += 1
 		check(solid > 20 and (ink > 8 or k == "puff") and solid < rc.size.x * rc.size.y, "그림 '%s': 칠 %d · 먹선 %d" % [k, solid, ink])
 	check(KidsView.atlas() == tex, "그림판은 한 번만 만듦")
+
+
+# ───────────────────────── 사방치기 · 물수제비 (k3) ─────────────────────────
+## 열린 놀이에 아이들을 제 자리에 세움 (걸음: 놀기 하나)
+func _join_all(g: Dictionary, kids: Array) -> void:
+	for k: Resident in kids:
+		var i := ChildPlay._add(g, k.id)
+		var sp := ChildPlay.seat(g, int(g["sl"][i]))
+		k.x = sp.x
+		k.y = sp.y
+		k.steps.clear()
+		ChildPlay._attach(k, g, i, 1.0e7)
+
+
+## 건물·밭 발자리 안인가
+func _on_building(v: Village, q: Vector2) -> bool:
+	for b in v.buildings:
+		if absf(q.x - b.x) < b.size() * 0.5 and absf(q.y - b.y) < b.size() * 0.5:
+			return true
+	return false
+
+
+## 사방치기 자리를 찾음 (아이 r 둘레) → {"c", "dir"} · 없으면 {}
+func _hop_place(v: Village, r: Resident) -> Dictionary:
+	for n in 60:
+		var hp := ChildPlay.hop_spot(v, r, Vector2(r.x, r.y) + Vector2(1.5, 0.0).rotated(float(n) * 0.9), n)
+		if not hp.is_empty():
+			return hp
+	return {}
+
+
+func test_hop() -> void:
+	print("== 아이·아기: 사방치기 — 집 가까운 트인 땅에 칸을 긋고, 한 아이씩 깨금발로 갔다가 돌아옴")
+	var v := _village(10.0)
+	var c0 := _open_centre(v)
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.8 + 0.4 * i, c0.x + 0.2 * i, c0.y))
+	var hp := _hop_place(v, kids[0])
+	check(not hp.is_empty(), "칸을 그을 자리가 있음")
+	if hp.is_empty():
+		return
+	var c: Vector2 = hp["c"]
+	var dir := int(hp["dir"])
+	var benches := ChildPlay.fire_benches(v)
+	check(ChildPlay.hop_ok(v, c, dir, benches) and ChildPlay._near_home(v, c, ChildPlay.HOP_HOME_R), "집 가까운 트인 자리")
+	check(c.distance_to(Vector2(kids[0].x, kids[0].y)) <= ChildPlay.HOP_WALK, "연 아이가 걸어갈 만한 곳 (%.1f칸)" % c.distance_to(Vector2(kids[0].x, kids[0].y)))
+	var from := v.events.serial
+	var g := ChildPlay.open_hop(v, kids[0], c, dir, 1)
+	g["c1"] = 1.0e9
+	_join_all(g, kids)
+	var started := _events(v, from, &"kid_play_started")
+	check(started.size() == 1 and String(started[0]["v"]["kind"]) == "hop" and kids[0].doing == "사방치기하는 중", "kid_play_started (hop) · 하는 일: %s" % kids[0].doing)
+	var ax := Vector2(float(g["ax"]), float(g["ay"]))
+	check(absf(ax.dot(Vector2(1.0, 1.0))) < 0.001 and is_equal_approx(ax.length(), 1.0), "칸은 화면 가로로 놓임 (기본 방향에서 옆으로 보임)")
+	var n_rows: int = ChildPlay.HOP_ROWS.size()
+	var bad_place := 0
+	for st_i in 2 * n_rows + 1:
+		var q := ChildPlay.hop_station(g, st_i)
+		bad_place += int(v.water_at(q.x, q.y) or _on_building(v, q) or ChildPlay._story_hidden(v, q, benches))
+	for slot in 4:
+		var q := ChildPlay.seat(g, slot)
+		bad_place += int(v.water_at(q.x, q.y) or _on_building(v, q) or ChildPlay._story_hidden(v, q, benches))
+		check(q.distance_to(ChildPlay.hop_station(g, 0)) < 1.6 and (q - c).dot(ax) < -ChildPlay.HOP_CELL * float(n_rows) * 0.5, "기다리는 자리 %d: 첫 칸 쪽 곁" % slot)
+	check(bad_place == 0, "칸·기다리는 자리 모두 마른 땅 · 건물과 밭 밖 · 가려지지 않음")
+	check(ChildPlay.hop_station(g, 0).distance_to(ChildPlay.hop_station(g, 2 * n_rows)) < 0.001, "갔다가 처음 자리로 돌아옴")
+	check(ChildPlay.hop_station(g, n_rows).distance_to(ChildPlay.hop_station(g, 0)) > ChildPlay.HOP_CELL * float(n_rows) - 0.2, "끝 칸까지 감 (%.2f칸)" % ChildPlay.hop_station(g, n_rows).distance_to(ChildPlay.hop_station(g, 0)))
+	# 한 아이씩 차례로
+	var turns: Array = []
+	var stages := {}
+	var off := 0
+	var wait_moved := 0
+	var jump := 0.0
+	var prev := {}
+	for k in 900:
+		ChildPlay.step(v, 30.0)
+		var t := int(g["turn"])
+		if t >= 0 and (turns.is_empty() or int(turns[turns.size() - 1]) != t):
+			turns.append(t)
+		var at := ChildPlay.hop_at(g, float(g["c"]))
+		stages[int(at[0])] = true
+		for i in 3:
+			var id := int(g["who"][i])
+			var sp := ChildPlay.spot(g, i, float(g["c"]))
+			off += int(v.water_at(sp.x, sp.y) or _on_building(v, sp))
+			if id != t and id != int(g["by"]):
+				wait_moved += int(sp.distance_to(ChildPlay.seat(g, int(g["sl"][i]))) > 0.001)
+			if prev.has(id):
+				jump = maxf(jump, sp.distance_to(prev[id]))
+			prev[id] = sp
+	var done := _events(v, from, &"kid_hop_done")
+	var clean := 0
+	var order_ok := true
+	for i in done.size():
+		clean += int(bool(done[i]["v"]["clean"]))
+		order_ok = order_ok and int(done[i]["v"]["n"]) == i + 1 and int(done[i]["who"]) == int(turns[i]) and int(done[i]["v"]["game"]) == int(g["id"])
+	check(done.size() >= 6 and order_ok, "판마다 kid_hop_done (%d판 · 번호와 뛴 아이가 맞음)" % done.size())
+	check(clean >= 1 and clean < done.size(), "깨끗이 다녀온 판도, 휘청한 판도 있음 (깨끗 %d / %d)" % [clean, done.size()])
+	var rot := true
+	for i in range(1, turns.size()):
+		rot = rot and int(turns[i]) != int(turns[i - 1])
+	var seen := {}
+	for t: Variant in turns:
+		seen[int(t)] = true
+	check(rot and seen.size() == 3, "셋이 돌아가며 뜀 (한 번에 한 아이)")
+	check(stages.has(0) and stages.has(1) and stages.has(2) and stages.has(3), "첫 칸 앞으로 → 뜀 → 끝에서 돌아섬 (· 가끔 휘청)")
+	check(off == 0 and wait_moved == 0, "뛰는 아이는 칸 위에만 · 기다리는 아이는 제 자리")
+	check(jump < 0.45, "자리가 튀지 않음 (한 틱 %.2f칸)" % jump)
+	check(ChildPlay.hop_secs(0) > ChildPlay.hop_secs(3) and ChildPlay.hop_secs(0) < 2600.0, "한 판은 짧게 (%.1f초)" % (ChildPlay.hop_secs(0) / 288.0))
+	# 저장 → 불러옴
+	var w := Village.from_dict(bytes_to_var(var_to_bytes(v.to_dict())))
+	check(SaveCodec.digest(SaveCodec.enc(w.kids)) == SaveCodec.digest(SaveCodec.enc(v.kids)), "저장 → 불러옴: 사방치기 상태가 같음")
+	var a := v.events.serial
+	var b := w.events.serial
+	for k in 300:
+		ChildPlay.step(v, 30.0)
+		ChildPlay.step(w, 30.0)
+	var da := _events(v, a, &"kid_hop_done")
+	var db := _events(w, b, &"kid_hop_done")
+	var same := da.size() == db.size() and da.size() >= 2
+	for i in mini(da.size(), db.size()):
+		same = same and int(da[i]["who"]) == int(db[i]["who"]) and bool(da[i]["v"]["clean"]) == bool(db[i]["v"]["clean"])
+	var gw: Dictionary = ChildPlay.games(w)[0]
+	check(same and str(ChildPlay.hop_at(gw, float(gw["c"]))) == str(ChildPlay.hop_at(g, float(g["c"]))), "불러온 마을에서도 같은 아이가 같은 판을 뜀 (%d판)" % da.size())
+	# 혼자 남으면 새 판 없음 → 돌탑으로
+	var v2 := _village(10.0)
+	var solo := _kid(v2, "보리", 2.0, c0.x, c0.y)
+	var g2 := ChildPlay.open_hop(v2, solo, c, dir, 1)
+	g2["c1"] = 1.0e9
+	_join_all(g2, [solo])
+	var from2 := v2.events.serial
+	for k in int(ChildPlay.TAG_WAIT / 30.0) + 4:
+		ChildPlay.step(v2, 30.0)
+	check(_events(v2, from2, &"kid_hop_done").is_empty() and String(g2["kind"]) == "stack" and solo.doing == "돌탑을 쌓는 중", "혼자서는 뛰지 않고, 기다리다 돌탑으로 (%s)" % solo.doing)
+	# 여는 때: 낮에만 · 해 질 무렵은 저녁 이야기에 비워 둠
+	var st := ChildPlay._state(v2)
+	var any_day := false
+	for n in 60:
+		st["last"] = ""
+		st["last2"] = ""
+		any_day = any_day or ChildPlay._pick_kind(v2, st, n) == "hop"
+	_set_hour(v2, 17.2)
+	var any_eve := false
+	for n in 60:
+		st["last"] = ""
+		st["last2"] = ""
+		any_eve = any_eve or ChildPlay._pick_kind(v2, st, n) in ["hop", "skip"]
+	check(any_day and not any_eve, "낮에 고름 · 해 질 무렵엔 사방치기·물수제비를 새로 열지 않음")
+	_set_hour(v2, 10.0)
+	var again := false
+	for n in 60:
+		st["last"] = "hop"
+		st["last2"] = "tag"
+		again = again or ChildPlay._pick_kind(v2, st, n) == "hop"
+		st["last"] = "tag"
+		st["last2"] = "hop"
+		again = again or ChildPlay._pick_kind(v2, st, n) == "hop"
+	check(not again, "방금 한 놀이·그 앞 놀이는 다시 고르지 않음 (여러 놀이가 고루 보이게)")
+	# 추운 날엔 긋지 않음
+	var old := Village.default_created
+	Village.default_created = {"year": 2026, "month": 1, "day": 15}
+	var cold := _village(10.0)
+	Village.default_created = old
+	var ck := _kid(cold, "보리", 2.0, c0.x, c0.y)
+	var temp := Health.temperature_at(cold, c0.x, c0.y)
+	if temp <= ChildPlay.HOP_MIN_TEMP:
+		check(_hop_place(cold, ck).is_empty(), "언 땅(%.1f도)엔 칸을 긋지 않음" % temp)
+	else:
+		print("   (1월 낮 %.1f도 — 얼지 않아 사방치기를 할 수 있음)" % temp)
+
+
+## 물수제비 자리를 찾음: 모닥불 둘레의 마른 땅에서 → {"p", "c", "d", "len"} · 없으면 {}
+func _skip_place(v: Village) -> Dictionary:
+	for ring in range(2, 16):
+		for k in 16:
+			var p := Vector2(v.fire.x, v.fire.y) + Vector2(float(ring), 0.0).rotated(TAU * float(k) / 16.0)
+			if not v.water.inside(p.x, p.y, 2.0) or v.water_at(p.x, p.y):
+				continue
+			var sk := ChildPlay.skip_spot(v, p, 1)
+			if not sk.is_empty():
+				sk["p"] = p
+				return sk
+	return {}
+
+
+func test_skip() -> void:
+	print("== 아이·아기: 물수제비 — 호숫가에 서서 한 아이씩 던지고, 돌이 점점 좁게 튀다 가라앉음")
+	var v: Village = null
+	var sk := {}
+	var used := 0
+	for seed_v: int in [11, 7, 3, 5, 13]:
+		v = _village(10.0, seed_v)
+		sk = _skip_place(v)
+		used = seed_v
+		if not sk.is_empty():
+			break
+	check(not sk.is_empty(), "호숫가 자리가 있음 (씨앗 %d)" % used)
+	if sk.is_empty():
+		return
+	var p: Vector2 = sk["p"]
+	var c: Vector2 = sk["c"]
+	var d: Vector2 = sk["d"]
+	var benches := ChildPlay.fire_benches(v)
+	check(c.distance_to(p) <= ChildPlay.SKIP_NEAR and ChildPlay._dry_line(v, p, c), "가까운 물가 (%.1f칸) · 가는 길이 마른 땅" % c.distance_to(p))
+	check(float(sk["len"]) >= ChildPlay.SKIP_LEN_MIN and float(sk["len"]) <= ChildPlay.SKIP_LEN_MAX, "돌이 갈 물길 %.1f칸" % float(sk["len"]))
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.8 + 0.4 * i, p.x, p.y))
+	var from := v.events.serial
+	var g := ChildPlay.open_skip(v, kids[0], c, d, float(sk["len"]), 1)
+	g["c1"] = 1.0e9
+	_join_all(g, kids)
+	check(int(g["cap"]) == 3 and kids[0].doing == "물수제비를 뜨는 중", "셋까지 · 하는 일: %s" % kids[0].doing)
+	var dry := true
+	for slot in 3:
+		var q := ChildPlay.seat(g, slot)
+		dry = dry and not v.water_at(q.x, q.y) and ChildPlay._dry(v, q, ChildPlay.SKIP_DRY) and not _on_building(v, q) and not ChildPlay._story_hidden(v, q, benches)
+		dry = dry and v.water_at(q.x + d.x * ChildPlay.SKIP_FIRST, q.y + d.y * ChildPlay.SKIP_FIRST)
+	check(dry, "세 자리 모두 물가의 마른 땅 (물에서 %.2f칸 넘게) · 가려지지 않음 · 바로 앞이 물" % ChildPlay.SKIP_DRY)
+	var extra := _kid(v, "다래", 2.2, p.x, p.y)
+	ChildPlay.try_play(v, extra, p, 900.0)
+	check(ChildPlay.idx(g, extra.id) < 0 and (g["who"] as Array).size() == 3, "넷째는 끼지 않음")
+	for gg: Dictionary in ChildPlay.games(v).duplicate():      # 넷째가 따로 연 놀이가 있으면 치움 (아래는 물수제비만 봄)
+		if int(gg["id"]) != int(g["id"]):
+			ChildPlay.games(v).erase(gg)
+	extra.steps.clear()
+	# 돌이 닿는 곳: 모두 호수 위 · 간격이 점점 좁아짐
+	var touch_ok := true
+	var gaps_ok := true
+	for i in 3:
+		g["turn"] = int(g["who"][i])
+		var o := ChildPlay.skip_from(g)
+		for h in range(2, 6):
+			g["h"] = h
+			var tc := ChildPlay.skip_touches(g)
+			touch_ok = touch_ok and tc.size() == h and float(tc[tc.size() - 1][0]) <= float(g["len"]) + 0.001
+			for k in tc.size():
+				var q := o + d * float(tc[k][0])
+				touch_ok = touch_ok and v.water_at(q.x, q.y) and v.water.is_lake(v.water.idx(q.x, q.y))
+				if k >= 2:
+					gaps_ok = gaps_ok and float(tc[k][0]) - float(tc[k - 1][0]) < float(tc[k - 1][0]) - float(tc[k - 2][0]) \
+						and float(tc[k][1]) - float(tc[k - 1][1]) < float(tc[k - 1][1]) - float(tc[k - 2][1])
+				if k >= 1:
+					gaps_ok = gaps_ok and float(tc[k][0]) - float(tc[k - 1][0]) >= 0.2
+	check(touch_ok, "돌이 닿는 곳은 모두 호수 위 (2~5번 · 물길 안)")
+	check(gaps_ok, "튈수록 간격·사이가 좁아짐 (그래도 고리가 겹치지 않을 만큼)")
+	g["turn"] = -1
+	g["h"] = 0
+	# 차례로 던짐
+	var turns: Array = []
+	var moved := 0
+	var wet := 0
+	var states := {}
+	var back := 0
+	var last_d := 0.0
+	var last_n := 0
+	for k in 700:
+		ChildPlay.step(v, 30.0)
+		var t := int(g["turn"])
+		if t >= 0 and (turns.is_empty() or int(turns[turns.size() - 1]) != t):
+			turns.append(t)
+		var stn := ChildPlay.skip_stone(g, float(g["c"]))
+		states[int(stn[0])] = true
+		if int(g["tags"]) == last_n and int(stn[0]) >= 1:
+			back += int(float(stn[1]) < last_d - 0.001)
+		last_d = float(stn[1]) if int(stn[0]) >= 1 else 0.0
+		last_n = int(g["tags"])
+		for i in 3:
+			var sp := ChildPlay.spot(g, i, float(g["c"]))
+			moved += int(sp.distance_to(ChildPlay.seat(g, int(g["sl"][i]))) > 0.001)
+			wet += int(v.water_at(sp.x, sp.y))
+	var thrown := _events(v, from, &"kid_skip_thrown")
+	var ev_ok := true
+	var far := 0
+	for i in thrown.size():
+		var n_sk := int(thrown[i]["v"]["skips"])
+		ev_ok = ev_ok and n_sk >= 2 and n_sk <= 5 and int(thrown[i]["v"]["n"]) == i + 1 and int(thrown[i]["who"]) == int(turns[i])
+		far += int(n_sk >= ChildPlay.SKIP_FAR)
+	check(thrown.size() >= 6 and ev_ok, "던질 때마다 kid_skip_thrown (%d번 · 2~5번 튐 · 던진 아이가 맞음)" % thrown.size())
+	check(far >= 1 and far < thrown.size(), "멀리 튄 돌도, 금방 가라앉은 돌도 있음 (멀리 %d / %d)" % [far, thrown.size()])
+	var seen := {}
+	for t: Variant in turns:
+		seen[int(t)] = true
+	check(seen.size() == 3, "셋이 돌아가며 던짐")
+	check(moved == 0 and wet == 0, "아이들은 물가 제 자리에서 움직이지 않음 (물에 들어가지 않음)")
+	check(states.has(0) and states.has(1) and states.has(2) and back == 0, "돌: 손 → 날아감 → 가라앉음 (뒤로 가지 않음)")
+	# 저장 → 불러옴
+	var w := Village.from_dict(bytes_to_var(var_to_bytes(v.to_dict())))
+	check(SaveCodec.digest(SaveCodec.enc(w.kids)) == SaveCodec.digest(SaveCodec.enc(v.kids)), "저장 → 불러옴: 물수제비 상태가 같음")
+	var a := v.events.serial
+	var b := w.events.serial
+	for k in 300:
+		ChildPlay.step(v, 30.0)
+		ChildPlay.step(w, 30.0)
+	var ta := _events(v, a, &"kid_skip_thrown")
+	var tb := _events(w, b, &"kid_skip_thrown")
+	var same := ta.size() == tb.size() and ta.size() >= 2
+	for i in mini(ta.size(), tb.size()):
+		same = same and int(ta[i]["who"]) == int(tb[i]["who"]) and int(ta[i]["v"]["skips"]) == int(tb[i]["v"]["skips"])
+	check(same, "불러온 마을에서도 같은 아이가 같은 돌을 던짐 (%d번)" % ta.size())
+	# 물 건너편 아이는 끼지 않음 (물을 건너 걸어오지 않게)
+	var over := Vector2.ZERO
+	var found := false
+	var x := float(sk["len"])
+	while x < ChildPlay.JOIN_R - 0.5 and not found:
+		var q := c + d * x
+		if v.water.inside(q.x, q.y, 1.0) and not v.water_at(q.x, q.y):
+			over = q
+			found = true
+		x += 0.25
+	if found:
+		(g["who"] as Array).size()
+		ChildPlay._remove(g, 2)                  # 한 자리를 비움
+		var other := _kid(v, "가람", 2.0, over.x, over.y)
+		ChildPlay.try_play(v, other, over, 900.0)
+		check(ChildPlay.idx(g, other.id) < 0 and (g["who"] as Array).size() == 2, "물 건너편 아이는 (자리가 비어도) 끼지 않음")
+		var near := _kid(v, "나래", 2.0, p.x, p.y)
+		ChildPlay.try_play(v, near, p, 900.0)
+		check(ChildPlay.idx(g, near.id) >= 0, "같은 쪽 아이는 낌")
+	else:
+		print("   (이 호수는 건너편이 멀어 '물 건너편 아이'는 보지 않음)")
+	# 혼자서도 던짐
+	var v2 := _village(10.0, used)
+	var solo := _kid(v2, "보리", 2.0, p.x, p.y)
+	var g2 := ChildPlay.open_skip(v2, solo, c, d, float(sk["len"]), 1)
+	g2["c1"] = 1.0e9
+	_join_all(g2, [solo])
+	var from2 := v2.events.serial
+	for k in 200:
+		ChildPlay.step(v2, 30.0)
+	check(_events(v2, from2, &"kid_skip_thrown").size() >= 2, "혼자서도 던짐")
+	# 늦은 낮엔 새로 열지 않음 · 겨울엔 물가에 가지 않음
+	var st := ChildPlay._state(v2)
+	var day := false
+	for n in 60:
+		st["last"] = ""
+		st["last2"] = ""
+		day = day or ChildPlay._pick_kind(v2, st, n) == "skip"
+	_set_hour(v2, 15.5)
+	var late := false
+	for n in 60:
+		st["last"] = ""
+		st["last2"] = ""
+		late = late or ChildPlay._pick_kind(v2, st, n) == "skip"
+	check(day and not late, "낮에 고름 · 늦은 낮엔 물수제비를 새로 열지 않음 (저녁 이야기 전에 돌아오게)")
+	var old := Village.default_created
+	Village.default_created = {"year": 2026, "month": 1, "day": 15}
+	var cold := _village(10.0, used)
+	Village.default_created = old
+	var cst := ChildPlay._state(cold)
+	var win := false
+	for n in 60:
+		cst["last"] = ""
+		cst["last2"] = ""
+		win = win or ChildPlay._pick_kind(cold, cst, n) == "skip"
+	check(Health.season_of(int(Health.jar_date(cold)["month"])) == "겨울" and not win and ChildPlay.skip_spot(cold, p, 1).is_empty(), "겨울엔 물수제비 없음 (물가가 얼 때)")
+
+
+func test_story_arc() -> void:
+	print("== 아이·아기: 이야기 자리 — 둘·셋만 앉아도 어르신을 반원으로 두름 · 이야기 자리의 사람")
+	var ring: Array = ChildPlay.STORY_RING
+	var bad := 0
+	var n_sub := 0
+	for mask in range(1, 1 << ring.size()):
+		var free: Array = []
+		for i in ring.size():
+			if mask & (1 << i):
+				free.append(i)
+		if free.size() < 2:
+			continue
+		n_sub += 1
+		var out: Array = ChildPlay.story_arc(free)
+		if out.size() != mini(free.size(), ChildPlay.MAX_KIDS):
+			bad += 1
+			continue
+		var by_ang: Array = free.duplicate()
+		by_ang.sort_custom(func(a: int, b: int) -> bool: return float(ring[a][0]) < float(ring[b][0]))
+		for m in range(2, out.size() + 1):       # 앞에서 m명만 앉아도: 그 자리들 사이에 빈 자리가 끼지 않음 (이웃해 앉음)
+			var lo := 99
+			var hi := -1
+			for k in m:
+				var at := by_ang.find(out[k])
+				lo = mini(lo, at)
+				hi = maxi(hi, at)
+			bad += int(hi - lo != m - 1)
+		if out.size() == 3:                       # 셋: 첫 아이가 가운데, 둘째·셋째가 그 양옆
+			var a0 := float(ring[out[0]][0])
+			bad += int((float(ring[out[1]][0]) - a0) * (float(ring[out[2]][0]) - a0) >= 0.0)
+	check(bad == 0, "열린 자리가 어떻든 (%d가지) 이웃한 자리에 가운데부터 앉음 — 한쪽 끝부터 한 줄로 앉지 않음" % n_sub)
+	check(str(ChildPlay.story_arc([0, 1, 2, 3, 4, 5])) == str([0, 1, 2, 3]), "자리가 다 열리면 옛 그대로 (화면 앞 네 자리) %s" % str(ChildPlay.story_arc([0, 1, 2, 3, 4, 5])))
+	check(int(ChildPlay.story_arc([1, 3, 5])[0]) == 3 and int(ChildPlay.story_arc([0, 2, 4])[0]) == 2, "한쪽만 열려도 그 가운데부터 %s · %s" % [str(ChildPlay.story_arc([1, 3, 5])), str(ChildPlay.story_arc([0, 2, 4]))])
+	# 이야기 자리의 사람
+	var v := _village(17.5)
+	var c := _open_centre(v)
+	var el := _elder(v, c.x, c.y)
+	var kids: Array = [_kid(v, "보리", 2.0, c.x + 0.5, c.y + 0.5), _kid(v, "새별", 2.4, c.x + 0.6, c.y + 0.4)]
+	check(ChildPlay.story_side(v, c) != 0, "어르신 둘레에 앉을 곳이 있음")
+	if ChildPlay.story_side(v, c) != 0:
+		var g := ChildPlay.open_story(v, kids[0], el, 1)
+		var i0 := ChildPlay._add(g, kids[0].id)
+		ChildPlay._add(g, kids[1].id)
+		check(not ChildPlay.story_seated(v, el.id) and not ChildPlay.story_seated(v, kids[0].id), "아직 아무도 앉기 전: 이야기 자리의 사람 아님")
+		g["go"] = 1
+		g["on"][i0] = 1
+		check(ChildPlay.story_seated(v, el.id) and ChildPlay.story_seated(v, kids[0].id), "이야기가 흐르면 어르신·앉은 아이")
+		check(not ChildPlay.story_seated(v, kids[1].id) and not ChildPlay.story_seated(v, v.people[0].id), "오는 길인 아이·다른 주민은 아님")
