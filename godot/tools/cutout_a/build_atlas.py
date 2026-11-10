@@ -105,6 +105,11 @@ SLOT_OF = {"body": 1, "head": 2, "sleeve_a": 3, "sleeve_b": 4, "arm_a": 5, "arm_
            "tail": 9, "knot": 9, "hat": 2, "prop": 10}
 # groups: 0 outfit (body set S, rig frame) 1 head (head set T, frame = its head pivot) 2 headwear (set U, frame = U's head pivot) 3 prop
 PROPS = ["bread", "twigs", "basket", "bread_q", "twigs_q", "basket_q", "hoe", "sickle", "rake", "mallet", "wheat", "bucket", "seed"]
+# wheat (ROADMAP Q8) = ONE ear as big as a head, on its stalk, held by the stalk so the ear stands over the shoulder
+# (tools/bld2d/wheat_field.py carry_ear -> parts/props/wheat.png; it prints the grip point).
+PROP_GRIP = {"wheat": (0.876, 0.882)}         # the hand's place in the picture (share from the left, from the top); others: the middle
+PROP_LATE = {"wheat": (83, 56)}             # packed after everything else, on the free rows at the bottom. Its old cell (h, w px: the
+                                            # sheaf it replaced) stays reserved and empty, so every other part keeps its place in the atlas
 
 
 # concept A (res_A.png, adult woman front, 456 px tall): chin -> collar top 12 px = 2.6 % -> 24 rig units;
@@ -549,20 +554,23 @@ def main():
         if not os.path.exists(f):
             continue
         img = Image.open(f).convert("RGBA")
-        sc = {"hoe": 1.55, "rake": 1.55, "sickle": 0.8, "mallet": 0.8, "seed": 0.7}.get(p, 0.5)   # long tools ~ her height
+        sc = {"hoe": 1.55, "rake": 1.55, "sickle": 0.8, "mallet": 0.8, "seed": 0.7, "wheat": 1.0}.get(p, 0.5)   # long tools ~ her height
         rw, rh = img.width * sc, img.height * sc
         w, h = int(round(rw * ATLAS_K)), int(round(rh * ATLAS_K))
+        gx, gy = PROP_GRIP.get(p, (0.5, 0.5))
         img = np.asarray(img.resize((w, h), Image.LANCZOS))
         items.append((img, np.zeros(img.shape[:2] + (3,), np.float32), {
             "set": p, "view": -1, "part": "prop", "group": 3, "slot": 10,
-            "rect": [-rw / 2, -rh / 2, rw / 2, rh / 2], "pivot": [0.0, 0.0], "parent_pivot": [0.0, 0.0], "layer": 0,
+            "rect": [-rw * gx, -rh * (1.0 - gy), rw * (1.0 - gx), rh * gy], "pivot": [0.0, 0.0], "parent_pivot": [0.0, 0.0], "layer": 0,
             "dye": [-1, -1, -1], "base": [[1, 1, 1]] * 3}))
     # shelf pack, tallest first
-    order = sorted(range(len(items)), key=lambda i: -items[i][0].shape[0])
+    late = {i: PROP_LATE[m["set"]] for i, (_img, _mask, m) in enumerate(items) if m["part"] == "prop" and m["set"] in PROP_LATE}
+    size = lambda i: late[i] if i in late else items[i][0].shape[:2]
+    order = sorted(range(len(items)), key=lambda i: -size(i)[0])
     x = y = shelf = 0
     pos = {}
-    for i in order:
-        h, w = items[i][0].shape[:2]
+    # a late one comes twice: first its reserved cell (in the old order), then the picture itself after everything else
+    for i, (h, w) in [(i, size(i)) for i in order] + [(i, items[i][0].shape[:2]) for i in late]:
         if x + w + 2 * PAD > ATLAS_W:
             x, y, shelf = 0, y + shelf, 0
         pos[i] = (x + PAD, y + PAD)

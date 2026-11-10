@@ -14,6 +14,12 @@ const CARD := &"card2d"            # 건물 노드 아래 그림 판 노드 이�
 const SHADOW_K := 0.42             # 접촉 그림자 타원 폭 = 그림 폭 × 이것
 const SHADOW_DEPTH := 0.65         # 타원 반깊이 = front × 이것, 가운데 = 카메라 쪽으로 front × 0.55 (그림 밑변 바로 앞까지 살짝 비침)
 const GROUND_LIFT := 0.04          # 땅에 눕힌 그림: 발자리 네 귀퉁이 중 가장 높은 곳 + 이만큼
+const STRIP_ROWS := 16             # strip(): 세로로 나눈 칸 수 (깊이로 기우는 밀 줄이 굽는 자리를 따라가게)
+const PITCH_COS := 0.669           # cos 48° (카메라 기울기) — 세운 판 두 장이 땅에서 d칸 떨어지면 같은 화면 자리에서 깊이는 d / cos
+const WHEAT_PULL := 0.85           # 익은 밀 줄은 맨 앞에 선 익은 줄의 면까지 거리의 이만큼 카메라 쪽으로 당겨 그린다 (wheat_pull)
+const ROW_RIPE := 2                # 밀 줄 한 줄의 모습 (wheat_cards의 rows): 2 익음 · 1 푸름 · 0 싹 · -1 벤 그루터기
+const ROW_STUBBLE := -1
+const STUBBLE_BACK := 0.04         # 무덤 앞에서 낮춘 익은 줄 밑의 그루터기는 그 줄보다 이만큼 뒤에 (같은 면에서 겹쳐 떨리지 않게)
 
 ## -1 = 설정(GameSettings.picture_buildings)을 따름 · 0 = 늘 3D · 1 = 늘 그림 (시험·캡처·비교)
 static var override := -1
@@ -52,20 +58,54 @@ static func wheat_pic(stage: int) -> String:
 	return String(Pics.WHEAT[clampi(stage, 0, Pics.WHEAT.size() - 1)])
 
 
-## 낮은 노란 밀밭 (Q8 · GAME_DESIGN 104): 마을 화면에서는 밭을 겹으로 그린다 — 눕힌 흙 + 이랑마다 세운 밀 줄(뒤→앞) + 앞 울타리
-## (+ 꾸밈 accent: Pics.WHEAT_ACCENTS의 이름, 없으면 ""). 줄마다 제 깊이(front)에 서므로 밭 안에 선 주민은 앞줄에 허리까지 묻히고
-## 뒷줄은 가린다 — 건물 그림 판의 보통 깊이 규칙 그대로 (방위를 돌려도 같음). 그림: tools/bld2d/wheat_field.py
+## 밀밭 (Q8 · GAME_DESIGN 104: 싹 → 푸른 밀 → 빽빽한 금빛 밀 숲, 익으면 주민 키의 1.5배): 마을 화면에서는 밭을 겹으로 그린다 —
+## 눕힌 흙 + 이랑마다 세운 밀 줄(뒤→앞) + 앞 울타리 (+ 꾸밈 accent: Pics.WHEAT_ACCENTS의 이름, 없으면 "").
+## 싹·푸른 밀은 줄마다 제 깊이(front)에 서므로 밭 안에 선 주민이 앞줄에 묻히고 뒷줄을 가린다 (건물 그림 판의 보통 깊이 규칙).
+## 익은 밀 숲은 한 덩어리 (wheat_pull) — 안으로 들어가지 않고 앞 가장자리에서 벤다 (BldEcon.wheat_stand).
+## rows = 줄마다의 모습 (뒤→앞 여섯, ROW_* — BldEcon.wheat_rows: 거두는 동안 앞줄부터 그루터기) · 비면 모두 stage 그대로.
+## 그림: tools/bld2d/wheat_field.py
 static func is_wheat_accent(pic: String) -> bool:
 	return Pics.WHEAT_ACCENTS.values().has(pic)
 
 
-static func wheat_cards(stage: int, accent := "") -> Array:
+static func wheat_cards(stage: int, accent := "", rows: Array = []) -> Array:
 	var out: Array = [Pics.WHEAT_SOIL]
-	out.append_array(Pics.WHEAT_ROWS[clampi(stage, 0, Pics.WHEAT_ROWS.size() - 1)])
+	var st := clampi(stage, 0, Pics.WHEAT_ROWS.size() - 1)
+	for i in Pics.WHEAT_STUBBLE.size():
+		var s: int = int(rows[i]) if i < rows.size() else st
+		out.append(Pics.WHEAT_STUBBLE[i] if s < 0 else Pics.WHEAT_ROWS[clampi(s, 0, Pics.WHEAT_ROWS.size() - 1)][i])
 	out.append(Pics.WHEAT_FENCE)
 	if Pics.WHEAT_ACCENTS.has(accent):
 		out.append(Pics.WHEAT_ACCENTS[accent])
 	return out
+
+
+## 익은 밀 줄인가 (밀 숲의 한 겹)
+static func is_ripe_row(pic: String) -> bool:
+	return Pics.WHEAT_ROWS[ROW_RIPE].has(pic)
+
+
+## 익은 밀 줄 pic과 같은 이랑의 그루터기 그림 (무덤 앞에서 낮춘 줄 밑에 깔린다 — 낮춘 자리가 맨흙이 아니라 벤 밭으로 보이게) · 없으면 ""
+static func row_stubble(pic: String) -> String:
+	var i: int = Pics.WHEAT_ROWS[ROW_RIPE].find(pic)
+	return String(Pics.WHEAT_STUBBLE[i]) if i >= 0 else ""
+
+
+## 밀밭 그림 판 목록(wheat_cards)에서 맨 앞에 선 익은 줄의 front — 밀 숲의 앞면. 익은 줄이 없으면 -INF
+static func wheat_face(cards: Array) -> float:
+	var face := -INF
+	for pic: String in cards:
+		if is_ripe_row(pic):
+			face = maxf(face, float(info(pic)["front"]))
+	return face
+
+
+## 밀 숲을 한 덩어리로: 익은 줄 pic을 카메라 쪽으로 당기는 깊이 (그림은 화면에서 움직이지 않음 — bld_card.gdshaderinc).
+## 줄들이 앞면(face = wheat_face) 가까이에 겹쳐 서서 줄 사이에 외곽선이 서지 않고, 숲 안에 반쯤 묻힌 사람도 없다.
+static func wheat_pull(pic: String, face: float) -> float:
+	if not is_ripe_row(pic):
+		return 0.0
+	return maxf(0.0, face - float(info(pic)["front"])) * WHEAT_PULL / PITCH_COS
 
 
 ## 짓는 터 여덟 단계(VillageView.SITE_STAGES) → 네 장: 말뚝·바닥 · 뼈대 · 벽 · 서까래
@@ -97,6 +137,15 @@ static func quad() -> QuadMesh:
 	return _quad
 
 
+## 세로로 여러 칸 나눈 판 (UV는 quad()와 같음) — 깊이로만 기우는 그림(밀 줄: bld_lean은 위에서부터 굽다가 멈춤)에.
+## 부를 때마다 새로 만든다 (기우는 판은 밭 하나에 여섯 장 · 멀리 묶음은 한 장).
+static func strip() -> QuadMesh:
+	var q := QuadMesh.new()
+	q.size = Vector2.ONE
+	q.subdivide_depth = STRIP_ROWS - 1
+	return q
+
+
 ## 그림 하나의 재질 (같은 그림을 쓰는 건물끼리 나눔)
 static func material(name: String) -> ShaderMaterial:
 	if _mats.has(name):
@@ -113,11 +162,12 @@ static func material(name: String) -> ShaderMaterial:
 	return m
 
 
-## 그림 판 노드 (부모 = 건물 노드 · 자리 = 부모 원점). k = 크기 배율 (짓는 터), lift = 땅에 눕힌 그림을 올리는 높이
-static func card(name: String, k := 1.0, flip := false, lift := 0.0, cut: Array = []) -> MeshInstance3D:
+## 그림 판 노드 (부모 = 건물 노드 · 자리 = 부모 원점). k = 크기 배율 (짓는 터), lift = 땅에 눕힌 그림을 올리는 높이,
+## pull = 판 전체를 카메라 쪽으로 당기는 깊이 (wheat_pull)
+static func card(name: String, k := 1.0, flip := false, lift := 0.0, cut: Array = [], pull := 0.0) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = CARD
-	mi.mesh = quad()
+	mi.mesh = strip() if float(info(name).get("lean", 0.0)) > 0.0 else quad()
 	mi.material_override = material(name)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var d := info(name)
@@ -126,9 +176,12 @@ static func card(name: String, k := 1.0, flip := false, lift := 0.0, cut: Array 
 	mi.set_instance_shader_parameter("k", k)
 	mi.set_instance_shader_parameter("flip", -1.0 if flip else 1.0)
 	mi.set_instance_shader_parameter("lift", lift)
-	if cut.size() == 3:              # 벤 창 [x0, x1, cap] (무덤 앞의 밀 줄 — BldEcon.grave_cut)
+	if cut.size() == 3:              # 낮춘 창 [x0, x1, cap] (무덤 앞의 밀 줄 — BldEcon.grave_cut)
 		mi.set_instance_shader_parameter("cut", Vector3(cut[0], cut[1], cut[2]))
 		mi.set_meta(&"cut", cut)
+	if pull != 0.0:
+		mi.set_instance_shader_parameter("pull", pull)
+	mi.set_meta(&"pull", pull)
 	mi.set_meta(&"pic", name)
 	mi.set_meta(&"k", k)
 	mi.set_meta(&"flip", flip)
@@ -183,18 +236,18 @@ static func multi_material() -> ShaderMaterial:
 	return _multi_mat
 
 
-## items: [[그림 이름, 원점(Vector3, 올림 포함), k, flip(bool)], ...] → MultiMeshInstance3D (그리기 1번)
+## items: [[그림 이름, 원점(Vector3, 올림 포함), k, flip(bool), 낮춘 창([] · [x0, x1, cap]), pull], ...] → MultiMeshInstance3D (그리기 1번)
 static func multi(items: Array) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
-	mm.use_colors = true             # 색 = 벤 창 (x0, x1, cap) · cap < 0이면 없음 (bld_card_multi.gdshader)
-	mm.mesh = quad()
+	mm.use_colors = true             # 색 = 낮춘 창 (x0, x1, cap) · cap < 0이면 없음 (bld_card_multi.gdshader)
+	mm.mesh = strip()               # 밀 줄이 섞여 있음 (bld_lean)
 	mm.instance_count = items.size()
 	for j in items.size():
 		var it: Array = items[j]
 		mm.set_instance_transform(j, Transform3D(Basis.IDENTITY, it[1]))
-		mm.set_instance_custom_data(j, Color(float(info(it[0]).get("i", 0)), -1.0 if it[3] else 1.0, float(it[2]), 0.0))
+		mm.set_instance_custom_data(j, Color(float(info(it[0]).get("i", 0)), -1.0 if it[3] else 1.0, float(it[2]), float(it[5]) if it.size() > 5 else 0.0))
 		var cut: Array = it[4] if it.size() > 4 else []
 		mm.set_instance_color(j, Color(float(cut[0]), float(cut[1]), float(cut[2]), 1.0) if cut.size() == 3 else Color(0.0, 0.0, -1.0, 1.0))
 	var mmi := MultiMeshInstance3D.new()

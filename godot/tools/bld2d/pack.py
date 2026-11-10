@@ -137,6 +137,7 @@ def main() -> None:
     L.append("const TYPES := " + json.dumps(table.TYPES, ensure_ascii=False))
     L.append("const WHEAT := " + json.dumps(table.WHEAT))
     L.append("const WHEAT_ROWS := " + json.dumps(table.WHEAT_ROWS))
+    L.append("const WHEAT_STUBBLE := " + json.dumps(table.WHEAT_STUBBLE))
     L.append(f"const WHEAT_SOIL := \"{table.WHEAT_SOIL}\"")
     L.append(f"const WHEAT_FENCE := \"{table.WHEAT_FENCE}\"")
     L.append("const WHEAT_ACCENTS := " + json.dumps(table.WHEAT_ACCENTS))

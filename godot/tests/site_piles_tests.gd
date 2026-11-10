@@ -671,8 +671,9 @@ func test_plants() -> void:
 	Flora2D.override = oldf
 
 
-## (Q8) 낮은 노란 밀밭: 익어도 주민 가슴 높이라 뒤쪽 건물의 더미 줄을 가리지 않는다 — 그림을 줄이는 규칙은 없어짐 (두 방위).
-## 밭은 눕힌 흙 + 세운 밀 줄 여섯 + 앞 울타리로 겹쳐 그리고, 가리는지 보는 판(_covers)도 줄마다 하나씩. 밭 자리·수확은 그대로
+## (Q8) 금빛 밀 숲: 싹(발목~무릎) → 푸른 밀(허리~머리) → 익은 밀 숲(주민 키의 1.5배쯤). 그림을 줄이는 규칙은 없다 (늘 제 크기) —
+## 키 큰 익은 밭이 뒤쪽 건물의 더미 줄을 가리면 더미가 옆으로 비킨다 (건물 앞에 선 다른 건물과 같은 규칙 · 두 방위).
+## 밭은 눕힌 흙 + 세운 밀 줄 여섯 + 앞 울타리로 겹쳐 그리고, 가리는지 보는 판(_covers)도 줄마다 하나씩 (제 키로). 밭 자리·수확은 그대로
 func test_wheat() -> void:
 	var scene := _scene()
 	var av := _village(scene)
@@ -691,8 +692,10 @@ func test_wheat() -> void:
 	a.stock["판자"] = 0.0
 	var band := BldEcon.pile_band(a, saw)
 	check(band.size() == 3 and float(band[1]) < float(band[2]) and float(band[0]) > 0.0, "제재소의 더미 줄 %s" % [band])
-	# 그림: 세 단계 모두 흙 한 장(눕힘) + 줄 여섯 + 울타리. 선 그림은 낮다 — 익은 줄도 주민 키(화면 0.83칸쯤)의 0.65배 아래
-	var tall := 0.0
+	# 그림: 세 단계 모두 흙 한 장(눕힘) + 줄 여섯 + 울타리. 같은 밀이 자란다 — 단계마다 가장 키 큰 줄 (주민 키 = 화면 0.83칸쯤):
+	# 싹은 무릎 아래 · 푸른 밀은 허리~머리 · 익은 밀 숲은 주민 키의 1.3~2배 (가운데 줄 평균 1.5배 + 삐죽 솟은 이삭)
+	var man := 0.83
+	var tops := [0.0, 0.0, 0.0]
 	var layered := true
 	for stg in 3:
 		var names := Bld2D.wheat_cards(stg)
@@ -702,10 +705,36 @@ func test_wheat() -> void:
 			layered = layered and not rd.is_empty()
 			if not rd.is_empty() and int(rd.get("mode", 0)) == 0:
 				up += 1
-				tall = maxf(tall, float(rd["h"]))
+				if Bld2D.Pics.WHEAT_ROWS[stg].has(nm):       # 밀 줄만 (울타리는 빼고)
+					tops[stg] = maxf(float(tops[stg]), float(rd["h"]))
 		layered = layered and names.size() == 8 and up == 7
-	check(layered and tall > 0.3 and tall < 0.83 * 0.65, "밀밭 = 흙 + 밀 줄 여섯 + 울타리 (세 단계) · 가장 키 큰 줄 %.2f칸 (주민 가슴 높이)" % tall)
+	var tall := float(tops[2])
+	check(layered and float(tops[0]) > 0.1 and float(tops[0]) < man * 0.4 and float(tops[1]) > man * 0.5 and float(tops[1]) < man
+		and tall > man * 1.3 and tall < man * 2.0,
+		"밀밭 = 흙 + 밀 줄 여섯 + 울타리 (세 단계) · 가장 키 큰 줄: 싹 %.2f칸 · 푸른 밀 %.2f칸 · 익은 밀 숲 %.2f칸 (주민 키의 1.5배쯤)" % tops)
 	check(Bld2D.wheat_cards(2, "scarecrow").size() == 9 and Bld2D.wheat_cards(2, "없는 꾸밈").size() == 8, "꾸밈 그림은 고른 때만 한 장 더")
+	# 익은 숲의 윤곽: 상자가 아니라 둔덕 — 맨 앞줄과 맨 뒷줄이 가운데 줄보다 낮고 좁다 (앞에서 뒤로 층층이 · 옆은 둥글게)
+	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+	var mid_h := 0.0
+	var mid_w := 0.0
+	for i in range(1, ripe.size() - 1):
+		mid_h = maxf(mid_h, float(Bld2D.info(String(ripe[i]))["h"]))
+		mid_w = maxf(mid_w, float(Bld2D.info(String(ripe[i]))["w"]))
+	var front_r := Bld2D.info(String(ripe[ripe.size() - 1]))
+	var back_r := Bld2D.info(String(ripe[0]))
+	check(float(front_r["h"]) < mid_h - 0.1 and float(front_r["w"]) < mid_w - 0.3 and float(back_r["w"]) < mid_w - 0.3 and float(back_r["h"]) <= mid_h,
+		"익은 밀 숲은 둔덕: 앞줄 키 %.2f칸 · 폭 %.2f칸 / 가운데 줄 키 %.2f칸 · 폭 %.2f칸 / 뒷줄 폭 %.2f칸"
+		% [float(front_r["h"]), float(front_r["w"]), mid_h, mid_w, float(back_r["w"])])
+	# 벤 줄: wheat_cards의 줄 상태(2 익음 · 1 푸름 · 0 싹 · -1 그루터기)대로 그 이랑의 그림이 바뀐다 — 장수·순서는 그대로
+	var cut_rows := [2, 2, 2, 2, -1, -1]
+	var mixed := Bld2D.wheat_cards(2, "", cut_rows)
+	var mixed_ok: bool = mixed.size() == 8 and mixed[0] == Bld2D.wheat_cards(2)[0] and mixed[7] == Bld2D.wheat_cards(2)[7]
+	for i in 6:
+		var want: String = String(Bld2D.Pics.WHEAT_STUBBLE[i]) if int(cut_rows[i]) < 0 else String(ripe[i])
+		mixed_ok = mixed_ok and String(mixed[1 + i]) == want and Bld2D.has(want)
+		mixed_ok = mixed_ok and Bld2D.row_stubble(String(ripe[i])) == String(Bld2D.Pics.WHEAT_STUBBLE[i])
+		mixed_ok = mixed_ok and float(Bld2D.info(String(Bld2D.Pics.WHEAT_STUBBLE[i]))["h"]) < man * 0.3
+	check(mixed_ok and Bld2D.row_stubble(String(mixed[0])) == "", "벤 줄은 그루터기 그림 (앞 두 줄을 벤 밭: 그림 여덟 장 그대로 · 그루터기는 발목 높이)")
 	var mid := (float(band[1]) + float(band[2])) * 0.5
 	farm.ready_at = a.t - 1.0                # 익은 밀 (가장 키 큰 그림)
 	for st in [0, 1]:
@@ -713,7 +742,7 @@ func test_wheat() -> void:
 		var tw: Vector2 = sd[0]
 		var rt: Vector2 = sd[1]
 		var o := Vector2(saw.x, saw.y) + rt * mid + tw * float(band[0])
-		for ahead: float in [5.0, 2.0]:      # 더미 줄 5칸 앞 (옛 그림은 줄여야 했던 자리) · 2칸 앞 (바로 앞)
+		for ahead: float in [5.0, 2.0]:      # 더미 줄 5칸 앞 · 2칸 앞 (바로 앞) — 밭 그림은 줄이지 않고, 가려지는 더미가 옆으로 비킨다
 			farm.x = o.x + tw.x * ahead
 			farm.y = o.y + tw.y * ahead
 			vw._bld_key.erase(farm.id)
@@ -743,7 +772,7 @@ func test_wheat() -> void:
 					if al > 0.05 and al * BldEcon.APRON_SIN < float(c[3]) and absf(dv.dot(econ._r2)) < float(c[2]) + BldEcon.PILE_HALF:
 						hid = true
 			check(econ.step == st and cards == 8 and full and covers == 7 and low and not hid,
-				"방위 걸음 %d · 더미 줄 %d칸 앞의 익은 밭: 그림 %d장 제 크기 · 가림 판 %d개(줄마다, 낮음) · 제재소 판자 더미 %d개는 안 가림" % [st, int(ahead), cards, covers, piles.size()])
+				"방위 걸음 %d · 더미 줄 %d칸 앞의 익은 밭: 그림 %d장 제 크기 · 가림 판 %d개(줄마다, 제 키) · 제재소 판자 더미 %d개는 안 가림" % [st, int(ahead), cards, covers, piles.size()])
 	scene.queue_free()
 
 

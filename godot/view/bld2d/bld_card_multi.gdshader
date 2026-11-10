@@ -1,7 +1,7 @@
 // Every building card at village zoom (bld_far) from ONE atlas (art/bld2d/far_atlas.png) — one MultiMesh = one draw call
 // (art-bible budget 300 draw calls at ppu 16). Also the graves. Placement / light = bld_card.gdshader.
-// Per instance: transform origin = building centre (lift already added), INSTANCE_CUSTOM = (picture index, flip, size k, -),
-// instance colour = cut window (x0, x1, cap, -) in world units (bld_cut_h) — cap < 0 = none.
+// Per instance: transform origin = building centre (lift already added), INSTANCE_CUSTOM = (picture index, flip, size k, pull),
+// instance colour = cut window (x0, x1, cap, -) in world units (bld_cut_sink) — cap < 0 = none.
 shader_type spatial;
 render_mode skip_vertex_transform, cull_disabled, ambient_light_disabled, specular_disabled, depth_draw_opaque, shadows_disabled;
 
@@ -32,17 +32,21 @@ void vertex() {
 		w = bld_sway(w, VERTEX.xy, MODEL_MATRIX[3].xyz, geo[i], psway[i], INSTANCE_CUSTOM.z, TIME, INV_VIEW_MATRIX);
 	}
 	VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
-	VERTEX.z += bld_lean(corner, plean[i], INSTANCE_CUSTOM.z);
+	VERTEX.z += bld_lean(corner, plean[i], geo[i].y, INSTANCE_CUSTOM.z) + INSTANCE_CUSTOM.w;
 	NORMAL = normalize((VIEW_MATRIX * vec4(INV_VIEW_MATRIX[2].xyz, 0.0)).xyz);
 	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
 }
 
 void fragment() {
-	vec4 t = texture(atlas, v_uv.xy + UV * v_uv.zw);
-	if (t.a < alpha_cut) {
-		discard;
+	vec2 uv = UV;
+	if (v_cut.z >= 0.0) {
+		uv.y -= bld_cut_sink(v_loc.x, v_cut.xyz, v_cut.w) / v_cut.w;
+		if (uv.y < 0.0) {
+			discard;
+		}
 	}
-	if (v_cut.z >= 0.0 && v_loc.y > bld_cut_h(v_loc.x, v_cut.xyz, v_cut.w)) {
+	vec4 t = texture(atlas, v_uv.xy + uv * v_uv.zw);
+	if (t.a < alpha_cut) {
 		discard;
 	}
 	ALBEDO = t.rgb;

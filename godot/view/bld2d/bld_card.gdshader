@@ -17,7 +17,8 @@ uniform vec3 lit_tint : source_color = vec3(1.0);
 instance uniform float flip = 1.0;               // -1 mirrors (ferry landing toward the other bank)
 instance uniform float k = 1.0;                  // size multiplier (building sites follow the building size)
 instance uniform float lift = 0.0;               // raise (ground mode: over the highest corner of the footprint)
-instance uniform vec3 cut = vec3(0.0, 0.0, -1.0);   // cut window x0, x1, cap (world units, bld_cut_h) — z < 0 = none
+instance uniform vec3 cut = vec3(0.0, 0.0, -1.0);   // cut window x0, x1, cap (world units, bld_cut_sink) — z < 0 = none
+instance uniform float pull = 0.0;               // the whole card toward the camera along the view ray (depth only) — ripe wheat rows
 
 varying vec2 v_loc;                              // card-local position in world units (x right, y up from the foot)
 
@@ -30,17 +31,21 @@ void vertex() {
 		w = bld_sway(w, VERTEX.xy, org, geo, sway, k, TIME, INV_VIEW_MATRIX);
 	}
 	VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
-	VERTEX.z += bld_lean(corner, lean, k);
+	VERTEX.z += bld_lean(corner, lean, geo.y, k) + pull;
 	NORMAL = normalize((VIEW_MATRIX * vec4(INV_VIEW_MATRIX[2].xyz, 0.0)).xyz);
 	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
 }
 
 void fragment() {
-	vec4 t = texture(tex, UV);
-	if (t.a < alpha_cut) {
-		discard;
+	vec2 uv = UV;
+	if (cut.z >= 0.0) {
+		uv.y -= bld_cut_sink(v_loc.x, cut, geo.y * k) / (geo.y * k);
+		if (uv.y < 0.0) {
+			discard;
+		}
 	}
-	if (cut.z >= 0.0 && v_loc.y > bld_cut_h(v_loc.x, cut, geo.y * k)) {
+	vec4 t = texture(tex, uv);
+	if (t.a < alpha_cut) {
 		discard;
 	}
 	ALBEDO = t.rgb;

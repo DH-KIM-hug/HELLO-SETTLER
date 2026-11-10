@@ -16,7 +16,7 @@ PICS: picture name -> dict
 TYPES: building type (Balance.B key) -> picture names by variant (b.id % n, same rule as VillageView.BUILDING_MODELS)
 """
 
-import wheat_field as _wf      # the low wheat field's geometry (rows on the soil ridges) — single source there
+import wheat_field as _wf      # the wheat field's geometry (rows on the soil ridges) — single source there
 
 NEAR_PPU = 150      # near picture pixels per world unit (zoom step 4, ppu 40-48 x 3 device px)
 FAR_PPU = 64        # far atlas pixels per world unit (zoom step 3, ppu 16-24 x 3)
@@ -58,8 +58,8 @@ PICS = {
     "pasture": dict(w=4.6, mode="ground"),
     "ferry_raft": dict(w=3.2, mode="ground", shadow=0),
     "ferry": dict(w=3.2, mode="ground", shadow=0),
-    # wheat field (Q8, GAME_DESIGN 104: the low golden field). The three stage pictures are the whole field flattened
-    # (thumbnail · line-up · layout numbers); in the village the field is drawn in layers so the farmer stands IN it:
+    # wheat field (Q8, GAME_DESIGN 104: sprouts -> green wheat -> the dense golden wheat forest). The three stage pictures are
+    # the whole field flattened (thumbnail · line-up · layout numbers); in the village the field is drawn in layers:
     # wheat_soil (flat) + one upright strip per ridge (WHEAT_ROWS, added below) + wheat_fence. Built by wheat_field.py.
     "wheat_sprout": dict(w=_wf.SOIL_W, front=_wf.field_front()),
     "wheat_green": dict(w=_wf.SOIL_W, front=_wf.field_front()),
@@ -118,15 +118,20 @@ TYPES = {
 }
 WHEAT = ["wheat_sprout", "wheat_green", "wheat_ripe"]
 # the field in layers: per stage, the row strips back to front (each its own picture: its ridge's front / dx / width)
+# (+ the same ridges reaped: WHEAT_STUBBLE — the harvest view swaps ripe rows for these, front to back)
 WHEAT_ROWS = []
-for _stage in _wf.STAGES:
+WHEAT_STUBBLE = []
+for _stage in _wf.STAGES + ["stubble"]:
     _names = []
-    for _i, _g in enumerate(_wf.rows()):
+    for _i, _g in enumerate(_wf.rows(_stage)):
         _n = f"wrow_{_stage}_{_i}"
         PICS[_n] = dict(w=_g["w"], front=_g["front"], dx=_g["dx"], shadow=0, sway=_wf.SWAY[_stage], lean=_wf.lean(_stage, _i),
-                        ink=_wf.line_ink(_stage))
+                        ink=_wf.line_ink("ripe" if _stage == "stubble" else _stage))
         _names.append(_n)
-    WHEAT_ROWS.append(_names)
+    if _stage == "stubble":
+        WHEAT_STUBBLE = _names
+    else:
+        WHEAT_ROWS.append(_names)
 WHEAT_SOIL = "wheat_soil"
 WHEAT_FENCE = "wheat_fence"
 # optional corner decoration (VillageView.wheat_accent — off by default): short name -> picture

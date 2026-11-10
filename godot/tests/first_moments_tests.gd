@@ -1916,7 +1916,8 @@ func test_grave_clear_view() -> void:
 	vw._flora2d_on = false
 	check(is_equal_approx(float(at.call(gp + rt0 * 1.0)), s), "3D 꽃일 때는 손대지 않음")
 	vw._flora2d_on = was
-	# 밀밭: 익은 밀 줄이 그 뒤 무덤을 가리지 않게 — 무덤 앞에 선 줄만, 무덤 폭만큼만 낮춰 그린다 (BldEcon.grave_cut · 밭 전체는 그대로)
+	# 밀밭(Q8 금빛 밀 숲): 익은 밀은 그 뒤 무덤을 결코 가리지 않는다 — 무덤 앞에 선 줄을 무덤 폭 넘게 낮춰 그리고 (BldEcon.grave_cut),
+	# 창 밖은 완만한 비탈로 제 키에 돌아온다 (뿔 없음: 창 옆에 남는 밭 어깨가 좁으면 그쪽은 밭 끝까지 낮춤) · 낮춘 익은 줄 밑에는 그루터기
 	var ups: Array = []                      # 밭의 세운 그림 (밀 줄 여섯 + 울타리)
 	for nm: String in Bld2D.wheat_cards(2):
 		if int(Bld2D.info(nm).get("mode", 0)) == 0:
@@ -1936,7 +1937,7 @@ func test_grave_clear_view() -> void:
 	v.buildings.clear()
 	v.buildings.append(farm)
 	farm.ready_at = v.t - 1.0
-	check(ups.size() == 7 and wh > 0.3 and BldEcon.grave_cuts(v, farm, 0, 2).size() == Bld2D.wheat_cards(2).size()
+	check(ups.size() == 7 and wh > 1.0 and BldEcon.grave_cuts(v, farm, 0, 2).size() == Bld2D.wheat_cards(2).size()
 		and BldEcon.grave_cut(v, farm, 0, Bld2D.wheat_cards(2)[0]).is_empty(), "밭 그림 판마다 벤 창 하나 · 눕힌 흙은 손대지 않음")
 	var a_half := wh * 0.5 / sn + BldEcon.GRAVE_CLEAR       # 가장 키 큰 줄이 무덤에서 이만큼 앞이면 반 키까지만
 	for st in [0, 1]:
@@ -1950,8 +1951,27 @@ func test_grave_clear_view() -> void:
 		var at_half := gp + tw * (a_half - fr)
 		var c: Array = put.call(at_half)
 		check(c.size() == 3 and is_equal_approx(float(c[2]), wh * 0.5) and float(c[2]) > BldEcon.GRAVE_MIN_H
-			and is_equal_approx(float(c[1]) - float(c[0]), BldEcon.GRAVE_HALF_W * 2.0) and is_equal_approx(float(c[0]) + float(c[1]), -wdx * 2.0),
-			"방위 걸음 %d: 무덤 %.1f칸 앞의 가장 키 큰 줄(%.2f칸)은 무덤 폭만큼만 반 키로 %s" % [st, a_half, wh, [c]])
+			and float(c[0]) <= -wdx - BldEcon.GRAVE_HALF_W + 0.001 and float(c[1]) >= -wdx + BldEcon.GRAVE_HALF_W - 0.001,
+			"방위 걸음 %d: 무덤 %.1f칸 앞의 가장 키 큰 줄(%.2f칸)은 무덤 폭을 다 덮는 창에서 반 키로 %s" % [st, a_half, wh, [c]])
+		# 창 옆 (뿔 없음): 무덤이 밭 왼쪽에 치우치면 — 좁은 왼쪽 어깨는 줄 끝까지 낮추고, 넓은 오른쪽은 완만한 비탈을 지나 제 키로
+		var side := 1.2
+		var hw := float(d["w"]) * 0.5
+		var cs: Array = put.call(at_half + rt * side)
+		var depth := wh - wh * 0.5
+		var ramp := BldEcon.cut_ramp(wh, wh * 0.5)
+		var slope := true                     # 창 오른쪽 끝에서 줄 끝까지: 내려간 만큼이 한 번도 다시 커지지 않고 0으로
+		var prev := depth
+		if cs.size() == 3:
+			for i in 21:
+				var sk := BldEcon.cut_sink(lerpf(float(cs[1]), hw, i / 20.0), cs, wh)
+				slope = slope and sk <= prev + 0.0001
+				prev = sk
+		check(cs.size() == 3 and is_equal_approx(float(cs[2]), wh * 0.5) and is_equal_approx(float(cs[1]), -side - wdx + BldEcon.GRAVE_HALF_W)
+			and float(cs[0]) <= -hw - ramp + 0.001 and is_equal_approx(BldEcon.cut_sink(-hw, cs, wh), depth)
+			and is_equal_approx(BldEcon.cut_sink(-side - wdx, cs, wh), depth) and slope and is_zero_approx(BldEcon.cut_sink(hw, cs, wh))
+			and ramp >= BldEcon.GRAVE_RAMP and hw - float(cs[1]) >= ramp,
+			"방위 걸음 %d: 왼쪽에 치우친 무덤 — 왼쪽은 줄 끝까지 낮춤 · 오른쪽은 %.1f칸 비탈 뒤 제 키 (줄 끝에서 내려간 만큼 %.2f칸) %s"
+			% [st, ramp, BldEcon.cut_sink(hw, cs, wh), [cs]])
 		var clear := true                     # 밭의 모든 세운 그림: 벤 창 안의 윗선이 무덤 자리(발치의 꽃)까지 올라오지 않음
 		var cut_n := 0
 		for nm: String in ups:
@@ -1995,9 +2015,20 @@ func test_grave_clear_view() -> void:
 			if it.size() > 4 and (it[4] as Array).size() == 3:
 				out[2] += 1
 		return out
+	# 비탈: 깊이 낮춘 줄일수록 길게 (벼랑이 아니라 언덕) · 셰이더(bld_cut_sink)와 같은 값
+	var inc := FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshaderinc")
+	check(BldEcon.cut_ramp(wh, BldEcon.GRAVE_MIN_H) > BldEcon.cut_ramp(wh, wh - 0.1) and is_equal_approx(BldEcon.cut_ramp(wh, wh - 0.1), BldEcon.GRAVE_RAMP)
+		and is_equal_approx(BldEcon.cut_ramp(wh, wh + 1.0), BldEcon.GRAVE_RAMP)
+		and inc.contains("BLD_CUT_RAMP = %s;" % str(BldEcon.GRAVE_RAMP)) and inc.contains("BLD_CUT_DEEP = %s;" % str(BldEcon.GRAVE_DEEP)),
+		"낮춘 창 밖 비탈: 얕게 낮추면 %.1f칸 · 그루터기 키까지 낮추면 %.1f칸 (셰이더와 같은 값)" % [BldEcon.GRAVE_RAMP, BldEcon.cut_ramp(wh, BldEcon.GRAVE_MIN_H)])
+	var under_n := 0                          # 낮춘 익은 줄 밑에 그루터기 그림이 한 장씩 더 놓인다
+	for nm: String in Bld2D.wheat_cards(2):
+		if Bld2D.row_stubble(nm) != "" and not BldEcon.grave_cut(v, farm, st0, nm).is_empty():
+			under_n += 1
 	if vw._bld2d_on:
 		var dn: Array = drawn.call()
-		check(int(dn[0]) == 8 and int(dn[1]) >= 1 and int(dn[2]) == int(dn[1]), "그린 밭: 그림 판 %d장 가운데 %d장에 벤 창 (멀리 묶음에도 %d장)" % dn)
+		check(under_n >= 1 and int(dn[0]) == 8 + under_n and int(dn[1]) >= under_n and int(dn[2]) == int(dn[1]),
+			"그린 밭: 그림 판 %d장 (낮춘 줄 밑 그루터기 포함) 가운데 %d장에 벤 창 (멀리 묶음에도 %d장)" % dn)
 		var gs2: Array = v.graves.duplicate()
 		v.graves.clear()
 		dn = drawn.call()

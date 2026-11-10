@@ -1,13 +1,15 @@
-## 낮은 노란 밀밭 캡처 (Q8 — GAME_DESIGN 104행). 창이 필요:  godot --path godot -s res://tools/shot_wheat_field.gd -- w1
+## 밀밭 캡처 (Q8 — GAME_DESIGN 104행: 싹 → 푸른 밀 → 금빛 밀 숲). 창이 필요:  godot --path godot -s res://tools/shot_wheat_field.gd -- w1
 ## -> godot_shots/wheat/<tag>_<sprout|green|ripe>_ppu44.png · _ppu20.png   밭 한 곳 (오두막·방앗간 곁, 밭 안에 일꾼 둘 + 밭 앞에 한 사람, 낮)
-##    <tag>_ripe_yaw1_ppu44.png · _ppu20.png                                카메라를 한 걸음 돌려서 (줄이 화면을 따라 도는지)
+##    <tag>_ripe_yaw1_ppu44.png · _ppu20.png · _yaw2_...                    카메라를 한 걸음 · 두 걸음 돌려서 (줄이 화면을 따라 도는지)
 ##    <tag>_ripe_wide_ppu20.png                                             먼 확대 화면 전체 ('노란 밭'으로 읽히는지)
 ##    <tag>_ripe_sway_a.png · _b.png                                        바람 (조금 뒤 두 장 — 이삭이 움직였는지)
 ##    <tag>_ripe_<scarecrow|flowers>_ppu44.png · _ppu20.png                 밭 꾸밈 그림 두 가지 (VillageView.wheat_accent — 기본은 없음)
 ##    <tag>_ripe_bubble_ppu44.png                                           볏단이 넘칠 때 밭 위 생각 풍선 + 가득 찬 볏단 더미
 ##    (grave)   <tag>_grave_ppu44.png · _ppu16.png · <tag>_grave_near_ppu44.png · _ppu16.png   밭 뒤(1.2칸 · 바로 뒤)의 무덤 — 그 앞의 밀 줄만 낮춰 그림
 ##    (compare) <tag>_cmp_ppu44.png · _ppu20.png                                  익은 밭 + 앞 울타리 앞에 선 주민 셋 (키 견줌 — 밭 안에는 아무도 없음)
-## 인자: -- <tag> [all|grave|compare]
+##    (harvest) <tag>_harvest_1.png · _2.png · _3.png   거두기: 아침 (첫 줄) · 한낮 (절반) · 저녁 (이삭 하나를 메고 감) + <tag>_harvest_night.png (밤사이 다시 자람)
+##    (carry)   <tag>_carry_a.png · _b.png   이삭 하나를 멘 사람 셋 — 오른쪽·앞·왼쪽 / 뒤·비스듬히 둘 (짐 그림 점검)
+## 인자: -- <tag> [all|grave|compare|harvest|carry]
 ## 시뮬레이션은 멈춘 채(paused) 밭 값(ready_at)만 바꿔 찍는다.
 extends SceneTree
 
@@ -51,9 +53,19 @@ func _initialize() -> void:
 			for ppu: float in [44.0, 16.0]:
 				plan.append_array([_aim.bind(ppu), _save.bind("grave%s_ppu%d" % ["_near" if near else "", int(ppu)], ppu)])
 	elif mode == "compare":
-		plan.append_array([_stage.bind(2), _front_folk])
+		plan.append_array([_stage.bind(2), _front_folk, _run.bind(60)])       # 옷 갈아입는 연기가 걷힌 뒤에
 		for ppu: float in [44.0, 20.0]:
 			plan.append_array([_aim.bind(ppu), _save.bind("cmp_ppu%d" % int(ppu), ppu)])
+	elif mode == "harvest":
+		plan.append(_stage.bind(2))
+		var hours := [9.3, 15.0, 18.2, 23.5]
+		for i in hours.size():
+			plan.append_array([_harvest.bind(float(hours[i]), i == 2), _aim.bind(44.0), _run.bind(24),
+				_save.bind("harvest_%s" % ("night" if i == 3 else str(i + 1)), 44.0)])
+	elif mode == "carry":
+		plan.append(_stage.bind(2))
+		for i in 2:
+			plan.append_array([_carriers.bind(i), _aim.bind(44.0), _run.bind(24), _save.bind("carry_%s" % "ab"[i], 44.0)])
 	if mode != "all":
 		plan.append(func() -> int:
 			quit()
@@ -65,9 +77,10 @@ func _initialize() -> void:
 			plan.append_array([_aim.bind(ppu), _save.bind("%s_ppu%d" % [STAGES[i], int(ppu)], ppu)])
 	plan.append_array([_aim.bind(20.0), _save.bind("ripe_wide_ppu20", 0.0)])
 	plan.append_array([_aim.bind(44.0), _run.bind(40), _save.bind("ripe_sway_a", 44.0), _run.bind(50), _save.bind("ripe_sway_b", 44.0)])
-	plan.append(_yaw.bind(1))
-	for ppu: float in [44.0, 20.0]:
-		plan.append_array([_aim.bind(ppu), _save.bind("ripe_yaw1_ppu%d" % int(ppu), ppu)])
+	for st: int in [1, 2]:
+		plan.append(_yaw.bind(st))
+		for ppu: float in [44.0, 20.0]:
+			plan.append_array([_aim.bind(ppu), _save.bind("ripe_yaw%d_ppu%d" % [st, int(ppu)], ppu)])
 	plan.append(_yaw.bind(0))
 	for ac: String in ["scarecrow", "flowers"]:
 		plan.append(_accent.bind(ac))
@@ -231,6 +244,8 @@ func _grave(near: bool) -> int:
 	g["x"] = gp.x
 	g["y"] = gp.y
 	_front_folk()
+	scene.view._grave_key = ""          # 무덤 돌 그림은 무덤 수가 바뀔 때만 다시 놓인다 — 자리를 옮겼으니 다시
+	scene.view._bld_key.erase(farm.id)
 	scene.refresh()
 	scene.view.sync(0.0, true)
 	print("grave ", gp, " cuts ", BldEcon.grave_cuts(v, farm, 0, 2))
@@ -258,6 +273,66 @@ func _front_folk() -> int:
 	scene.refresh()
 	scene.view.sync(0.0, true)
 	return 20
+
+
+## 거두기 (화면만): 밭은 며칠 전에 익었고 일꾼이 있다 · 시각 hour (BldEcon.wheat_rows가 앞줄부터 그루터기로).
+## 일꾼 둘은 밭 한가운데서 일함 (시뮬 자리 — 화면에서는 숲 앞 가장자리에 선다) · carry: 셋째 사람이 밀을 메고 방앗간 쪽으로 걸어감
+func _harvest(hour: float, carry: bool) -> int:
+	var f := _fdir(0)
+	var r := _rdir(0)
+	farm.ready_at = v.t - 3.0 * 86400.0
+	v.start_clock = fposmod(v.start_clock + (hour - v.hour_now()) * Village.HOUR, Village.DAY)
+	var p := Vector2(farm.x, farm.y)
+	var spots := [p + r * 0.75 + f * 0.25, p - r * 0.7 - f * 0.3, p + r * 1.5 + f * 1.9]
+	for i in folk.size():
+		var q := folk[i]
+		var act := "work" if i < 2 else ("carry" if carry else "idle")
+		q.steps.clear()
+		q.steps.append(ResidentAI.act(1.0e6, act))
+		q.x = (spots[i] as Vector2).x
+		q.y = (spots[i] as Vector2).y
+		q.px = q.x
+		q.py = q.y
+		q.action = act
+		q.anim = act
+		q.carry = "밀" if act == "carry" else ""
+		q.job = farm.id if i < 2 else -1
+		if act == "carry":
+			q.facing = atan2(r.x, r.y)
+	farm.worker = folk[0].id
+	scene.view._bld_key.erase(farm.id)
+	scene.refresh()
+	scene.view.sync(0.0, true)
+	print("harvest ", hour, " rows ", BldEcon.wheat_rows(v, farm), " fields ", scene.view.econ.fields)
+	return 30
+
+
+## 이삭을 멘 사람 셋을 울타리 앞에 — 걷는 쪽이 서로 다름 (which 0: 오른쪽·카메라 쪽·왼쪽 / 1: 뒤·비스듬히 뒤·비스듬히 앞)
+func _carriers(which: int) -> int:
+	var f := _fdir(0)
+	var r := _rdir(0)
+	var edge := float(Bld2D.info(Bld2D.Pics.WHEAT_FENCE)["front"]) + 0.45
+	var dirs: Array = [[r, f, -r], [-f, r - f, f - r]][which]
+	for i in folk.size():
+		var q := folk[i]
+		var at := Vector2(farm.x, farm.y) + f * edge + r * (-1.1 + 1.1 * i)
+		var d := (dirs[i] as Vector2).normalized()
+		q.steps.clear()
+		q.steps.append(ResidentAI.act(1.0e6, "carry"))
+		q.x = at.x
+		q.y = at.y
+		q.px = q.x
+		q.py = q.y
+		q.action = "carry"
+		q.anim = "carry"
+		q.carry = "밀"
+		q.job = -1
+		q.facing = atan2(d.x, d.y)
+	farm.worker = -1
+	scene.view._bld_key.erase(farm.id)
+	scene.refresh()
+	scene.view.sync(0.0, true)
+	return 30
 
 
 ## 밭 꾸밈 그림을 바꿔 다시 그림 (화면만)
