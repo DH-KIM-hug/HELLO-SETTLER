@@ -148,6 +148,13 @@ func _build_settings(body: VBoxContainer) -> void:
 		notebook_requested.emit())
 	var ask := _button(body, "문의하기")
 	ask.pressed.connect(func() -> void: show_page("inquiry"))
+	if OS.is_debug_build():                    # 개발판에서만 — 개미굴 원정 시험판 (ROADMAP Q10 1걸음, 마을과 따로 도는 장면). 타이틀의 설정에서만 연다
+		var nest := _button(body, "개미굴 원정 시험판 (개발판)")
+		nest.pressed.connect(func() -> void:
+			if village != null:
+				show_toast("타이틀 화면의 설정에서 열 수 있어요.")
+			else:
+				get_tree().change_scene_to_file("res://proto/nest/nest_proto.tscn"))
 	var snd := credits_text()
 	credit_l = _label(body, (snd + "\n" if snd != "" else "") + ART_CREDITS, "Small")
 	credit_l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
