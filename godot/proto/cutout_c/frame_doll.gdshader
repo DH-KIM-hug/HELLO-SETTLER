@@ -28,13 +28,15 @@ uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;
 uniform float alpha_cut = 0.5;
 uniform float ground_pull = 1.3;   // 뿌리 아래(앞으로 디딘 발)를 땅 위로 당기는 배율 (1 = 딱 땅 높이, 그보다 크면 땅 위로 뜸)
+uniform float foot_lock = 1.0;     // 발 붙이기 세기 (0 = 끔): 한 장면이 떠 있는 동안 인형을 제자리에 세워 디딘 발이 땅에서 밀리지 않게 (아래 lockv)
 uniform float far_k = 0.68;       // 비스듬한 보기의 먼 다리 (frames_mask1.a)를 물감을 입힌 뒤 이만큼 어둡게 — 어떤 양말 색이든 두 다리가 갈림
 
 instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // -, 머리 묶음 T, 모자 묶음 U(-1 없음), -
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작(0 걷기 1 나르기 2 서기 3 안고 서기), 시작 위상
 instance uniform vec4 dyes0 = vec4(0.0, 1.0, 2.0, 3.0);
 instance uniform vec4 dyes1 = vec4(4.0, 5.0, 6.0, 7.0);
-instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), -, 동작 빠르기(주기/초), -
+instance uniform vec4 misc = vec4(0.88, 1.0, 1.0, 0.0);    // 화면 키(세계), 폭 배율(음수 = 뒤집힘), 동작 빠르기(주기/초), 기울기(rad, 발끝 중심) — 컷아웃 인형과 같음
+instance uniform vec4 lockv = vec4(0.0);                   // xy = 걸음 한 주기에 땅에서 가는 길 (세계 x, z — frame_doll.gd가 걷는 쪽 × 땅 빠르기 ÷ 걸음 빠르기)
 
 varying flat vec4 v_dye;     // 머리 조각: 물감 슬롯 xyz, w = 묶음 · 몸: w = 50 (몸) / 60 (짐 겹)
 varying flat float v_show;
@@ -56,6 +58,12 @@ void vertex() {
 		}
 	}
 	vec4 fd = texelFetch(fdata, ivec2(fi, 1), 0);
+	// 발 붙이기 (2026-11-10 "디딘 장화가 한 장면 안에서 2.8px 밀림"): 그림은 장면마다 뚝뚝 바뀌는데 몸은 매끄럽게 나아가서, 한 장면이
+	// 떠 있는 동안 디딘 발이 몸과 함께 밀렸다 (8장면 톱니). 그리는 자리만 장면의 가운데 때 자리에 세워 둔다: 장면이 바뀌는 순간
+	// 한 장면 몫만큼 나아가고 (그림의 디딘 발은 그만큼 뒤로 가 있으므로 땅에서는 제자리), 시뮬 자리(노드)는 그대로. 평균 자리는 같다.
+	float t_b = fi + 1 < f0 + n ? texelFetch(fdata, ivec2(fi + 1, 1), 0).z : 1.0;
+	float f_len = max(t_b - fd.z, 0.0001);
+	vec2 hold = lockv.xy * (f_len * (clamp((u - fd.z) / f_len, 0.0, 1.0) - 0.5) * foot_lock);
 	bool show;
 	if (group == 0) {
 		show = true;
@@ -88,13 +96,17 @@ void vertex() {
 			p = p * head_k[cur_view] + fd.xy;
 			layer = VERTEX.z;
 		}
-		p.x *= st.y;
+		p.x *= st.y * misc.y;
+		if (misc.w != 0.0) {                           // [톡 반응] 발끝을 중심으로 인형 전체를 기울임 (view/tap_react.gd — 화면만, 컷아웃 인형과 같은 식)
+			float rc = cos(misc.w), rs = sin(misc.w);
+			p = vec2(rc * p.x - rs * p.y, rs * p.x + rc * p.y);
+		}
 		vec3 right = INV_VIEW_MATRIX[0].xyz;
 		right = normalize(vec3(right.x, 0.0, right.z));
 		vec3 back = INV_VIEW_MATRIX[2].xyz;
 		float cu = max(INV_VIEW_MATRIX[1].y, 0.3);
 		float k = misc.x / fig;
-		vec3 org = MODEL_MATRIX[3].xyz;
+		vec3 org = MODEL_MATRIX[3].xyz - vec3(hold.x, 0.0, hold.y);
 		vec3 w = org + right * (p.x * k) + vec3(0.0, p.y * k / cu, 0.0) + back * (layer * layer_eps);
 		// 뿌리(땅 점)보다 아래에 그려진 발 (2026-11-10): 비스듬한 보기에서 앞으로 디딘 발은 화면에서 뿌리보다 아래 = 땅 위에서
 		// 카메라 쪽에 있다. 세운 판에서는 그 부분이 땅속(y < 0)이라 땅에 가려 장화 밑이 반듯하게 잘렸다 → 보는 줄기를 따라

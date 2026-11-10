@@ -118,6 +118,56 @@ Shots: godot_shots/cutC/feet_frames_before_after.png (atlas, 8 frames, 3/4 front
 feet_boots_before_after_ppu{60,44}.png, feet_boots_diag_down_up_after_ppu{60,44}.png, feet_diag_close_{before,after}_ppu60.mp4,
 feet_diag_close_after_ppu44.mp4.
 
+## 2026-11-10 v9 — both boots in every 3/4 frame ("한 발로만 걷는 것 같아요"), foot lock, tap reactions
+Coordinator review of v8: about half of the 3/4-front cycle showed only ONE boot (far boot 18 / 39 px in the worst frames).
+No parts pasted: new references, whole sheets regenerated, one take per sheet.
+
+Reference (`pose_ref.py`, 3/4 views only — `geometry()` v9, found with a grid search over far-foot offset / swing arc / hem that
+maximises the worst-frame far-boot area): feet almost on one line, late swing + low peel-off (`leg_phase(v9)`), the swinging foot
+arcs around the planted one, hem 6 px higher, shin 30 px ending inside the boot (no stocking sliver beside the heel).
+`check_pose.py`: `VIS_MIN = 250` px of EACH boot must be visible in the 3/4 views. `prompts.py`: both boots visible in every frame.
+
+Far boot visible px per frame (a whole boot is ~950), reference -> chosen take:
+
+| sheet | reference | chosen take | before (v8) |
+|---|---|---|---|
+| walk_q_front | 934 558 451 956 943 959 483 678 | 923 555 494 1031 1054 1008 479 682 | 635 18 788 1099 1121 1058 744 319 |
+| carry_q_front | 936 381 426 956 966 940 410 495 | 869 361 455 1120 1147 1230 471 690 | 308 39 757 ... 616 53 |
+| walk_q_back | 979 947 624 676 947 582 679 974 | 1016 1001 625 699 991 619 768 1018 | min 149 |
+| carry_q_back | 947 947 613 478 922 390 633 971 | 886 830 543 383 854 250 496 834 | min 93 |
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/pose_{walk,carry}_{q_front,q_back}.png | v9 hybrid references | pose_ref.py | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/walk_q_front.png | take p22 of 4 | codex-cli (built-in image gen) | - | 1536x1024 | 2026-11-10 | yes | 8/8, whole sheet |
+| raw/walk_q_back.png | take p26 of 6 | same | - | 1536x1024 | 2026-11-10 | yes | 8/8; p21/p23/p24/p25 copied the guide marks (cell frames, ground line) -> rejected; p22 3/8 |
+| raw/carry_q_front.png | take p23 of 4 | same | - | 1536x1024 | 2026-11-10 | yes | 8/8; p24 copied guide marks |
+| raw/carry_q_back.png | take p21 of 4 | same | - | 1536x1024 | 2026-11-10 | yes | 8/8; p22 4/8, p23 / p24 7/8 |
+
+Extra takes deleted; logs of the chosen takes kept (`tools/cutout_c/logs/log_pose_*_p{22,26,23,21}.txt`). Atlas rebuilt
+(1608x1384, cell 134x173; stride walk 279.1 / carry 232.6 unchanged; boot x within +-4 px of the reference in the four sheets).
+
+Foot lock (view only, `frame_doll.gdshader` `foot_lock` + instance `lockv`, `frame_doll.gd` `cycle_len` / `_update_lock`): the
+draw origin holds still for the whole held frame and advances one frame's travel exactly at the GPU frame change (same `u` as
+the frame pick), mean = simulation position, node position untouched. Chosen over 16 frames per cycle: no new drawings (64 more
+frames = more inconsistency, twice the atlas memory), cost = one instance uniform + one texelFetch per vertex. Measured at ppu 60
+(30 fps captures, blue-dyed boots): drift inside a held frame 2.3-2.8 px -> <= 0.2 px. Left over: the figure now advances in
+~16 hops per second (1.9 px at ppu 60, 0.65 px at ppu 20); `foot_lock` 0..1 blends back to the smooth glide. The sideways error at
+screen 27-42 deg (drawn step axis 29 deg) is not removed: up to 2.4 px per stance at ppu 60, now in hops instead of a slide.
+
+Tap reactions: `frame_doll.set_react()` (called from `CutoutResident._push_misc`) — hop, squash, roll about the toes and
+turn-round reach the method C doll (shader `misc.y` width scale, `misc.w` roll, as `cut_doll.gdshader`). "lookup" has no method
+C clip: the cutout doll takes over for that reaction.
+
+Still wrong by eye: carry 3/4 back frames 4 and 6 (legs passing) show only a sliver of the far boot (383 / 250 px); at ppu 20 the
+legwear and shoe dyes of the test look are both mid-brown and the two boots merge into one blob in about a third of the frames
+(dye slots `leg` / `shoe` are separate — which palette entries they get is an art-direction choice, not made here).
+
+Shots: godot_shots/cutC/feet2_boots_{front34,back34}_before_after_ppu{60,44,20}.png, feet2_{diag,oct}_close_{before,after}_ppu{60,44}.mp4,
+feet2_{diag,oct}_close_{before,after}_ppu20_x4.mp4, feet2_live_cutout_vs_frames_after_ppu20.mp4,
+feet2_footlock_off_vs_on_bluedye_ppu{60,44}.mp4, feet2_tap_react_cutout_vs_frames_ppu44.png.
+Tool: `shot_cutC_compare.gd` env `CUTC_PPUS=20,44,60`, `CUTC_LOCK=0` (lock off), `CUTC_REACT=1` (same reaction values on both dolls).
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to
