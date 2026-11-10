@@ -5,7 +5,7 @@
 ##   묶음 (하나만): world 넓은 세상 · economy 영역·제물·소원 · genetics 유전·혈통 · health 건강·기후·두려움 · mold 공기·뚜껑·곰팡이 ·
 ##         era 깨달음·계시·연대기 (A4b · A5 · A10) · shop 상점·손·떨어뜨리기·아래 띠 (A7 · A9) ·
 ##         village 마을 시대 건물·등불 옮기기 (A6 · A11) ·
-##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초) · touch 거인의 손길 (giant-touch, 몇 초) · population 인구 (혼인·출산 확률·가임 부부·조각, 몇 초) · kitchen 우유·계란 없는 부엌 (진딧물 목장·큰 알·씨앗 방앗간 — E3-14) · kitchen_view 부엌 화면 (목장·큰 알·껍데기·씨앗 짜개, 몇 초) · production 생산 사슬 (바로 보냄·입구 채우기·상함·애벌레 한살이·꿀방울 — design/gdd/production-chain.md AC) · ui_batch 화면 UI 그리기 묶기 (P1b, 1초 안) · dogs 강아지 새끼·털 유전·상세 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · flower_info 꽃 정보 카드 (UI.md, 몇 초) · cutdog 종이 인형 강아지 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · tap_react 톡 반응 (주민·강아지를 누르면 귀엽게 — 화면만, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
+##         flora 큰 버섯·큰 민들레·첫 제물·밀 (1분 안) · ui 설정·문의하기 (몇 초) · audio 소리·음악 (몇 초) · start 시작 흐름 (UI 00, 몇 초) · room 병 밖 = 거인의 방 (B1, 몇 초) · terrain 땅 겉흙·계절·폭포 (A12·A13·A18, 몇 초) · looks 주민 모델 부품 (A20, 몇 초) · animals 동물 3D 모델 부품·삼각형·크기 (B3, 몇 초) · wildlife 물고기·낚시 (B3 · E3-12) · fauna 작은 생물·강아지 (E3-12 · E3-13) · immigrant 이주민 뽑기 (B2) · crisis 날벌레·물방울·먼지 (B5) · shelf 선반·새 병·등불·키트 업그레이드·병 바꾸기 (C1) · hand 거인의 손 도구 (B6) · portrait 그림 초상화 · people 사람들 목록 (몇 초) · campfire 모닥불 화면 (몇 초) · resources 창고 띠·창고 시트 (몇 초) · notebook 거인의 수첩·창세의 날 (OPENING 3.1b · 3.0) · events 사건 기록 흐름 (ADR-0001, 몇 초) · touch 거인의 손길 (giant-touch, 몇 초) · population 인구 (혼인·출산 확률·가임 부부·조각, 몇 초) · kitchen 우유·계란 없는 부엌 (진딧물 목장·큰 알·씨앗 방앗간 — E3-14) · kitchen_view 부엌 화면 (목장·큰 알·껍데기·씨앗 짜개, 몇 초) · production 생산 사슬 (바로 보냄·입구 채우기·상함·애벌레 한살이·꿀방울 — design/gdd/production-chain.md AC) · ui_batch 화면 UI 그리기 묶기 (P1b, 1초 안) · dogs 강아지 새끼·털 유전·상세 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · flower_info 꽃 정보 카드 (UI.md, 몇 초) · cutdog 종이 인형 강아지 (E3-13b, 몇 초) · building_info 건물 정보 카드 (UI.md, 몇 초) · tap_react 톡 반응 (주민·강아지를 누르면 귀엽게 — 화면만, 몇 초) · daily 하루의 흐름 (기지개·우물 세수·저녁 수다·별 보기 — 화면만 E2-1, 몇 초). 묶음과 모드를 함께 줄 수 있다 (예: -- health quick).
 ## 시험마다 걸린 시간을 재서 끝에 오래 걸린 순으로 보여 준다 (느린 시험은 각 묶음의 SLOW 목록 → long).
 extends SceneTree
 
@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -49,12 +49,12 @@ const SUITES := {"world": "res://tests/world_tests.gd", "genetics": "res://tests
 	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
 	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd", "social": "res://tests/social_tests.gd",
 	"events": "res://tests/event_tests.gd", "watcher_name": "res://tests/watcher_name_tests.gd", "touch": "res://tests/touch_tests.gd",
-	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
+	"buildings": "res://tests/buildings_tests.gd", "population": "res://tests/population_tests.gd", "opening_food": "res://tests/opening_food_tests.gd", "production": "res://tests/production_tests.gd", "plants": "res://tests/plants_tests.gd", "lean": "res://tests/lean_tests.gd", "ui_batch": "res://tests/ui_batch_tests.gd",
 	"found": "res://tests/found_tests.gd", "warmth": "res://tests/warmth_tests.gd", "warm_view": "res://tests/warm_view_tests.gd", "cutout": "res://tests/cutout_tests.gd", "building_info": "res://tests/building_info_tests.gd", "flower_info": "res://tests/flower_info_tests.gd", "cutdog": "res://tests/cutdog_tests.gd",
 	"kitchen": "res://tests/kitchen_tests.gd", "nature": "res://tests/nature_tests.gd", "kitchen_view": "res://tests/kitchen_view_tests.gd", "creation_lake": "res://tests/creation_lake_tests.gd",
 	"bld2d": "res://tests/bld2d_tests.gd", "siting": "res://tests/siting_tests.gd", "flora2d": "res://tests/flora2d_tests.gd",
 	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd",
-	"kids": "res://tests/kids_tests.gd", "dogs_play": "res://tests/dogs_play_tests.gd", "kids_view": "res://tests/kids_view_tests.gd"}
+	"kids": "res://tests/kids_tests.gd", "dogs_play": "res://tests/dogs_play_tests.gd", "kids_view": "res://tests/kids_view_tests.gd", "daily": "res://tests/daily_tests.gd"}
 
 
 func _initialize() -> void:
@@ -91,7 +91,7 @@ func _initialize() -> void:
 		_finish(t0)
 		return
 	timed(self, ["test_nine_days", "test_rotation", "test_sale_price", "test_village_opening", "test_opening_first_hour", "test_stump_stays", "test_house_bottleneck", "test_determinism", "test_time_controls", "test_fast_speeds", "test_away_rate", "test_catchup_fast"])
-	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting", "kids"]:
+	for k: String in ["world", "genetics", "health", "economy", "mold", "flora", "ui", "audio", "save", "terrain", "looks", "carry", "animals", "wildlife", "fauna", "crisis", "hand", "resources", "plan", "waterside", "social", "events", "watcher_name", "touch", "buildings", "population", "opening_food", "production", "plants", "lean", "found", "warmth", "warm_view", "cutout", "kitchen", "nature", "kitchen_view", "dogs", "creation_lake", "cutdog", "siting", "kids"]:
 		load(SUITES[k]).new(self, q).all()
 	timed(self, ["test_village_population"])            # 30일 인구 시험 (long·전체)
 	_later = TREE_SUITES.duplicate()
@@ -256,8 +256,9 @@ func test_rotation() -> void:
 
 # ───────────────────────── 3단계 — 주민 ─────────────────────────
 const POP_SEEDS := [1, 2, 3]
-# tools/sim_life.py (판매 없음, 병 하나, 하루 2시간 지켜봄, 60번 평균)의 10%~90% 범위
-const POP_RANGE := {10: [16, 28], 20: [18, 49], 30: [32, 52]}   # 10일 상한 28: v3.6 아침 7시 시작으로 초반이 빨라짐 (메인 세션 승인)
+# (2026-11-11 Q7 · docs/measure/opening_food_2026-11-11.md 4장) 출생 속도를 늦춘 뒤(Q5) 이 시험과 같은 설정으로 다시 잰 값: 씨앗 1·2·3 = 10일 13·13·12 / 20일 16·16·15 / 30일 19·18·17 (평균 12.7 / 15.7 / 18.0)
+# 범위는 평균에서 두세 명 (10일) ~ 서너 명 (30일) 여유. 예전 값 {10: [16, 28], 20: [18, 49], 30: [32, 52]}은 tools/sim_life.py (출생이 빠르던 때)의 10%~90% 범위였다
+const POP_RANGE := {10: [11, 15], 20: [13, 19], 30: [15, 22]}
 
 
 func words_ok(texts: Array) -> String:
@@ -942,7 +943,7 @@ func test_village_population() -> void:
 	for d: int in POP_RANGE:
 		var avg: float = sums[d] / POP_SEEDS.size()
 		var rg: Array = POP_RANGE[d]
-		check(avg >= rg[0] and avg <= rg[1], "%d일째 평균 인구 %.1f — sim_life 범위 %d~%d" % [d, avg, rg[0], rg[1]])
+		check(avg >= rg[0] and avg <= rg[1], "%d일째 평균 인구 %.1f — 잰 범위 %d~%d" % [d, avg, rg[0], rg[1]])
 	check(all_ok, "30일 내내 물자·주민 값이 음수/NaN 아님, 집 정원 초과 없음")
 	check(room_ok, "모든 출생 때 집에 빈자리 (집 크기 병목)")
 	check(cap_ok, "집 정원 합계 ≤ 품을 수 있는 인구 × 1.1 (땅이 한계)")

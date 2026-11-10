@@ -21,6 +21,7 @@ var born := 0.0
 var facing := 0.0
 var target_b := -1                    # 날벌레: 먹으러 가는 건물 id (-1 = 창고)
 var cover_b := -1                     # 먼지: 덮고 있는 밭 id
+var touched := false                  # 먼지: 주민이 한 번이라도 뜯었거나 거인이 불었다 — 그 전에는 물에 들어가지 않는다 (2026-11-11 Q7)
 
 
 func pos() -> Vector2:

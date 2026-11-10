@@ -63,7 +63,10 @@ const NUDGE := [0.8, 1.6]        # 옆으로 옮겨 보는 걸음 — 반대편,
 const NUDGE_OUT := 1.2           # 건물 그림 반 폭 + 이것 안에서만 (제 건물 곁 — 앞마당 폭 APRON_SIDE 안)
 const NUDGE_STEP := 0.25         # 반대편·바깥이 다 가리면 이 간격으로 훑음
 const NUDGE_GAP := 0.7           # 그 건물의 다른 더미 자리와 이만큼은 띄움
-## 밀밭(세워 놓는 큰 그림)이 뒤쪽 건물의 더미 줄을 가리면 밭 그림을 가리지 않는 크기까지 줄인다 (밭 자리·수확은 그대로)
+## 밀밭 그림(줄마다 세운 판)이 그 뒤 무덤을 가리면 그 줄을 무덤 폭만큼 낮춘다 (grave_cut — 밭 자리·수확은 그대로)
+const GRAVE_CLEAR := 0.7         # (E1-5) 밀 줄 윗선은 무덤 자리보다 이만큼 앞에서 끝남 — 돌 발치의 꽃까지 보이게 (돌 그림 밑변 + 꽃 줄)
+const GRAVE_HALF_W := 0.7        # 무덤 돌·꽃의 반 폭 (밀 줄을 이 폭으로 벤다)
+const GRAVE_MIN_H := 0.1         # 무덤 바로 앞의 줄도 이 키(그루터기)는 남김
 ## 채집 일꾼이 서는 자리 (화면만): 나무·바위 그림의 깊이 면 앞 · 화면 옆으로 비켜서 옆모습 도끼질·곡괭이질이 보이게
 const GATHER_OPS := {"나무꾼": "chop", "채석장": "dig"}      # 그 일터 일꾼의 채집 걸음 (ResidentAI.work_task의 done)
 const STAND_FRONT := 0.3         # 그림의 깊이 면보다 이만큼 카메라 쪽
@@ -795,6 +798,47 @@ static func pile_band(vil: Village, b: Building) -> Array:
 		return [base + out_at.y, out_at.x - m, out_at.x + m]
 	var in_at: Vector2 = lay.get("in", Vector2(-(w * 0.5 - 0.3), FRONT_GAP))
 	return [base + maxf(in_at.y, out_at.y), minf(in_at.x, out_at.x) - m, maxf(in_at.x, out_at.x) + m]
+
+
+## (E1-5 무덤이 남는다 · Q8 밀 숲) 밭의 세운 그림 한 장(밀 줄·울타리·꾸밈)이 그 뒤(카메라에서 먼 쪽)의 무덤 돌·꽃을 가리지 않게 '벤 창'을 낸다.
+## 방위 걸음 st에서 → [x0, x1, cap]: 그림 가운데에서 화면 오른쪽으로 x0~x1 사이(칸)는 키 cap(칸)까지만 그린다 · [] = 손대지 않음.
+## 무덤에서 a칸 앞에 선 줄은 키가 (a - GRAVE_CLEAR) sin 아래면 무덤을 안 가린다 (꽃·나무를 낮추는 VillageView._grave_scale과 같은 뜻).
+## 밭 전체를 줄이지 않고 무덤 앞의 줄만, 무덤 폭만큼만 낮춘다 — 키 큰 밀 숲도 나머지는 그대로. 화면만: 밭 자리·자람·수확은 그대로 (ADR-0001)
+## 밭 그림 판마다의 벤 창 (Bld2D.wheat_cards 순서) — 건물 노드를 다시 만들 때를 아는 데 (VillageView._bld_state)
+static func grave_cuts(vil: Village, farm: Building, st: int, stage: int, accent := "") -> Array:
+	var out: Array = []
+	for pic: String in Bld2D.wheat_cards(stage, accent):
+		out.append(grave_cut(vil, farm, st, pic))
+	return out
+
+
+static func grave_cut(vil: Village, farm: Building, st: int, pic: String) -> Array:
+	if vil.graves.is_empty():
+		return []
+	var d := Bld2D.info(pic)
+	if d.is_empty() or int(d.get("mode", 0)) != 0:
+		return []
+	var sd := step_dirs(st)
+	var tw: Vector2 = sd[0]
+	var rt: Vector2 = sd[1]
+	var h := float(d["h"])
+	var hw := float(d["w"]) * 0.5
+	var base := Vector2(farm.x, farm.y) + tw * float(d["front"]) + rt * float(d.get("dx", 0.0))
+	var out: Array = []
+	for g: Dictionary in vil.graves:
+		var dv := Vector2(float(g["x"]), float(g["y"])) - base
+		var a := -dv.dot(tw)                      # 줄이 무덤보다 카메라 쪽으로 a칸
+		if a <= 0.0:
+			continue
+		var cap := maxf(GRAVE_MIN_H, (a - GRAVE_CLEAR) * APRON_SIN)
+		var lat := dv.dot(rt)
+		if cap >= h or absf(lat) > hw + GRAVE_HALF_W:
+			continue
+		if out.is_empty():
+			out = [lat - GRAVE_HALF_W, lat + GRAVE_HALF_W, cap]
+		else:
+			out = [minf(float(out[0]), lat - GRAVE_HALF_W), maxf(float(out[1]), lat + GRAVE_HALF_W), minf(float(out[2]), cap)]
+	return out
 
 
 ## 세워 놓은 건물 그림 판 목록 (다른 건물 앞 더미를 가리는지 볼 것) — 바뀌었을 때만 건물별 목록(_cov_by)을 버린다

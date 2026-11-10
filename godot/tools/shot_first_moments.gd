@@ -33,19 +33,22 @@ var _t0 := 0
 var _n := 0
 var _strip: PackedStringArray = []
 var _beats: Array = []               # (장례) 박자마다 한 장 [[연출 초, 이름]]
+var pfx_h := "f3_handover_"          # (f3) 연출 끝 → 시뮬레이션으로 넘어가는 장면 이름 앞머리 (h=before_ 로 고치기 전 것을 따로)
 
 
 func _initialize() -> void:
 	for a: String in OS.get_cmdline_user_args():
-		if a in ["wish", "baby", "naming", "night", "funeral"]:
+		if a in ["wish", "baby", "naming", "night", "funeral", "f3"]:
 			mode = a
 		elif a.begins_with("pfx="):
 			pfx = a.substr(4)
 		elif a.begins_with("zoom="):
 			mini_ppu = maxf(1.0, a.substr(5).to_float())
+		elif a.begins_with("h="):
+			pfx_h = "f3_handover_" + a.substr(2)
 		elif a.begins_with("every="):
 			long_every = maxf(0.1, a.substr(6).to_float())
-	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/funeral" if mode == "funeral" else "../godot_shots/first_moments").simplify_path()
+	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/funeral" if mode in ["funeral", "f3"] else "../godot_shots/first_moments").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	Village.start_aware = mode == "wish" or mode == "night"      # 아기 · 장례는 깨닫기 전 병에서 (지켜보는 이 이야기가 없어야 함)
@@ -71,6 +74,14 @@ func _initialize() -> void:
 				_s_grave.bind("f3_grave_day2_close", 0.0, 60.0), _s_grave.bind("f3_grave_day2_village", 0.0, 16.0),
 				_s_grave.bind("f3_grave_day4_close", 1.6, 60.0), _s_grave.bind("f3_grave_day4_village", 0.0, 16.0),
 				_s_grave.bind("f3_grave_day7_close", 3.0, 60.0), _s_grave.bind("f3_grave_day7_village", 0.0, 16.0), _s_end]
+		"f3":                             # (E1-5 남은 것) 연출 끝 → 시뮬레이션 행렬로 넘어감 · 서서 고개 숙임 / 무릎 · 무덤이 멀리서도 보이는가 (새 무덤 · 3일 · 6일 · 밀밭 곁)
+			steps = [_s_start.bind(10.0), _s_death.bind(""), _w_play.bind("first_death"), _s_at.bind(13.9, pfx_h + "0_end"), _w_end,
+				_s_live.bind(true), _s_shots.bind(pfx_h, [0.5, 4.0, 8.0, 14.0, 20.0, 28.0]), _s_live.bind(false),
+				_s_grave.bind("f3_grave_d0_village", 0.0, 16.0), _s_grave.bind("f3_grave_d0_close", 0.0, 60.0), _s_wheat.bind("f3_grave_wheat"),
+				_s_mourn.bind("f3_mourn_stand", false),
+				_s_grave.bind("f3_grave_d3_village", 2.9, 16.0), _s_grave.bind("f3_grave_d3_close", 0.0, 60.0),
+				_s_grave.bind("f3_grave_d6_village", 3.0, 16.0), _s_grave.bind("f3_grave_d6_close", 0.0, 60.0),
+				_s_mourn.bind("f3_mourn_kneel", true), _s_end]
 		"night":
 			steps = [_s_start.bind(23.5), _s_birth.bind(false), _w_play.bind("first_baby"), _s_strip.bind("night_baby", true, 1.0), _w_end, _s_after.bind("night_baby"),
 				_s_wish.bind(false), _w_play.bind("miracle"), _s_strip.bind("night_miracle", true, 1.0), _w_end, _s_after.bind("night_miracle"), _s_end]
@@ -377,6 +388,163 @@ func _s_grave(name: String, days: float, ppu: float) -> int:
 		var gv: GraveView = (scene.view as VillageView).get_node_or_null(GraveView.NODE_NAME)
 		print("무덤 %s: 묻힌 지 %.1f일 · %s" % [name, (v().t - float(g["t"])) / Balance.DAY, str(gv.shown(int(g["id"])) if gv != null else {})])
 		_save(name)
+		return true
+	return 0
+
+
+## (f3) 무덤 앞(카메라 쪽)에 익은 밀밭이 있을 때: 캡처용으로 밭을 하나 놓고 두 장 (마을 기본 확대 · 가까이), 찍은 뒤 밭은 치움
+func _s_wheat(name: String) -> int:
+	var vv := v()
+	var g: Dictionary = vv.graves[0]
+	var gp := Vector2(float(g["x"]), float(g["y"]))
+	var vw := scene.view as VillageView
+	var tw: Vector2 = BldEcon.step_dirs(vw.econ.step if vw.econ != null else 0)[0]
+	var ahead := 3.6 if name.find("near") < 0 else 1.6      # 이름에 near가 들면 밭이 무덤 바로 앞 (줄을 베어 낸 창이 보이는 자리)
+	var at := gp + tw * ahead
+	var farm := vv.add_building("농장", at.x, at.y, true)
+	farm.built_t = vv.t
+	farm.ready_at = vv.t - 1.0
+	scene._sync_views()
+	_look(gp + Vector2(0.0, 2.0), 16.0)
+	_settle()
+	var w := {"t1": Time.get_ticks_msec() + 900, "stage": 0}       # (람다는 바깥 변수를 값으로 잡는다 — 바뀌는 것은 사전에)
+	_guard = 0
+	_until = func() -> bool:
+		_guard = 0
+		if Time.get_ticks_msec() < int(w["t1"]):
+			return false
+		if int(w["stage"]) == 0:
+			var cuts := BldEcon.grave_cuts(vv, farm, vw.econ.step if vw.econ != null else 0, VillageView.wheat_stage(farm, vv.t))
+			print("밀밭: 무덤 앞 %.1f칸 · 낮춰 그린 줄 %d장 %s" % [ahead, cuts.filter(func(c: Array) -> bool: return not c.is_empty()).size(), [cuts]])
+			_save(name + "_village")
+			_look(gp + Vector2(0.0, 1.2), 34.0)
+			_settle()
+			w["t1"] = Time.get_ticks_msec() + 700
+			w["stage"] = 1
+			return false
+		_save(name + "_close")
+		vv.buildings.erase(farm)
+		scene._sync_views()
+		return true
+	return 0
+
+
+## (f3) 연출 t초에 한 장
+func _s_at(t: float, name: String) -> int:
+	_beats = [[t, name]]
+	return 0
+
+
+## (f3) 병 시계를 흐르게 · 멈추게 (연출이 끝난 뒤 시뮬레이션의 장례 행렬이 걸어오는 모습)
+func _s_live(on: bool) -> int:
+	scene.paused = not on
+	return 0
+
+
+## (f3) 지금부터 현실 초마다 한 장 (tag + 순번) — 마을과 무덤이 함께 보이는 자리에서 (게임에서는 카메라가 마을로 돌아옴).
+## h=before_ 이면 고치기 전 모습: 연출이 끝나면 모두 제자리로 돌려보냄 (예전 release_all과 같음)
+func _s_shots(tag: String, times: Array) -> int:
+	var g0: Dictionary = v().graves[0]
+	var gp0 := Vector2(float(g0["x"]), float(g0["y"]))
+	if tag.contains("before"):
+		d()._dolls.release_all()
+	_look((gp0 + v().center) * 0.5 + Vector2(0.0, 2.0), 16.0)
+	_settle()
+	print("넘어감: 배속 %s · 머무는 인형 %d · 무덤까지 %.1f칸" % [str(scene.clock.speed_i), d()._dolls.acts.keys().filter(func(rid: int) -> bool: return d()._dolls.holding(rid)).size(),
+		gp0.distance_to(v().center)])
+	var t0 := Time.get_ticks_msec()
+	var left := times.duplicate()
+	var w := {"n": 1}
+	_guard = 0
+	_until = func() -> bool:
+		_guard = 0
+		var el := float(Time.get_ticks_msec() - t0) / 1000.0
+		if not left.is_empty() and el >= float(left[0]):
+			var vv := v()
+			var walk := vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r) and r.anim == "walk").size()
+			var stand := vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r) and r.anim != "walk").size()
+			print("넘어감 %.1f초: 시뮬레이션 행렬 걷는 중 %d · 무덤가 %d · 인형 %d (머무는 %d)" % [el, walk, stand, d()._dolls.acts.size(),
+				d()._dolls.acts.keys().filter(func(rid: int) -> bool: return d()._dolls.holding(rid)).size()])
+			_save("%s%d_%s" % [tag, int(w["n"]), ("%.1fs" % float(left[0])).replace(".", "_")])
+			w["n"] = int(w["n"]) + 1
+			left.pop_front()
+		return left.is_empty()
+	return 0
+
+
+## (f3) 시뮬레이션의 장례 행렬이 무덤가에 선 모습: 한 사람이 더 떠나고 (aware = 지켜보는 이를 안 마을), 셋 넘게 닿을 때까지 흘린 뒤 한 장 (가까이 · 마을 기본 확대)
+func _s_mourn(name: String, aware: bool) -> int:
+	var vv := v()
+	vv.aware = aware
+	var gone: Resident = null
+	for r in vv.people:
+		if r.is_adult() and r.partner >= 0 and vv.person(r.partner) != null:
+			gone = r
+			break
+	if gone == null:
+		for r in vv.people:
+			if r.is_adult():
+				gone = r
+				break
+	if vv.is_night():
+		_run(fposmod(10.0 - vv.hour_now(), 24.0) * 3600.0)
+	vv.kill(gone, "노환")
+	var g: Dictionary = vv.graves[vv.graves.size() - 1]
+	var gp := Vector2(float(g["x"]), float(g["y"]))
+	# (캡처용) 행렬에 든 사람을 설 자리 바로 바깥에 세워 둠 — 저마다 닿는 대로 잠깐씩만 서 있으므로 (Balance.FUNERAL_TIME) 멀리서 오면 함께 선 모습을 찍기 어렵다
+	var spots := {}
+	for r in vv.people:
+		if not VillageEra.in_funeral(r):
+			continue
+		for i in range(r.steps.size() - 1, -1, -1):
+			if String((r.steps[i] as Dictionary).get("k", "")) == "walk":
+				var sp := Vector2(float(r.steps[i]["x"]), float(r.steps[i]["y"]))
+				var o := sp + (sp - gp).normalized() * 0.6
+				r.x = o.x
+				r.y = o.y
+				r.steps = r.steps.slice(i)             # 돌아가는 길 없이 곧장 설 자리로
+				spots[r.id] = sp
+				break
+	print("행렬 %d명 · 병 시각 %.1f시" % [spots.size(), vv.hour_now()])
+	var want := mini(3, spots.size())
+	var there := 0
+	var left := 1.0 * 3600.0
+	vv.water.offline = true
+	while left > 0.0 and (there < want or want == 0):
+		scene.world.advance(10.0)
+		left -= 10.0
+		there = vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r) and spots.has(r.id) and r.anim != "walk" and Vector2(r.x, r.y).distance_to(spots[r.id]) < 0.1).size()
+	vv.water.offline = false
+	scene._sync_views()
+	_look(gp + Vector2(0.0, 0.4), 52.0)
+	_settle()
+	print("무덤가 (%s): 떠난 사람 %s · 닿은 사람 %d · 하는 일 %s · 몸짓 %s" % ["안 뒤" if aware else "깨닫기 전", gone.name, there,
+		str(vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r)).map(func(r: Resident) -> String: return r.action)),
+		str(vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r)).map(func(r: Resident) -> String: return r.anim))])
+	var w := {"t1": Time.get_ticks_msec() + 1500, "stage": -1}
+	_guard = 0
+	_until = func() -> bool:
+		_guard = 0
+		if Time.get_ticks_msec() < int(w["t1"]):
+			return false
+		if int(w["stage"]) == -1:
+			# (캡처용) 뒤이은 죽음의 짧은 판이 세운 인형을 치움 — 여기서는 시뮬레이션의 조문만 찍는다
+			d()._stop_minis()
+			d()._dolls.clear()
+			scene._sync_views()
+			w["t1"] = Time.get_ticks_msec() + 600
+			w["stage"] = 0
+			return false
+		if int(w["stage"]) == 0:
+			var gv: GraveView = (scene.view as VillageView).get_node_or_null(GraveView.NODE_NAME)
+			print("고개 숙임: %s" % str(vv.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r)).map(func(r: Resident) -> float: return gv.bowed(r.id) if gv != null else -1.0)))
+			_save(name)
+			_look(gp + Vector2(0.0, 2.0), 16.0)
+			_settle()
+			w["t1"] = Time.get_ticks_msec() + 700
+			w["stage"] = 1
+			return false
+		_save(name + "_village")
 		return true
 	return 0
 

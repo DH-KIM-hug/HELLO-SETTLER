@@ -55,6 +55,10 @@ static func wheat_pic(stage: int) -> String:
 ## 낮은 노란 밀밭 (Q8 · GAME_DESIGN 104): 마을 화면에서는 밭을 겹으로 그린다 — 눕힌 흙 + 이랑마다 세운 밀 줄(뒤→앞) + 앞 울타리
 ## (+ 꾸밈 accent: Pics.WHEAT_ACCENTS의 이름, 없으면 ""). 줄마다 제 깊이(front)에 서므로 밭 안에 선 주민은 앞줄에 허리까지 묻히고
 ## 뒷줄은 가린다 — 건물 그림 판의 보통 깊이 규칙 그대로 (방위를 돌려도 같음). 그림: tools/bld2d/wheat_field.py
+static func is_wheat_accent(pic: String) -> bool:
+	return Pics.WHEAT_ACCENTS.values().has(pic)
+
+
 static func wheat_cards(stage: int, accent := "") -> Array:
 	var out: Array = [Pics.WHEAT_SOIL]
 	out.append_array(Pics.WHEAT_ROWS[clampi(stage, 0, Pics.WHEAT_ROWS.size() - 1)])
@@ -110,7 +114,7 @@ static func material(name: String) -> ShaderMaterial:
 
 
 ## 그림 판 노드 (부모 = 건물 노드 · 자리 = 부모 원점). k = 크기 배율 (짓는 터), lift = 땅에 눕힌 그림을 올리는 높이
-static func card(name: String, k := 1.0, flip := false, lift := 0.0) -> MeshInstance3D:
+static func card(name: String, k := 1.0, flip := false, lift := 0.0, cut: Array = []) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.name = CARD
 	mi.mesh = quad()
@@ -122,6 +126,9 @@ static func card(name: String, k := 1.0, flip := false, lift := 0.0) -> MeshInst
 	mi.set_instance_shader_parameter("k", k)
 	mi.set_instance_shader_parameter("flip", -1.0 if flip else 1.0)
 	mi.set_instance_shader_parameter("lift", lift)
+	if cut.size() == 3:              # 벤 창 [x0, x1, cap] (무덤 앞의 밀 줄 — BldEcon.grave_cut)
+		mi.set_instance_shader_parameter("cut", Vector3(cut[0], cut[1], cut[2]))
+		mi.set_meta(&"cut", cut)
 	mi.set_meta(&"pic", name)
 	mi.set_meta(&"k", k)
 	mi.set_meta(&"flip", flip)
@@ -181,12 +188,15 @@ static func multi(items: Array) -> MultiMeshInstance3D:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_custom_data = true
+	mm.use_colors = true             # 색 = 벤 창 (x0, x1, cap) · cap < 0이면 없음 (bld_card_multi.gdshader)
 	mm.mesh = quad()
 	mm.instance_count = items.size()
 	for j in items.size():
 		var it: Array = items[j]
 		mm.set_instance_transform(j, Transform3D(Basis.IDENTITY, it[1]))
 		mm.set_instance_custom_data(j, Color(float(info(it[0]).get("i", 0)), -1.0 if it[3] else 1.0, float(it[2]), 0.0))
+		var cut: Array = it[4] if it.size() > 4 else []
+		mm.set_instance_color(j, Color(float(cut[0]), float(cut[1]), float(cut[2]), 1.0) if cut.size() == 3 else Color(0.0, 0.0, -1.0, 1.0))
 	var mmi := MultiMeshInstance3D.new()
 	mmi.name = "cards2d"
 	mmi.multimesh = mm

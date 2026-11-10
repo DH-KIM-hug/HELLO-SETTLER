@@ -39,6 +39,17 @@ float bld_lean(vec2 corner, float lean, float k) {
 	return lean * k * (0.5 - corner.y);
 }
 
+// Cut window (a ripe wheat row standing in front of a grave — BldEcon.grave_cut): loc = card-local position in world units
+// (x along the camera right from the picture's centre line, y up from its foot), cut = (x0, x1, cap). Between x0 and x1 the
+// picture is drawn only up to cap; outside, the limit climbs back to the full height h over BLD_CUT_RAMP, with small scallops so
+// the cut edge reads as the tops of ears, not a ruler line. cut.z < 0 = no window. → the highest y still drawn at loc.x.
+const float BLD_CUT_RAMP = 0.45;
+float bld_cut_h(float x, vec3 cut, float h) {
+	float d = max(max(cut.x - x, x - cut.y), 0.0);
+	float t = smoothstep(0.0, BLD_CUT_RAMP, d);
+	return mix(cut.z, h + 0.02, t) - 0.035 * (1.0 - t) * abs(sin(x * 11.0));
+}
+
 vec3 bld_srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }

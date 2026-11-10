@@ -27,7 +27,7 @@ func all() -> void:
 	run.timed(self, ["test_events", "test_tables_and_words", "test_cast", "test_miracle_scene", "test_miracle_skip", "test_baby_scene", "test_baby_naming",
 		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade",
 		"test_death_tables", "test_death_cast", "test_death_scene", "test_death_skip_and_aware", "test_death_more_and_fold", "test_death_away",
-		"test_death_sim_same", "test_grave_stays", "test_death_fast_off", "test_death_sounds", "test_death_bell_once"])
+		"test_death_sim_same", "test_grave_stays", "test_grave_clear_view", "test_death_fast_off", "test_death_sounds", "test_death_bell_once", "test_death_bell_edges"])
 	Village.start_aware = _old_aware
 	fs.reset()
 	Market.reset()
@@ -159,6 +159,26 @@ func test_events() -> void:
 		and int(born[0]["v"]["mom"]) == int(b1.parents[0]) and int(born[0]["v"]["home"]) == b1.home,
 		"아기가 태어남 → 사건 &\"born\" (아기 · 엄마 · 집 · 이 병의 첫 아기인지)")
 	check(StageDirector.moment_ctx(born[0]) == {"baby": b1.id, "mom": int(b1.parents[0]), "home": b1.home}, "사건 → 연출의 사람·집")
+	# (E1-5) 죽음 → 사건 &"died" — 무덤이 생긴 다음, 그 마을의 첫 무덤인지
+	var c2: int = v.events.serial
+	var g1 := _grown(v, [])
+	var g2 := _grown(v, [g1])
+	v.kill(g1, "노환")
+	v.kill(g2, "병")
+	var died: Array = v.events.since(c2).filter(func(e: Dictionary) -> bool: return e["kind"] == &"died")
+	check(died.size() == 2 and v.graves.size() == 2, "두 사람이 떠남 → 사건 &\"died\" 둘 · 무덤 둘 (%d · %d)" % [died.size(), v.graves.size()])
+	if died.size() == 2:
+		var e0: Dictionary = died[0]
+		var gp := Vector2(float(v.graves[0]["x"]), float(v.graves[0]["y"]))
+		check(int(e0["who"]) == g1.id and (e0["at"] as Vector2).is_equal_approx(gp) and int(e0["village"]) == v.sid and is_equal_approx(float(e0["t"]), g1.death_t),
+			"사건의 사람 = 떠난 사람 · 자리 = 무덤")
+		check(bool(e0["v"]["first"]) and String(e0["v"]["name"]) == g1.name and int(e0["v"]["grave"]) == int(v.graves[0]["id"]) and String(e0["v"]["why"]) == "노환",
+			"값: 첫 무덤 · 이름 · 무덤 id · 까닭")
+		check(not bool(died[1]["v"]["first"]) and int(died[1]["who"]) == g2.id and String(died[1]["v"]["why"]) == "병", "두 번째는 첫 무덤이 아님")
+		check(StageDirector.moment_ctx(e0) == {"grave": g1.id, "name": g1.name, "also": []}, "사건 → 연출의 무덤·이름")
+		var fd := StageDirector.new(null)
+		check(fd.moment_id(e0) == "first_death" and fd.moment_id(died[1]) == "death_more", "첫 무덤 = 긴 연출 · 그 뒤 = 짧은 판")
+		fd.free()
 
 
 # ───────────────────────── 콘티 표 · 말 규칙 ─────────────────────────
@@ -1220,8 +1240,56 @@ func test_death_scene() -> void:
 	var e := StageDirector._entry(v, "그 위에 돌을 세웠다")
 	check(e.is_empty() or String(e.get("card", "")) == "first_death", "연대기의 그 줄이 그림 카드로")
 	check(fs.play_count("first_death") == 1, "본 횟수")
+	# (E1-5 남은 것) 끝난 뒤: 시뮬레이션의 장례 행렬에 든 사람은 무덤가에 머물고 (돌아갔다가 다시 걸어 나오면 장례를 두 번 치르는 것처럼 보임),
+	# 시뮬레이션의 그 사람이 걸어와 닿으면 그 자리에서 넘겨받는다. 나머지는 예전처럼 걸어서 제자리로. 화면만 — 시뮬레이션은 그대로.
 	_gframes(scene, 4.5)
-	check(not d._dolls.busy() and vw.staged.is_empty(), "사람들이 걸어서 제자리로 돌아감")
+	var nm := VillageEra.FUNERAL_DOING % gone.name
+	var gpos := Vector2(float(v.graves[0]["x"]), float(v.graves[0]["y"]))
+	var line: Array = v.people.filter(func(r: Resident) -> bool: return VillageEra.in_funeral(r) and r.doing == nm and r.id in all)
+	var stay_ok := not line.is_empty() and d._dolls.acts.size() == line.size() and vw.staged.size() == line.size()
+	var sim_far := 0
+	var bow_min := 1.0
+	for r: Resident in line:
+		var st: Dictionary = vw.staged.get(r.id, {})
+		var p: Vector3 = st.get("pos", Vector3(1e6, 0, 1e6))
+		stay_ok = stay_ok and d._dolls.holding(r.id) and bool(st.get("hold", false)) and String(st.get("anim", "")) == "idle" and Vector2(p.x, p.z).distance_to(gpos) < 1.6
+		if Vector2(r.x, r.y).distance_to(gpos) > 2.0:
+			sim_far += 1
+		if vw.residents.get(r.id) is CutoutResident:
+			bow_min = minf(bow_min, gv.bowed(r.id))
+	check(stay_ok, "끝난 뒤: 행렬에 든 사람(%d / 연출 %d명)은 무덤가에 선 채 머묾 · 나머지는 걸어서 제자리로" % [line.size(), all.size()])
+	check(sim_far > 0 and bow_min > 0.9 and gv._hands.is_empty(), "시뮬레이션의 그 사람들은 아직 걸어오는 중 (%d명) — 화면에서는 고개 숙이고 서 있음 · 빈손" % sim_far)
+	var funerals := int(v.stats.get("funerals", 0))
+	var jump := 0.0
+	var last := {}
+	var left := {}
+	for r: Resident in line:
+		left[r.id] = r
+	var g2 := 0
+	while not left.is_empty() and g2 < 2400:
+		g2 += 1
+		for rid: int in left.keys():
+			var st: Dictionary = vw.staged.get(rid, {})
+			if st.has("pos"):
+				last[rid] = Vector2((st["pos"] as Vector3).x, (st["pos"] as Vector3).z)
+		v.advance(20.0)
+		_gframes(scene, 0.1)
+		for rid: int in left.keys():
+			if not vw.staged.has(rid):
+				var r: Resident = left[rid]
+				jump = maxf(jump, Vector2(r.x, r.y).distance_to(last.get(rid, Vector2(r.x, r.y))))
+				left.erase(rid)
+	check(left.is_empty() and jump < 0.12 and not d._dolls.busy() and vw.staged.is_empty(), "시뮬레이션이 닿으면 그 자리에서 넘겨받음 (가장 크게 튄 거리 %.2f칸 · %d걸음)" % [jump, g2])
+	check(int(v.stats.get("funerals", 0)) == funerals and v.graves.size() == 1 and d.log.size() == 1, "장례는 한 번 — 시뮬레이션의 셈은 그대로")
+	var one := _grown(v, [])
+	d._dolls.bind(vw, v)
+	d._dolls.hold(one.id, Vector2(one.x + 1.5, one.y), 0.4, gpos, "idle", func(_p: Resident) -> bool: return false)
+	var held := d._dolls.holding(one.id)
+	_gframes(scene, 0.1)
+	var let_go := held and d._dolls.has(one.id) and not d._dolls.holding(one.id)
+	_gframes(scene, 4.5)
+	check(let_go and not d._dolls.busy() and vw.staged.is_empty() and StageDirector.HOLD_T <= 3.0 * Balance.HOUR,
+		"머물 까닭이 사라지면 (그만둠 · 너무 오래 걸림) 여느 때처럼 걸어서 제자리로 (%s · 인형 %d · 그려진 자리 %d)" % [str(let_go), d._dolls.acts.size(), vw.staged.size()])
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()
@@ -1348,6 +1416,20 @@ func test_death_away() -> void:
 	d2.watch(v, true)
 	check(not d2.playing() and not d2.minis_busy() and (d2._pend.get(v, []) as Array).is_empty(), "막 연 병의 옛 무덤은 연출하지 않음")
 	d2.free()
+	# 저장 → 불러오기: 사건 줄은 저장되지 않는다 — 방금(JUST 안) 떠난 사람도 불러온 병에서는 다시 연출하지 않고 무덤만 남는다
+	var c := _grown(v, [])
+	v.kill(c, "노환")
+	var v2: Village = Village.from_dict(bytes_to_var(var_to_bytes(v.to_dict())))
+	var d3 := StageDirector.new(scene)
+	d3.watch(v2, true)
+	check(v2.graves.size() == v.graves.size() and v2.t - float(v2.graves[v2.graves.size() - 1]["t"]) < StageDirector.JUST
+		and not d3.playing() and not d3.minis_busy() and (d3._pend.get(v2, []) as Array).is_empty(), "불러온 병: 불러오기 전의 죽음은 다시 연출하지 않음 (무덤 %d)" % v2.graves.size())
+	var c3 := _grown(v2, [])
+	v2.kill(c3, "노환")
+	d3._read_events(v2)
+	var pd: Array = d3._pend.get(v2, [])
+	check(pd.size() == 1 and pd[0]["kind"] == &"died" and int(pd[0]["who"]) == c3.id and not bool(pd[0]["v"]["first"]), "불러온 뒤의 죽음은 사건으로 줄 섬 (첫 무덤 아님)")
+	d3.free()
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()
@@ -1574,6 +1656,144 @@ func test_death_bell_once() -> void:
 	fs.reset()
 
 
+## 종의 모서리 (E1-5 남은 것): 죽음 하나(같은 때 떠난 여럿은 한 무리)에 종 하나 — 밤을 건너뛰는 중 · 빠른 흐름에는 없음
+##   ⓐ 다른 긴 연출 중에 누가 떠남 → 그동안 종이 기다림 → 뒤이은 짧은 판의 종만 / 연출이 없으면 끝난 뒤 한 번
+##   ⓑ 긴 연출을 자막(종) 앞에서 건너뜀 → 예전의 종이 조금 뒤 한 번 · 자막 뒤에 건너뛰면 더 울리지 않음
+##   ⓒ 짧은 판의 종은 밤을 건너뛰는 중 · 빠른 흐름에 울리지 않음 (빛과 꽃은 그대로)
+##   ⓓ 짧은 판이 빛(종) 앞에서 긴 연출에 밀려남 → 긴 연출이 끝난 뒤 한 번
+func test_death_bell_edges() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var a := GameAudio.get_instance()
+	var mine := a == null
+	if mine:
+		a = GameAudio.new()
+		run.root.add_child(a)
+		GameAudio._inst = a
+	var old_clock := a.clock_override
+	var old_speed := a.speed
+	a.clock_override = 9000.0
+	a.speed = 1.0
+	a._recent.erase("funeral")
+	a._bell_at = -1.0
+	a._bell_own_until = -1.0e9
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var clock: JarClock = scene.get("clock")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	a.attach(v)
+	# ⓑ 첫 죽음의 긴 연출을 자막 앞에서 건너뜀
+	_die(v, _grown(v, []))
+	a._watch_village(0.0)
+	vw.sync(0.1)
+	d.watch(v, true)
+	var b0 := _bell_frames(a, scene, 3.0)
+	var was_long := d.playing() and d.id == "first_death"
+	d.skip()
+	var b1 := _bell_frames(a, scene, 0.4)
+	var b2 := _bell_frames(a, scene, 0.6)
+	var b3 := _bell_frames(a, scene, 3.0)
+	check(was_long and not d.playing() and b0 == 0 and b1 == 0 and b2 == 1 and b3 == 0 and a._bell_at < 0.0,
+		"긴 연출을 자막 앞에서 건너뜀: 종이 조금 뒤 한 번 (연출 중 %d · 곧바로 %d · 조금 뒤 %d · 그 뒤 %d)" % [b0, b1, b2, b3])
+	#    자막 뒤에 건너뜀 (두 번째라 짧은 판 길이): 연출의 종 하나뿐
+	a.clock_override += 30.0
+	d.play("first_death", v)
+	var cap := 11.2 * d.k
+	var e0 := _bell_frames(a, scene, cap - 0.3)
+	var e1 := _bell_frames(a, scene, 0.8)
+	var mid := d.playing()
+	d.skip()
+	var e2 := _bell_frames(a, scene, 4.0)
+	check(mid and not d.playing() and e0 == 0 and e1 == 1 and e2 == 0 and a._bell_at < 0.0, "자막 뒤에 건너뜀: 연출의 종 하나뿐 (앞 %d · 자막 %d · 건너뛴 뒤 %d)" % [e0, e1, e2])
+	# ⓐ 다른 긴 연출(첫 기도) 중에 누가 떠남 → 그동안 종이 기다림 → 끝나면 짧은 판의 종만
+	a.clock_override += 30.0
+	d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+	var ml := d.mini_log.size()
+	d.play("first_prayer", v)
+	_bell_frames(a, scene, 1.0)
+	_die(v, _grown(v, []))
+	var left := float(Stagings.SCENES["first_prayer"]["dur"]) * d.k - 1.0
+	var p0 := _bell_frames(a, scene, left - 0.3)
+	var held := d.playing() and a._bell_at >= 0.0
+	var p1 := _bell_frames(a, scene, 0.4)
+	var over := not d.playing() and a._bell_at >= 0.0
+	d.watch(v, true)
+	_gframes(scene, 0.1)
+	var took := d.minis_busy() and d.mini_log.size() == ml + 1 and a._bell_at < 0.0
+	var p2 := _bell_frames(a, scene, 1.2)
+	var p3 := _bell_frames(a, scene, 1.0)
+	var p4 := _bell_frames(a, scene, 3.0)
+	check(held and over and took and p0 == 0 and p1 == 0 and p2 == 0 and p3 == 1 and p4 == 0,
+		"다른 긴 연출 중의 죽음: 종은 기다렸다가 짧은 판의 것 하나 (연출 중 %d · 끝 %d · 짧은 판 처음 %d · 빛 %d · 뒤 %d)" % [p0, p1, p2, p3, p4])
+	#    뒤이을 연출이 없으면 (조금 전 장례를 연출함 — 접힘) 긴 연출이 끝난 뒤 한 번
+	a.clock_override += 30.0
+	ml = d.mini_log.size()
+	d.play("first_prayer", v)
+	_bell_frames(a, scene, 1.0)
+	_die(v, _grown(v, []))
+	left = float(Stagings.SCENES["first_prayer"]["dur"]) * d.k - 1.0
+	var q0 := _bell_frames(a, scene, left + 0.1)
+	var done := not d.playing()
+	d.watch(v, true)
+	var q1 := _bell_frames(a, scene, 1.0)
+	var q2 := _bell_frames(a, scene, 3.0)
+	check(done and d.mini_log.size() == ml and q0 == 0 and q1 == 1 and q2 == 0 and a._bell_at < 0.0,
+		"다른 긴 연출 중의 죽음 · 뒤이을 연출 없음: 끝난 뒤 한 번 (연출 중 %d · 끝난 뒤 %d · 그 뒤 %d)" % [q0, q1, q2])
+	# ⓒ 밤을 건너뛰는 중 · 빠른 흐름: 짧은 판은 나오되 (빛 · 꽃) 종은 없음 — 건너뛰기가 끝난 뒤에 뒤늦게 울리지도 않음
+	for mode: String in ["skipping", "fast"]:
+		a.clock_override += 30.0
+		d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+		ml = d.mini_log.size()
+		clock.set(mode, true)
+		_die(v, _grown(v, []))
+		vw.sync(0.1)
+		d.watch(v, true)
+		_gframes(scene, 0.1)
+		var began := d.minis_busy() and d.mini_log.size() == ml + 1
+		var s0 := _bell_frames(a, scene, 3.2)
+		clock.set(mode, false)
+		var s1 := _bell_frames(a, scene, 3.0)
+		check(began and not d.minis_busy() and s0 == 0 and s1 == 0 and a._bell_at < 0.0,
+			"%s: 짧은 판의 종은 울리지 않음 (도는 동안 %d · 뒤 %d)" % ["밤을 건너뛰는 중" if mode == "skipping" else "빠른 흐름", s0, s1])
+	#    밤을 건너뛰는 중의 긴 연출도 자막의 종은 없음 (종이 든 소리 줄에서 종만 빠짐)
+	clock.skipping = true
+	a._recent.erase("paper")
+	var had := d._play_fx([["paper", -9.0, "Room"], [StageDirector.BELL, -9.0, "Room"]])
+	clock.skipping = false
+	check(had and (a._recent.get(StageDirector.BELL, []) as Array).filter(func(x: float) -> bool: return x >= a.clock_override - 1.0e-4).is_empty()
+		and not (a._recent.get("paper", []) as Array).is_empty(), "밤을 건너뛰는 중: 소리 줄에서 종만 빠짐 (다른 소리는 그대로)")
+	# ⓓ 짧은 판이 빛(종) 앞에서 긴 연출에 밀려남 → 긴 연출 동안 기다렸다가 끝난 뒤 한 번
+	a.clock_override += 30.0
+	d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+	ml = d.mini_log.size()
+	_die(v, _grown(v, []))
+	vw.sync(0.1)
+	d.watch(v, true)
+	_gframes(scene, 0.1)
+	var r0 := _bell_frames(a, scene, 1.0)
+	var mini_on := d.minis_busy() and d.mini_log.size() == ml + 1
+	d.play("first_prayer", v)
+	var r1 := _bell_frames(a, scene, float(Stagings.SCENES["first_prayer"]["dur"]) * d.k + 0.1)
+	var r2 := _bell_frames(a, scene, 1.0)
+	var r3 := _bell_frames(a, scene, 3.0)
+	check(mini_on and not d.playing() and not d.minis_busy() and r0 == 0 and r1 == 0 and r2 == 1 and r3 == 0 and a._bell_at < 0.0,
+		"짧은 판이 빛 앞에서 밀려남: 긴 연출이 끝난 뒤 한 번 (짧은 판 %d · 긴 연출 %d · 끝난 뒤 %d · 그 뒤 %d)" % [r0, r1, r2, r3])
+	a.attach(null)
+	a.clock_override = old_clock
+	a.speed = old_speed
+	a._bell_own_until = -1.0e9
+	a._bell_at = -1.0
+	if mine:
+		GameAudio._inst = null
+		a.free()
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
 ## 장례를 다 봄 = 건너뜀 = 아무도 보지 않음: 자리·연대기·말·난수 상태가 같다 (ADR-0001)
 func test_death_sim_same() -> void:
 	Village.start_aware = false
@@ -1641,7 +1861,7 @@ func test_grave_stays() -> void:
 	var want := 0
 	var nm := "%s의 장례에 가는 중" % a.name
 	for r in v.people:
-		if r.action == "pray" and r.anim == "walk" and r.doing == nm:
+		if VillageEra.in_funeral(r) and r.anim == "walk" and r.doing == nm:     # 깨닫기 전에는 하는 일이 MOURN (기도가 아님 — E1-5)
 			want += 1
 	check(gv._hands.size() == want, "장례에 가는 사람은 꽃을 듦 (%d명)" % want)
 	check(gv._marks.has(a.id) and int(gv.shown(a.id)["flowers"]) == GraveView.FLOWER_MAX, "새 무덤: 꽃")
@@ -1657,6 +1877,151 @@ func test_grave_stays() -> void:
 	check(int(gv.shown(a.id)["flowers"]) == 0 and bool(gv.shown(a.id)["stone"]) and not gv._marks.has(a.id) and v.graves.size() == 1 and vw.grave_hide.is_empty(),
 		"더 지나면: 꽃은 사라지고 돌은 남음")
 	g["t"] = t0
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## (E1-5 남은 것) 무덤이 가려지지 않는다 — 화면만: 무덤 곁·앞(카메라 쪽)의 키 큰 꽃 그림과 익은 밀밭 그림을 낮춤 (시뮬레이션 자리·수확은 그대로),
+## 홀로 선 돌은 멀리서도 보이는 크기, 빛은 하루 내내 보이다 끝에 스러짐
+func test_grave_clear_view() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	var key := "flora/chrysanthemum_gold"
+	var s := 0.4
+	var h := float(Flora2D.info(Flora2D.pic_for(key)).get("h", 0.0)) * s
+	var was := vw._flora2d_on
+	vw._flora2d_on = true
+	check(h > VillageView.GRAVE_H + 5.0 * VillageView.GRAVE_RISE and is_equal_approx(vw._grave_scale(key, 3.0, 3.0, s), s), "무덤이 없으면 키 큰 꽃 그림 그대로 (%.1f칸)" % h)
+	var a := _grown(v, [])
+	v.kill(a, "노환")
+	var g: Dictionary = v.graves[0]
+	var gp := Vector2(float(g["x"]), float(g["y"]))
+	var st0: int = vw.econ.step if vw.econ != null else 0
+	var sd0 := BldEcon.step_dirs(st0)
+	var tw0: Vector2 = sd0[0]
+	var rt0: Vector2 = sd0[1]
+	var at := func(p: Vector2, k := key, sc := s) -> float: return vw._grave_scale(k, p.x, p.y, sc)
+	check(is_equal_approx(h * float(at.call(gp + rt0 * 1.0)) / s, VillageView.GRAVE_H), "무덤 곁의 키 큰 그림은 주민 키쯤으로 낮춤")
+	var f5 := h * float(at.call(gp + tw0 * 5.0)) / s
+	check(f5 > VillageView.GRAVE_H and f5 < h and f5 <= VillageView.GRAVE_H + 5.0 * VillageView.GRAVE_RISE, "무덤 앞(카메라 쪽) 5칸: 낮추되 곁보다는 높게 (%.2f칸)" % f5)
+	check(is_equal_approx(float(at.call(gp - tw0 * 5.0)), s), "무덤 뒤쪽 그림은 그대로 (가리지 않음)")
+	check(is_equal_approx(float(at.call(gp + tw0 * 5.0 + rt0 * 6.0)), s), "옆으로 비켜 선 그림은 그대로")
+	check(is_equal_approx(float(at.call(gp + tw0 * 20.0)), s), "멀리 앞의 그림은 그대로")
+	check(is_equal_approx(float(at.call(gp + rt0 * 1.0, "bush_b", 1.0)), 1.0), "낮은 그림은 그대로")
+	vw._flora2d_on = false
+	check(is_equal_approx(float(at.call(gp + rt0 * 1.0)), s), "3D 꽃일 때는 손대지 않음")
+	vw._flora2d_on = was
+	# 밀밭: 익은 밀 줄이 그 뒤 무덤을 가리지 않게 — 무덤 앞에 선 줄만, 무덤 폭만큼만 낮춰 그린다 (BldEcon.grave_cut · 밭 전체는 그대로)
+	var ups: Array = []                      # 밭의 세운 그림 (밀 줄 여섯 + 울타리)
+	for nm: String in Bld2D.wheat_cards(2):
+		if int(Bld2D.info(nm).get("mode", 0)) == 0:
+			ups.append(nm)
+	var tall := String(ups[0])
+	for nm: String in ups:
+		if float(Bld2D.info(nm)["h"]) > float(Bld2D.info(tall)["h"]):
+			tall = nm
+	var d := Bld2D.info(tall)
+	var wh := float(d["h"])
+	var fr := float(d["front"])
+	var wdx := float(d.get("dx", 0.0))
+	var sn := BldEcon.APRON_SIN
+	var all_b: Array = v.buildings.duplicate()
+	var farm := v.add_building("농장", gp.x, gp.y + 4.0, true)
+	var site := Vector2(farm.x, farm.y)
+	v.buildings.clear()
+	v.buildings.append(farm)
+	farm.ready_at = v.t - 1.0
+	check(ups.size() == 7 and wh > 0.3 and BldEcon.grave_cuts(v, farm, 0, 2).size() == Bld2D.wheat_cards(2).size()
+		and BldEcon.grave_cut(v, farm, 0, Bld2D.wheat_cards(2)[0]).is_empty(), "밭 그림 판마다 벤 창 하나 · 눕힌 흙은 손대지 않음")
+	var a_half := wh * 0.5 / sn + BldEcon.GRAVE_CLEAR       # 가장 키 큰 줄이 무덤에서 이만큼 앞이면 반 키까지만
+	for st in [0, 1]:
+		var sd := BldEcon.step_dirs(st)
+		var tw: Vector2 = sd[0]
+		var rt: Vector2 = sd[1]
+		var put := func(p: Vector2, nm: String = tall, step: int = st) -> Array:
+			farm.x = p.x
+			farm.y = p.y
+			return BldEcon.grave_cut(v, farm, step, nm)
+		var at_half := gp + tw * (a_half - fr)
+		var c: Array = put.call(at_half)
+		check(c.size() == 3 and is_equal_approx(float(c[2]), wh * 0.5) and float(c[2]) > BldEcon.GRAVE_MIN_H
+			and is_equal_approx(float(c[1]) - float(c[0]), BldEcon.GRAVE_HALF_W * 2.0) and is_equal_approx(float(c[0]) + float(c[1]), -wdx * 2.0),
+			"방위 걸음 %d: 무덤 %.1f칸 앞의 가장 키 큰 줄(%.2f칸)은 무덤 폭만큼만 반 키로 %s" % [st, a_half, wh, [c]])
+		var clear := true                     # 밭의 모든 세운 그림: 벤 창 안의 윗선이 무덤 자리(발치의 꽃)까지 올라오지 않음
+		var cut_n := 0
+		for nm: String in ups:
+			var rd := Bld2D.info(nm)
+			var an := a_half - fr + float(rd["front"])
+			var top := float(rd["h"])
+			var cn: Array = put.call(at_half, nm)
+			if not cn.is_empty():
+				cut_n += 1
+				top = float(cn[2])
+				clear = clear and top < float(rd["h"])
+			clear = clear and (an <= 0.0 or top <= maxf(BldEcon.GRAVE_MIN_H, (an - BldEcon.GRAVE_CLEAR) * sn) + 0.001)
+		check(clear and cut_n >= 1, "방위 걸음 %d: 밭의 줄 %d장을 낮춤 — 어느 줄도 무덤을 가리지 않음" % [st, cut_n])
+		var opp := true
+		for nm: String in ups:
+			opp = opp and (put.call(gp + tw * 4.0, nm, (st + 2) % 4) as Array).is_empty()
+		check(opp, "방위 걸음 %d: 무덤 4칸 앞의 밭도 반대편에서 보면 (밭이 무덤 뒤) 그대로" % st)
+		c = put.call(gp + tw * (0.3 - fr))
+		check(c.size() == 3 and is_equal_approx(float(c[2]), BldEcon.GRAVE_MIN_H), "방위 걸음 %d: 무덤 바로 앞 줄도 그루터기 키(%.2f칸)는 남김" % [st, BldEcon.GRAVE_MIN_H])
+		check((put.call(gp + tw * 30.0) as Array).is_empty(), "방위 걸음 %d: 멀리 앞의 밭은 그대로" % st)
+		check((put.call(at_half + rt * (float(d["w"]) * 0.5 + BldEcon.GRAVE_HALF_W + 1.0)) as Array).is_empty(), "방위 걸음 %d: 옆으로 비켜 선 밭은 그대로" % st)
+		var gs: Array = v.graves.duplicate()
+		v.graves.clear()
+		check((put.call(at_half) as Array).is_empty(), "방위 걸음 %d: 무덤이 없으면 그대로" % st)
+		v.graves.append_array(gs)
+	# 그린 밭: 무덤 앞에 놓으면 그 줄의 그림 판에 벤 창이 실리고 (가까이 · 멀리 묶음 둘 다), 무덤이 없어지면 다시 온 키로
+	var tw1: Vector2 = BldEcon.step_dirs(st0)[0]
+	farm.x = gp.x + tw1.x * (a_half - fr)
+	farm.y = gp.y + tw1.y * (a_half - fr)
+	var drawn := func() -> Array:             # [그림 판 수, 벤 창이 실린 판 수, 멀리 묶음 기록에 실린 수]
+		vw.sync(0.3)
+		var out := [0, 0, 0]
+		if not vw._blds.has(farm.id):
+			return out
+		for ch: Node in (vw._blds[farm.id] as Node3D).get_children():
+			if ch is MeshInstance3D and ch.has_meta(&"pic"):
+				out[0] += 1
+				if ch.has_meta(&"cut"):
+					out[1] += 1
+		for it: Array in vw._card_items.get(farm.id, []):
+			if it.size() > 4 and (it[4] as Array).size() == 3:
+				out[2] += 1
+		return out
+	if vw._bld2d_on:
+		var dn: Array = drawn.call()
+		check(int(dn[0]) == 8 and int(dn[1]) >= 1 and int(dn[2]) == int(dn[1]), "그린 밭: 그림 판 %d장 가운데 %d장에 벤 창 (멀리 묶음에도 %d장)" % dn)
+		var gs2: Array = v.graves.duplicate()
+		v.graves.clear()
+		dn = drawn.call()
+		check(int(dn[0]) == 8 and int(dn[1]) == 0 and int(dn[2]) == 0, "그린 밭: 무덤이 없으면 벤 창 없이 다시 그림")
+		v.graves.append_array(gs2)
+	check(is_equal_approx(farm.ready_at, v.t - 1.0) and v.graves.size() == 1, "밭의 익는 때·무덤은 그대로 (화면만)")
+	farm.x = site.x
+	farm.y = site.y
+	v.buildings.clear()
+	v.buildings.append_array(all_b)
+	# 돌 크기: 홀로 선 돌은 멀리서도 STONE_PX쯤 · 가까이서는 조금만 · 묘지의 돌은 그대로 (0.75칸 간격)
+	var k16 := GraveView.stone_k(16.0)
+	check(is_equal_approx(GraveView.stone_k(60.0), GraveView.STONE_K) and k16 > GraveView.STONE_K and GraveView.STONE_H * k16 * 16.0 >= GraveView.STONE_PX - 0.5
+		and is_equal_approx(GraveView.stone_k(4.0), GraveView.STONE_K_MAX), "홀로 선 돌: 가까이 %.2f배 · 마을 기본 확대 %.2f배 (%.0f px) · 가장 커도 %.2f배" % [GraveView.STONE_K, k16,
+		GraveView.STONE_H * k16 * 16.0, GraveView.STONE_K_MAX])
+	check(is_equal_approx(GraveView.stone_k_of({"yard": true}, k16), 1.0) and is_equal_approx(GraveView.stone_k_of(g, k16), k16), "묘지 안의 돌은 그대로")
+	vw.sync(0.1)
+	var gv := GraveView.of(vw, v)
+	gv.step(0.1)
+	check(is_equal_approx(vw.grave_k, GraveView.stone_k(gv._ppu())) and vw.grave_k >= GraveView.STONE_K, "화면의 돌 크기 = 지금 확대에 맞춘 몫 (%.2f)" % vw.grave_k)
+	# 빛: 하루 내내 보이다 끝에 스러짐
+	var l9 := GraveView.light_at(GraveView.LIGHT_DAYS * 0.9)
+	check(is_equal_approx(GraveView.light_at(0.0), 1.0) and GraveView.light_at(GraveView.LIGHT_DAYS * 0.6) >= 0.99 and l9 > 0.0 and l9 < 1.0
+		and is_equal_approx(GraveView.light_at(GraveView.LIGHT_DAYS), 0.0), "무덤의 빛: 하루의 대부분 또렷 · 끝에 스러짐 (0.9일에 %.2f)" % l9)
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()

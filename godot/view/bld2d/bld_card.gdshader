@@ -17,10 +17,14 @@ uniform vec3 lit_tint : source_color = vec3(1.0);
 instance uniform float flip = 1.0;               // -1 mirrors (ferry landing toward the other bank)
 instance uniform float k = 1.0;                  // size multiplier (building sites follow the building size)
 instance uniform float lift = 0.0;               // raise (ground mode: over the highest corner of the footprint)
+instance uniform vec3 cut = vec3(0.0, 0.0, -1.0);   // cut window x0, x1, cap (world units, bld_cut_h) — z < 0 = none
+
+varying vec2 v_loc;                              // card-local position in world units (x right, y up from the foot)
 
 void vertex() {
 	vec3 org = MODEL_MATRIX[3].xyz + vec3(0.0, lift, 0.0);
 	vec2 corner = VERTEX.xy;
+	v_loc = vec2(corner.x * flip * geo.x, (corner.y + 0.5) * geo.y) * k;
 	vec3 w = bld_place(VERTEX.xy, org, geo, mode, flip, k, INV_VIEW_MATRIX);
 	if (sway > 0.0) {
 		w = bld_sway(w, VERTEX.xy, org, geo, sway, k, TIME, INV_VIEW_MATRIX);
@@ -34,6 +38,9 @@ void vertex() {
 void fragment() {
 	vec4 t = texture(tex, UV);
 	if (t.a < alpha_cut) {
+		discard;
+	}
+	if (cut.z >= 0.0 && v_loc.y > bld_cut_h(v_loc.x, cut, geo.y * k)) {
 		discard;
 	}
 	ALBEDO = t.rgb;

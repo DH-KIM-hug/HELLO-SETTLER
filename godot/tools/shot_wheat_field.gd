@@ -5,7 +5,9 @@
 ##    <tag>_ripe_sway_a.png · _b.png                                        바람 (조금 뒤 두 장 — 이삭이 움직였는지)
 ##    <tag>_ripe_<scarecrow|flowers>_ppu44.png · _ppu20.png                 밭 꾸밈 그림 두 가지 (VillageView.wheat_accent — 기본은 없음)
 ##    <tag>_ripe_bubble_ppu44.png                                           볏단이 넘칠 때 밭 위 생각 풍선 + 가득 찬 볏단 더미
-## 인자: -- <tag>
+##    (grave)   <tag>_grave_ppu44.png · _ppu16.png · <tag>_grave_near_ppu44.png · _ppu16.png   밭 뒤(1.2칸 · 바로 뒤)의 무덤 — 그 앞의 밀 줄만 낮춰 그림
+##    (compare) <tag>_cmp_ppu44.png · _ppu20.png                                  익은 밭 + 앞 울타리 앞에 선 주민 셋 (키 견줌 — 밭 안에는 아무도 없음)
+## 인자: -- <tag> [all|grave|compare]
 ## 시뮬레이션은 멈춘 채(paused) 밭 값(ready_at)만 바꿔 찍는다.
 extends SceneTree
 
@@ -15,6 +17,7 @@ const STAGES := ["sprout", "green", "ripe"]
 
 var out_dir := ""
 var tag := "w1"
+var mode := "all"
 var frame := 0
 var step := 0
 var _wait := 0
@@ -30,6 +33,8 @@ func _initialize() -> void:
 	var args := OS.get_cmdline_user_args()
 	if args.size() > 0:
 		tag = args[0]
+	if args.size() > 1:
+		mode = args[1]
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/wheat").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	Bld2D.override = 1
@@ -39,6 +44,21 @@ func _initialize() -> void:
 	Village.start_aware = true
 	plan.append(_setup)
 	plan.append(_build)
+	if mode == "grave":
+		plan.append(_stage.bind(2))
+		for near: bool in [false, true]:
+			plan.append(_grave.bind(near))
+			for ppu: float in [44.0, 16.0]:
+				plan.append_array([_aim.bind(ppu), _save.bind("grave%s_ppu%d" % ["_near" if near else "", int(ppu)], ppu)])
+	elif mode == "compare":
+		plan.append_array([_stage.bind(2), _front_folk])
+		for ppu: float in [44.0, 20.0]:
+			plan.append_array([_aim.bind(ppu), _save.bind("cmp_ppu%d" % int(ppu), ppu)])
+	if mode != "all":
+		plan.append(func() -> int:
+			quit()
+			return 1)
+		return
 	for i in 3:
 		plan.append(_stage.bind(i))
 		for ppu: float in [44.0, 20.0]:
@@ -190,6 +210,54 @@ func _yaw(st: int) -> int:
 	scene.cam._apply()
 	scene.view.sync(0.0, true)
 	return 30
+
+
+## 밭 뒤에 무덤 하나 (near: 맨 뒷줄 바로 뒤 · 아니면 1.2칸 뒤) — 밭 안의 일꾼은 밭 앞으로 비킴
+func _grave(near: bool) -> int:
+	var f := _fdir(0)
+	var r := _rdir(0)
+	var back := float(Bld2D.info(Bld2D.wheat_cards(2)[1])["front"])       # 맨 뒷줄
+	var gp := Vector2(farm.x, farm.y) + f * (back - (0.35 if near else 1.2)) + r * 0.3
+	if v.graves.is_empty():
+		var dead: Resident = null
+		for q: Resident in v.people:
+			if q.is_adult() and not folk.has(q):
+				dead = q
+				break
+		dead.x = gp.x
+		dead.y = gp.y
+		v.kill(dead, "노환")
+	var g: Dictionary = v.graves[0]
+	g["x"] = gp.x
+	g["y"] = gp.y
+	_front_folk()
+	scene.refresh()
+	scene.view.sync(0.0, true)
+	print("grave ", gp, " cuts ", BldEcon.grave_cuts(v, farm, 0, 2))
+	return 40
+
+
+## 주민 셋을 앞 울타리 앞에 나란히 세움 (키 견줌 · 밭 안에는 아무도 없게)
+func _front_folk() -> int:
+	var f := _fdir(0)
+	var r := _rdir(0)
+	var edge := float(Bld2D.info(Bld2D.Pics.WHEAT_FENCE)["front"]) + 0.3
+	for i in folk.size():
+		var q := folk[i]
+		var at := Vector2(farm.x, farm.y) + f * edge + r * (-0.9 + 0.75 * i)
+		q.steps.clear()
+		q.steps.append(ResidentAI.act(1.0e6, "idle"))
+		q.x = at.x
+		q.y = at.y
+		q.px = q.x
+		q.py = q.y
+		q.action = "idle"
+		q.anim = "idle"
+		q.job = -1
+	farm.worker = -1
+	scene.refresh()
+	scene.view.sync(0.0, true)
+	return 20
 
 
 ## 밭 꾸밈 그림을 바꿔 다시 그림 (화면만)
