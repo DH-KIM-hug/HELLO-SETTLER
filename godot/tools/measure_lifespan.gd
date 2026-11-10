@@ -17,6 +17,19 @@
 ##   adult2f adult3f  adult2·adult3 + 아이 낳는 나이 창(지금 병 56일)을 병 날로 그대로 — 그 나이를 넘긴 아내의 fert를 0으로
 ##                    (BIRTH_WIFE_MAX를 18 → 4 + 14 ÷ 배율로 낮춘 것의 어림. fertile_couples()는 여전히 18까지 센다)
 ##
+## 출산 속도 규칙 (2026-11-10 — '어른 ×3'에서 아이가 끊기지 않게): 변형 이름 뒤에 '+규칙=값,값'을 붙인다. 여러 개면 곱한다.
+##   예) adult3+kids=6 · adult3+room=0.5,0,24 · adult3+third=4,24+room=0.5,0,24 · adult3+kids=6+reserve=5
+##   kids=M[,K]        마을의 어린것(아기 + 아이)이 max(M, 인구 ÷ K)명이면 다음 아기는 기다린다 (K를 안 주면 M만)
+##   cradle=M          걸음마 전 아기(CARE_DAYS 전)가 M명이면 기다린다 (지금 규칙은 '아기 × CARE_CAP < 어른')
+##   room=SHARE,FLOOR,N   (a) 인구 N명부터: 아내마다 확률 × clamp(빈 침대 ÷ (SHARE × 모든 침대), FLOOR, 1)
+##   third=K,N[,AFTER]    (b) 인구 N명부터: AFTER(기본 2)명을 낳은 아내는 확률 ÷ K
+##   gap=G,N[,AFTER]      (b) 인구 N명부터: AFTER(기본 2)명을 낳은 아내는 막내를 낳고 병 G × (낳은 수 − AFTER + 1)일을 기다린다
+##   reserve=D[,BOOST]    (d) 어린것이 한 명도 없는 채로 병 D일이 지났고 빈 침대가 있으면 확률 × BOOST (기본 20, 다른 규칙을 누름)
+##   floor=L,N[,G]        (d′) 인구 N명부터: 어린것이 L명이 안 되면 먹을 것 문이 닫혀 있어도 한 집이 아기를 맞는다 (빈 침대가 있는 집 · 아이가 가장 적은 아내,
+##                        마지막 그런 출생 뒤 병 G일(기본 1)은 쉼). 이 규칙만 훅이 아니라 도구가 걸음 묶음 끝에 Village._give_birth를 직접 부른다 (먹을 것 문을 건너뛰어야 해서)
+##   규칙은 Village.birth_pace(기본은 비어 있음 — 게임 그대로)에 이 도구의 함수를 걸어서 쓴다. Balance 값은 그대로.
+##   날마다 CHIEF 줄(창고·집 필요·땅)과 끝에 PACE 줄(36일 인구·출생, 40일부터 어린것 평균·최소·4명 이상인 날·0명이 이어진 날) · MOMS 줄(엄마마다 낳은 수)을 더 찍는다.
+##
 ## 덮어쓰는 법 (게임 코드 고치지 않음):
 ##   - 걸음 묶음(병 1시간 이하)이 끝날 때마다 그동안 먹은 나이를 구간 배율로 다시 계산해 Resident.age에 써 넣는다.
 ##   - 노환 굴림은 Resident.fx["lifespan"]을 아주 크게 해 게임 쪽 굴림을 끄고, 같은 식
@@ -60,6 +73,12 @@ var d_blocked := 0
 var d_food_min := 1.0e9
 var short_days := 0
 var tool_deaths := 0
+# 출산 속도 규칙 (변형 이름의 '+규칙=값' — 비면 게임 그대로)
+var pace := {}                     # 규칙 이름 → [값, …]
+var pstate := {}                   # 마을 instance id → 그 마을의 셈 (걸음마다 한 번 다시 셈)
+var floor_last := {}               # 마을 instance id → 'floor' 규칙으로 마지막에 태어난 때
+var floor_births := 0
+var kid_days: Array = []           # 날마다 [병 날, 어린것 수, 인구, 태어난 수] — 끝에 PACE 줄
 
 
 func _initialize() -> void:
@@ -70,16 +89,29 @@ func _initialize() -> void:
 		quit()
 		return
 	variant = args[1] if args.size() > 1 else "base"
+	var parts := variant.split("+")
+	var aging := parts[0]
+	for i in range(1, parts.size()):
+		var kv := parts[i].split("=")
+		var vals := []
+		if kv.size() > 1:
+			for x: String in kv[1].split(","):
+				vals.append(float(x))
+		if not kv[0] in ["kids", "cradle", "room", "third", "gap", "reserve", "floor"] or vals.is_empty():
+			push_error("unknown pacing rule " + parts[i])
+			quit(1)
+			return
+		pace[kv[0]] = vals
 	seed_v = int(args[2]) if args.size() > 2 else 11
 	var days := int(args[3]) if args.size() > 3 else 60
 	var pat := args[4] if args.size() > 4 else "typical"
 	mig_per_day = int(args[5]) if args.size() > 5 else 0
-	if variant == "adult2f" or variant == "adult3f":
-		var s := 2.0 if variant == "adult2f" else 3.0
+	if aging == "adult2f" or aging == "adult3f":
+		var s := 2.0 if aging == "adult2f" else 3.0
 		fert_cut = Balance.AGE_ADULT + (Balance.BIRTH_WIFE_MAX - Balance.BIRTH_WIFE_MIN) / s
 		bands = _bands("adult2" if s == 2.0 else "adult3")
 	else:
-		bands = _bands(variant)
+		bands = _bands(aging)
 	drng.seed = hash([seed_v, "lifespan-tool"])
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	Village.start_aware = false
@@ -160,6 +192,141 @@ func _consts() -> void:
 	print("FOUNDERS ages (life days): ", ", ".join(ages))
 
 
+# ───────────────────────── 출산 속도 규칙 (Village.birth_pace 훅) ─────────────────────────
+func _hooks() -> void:
+	if pace.is_empty():
+		return
+	for q: Village in jw.settlements:
+		if not q.birth_pace.is_valid():
+			q.birth_pace = _pace
+
+
+func _pv(rule: String, i: int, def: float) -> float:
+	var a: Array = pace[rule]
+	return float(a[i]) if i < a.size() else def
+
+
+## 마을의 셈: 인구·어린것·걸음마 전 아기·침대. 걸음(시각)이나 태어난 수가 바뀌면 다시 센다 (읽기만 — 마을을 고치지 않는다)
+func _pstate(v: Village) -> Dictionary:
+	var id := v.get_instance_id()
+	var st: Dictionary = pstate.get(id, {})
+	if st.is_empty():
+		st = {"t": -1.0, "born": -1, "nokid": -1.0, "moms_born": -1, "n": {}, "last": {}}
+		pstate[id] = st
+	var born := int(v.stats["born"])
+	if float(st["t"]) == v.t and int(st["born"]) == born:
+		return st
+	st["t"] = v.t
+	st["born"] = born
+	var kids := 0
+	var babies := 0
+	var housed := 0
+	for p: Resident in v.people:
+		if p.age < Balance.AGE_ADULT:
+			kids += 1
+		if p.age < Balance.CARE_DAYS:
+			babies += 1
+		if p.home >= 0:
+			housed += 1
+	var beds := 0
+	for b: Building in v.houses():
+		beds += b.cap()
+	st["pop"] = v.people.size()
+	st["kids"] = kids
+	st["babies"] = babies
+	st["beds"] = beds
+	st["free"] = beds - housed
+	if kids > 0:
+		st["nokid"] = -1.0
+	elif float(st["nokid"]) < 0.0:
+		st["nokid"] = v.t
+	if (pace.has("third") or pace.has("gap")) and int(st["moms_born"]) != born:      # 엄마마다 낳은 수 · 막내를 낳은 때 (죽은 아이도 센다)
+		st["moms_born"] = born
+		var n := {}
+		var last := {}
+		for p: Resident in v.people + v.dead:
+			if p.parents.size() != 2:
+				continue
+			for m: int in p.parents:
+				n[m] = int(n.get(m, 0)) + 1
+				last[m] = maxf(float(last.get(m, -1.0e18)), p.born_t)
+		st["n"] = n
+		st["last"] = last
+	return st
+
+
+## Village._births가 아내마다 부른다 → 그 아내의 출산 비율에 곱할 값
+func _pace(v: Village, w: Resident) -> float:
+	var st := _pstate(v)
+	var pop := int(st["pop"])
+	var k := 1.0
+	if pace.has("kids"):
+		var lim := _pv("kids", 0, 6.0)
+		var per := _pv("kids", 1, 0.0)
+		if per > 0.0:
+			lim = maxf(lim, float(pop) / per)
+		if float(st["kids"]) >= lim:
+			k = 0.0
+	if pace.has("cradle") and float(st["babies"]) >= _pv("cradle", 0, 1.0):
+		k = 0.0
+	if pace.has("room") and pop >= int(_pv("room", 2, 24.0)):
+		var share := _pv("room", 0, 0.5)
+		k *= clampf(float(st["free"]) / maxf(1.0, share * float(st["beds"])), _pv("room", 1, 0.0), 1.0)
+	if pace.has("third") and pop >= int(_pv("third", 1, 24.0)):
+		if int((st["n"] as Dictionary).get(w.id, 0)) >= int(_pv("third", 2, 2.0)):
+			k /= maxf(1.0, _pv("third", 0, 4.0))
+	if pace.has("gap") and pop >= int(_pv("gap", 1, 24.0)):
+		var after := int(_pv("gap", 2, 2.0))
+		var n := int((st["n"] as Dictionary).get(w.id, 0))
+		if n >= after and v.t - float((st["last"] as Dictionary).get(w.id, -1.0e18)) < _pv("gap", 0, 20.0) * (n - after + 1) * D:
+			k = 0.0
+	if pace.has("reserve") and float(st["nokid"]) >= 0.0 and v.t - float(st["nokid"]) >= _pv("reserve", 0, 5.0) * D and int(st["free"]) > 0:
+		k = _pv("reserve", 1, 20.0)
+	return k
+
+
+## 'floor' 규칙: 어린것이 L명이 안 되면 먹을 것 문과 상관없이 한 집이 아기를 맞는다 (걸음 묶음이 끝날 때마다 한 번, 마을마다 한 명까지)
+func _floor() -> void:
+	if not pace.has("floor"):
+		return
+	var need := int(_pv("floor", 0, 4.0))
+	var from := int(_pv("floor", 1, 24.0))
+	var rest := _pv("floor", 2, 1.0) * D
+	for q: Village in jw.settlements:
+		if q.people.size() < from:
+			continue
+		var id := q.get_instance_id()
+		if q.t - float(floor_last.get(id, -1.0e18)) < rest:
+			continue
+		var kids := 0
+		var n := {}                       # 엄마 id → 살아 있는 아이 수
+		for p: Resident in q.people:
+			if p.age < Balance.AGE_ADULT:
+				kids += 1
+			if p.parents.size() == 2:
+				n[p.parents[0]] = int(n.get(p.parents[0], 0)) + 1
+		if kids >= need:
+			continue
+		var occ := q.occupancy()
+		var best: Resident = null
+		var best_n := 1 << 30
+		for w: Resident in q.people:
+			if not (w.sex == "f" and w.partner >= 0 and w.fert > 0.0 and w.age >= Balance.BIRTH_WIFE_MIN and w.age < Balance.BIRTH_WIFE_MAX):
+				continue
+			var h := q.bld(w.home) if w.home >= 0 else null
+			if h == null or int(occ.get(h.id, 0)) >= h.cap():
+				continue
+			var c := int(n.get(w.id, 0))
+			if c < best_n:
+				best_n = c
+				best = w
+		if best == null:
+			continue
+		q._give_birth(best, q.bld(best.home))
+		floor_last[id] = q.t
+		floor_births += 1
+
+
 # ───────────────────────── 나이 덮어쓰기 ─────────────────────────
 ## 나이 a에서 게임이 d(일생 날 — 병 날 ÷ AGE_K)만큼 먹였을 때, 구간 배율로 다시 계산한 나이
 func _adv(a: float, d: float) -> float:
@@ -234,6 +401,7 @@ func _run(days: int, pat: String) -> void:
 	Market.today_override = "R1"
 	print("START variant %s seed %d days %d pattern %s | per session watch %.2f jar d + away %.2f jar d | %.2f jar days per real day | mig/day %d" % [
 		variant, seed_v, days, pat, watch_j / D, away_j / D, per_real_day, mig_per_day])
+	_hooks()
 	_fix(0.0)
 	var tapped := 0
 	var dropped := false
@@ -277,7 +445,9 @@ func _run(days: int, pat: String) -> void:
 			var c := CatchUp.new(v, chunk / rate, lamp_s, jw, rate)
 			c.run()
 			c.finish()
+			_hooks()
 			_fix(chunk)
+			_floor()
 			left -= chunk
 			_sample(v, false)
 		_collect()
@@ -288,7 +458,9 @@ func _run(days: int, pat: String) -> void:
 
 func _advance(dt: float) -> void:
 	jw.advance(dt)
+	_hooks()
 	_fix(dt)
+	_floor()
 
 
 func _all() -> Array:
@@ -409,12 +581,59 @@ func _flush_day(v: Village) -> void:
 		variant, seed_v, cur_day + 1, pop, n[0], n[1], n[2], n[3], born, died, starved, houses, cap, built, couples, fert, singles, workers, carers,
 		float(d_blocked) / d_samples, d_food_min, 1 if d_short > 0 else 0, float(d_gate_food) / d_samples, float(d_gate_care) / d_samples,
 		lean, helps, v.era, v.era_pts, income, jw.settlements.size()])
+	kid_days.append([cur_day + 1, int(n[0]) + int(n[1]), pop, born])
+	# 촌장이 보는 것 (읽기만): 창고 · 집 필요(house_need) · 땅 한계 · 짓는 터 · 일 없는 어른
+	var hn := v.house_need()
+	var sites := 0
+	var hcap := 0
+	for b: Building in v.buildings:
+		if b.is_site():
+			sites += 1
+		if b.built and b.is_house():
+			hcap += b.cap()
+	var idle := 0
+	for p: Resident in v.people:
+		if p.is_adult() and p.job < 0:
+			idle += 1
+	print("CHIEF v=%s seed=%d day=%d tools=%.0f plank=%.0f stone=%.0f logs=%.0f food_days=%.2f hn_free=%d hn_need=%d short=%d crowded=%d homeless=%d land=%.0f cap=%d era_house=%s farms=%d sites=%d idle=%d" % [
+		variant, seed_v, cur_day + 1, float(v.stock["도구"]), float(v.stock["판자"]), float(v.stock["돌"]), float(v.stock.get("통나무", 0.0)),
+		v.food_total() / maxf(1.0, Production.day_need(v)), int(hn["free"]), int(hn["need"]), 1 if bool(hn["short"]) else 0, 1 if bool(hn["crowded"]) else 0,
+		1 if bool(hn["homeless"]) else 0, v.land_capacity() * Balance.HOUSE_SLACK, hcap, String(Balance.ERA_HOUSE[mini(v.era, 3)]), v.count_type("농장"), sites, idle])
 	d_samples = 0
 	d_short = 0
 	d_gate_food = 0
 	d_gate_care = 0
 	d_blocked = 0
 	d_food_min = 1.0e9
+
+
+## 끝 요약 — 36일(현실 첫 3일) 인구·출생과 40일부터의 어린것(아기 + 아이): 평균 · 최소 · 4명 이상인 날의 몫 · 0명이 이어진 가장 긴 날 수
+func _pace_line() -> void:
+	var pop36 := -1
+	var born36 := -1
+	var sum := 0
+	var cnt := 0
+	var lo := 1 << 30
+	var ge4 := 0
+	var zero := 0
+	var zero_max := 0
+	for r: Array in kid_days:
+		var day := int(r[0])
+		var kids := int(r[1])
+		if day == 36:
+			pop36 = int(r[2])
+			born36 = int(r[3])
+		if day < 40:
+			continue
+		sum += kids
+		cnt += 1
+		lo = mini(lo, kids)
+		if kids >= 4:
+			ge4 += 1
+		zero = zero + 1 if kids == 0 else 0
+		zero_max = maxi(zero_max, zero)
+	print("PACE v=%s seed=%d pop36=%d born36=%d from=40 days=%d kids_avg=%.2f kids_min=%d ge4=%.3f zero_run=%d floor_births=%d" % [
+		variant, seed_v, pop36, born36, cnt, float(sum) / maxf(1, cnt), lo if cnt > 0 else -1, float(ge4) / maxf(1, cnt), zero_max, floor_births])
 
 
 func _end(v: Village, per_real_day: float, secs: float) -> void:
@@ -445,7 +664,24 @@ func _end(v: Village, per_real_day: float, secs: float) -> void:
 			if gap >= Balance.BIRTH_WIFE_MIN - 0.5 and gap <= Balance.BIRTH_WIFE_MAX + 0.5:
 				mom_sum += gap
 				mom_n += 1
+	_pace_line()
 	print("MOMAGE v=%s seed=%d mean=%.2f n=%d" % [variant, seed_v, mom_sum / maxf(1, mom_n), mom_n])
+	# 엄마마다 낳은 수 (이 판에서 태어난 아이만, 죽은 사람도 셈) — 출산이 몇 집에 몰리는지. 여자는 낳는 나이(BIRTH_WIFE_MIN)에서 일생 2일이 지난 사람만
+	var per := {}
+	var hist := [0, 0, 0, 0, 0, 0, 0]          # 0 · 1 · 2 · 3 · 4 · 5 · 6명 이상
+	var most := 0
+	for q: Village in jw.settlements:
+		for p: Resident in q.people + q.dead:
+			if p.parents.size() == 2 and p.born_t > 0.0:
+				per[p.parents[0]] = int(per.get(p.parents[0], 0)) + 1
+	for q: Village in jw.settlements:
+		for p: Resident in q.people + q.dead:
+			if p.sex != "f" or p.age < Balance.BIRTH_WIFE_MIN + 2.0:
+				continue
+			var c := int(per.get(p.id, 0))
+			hist[mini(c, 6)] += 1
+			most = maxi(most, c)
+	print("MOMS v=%s seed=%d none=%d one=%d two=%d three=%d four=%d five=%d six_up=%d most=%d" % [variant, seed_v, hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], most])
 	for e in 3:
 		if float(era_at[e]) < 0.0 and v.era > e:
 			era_at[e] = v.t / D

@@ -119,6 +119,7 @@ var crises: Array = []                # 위기가 시작됨 {t, kind, text} — 
 var stats := {"born": 0, "died": 0, "built": 0, "starved": 0, "marriages": 0, "moves": 0, "upgrades": 0}
 var found: Array[Dictionary] = []     # 떨어진 물건 (작은 시험 병만 — 넓은 세상은 WorldWater.found, sim/found_objects.gd · E3-16)
 var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, home, occ_before, cap}
+var birth_pace := Callable()          # 재 보기용 (저장 안 함 — tools/measure_lifespan.gd '+규칙' 변형): 아내마다 출산 비율에 곱할 값 func(v: Village, w: Resident) -> float. 비면 오늘 그대로
 var violations: Array = []            # 테스트용: 규칙 위반 기록
 var basins_said: Array = []
 var _starve_day := -1
@@ -1908,7 +1909,10 @@ func _births(dt: float) -> void:
 			h = to
 			stats["moves"] += 1
 			log_line("%s의 가족이 더 넓은 집으로 옮겼다." % w.name)
-		if guarantee or (dt > 0.0 and fed and rng.randf() < day_rate_p(Balance.BIRTH_RATE * w.fert * env, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
+		var rate: float = Balance.BIRTH_RATE * w.fert * env
+		if birth_pace.is_valid():         # 재 보기용 훅 (기본은 비어 있음 — 값·난수 순서가 오늘과 같다)
+			rate *= float(birth_pace.call(self, w))
+		if guarantee or (dt > 0.0 and fed and rng.randf() < day_rate_p(rate, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
 			guarantee = false
 			_give_birth(w, h)
 			occ[h.id] = int(occ.get(h.id, 0)) + 1     # 아기도 그 집에 산다
@@ -3824,7 +3828,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "birth_pace"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)
