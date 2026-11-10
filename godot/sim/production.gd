@@ -38,6 +38,45 @@ static func food_total(v: Village) -> float:
 	return n + wheat_total(v) * Balance.PORRIDGE_YIELD
 
 
+## 배고픈 사람이 먹으러 갈 만큼 있는가 (2026-11-11 Q7-b · docs/measure/opening_food_b_2026-11-11.md): 먹을 수 있는 것(창고·밭 앞 + 창고로 오는 길)이 온 마을의 EAT_AT_HAND_HOURS 시간치 이상.
+## 없으면 '먹기'를 고르지 않는다 (ResidentAI.decide) — 빈 창고 앞에 모여 서서 밭·나르기·짓기가 멎던 고리를 끊는다. 밭에서 나는 대로 먹어 치우는 부스러기는 '있다'로 치지 않는다
+static func food_at_hand(v: Village) -> bool:
+	var want := day_need(v) * Balance.EAT_AT_HAND_HOURS / 24.0
+	return food_total(v) >= want or food_total(v) + food_on_way(v) >= want
+
+
+## 첫 며칠의 맨손 채집 때인가 (2026-11-11 Q7-b): 도착하고 FORAGE_FIRST_DAYS 날 안이고, 먹을 것(창고·밭 앞 + 창고로 오는 길)이 FORAGE_FIRST_FOOD_DAYS 날치 아래.
+## Village.forage_open이 연장 수와 상관없이 문을 열고, ResidentAI.decide가 채집 점수를 나르기·짓기보다 앞세운다 (OPENING 3.1 '건량 하루치 + 열매·버섯 조금 + 모닥불 죽')
+static func forage_first(v: Village) -> bool:
+	if v.t >= Balance.FORAGE_FIRST_DAYS * Balance.DAY or not bread_chain_built(v):
+		return false
+	return food_total(v) + food_on_way(v) < Balance.FORAGE_FIRST_FOOD_DAYS * day_need(v)
+
+
+## 맷돌간과 화덕이 다 섰는가 — 그 전에는 일손을 채집으로 빼지 않는다 (재 보니 한 사람만 빠져도 첫 빵이 둘째 날에서 셋째 날로 밀렸다)
+static func bread_chain_built(v: Village) -> bool:
+	var mill := false
+	var oven := false
+	for b in v.buildings:
+		if not b.built:
+			continue
+		if _grinds(b):
+			mill = true
+		var d := b.def()
+		if d.has("out") and (d["out"] as Dictionary).has("빵"):
+			oven = true
+	return mill and oven
+
+
+## 지금 바구니를 들고 나가 있는 사람 수 (r 빼고) — 첫 며칠의 맨손 채집은 FORAGE_FIRST_HANDS 사람까지만 앞세운다 (나머지는 짓기·나르기)
+static func foragers_out(v: Village, r: Resident) -> int:
+	var n := 0
+	for p in v.people:
+		if p != r and p.action == "forage" and not p.steps.is_empty():
+			n += 1
+	return n
+
+
 ## 창고 먹을 것 (밀 제외) — 다른 먹을 것이 이만큼 있으면 죽을 끓이지 않는다
 static func _take(v: Village, k: String, need: float) -> float:
 	var have := float(v.stock.get(k, 0.0))
@@ -113,8 +152,155 @@ static func _eat(v: Village, need: float) -> float:
 		if w > 0.0:
 			v.ate_porridge_t = v.t
 		need -= w * Balance.PORRIDGE_YIELD
+	if need > 1e-6:                       # (2026-11-11 Q7-b) 그래도 모자라면 창고로 오는 길의 것 — 수레의 밀·바구니 (맨 끝에)
+		need = _eat_way(v, need)
+	if need > 1e-6:                       # … 그것도 없으면 맷돌간에 부려 둔·맷돌간으로 가는 (아직 갈지 않은) 밀을 죽으로
+		need = _eat_mill(v, need)
 	v.manna_batches = v.manna_batches.filter(func(m: Dictionary) -> bool: return m["amt"] > 0.001)
 	return need if need > 1e-6 else 0.0     # 죽 나눗셈의 부스러기는 굶주림이 아니다
+
+
+# ───────────────────────── 창고로 오는 길의 먹을 것 (2026-11-11 Q7-b · docs/measure/opening_food_b_2026-11-11.md) ─────────────────────────
+## 나르는 사람이 창고에 내려놓으려고 잡은 먹을 것 — 밭·화덕 앞에서 덜어 낸 수레(ResidentAI._haul_out · work_task: "put" → "stock_add")와
+## 손에 든 채집 바구니("store_put"). 건물 앞에서는 떠날 때 이미 빠졌고 창고에는 아직 없어서, 재 보니 창고가 비는 아침은 대개
+## '밀은 있는데 길 위에 있어서'였다. 이 몫도 마을의 먹을 것으로 친다: 다른 것이 다 떨어졌을 때 맨 끝에 먹고, 먹은 만큼 내려놓을 짐이 준다.
+## 가공 건물(맷돌간·화덕) 입구로 가는 짐은 치지 않는다 (가루·빵이 될 몫). 사람 순서 · 걸음 순서대로 — 난수 없음.
+## 걸음 s가 그런 짐이면 물건 이름, 아니면 ""
+static func _way_kind(r: Resident, s: Dictionary) -> String:
+	if String(s.get("k", "")) != "do" or not (s.get("done") is Dictionary):
+		return ""
+	var d: Dictionary = s["done"]
+	var k := ""
+	match String(d.get("op", "")):
+		"put":
+			var drop: Variant = d.get("drop")
+			if drop is Dictionary and String((drop as Dictionary).get("op", "")) == "stock_add" and float((drop as Dictionary).get("amt", 0.0)) > 0.0:
+				k = String((drop as Dictionary)["k"])
+		"store_put":
+			if r.carry_amt > 0.0 and r.carry == String(d.get("k", "")) and float(d.get("amt", 0.0)) <= 0.0:
+				k = r.carry
+	if k == Balance.PORRIDGE or k == "밀가루" or k in Balance.FOODS_ALL:
+		return k
+	return ""
+
+
+## 창고로 오는 길의 먹을 것 (식량 단위 — 밀·밀가루는 죽 값). food_total에는 넣지 않는다 (촌장·출산 문·화면이 보는 '창고'는 그대로)
+static func food_on_way(v: Village) -> float:
+	var n := 0.0
+	for r in v.people:
+		for s: Dictionary in r.steps:
+			var k := _way_kind(r, s)
+			if k == "":
+				continue
+			var amt := r.carry_amt if String(s["done"]["op"]) == "store_put" else float(s["done"]["drop"]["amt"])
+			n += amt * (Balance.PORRIDGE_YIELD if (k == Balance.PORRIDGE or k == "밀가루") else 1.0)
+	return n
+
+
+## 오는 길의 것을 먹는다 — 먹을 것(빵·버섯 …) 먼저, 그다음 밀·밀가루를 죽으로. 남은 못 먹은 양을 돌려준다
+static func _eat_way(v: Village, need: float) -> float:
+	for porridge: bool in [false, true]:
+		for r in v.people:
+			for i in r.steps.size():
+				if need <= 1e-6:
+					return need
+				var s: Dictionary = r.steps[i]
+				var k := _way_kind(r, s)
+				if k == "" or (k == Balance.PORRIDGE or k == "밀가루") != porridge:
+					continue
+				var d: Dictionary = s["done"]
+				var hand := String(d["op"]) == "store_put"
+				var have := r.carry_amt if hand else float(d["drop"]["amt"])
+				var yld := Balance.PORRIDGE_YIELD if porridge else 1.0
+				var take := minf(have, need / yld)
+				if take <= 0.0:
+					continue
+				need -= take * yld
+				if hand:
+					r.carry_amt = have - take
+				else:
+					var drop: Dictionary = d["drop"]
+					drop["amt"] = have - take
+					var c: Variant = s.get("cancel")          # 그만둘 때 되돌릴 양도 (저장했다 불러오면 내려놓기와 따로인 묶음)
+					if c is Dictionary and not is_same(c, drop) and String((c as Dictionary).get("op", "")) == "stock_add":
+						(c as Dictionary)["amt"] = have - take
+					var picked := true
+					for j in i:                               # 아직 집어 들기 전이면 집을 양을, 들었으면 든 양을 줄인다
+						var pd: Variant = (r.steps[j] as Dictionary).get("done")
+						if pd is Dictionary and String((pd as Dictionary).get("op", "")) == "pick" and String((pd as Dictionary).get("item", "")) == k:
+							(pd as Dictionary)["amt"] = have - take
+							picked = false
+					if picked and r.carry == k:
+						r.carry_amt = have - take
+				if porridge:
+					v.ate_porridge_t = v.t
+				elif k == "빵":
+					v.ate_bread_t = v.t
+				elif k == "꿀":
+					v.ate_honey_t = v.t
+	return need
+
+
+## 밀을 가루로 가는 건물인가 (맷돌간·방앗간)
+static func _grinds(b: Building) -> bool:
+	var d := b.def()
+	return d.has("in") and (d["in"] as Dictionary).has(Balance.PORRIDGE) and d.has("out") and (d["out"] as Dictionary).has("밀가루")
+
+
+## 맷돌간의 밀 (2026-11-11 Q7-b): 아직 갈지 않은 밀 — 입구에 부려 둔 것 먼저, 그다음 맷돌간으로 가는 수레. 굶기 직전의 맨 마지막 죽이다
+## (맷돌은 시간에 MILL 몫만 갈아서 한 수레가 몇 시간씩 입구에 쌓여 있다 — 재 보니 셋째 날 아침의 빈 창고는 '밤새 쌓인 밀이 통째로 맷돌간에 들어간 뒤'였다).
+## 화덕의 가루는 건드리지 않는다 (빵이 될 몫). 건물 순서 · 사람 순서 · 걸음 순서대로 — 난수 없음. 남은 못 먹은 양을 돌려준다
+static func _eat_mill(v: Village, need: float) -> float:
+	var k := Balance.PORRIDGE
+	var yld := Balance.PORRIDGE_YIELD
+	for b in v.buildings:
+		if need <= 1e-6:
+			return need
+		if not b.built or not _grinds(b):
+			continue
+		var have := float(b.in_buf.get(k, 0.0))
+		var take := minf(have, need / yld)
+		if take <= 0.0:
+			continue
+		b.in_buf[k] = have - take
+		if b.gift_in.has(k):                          # 먹은 만큼 받은 몫(거인이 준 몫)도 준다
+			b.gift_in[k] = minf(float(b.gift_in[k]), have - take)
+		need -= take * yld
+		v.ate_porridge_t = v.t
+	for r in v.people:
+		for i in r.steps.size():
+			if need <= 1e-6:
+				return need
+			var s: Dictionary = r.steps[i]
+			if String(s.get("k", "")) != "do" or not (s.get("done") is Dictionary) or String(s["done"].get("op", "")) != "put":
+				continue
+			var dv: Variant = s["done"].get("drop")
+			if not (dv is Dictionary) or String((dv as Dictionary).get("op", "")) != "inbuf_put" or String((dv as Dictionary).get("k", "")) != k:
+				continue
+			var drop: Dictionary = dv
+			var to: Building = drop["b"]
+			if to == null or not _grinds(to):
+				continue
+			var have := float(drop["amt"])
+			var take := minf(have, need / yld)
+			if take <= 0.0:
+				continue
+			need -= take * yld
+			to.in_inc[k] = maxf(0.0, float(to.in_inc.get(k, 0.0)) - take)
+			for dct: Variant in [drop, s.get("cancel")]:      # 내려놓을 양 · 그만둘 때 되돌릴 양 (같은 묶음일 수도, 불러온 뒤엔 따로일 수도)
+				if dct is Dictionary and String((dct as Dictionary).get("op", "")) in ["inbuf_put", "inbuf_undo"]:
+					(dct as Dictionary)["amt"] = have - take
+					(dct as Dictionary)["gift"] = minf(float((dct as Dictionary).get("gift", 0.0)), have - take)
+			var picked := true
+			for j in i:
+				var pd: Variant = (r.steps[j] as Dictionary).get("done")
+				if pd is Dictionary and String((pd as Dictionary).get("op", "")) == "pick" and String((pd as Dictionary).get("item", "")) == k:
+					(pd as Dictionary)["amt"] = have - take
+					picked = false
+			if picked and r.carry == k:
+				r.carry_amt = have - take
+			v.ate_porridge_t = v.t
+	return need
 
 
 ## 창고에서 상함 (새벽마다 하루 몫 — 표 하나 Balance.SPOIL_DAY, production-chain R4 · F4).
