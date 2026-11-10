@@ -87,6 +87,8 @@ var _infant := false
 var baby_mode := ""
 var toddle_clip := "idle"
 var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기 팔, 소품 없음)
+var baby_held := false           # 품에 정말 아기가 있음 (place_babies) — carry_baby만 켜진 것은 안아 주는 몸짓 (연출 hold)이라 아기 그림을 그리지 않음
+var baby_dye := Vector2i(-1, -1)  # 안긴 아기의 피부 · 머리카락 물감 (place_babies가 넣음 — 방식 C 인형의 아기 그림에 입힘, 화면만)
 var cradle: MeshInstance3D
 var minder_id := -1              # (Q2-b) 이 아기를 지금 보는 사람 (place_babies가 적음 — 없으면 -1: 문 옆)
 var _warp := Vector3(1, 1, 0)    # (Q2-b) 화면 몸짓: (키 배율, 폭 배율, 기울임) — set_body_warp
@@ -502,8 +504,18 @@ func set_body_lift(y := 0.0) -> void:
 ## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
 func _frames_ok() -> bool:
 	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
-	return on and not _baby and not carry_baby and String(dlook.get("body", "")) == "adult" \
-		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(FRAME_CLIPS[_d_clip]) >= 0
+	return on and not _baby and String(dlook.get("body", "")) == "adult" \
+		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(_frame_clip()) >= 0
+
+
+## 지금 동작의 장면 그림 이름. 아기를 안으면 (v13) 나르기 → 안고 걷기(cradle), 안고 서기 → 안고 서기(rock) — 그 밖의 동작은 아기 장면이 없어 컷아웃 인형
+func _frame_clip() -> String:
+	var fc: String = FRAME_CLIPS[_d_clip]
+	if carry_baby:
+		if not baby_held:
+			return ""                 # 안아 주는 몸짓 (연출): 아기 없는 안기 팔 → 컷아웃 인형 그대로
+		return "cradle" if fc == "carry" else ("rock" if fc == "hold" else "")
+	return fc
 
 
 func _refresh_frames() -> void:
@@ -527,10 +539,15 @@ func _refresh_frames() -> void:
 	if _d_hat != _f_hat:
 		_f_hat = _d_hat
 		fdoll.set_look(dlook, _d_hat)
-	var fc: String = FRAME_CLIPS[_d_clip]
-	fdoll.set_prop(_d_prop, _item_kind if fc == "carry" or fc == "hold" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
-	var rate: float = 0.0 if fc == "walk" or fc == "carry" else Lib.CLIP_RATE[fc]
-	if fc == "walk" or fc == "carry":
+	var fc := _frame_clip()
+	var walking := fc == "walk" or fc == "carry" or fc == "cradle"
+	if carry_baby:
+		fdoll.set_baby(baby_dye.x, baby_dye.y)
+		fdoll.set_prop(_d_prop, FrameLib.BABY_LOAD)      # v13: 품의 아기도 따로 그린 그림 (짐과 같은 식)
+	else:
+		fdoll.set_prop(_d_prop, _item_kind if fc == "carry" or fc == "hold" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
+	var rate: float = 0.0 if walking else Lib.CLIP_RATE["hold" if fc == "rock" else fc]
+	if walking:
 		var g := _ground
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait
@@ -559,7 +576,7 @@ func frame_load() -> String:
 
 ## 방식 C 발 붙이기 (frame_doll.gdshader lockv): 걸음 한 주기에 땅에서 가는 길 (세계) — 걷지 않거나 멈춘 보폭이면 0
 func g_cycle(fc: String, rate: float) -> float:
-	if rate <= 0.0 or not (fc == "walk" or fc == "carry"):
+	if rate <= 0.0 or not (fc == "walk" or fc == "carry" or fc == "cradle"):
 		return 0.0
 	return (_ground if _ground >= 0.0 else GROUND_NORMAL * _gait) / rate
 
@@ -648,6 +665,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 	for m: Variant in models.values():
 		if m is CutoutResident:
 			(m as CutoutResident).carry_baby = false
+			(m as CutoutResident).baby_held = false
 	var cam: Camera3D = null
 	for r: Resident in people:
 		if not r.is_baby() or r.dead:
@@ -679,6 +697,9 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 				carrier = best.id
 				taken[best.id] = true
 				pm.carry_baby = true
+				pm.baby_held = true
+				var bd: Array = bm.dlook.get("dye", [])
+				pm.baby_dye = Vector2i(int(bd[0]), int(bd[1])) if bd.size() >= 2 else Vector2i(-1, -1)
 				pm._refresh_doll()
 				pos = pm.position + pm.react_off       # [톡 반응] 폴짝 뛰는 부모 품에서 함께
 				yaw = pm.rotation.y
@@ -701,6 +722,10 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 				bm.toddle_clip = "sit"
 		bm.minder_id = carrier
 		bm.set_baby_mode(mode, pos, yaw, cam)
+		# 방식 C 부모(v13)는 품의 아기를 제 그림으로 그린다 → 아기의 컷아웃 인형은 숨김 (화면만 — 아기 노드·자리·고르기는 그대로)
+		var in_frames := mode == "carried" and (models[carrier] as CutoutResident)._f_on
+		if bm.doll != null and bm.doll.visible == in_frames:
+			bm.doll.visible = not in_frames
 		out[r.id] = {"mode": mode, "pos": pos, "carrier": carrier}
 	return out
 

@@ -21,6 +21,11 @@ const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6}
 ## 소품 (CutoutResident.CARRY_PROP, 없으면 바구니), 방식 C 인형은 그 짐의 그림. 없으면 밀가루.
 ## CUTC_TAG=flour: 띠 파일 이름에 붙임 (strip_tmp_flour_ppu20_carry_0.png) — 여러 번 찍어도 덮어쓰지 않게
 ## CUTC_MODE=loads: 방식 C 여자 여럿이 저마다 다른 짐을 지고 걷고·서 있는 장면 (loads_tmp_ppu<P>_<n>.png)
+## (2026-11-10 states6) CUTC_CLIPS="cradle,rock": 아기 안기 띠 — 위 줄(옛 인형)은 안기 팔만 (옛 인형의 아기는 따로 얹는 작은 인형 — 가족 장면에서 봄),
+##   아래 줄은 아기 안기 장면 + 아기 그림. CUTC_BABY="3,9;5,12": 칸마다 차례로 아기의 피부·머리카락 물감 (없으면 그린 색)
+## CUTC_HEAD=1: 띠 두 인형의 머리 묶음 (0 = a, 1 = b) · CUTC_HAT=1: 모자 (묶음 번호 — 1·4 = 챙 넓은 모자)
+## CUTC_MODE=family: 집 앞 마을 장면 — 왼쪽 셋은 옛 인형, 오른쪽 셋은 방식 C (같은 생김새): 자는 사람 · 아기를 안고 선 사람 · 아기를 안고 걷는 사람
+##   (바라보는 쪽을 앞·비스듬한 앞·비스듬한 뒤·뒤로 돌려 가며 family_tmp_ppu<P>_<n>.png 네 장)
 const LOAD_KINDS := ["밀", "밀가루", "빵", "통나무", "판자", "돌", "물", "낟알", "과일", "생선", "솜", "버섯"]
 const SP := 0.7            # 띠의 칸 간격 (세계)
 const ROW := 1.5          # 위·아래 줄의 깊이 차 (세계, 카메라 쪽)
@@ -76,9 +81,12 @@ func _initialize() -> void:
 	if mode == "loads":
 		for lp in [20.0, 44.0]:
 			plan.append_array([_loads_setup.bind(float(lp)), _loads_loop])
+	elif mode == "family":
+		for lp in [20.0, 44.0]:
+			plan.append_array([_family_setup.bind(float(lp)), _family_loop])
 	elif mode != "live":
 		plan.append_array([_strip_setup, _strip_loop])
-	if mode != "strip" and mode != "loads":
+	if mode != "strip" and mode != "loads" and mode != "family":
 		# CUTC_PPUS="20,44,60" (2026-11-10): 라이브 사진의 확대 (기본 44·60) — 실제 기본 확대(ppu 20)에서 두 발이 읽히는지 볼 때
 		var lps: Array = [44.0, 60.0]
 		if OS.get_environment("CUTC_PPUS") != "":
@@ -257,6 +265,12 @@ func _strip_setup(_dt: float) -> int:
 		for t in OS.get_environment("CUTC_DYE").split(","):
 			dd.append(int(t))
 		look["dye"] = dd
+	var hat := -1
+	if OS.get_environment("CUTC_HEAD") != "":
+		look["head"] = int(OS.get_environment("CUTC_HEAD"))
+	if OS.get_environment("CUTC_HAT") != "":
+		hat = int(OS.get_environment("CUTC_HAT"))
+		look["hat"] = hat
 	var pal: PackedVector3Array = CutoutResident.game_material().get_shader_parameter("palette")
 	for i in 8:
 		var o: MeshInstance3D = Doll.new()
@@ -267,7 +281,7 @@ func _strip_setup(_dt: float) -> int:
 		var n: MeshInstance3D = FDoll.new()
 		n.setup(FLib.material(pal))
 		scene.view.add_child(n)
-		n.set_look(look, -1)
+		n.set_look(look, hat)
 		news.append(n)
 	return 2
 
@@ -307,6 +321,12 @@ func _strip_loop(_dt: float) -> int:
 				ph = (float(i % 4) + 0.5) / 4.0
 			if clip == "sleep":
 				ph = (float(i % 4) + 0.5) / 4.0
+			var baby_clip := clip == "cradle" or clip == "rock"         # states6: 아기 안기 (옛 인형 = 안기 팔만)
+			if clip == "cradle":
+				oc = "carry"
+			if clip == "rock":
+				oc = "hold"
+				ph = (float(i % 4) + 0.5) / 4.0
 			o.visible = clip != "sleep" or i < 4
 			o.view = view
 			o.mirror = 1.0
@@ -314,7 +334,9 @@ func _strip_loop(_dt: float) -> int:
 			if oc == "hoe" and OS.get_environment("CUTC_PROP") != "":
 				pr = int(OS.get_environment("CUTC_PROP"))
 			var kind := ""
-			if oc == "carry" or oc == "hold":
+			if baby_clip:
+				pr = -1
+			elif oc == "carry" or oc == "hold":
 				kind = kinds[i % kinds.size()]
 				pr = int(CutoutResident.CARRY_PROP.get(kind, CutoutResident.PROP_BASKET))
 			o.set_prop(pr)
@@ -323,7 +345,16 @@ func _strip_loop(_dt: float) -> int:
 			n.mirror = 1.0
 			n.visible = FLib.clip_index(nc) >= 0 and (clip != "sleep" or i < 4)         # 아직 그리지 않은 동작은 아래 줄을 비움
 			if n.visible:
-				n.set_prop(pr if kind == "" else -1, kind)
+				if baby_clip:
+					var bd := Vector2i(-1, -1)
+					if OS.get_environment("CUTC_BABY") != "":
+						var prs: PackedStringArray = OS.get_environment("CUTC_BABY").split(";")
+						var one: PackedStringArray = prs[i % prs.size()].split(",")
+						bd = Vector2i(int(one[0]), int(one[1]))
+					n.set_baby(bd.x, bd.y)
+					n.set_prop(-1, FLib.BABY_LOAD)
+				else:
+					n.set_prop(pr if kind == "" else -1, kind)
 				n.set_clip(nc, 0.0, ph)
 		_pending = j
 		_hid_pass = false
@@ -480,6 +511,133 @@ func _loads_loop(_dt: float) -> int:
 		var ri := Rect2i(r.grow(6.0)).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
 		img.get_region(ri).save_png(out_dir.path_join("loads_tmp_ppu%d_%d.png" % [int(_ppu), _cap_n]))
 		print("saved loads_tmp_ppu%d_%d.png " % [int(_ppu), _cap_n], ri)
+		_cap_n += 1
+	return -1
+
+
+# ───────────────────────── (d) 가족 장면 (states6) ─────────────────────────
+var _fam: Array = []           # [Resident, 자리 (P 기준: 오른쪽, 카메라 쪽), 구실 "sleep"/"hold"/"walk", 방식 C?]
+var _fam_p := Vector2.ZERO
+const FAM_T := 1.6             # 바라보는 쪽 하나에 머무는 시간 (초)
+const FAM_HEADS := [0.0, 60.0, 130.0, 180.0]
+
+
+## 집 앞: 왼쪽 셋 = 옛 인형, 오른쪽 셋 = 방식 C. 자는 사람 (뒤 줄) · 아기를 안고 선 사람 (가운데) · 아기를 안고 걷는 사람 (앞 줄, 챙 넓은 모자)
+func _family_setup(_dt: float, ppu: float) -> int:
+	_ppu = ppu
+	var ax := _cam_axes()
+	var right: Vector2 = ax[0]
+	var toward: Vector2 = ax[1]
+	if _fam.is_empty():
+		var hm: Building = null
+		for b in v.buildings:
+			if b.type == "목조주택" and (hm == null or Vector2(b.x, b.y).distance_to(C) < Vector2(hm.x, hm.y).distance_to(C)):
+				hm = b
+		_fam_p = Vector2(hm.x, hm.y) + toward * (hm.size() * 0.5 + 2.2)
+		var moms := {}
+		for q: Resident in v.people:
+			if q.is_baby():
+				for pid in q.parents:
+					moms[pid] = true
+		var ws: Array[Resident] = []
+		for r: Resident in v.people:
+			if r.sex == "f" and r.is_adult() and not r.sleeping and not moms.has(r.id) and ws.size() < 6:
+				ws.append(r)
+		var rng := RandomNumberGenerator.new()
+		rng.seed = 13
+		while ws.size() < 6:
+			ws.append(v.add_person("가족%d" % ws.size(), "f", rng.randf_range(6.0, 15.0), "", _fam_p.x, _fam_p.y, null, null))
+		var spots := [Vector2(-2.3, -0.9), Vector2(-2.6, 0.2), Vector2(-1.2, 1.0), Vector2(1.3, -0.9), Vector2(1.0, 0.2), Vector2(2.4, 1.0)]
+		var roles := ["sleep", "hold", "walk", "sleep", "hold", "walk"]
+		for i in 6:
+			_fam.append([ws[i], spots[i], roles[i], i >= 3])
+			if roles[i] != "sleep":
+				var q: Vector2 = _fam_p + right * (spots[i] as Vector2).x + toward * (spots[i] as Vector2).y
+				var b := v.add_person("품아기%d" % i, "f", 0.12, "", q.x, q.y, null, null)
+				b.parents = PackedInt32Array([ws[i].id])
+				b.home = hm.id
+		# 둘레에 서 있던 다른 사람은 사진 밖으로 (자리만 — 사진용)
+		for r: Resident in v.people:
+			if not ws.has(r) and not r.is_baby() and Vector2(r.x, r.y).distance_to(_fam_p) < 4.5:
+				r.x += 9.0
+				r.px = r.x
+		scene.refresh()
+	_look(_fam_p, ppu)
+	_lt = 0.0
+	_cap_n = 0
+	_family_place(0.0)
+	scene.view.sync(0.0, true)
+	var src: Dictionary = (scene.view.residents[(_fam[0][0] as Resident).id] as CutoutResident).dlook.duplicate(true)
+	src["personal"] = 0
+	for i in 6:
+		var e: Array = _fam[i]
+		var m := scene.view.residents[(e[0] as Resident).id] as CutoutResident
+		m.dlook = src.duplicate(true)
+		m.dlook["head"] = 1 if String(e[2]) == "hold" else 0          # 머리 묶음 a (자는 사람·걷는 사람) · b (선 사람)
+		m.dlook["hat"] = 1 if String(e[2]) == "walk" else -1          # 걷는 사람: 챙 넓은 모자
+		m._d_outfit = -2
+		m._d_hat = -2
+		m._d_prop = -2
+		m._f_hat = -9
+		m.frames_force = 1 if bool(e[3]) else 0
+		m.doll.set_look(m.dlook)
+	print("family ppu%d at %s" % [int(ppu), _fam_p])
+	for cl in scene.find_children("*", "CanvasLayer", true, false):
+		(cl as CanvasLayer).visible = false
+	_live_hide = 10
+	return 20
+
+
+func _family_place(t: float) -> void:
+	var ax := _cam_axes()
+	var k := mini(int(t / FAM_T), FAM_HEADS.size() - 1)
+	var d: Vector2 = (ax[1] as Vector2).rotated(-deg_to_rad(float(FAM_HEADS[k])))
+	for e: Array in _fam:
+		var r: Resident = e[0]
+		var q: Vector2 = _fam_p + (ax[0] as Vector2) * (e[1] as Vector2).x + (ax[1] as Vector2) * (e[1] as Vector2).y
+		var role := String(e[2])
+		if role == "walk":
+			q += d * Balance.WALK_SCREEN * (t - (float(k) + 0.5) * FAM_T)
+		r.x = q.x
+		r.y = q.y
+		r.px = q.x
+		r.py = q.y
+		r.anim = "sleep" if role == "sleep" else ("walk" if role == "walk" else "idle")
+		r.sleeping = role == "sleep"
+		r.carry = ""
+		r.action = ""
+		r.facing = atan2(d.x, d.y)
+
+
+func _family_loop(_dt: float) -> int:
+	if _live_hide > 0:
+		_live_hide -= 1
+		if _live_hide == 0:
+			_flora(false)
+		_family_place(0.0)
+		return -1
+	_lt += 1.0 / 60.0
+	_family_place(_lt)
+	if _lt >= FAM_T * FAM_HEADS.size():
+		return 4
+	if int(_lt * 60.0 + 0.5) % int(FAM_T * 60.0) == int(FAM_T * 60.0 * 0.6):
+		var img := vp.get_texture().get_image()
+		var cam: Camera3D = scene.cam.camera
+		var ax := _cam_axes()
+		var r := Rect2()
+		var first := true
+		for corner in [Vector2(-3.6, -2.2), Vector2(3.6, -2.2), Vector2(-3.6, 1.9), Vector2(3.6, 1.9)]:
+			var p: Vector2 = _fam_p + (ax[0] as Vector2) * corner.x + (ax[1] as Vector2) * corner.y
+			for hh in [0.0, 1.3]:
+				var sp: Vector2 = cam.unproject_position(_g3(p) + Vector3(0, float(hh), 0)) * 3.0
+				if first:
+					r = Rect2(sp, Vector2.ZERO)
+					first = false
+				else:
+					r = r.expand(sp)
+		var ri := Rect2i(r.grow(6.0)).intersection(Rect2i(Vector2i.ZERO, img.get_size()))
+		img.get_region(ri).save_png(out_dir.path_join("family_tmp_ppu%d_%d.png" % [int(_ppu), _cap_n]))
+		print("saved family_tmp_ppu%d_%d.png " % [int(_ppu), _cap_n], ri)
 		_cap_n += 1
 	return -1
 

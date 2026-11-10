@@ -41,16 +41,40 @@ PX_PER_RIG = 0.2       # atlas texel density (figure ~920 rig -> ~185 px; at ppu
 # clips in the atlas: (name, sheet, cells)
 # v12 (states5): carry / hold are drawn with EMPTY arms in the carry pose (carry_<view>.png, hold_<view>.png rows 2) — the load is
 # an overlay picture chosen by what she carries (LOADS below), so wheat, flour and bread read differently
+# v13 (states6): cradle (walking with a baby in her arms) / rock (standing with it) — the carry / hold sheets redrawn whole with
+# the arms cradling in front of the chest (prompts.py REDRAW_SHEETS); the baby bundle is its own picture (BABY_PIC below)
 CLIPS = [("walk", "walk", list(range(8))), ("carry", "carry", list(range(8))),
-         ("idle", "idle", [0, 1, 2, 3]), ("hold", "hold", [4, 5, 6, 7])]
+         ("idle", "idle", [0, 1, 2, 3]), ("hold", "hold", [4, 5, 6, 7]),
+         ("cradle", "cradle", list(range(8))), ("rock", "rock", [4, 5, 6, 7])]
+LOAD_CLIPS = ("carry", "hold")       # a load picture on the shoulder
+BABY_CLIPS = ("cradle", "rock")      # the baby picture in the arms
+ARM_CLIPS = LOAD_CLIPS + BABY_CLIPS  # traced sheets whose arms hold something (front views: hands drawn again over it)
+GAIT_OF = {"cradle": "carry"}        # legs traced from that clip's sheets (stride, boot check)
 # load pictures: raw/props_a.png, props_b.png (prompts.py PROP_SHEETS: 8 objects per sheet, cut by blob) -> (name, longer side in rig)
-LOAD_SHEETS = ["props_a", "props_b"]
+LOAD_SHEETS = ["props_a", "props_b", "props_c"]
 LOAD_SIZE = {"flour": 330, "wheat": 390, "bread": 300, "logs": 300, "planks": 300, "stone": 250, "tools": 350, "water": 290,
              "grain": 330, "fruit": 290, "fish": 320, "meat": 300, "cotton": 300, "basket": 280, "silk": 290, "jar": 300}
 # where the load sits, per view: (dx, dy px from the chin anchor to the load's bottom centre — image x right, y DOWN; lean rad, + = top
 # to the image left). Front views: on her right shoulder at the image left, its bottom in the fist under it (the fists are drawn
 # again over the load: mask1.B). Back views: behind her shoulder at the image right, the raised hand against its side.
-LOAD_SEAT = {"front": (-104.0, 58.0, -0.1), "q_front": (-102.0, 62.0, -0.1), "q_back": (118.0, 30.0, 0.1), "back": (122.0, 24.0, 0.1)}
+# v13: 4th value = scale of the whole picture. Back views ("small, a wide-brim hat hides most of one" at ppu 20): the load sits
+# further out and lower — beside the shoulder and the raised hand, clear of a hat brim — and a little bigger. Whole-picture
+# transform only (the hat is not shrunk, nothing is cut).
+LOAD_SEAT = {"front": (-104.0, 58.0, -0.1, 1.0), "q_front": (-102.0, 62.0, -0.1, 1.0),
+             "q_back": (132.0, 66.0, 0.16, 1.15), "back": (136.0, 62.0, 0.16, 1.15)}
+# v13 the baby in arms: which props_c picture each view shows, its longer side (rig) and its seat (same form as LOAD_SEAT: the
+# picture's bottom centre from the chin anchor). Front views: the bundle lies on the crossed forearms, which are drawn again over
+# its lower edge (mask1.B); back views: behind the body, the head end peeking out at her side.
+BABY_PIC = {"front": "baby_b", "q_front": "baby_b", "q_back": "baby_back", "back": "baby_back"}
+BABY_SIZE = 250.0
+BABY_SEAT = {"front": (12.0, 96.0, 0.0, 0.92), "q_front": (40.0, 90.0, 0.0, 1.0), "q_back": (62.0, 86.0, 0.0, 1.0), "back": (68.0, 86.0, 0.0, 1.0)}
+# v13 closed eyes (sleep): a small eyelid picture per head set, laid over the front head piece of the old cutout library
+LID_SETS = ("a", "b")
+LID_W = 1.1            # half width of the closed-eye line, in open-eye widths
+LID_SAG = 5.0          # rig: how far the middle of the line hangs below its ends
+LID_TH = 10.0          # rig: line thickness
+LID_PX = 0.6           # px per head rig
+LID_LAYER = 0.5        # above the head piece's layer (half a layer, like the hands-over-load overlay), below the hat (+1)
 HANDS_OVER = ("front", "q_front")      # views whose hands are drawn again over the load
 LOOK_LIFT = 100.0      # look up (front view): the head lifts this many rig per rad of tilt while it leans back about the chin
 LIE_ANGLE = 1.5708     # sleep: the whole doll is laid on its side by the shader (head to the image left)
@@ -331,6 +355,7 @@ def foot_errors(rgb, a, far, sheet, i):
     """{R: dx px | '.' swing | '?' hidden, L: ...} — drawn boot blob centre x vs the reference sheet's boot blob centre x, both the
     visible part only (3/4 traced sheets only; diagnostic, nothing is moved)"""
     clip, view = sheet.split("_", 1)
+    clip = GAIT_OF.get(clip, clip)
     if view not in ("q_front", "q_back") or clip not in PR.GAIT or not POSE_SHEETS:
         return {}
     L = luma(rgb)
@@ -356,7 +381,8 @@ def foot_errors(rgb, a, far, sheet, i):
 
 
 def load_pictures():
-    """v12: the load pictures of raw/props_*.png -> [(name, RGBA float array at atlas density)], in sheet order.
+    """v12: the load pictures of raw/props_*.png -> [(name, RGBA float array at atlas density, dye mask | None)], in sheet order.
+    v13: props_c = the baby bundle (only the pictures of BABY_PIC go in), with a mask (skin, hair) so the baby takes its own colours.
     The model does not keep a strict grid, so the 8 objects of a sheet are its 8 biggest blobs (small loose bits join the nearest
     one), read row by row. Each picture is drawn whole — nothing is cut out of or pasted into it."""
     out = []
@@ -378,7 +404,10 @@ def load_pictures():
         for (name, _desc), (_b, bx) in zip(PT.PROP_SHEETS[sname], items):
             x0, y0, x1, y1 = bx[0] * 2 - 3, bx[1] * 2 - 3, bx[2] * 2 + 5, bx[3] * 2 + 5
             crop = rgba[max(y0, 0):y1, max(x0, 0):x1].copy()
-            k = LOAD_SIZE[name] * PX_PER_RIG / max(crop.shape[0], crop.shape[1])
+            baby = name.startswith("baby")
+            if baby and name not in BABY_PIC.values():
+                continue
+            k = (BABY_SIZE if baby else LOAD_SIZE[name]) * PX_PER_RIG / max(crop.shape[0], crop.shape[1])
             w, h = max(2, int(round(crop.shape[1] * k))), max(2, int(round(crop.shape[0] * k)))
             pm = crop.copy(); pm[..., :3] *= pm[..., 3:4] / 255.0
             chans = [np.asarray(Image.fromarray(np.ascontiguousarray(pm[..., i]), "F").resize((w, h), Image.BOX)) for i in range(4)]
@@ -386,13 +415,148 @@ def load_pictures():
             col = np.where(al[..., None] > 1, np.dstack(chans[:3]) / np.maximum(al[..., None], 1) * 255.0, 0)
             pic = np.zeros((h + 2, w + 2, 4), np.float32)          # 1 px clear rim (mipmaps)
             pic[1:-1, 1:-1] = np.dstack([col, al])
-            out.append((name, pic))
+            msk = None
+            if baby:
+                # skin (face, ear) and hair of the baby -> dyed with the baby's own colours; blanket and ink stay as drawn.
+                # Hair = brown areas that survive a 1 px erosion (the anti-aliased rim between ink and skin does not); in a picture
+                # with a face only the big ones (the curl), not the two closed-eye lines.
+                cr, cb, cl = crop[..., 0], crop[..., 2], luma(crop[..., :3])
+                op = crop[..., 3] > 128
+                skin = op & (cr - cb > 70) & (cr > 150) & (cl > 120)
+                brown = op & (cr - cb > 40) & (cl > 60) & (cl < 130) & ~skin
+                core = ~dilate(~brown, 1)
+                comps = blobs(core, 12)
+                face = "back" not in name and name != "baby_f"
+                hair = np.zeros_like(op)
+                for n_, _cy, _cx, _bx, m_ in comps:
+                    if n_ >= (0.5 * comps[0][0] if face else 40):
+                        hair |= dilate(m_, 2) & brown
+                print(f"  {name}: skin {int(skin.sum())} px, brown areas {[c_[0] for c_ in comps]} -> hair {int(hair.sum())} px")
+                mm = np.dstack([skin, hair]).astype(np.float32) * crop[..., 3:4]
+                mr = [np.asarray(Image.fromarray(np.ascontiguousarray(mm[..., i]), "F").resize((w, h), Image.BOX)) for i in range(2)]
+                msk = np.zeros((h + 2, w + 2, 2), np.float32)
+                msk[1:-1, 1:-1] = np.dstack(mr)
+                BABY_BASE[name] = (np.median(crop[skin][:, :3], 0), np.median(crop[hair][:, :3], 0) if hair.any() else None)
+            out.append((name, pic, msk))
+    return out
+
+
+BABY_BASE = {}      # picture name -> (skin rgb, hair rgb) as drawn
+
+
+def lid_pictures(skin_base=None):
+    """v13 closed eyes for the sleep clip: per head set (LID_SETS) one small picture laid over the FRONT head piece of the old
+    cutout library (art/cutout/woman_a) — over each eye a patch of that face's own skin colour and on it a closed-eye line
+    (a soft U, in the eye's own dark colour). Drawn here from scratch; nothing is copied from another frame.
+    -> [(set, pic RGBA float, skin mask, rect [x0, y0, x1, y1] head rig (chin origin, y up), layer)]
+    skin_base = the body sheets' skin base colour: the patch is stored relative to it, so the body skin dye (c * dye / base) gives
+    exactly the colour the head piece gets from its own base."""
+    cut = os.path.normpath(os.path.join(ART, "..", "woman_a"))
+    L = json.load(open(os.path.join(cut, "doll_lib.json")))
+    at = np.asarray(Image.open(os.path.join(cut, "doll_atlas.png")).convert("RGBA")).astype(np.float32)
+    H_, W_ = at.shape[:2]
+    out = []
+    for sname in LID_SETS:
+        best = None
+        for q in L["quads"]:
+            if int(q["group"]) != 1 or int(q["view"]) != 0 or q["set"] != sname:
+                continue
+            u0, v0, u1, v1 = [int(round(t)) for t in (q["uv"][0] * W_, q["uv"][1] * H_, q["uv"][2] * W_, q["uv"][3] * H_)]
+            crop = at[v0:v1, u0:u1]
+            if crop.shape[0] < 40 or crop.shape[1] < 40:
+                continue
+            L_ = luma(crop[..., :3])
+            dark = (crop[..., 3] > 128) & (L_ < 95)
+            cand = []
+            for n_, cy, cx, bx, m_ in blobs(dark, 8):
+                bw, bh = bx[2] - bx[0] + 1, bx[3] - bx[1] + 1
+                if n_ > 400 or n_ < 0.55 * bw * bh or not 0.4 < bw / bh < 1.8:
+                    continue
+                cand.append((n_, cy, cx, bx, m_))
+            pair = None
+            for i in range(len(cand)):
+                for j in range(i + 1, len(cand)):
+                    a_, b_ = cand[i], cand[j]
+                    eh = max(a_[3][3] - a_[3][1], b_[3][3] - b_[3][1]) + 1
+                    if abs(a_[1] - b_[1]) < 0.3 * eh and max(a_[0], b_[0]) < 1.6 * min(a_[0], b_[0]) and abs(a_[2] - b_[2]) > 2.0 * eh * 0.5:
+                        if pair is None or a_[0] + b_[0] > pair[0][0] + pair[1][0]:
+                            pair = (a_, b_)
+            if pair and (best is None or pair[0][0] + pair[1][0] > best[0][0][0] + best[0][1][0]):
+                best = (pair, q, crop, L_)
+        if best is None:
+            print(f"  WARNING lids: no eyes found on the front head of set {sname}")
+            continue
+        pair, q, crop, L_ = best
+        rx0, ry0, rx1, ry1 = q["rect"]
+        dx = crop.shape[1] / (rx1 - rx0)        # atlas px per rig
+        dy = crop.shape[0] / (ry1 - ry0)
+        eyes = []
+        for n_, cy, cx, bx, m_ in pair:
+            ring = dilate(m_, 5) & ~dilate(m_, 2) & (crop[..., 3] > 128) & (L_ > 140)
+            skin = np.median(crop[ring][:, :3], 0)
+            ink = np.median(crop[m_ & (L_ <= np.median(L_[m_]))][:, :3], 0)
+            eyes.append(dict(cx=rx0 + (bx[0] + bx[2] + 1) * 0.5 / dx, cy=ry1 - (bx[1] + bx[3] + 1) * 0.5 / dy,
+                             w=(bx[2] - bx[0] + 1) / dx, h=(bx[3] - bx[1] + 1) / dy, skin=skin, ink=ink))
+        M = 5.0                                  # rig: the patch reaches this far past the eye (its anti-aliased rim)
+        x0 = min(e["cx"] - e["w"] * LID_W for e in eyes) - M - 2
+        x1 = max(e["cx"] + e["w"] * LID_W for e in eyes) + M + 2
+        y0 = min(e["cy"] - e["h"] * 0.5 for e in eyes) - M - 2
+        y1 = max(e["cy"] + e["h"] * 0.5 for e in eyes) + M + 2
+        w, h = int(np.ceil((x1 - x0) * LID_PX)), int(np.ceil((y1 - y0) * LID_PX))
+        SS = 4
+        yy, xx = np.mgrid[0:h * SS, 0:w * SS]
+        X = x0 + (xx + 0.5) / (SS * LID_PX)
+        Y = y1 - (yy + 0.5) / (SS * LID_PX)
+        col = np.zeros((h * SS, w * SS, 3), np.float32)
+        al = np.zeros((h * SS, w * SS), np.float32)
+        sk = np.zeros((h * SS, w * SS), np.float32)
+        ratio = np.ones(3) if skin_base is None else np.asarray(skin_base, np.float64) / np.array(
+            [int(L["base"][sname]["skin"][i:i + 2], 16) for i in (0, 2, 4)], np.float64)
+        for e in eyes:
+            patch = ((X - e["cx"]) / (e["w"] * 0.5 + M)) ** 2 + ((Y - e["cy"]) / (e["h"] * 0.5 + M)) ** 2 <= 1.0
+            col[patch] = np.clip(e["skin"] * ratio, 0, 255)
+            al[patch] = 255.0
+            sk[patch] = 255.0
+            # the closed eye: a long thin lash line (ends up a little, middle low), round ends. First take (a U as wide as the
+            # open eye, 7 rig thick) came out as a 3 x 2 px blob on screen = the open eye's dot again; it has to be clearly WIDER
+            # and THINNER than the open eye to read as shut (about 5 x 1 px at ppu 44).
+            hw, sag, th = e["w"] * LID_W, LID_SAG, LID_TH
+            yb = e["cy"] - e["h"] * 0.2
+            t = np.clip((X - e["cx"]) / hw, -1.0, 1.0)
+            fy = yb + sag * t * t
+            slope = 2.0 * sag * t / hw
+            d = np.where(np.abs(X - e["cx"]) <= hw, np.abs(Y - fy) / np.sqrt(1.0 + slope * slope),
+                         np.sqrt((np.abs(X - e["cx"]) - hw) ** 2 + (Y - (yb + sag)) ** 2))
+            line = d <= th * 0.5
+            col[line] = e["ink"]
+            al[line] = 255.0
+            sk[line] = 0.0
+        fill = np.clip(np.mean([e["skin"] for e in eyes], 0) * ratio, 0, 255)
+
+        def down(a_):
+            return a_.reshape(h, SS, w, SS).mean((1, 3))
+        a_s = down(al)
+        pm = np.dstack([down(col[..., i] * al / 255.0) for i in range(3)])
+        rgb = np.where(a_s[..., None] > 1, pm / np.maximum(a_s[..., None], 1) * 255.0, fill[None, None])
+        pic = np.zeros((h + 2, w + 2, 4), np.float32)
+        pic[..., :3] = fill
+        pic[1:-1, 1:-1] = np.dstack([rgb, a_s])
+        msk = np.zeros((h + 2, w + 2, 2), np.float32)
+        msk[1:-1, 1:-1, 0] = down(sk)
+        rect = [x0 - 1.0 / LID_PX, y0 - 1.0 / LID_PX, x1 + 1.0 / LID_PX, y0 - 1.0 / LID_PX + (h + 2) / LID_PX]
+        rect[2] = rect[0] + (w + 2) / LID_PX
+        # y: the picture's top row is y1 (+ rim) — recompute the bottom from the pixel height so texels stay square
+        rect[3] = y1 + 1.0 / LID_PX
+        rect[1] = rect[3] - (h + 2) / LID_PX
+        if skin_base is not None:
+            print(f"  lids {sname}: eyes at {[(round(e['cx']), round(e['cy']), round(e['w']), round(e['h'])) for e in eyes]} rig, picture {w + 2}x{h + 2}")
+        out.append((sname, pic, msk, [round(float(t), 2) for t in rect], float(q["layer"]) + LID_LAYER))
     return out
 
 
 def main():
     sheets = {}
-    for clip in ["walk", "carry", "idle", "hold"]:
+    for clip in ["walk", "carry", "idle", "hold", "cradle", "rock"]:
         for v in VIEWS:
             p = os.path.join(RAW, f"{clip}_{v}.png")
             if os.path.exists(p):
@@ -425,7 +589,7 @@ def main():
     for name, frs in sheets.items():
         clip_n, view_n = name.split("_", 1)
         state = name in PS.SHEETS
-        pose = state or (POSE_SHEETS and (clip_n in ("walk", "carry", "hold") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS)))
+        pose = state or (POSE_SHEETS and (clip_n in ("walk", "carry", "hold", "cradle", "rock") or (clip_n == "idle" and view_n in IDLE_POSE_VIEWS)))
         dmed = float(np.median([f["head"]["d"] for f in frs]))
         if state:
             # v11: traced from pose_states.py puppets — the same template scale and root; the head moves per pose
@@ -513,11 +677,12 @@ def main():
     # v12 load pictures: shelf-packed (tallest first) into the unused end of the last cell row; a strip under the cells if they
     # do not fit there
     loads = load_pictures()
+    loads += [("lid_" + ls[0], ls[1], ls[2]) for ls in lid_pictures()]      # sizes only here; colours once the skin base is known
 
     def pack(width):
         x = y = shelf = 0
         at = {}
-        for name_, pic_ in sorted(loads, key=lambda t: -t[1].shape[0]):
+        for name_, pic_, _msk in sorted(loads, key=lambda t: -t[1].shape[0]):
             ph_, pw_ = pic_.shape[:2]
             if x + pw_ + 2 > width:
                 x, y, shelf = 0, y + shelf + 2, 0
@@ -565,7 +730,7 @@ def main():
         m0[ay0:ay0 + ch, ax0:ax0 + cw] = oh[..., [0, 1, 2, 3]]
         m1[ay0:ay0 + ch, ax0:ax0 + cw, :2] = oh[..., [4, 5]]
         sheet_clip, sheet_view = sheet.split("_", 1)
-        if sheet_clip in ("carry", "hold") and sheet_view in HANDS_OVER:
+        if sheet_clip in ARM_CLIPS and sheet_view in HANDS_OVER:
             # v12: the hands and forearms (skin + their ink outline) are drawn once more over the load picture, so she HOLDS it
             skin_m = (lab == 1) & (f["a"] > 128)
             hand_m = dilate(skin_m, 4) & (f["a"] > 128) & ((lab == 1) | (luma(f["rgb"]) < 110))
@@ -604,11 +769,11 @@ def main():
             key = (clip, v)
             fr["t0"] = pos.get(key, 0) / len(CLIP_CELLS[clip])
             pos[key] = pos.get(key, 0) + 1
-            if clip in ("carry", "hold"):
+            if clip in ARM_CLIPS:
                 # v12: the load overlay's seat (bottom centre of the load picture, rig) — it rides on the frame's chin anchor, so
-                # it bobs with the drawn body (the drawn fists stay within 3 px of the chin in every frame)
-                dx, dy, lean = LOAD_SEAT[v]
-                fr["prop"] = [lean, round(fr["head"][0] + dx * it["k"], 1), round(fr["head"][1] - dy * it["k"], 1), 1.0, 0.0]
+                # it bobs with the drawn body (the drawn fists stay within 3 px of the chin in every frame). v13: the baby too.
+                dx, dy, lean, sc = (BABY_SEAT if clip in BABY_CLIPS else LOAD_SEAT)[v]
+                fr["prop"] = [lean, round(fr["head"][0] + dx * it["k"], 1), round(fr["head"][1] - dy * it["k"], 1), sc, 0.0]
         else:
             fr["t0"] = t0
             fr["pose"] = pose_n
@@ -629,6 +794,7 @@ def main():
                 fr["head"] = [fr["head"][0], round(fr["head"][1] - 60.0 * abs(dang), 1)]
             if clip in PS.LIE:
                 fr["lie"] = LIE_ANGLE
+                fr["shut"] = 1.0          # v13: asleep = eyes closed (the lid picture of her head set is shown)
             if clip in PS.PROP and inf["grip"] is not None:
                 # the drawn fists (skin blobs next to the puppet's fists); a fist hidden by the body falls back to the puppet's
                 skin = (it["lab"] == 1) & (it["f"]["a"] > 128)
@@ -663,7 +829,7 @@ def main():
     # rig per frame — so equal frame times made the planted foot slip forward and back). 3/4 views with the colour-coded far leg:
     #   stride (per cycle, 2 steps) = 2 x (far foot max forward - max back) ; frame i's duration ~ far-foot backward travel i -> i+1
     #   during its stance (frames 5-8), the same pattern for frames 1-4 (the near leg's stance, by symmetry), blended with uniform.
-    for clip in ("walk", "carry"):
+    for clip in ("walk", "carry", "cradle"):
         st = []
         for v in ("q_front", "q_back"):
             fr = [f for f in frames if f and f["clip"] == clip and f["view"] == v]
@@ -689,22 +855,36 @@ def main():
             # 2026-11-10: the traced sheets' planted foot moves exactly like the puppet's (2 S px per stance, checked ±2 px), so
             # the stride is the template's: 4 S px per cycle (two steps), horizontal. The far-foot extremes measured on the
             # drawing (incl. the swing overshoot at contact) ran 4-10% long -> the planted foot crept forward on one step.
-            strides[clip] = round(4.0 * PR.GAIT[clip]["S"] * K_POSE, 1)
+            strides[clip] = round(4.0 * PR.GAIT[GAIT_OF.get(clip, clip)]["S"] * K_POSE, 1)
             print(f"  stride {clip}: template {strides[clip]} rig / cycle (far-foot extremes on the drawing {measured})")
         else:
             strides[clip] = measured
-    # v12 load pictures (not dyed: the masks stay empty there)
-    load_tab = []
-    for lname, pic in loads:
-        ph, pw = pic.shape[:2]
-        ax0, ay0 = load_org[0] + load_at[lname][0], load_org[1] + load_at[lname][1]
-        atlas[ay0:ay0 + ph, ax0:ax0 + pw] = pic
-        load_tab.append(dict(name=lname, uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH],
-                             size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)]))
     base = {}
     for ci in range(1, len(CLASSES)):
         if cls_px[ci]:
             base[CLASSES[ci]] = "%02x%02x%02x" % tuple(np.median(np.concatenate(cls_px[ci]), 0).astype(int))
+    # v12 load pictures (not dyed: the masks stay empty there). v13: the baby pictures carry a mask (mask0 R skin, G hair — dyed
+    # with the baby's own colours by the shader) and the eyelid pictures one too (mask0 R = skin, the body's skin dye)
+    skin_rgb = [int(base["skin"][i:i + 2], 16) for i in (0, 2, 4)]
+    lids = lid_pictures(skin_rgb)
+    load_tab, lid_tab, where = [], [], {}
+    for lname, pic, msk in [l_ for l_ in loads if not l_[0].startswith("lid_")] + [("lid_" + ls[0], ls[1], ls[2]) for ls in lids]:
+        ph, pw = pic.shape[:2]
+        ax0, ay0 = load_org[0] + load_at[lname][0], load_org[1] + load_at[lname][1]
+        atlas[ay0:ay0 + ph, ax0:ax0 + pw] = pic
+        if msk is not None:
+            m0[ay0:ay0 + ph, ax0:ax0 + pw, :2] = msk
+        where[lname] = dict(uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH], size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)])
+        if not lname.startswith("lid_") and not lname.startswith("baby"):
+            load_tab.append(dict(name=lname, **where[lname]))
+    for vi, v in enumerate(VIEWS):
+        load_tab.append(dict(name="baby", view=vi, pic=BABY_PIC[v], **where[BABY_PIC[v]]))
+    for sname, _pic, _msk, rect, layer in lids:
+        lid_tab.append(dict(set=sname, view=0, rect=rect, layer=layer, uv=where["lid_" + sname]["uv"]))
+    bsk = np.median(np.array([BABY_BASE[n_][0] for n_ in set(BABY_PIC.values())]), 0)
+    bhr = [BABY_BASE[n_][1] for n_ in set(BABY_PIC.values()) if BABY_BASE[n_][1] is not None]
+    base["baby_skin"] = "%02x%02x%02x" % tuple(int(t) for t in bsk)
+    base["baby_hair"] = "%02x%02x%02x" % tuple(int(t) for t in (np.median(np.array(bhr), 0) if bhr else (119, 72, 47)))
     def save(arr, name):
         Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(ART, name), optimize=True)
     save(atlas, "frames_atlas.png")
@@ -718,7 +898,7 @@ def main():
             print(f"  {cl}: fists found on the drawing in {sum(all(x) for x in seen)} of {len(seen)} frames (else the puppet's)")
     lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], cell=[cw, ch], views=VIEWS,
                clips=[cl for cl, _, _ in CLIPS] + state_clips, frames_per_clip=nclip, stride=strides, base=base, cells=len(order),
-               loads=load_tab, frames=frames)
+               loads=load_tab, lids=lid_tab, frames=frames)
     with open(os.path.join(ART, "frames.json"), "w") as fh:
         json.dump(lib, fh, indent=0)
     print("atlas", AW, AH, "cell", cw, ch, "cells", len(order), "frames", len(frames), "rect", lib["rect"], "stride", strides, "base", base)

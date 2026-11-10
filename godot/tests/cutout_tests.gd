@@ -801,6 +801,38 @@ func test_frames_c() -> void:
 	check(int(fpc.get("walk", 0)) == 8 and int(fpc.get("carry", 0)) == 8 and int(fpc.get("hold", 0)) == 4 and int(fpc.get("hoe", 0)) == 4
 		and int(fpc.get("lookup", 0)) == 8 and int(fpc.get("gather", 0)) == 6 and int(fpc.get("sleep", 0)) == 2,
 		"방식 C 장면 수: 걷기·나르기 8 · 안고 서기 4 · 괭이질 4 · 올려다보기 8 · 줍기 6 · 잠 2 (%s)" % [fpc])
+	# (states6 v13, 2026-11-10) 아기 안기: 안고 걷기 8 (나르기와 같은 걸음) · 안고 서기 4, 아기 그림은 보기마다 한 장 (같은 묶음 번호)
+	check(int(fpc.get("cradle", 0)) == 8 and int(fpc.get("rock", 0)) == 4 and FL.clip_index("cradle") >= 0 and FL.clip_index("rock") >= 0
+		and is_equal_approx(FL.stride_rig("cradle"), FL.stride_rig("carry")),
+		"방식 C 아기 안기: 안고 걷기 8 · 안고 서기 4 장면, 걸음은 나르기와 같은 보폭 (%s)" % [fpc])
+	var baby_views := {}
+	var bi := FL.load_index(FL.BABY_LOAD)
+	for e: Dictionary in L.get("loads", []):
+		if String(e["name"]) == FL.BABY_NAME:
+			baby_views[int(e.get("view", -1))] = true
+	check(bi >= 0 and FL.load_name(FL.BABY_LOAD) == FL.BABY_NAME and baby_views.size() == 4 and not baby_views.has(-1)
+		and L["base"].has("baby_skin") and L["base"].has("baby_hair"),
+		"방식 C 아기 그림: 보기 4개마다 한 장 · 피부·머리카락 바탕색 (%s)" % [baby_views.keys()])
+	var no_baby_kind := true
+	for kind0: String in FL.LOAD_OF:
+		no_baby_kind = no_baby_kind and FL.load_name(kind0) != FL.BABY_NAME
+	check(no_baby_kind and FL.load_name("처음 보는 것") != FL.BABY_NAME, "방식 C: 어떤 짐 이름도 아기 그림으로 이어지지 않음")
+	# 감은 눈: 자는 장면에만 표시(shut), 어른 여자의 머리 묶음 a·b 앞 얼굴에 한 장씩 (눈 자리 = 머리 네모 안)
+	var shut_bad := []
+	for f: Dictionary in L["frames"]:
+		if (float(f.get("shut", 0.0)) > 0.5) != (String(f["clip"]) == "sleep"):
+			shut_bad.append("%s/%s" % [f["clip"], f["view"]])
+	var lid_sets := {}
+	var lid_bad := []
+	for e: Dictionary in L.get("lids", []):
+		lid_sets[String(e["set"])] = true
+		var lr: Array = e["rect"]
+		var luv: Array = e["uv"]
+		if int(e["view"]) != 0 or float(lr[2]) <= float(lr[0]) or float(lr[3]) <= float(lr[1]) or float(luv[2]) <= float(luv[0]) or float(luv[3]) <= float(luv[1]) \
+				or float(lr[1]) < 0.0 or float(lr[3]) > float(L["d_rig"]) or absf(float(lr[0]) + float(lr[2])) > float(L["d_rig"]) * 0.5:
+			lid_bad.append(String(e["set"]))
+	check(shut_bad.is_empty() and lid_bad.is_empty() and lid_sets.has("a") and lid_sets.has("b"),
+		"방식 C 잠: 자는 장면만 눈 감음 · 머리 묶음 a·b에 감은 눈 그림 %s %s" % [shut_bad, lid_bad])
 	var deep := 0
 	var deep_t := 0.0
 	var gfs: Array = []
@@ -838,7 +870,7 @@ func test_frames_c() -> void:
 	var seat_bad := []
 	var seats := {}
 	for f: Dictionary in L["frames"]:
-		if f["clip"] != "carry" and f["clip"] != "hold":
+		if not FL.LOAD_CLIP.has(String(f["clip"])):
 			continue
 		var k := "%s/%s" % [f["clip"], f["view"]]
 		seats[k] = int(seats.get(k, 0)) + 1
@@ -851,10 +883,10 @@ func test_frames_c() -> void:
 		if dd < 60.0 or dd > 300.0 or float(pr[2]) < 250.0:
 			seat_bad.append("%s 거리 %.0f" % [k, dd])
 	var seat_all := true
-	for c: String in ["carry", "hold"]:
+	for c: String in ["carry", "hold", "cradle", "rock"]:
 		for v: String in ["front", "q_front", "q_back", "back"]:
 			seat_all = seat_all and int(seats.get("%s/%s" % [c, v], 0)) == int(fpc[c])
-	check(seat_bad.is_empty() and seat_all, "방식 C 짐: 나르기·안고 서기 장면마다 보기 4개에 짐 자리 %s" % [seat_bad])
+	check(seat_bad.is_empty() and seat_all, "방식 C 짐·아기: 나르기·안고 서기·아기 안기 장면마다 보기 4개에 얹을 자리 %s" % [seat_bad])
 	# 괭이질 꼭대기: 연장 머리(날)가 머리 네모 밖 — 괭이(6)는 장면의 기울기, 짧은 연장 낫(7)·나무망치(9)는 따로 정한 기울기 (prop_short)
 	var head_h: float = FL.HEAD_FIT * float(L["d_rig"])
 	var tool_bad := []
@@ -915,11 +947,31 @@ func test_frames_c() -> void:
 	m.set_anim("idle")
 	m.tick(0.0)
 	check(m._f_on and m.frame_load() == "" and int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x) == -1, "방식 C: 내려놓으면 짐 그림 없음")
+	# (states6 v13) 아기를 안으면 방식 C의 아기 안기 장면 + 아기 그림 (서기 → rock, 걷기 → cradle) — 아기 장면이 없는 동작은 컷아웃 그대로
 	m.set_anim("idle")
 	m.carry_baby = true
 	m.tick(0.0)
-	check(not m._f_on and m.doll.visible, "아기를 안으면 컷아웃 인형 (장면 그림엔 아기가 없음)")
+	check(not m._f_on and m.doll.visible, "방식 C: 안아 주는 몸짓만 (품에 아기 없음)이면 컷아웃 인형")
+	m.baby_held = true
+	m.baby_dye = Vector2i(3, 9)
+	var baby_bad := []
+	for cs: Array in [["idle", "rock"], ["walk", "cradle"]]:
+		m.set_anim(cs[0])
+		m.tick(0.0)
+		var sx := int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x)
+		var bd: Vector4 = m.fdoll.get_instance_shader_parameter("baby")
+		if not m._f_on or m.doll.visible or not m.fdoll.visible or m.fdoll.clip != cs[1] or sx != FL.load_index(FL.BABY_LOAD) or sx < 0 \
+				or int(bd.x) != 3 or int(bd.y) != 9 or m.frame_load() != "":
+			baby_bad.append("%s → %s %s %d %s" % [cs[0], m._f_on, m.fdoll.clip, sx, bd])
+	check(baby_bad.is_empty(), "방식 C: 아기를 안으면 아기 안기 장면 + 아기 그림 (아기의 물감) %s" % [baby_bad])
+	m.set_anim("sit")
+	m.tick(0.0)
+	check(not m._f_on and m.doll.visible and not m.fdoll.visible, "방식 C: 아기 장면이 없는 동작(앉기)은 컷아웃 인형")
+	m.set_anim("idle")
 	m.carry_baby = false
+	m.baby_held = false
+	m.tick(0.0)
+	check(m._f_on and m.fdoll.clip == "idle" and int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x) == -1, "방식 C: 아기를 내려놓으면 서기 장면 · 아기 그림 없음")
 	m.frames_force = 0
 	m.tick(0.0)
 	check(not m._f_on and m.doll.visible and not m.fdoll.visible, "끄면 컷아웃 인형으로 돌아옴")
