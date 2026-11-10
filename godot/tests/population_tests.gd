@@ -21,7 +21,8 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 인구 (population.md)")
-	run.timed(self, ["test_rates", "test_rates_mc", "test_fertile_couples", "test_offline_spare", "test_hints", "test_hint_words", "test_homeless_note"])
+	run.timed(self, ["test_rates", "test_rates_mc", "test_fertile_couples", "test_offline_spare", "test_hints", "test_hint_words", "test_homeless_note",
+		"test_two_rate_aging", "test_old_age_rate", "test_little_cap", "test_little_floor", "test_little_floor_pick", "test_little_first_birth", "test_little_save"])
 
 
 func _bad(texts: Array) -> String:
@@ -260,3 +261,237 @@ func test_homeless_note() -> void:
 	var c1 := Shop.card(v, Immigrants.ITEM)
 	check(Immigrants.free_house_slots(v) == 0 and String(c1.get("note", "")) == "모닥불 곁에서 지내게 돼요" and String(c1["lock"]) == lock_free,
 		"빈 집 자리 0 → \"%s\" · 뽑기 잠금 그대로 ('%s')" % [c1.get("note", ""), c1["lock"]])
+
+
+# ───────────────────────── 어른·노년 ×3 · 어린것은 늘 넷에서 여섯 (2026-11-10 — docs/measure/lifespan_2026-11-10.md 6장 · BALANCE.md) ─────────────────────────
+## 어린 시절은 병 4일에 일생 한 날 (Balance.AGE_K), 어른·노인은 병 12일에 한 날 (AGE_K_ADULT)
+func test_two_rate_aging() -> void:
+	check(Balance.age_k(0.0) == Balance.AGE_K and Balance.age_k(Balance.AGE_ADULT - 0.01) == Balance.AGE_K and Balance.age_k(Balance.AGE_ADULT) == Balance.AGE_K_ADULT
+		and Balance.age_k(Balance.AGE_ELDER + 3.0) == Balance.AGE_K_ADULT and Balance.AGE_K == 4.0 and Balance.AGE_K_ADULT == 12.0,
+		"나이 먹는 빠르기: 어린 시절 병 %.0f일 · 어른·노인 병 %.0f일에 일생 한 날" % [Balance.AGE_K, Balance.AGE_K_ADULT])
+	var v := _proto()
+	v.step_dt = 30.0
+	var kid := v.add_person("다온", "m", 1.0, "", v.fire.x, v.fire.y, null, null)
+	var edge := v.add_person("새봄", "f", 3.9, "", v.fire.x, v.fire.y, null, null)
+	var grown := v.add_person("라온", "m", 8.0, "", v.fire.x, v.fire.y, null, null)
+	var old := v.add_person("한울", "f", 20.5, "", v.fire.x, v.fire.y, null, null)
+	v.advance(4.0 * Balance.DAY)
+	check(absf(kid.age - 2.0) < 0.01, "아이: 병 4일에 일생 한 날 (1.0 → %.3f)" % kid.age)
+	check(absf(grown.age - (8.0 + 4.0 / 12.0)) < 0.01, "어른: 병 12일에 일생 한 날 (8.0 → %.3f)" % grown.age)
+	check(absf(old.age - (20.5 + 4.0 / 12.0)) < 0.01, "노인도 어른과 같은 빠르기 (20.5 → %.3f)" % old.age)
+	check(absf(edge.age - (4.0 + 3.6 / 12.0)) < 0.01, "어른이 되는 날을 지나면 그때부터 천천히 (3.9 → %.3f)" % edge.age)
+
+
+## 노환: 일생 날 하루 확률은 그대로, 병 하루엔 ÷ 12 — 병 6일을 한 걸음에 굴리면 저마다 (0.05 + 0.06 × (나이 − 20)) × 6 ÷ 12
+func test_old_age_rate() -> void:
+	var v := _proto()
+	var made: Array[Resident] = _adults(v, 400, 22.0)
+	var want := 0.0
+	var want_old := 0.0
+	for p in made:
+		var la: float = p.age / p.f("lifespan")
+		var pd: float = Balance.DEATH_BASE + Balance.DEATH_SLOPE * (la - Balance.DEATH_FROM)
+		want += 1.0 if la > Balance.DEATH_MAX_AGE else clampf(pd * 6.0 / Balance.AGE_K_ADULT, 0.0, 1.0)
+		want_old += 1.0 if la > Balance.DEATH_MAX_AGE else clampf(pd * 6.0 / Balance.AGE_K, 0.0, 1.0)
+	v._deaths(6.0 * Balance.DAY)
+	var gone := made.filter(func(r: Resident) -> bool: return r.dead and r.death_why == "노환").size()
+	check(absf(gone - want) <= 4.0 * sqrt(want) and gone < want_old * 0.6, "노인 400명 · 병 6일: 노환 %d명 (어른 빠르기로 기대 %.1f · 옛 빠르기였다면 %.1f)" % [gone, want, want_old])
+
+
+## 출산만 보는 빈 마을: 처음 사람은 모두 떠나보내고, 목조주택 한 채에 부부 하나 + 어린것 littles명 + 어른으로 pop명을 채운다. 첫 출생 보장은 지난 뒤 (병 5일)
+func _pace_village(pop: int, littles: int) -> Dictionary:
+	var v := _proto()
+	v.chief_off = true
+	for p in v.people.duplicate():
+		v.kill(p, "노환")
+	v.t = 5.0 * Balance.DAY
+	var house := v.add_building("목조주택", 4.0, -3.0, true)
+	var pair := _couple(v, 8.0, 9.0)
+	var wife: Resident = pair[1]
+	wife.fert = 1.0
+	for q: Resident in pair:
+		q.home = house.id
+	for i in littles:
+		v.add_person("다온", "m", 2.0, "", v.fire.x, v.fire.y, null, null)
+	_adults(v, pop - v.people.size())
+	return {"v": v, "wife": wife, "house": house}
+
+
+## 창고의 먹을 것을 '하루 먹는 양 × days'로 맞춘다 (먹을 것 문: BIRTH_FOOD_DAYS)
+func _set_food(v: Village, days: float) -> void:
+	for k: String in Balance.FOODS_ALL:
+		v.stock[k] = 0.0
+	v.stock[Balance.PORRIDGE] = 0.0
+	v.stock["밀가루"] = 0.0
+	v.manna.clear()
+	v.manna_batches.clear()
+	for b in v.buildings:
+		b.out.clear()
+	v.stock[Balance.FOODS[0]] = days * Production.day_need(v)
+
+
+func _littles(v: Village) -> int:
+	return v.people.filter(func(q: Resident) -> bool: return q.age < Balance.AGE_ADULT).size()
+
+
+## 규칙 1: 어린것이 여섯이면 다음 아기는 기다린다. 다섯이면 낳을 수 있고, 한 걸음 안에서도 여섯에서 멈춘다
+func test_little_cap() -> void:
+	var big := 100.0 * Balance.DAY            # 굴림이 거의 반드시 나오는 큰 걸음 (p ≈ 1)
+	var a := _pace_village(30, Balance.BIRTH_LITTLE_MAX)
+	var v: Village = a["v"]
+	_set_food(v, 10.0)
+	var s0 := v.rng.state
+	for i in 3:
+		v._births(big)
+	check(v.food_total() >= Balance.BIRTH_FOOD_DAYS * Production.day_need(v) and v.occupants(a["house"]) < (a["house"] as Building).cap() and _littles(v) == Balance.BIRTH_LITTLE_MAX,
+		"(준비) 먹을 것 넉넉 · 집에 빈자리 · 어린것 %d명" % _littles(v))
+	check(v.stats["born"] == 0, "어린것이 %d명이면 아무도 낳지 않는다 (출생 %d)" % [Balance.BIRTH_LITTLE_MAX, v.stats["born"]])
+	check(v.rng.state != s0, "굴림은 예전처럼 한다 (난수 차례가 바뀌지 않게) — 상한은 굴린 뒤에 본다")
+	var b := _pace_village(30, Balance.BIRTH_LITTLE_MAX - 1)
+	var w: Village = b["v"]
+	_set_food(w, 10.0)
+	w._births(big)
+	check(w.stats["born"] == 1 and _littles(w) == Balance.BIRTH_LITTLE_MAX, "어린것이 %d명이면 낳을 수 있다 (출생 %d)" % [Balance.BIRTH_LITTLE_MAX - 1, w.stats["born"]])
+	w._births(big)
+	check(w.stats["born"] == 1, "그 아기로 여섯이 되면 다시 기다린다 (출생 %d)" % w.stats["born"])
+	# 한 걸음에 두 집이 함께 굴려도 여섯에서 멈춘다
+	var c := _pace_village(40, Balance.BIRTH_LITTLE_MAX - 1)
+	var u: Village = c["v"]
+	var house2 := u.add_building("목조주택", -4.0, -3.0, true)
+	var pair2 := _couple(u, 7.0, 8.0)
+	(pair2[1] as Resident).fert = 1.0
+	for q: Resident in pair2:
+		q.home = house2.id
+	_set_food(u, 10.0)
+	u._births(big)
+	check(u.stats["born"] == 1 and _littles(u) == Balance.BIRTH_LITTLE_MAX, "두 부부가 한 걸음에 굴려도 아기는 하나 (출생 %d)" % u.stats["born"])
+	check(u.violations.is_empty() and v.violations.is_empty() and w.violations.is_empty(), "집 정원 위반 없음")
+
+
+## 규칙 2: 먹을 것 문이 닫혀 있고 · 마을이 24명 이상이고 · 어린것이 넷보다 적을 때만 — 한 집이 아기를 맞는다, 병 하루에 하나까지
+func test_little_floor() -> void:
+	var tiny := 60.0
+	var a := _pace_village(Balance.BIRTH_LITTLE_MIN_POP - 1, 0)
+	var v: Village = a["v"]
+	_set_food(v, 0.0)
+	v._births(tiny)
+	check(v.food_total() < Balance.BIRTH_FOOD_DAYS * Production.day_need(v) and v.stats["born"] == 0 and v.birth_floor_t < 0.0,
+		"먹을 것이 없고 어린것 0명이어도 %d명 마을은 오늘 그대로 — 낳지 않는다" % v.people.size())
+	_adults(v, 1)
+	_set_food(v, 0.0)
+	var bk := v.book.size()
+	var s0 := v.rng.state
+	v._births(tiny)
+	check(v.people.size() == Balance.BIRTH_LITTLE_MIN_POP + 1 and v.stats["born"] == 1 and v.birth_floor_t == v.t,
+		"%d명이 되면 한 집이 아기를 맞는다 (출생 %d)" % [Balance.BIRTH_LITTLE_MIN_POP, v.stats["born"]])
+	var baby: Resident = v.people[v.people.size() - 1]
+	check(baby.age == 0.0 and baby.parents.size() == 2 and baby.parents[0] == (a["wife"] as Resident).id and baby.home == (a["house"] as Building).id and v.violations.is_empty(),
+		"아기는 그 부부의 집에서 태어난다 (집 정원 위반 없음)")
+	var lines: Array = []
+	for i in range(bk, v.book.size()):
+		lines.append(String(v.book[i]["text"]))
+	check(lines.size() >= 2 and "웃음소리" in String(lines[0]) and _bad(lines) == "", "연대기: \"%s\" — 숫자·금지어 없음 (%s)" % [lines[0] if lines.size() > 0 else "", _bad(lines)])
+	check(v.rng.state != s0, "(아기의 성별·이름은 여느 출생처럼 굴린다)")
+	v._births(tiny)
+	v.t += 0.5 * Balance.DAY
+	v._births(tiny)
+	check(v.stats["born"] == 1, "병 하루에 하나까지 — 반나절 뒤에는 맞지 않는다 (출생 %d)" % v.stats["born"])
+	v.t += 0.6 * Balance.DAY
+	bk = v.book.size()
+	v._births(tiny)
+	check(v.stats["born"] == 2, "병 하루가 지나면 또 한 집 (출생 %d)" % v.stats["born"])
+	var again := false
+	for i in range(bk, v.book.size()):
+		again = again or "웃음소리" in String(v.book[i]["text"])
+	check(not again, "'웃음소리' 줄은 되풀이하지 않는다 (병 %.0f일 안 — 낳았다는 줄만)" % Balance.BIRTH_LITTLE_NOTE_DAYS)
+	# 어린것이 넷이면 맞지 않는다
+	var b := _pace_village(30, Balance.BIRTH_LITTLE_MIN)
+	var w: Village = b["v"]
+	_set_food(w, 0.0)
+	w._births(tiny)
+	check(w.stats["born"] == 0, "어린것이 %d명이면 빠듯한 때엔 기다린다 (출생 %d)" % [Balance.BIRTH_LITTLE_MIN, w.stats["born"]])
+	w.kill(w.people.filter(func(q: Resident) -> bool: return q.age < Balance.AGE_ADULT)[0], "노환")
+	_set_food(w, 0.0)
+	w._births(tiny)
+	check(w.stats["born"] == 1, "%d명이 되면 맞는다 (출생 %d)" % [Balance.BIRTH_LITTLE_MIN - 1, w.stats["born"]])
+	# 먹을 것 문이 열려 있으면 이 규칙은 쓰지 않는다 (여느 굴림뿐 — 아주 짧은 걸음이라 굴림은 나오지 않는다)
+	var c := _pace_village(30, 0)
+	var u: Village = c["v"]
+	_set_food(u, 10.0)
+	u._births(1.0e-6)
+	check(u.stats["born"] == 0 and u.birth_floor_t < 0.0, "먹을 것이 넉넉하면 여느 굴림만 (출생 %d)" % u.stats["born"])
+	# 집에 빈자리가 없으면 맞지 않는다 (이사하지 않는다)
+	var d := _pace_village(30, 0)
+	var x: Village = d["v"]
+	for q in _adults(x, 4):
+		q.home = (d["house"] as Building).id
+	_set_food(x, 0.0)
+	x._births(tiny)
+	check(x.occupants(d["house"]) == (d["house"] as Building).cap() and x.stats["born"] == 0 and x.birth_floor_t < 0.0, "제 집이 꽉 찬 부부는 맞지 않는다 (출생 %d)" % x.stats["born"])
+
+
+## 규칙 2의 집 고르기: 살아 있는 아이가 가장 적은 부부 (같으면 먼저 온 부부) — 난수를 쓰지 않는다
+func test_little_floor_pick() -> void:
+	var a := _pace_village(30, 0)
+	var v: Village = a["v"]
+	var first: Resident = a["wife"]
+	var house2 := v.add_building("목조주택", -4.0, -3.0, true)
+	var pair2 := _couple(v, 7.0, 8.0)
+	var second: Resident = pair2[1]
+	for q: Resident in pair2:
+		q.home = house2.id
+	for i in 2:                               # 첫 부부에게 다 자란 자식 둘
+		var grown := v.add_person("라온", "m", 5.0, "", v.fire.x, v.fire.y, null, null)
+		grown.parents = PackedInt32Array([first.id, first.partner])
+	_set_food(v, 0.0)
+	v._births(60.0)
+	var baby: Resident = v.people[v.people.size() - 1]
+	check(v.stats["born"] == 1 and baby.parents.size() == 2 and baby.parents[0] == second.id and baby.home == house2.id, "아이가 없는 부부가 먼저 맞는다")
+	v.t += 1.1 * Balance.DAY
+	v._births(60.0)
+	baby = v.people[v.people.size() - 1]
+	check(v.stats["born"] == 2 and baby.parents[0] == second.id, "아직도 아이가 더 적은 부부 (하나 대 둘)")
+	v.t += 1.1 * Balance.DAY
+	v._births(60.0)
+	baby = v.people[v.people.size() - 1]
+	check(v.stats["born"] == 3 and baby.parents[0] == first.id, "같아지면 먼저 온 부부")
+
+
+## 첫 출생 보장은 그대로 — 기본 마을의 첫날, 그리고 어린것이 여섯이어도
+func test_little_first_birth() -> void:
+	var v := _proto()
+	v.step_dt = 30.0
+	v.advance(1.0 * Balance.DAY)
+	check(v.stats["born"] >= 1, "기본 마을: 첫날에 첫 아기 (출생 %d)" % v.stats["born"])
+	var w := _proto()
+	w.step_dt = 30.0
+	for i in Balance.BIRTH_LITTLE_MAX:
+		w.add_person("다온", "m", 2.0, "", w.fire.x, w.fire.y, null, null)
+	w.advance(1.0 * Balance.DAY)
+	check(_littles(w) > Balance.BIRTH_LITTLE_MAX and w.stats["born"] >= 1, "어린것이 이미 여섯을 넘어도 첫 아기는 온다 (출생 %d · 어린것 %d)" % [w.stats["born"], _littles(w)])
+
+
+## 저장 → 불러오기: 마지막으로 그렇게 아기를 맞은 때가 그대로 — 쉬는 하루도 이어진다. 옛 저장(값 없음)은 '아직 없음'
+func test_little_save() -> void:
+	var a := _pace_village(30, 0)
+	var v: Village = a["v"]
+	_set_food(v, 0.0)
+	v._births(60.0)
+	var d: Dictionary = bytes_to_var(var_to_bytes(v.to_dict()))
+	check(d.has("birth_floor_t") and float(d["birth_floor_t"]) == v.birth_floor_t and not d.has("birth_pace"), "저장에 마지막 때가 들어간다 (%.0f)" % v.birth_floor_t)
+	var w := Village.from_dict(d)
+	check(w.birth_floor_t == v.birth_floor_t and w.stats["born"] == 1 and w.people.size() == v.people.size(), "불러오면 같은 값")
+	for q: Village in [v, w]:
+		q.t += 0.5 * Balance.DAY
+		q._births(60.0)
+	check(v.stats["born"] == 1 and w.stats["born"] == 1, "불러온 마을도 쉬는 하루를 지킨다")
+	for q: Village in [v, w]:
+		q.t += 0.6 * Balance.DAY
+		q._births(60.0)
+	var b1: Resident = v.people[v.people.size() - 1]
+	var b2: Resident = w.people[w.people.size() - 1]
+	check(v.stats["born"] == 2 and w.stats["born"] == 2 and b1.name == b2.name and b1.sex == b2.sex and b1.home == b2.home, "하루 뒤 두 마을에서 같은 아기 (%s · %s)" % [b1.name, b2.name])
+	var od: Dictionary = bytes_to_var(var_to_bytes(v.to_dict()))
+	od.erase("birth_floor_t")
+	var o := Village.from_dict(od)
+	check(o.birth_floor_t == -1.0, "옛 저장 (값 없음) → 아직 없음 (%.1f)" % o.birth_floor_t)

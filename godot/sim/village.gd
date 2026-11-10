@@ -119,7 +119,7 @@ var crises: Array = []                # 위기가 시작됨 {t, kind, text} — 
 var stats := {"born": 0, "died": 0, "built": 0, "starved": 0, "marriages": 0, "moves": 0, "upgrades": 0}
 var found: Array[Dictionary] = []     # 떨어진 물건 (작은 시험 병만 — 넓은 세상은 WorldWater.found, sim/found_objects.gd · E3-16)
 var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, home, occ_before, cap}
-var birth_pace := Callable()          # 재 보기용 (저장 안 함 — tools/measure_lifespan.gd '+규칙' 변형): 아내마다 출산 비율에 곱할 값 func(v: Village, w: Resident) -> float. 비면 오늘 그대로
+var birth_floor_t := -1.0             # 어린것이 드물어 (먹을 것 문이 닫힌 채) 한 집이 아기를 맞은 마지막 때 (병 초 · -1 = 아직 없음) — 병 하루에 하나까지 (Balance.BIRTH_LITTLE_REST_DAYS). 저장됨
 var violations: Array = []            # 테스트용: 규칙 위반 기록
 var basins_said: Array = []
 var _starve_day := -1
@@ -916,7 +916,7 @@ func step(dt: float) -> void:
 				p.genes[Genetics.HEIGHT] = maxi(0, p.genes[Genetics.HEIGHT] - roundi(Genetics.STUNT * 255.0))
 		elif p.health != 1.0 and Health.can_heal(p):         # 앓는 중·추위·더위 속에서는 저절로 낫지 않는다 (HEALTH.md 1.4 · 2). 다 나았으면 볼 것 없음 (같은 값)
 			p.health = minf(1.0, p.health + dt * p.f("heal") / Balance.HEAL_TIME)
-		p.age += dt / (DAY * Balance.AGE_K)    # v5: 일생 날 하나 = 병 4일
+		p.age += dt / (DAY * Balance.age_k(p.age))    # 일생 날 하나 = 어린 시절 병 4일 · 어른·노인 병 12일 (2026-11-10 — Balance.AGE_K · AGE_K_ADULT)
 		if p.say_t > 0.0:
 			p.say_t -= dt
 	SimProf.mark("food_people")
@@ -1873,7 +1873,12 @@ func _shuffle(a: Array) -> void:
 func _births(dt: float) -> void:
 	var env := birth_env()
 	var guarantee: bool = Balance.FIRST_BIRTH_GUARANTEE and stats["born"] == 0 and t >= Balance.FIRST_BIRTH_AT and t < 2.0 * DAY
-	var fed := guarantee or food_total() >= Balance.BIRTH_FOOD_DAYS * Production.day_need(self)     # v5: 먹을 것이 모자라면 아이를 미룬다 (성장이 스스로 멈춤)
+	var food_ok := food_total() >= Balance.BIRTH_FOOD_DAYS * Production.day_need(self)     # v5: 먹을 것이 모자라면 아이를 미룬다 (성장이 스스로 멈춤)
+	var fed := guarantee or food_ok
+	var littles := 0                      # 마을의 어린것 (아기 + 아이) — MAX명이면 다음 아기는 기다린다 (population.md F3a · 2026-11-10 '어린것은 늘 넷에서 여섯')
+	for q in people:
+		if q.age < Balance.AGE_ADULT:
+			littles += 1
 	if fed and not guarantee:             # v5 · F3a: 걸음마 전 아기 × CARE_CAP < 어른이어야 (돌보는 부모가 일손의 3분의 1을 넘지 않게) — 한꺼번에 태어나 밭이 비지 않게
 		var babies := 0
 		var adults := 0
@@ -1912,12 +1917,43 @@ func _births(dt: float) -> void:
 			stats["moves"] += 1
 			log_line("%s의 가족이 더 넓은 집으로 옮겼다." % w.name)
 		var rate: float = Balance.BIRTH_RATE * w.fert * env
-		if birth_pace.is_valid():         # 재 보기용 훅 (기본은 비어 있음 — 값·난수 순서가 오늘과 같다)
-			rate *= float(birth_pace.call(self, w))
-		if guarantee or (dt > 0.0 and fed and rng.randf() < day_rate_p(rate, dt)):     # F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1
+		# F3: λ가 1을 넘어도 (따라잡기 큰 걸음) p ≤ 1. 어린것 상한은 굴린 뒤에 본다 — 난수를 뽑는 자리·차례가 예전과 같게 (첫 출생 보장은 상한을 보지 않는다)
+		if guarantee or (dt > 0.0 and fed and rng.randf() < day_rate_p(rate, dt) and littles < Balance.BIRTH_LITTLE_MAX):
 			guarantee = false
 			_give_birth(w, h)
 			occ[h.id] = int(occ.get(h.id, 0)) + 1     # 아기도 그 집에 산다
+			littles += 1
+	# 어린것이 드물면: 먹을 것 문이 닫혀 있어도 한 집이 아기를 맞는다 — 병 하루에 하나까지 (2026-11-10 메인 판단 — 사용자 위임. BIRTH_LITTLE_MIN 0이면 꺼짐)
+	if dt > 0.0 and not food_ok and littles < Balance.BIRTH_LITTLE_MIN and people.size() >= Balance.BIRTH_LITTLE_MIN_POP \
+			and (birth_floor_t < 0.0 or t - birth_floor_t >= Balance.BIRTH_LITTLE_REST_DAYS * DAY):
+		var w := _quiet_lane_mother()
+		if w != null:
+			if birth_floor_t < 0.0 or t - birth_floor_t >= Balance.BIRTH_LITTLE_NOTE_DAYS * DAY:
+				log_line("골목에 아이 웃음소리가 드물어졌다. %s네는 살림이 빠듯해도 아기를 맞기로 했다." % w.name)
+			birth_floor_t = t
+			_give_birth(w, bld(w.home))
+
+
+## 어린것이 드물 때 아기를 맞을 집: 아이를 낳을 수 있는 아내 가운데 제 집에 빈자리가 있고 살아 있는 아이가 가장 적은 사람 (같으면 먼저 온 사람 — 난수를 쓰지 않는다. 이사는 하지 않는다)
+func _quiet_lane_mother() -> Resident:
+	var n := {}                           # 엄마 id → 살아 있는 아이 수
+	for p in people:
+		if p.parents.size() == 2:
+			n[p.parents[0]] = int(n.get(p.parents[0], 0)) + 1
+	var occ := occupancy()
+	var best: Resident = null
+	var best_n := 1 << 30
+	for w in people:
+		if not (w.sex == "f" and w.partner >= 0 and w.fert > 0.0 and w.age >= Balance.BIRTH_WIFE_MIN and w.age < Balance.BIRTH_WIFE_MAX):
+			continue
+		var h := bld(w.home) if w.home >= 0 else null
+		if h == null or int(occ.get(h.id, 0)) >= h.cap():
+			continue
+		var c := int(n.get(w.id, 0))
+		if c < best_n:
+			best_n = c
+			best = w
+	return best
 
 
 func _give_birth(w: Resident, h: Building) -> void:
@@ -1948,7 +1984,7 @@ func _deaths(dt: float) -> void:
 		var la: float = p.age / p.f("lifespan")          # 혈통 '장수' ×1.15 · '단명' ×0.8 → 늙는 빠르기로 (노환 확률·상한 나이)
 		if la >= Balance.DEATH_FROM:
 			var pd: float = Balance.DEATH_BASE + Balance.DEATH_SLOPE * (la - Balance.DEATH_FROM)
-			if rng.randf() < pd * dt / (DAY * Balance.AGE_K) or la > Balance.DEATH_MAX_AGE:
+			if rng.randf() < pd * dt / (DAY * Balance.age_k(p.age)) or la > Balance.DEATH_MAX_AGE:
 				why = "노환"
 		if why == "" and p.health <= 0.0:
 			# 거인이 없을 때: 위기 사망(굶주림·병·추위·더위)은 하루 1명까지, 가임 부부 OFFLINE_MIN_COUPLES쌍 이하면 일어나지 않음 (멸망 방지)
@@ -3830,7 +3866,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "birth_pace"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

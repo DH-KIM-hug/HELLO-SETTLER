@@ -45,8 +45,11 @@ const SPEAK_EVERY := 240.0
 
 # ───────────────────────── 주민 ─────────────────────────
 # BALANCE v5 (2026-11-07 — 병 하루 = 현실 5분): 나이는 '일생 날' 단위 그대로 (아래 값·표시 나이 2.4세/일생 날)이고,
-# 일생 날 하나가 병 AGE_K일에 흐른다 → 일생 약 25 × 4 = 병 100일 ≈ 하루 10분씩 세 번 오는 사람의 현실 열흘 (GD 6.6 '일생 현실 1~2주')
-const AGE_K := 4.0                      # 병 하루에 나이는 1/AGE_K 일생 날 (Village.step)
+# 일생 날 하나가 병 age_k(나이)일에 흐른다 (v5 처음엔 모두 4일 → 일생 병 100일. 2026-11-10부터 어른·노년만 12일 → 일생 약 병 270일)
+const AGE_K := 4.0                      # 어린 시절 (일생 0~4날): 병 하루에 나이는 1/AGE_K 일생 날 (Village.step)
+## 어른·노년은 세 배 천천히 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6장): 일생 날 하나 = 병 12일.
+## 어린 시절은 그대로 (병 16일이면 어른) → 한살이 약 병 16 + (25 − 4) × 12 ≈ 병 270일. 나이 값(일생 날)·단계 경계·표시 나이는 그대로다
+const AGE_K_ADULT := 12.0               # 어른·노인 (일생 4날~): 병 하루에 나이는 1/AGE_K_ADULT 일생 날 — 노환 확률도 같은 빠르기로 (Village._deaths)
 const AGE_BABY := 1.0                   # 0~1 아기 (병 4일 — 걸음마 약 2.4세) · 1~4 아이 · 4~20 성인 · 20~ 노인 (일생 날)
 const AGE_ADULT := 4.0
 const AGE_ELDER := 20.0
@@ -96,6 +99,13 @@ const CARE_ELDER_DAYS := 0.15           # 같은 집에 노인이 있으면 한 
 const STROLL_P := 0.25                  # (v5) 돌보는 부모가 낮에 결정할 때 유모차 산책을 나갈 확률
 const STROLL_HAPPY := 0.03              # 산책하는 아기를 들여다본 사람 행복 +
 const STROLL_R := 3.0
+## 어린것은 늘 넷에서 여섯 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6.6): 어른이 오래 살면 한 또래가 한꺼번에 태어나고
+## 오래 아무도 태어나지 않는다 → 마을의 어린것(아기 + 아이, 일생 4날 아래)이 MAX명이면 다음 아기는 기다리고, 먹을 것 문이 닫혀도 MIN명 아래면 한 집이 아기를 맞는다
+const BIRTH_LITTLE_MAX := 6             # 어린것이 이만큼이면 그 걸음엔 아무도 낳지 않는다 (첫 출생 보장은 예외)
+const BIRTH_LITTLE_MIN := 4             # 먹을 것 문이 닫혀 있고 어린것이 이보다 적으면 한 집이 아기를 맞는다 — 0이면 이 규칙을 끈다
+const BIRTH_LITTLE_MIN_POP := 24        # … 마을이 이만큼은 되어야 (처음 몇 주는 오늘 그대로)
+const BIRTH_LITTLE_REST_DAYS := 1.0     # … 그런 아기는 병 하루에 하나까지
+const BIRTH_LITTLE_NOTE_DAYS := 10.0    # (정함) … 연대기의 '아이 웃음소리가 드물어졌다' 줄은 그런 아기가 이만큼 없다가 다시 올 때만 (긴 겨울에 같은 줄이 줄줄이 서지 않게)
 const BIRTH_WIFE_MIN := 4.0
 const BIRTH_WIFE_MAX := 18.0
 const FERT_LO := 0.4                    # 개인 출산 배율 (삼각분포, 평균 1)
@@ -109,7 +119,7 @@ const HAPPY_HIGH := 0.75                # (정함) 이 위 = 높음
 const STARVED_RECENT := 1.0 * DAY       # (정함) 최근 하루 안에 식량이 모자랐으면 '굶주림'
 const FIRST_BIRTH_GUARANTEE := true     # OPENING 3장: 첫 출생은 1일차 보장 (확률 보정)
 const FIRST_BIRTH_AT := 1.0 * HOUR      # v5: 출생은 대개 문(먹을 것·아기·집)에서 막히므로 첫 아기는 첫날 아침(도착 1시간 뒤부터 — 빈자리 있는 집이 생기면) — 수첩 '아기 이름' 쪽지 전에
-const DEATH_FROM := 20.0                # 노인 일생 날 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30 상한 (병 하루엔 ÷ AGE_K)
+const DEATH_FROM := 20.0                # 노인 일생 날 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30 상한 (병 하루엔 ÷ age_k(나이) — 어른·노인은 AGE_K_ADULT)
 const DEATH_BASE := 0.05
 const DEATH_SLOPE := 0.06
 const DEATH_MAX_AGE := 30.0
@@ -431,6 +441,11 @@ const B_LABEL := {
 
 
 ## 건물 종류 → 보이는 이름 (건물이 아닌 물건 이름은 그대로 돌려준다)
+## 일생 날 하나가 병 며칠에 흐르는가 — 어린 시절(0~AGE_ADULT)은 AGE_K, 어른·노인은 AGE_K_ADULT (늙는 빠르기 · 노환 확률이 함께 읽는다)
+static func age_k(age: float) -> float:
+	return AGE_K if age < AGE_ADULT else AGE_K_ADULT
+
+
 static func label(type: String) -> String:
 	return String(B_LABEL.get(type, type))
 
