@@ -16,7 +16,9 @@
 ## 사건이 일어나는 때는 watch()가 본다: 깨달음은 사건 &"awakened" 구독 (ADR-0001 — 커서), 제단 짓기 · 제단 완성 → 첫 기도는 상태.
 ## 보고 있지 않던 무리·자리를 비운 동안의 일은 연출 없이 안내 창만.
 ## 새 사건을 붙이려면: Stagings.SCENES에 칸 하나 + watch()에 한 줄 (또는 장면이 play(id, village)를 부름).
-## 6d(소원 들어주기 — 첫 기적)는 play("miracle", v)를 부를 자리만 — 콘티는 그때 Stagings에.
+## (E1-4 첫 아기 · E1-6 첫 기적 — 2026-11-10) 사건 &"born" · &"wish_granted" 구독: 처음이면 긴 연출 (Stagings "first_baby" · "miracle" — 배역은
+## view/moment_cast.gd, 인형 통째 몸짓은 view/stage_dolls.gd), 그다음부터는 짧은 판 (Stagings.MINIS — 카메라·병 시간·입력을 붙잡지 않음).
+## 자리를 비운 동안·따라잡는 중에 일어난 일은 연출하지 않는다 (깨달음과 같은 잣대 STALE). 시뮬레이션은 읽기만 — 보든 건너뛰든 안 보든 결과가 같다.
 class_name StageDirector
 extends Control
 
@@ -53,8 +55,27 @@ var _page_a := 0.0
 var _page_goal := 0.0
 var _page_rate := 1.0
 var _said: Array = []                # 이 연출이 띄운 말풍선 주민 id (끝나면 지움)
-var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" 구독)
+var _ev_cur: Dictionary = {}         # 무리 → 사건 줄 커서 (&"awakened" · &"born" · &"wish_granted" 구독)
 var _aw_ev: Dictionary = {}          # 무리 → 사건으로 받은 깨달음 시각
+
+# (E1-4 · E1-6) 작은 순간
+const MINI_WAIT := 12.0              # 짧은 판: 큰 시트가 열려 있으면 이만큼(현실 초)까지 닫히길 기다림 — 그래도 열려 있으면 그만둠
+const MINI_PX := 56.0                # 짧은 판의 빛·하트: 한 칸이 이만큼(화면 점)보다 작게 보이면 그만큼 키움
+const MINI_BIG := 3.5
+const MINI_MAX := 2                  # 짧은 판은 한 번에 이만큼까지
+const MINI_SHEETS := ["altar_sheet", "shop_sheet", "chronicle", "settings_sheet", "shelf_sheet", "people_sheet", "return_letter", "baby_sheet"]
+var mini_log: Array = []             # (시험) 지금까지 한 짧은 판 [{id, t}]
+var _pend: Dictionary = {}           # 무리 → 아직 연출하지 않은 사건 [&"born" · &"wish_granted"]
+var _cast: Dictionary = {}           # 지금 연출의 배역 (MomentCast.build + on · v · view · said · touched)
+var _dolls := StageDolls.new()       # 인형 통째 몸짓 (긴 연출 · 짧은 판이 함께 씀)
+var _props: Array = []               # 연출이 놓은 빛·하트 (MomentFx — 다 스러지면 스스로 지워짐. 건너뛰면 곧바로 지움)
+var _bundle: BabyBundle
+var _wgift: WishGift
+var _hide_baby := -1                 # 강보가 대신 보이는 동안 감출 진짜 아기 인형 (주민 id)
+var _minis: Array = []               # 짧은 판 [{id, v, ctx, spec, t, bi, wait, cast}]
+var _mq: Array = []                  # 조금 뒤에 할 일 [때(_now), Callable] (사람마다 조금씩 늦게)
+var _now := 0.0                      # 이 감독의 현실 시계 (초)
+var _light_r := LIGHT_R
 
 var sc: Node                         # 장면 (TestVillage 계열)
 var id := ""                         # 지금 연출 (없으면 "")
@@ -267,6 +288,7 @@ func watch(q: Village, can_stage := true) -> void:
 		return
 	var due := _due(q)
 	if due == "":
+		_watch_moments(q, can_stage)
 		return
 	var fresh := can_stage
 	match due:
@@ -295,9 +317,18 @@ func watch(q: Village, can_stage := true) -> void:
 func _read_events(q: Village) -> void:
 	if q.events == null:
 		return
+	var first := not _ev_cur.has(q)
 	for e: Dictionary in q.events.since(int(_ev_cur.get(q, 0))):
-		if e["kind"] == &"awakened" and int(e["village"]) == q.sid:
+		if int(e["village"]) != q.sid:
+			continue
+		if e["kind"] == &"awakened":
 			_aw_ev[q] = float(e["t"])
+		elif e["kind"] == &"born" or e["kind"] == &"wish_granted":
+			if first and q.t - float(e["t"]) >= JUST:
+				continue                           # 처음 보는 무리의 지난 일 — 연출하지 않음
+			if not _pend.has(q):
+				_pend[q] = []
+			(_pend[q] as Array).append(e)
 	_ev_cur[q] = q.events.serial
 
 
@@ -346,11 +377,14 @@ func _next_due() -> String:
 		return "awakening"
 	if q.altar_built and not bool(_seen_altar[q]) and q.awakened_t >= 0.0:
 		return "first_prayer"
+	if not (_pend.get(q, []) as Array).is_empty():
+		return "moment"                            # 첫 아기 · 첫 기적이 곧 시작됨 (또는 다음 watch가 흘려보냄) — 안내 창은 그 뒤에
 	return ""
 
 
 # ───────────────────────── 연출 ─────────────────────────
-func play(stage_id: String, q: Village) -> bool:
+## ctx = (작은 순간) 사건의 사람 — 소원 {who, id} · 아기 {baby, mom, home}. 비우면 가장 최근의 것 (MomentCast.fill_ctx)
+func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 	if playing() or not Stagings.has(stage_id) or q == null:
 		return false
 	id = stage_id
@@ -379,8 +413,10 @@ func play(stage_id: String, q: Village) -> bool:
 	_page.visible = false
 	_said.clear()
 	_light_c = Vector2.INF
+	_light_r = float(spec.get("light_r", LIGHT_R))
 	_beam = null
 	_gift = null
+	_stop_minis()
 	if sc != null:
 		if sc.has_method("close_sheets"):
 			sc.close_sheets()
@@ -392,7 +428,11 @@ func play(stage_id: String, q: Village) -> bool:
 		_home = cam_pose(cam)
 		_cam_a = _home
 		_cam_b = _home
-	_roles = roles(q, _focus_point(q))
+	_cast = {}
+	if spec.has("cast"):                       # (E1-4 · E1-6) 배역이 따로 있는 장면
+		_begin_moment(ctx)
+	else:
+		_roles = roles(q, _focus_point(q))
 	_slow_down()
 	_chip_l.text = "천천히 — %s" % String(spec.get("reason", ""))
 	_chip.visible = String(spec.get("reason", "")) != ""
@@ -448,6 +488,7 @@ func _gui_input(e: InputEvent) -> void:
 
 func _process(dt: float) -> void:
 	if not playing():
+		idle_step(dt)                          # 짧은 판 · 끝난 연출의 인형이 제자리로 돌아가는 걸음
 		return
 	step(dt)
 
@@ -457,6 +498,8 @@ func step(dt: float) -> void:
 	if not playing():
 		return
 	t += dt
+	_now += dt
+	_run_queue()
 	var beats: Array = spec.get("beats", [])
 	while _bi < beats.size() and float(beats[_bi]["t"]) * k <= t + 1e-6:
 		_beat(beats[_bi])
@@ -484,6 +527,7 @@ func step(dt: float) -> void:
 	_page_a = move_toward(_page_a, _page_goal, _page_rate * dt)
 	if _gift != null and is_instance_valid(_gift) and not _gift.is_queued_for_deletion():
 		_gift.step(dt)
+	_step_moment(dt)
 	if _skip_arm > 0.0:
 		_skip_arm -= dt
 		if _skip_arm <= 0.0 and not bool(spec.get("popups", false)):
@@ -519,10 +563,15 @@ func _beat(b: Dictionary) -> void:
 		_go_to(b["cam"])
 	if b.has("back"):
 		_go_back(float(b["back"]) * maxf(k, 0.6))
+		if _naming_due():                          # 이름 짓기 칸으로 이어질 땐 돌아가지 않고 그 칸이 보여 줄 자리로 (끝날 때 화면이 튀지 않게)
+			var nb := v.person(int(v.notebook.get("baby", -1)))
+			if nb != null and sc.has_method("ground_point"):
+				_cam_b = _home.duplicate()
+				_cam_b["target"] = sc.ground_point(Vector2(nb.x, nb.y) + Vector2(0.0, 2.0))
 	if b.has("vignette"):
 		_vig_goal = float(b["vignette"])
 	if b.has("caption"):
-		_cap_l.text = WatcherName.fill(v, String(b["caption"]))     # {w} = 마을이 부르는 말 (STORY 4)
+		_cap_l.text = _fill(_cast, v, String(b["caption"]))        # {w} = 마을이 부르는 말 (STORY 4) · {who} 등 = 배역의 이름
 		_cap_on = true
 		_layout()
 	if b.has("beam") and sc != null and sc.has_method("beam_at"):
@@ -586,6 +635,8 @@ func _beat(b: Dictionary) -> void:
 			_poses.erase(rid)
 	if b.has("glow") and sc != null and sc.has_method("glow_tool"):
 		sc.glow_tool(String(b["glow"]), 6.0)
+	if not _cast.is_empty():
+		_moment_beat(_cast, b, k)
 
 
 func _end() -> void:
@@ -603,6 +654,8 @@ func _end() -> void:
 		for rid: int in _said:
 			view.stage_say.erase(rid)
 	_said.clear()
+	var naming := _naming_due()
+	_end_moment()
 	_vig = 0.0
 	_vig_goal = 0.0
 	_cap_on = false
@@ -630,6 +683,8 @@ func _end() -> void:
 		_firsts().fire(after)
 	id = ""
 	finished.emit(was, skipped)
+	if naming and sc != null:
+		sc.call("_open_baby", v)                   # 수첩의 아기 이름 짓기 칸이 자연스럽게 이어짐 (그 칸은 장면의 것 — 여기서 만들지 않음)
 
 
 # ───────────────────────── (E1-1) 어둠 · 그림자 · 빛 · 연대기 한 쪽 ─────────────────────────
@@ -684,7 +739,7 @@ func light_param() -> Vector4:
 		_light_c = c
 	elif _light_c != Vector2.INF:
 		c = _light_c
-	return Vector4(c.x, c.y, LIGHT_R, k0)
+	return Vector4(c.x, c.y, _light_r, k0)
 
 
 var _light_c := Vector2.INF
@@ -747,10 +802,14 @@ func _cam() -> JarCamera:
 
 
 func _view() -> VillageView:
-	if sc == null or v == null or not sc.has_method("village_views"):
+	return _view_of(v)
+
+
+func _view_of(q: Village) -> VillageView:
+	if sc == null or q == null or not sc.has_method("village_views"):
 		return null
 	for vv: Array in sc.village_views():
-		if vv[0] == v:
+		if vv[0] == q:
 			return vv[1]
 	return null
 
@@ -772,6 +831,10 @@ static func blend(a: Dictionary, b: Dictionary, u: float) -> Dictionary:
 
 func _focus_point(q: Village) -> Vector2:
 	match String(spec.get("at", "fire")):
+		"ctx":                                     # (E1-4 · E1-6) 사건의 사람·집 — 배역이 정한 자리
+			var mk: Dictionary = _cast.get("marks", {})
+			if mk.has("cam"):
+				return mk["cam"]
 		"altar":
 			return q.altar_pos
 		"center":
@@ -803,7 +866,8 @@ func _go_to(c: Dictionary) -> void:
 
 
 ## 카메라 방위 더하기 (도): 사건 자리와 카메라 사이에 집·큰 버섯·큰 민들레가 가장 적게 끼는 쪽 (같으면 지금 방위에 가까운 쪽)
-func clear_yaw(tg: Vector3, base_yaw: float, pitch: float) -> float:
+## offs = 고를 수 있는 방위들 (비우면 사방) · pref = 같은 값이면 이 방위에 가까운 쪽 (문 앞에서 봐야 하는 장면)
+func clear_yaw(tg: Vector3, base_yaw: float, pitch: float, offs: Array = [], pref := 0.0) -> float:
 	var obs: Array = []                      # [세계 xz, 반지름, 높이]
 	var skip := Awakening.altar_site(v)
 	for b in v.buildings:
@@ -822,12 +886,12 @@ func clear_yaw(tg: Vector3, base_yaw: float, pitch: float) -> float:
 				obs.append([Vector2(w.x, w.z), 0.9, 4.0])
 	var t2 := Vector2(tg.x, tg.z)
 	var tn := tan(deg_to_rad(maxf(pitch, 10.0)))
-	var best := 0.0
+	var best := 0.0 if offs.is_empty() else float(offs[0])
 	var best_n := 1.0e9
-	for off: float in [0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 135.0, -135.0, 180.0]:
+	for off: float in ([0.0, 30.0, -30.0, 60.0, -60.0, 90.0, -90.0, 135.0, -135.0, 180.0] if offs.is_empty() else offs):
 		var yr := deg_to_rad(base_yaw + off)
 		var back := Vector2(sin(yr), cos(yr))
-		var n := absf(off) * 0.002
+		var n := absf(off - pref) * 0.002
 		for o: Array in obs:
 			var rel: Vector2 = (o[0] as Vector2) - t2
 			var along := rel.dot(back)
@@ -850,6 +914,448 @@ func _go_back(secs: float) -> void:
 	_cam_b = _home
 	_cam_t = 0.0
 	_cam_dur = maxf(0.05, secs)
+
+
+# ───────────────────────── (E1-4 · E1-6) 작은 순간: 첫 아기 · 첫 기적 · 그 짧은 판 ─────────────────────────
+## 사건 → 연출 이름: 처음이면 긴 연출 (Stagings.SCENES), 그다음부터는 짧은 판 (Stagings.MINIS).
+## 첫 기적 = 이 별지기가 처음 들어준 소원 (Firsts.plays — 병을 바꿔도 한 번) · 첫 아기 = 이 병에서 처음 태어난 아이 (사건의 first)
+func moment_id(e: Dictionary) -> String:
+	if e["kind"] == &"wish_granted":
+		return "miracle" if _firsts().play_count("miracle") == 0 else "wish_more"
+	return "first_baby" if bool((e.get("v", {}) as Dictionary).get("first", false)) else "baby_more"
+
+
+static func moment_ctx(e: Dictionary) -> Dictionary:
+	var d: Dictionary = e.get("v", {})
+	if e["kind"] == &"wish_granted":
+		return {"who": int(e.get("who", -1)), "id": int(d.get("id", -1))}
+	return {"baby": int(e.get("who", -1)), "mom": int(d.get("mom", -1)), "home": int(d.get("home", -1))}
+
+
+## 쌓인 사건을 연출한다. 연출할 수 없으면(자리를 비운 동안 · 따라잡는 중 · 오래전 일) 그냥 흘려보냄 — 돌아와서 다시 틀지 않는다
+## (아기 안내 창·이름 짓기는 Firsts.check · 수첩이 따로 챙김)
+func _watch_moments(q: Village, can_stage: bool) -> void:
+	var pend: Array = _pend.get(q, [])
+	while not pend.is_empty():
+		var e: Dictionary = pend.pop_front()
+		if not can_stage or q.t - float(e["t"]) >= STALE:
+			continue
+		var mid := moment_id(e)
+		if Stagings.has(mid):
+			if play(mid, q, moment_ctx(e)):
+				return                             # 남은 일은 이 연출이 끝난 뒤에
+		elif Stagings.MINIS.has(mid):
+			_queue_mini(mid, q, moment_ctx(e))
+
+
+## 긴 연출의 배역: 카메라 방위를 먼저 정하고 (문 앞 장면은 문 쪽에서) 그 화면 기준으로 자리를 만든다
+func _begin_moment(ctx: Dictionary) -> void:
+	var kind := String(spec["cast"])
+	var c := MomentCast.fill_ctx(kind, v, ctx)
+	var f := MomentCast.focus(kind, v, c)
+	var pitch := JarCamera.PITCH_DEG
+	var beats: Array = spec.get("beats", [])
+	if not beats.is_empty() and (beats[0] as Dictionary).has("cam"):
+		pitch = float((beats[0]["cam"] as Dictionary).get("pitch", pitch))
+	var ax := _screen_axes(f["at"], f["front"], pitch, true)
+	var view := _view()
+	_cast = MomentCast.build(kind, v, c, ax[0], ax[1])
+	_cast["on"] = true
+	_cast["v"] = v
+	_cast["view"] = view
+	_cast["said"] = []
+	_cast["touched"] = []
+	_cast["beams"] = []
+	_cast["fast"] = false
+	_roles = _cast["roles"]
+	_dolls.bind(view, v)
+	var st: Dictionary = (_cast["slots"] as Dictionary).get("start", {})
+	for rid: int in st:                            # 집 안에서 나오는 사람 (자고 있던 · 멀리 있던 엄마 — 화면만)
+		_dolls.place(rid, st[rid])
+	_hide_baby = int(_cast.get("baby", -1)) if kind == "baby" else -1     # 강보가 나타나기 전까지 아기는 아직 집 안에
+	var mk: Vector2 = (_cast["marks"] as Dictionary).get("spot", f["at"])
+	var w: Vector3 = sc.ground_point(mk) if sc != null and sc.has_method("ground_point") else Vector3(mk.x, 0, mk.y)
+	_light_c = Vector2(w.x, w.z)
+
+
+## 화면 기준 두 축 (마을 데이터 좌표): [화면 오른쪽, 카메라 쪽]. decide = 이 연출의 카메라 방위(_yaw_off)를 여기서 정함
+func _screen_axes(at: Vector2, front: Vector2, pitch: float, decide: bool) -> Array:
+	var cam := _cam()
+	if cam == null or sc == null or not sc.has_method("ground_point"):
+		return [Vector2(1, 0), Vector2(0, 1)]
+	var o: Vector3 = sc.ground_point(at)
+	var px: Vector3 = sc.ground_point(at + Vector2(1, 0))
+	var py: Vector3 = sc.ground_point(at + Vector2(0, 1))
+	var ex := Vector2(px.x - o.x, px.z - o.z).normalized()       # 데이터 x축 · y축이 세계에서 가리키는 쪽 (넓은 세상은 돌려 놓음)
+	var ey := Vector2(py.x - o.x, py.z - o.z).normalized()
+	var yaw := float(cam_pose(cam)["yaw"])
+	if decide:
+		var base := float(_home.get("yaw", cam._yaw_deg))
+		if JarCamera.reduce_motion():
+			pitch = float(_home.get("pitch", pitch))
+		if front != Vector2.ZERO:
+			var fw := ex * front.x + ey * front.y
+			var pref := wrapf(rad_to_deg(atan2(fw.x, fw.y)) - base, -180.0, 180.0)
+			_yaw_off = clear_yaw(o, base, pitch, [pref, pref + 25.0, pref - 25.0, pref + 45.0, pref - 45.0], pref)
+		else:
+			_yaw_off = clear_yaw(o, base, pitch)
+		yaw = base + _yaw_off
+	var yr := deg_to_rad(yaw)
+	var rw := Vector2(cos(yr), -sin(yr))
+	var bw := Vector2(sin(yr), cos(yr))
+	return [Vector2(rw.dot(ex), rw.dot(ey)), Vector2(bw.dot(ex), bw.dot(ey))]
+
+
+func _fill(c: Dictionary, q: Village, s: String) -> String:
+	if not s.contains("{"):
+		return s
+	var vars: Dictionary = (c.get("names", {}) as Dictionary).duplicate()
+	vars["w"] = WatcherName.of(q)
+	return Social.fill(s, vars)
+
+
+## 표시 이름 → 마을 화면(VillageView) 좌표. "bundle" = 지금 강보가 있는 곳
+func _mark3(c: Dictionary, nm: String) -> Vector3:
+	if nm == "bundle":
+		if _bundle != null and is_instance_valid(_bundle) and not _bundle.is_queued_for_deletion():
+			return _bundle.heart_point()
+		nm = "basket"
+	var mk: Dictionary = c["marks"]
+	if not mk.has(nm):
+		return Vector3.INF
+	var p: Vector2 = mk[nm]
+	var view: VillageView = c["view"]
+	return Vector3(p.x, view.gy(p.x, p.y), p.y)
+
+
+## 배역이 있는 장면의 할 일 (긴 연출 · 짧은 판 공통): dolls · says · wbeam · wgift · fxs · bundle · fxr
+func _moment_beat(c: Dictionary, b: Dictionary, kk: float) -> void:
+	var view: VillageView = c.get("view")
+	if not bool(c.get("on", false)) or view == null or not is_instance_valid(view):
+		return
+	var q: Village = c["v"]
+	var rl: Dictionary = c["roles"]
+	var dk := maxf(kk, 0.6)
+	if b.has("dolls") and not bool(c.get("fast", false)):
+		for d: Dictionary in b["dolls"]:
+			var stg := float(d.get("stagger", 0.0)) * dk
+			var dl := float(d.get("delay", 0.0)) * dk
+			var i := 0
+			for rid: int in rl.get(String(d.get("who", "")), []):
+				var wait := dl + stg * i
+				i += 1
+				if wait > 0.0:
+					_mq.append([_now + wait, _doll_act.bind(c, rid, d, dk)])
+				else:
+					_doll_act(c, rid, d, dk)
+	if b.has("says"):
+		for s: Dictionary in b["says"]:
+			var texts: Array = s.get("texts", [])
+			var moods: Array = s.get("moods", [])
+			var stg := float(s.get("stagger", 0.0)) * dk
+			var dl := float(s.get("delay", 0.0)) * dk
+			var i := 0
+			for rid: int in rl.get(String(s.get("who", "")), []):
+				if i >= texts.size():
+					break
+				var line := [_fill(c, q, String(texts[i])), String(moods[i]) if i < moods.size() else "", float(s.get("secs", 2.5)) * dk]
+				var wait := dl + stg * i
+				i += 1
+				if wait > 0.0:
+					_mq.append([_now + wait, _say_act.bind(c, rid, line)])
+				else:
+					_say_act(c, rid, line)
+	if b.has("wbeam"):                                 # 가는 빛줄기 (깨달음의 빛기둥보다 옅고 가늘게)
+		var wb: Array = b["wbeam"]
+		var p3 := _mark3(c, String(wb[3]) if wb.size() > 3 else "gift")
+		if p3 != Vector3.INF:
+			var bm := SkyBeam.spawn(view, p3, float(wb[0]) * dk)
+			bm.rise = 0.9
+			bm.peak = float(wb[1])
+			bm.width = float(wb[2]) * float(c.get("big", 1.0))
+			(c["beams"] as Array).append(bm)
+			if is_same(c, _cast):
+				_beam = bm                             # 빛 웅덩이가 이 빛을 따라감 · 건너뛰면 지움
+	if b.has("wgift"):
+		var p3 := _mark3(c, "gift")
+		if p3 != Vector3.INF:
+			_wgift = WishGift.spawn(view, p3, float(b["wgift"]) * dk)
+			_wgift.driven = true
+	if b.has("bundle"):
+		var live := _bundle != null and is_instance_valid(_bundle) and not _bundle.is_queued_for_deletion()
+		match String(b["bundle"]):
+			"show":
+				if not live:
+					var hid: Array = rl.get("holder", [])
+					var hm: Node3D = view.residents.get(int(hid[0])) if not hid.is_empty() else null
+					if hm != null and (not is_instance_valid(hm) or not hm.visible):
+						hm = null
+					_bundle = BabyBundle.spawn(view, hm, _mark3(c, "basket"))
+					_bundle.driven = true
+			"lift":
+				if live:
+					_bundle.raise = 1.0
+			"down":
+				if live:
+					_bundle.raise = 0.0
+			"hide":
+				if live:
+					_bundle.dismiss()
+	if b.has("fxs"):                                   # 빛 · 반짝임 · 하트 (강보가 나타난 뒤에 — "bundle" 자리를 쓰므로)
+		for f: Array in b["fxs"]:
+			var p3 := _mark3(c, String(f[1]))
+			if p3 == Vector3.INF:
+				continue
+			var big := float(c.get("big", 1.0))
+			p3.y += (float(f[3]) if f.size() > 3 else 0.0) * big
+			var fx := MomentFx.spawn(view, String(f[0]), p3, float(f[2]) * dk, big)
+			fx.driven = true
+			_props.append(fx)
+	if b.has("fxr"):
+		var fr: Array = b["fxr"]
+		if not (rl.get(String(fr[0]), []) as Array).is_empty():
+			GameAudio.fx(String(fr[1]), String(fr[3]) if fr.size() > 3 else "Village", float(fr[2]))
+
+
+func _doll_act(c: Dictionary, rid: int, d: Dictionary, dk: float) -> void:
+	if not bool(c.get("on", false)) or _dolls.v != c["v"] or not _dolls.pin(rid):
+		return
+	if not rid in (c["touched"] as Array):
+		(c["touched"] as Array).append(rid)
+	var mk: Dictionary = c["marks"]
+	if d.has("go"):
+		var slot: Dictionary = (c["slots"] as Dictionary).get(String(d["go"]), {})
+		if slot.has(rid):
+			_dolls.go(rid, slot[rid], float(d.get("secs", 1.0)) * dk)
+	if d.has("look") and mk.has(String(d["look"])):
+		_dolls.look(rid, mk[String(d["look"])])
+	if d.has("face"):
+		_dolls.face(rid, String(d["face"]))
+	if d.has("anim"):
+		_dolls.anim(rid, String(d["anim"]))
+	if d.has("hop"):
+		var h: Array = d["hop"]
+		_dolls.hop(rid, int(h[0]), float(h[1]), float(h[2]))
+	if d.has("tiptoe"):
+		_dolls.tiptoe(rid, float(d["tiptoe"]) * dk)
+	if d.has("back"):
+		_dolls.release(rid, float(d["back"]))
+
+
+## 화면 말풍선만 (R4 — 시뮬레이션의 말 기록 v.speak를 쓰지 않음)
+func _say_act(c: Dictionary, rid: int, line: Array) -> void:
+	var view: VillageView = c.get("view")
+	var q: Village = c["v"]
+	if not bool(c.get("on", false)) or view == null or not is_instance_valid(view) or q.person(rid) == null:
+		return
+	view.stage_say[rid] = line
+	(c["said"] as Array).append(rid)
+
+
+func _run_queue() -> void:
+	var i := 0
+	while i < _mq.size():                              # 넣은 차례대로 (할 일이 새 할 일을 넣어도 됨)
+		var e: Array = _mq[i]
+		if float(e[0]) <= _now:
+			_mq.remove_at(i)
+			(e[1] as Callable).call()
+		else:
+			i += 1
+
+
+## 인형 몸짓 · 빛 · 강보 · 두루마리의 한 화면 (장면의 VillageView.sync 뒤 — 긴 연출 · 짧은 판 · 끝난 뒤 스러지는 동안 모두)
+func _step_props(dt: float) -> void:
+	_dolls.step(dt)
+	for i in range(_props.size() - 1, -1, -1):
+		var p: Variant = _props[i]
+		if not is_instance_valid(p) or (p as Node).is_queued_for_deletion():
+			_props.remove_at(i)
+		else:
+			(p as MomentFx).step(dt)
+	if _bundle != null:
+		if is_instance_valid(_bundle) and not _bundle.is_queued_for_deletion():
+			_bundle.step(dt)
+		else:
+			_bundle = null
+	if _wgift != null:
+		if is_instance_valid(_wgift) and not _wgift.is_queued_for_deletion():
+			_wgift.step(dt)
+		else:
+			_wgift = null
+
+
+func _step_moment(dt: float) -> void:
+	if _cast.is_empty():
+		return
+	if bool(spec.get("naming", false)) and sc != null:     # 연출 동안 이름 짓기 칸은 접어 둠 (끝나면 다시 엶)
+		var bs: Variant = sc.get("baby_sheet")
+		if bs is Control and (bs as Control).visible and (bs as Control).has_method("close"):
+			(bs as Control).call("close")
+	_step_props(dt)
+	var view: VillageView = _cast.get("view")
+	if _hide_baby >= 0 and view != null and is_instance_valid(view):     # 강보가 대신 보이는 동안 (sync가 매 화면 다시 보이게 하므로 매 화면)
+		var bm: Node3D = view.residents.get(_hide_baby)
+		if bm != null and is_instance_valid(bm):
+			bm.visible = false
+
+
+## 끝난 뒤 수첩의 아기 이름 짓기 칸으로 이어지나 (첫 병의 수첩이 그 쪽지를 보이고 있을 때만)
+func _naming_due() -> bool:
+	if not bool(spec.get("naming", false)) or sc == null or v == null or not sc.has_method("_open_baby"):
+		return false
+	if String(Notebook.shown(v).get("id", "")) != "baby":
+		return false
+	var b := v.person(int(v.notebook.get("baby", -1)))
+	return b != null and not b.dead
+
+
+func _end_moment() -> void:
+	if _cast.is_empty():
+		return
+	_mq.clear()
+	_cast["on"] = false
+	var view: VillageView = _cast.get("view")
+	if view != null and is_instance_valid(view):
+		for rid: int in _cast["said"]:
+			view.stage_say.erase(rid)
+	if skipped:                                        # 건너뛰기: 곧바로 모두 제자리
+		_dolls.clear()
+		_free_props()
+	else:                                              # 끝: 인형은 깡충 제자리로 · 빛은 스러짐 (idle_step이 이어서 걸음을 줌)
+		_dolls.release_all()
+		for p: Variant in _props:
+			if is_instance_valid(p):
+				(p as MomentFx).dismiss()
+		if _bundle != null and is_instance_valid(_bundle):
+			_bundle.dismiss()
+		if _wgift != null and is_instance_valid(_wgift):
+			_wgift.dismiss()
+	_hide_baby = -1
+	_cast = {}
+
+
+func _free_props() -> void:
+	for p: Variant in _props:
+		if is_instance_valid(p):
+			(p as Node).queue_free()
+	_props.clear()
+	if _bundle != null and is_instance_valid(_bundle):
+		_bundle.queue_free()
+	if _wgift != null and is_instance_valid(_wgift):
+		_wgift.queue_free()
+	_bundle = null
+	_wgift = null
+
+
+# ───────────────────────── 짧은 판 (두 번째부터 — 카메라·병 시간·입력을 붙잡지 않음) ─────────────────────────
+func minis_busy() -> bool:
+	return not _minis.is_empty()
+
+
+func _queue_mini(mid: String, q: Village, ctx: Dictionary) -> void:
+	if _minis.size() >= MINI_MAX:
+		return
+	_minis.append({"id": mid, "v": q, "ctx": ctx, "spec": Stagings.MINIS[mid], "t": -1.0, "bi": 0, "wait": 0.0, "cast": {}})
+
+
+func _sheet_open() -> bool:
+	if sc == null:
+		return false
+	for nm: String in MINI_SHEETS:
+		var s: Variant = sc.get(nm)
+		if s is Control and (s as Control).visible:
+			return true
+	return false
+
+
+## 연출이 없을 때의 한 화면 (시험은 직접 부른다): 짧은 판 + 끝난 연출의 인형·빛이 제자리로
+func idle_step(dt: float) -> void:
+	if _minis.is_empty() and _mq.is_empty() and _props.is_empty() and not _dolls.busy() and _bundle == null and _wgift == null:
+		return
+	_now += dt
+	_run_queue()
+	var i := 0
+	while i < _minis.size():
+		var m: Dictionary = _minis[i]
+		if float(m["t"]) < 0.0:
+			if _sheet_open():                          # 큰 시트에 가려 안 보임 — 닫히길 기다림
+				m["wait"] = float(m["wait"]) + dt
+				if float(m["wait"]) > MINI_WAIT:
+					_minis.remove_at(i)
+				else:
+					i += 1
+				continue
+			if not _start_mini(m):
+				_minis.remove_at(i)
+				continue
+		else:
+			m["t"] = float(m["t"]) + dt
+		var beats: Array = (m["spec"] as Dictionary).get("beats", [])
+		while int(m["bi"]) < beats.size() and float(beats[int(m["bi"])]["t"]) <= float(m["t"]) + 1e-6:
+			var b: Dictionary = beats[int(m["bi"])]
+			m["bi"] = int(m["bi"]) + 1
+			if b.has("fx"):
+				var fx: Array = b["fx"]
+				GameAudio.fx(String(fx[0]), String(fx[2]) if fx.size() > 2 else "Village", float(fx[1]) if fx.size() > 1 else 0.0)
+			_moment_beat(m["cast"], b, 1.0)
+		if float(m["t"]) >= float((m["spec"] as Dictionary).get("dur", 3.0)):
+			_end_mini(m)
+			_minis.remove_at(i)
+			continue
+		i += 1
+	_step_props(dt)
+
+
+func _start_mini(m: Dictionary) -> bool:
+	var q: Village = m["v"]
+	var view := _view_of(q)
+	if view == null:
+		return false
+	var kind := String((m["spec"] as Dictionary)["cast"])
+	var c0 := MomentCast.fill_ctx(kind, q, m["ctx"])
+	var f := MomentCast.focus(kind, q, c0)
+	var ax := _screen_axes(f["at"], Vector2.ZERO, 0.0, false)
+	var c := MomentCast.build(kind, q, c0, ax[0], ax[1], MomentCast.MINI_NEAR)
+	c["on"] = true
+	c["v"] = q
+	c["view"] = view
+	c["said"] = []
+	c["touched"] = []
+	c["beams"] = []
+	var jc := _cam()
+	c["big"] = clampf(MINI_PX / maxf(1.0, float(jc.ppu)), 1.0, MINI_BIG) if jc != null else 1.0     # 멀리서 보고 있으면 빛·하트를 그만큼 크게
+	c["fast"] = view.fast                              # 빠른 흐름(주민이 점처럼 순간이동)에선 몸짓 없이 빛과 말풍선만
+	_dolls.bind(view, q)
+	m["cast"] = c
+	m["t"] = 0.0
+	mini_log.append({"id": String(m["id"]), "t": q.t})
+	return true
+
+
+func _end_mini(m: Dictionary) -> void:
+	var c: Dictionary = m["cast"]
+	if c.is_empty():
+		return
+	c["on"] = false
+	if _dolls.v == c["v"]:
+		for rid: int in c["touched"]:
+			_dolls.release(rid)                        # 말풍선은 제 시간에 스스로 사라짐 (VillageView.stage_say)
+
+
+## 긴 연출이 시작되면 짧은 판은 곧바로 그만
+func _stop_minis() -> void:
+	for m: Dictionary in _minis:
+		var c: Dictionary = m["cast"]
+		if c.is_empty():
+			continue
+		c["on"] = false
+		for bm: Variant in c.get("beams", []):
+			if is_instance_valid(bm):
+				(bm as Node).queue_free()
+	_minis.clear()
+	_mq.clear()
+	_dolls.clear()
+	_free_props()
 
 
 # ───────────────────────── 누가 (역할) ─────────────────────────
