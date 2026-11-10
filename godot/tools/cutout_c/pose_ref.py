@@ -27,13 +27,18 @@ def smooth(u):
     return u * u * (3 - 2 * u)
 
 
-def leg_phase(p, S, H):
-    """p 0..1 for one leg: stance [0, .5) planted foot from +S to -S at constant speed, swing [.5, 1) lift + reach"""
+def leg_phase(p, S, H, v9=False):
+    """p 0..1 for one leg: stance [0, .5) planted foot from +S to -S at constant speed, swing [.5, 1) lift + reach.
+    v9 (3/4 views): the swing starts late and lands late (smootherstep) and the foot peels off low (sin^2 lift), so the swinging
+    foot is still clear of the other leg in the frames next to the passing frame; third value = swing weight 0..1 (sin^4)"""
     p %= 1.0
     if p < 0.5:
-        return S * (1 - 4 * p), 0.0
+        return S * (1 - 4 * p), 0.0, 0.0
     u = (p - 0.5) * 2
-    return -S + 2 * S * smooth(u), H * math.sin(math.pi * u)
+    if not v9:
+        return -S + 2 * S * smooth(u), H * math.sin(math.pi * u), 0.0
+    sn = math.sin(math.pi * u)
+    return -S + 2 * S * u * u * u * (u * (6 * u - 15) + 10), H * sn * sn, sn ** 4
 
 
 def geometry(view):
@@ -50,8 +55,17 @@ def geometry(view):
         # v8b: feet 24 px apart sideways (was 18) so the two boots overlap less when they pass (mean x unchanged); far foot 4 px
         # BELOW the root line (was 5 above): at contact R the rear far boot peeks out under the hem (visible 140 -> 390 px of 940).
         # It stays hidden in frames 2 and 8 (lifted under the hem / behind the swinging near leg) — real occlusion.
-        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (16, -6)}, foot={"R": (-9, 8), "L": (15, 4)}, sack=-1, side=1)
-    return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-14, -6)}, foot={"R": (13, 8), "L": (-13, -5)}, sack=1, side=1)
+        # v9 (2026-11-10 coordinator: "roughly half of the 3/4-front cycle shows only ONE boot"): searched numerically for the
+        # largest worst-frame far-boot area (tools note in log.md): feet almost on one line (far foot 7 px ahead, same height),
+        # late swing + low peel-off (leg_phase v9), the swinging foot arcs 10 px around the planted one, hem 6 px higher in the
+        # 3/4 views (hem->sole was 0.076 in game against 0.093 on the old cutout). Far boot visible in the reference, of ~940 px:
+        # walk 934 558 451 956 943 959 483 678, carry 936 381 426 956 966 940 410 495 (was 389 2 634 957 977 974 569 66).
+        return dict(fwd=(1.0, 0.55), hip={"R": (-10, 4), "L": (7.5, -6)}, foot={"R": (-9, 8), "L": (-2, 8)}, sack=-1, side=1,
+                    v9=True, arc={"L": (10.0, -3.0), "R": (-10.0, 3.0)}, hem=HEM_Y - 6)
+    # v9: 3/4 back the same way (was hidden in frames 4 and 6: 182 / 200 px): walk 979 947 624 676 947 582 679 974,
+    # carry 947 947 613 478 922 390 633 971 (carry frames 4 and 6 = the legs passing: the far boot is mostly behind the near leg)
+    return dict(fwd=(1.0, -0.33), hip={"R": (12, 4), "L": (-8.5, -6)}, foot={"R": (13, 8), "L": (-2, 8)}, sack=1, side=1,
+                v9=True, arc={"L": (-14.0, -4.2), "R": (14.0, 4.2)}, hem=HEM_Y - 6)
 
 
 def feet(clip, view, f):
@@ -59,9 +73,10 @@ def feet(clip, view, f):
     g, G = geometry(view), GAIT[clip]
     out = {}
     for leg, ph in (("R", 0.0), ("L", 0.5)):
-        s, h = leg_phase(f / 8.0 + ph, G["S"], G["H"])
+        s, h, w = leg_phase(f / 8.0 + ph, G["S"], G["H"], bool(g.get("v9")))
         bx, by = g["foot"][leg]
-        out[leg] = (CW / 2 + bx + g["fwd"][0] * s, GROUND + by + g["fwd"][1] * s - h, h)
+        ax, ay = g.get("arc", {}).get(leg, (0.0, 0.0))        # v9: the swinging foot swings around the planted one
+        out[leg] = (CW / 2 + bx + g["fwd"][0] * s + ax * w, GROUND + by + g["fwd"][1] * s + ay * w - h, h)
     return out
 
 
@@ -98,14 +113,17 @@ def boot_oval(foot, fwd, grow=0.0, n=48):
 
 def draw_leg(d, hip, foot, col, shoe, fwd, front):
     fwdx = fwd[0]
-    ankle = (foot[0], foot[1] - 16)
+    # v9: in the 3/4 views the leg ends 8 px higher, inside the rotated boot oval — its round end used to show as a
+    # stocking-coloured crescent under the heel and was traced as a sliver beside the boot
+    ankle = (foot[0], foot[1] - (16 if front else 24))
     L = (GROUND - 18 - HIP_Y) / 2 * 1.02          # subtle knee bend
     knee = ik(hip, ankle, L, 1 if fwdx >= 0 else -1) if not front else ((hip[0] + ankle[0]) / 2, (hip[1] + ankle[1]) / 2)
-    for a, b in ((hip, knee), (knee, ankle)):
-        d.line([a, b], fill=INK, width=46)
-        d.line([a, b], fill=col, width=36)
-    for p in (knee, ankle):
-        d.ellipse([p[0] - 18, p[1] - 18, p[0] + 18, p[1] + 18], fill=col)
+    # v9: 3/4 views — the shin is a little narrower than the boot (30 px, was 36) so nothing of it shows beside the heel
+    for a, b, w in ((hip, knee, 36), (knee, ankle, 36 if front else 30)):
+        d.line([a, b], fill=INK, width=w + 10)
+        d.line([a, b], fill=col, width=w)
+    for p, r in ((knee, 18), (ankle, 18 if front else 15)):
+        d.ellipse([p[0] - r, p[1] - r, p[0] + r, p[1] + r], fill=col)
     if front:
         box = [foot[0] - 24, foot[1] - 28, foot[0] + 24, foot[1]]          # rounded boot
         d.ellipse([box[0] - 3, box[1] - 3, box[2] + 3, box[3] + 3], fill=INK)
@@ -234,7 +252,7 @@ def hybrid(clip, view):
         legish = (b > r + 25) & (b > gg + 5) & (L < 190)      # the v3 cyan / navy far leg (the near leg is under the cut)
         keep[..., 3] = np.where(low & legish & ~rose, 0, keep[..., 3])
         up = Image.fromarray(np.clip(keep, 0, 255).astype(np.uint8), "RGBA")
-        pchin, phem = CHIN_Y + by, HEM_Y + by          # hem at mid-shin (v6)
+        pchin, phem = CHIN_Y + by, g.get("hem", HEM_Y) + by          # hem at mid-shin (v6; v9: per view)
         k = (phem - pchin) / max(1.0, hem - chin)
         up = up.resize((round(CW * k), round(CH * k)), Image.LANCZOS)
         hc = CW / 2 + (8 if view == "q_front" else (-4 if view == "q_back" else 0))

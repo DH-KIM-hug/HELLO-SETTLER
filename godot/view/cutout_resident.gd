@@ -331,6 +331,8 @@ func _push_misc() -> void:
 	var sy := maxf(react_sq.y, 0.05)
 	var face := float(doll.mirror) * (-1.0 if w < 0.0 else 1.0)      # 화면에서 바라보는 쪽 (오른쪽 +1)
 	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -react_roll * face))
+	if fdoll != null:
+		fdoll.set_react(doll.position, w, sy, react_roll)        # 방식 C 인형도 같은 반응 (frame_doll.set_react)
 
 
 ## [톡 반응] 지금 그려진 인형의 머리 높이 (세계, 찌그러짐 전) — 말풍선 자리. 누웠으면 낮게, 앉았으면 조금 낮게
@@ -514,6 +516,7 @@ func _refresh_frames() -> void:
 		var hk: float = fdoll.step_k        # 화면 움직임을 그림의 걸음 축에 투영 (frame_doll.update_view)
 		var wr := walk_rate(g * hk / maxf(stride, 0.01), frame_dt())
 		rate = 0.0 if bool(wr["travel"]) or _d_clip == "travel" else float(wr["rate"])
+	fdoll.cycle_len = g_cycle(fc, rate)
 	if fc != _f_clip or not is_equal_approx(rate, _f_rate):
 		var now := _shader_time()
 		if fc == _f_clip and _f_rate >= 0.0:
@@ -523,6 +526,13 @@ func _refresh_frames() -> void:
 		_f_clip = fc
 		_f_rate = rate
 		fdoll.set_clip(fc, rate, _f_phase)
+
+
+## 방식 C 발 붙이기 (frame_doll.gdshader lockv): 걸음 한 주기에 땅에서 가는 길 (세계) — 걷지 않거나 멈춘 보폭이면 0
+func g_cycle(fc: String, rate: float) -> float:
+	if rate <= 0.0 or not (fc == "walk" or fc == "carry"):
+		return 0.0
+	return (_ground if _ground >= 0.0 else GROUND_NORMAL * _gait) / rate
 
 
 ## 땅에 맞는 걸음 빠르기 want(주기/초) · 장면 길이 fdt(초) → {travel: 걸음 대신 멈춘 보폭인가, rate: 걸음 빠르기 (상·하한·계단)}

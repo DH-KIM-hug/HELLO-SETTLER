@@ -20,6 +20,7 @@ RAW = P.RAW
 TOL = 0.09          # position tolerance for a SWINGING foot (fraction of soles->chin height)
 PLANT_TOL = (4.0, 5.0)   # v8 (2026-11-10, tight): a PLANTED foot must be within 4 px (x) / 5 px (y) of the reference boot
 TOE_TOL = 25.0      # v8: the boot's long axis within this many degrees of the step axis (3/4 views; blobs with elongation > 1.25)
+VIS_MIN = 250       # v9 (2026-11-10, "walks on one foot"): 3/4 views — BOTH boots at least this many px in EVERY frame (a full boot ~940)
 ORDER_MIN = 0.12    # the reference must separate the feet by this much for the order test
 LIFT_MIN = 0.05
 
@@ -119,8 +120,9 @@ def _check(path, clip, view, skip=frozenset(), partial=frozenset()):
         for k in ("R", "L"):
             if (f, k) in skip:            # hidden under the skirt in the reference itself (v6 long skirt) — not checkable
                 continue
-            if gen[k] is None or gen[k][2] * 4 < 150:
-                why.append("%s missing" % k)
+            need = VIS_MIN if g["side"] else 150
+            if gen[k] is None or gen[k][2] * 4 < need:
+                why.append("%s missing (%d px)" % (k, 0 if gen[k] is None else gen[k][2] * 4))
                 bad.add(k)
                 missing.add(k)
                 continue
@@ -155,6 +157,7 @@ def _check(path, clip, view, skip=frozenset(), partial=frozenset()):
         stray = _stray(rgb, fg, clip, view, f) if g["side"] else 0
         if stray > STRAY_MAX:
             why.append("stray leg/boot pieces (%d px)" % stray)
+        res["px"] = {k: (0 if gen[k] is None else int(gen[k][2] * 4)) for k in ("R", "L")}
         res.update(ok=not why, why=", ".join(why), err=round(max(errs), 3), H=float(H), bad=bad, missing=missing, stray=stray)
         out.append(res)
     return out

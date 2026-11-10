@@ -64,8 +64,14 @@ func _initialize() -> void:
 	if mode != "live":
 		plan.append_array([_strip_setup, _strip_loop])
 	if mode != "strip":
-		for lp in [44.0, 60.0]:
-			plan.append_array([_live_setup.bind(lp), _live_loop])
+		# CUTC_PPUS="20,44,60" (2026-11-10): 라이브 사진의 확대 (기본 44·60) — 실제 기본 확대(ppu 20)에서 두 발이 읽히는지 볼 때
+		var lps: Array = [44.0, 60.0]
+		if OS.get_environment("CUTC_PPUS") != "":
+			lps = []
+			for t in OS.get_environment("CUTC_PPUS").split(","):
+				lps.append(float(t))
+		for lp in lps:
+			plan.append_array([_live_setup.bind(float(lp)), _live_loop])
 	plan.append(_finish)
 
 
@@ -445,6 +451,16 @@ func _live_loop(dt: float) -> int:
 	dt = 1.0 / 60.0               # 사진 시계: 장면마다 1/60초 (창 FPS와 무관하게 같은 걸음)
 	_lt += dt
 	_place(_lt, dt)
+	if OS.get_environment("CUTC_LOCK") == "0":          # 발 붙이기(frame_doll.gdshader foot_lock)를 끄고 찍기 — 앞뒤 비교
+		var fm := scene.view.residents[_B.id] as CutoutResident
+		if fm.fdoll != null:
+			(fm.fdoll.material_override as ShaderMaterial).set_shader_parameter("foot_lock", 0.0)
+	if OS.get_environment("CUTC_REACT") == "1":         # 톡 반응 값(폴짝·찌그러짐·기울기·돌아섬)을 두 인형에 똑같이 — 방식 C 인형이 컷아웃과 같게 움직이는지 (2초 돌림)
+		var ph := fmod(_lt, 2.0) / 2.0
+		var sq := 0.2 * sin(ph * TAU * 2.0)
+		for rr: Resident in [_A, _B]:
+			(scene.view.residents[rr.id] as CutoutResident).set_react(Vector3(0, 0.25 * absf(sin(ph * TAU)), 0),
+				Vector2(1.0 + sq, 1.0 - sq), 0.35 * sin(ph * TAU), 0.5 if ph > 0.75 else 0.0, "")
 	if _lt >= T_WALK + T_IDLE + T_CARRY:
 		return 4
 	_cap_t += dt
