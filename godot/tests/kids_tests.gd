@@ -538,7 +538,7 @@ func test_story() -> void:
 	var nat_throws := 0
 	var nat_wet := 0
 	for pass_i in 3:
-		var seed_v: int = [31, 31, 3][pass_i]      # 저녁 이야기는 드물다 (나흘에 0~2번) — 이야기가 열리는 씨앗 둘 (k3: 새 놀이가 끼며 굴림 차례가 바뀌어 다시 고름)
+		var seed_v: int = [31, 31, 5][pass_i]      # 저녁 이야기는 드물다 (나흘에 0~2번) — 이야기가 열리는 씨앗 둘 (k3: 새 놀이가 끼며 굴림 차례가 바뀌어 다시 고름 · Q7-b 2026-11-11: 나르기 순서·빈 창고 앞에서 안 기다리기로 굴림 차례가 또 바뀌어 3 → 5, 열리는 씨앗은 마흔 가운데 25 → 23개로 그대로)
 		var w := Village.new_prototype(seed_v)
 		w.water.offline = true
 		w.stock["빵"] = 300.0
@@ -593,7 +593,7 @@ func test_story() -> void:
 		if pass_i != 1:
 			print("   마을의 저녁 (씨앗 %d): 이야기 %d번 (살핀 틱 %d · 함께 앉은 아이 많을 때 %d)" % [seed_v, n_story, seen, sat])
 			check(n_story >= 1 and seen >= 1, "나흘 사이 저녁 이야기가 저절로 열림 (씨앗 %d)" % seed_v)
-			if pass_i == 0:                    # 씨앗 3에선 아이 하나만 닿는다 (다른 아이는 오는 길에 어르신이 일어남 — 어르신의 걸음은 건드리지 않음) — 씨앗 31에서 봄
+			if pass_i == 0:                    # 아이 하나만 닿는 씨앗도 있다 (다른 아이는 오는 길에 어르신이 일어남 — 어르신의 걸음은 건드리지 않음) — 씨앗 31에서 봄
 				check(sat >= 2, "아이 둘 넘게 함께 앉아 들음 (씨앗 %d)" % seed_v)
 			check(bad == 0, "이야기는 해 질 무렵~저녁에만 (일 시간 안)")
 			check(hid == 0, "가려진 자리의 어르신에게는 모이지 않음")
