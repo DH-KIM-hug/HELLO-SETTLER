@@ -9,7 +9,7 @@
 class_name ResidentAI
 extends RefCounted
 
-const WORKISH := {"work": true, "haul": true, "build": true}
+const WORKISH := {"work": true, "haul": true, "build": true, "forage": true}
 
 
 static func walk(x: float, y: float) -> Dictionary:
@@ -126,6 +126,14 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 			run_op(v, r, d["drop"])
 			r.carry = ""
 			r.carry_amt = 0.0
+		"forage_take":                    # 맨손 채집: 거둔 것을 바구니에 (몫은 떠날 때 둘레에서 잡아 둠)
+			r.carry = Balance.FORAGE_ITEM
+			r.carry_amt = float(d["amt"])
+			r.doing = "바구니를 안고 돌아오는 중"
+			v.stats["forage_food"] = float(v.stats.get("forage_food", 0.0)) + float(d["amt"])
+			v.stats["forage_trips"] = int(v.stats.get("forage_trips", 0)) + 1
+		"forage_undo":                    # 거두기 전에 그만둠 — 잡아 둔 몫을 둘레에 되돌린다
+			v.wild_food += float(d["amt"])
 		"store_put":                      # 손에 든 것을 창고에 (든 양 — 없으면 적힌 양)
 			var amt := r.carry_amt if r.carry_amt > 0.0 else float(d["amt"])
 			v.stock[d["k"]] = float(v.stock.get(d["k"], 0.0)) + amt
@@ -352,6 +360,11 @@ static func decide(v: Village, r: Resident) -> void:
 			if site != null:
 				var g := v.build_mult(site)          # 들어준 소원의 터는 더 서둘러 짓는다
 				cand["build"] = Balance.ACT_BASE["build"] * 1.2 * Balance.W_DAY_WORK * g
+			# 맨손 채집 (design/gdd/daily-schedule.md R4.6): 연장이 모자라 일터가 없는 어른 — 짓기·나르기가 없을 때 바구니를 들고 들·숲 가로
+			if r.job < 0 and not opening and v.wild_food >= Balance.FORAGE_LOAD * Balance.FORAGE_LOAD_MIN and v.forage_open():
+				cand["forage"] = Balance.FORAGE_SCORE * Balance.W_DAY_WORK
+				if r.hunger >= Balance.HUNGRY_AT and cand.has("eat"):     # 배고픈데 창고가 비었다 — 빈 창고 앞에서 기다리느니 바구니를 들고 나간다
+					cand["forage"] = float(cand["eat"]) * Balance.FORAGE_HUNGRY_MULT
 	# [상점] 하늘에서 내려온 바깥 크기의 물건: 몰려와 깎아 창고로 (WORLD_EVENTS 1.1) — 낮에, 어른 (아이는 먹을 것만 조금씩)
 	if work_t and not hurt and r.age >= 2.5 and not v.drops.is_empty() and SkyDrops.carve_open(v):
 		cand["carve"] = Balance.ACT_BASE["haul"] * 1.4 * Balance.W_DAY_WORK * (1.0 if r.is_adult() else 0.5)
@@ -488,7 +501,53 @@ static func _do(v: Village, r: Resident, k: String, h: float) -> bool:
 			return _care(v, r)
 		"chores":
 			return _chores(v, r)
+		"forage":
+			return _forage(v, r)
 	return false
+
+
+## 거둘 자리: 둘레의 서 있는 나무 곁(숲 가)을 몇 번 골라 보고, 없으면 들. 물 위면 다시 고른다 (몇 번 해도 물이면 이번엔 나가지 않는다)
+static func _forage_spot(v: Village) -> Variant:
+	for i in 6:
+		var c: Variant = null
+		for j in 3:
+			if v.trees.is_empty():
+				break
+			var tr: Dictionary = v.trees[v.rng.randi() % v.trees.size()]
+			if tr["s"] == "tree" and Vector2(float(tr["x"]) - v.fire.x, float(tr["y"]) - v.fire.y).length() <= Balance.FORAGE_RANGE:
+				c = near(v, float(tr["x"]), float(tr["y"]), 1.2)
+				break
+		if c == null:
+			c = near(v, v.fire.x, v.fire.y, Balance.FORAGE_RANGE * (0.5 + 0.5 * v.rng.randf()))
+		var p: Vector2 = c
+		if not v.water_at(p.x, p.y):
+			return p
+	return null
+
+
+## 맨손 채집 (design/gdd/daily-schedule.md R4.6 · 2026-11-10): 둘레의 들·숲 가에서 숙여 거두고 (gather) 바구니에 담아 창고로.
+## 거둘 몫은 떠날 때 둘레(Village.wild_food)에서 잡아 둔다 — 여럿이 같은 것을 보고 나가 빈손으로 돌아오지 않게. 도중에 그만두면 되돌린다
+static func _forage(v: Village, r: Resident) -> bool:
+	var s := v.store()
+	if s == null:
+		return false
+	var amt := minf(Balance.FORAGE_LOAD, v.wild_food)
+	if amt < Balance.FORAGE_LOAD * Balance.FORAGE_LOAD_MIN:
+		return false
+	var sp: Variant = _forage_spot(v)
+	if sp == null:
+		return false
+	var p: Vector2 = sp
+	v.wild_food -= amt
+	r.doing = "들과 숲 가에서 먹을 것을 찾는 중"
+	if v.t - v.forage_note_t >= Balance.FORAGE_NOTE_DAYS * Balance.DAY:
+		v.forage_note_t = v.t
+		v.log_line("일손은 남는데 연장이 모자랐다. %s%s 빈 바구니를 들고 숲 가로 나갔다." % [r.name, Village.josa(r.name, "은", "는")])
+		v.speak(r, "손 놓고 있느니 숲 가라도 돌아보고 올게요", 5)
+	r.steps.append(walk(p.x, p.y))
+	r.steps.append(act(Balance.FORAGE_TIME, "gather", op("forage_take", {"amt": amt}), false, op("forage_undo", {"amt": amt})))
+	_drop_at_store(v, r, s, Balance.FORAGE_ITEM, 0.0)
+	return true
 
 
 ## v5 (GD 7.3) 아기 돌봄: 집에서 흔들고 먹이고 안아 줌. 낮에 가끔 나무 유모차(바구니 수레)를 끌고 마을을 한 바퀴 —

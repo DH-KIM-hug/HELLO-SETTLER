@@ -1,43 +1,32 @@
-## 수명 재 보기 (ROADMAP Q5, 2026-11-10) — 헤드리스 측정 도구. 게임 코드의 값은 바꾸지 않는다.
+## 수명·출산 속도 재 보기 (ROADMAP Q5, 2026-11-10) — 헤드리스 측정 도구. 게임 코드의 값은 바꾸지 않는다.
 ## 넓은 세상 + 기본 키트를 병 N일 돌리며 (tools/balance_v5_report.gd와 같은 하루: 지켜봄 → 비움(CatchUp ×6) 되풀이),
-## 날마다 인구·나이 구성·출생·사망·집·먹을 것·시대 점수·지폐를 한 줄씩 찍는다. 모으기는 밖에서 (로그의 DAY · DEATH · END 줄).
+## 날마다 인구·나이 구성·출생·사망·집·먹을 것·시대 점수·지폐를 한 줄씩 찍는다. 모으기는 밖에서 (로그의 DAY · CHIEF · DEATH · PACE · END 줄).
 ##
 ## 실행:
 ##   godot --headless --path godot -s res://tools/measure_lifespan.gd -- consts
 ##   godot --headless --path godot -s res://tools/measure_lifespan.gd -- run <변형> <시드> <일수> [light|typical|heavy] [이주민 뽑기/현실 하루=0]
 ##
-## 변형 (나이 먹는 빠르기만 — 도구 안에서 덮어씀. Balance.AGE_K 등 상수는 그대로):
-##   base      게임 그대로 (손대지 않음)
-##   x1emu     ×1을 도구 방식으로 흉내 (검증용 — base와 통계로 같아야 한다)
-##   x2 x3 x4  일생 전체 ×2·×3·×4 (AGE_K 8·12·16과 같은 뜻 — 모든 나이 구간 + 노환 굴림)
-##   adult2 adult3 adult4  어린 시절(0~4 일생 날 = 병 16일)은 그대로, 어른·노년(4~)만 ×2·×3·×4
-##   c15a3     어린 시절 ×1.5 + 어른·노년 ×3
-##   child2    일생 길이는 그대로, 어린 시절(0~4)만 ×2 — 어른 구간(4~20)이 그만큼 짧아짐 (×0.75)
-##   x2care x3care  일생 ×2·×3이되 아기 돌봄 기간(CARE_DAYS 0.8 일생 날)은 지금의 병 3.2일 그대로
-##   adult2f adult3f  adult2·adult3 + 아이 낳는 나이 창(지금 병 56일)을 병 날로 그대로 — 그 나이를 넘긴 아내의 fert를 0으로
-##                    (BIRTH_WIFE_MAX를 18 → 4 + 14 ÷ 배율로 낮춘 것의 어림. fertile_couples()는 여전히 18까지 센다)
+## 변형: game (= base) — 게임 코드 그대로. 뒤에 '+이름'을 붙여 거인의 손만 바꾼다:
+##   game+nohelp    거인이 아무것도 주지 않는다 (하늘 낟알 없음 · 소원 안 들어줌) — 공물 거두기·제단 넓히기는 그대로
+##   game+nofloor   '어린것이 드물면 한 집이 아기를 맞는다'(Balance.BIRTH_LITTLE_MIN)만 끈 것처럼 — 걸음 묶음마다 Village.birth_floor_t를 지금으로 써서 쉬는 날이 끝나지 않게 한다
+##   (여럿: game+nohelp+nofloor)
 ##
-## 덮어쓰는 법 (게임 코드 고치지 않음):
-##   - 걸음 묶음(병 1시간 이하)이 끝날 때마다 그동안 먹은 나이를 구간 배율로 다시 계산해 Resident.age에 써 넣는다.
-##   - 노환 굴림은 Resident.fx["lifespan"]을 아주 크게 해 게임 쪽 굴림을 끄고, 같은 식
-##     (DEATH_BASE + DEATH_SLOPE × (la − DEATH_FROM)) × dt / (DAY × AGE_K × 배율), la > DEATH_MAX_AGE면 반드시 — 를 도구가 굴려 Village.kill(p, "노환").
-##     혈통 장수·단명 배율은 Bloodlines.effects(blood)에서 읽어 그대로 쓴다.
+## 1단계(2026-11-10 오전)에는 나이 먹는 빠르기(x2 · adult3 …)와 출산 속도 규칙(kids · room · gap · floor …)을 이 도구가 흉내 냈다 —
+## docs/measure/lifespan_2026-11-10.md 1~6.8장의 숫자가 그것. 규칙이 게임에 들어간 뒤(Balance.AGE_K_ADULT · BIRTH_LITTLE_*)로는 흉내와 진짜가 겹치지 않게
+## 흉내 쪽을 지웠다 (옛 도구는 커밋 197e1a0). 6.9장부터는 이 도구의 'game'.
+##   날마다 CHIEF 줄(창고·집 필요·땅)과 끝에 PACE 줄(36일 인구·출생, 40일부터 어린것 평균·최소·4명 이상인 날·0명이 이어진 날·빠듯한 때 맞은 아기 수) · MOMS 줄(엄마마다 낳은 수)을 더 찍는다.
 extends SceneTree
 
 const H := 3600.0
 const D := 86400.0
-const BIG := 1.0e9
-const INF_AGE := 1.0e9
 
 ## 놀이 패턴 → [현실 하루 접속 횟수, 한 번에 지켜보는 현실 분]. 비운 시간 = (24시간 − 지켜본 시간) ÷ 횟수 (모두 등불 12시간 안)
 const PATTERNS := {"light": [2, 5.0], "typical": [3, 10.0], "heavy": [3, 20.0]}
 
 var jw: JarWorld
-var variant := "base"
-var bands: Array = []              # [[나이 끝, 배율], …] — 비면 게임 그대로
-var fert_cut := 0.0                # > 0이면 이 나이(일생 날)를 넘긴 여자의 fert를 0으로 (adult2f · adult3f)
-var age_prev := {}                 # instance id → 고쳐 쓴 나이
-var life_mult := {}                # instance id → 혈통 수명 배율 (장수 1.15 · 단명 0.8)
+var variant := "game"
+var no_help := false               # '+nohelp': 하늘 낟알·소원 없음
+var no_floor := false              # '+nofloor': 빠듯한 때 아기 맞기를 끈 것처럼
 var drng := RandomNumberGenerator.new()
 var seed_v := 0
 var mig_per_day := 0
@@ -59,7 +48,9 @@ var d_gate_care := 0
 var d_blocked := 0
 var d_food_min := 1.0e9
 var short_days := 0
-var tool_deaths := 0
+var floor_last := {}               # 마을 instance id → 마지막으로 본 Village.birth_floor_t
+var floor_births := 0              # 빠듯한 때 (먹을 것 문이 닫힌 채) 맞은 아기 수
+var kid_days: Array = []           # 날마다 [병 날, 어린것 수, 인구, 태어난 수] — 끝에 PACE 줄
 
 
 func _initialize() -> void:
@@ -69,17 +60,26 @@ func _initialize() -> void:
 		_consts()
 		quit()
 		return
-	variant = args[1] if args.size() > 1 else "base"
+	variant = args[1] if args.size() > 1 else "game"
+	var parts := variant.split("+")
+	if not parts[0] in ["game", "base"]:
+		push_error("unknown variant %s — only 'game' (the real code) is left; the simulated variants were removed when the rule went into the game" % parts[0])
+		quit(1)
+		return
+	for i in range(1, parts.size()):
+		match parts[i]:
+			"nohelp":
+				no_help = true
+			"nofloor":
+				no_floor = true
+			_:
+				push_error("unknown option " + parts[i])
+				quit(1)
+				return
 	seed_v = int(args[2]) if args.size() > 2 else 11
 	var days := int(args[3]) if args.size() > 3 else 60
 	var pat := args[4] if args.size() > 4 else "typical"
 	mig_per_day = int(args[5]) if args.size() > 5 else 0
-	if variant == "adult2f" or variant == "adult3f":
-		var s := 2.0 if variant == "adult2f" else 3.0
-		fert_cut = Balance.AGE_ADULT + (Balance.BIRTH_WIFE_MAX - Balance.BIRTH_WIFE_MIN) / s
-		bands = _bands("adult2" if s == 2.0 else "adult3")
-	else:
-		bands = _bands(variant)
 	drng.seed = hash([seed_v, "lifespan-tool"])
 	Village.default_created = {"year": 2026, "month": 4, "day": 15}
 	Village.start_aware = false
@@ -87,42 +87,10 @@ func _initialize() -> void:
 	quit()
 
 
-static func _bands(vname: String) -> Array:
-	match vname:
-		"base":
-			return []
-		"x1emu":
-			return [[INF_AGE, 1.0]]
-		"x2":
-			return [[INF_AGE, 2.0]]
-		"x3":
-			return [[INF_AGE, 3.0]]
-		"x4":
-			return [[INF_AGE, 4.0]]
-		"adult2":       # 어린 시절(0~4)은 지금 그대로 병 16일, 어른·노년만 ×2·×3·×4
-			return [[Balance.AGE_ADULT, 1.0], [INF_AGE, 2.0]]
-		"adult3":
-			return [[Balance.AGE_ADULT, 1.0], [INF_AGE, 3.0]]
-		"adult4":
-			return [[Balance.AGE_ADULT, 1.0], [INF_AGE, 4.0]]
-		"c15a3":        # 어린 시절 ×1.5 (병 24일) + 어른·노년 ×3
-			return [[Balance.AGE_ADULT, 1.5], [INF_AGE, 3.0]]
-		"child2":       # 어린 시절 병 16일 → 32일, 어른 64일 → 48일, 노년 그대로
-			return [[Balance.AGE_ADULT, 2.0], [Balance.AGE_ELDER, 0.75], [INF_AGE, 1.0]]
-		"x2care", "x3care":
-			var s := 2.0 if vname == "x2care" else 3.0
-			var jar_child := Balance.AGE_ADULT * Balance.AGE_K * s          # 어린 시절 병 날
-			var jar_care := Balance.CARE_DAYS * Balance.AGE_K                # 돌봄 병 3.2일 그대로
-			var mid := (jar_child - jar_care) / ((Balance.AGE_ADULT - Balance.CARE_DAYS) * Balance.AGE_K)
-			return [[Balance.CARE_DAYS, 1.0], [Balance.AGE_ADULT, mid], [INF_AGE, s]]
-	push_error("unknown variant " + vname)
-	return []
-
-
 # ───────────────────────── 상수 + 노환 분포 (식 그대로 적분) ─────────────────────────
 func _consts() -> void:
-	print("CONST AGE_K=%.1f AGE_BABY=%.1f AGE_ADULT=%.1f AGE_ELDER=%.1f CARE_DAYS=%.2f MARRY=%.0f~%.0f BIRTH_WIFE=%.0f~%.0f YEARS_PER_DAY=%.1f" % [
-		Balance.AGE_K, Balance.AGE_BABY, Balance.AGE_ADULT, Balance.AGE_ELDER, Balance.CARE_DAYS, Balance.MARRY_MIN, Balance.MARRY_MAX,
+	print("CONST AGE_K=%.1f AGE_K_ADULT=%.1f BIRTH_LITTLE max=%d min=%d min_pop=%d rest=%.1f AGE_BABY=%.1f AGE_ADULT=%.1f AGE_ELDER=%.1f CARE_DAYS=%.2f MARRY=%.0f~%.0f BIRTH_WIFE=%.0f~%.0f YEARS_PER_DAY=%.1f" % [
+		Balance.AGE_K, Balance.AGE_K_ADULT, Balance.BIRTH_LITTLE_MAX, Balance.BIRTH_LITTLE_MIN, Balance.BIRTH_LITTLE_MIN_POP, Balance.BIRTH_LITTLE_REST_DAYS, Balance.AGE_BABY, Balance.AGE_ADULT, Balance.AGE_ELDER, Balance.CARE_DAYS, Balance.MARRY_MIN, Balance.MARRY_MAX,
 		Balance.BIRTH_WIFE_MIN, Balance.BIRTH_WIFE_MAX, Balance.YEARS_PER_DAY])
 	print("CONST DEATH_FROM=%.0f DEATH_BASE=%.2f DEATH_SLOPE=%.2f DEATH_MAX_AGE=%.0f MARRY_RATE=%.2f BIRTH_RATE=%.2f CARE_CAP=%d BIRTH_FOOD_DAYS=%.1f" % [
 		Balance.DEATH_FROM, Balance.DEATH_BASE, Balance.DEATH_SLOPE, Balance.DEATH_MAX_AGE, Balance.MARRY_RATE, Balance.BIRTH_RATE, Balance.CARE_CAP, Balance.BIRTH_FOOD_DAYS])
@@ -130,7 +98,7 @@ func _consts() -> void:
 		float(Balance.SPEEDS[Balance.SPEED_DEFAULT_I]), D / float(Balance.SPEEDS[Balance.SPEED_DEFAULT_I]) / 60.0, str(Balance.AWAY_RATES),
 		float(Balance.AWAY_RATES[Balance.AWAY_DEFAULT_I]), str(Market.LAMP_HOURS)])
 	print("CONST jar days: baby<%.0f child<%.0f adult<%.0f (elder from) certain death>%.0f" % [
-		Balance.AGE_BABY * Balance.AGE_K, Balance.AGE_ADULT * Balance.AGE_K, Balance.AGE_ELDER * Balance.AGE_K, Balance.DEATH_MAX_AGE * Balance.AGE_K])
+		_jar(Balance.AGE_BABY), _jar(Balance.AGE_ADULT), _jar(Balance.AGE_ELDER), _jar(Balance.DEATH_MAX_AGE)])
 	for mult: float in [1.0, 0.8, 1.15]:
 		var s := 1.0                    # 살아 있을 몫
 		var la := Balance.DEATH_FROM
@@ -152,66 +120,38 @@ func _consts() -> void:
 				q[k] = Balance.DEATH_MAX_AGE
 		print("OLDAGE lifespan_mult=%.2f | life days mean %.2f p10 %.2f p50 %.2f p90 %.2f | jar days mean %.1f p10 %.1f p50 %.1f p90 %.1f max %.0f | reach cap %.1f%%" % [
 			mult, mean * mult, float(q[0.1]) * mult, float(q[0.5]) * mult, float(q[0.9]) * mult,
-			mean * mult * Balance.AGE_K, float(q[0.1]) * mult * Balance.AGE_K, float(q[0.5]) * mult * Balance.AGE_K, float(q[0.9]) * mult * Balance.AGE_K,
-			Balance.DEATH_MAX_AGE * mult * Balance.AGE_K, 100.0 * s])
+			_jar(mean * mult), _jar(float(q[0.1]) * mult), _jar(float(q[0.5]) * mult), _jar(float(q[0.9]) * mult),
+			_jar(Balance.DEATH_MAX_AGE * mult), 100.0 * s])
 	var ages := PackedStringArray()
 	for f: Array in Balance.FIRST_SETTLERS:
 		ages.append("%.1f" % float(f[2]))
 	print("FOUNDERS ages (life days): ", ", ".join(ages))
 
 
-# ───────────────────────── 나이 덮어쓰기 ─────────────────────────
-## 나이 a에서 게임이 d(일생 날 — 병 날 ÷ AGE_K)만큼 먹였을 때, 구간 배율로 다시 계산한 나이
-func _adv(a: float, d: float) -> float:
-	for b: Array in bands:
-		if d <= 0.0:
-			break
-		if a >= float(b[0]):
-			continue
-		var sl := float(b[1])
-		var room := (float(b[0]) - a) * sl
-		if d <= room:
-			return a + d / sl
-		d -= room
-		a = float(b[0])
-	return a
+## 일생 날 나이 → 태어나서 그 나이가 될 때까지의 병 날 (어린 시절 AGE_K · 어른·노인 AGE_K_ADULT)
+static func _jar(age: float) -> float:
+	return minf(age, Balance.AGE_ADULT) * Balance.AGE_K + maxf(0.0, age - Balance.AGE_ADULT) * Balance.AGE_K_ADULT
 
 
-func _slow(a: float) -> float:
-	for b: Array in bands:
-		if a < float(b[0]):
-			return float(b[1])
-	return 1.0
-
-
-## 병 dt_j초가 흐른 뒤: 나이를 고쳐 쓰고 노환을 굴린다
-func _fix(dt_j: float) -> void:
-	if bands.is_empty():
-		return
-	var born_max := dt_j / (D * Balance.AGE_K) + 1e-6
+# ───────────────────────── 빠듯한 때 맞은 아기 (Village.birth_floor_t) ─────────────────────────
+## 걸음 묶음(병 1시간 이하) 앞: '+nofloor'면 쉬는 날이 끝나지 않게 한다
+func _before() -> void:
 	for q: Village in jw.settlements:
-		for p: Resident in q.people.duplicate():
-			var id := p.get_instance_id()
-			var a := p.age
-			if age_prev.has(id):
-				a = _adv(float(age_prev[id]), p.age - float(age_prev[id]))
-			elif p.age <= born_max:           # 이 묶음에서 태어남
-				a = _adv(0.0, p.age)
-			p.age = a
-			age_prev[id] = a
-			if fert_cut > 0.0 and p.sex == "f" and a >= fert_cut and p.fert != 0.0:
-				p.fert = 0.0
-			if float(p.fx.get("lifespan", 0.0)) != BIG:      # 새 사람 · 혈통이 다시 정해짐 → 게임 쪽 노환 굴림 끄기
-				life_mult[id] = float(Bloodlines.effects(p.blood).get("lifespan", 1.0))
-				var fx := p.fx.duplicate()
-				fx["lifespan"] = BIG
-				p.fx = fx
-			var la := a / float(life_mult[id])
-			if la >= Balance.DEATH_FROM:
-				var pd := Balance.DEATH_BASE + Balance.DEATH_SLOPE * (la - Balance.DEATH_FROM)
-				if drng.randf() < pd * dt_j / (D * Balance.AGE_K * _slow(a)) or la > Balance.DEATH_MAX_AGE:
-					q.kill(p, "노환")
-					tool_deaths += 1
+		var id := q.get_instance_id()
+		if no_floor:
+			q.birth_floor_t = q.t
+			floor_last[id] = q.t
+
+
+## 걸음 묶음 뒤: birth_floor_t가 바뀌었으면 그런 아기가 하나 태어난 것 (병 하루에 하나까지라 놓치지 않는다)
+func _after() -> void:
+	for q: Village in jw.settlements:
+		var id := q.get_instance_id()
+		var was := float(floor_last.get(id, -1.0))
+		if q.birth_floor_t != was:
+			if not no_floor and q.birth_floor_t >= 0.0:
+				floor_births += 1
+			floor_last[id] = q.birth_floor_t
 
 
 # ───────────────────────── 한 판 ─────────────────────────
@@ -234,7 +174,6 @@ func _run(days: int, pat: String) -> void:
 	Market.today_override = "R1"
 	print("START variant %s seed %d days %d pattern %s | per session watch %.2f jar d + away %.2f jar d | %.2f jar days per real day | mig/day %d" % [
 		variant, seed_v, days, pat, watch_j / D, away_j / D, per_real_day, mig_per_day])
-	_fix(0.0)
 	var tapped := 0
 	var dropped := false
 	while v.t < 23.0 * H:                  # 창세의 날 (balance_v5_report와 같음)
@@ -274,10 +213,11 @@ func _run(days: int, pat: String) -> void:
 		var left := away_j                 # 비움: 병 한 시간씩 따라잡기
 		while left > 1.0:
 			var chunk := minf(H, left)
+			_before()
 			var c := CatchUp.new(v, chunk / rate, lamp_s, jw, rate)
 			c.run()
 			c.finish()
-			_fix(chunk)
+			_after()
 			left -= chunk
 			_sample(v, false)
 		_collect()
@@ -287,8 +227,9 @@ func _run(days: int, pat: String) -> void:
 
 
 func _advance(dt: float) -> void:
+	_before()
 	jw.advance(dt)
-	_fix(dt)
+	_after()
 
 
 func _all() -> Array:
@@ -330,7 +271,7 @@ func _sample(v: Village, watching: bool) -> void:
 		lean += 1
 	elif fd >= 1.5:
 		in_lean = false
-	if watching and fd < 1.0 and v.t - last_help >= D:      # 거인의 손: 비축이 하루치 아래면 하늘 낟알 (병 하루에 한 번까지)
+	if watching and not no_help and fd < 1.0 and v.t - last_help >= D:      # 거인의 손: 비축이 하루치 아래면 하늘 낟알 (병 하루에 한 번까지)
 		v.manna_fall("giant")
 		helps += 1
 		last_help = v.t
@@ -405,16 +346,64 @@ func _flush_day(v: Village) -> void:
 	var pop: int = n[0] + n[1] + n[2] + n[3]
 	if d_short > 0:
 		short_days += 1
-	print("DAY v=%s seed=%d day=%d pop=%d baby=%d child=%d adult=%d elder=%d born=%d died=%d starved=%d houses=%d cap=%d built=%d couples=%d fert=%d singles=%d workers=%d carers=%d blocked=%.2f foodmin=%.2f short=%d gate_food=%.2f gate_care=%.2f lean=%d helps=%d era=%d pts=%.1f notes=%.0f sett=%d" % [
+	print("DAY v=%s seed=%d day=%d pop=%d baby=%d child=%d adult=%d elder=%d born=%d died=%d starved=%d houses=%d cap=%d built=%d couples=%d fert=%d singles=%d workers=%d carers=%d blocked=%.2f foodmin=%.2f short=%d gate_food=%.2f gate_care=%.2f lean=%d helps=%d era=%d pts=%.1f notes=%.0f sett=%d hand=%.0f trips=%d wild=%.0f tools=%.0f" % [
 		variant, seed_v, cur_day + 1, pop, n[0], n[1], n[2], n[3], born, died, starved, houses, cap, built, couples, fert, singles, workers, carers,
 		float(d_blocked) / d_samples, d_food_min, 1 if d_short > 0 else 0, float(d_gate_food) / d_samples, float(d_gate_care) / d_samples,
-		lean, helps, v.era, v.era_pts, income, jw.settlements.size()])
+		lean, helps, v.era, v.era_pts, income, jw.settlements.size(),
+		float(v.stats.get("forage_food", 0.0)), int(v.stats.get("forage_trips", 0)), v.wild_food, float(v.stock.get("도구", 0.0))])
+	kid_days.append([cur_day + 1, int(n[0]) + int(n[1]), pop, born])
+	# 촌장이 보는 것 (읽기만): 창고 · 집 필요(house_need) · 땅 한계 · 짓는 터 · 일 없는 어른
+	var hn := v.house_need()
+	var sites := 0
+	var hcap := 0
+	for b: Building in v.buildings:
+		if b.is_site():
+			sites += 1
+		if b.built and b.is_house():
+			hcap += b.cap()
+	var idle := 0
+	for p: Resident in v.people:
+		if p.is_adult() and p.job < 0:
+			idle += 1
+	print("CHIEF v=%s seed=%d day=%d tools=%.0f plank=%.0f stone=%.0f logs=%.0f food_days=%.2f hn_free=%d hn_need=%d short=%d crowded=%d homeless=%d land=%.0f cap=%d era_house=%s farms=%d sites=%d idle=%d" % [
+		variant, seed_v, cur_day + 1, float(v.stock["도구"]), float(v.stock["판자"]), float(v.stock["돌"]), float(v.stock.get("통나무", 0.0)),
+		v.food_total() / maxf(1.0, Production.day_need(v)), int(hn["free"]), int(hn["need"]), 1 if bool(hn["short"]) else 0, 1 if bool(hn["crowded"]) else 0,
+		1 if bool(hn["homeless"]) else 0, v.land_capacity() * Balance.HOUSE_SLACK, hcap, String(Balance.ERA_HOUSE[mini(v.era, 3)]), v.count_type("농장"), sites, idle])
 	d_samples = 0
 	d_short = 0
 	d_gate_food = 0
 	d_gate_care = 0
 	d_blocked = 0
 	d_food_min = 1.0e9
+
+
+## 끝 요약 — 36일(현실 첫 3일) 인구·출생과 40일부터의 어린것(아기 + 아이): 평균 · 최소 · 4명 이상인 날의 몫 · 0명이 이어진 가장 긴 날 수
+func _pace_line() -> void:
+	var pop36 := -1
+	var born36 := -1
+	var sum := 0
+	var cnt := 0
+	var lo := 1 << 30
+	var ge4 := 0
+	var zero := 0
+	var zero_max := 0
+	for r: Array in kid_days:
+		var day := int(r[0])
+		var kids := int(r[1])
+		if day == 36:
+			pop36 = int(r[2])
+			born36 = int(r[3])
+		if day < 40:
+			continue
+		sum += kids
+		cnt += 1
+		lo = mini(lo, kids)
+		if kids >= 4:
+			ge4 += 1
+		zero = zero + 1 if kids == 0 else 0
+		zero_max = maxi(zero_max, zero)
+	print("PACE v=%s seed=%d pop36=%d born36=%d from=40 days=%d kids_avg=%.2f kids_min=%d ge4=%.3f zero_run=%d floor_births=%d" % [
+		variant, seed_v, pop36, born36, cnt, float(sum) / maxf(1, cnt), lo if cnt > 0 else -1, float(ge4) / maxf(1, cnt), zero_max, floor_births])
 
 
 func _end(v: Village, per_real_day: float, secs: float) -> void:
@@ -433,8 +422,7 @@ func _end(v: Village, per_real_day: float, secs: float) -> void:
 		for p: Resident in q.people + q.dead:
 			if p.parents.size() != 2 or not by_id.has(p.parents[0]):
 				continue
-			var born_t := (p.death_t if p.dead else q.t) - p.age * Balance.AGE_K * D      # 게임 그대로일 때만 정확 (변형은 어림)
-			if bands.is_empty() and born_t < -1.0:
+			if p.born_t <= 0.0:
 				continue                      # 처음부터 있던 아이
 			var mom: Resident = by_id[p.parents[0]]
 			if mom.dead and (not p.dead or p.death_t > mom.death_t):
@@ -445,7 +433,24 @@ func _end(v: Village, per_real_day: float, secs: float) -> void:
 			if gap >= Balance.BIRTH_WIFE_MIN - 0.5 and gap <= Balance.BIRTH_WIFE_MAX + 0.5:
 				mom_sum += gap
 				mom_n += 1
+	_pace_line()
 	print("MOMAGE v=%s seed=%d mean=%.2f n=%d" % [variant, seed_v, mom_sum / maxf(1, mom_n), mom_n])
+	# 엄마마다 낳은 수 (이 판에서 태어난 아이만, 죽은 사람도 셈) — 출산이 몇 집에 몰리는지. 여자는 낳는 나이(BIRTH_WIFE_MIN)에서 일생 2일이 지난 사람만
+	var per := {}
+	var hist := [0, 0, 0, 0, 0, 0, 0]          # 0 · 1 · 2 · 3 · 4 · 5 · 6명 이상
+	var most := 0
+	for q: Village in jw.settlements:
+		for p: Resident in q.people + q.dead:
+			if p.parents.size() == 2 and p.born_t > 0.0:
+				per[p.parents[0]] = int(per.get(p.parents[0], 0)) + 1
+	for q: Village in jw.settlements:
+		for p: Resident in q.people + q.dead:
+			if p.sex != "f" or p.age < Balance.BIRTH_WIFE_MIN + 2.0:
+				continue
+			var c := int(per.get(p.id, 0))
+			hist[mini(c, 6)] += 1
+			most = maxi(most, c)
+	print("MOMS v=%s seed=%d none=%d one=%d two=%d three=%d four=%d five=%d six_up=%d most=%d" % [variant, seed_v, hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], most])
 	for e in 3:
 		if float(era_at[e]) < 0.0 and v.era > e:
 			era_at[e] = v.t / D
@@ -453,9 +458,9 @@ func _end(v: Village, per_real_day: float, secs: float) -> void:
 	for q: Village in jw.settlements:
 		bad.append_array(q.check_invariants())
 		bad.append_array(PackedStringArray(q.violations))
-	print("END v=%s seed=%d days=%.1f per_real_day=%.2f pop=%d era=%d era1_day=%.1f era2_day=%.1f short_days=%d lean=%d helps=%d notes=%.0f mig_bought=%d mig_people=%d tool_deaths=%d causes=%s spared=%d marriages=%d moves=%d invariants=%d secs=%.0f" % [
+	print("END v=%s seed=%d days=%.1f per_real_day=%.2f pop=%d era=%d era1_day=%.1f era2_day=%.1f short_days=%d lean=%d helps=%d notes=%.0f mig_bought=%d mig_people=%d causes=%s spared=%d marriages=%d moves=%d invariants=%d secs=%.0f" % [
 		variant, seed_v, v.t / D, per_real_day, _all().size(), v.era, float(era_at[0]), float(era_at[1]), short_days, lean, helps, income,
-		mig_bought, mig_people, tool_deaths, JSON.stringify(why), int(v.stats.get("spared", 0)), int(v.stats["marriages"]), int(v.stats["moves"]), bad.size(), secs])
+		mig_bought, mig_people, JSON.stringify(why), int(v.stats.get("spared", 0)), int(v.stats["marriages"]), int(v.stats["moves"]), bad.size(), secs])
 	if not bad.is_empty():
 		print("  !! ", bad.slice(0, 5))
 
@@ -480,6 +485,8 @@ func _buy_altar() -> void:
 
 
 func _grant() -> void:
+	if no_help:
+		return
 	for q: Village in jw.settlements:
 		for l: Dictionary in q.open_letters("wish"):
 			q.grant_wish(int(l["id"]))

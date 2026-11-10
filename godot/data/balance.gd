@@ -45,8 +45,11 @@ const SPEAK_EVERY := 240.0
 
 # ───────────────────────── 주민 ─────────────────────────
 # BALANCE v5 (2026-11-07 — 병 하루 = 현실 5분): 나이는 '일생 날' 단위 그대로 (아래 값·표시 나이 2.4세/일생 날)이고,
-# 일생 날 하나가 병 AGE_K일에 흐른다 → 일생 약 25 × 4 = 병 100일 ≈ 하루 10분씩 세 번 오는 사람의 현실 열흘 (GD 6.6 '일생 현실 1~2주')
-const AGE_K := 4.0                      # 병 하루에 나이는 1/AGE_K 일생 날 (Village.step)
+# 일생 날 하나가 병 age_k(나이)일에 흐른다 (v5 처음엔 모두 4일 → 일생 병 100일. 2026-11-10부터 어른·노년만 12일 → 일생 약 병 270일)
+const AGE_K := 4.0                      # 어린 시절 (일생 0~4날): 병 하루에 나이는 1/AGE_K 일생 날 (Village.step)
+## 어른·노년은 세 배 천천히 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6장): 일생 날 하나 = 병 12일.
+## 어린 시절은 그대로 (병 16일이면 어른) → 한살이 약 병 16 + (25 − 4) × 12 ≈ 병 270일. 나이 값(일생 날)·단계 경계·표시 나이는 그대로다
+const AGE_K_ADULT := 12.0               # 어른·노인 (일생 4날~): 병 하루에 나이는 1/AGE_K_ADULT 일생 날 — 노환 확률도 같은 빠르기로 (Village._deaths)
 const AGE_BABY := 1.0                   # 0~1 아기 (병 4일 — 걸음마 약 2.4세) · 1~4 아이 · 4~20 성인 · 20~ 노인 (일생 날)
 const AGE_ADULT := 4.0
 const AGE_ELDER := 20.0
@@ -96,6 +99,13 @@ const CARE_ELDER_DAYS := 0.15           # 같은 집에 노인이 있으면 한 
 const STROLL_P := 0.25                  # (v5) 돌보는 부모가 낮에 결정할 때 유모차 산책을 나갈 확률
 const STROLL_HAPPY := 0.03              # 산책하는 아기를 들여다본 사람 행복 +
 const STROLL_R := 3.0
+## 어린것은 늘 넷에서 여섯 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6.6): 어른이 오래 살면 한 또래가 한꺼번에 태어나고
+## 오래 아무도 태어나지 않는다 → 마을의 어린것(아기 + 아이, 일생 4날 아래)이 MAX명이면 다음 아기는 기다리고, 먹을 것 문이 닫혀도 MIN명 아래면 한 집이 아기를 맞는다
+const BIRTH_LITTLE_MAX := 6             # 어린것이 이만큼이면 그 걸음엔 아무도 낳지 않는다 (첫 출생 보장은 예외)
+const BIRTH_LITTLE_MIN := 4             # 먹을 것 문이 닫혀 있고 어린것이 이보다 적으면 한 집이 아기를 맞는다 — 0이면 이 규칙을 끈다
+const BIRTH_LITTLE_MIN_POP := 24        # … 마을이 이만큼은 되어야 (처음 몇 주는 오늘 그대로)
+const BIRTH_LITTLE_REST_DAYS := 1.0     # … 그런 아기는 병 하루에 하나까지
+const BIRTH_LITTLE_NOTE_DAYS := 10.0    # (정함) … 연대기의 '아이 웃음소리가 드물어졌다' 줄은 그런 아기가 이만큼 없다가 다시 올 때만 (긴 겨울에 같은 줄이 줄줄이 서지 않게)
 const BIRTH_WIFE_MIN := 4.0
 const BIRTH_WIFE_MAX := 18.0
 const FERT_LO := 0.4                    # 개인 출산 배율 (삼각분포, 평균 1)
@@ -109,7 +119,7 @@ const HAPPY_HIGH := 0.75                # (정함) 이 위 = 높음
 const STARVED_RECENT := 1.0 * DAY       # (정함) 최근 하루 안에 식량이 모자랐으면 '굶주림'
 const FIRST_BIRTH_GUARANTEE := true     # OPENING 3장: 첫 출생은 1일차 보장 (확률 보정)
 const FIRST_BIRTH_AT := 1.0 * HOUR      # v5: 출생은 대개 문(먹을 것·아기·집)에서 막히므로 첫 아기는 첫날 아침(도착 1시간 뒤부터 — 빈자리 있는 집이 생기면) — 수첩 '아기 이름' 쪽지 전에
-const DEATH_FROM := 20.0                # 노인 일생 날 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30 상한 (병 하루엔 ÷ AGE_K)
+const DEATH_FROM := 20.0                # 노인 일생 날 하루 사망 확률 = 0.05 + 0.06 × (나이 − 20), 30 상한 (병 하루엔 ÷ age_k(나이) — 어른·노인은 AGE_K_ADULT)
 const DEATH_BASE := 0.05
 const DEATH_SLOPE := 0.06
 const DEATH_MAX_AGE := 30.0
@@ -255,6 +265,23 @@ const SEASON_GROW_MAX := 1.1
 const FARM_FAV_DAYS := 0.15            # (정함) 거인님이 밀을 좋아하신다고 믿으면 이만큼 날을 더 (다른 물건의 ×1.5 대신 — 식량이라 바치는 몫이 너무 커지지 않게)
 const PLANK_RESERVE := 4                # 촌장이 남기는 비상용 판자 (나무꾼·제재소 제외)
 const IDLE_FOR_NEW_JOB := 2             # 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외)
+## 맨손 채집 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6.10 · design/gdd/daily-schedule.md R4.6):
+## 연장이 모자라 일터가 없는 어른은 마을 둘레의 들과 숲 가에서 먹을 것을 손으로 거둬 바구니에 담아 온다.
+## 연장을 쥔 일보다 훨씬 적게, 추운 철엔 덜, 둘레의 땅이 내는 만큼만 (끝없는 사람을 먹이지 못한다).
+const FORAGE_ITEM := "버섯"             # 창고에 들어가는 이름 (이미 있는 먹을 것 · 바구니 그림 mushroom_basket) — 새 물건을 만들지 않는다
+const FORAGE_LOAD := 44.0               # 바구니 하나 (식량 단위 — 한 사람의 하루는 DAY ÷ FOOD_IV = 96. 36으로 재 보니 겨울에 둘레는 남는데 손이 모자랐다)
+const FORAGE_LOAD_MIN := 0.5            # 둘레에 남은 것이 바구니의 이만큼도 안 되면 나가지 않는다
+const FORAGE_TIME := 2400.0             # 숙여 거두는 시간 (병 초)
+const FORAGE_RANGE := 10.0              # 모닥불에서 이 안의 들·숲 가 (칸 — 한 번 다녀오는 데 병 두 시간 남짓, 재 보니 하루 서너 번)
+const FORAGE_GROUND := 8000.0           # 둘레의 들이 병 하루에 내는 양 (따뜻한 철 · 식량 단위 — 여든세 사람 하루치. 한겨울엔 쉰 사람치)
+const FORAGE_PER_TREE := 60.0           # … 서 있는 나무 한 그루마다 더 (숲 바닥)
+const FORAGE_TREES_MAX := 50            # … 나무는 이만큼까지만 센다
+const FORAGE_KEEP_DAYS := 1.5           # 거두지 않아도 이만큼 날치까지만 쌓인다 (들에서 시든다)
+const FORAGE_WINTER := 0.6              # 가장 추운 철에 나는 양 (따뜻한 철의 몫 — 밭 자람 Health.season_grow를 따라 줄어든다)
+const FORAGE_ENOUGH_DAYS := 1.0         # 창고 먹을 것이 이만큼 날치면 나가지 않는다 (집안일로) — 하루치도 안 남았을 때만 나간다
+const FORAGE_HUNGRY_MULT := 1.5         # 배가 고픈데 나갈 수 있으면: 빈 창고 앞에서 기다리는 것(먹기 점수)보다 이만큼 앞선다
+const FORAGE_SCORE := 5.0               # 할 일 점수 (나르기와 같음 — 짓기·나르기가 먼저)
+const FORAGE_NOTE_DAYS := 30.0          # (정함) 연대기 '바구니를 들고 나갔다' 줄은 이만큼에 한 번
 const FARM_SAFETY := 1.3                # 농장 생산 < 소비 × 1.3 이면 식량 부족
 const FARM_FEEDS := 6.0                 # 먹을 것이 모자랄 때 촌장의 어림: 밭 하나 = 죽으로 6명 (빵을 구우면 × BREAD/PORRIDGE = 12명 — v5-0, 밭이 넘치게 지어지지 않게)
 const FOREST_MIN := 40                  # 나무가 이만큼 아래면 산림관
@@ -431,6 +458,11 @@ const B_LABEL := {
 
 
 ## 건물 종류 → 보이는 이름 (건물이 아닌 물건 이름은 그대로 돌려준다)
+## 일생 날 하나가 병 며칠에 흐르는가 — 어린 시절(0~AGE_ADULT)은 AGE_K, 어른·노인은 AGE_K_ADULT (늙는 빠르기 · 노환 확률이 함께 읽는다)
+static func age_k(age: float) -> float:
+	return AGE_K if age < AGE_ADULT else AGE_K_ADULT
+
+
 static func label(type: String) -> String:
 	return String(B_LABEL.get(type, type))
 
