@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc", "test_story_no_stop",
+	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc", "test_story_no_stop", "test_story_no_kids",
 		"test_minder", "test_peek", "test_first_steps", "test_save", "test_village_day", "test_watch_determinism", "test_view"])
 
 
@@ -1376,6 +1376,36 @@ func test_story_no_stop() -> void:
 	busy = v.social.get("busy", {})
 	check(not ev2.is_empty() and busy.has(str(el.id)) and busy.has(str(nb.id)) and _events(v, from, &"talk_started").size() == 1,
 		"… 그리고 실제로 멈춰 서서 이야기함 (talk_started)")
+
+
+func test_story_no_kids() -> void:
+	print("== 아이·아기: 이야기 부르기 — 아이가 한 명도 없는 마을에서는 열리지 않음 (빈 목록을 읽지 않음)")
+	var v := _village(19.3)
+	var e := Vector2(v.fire.x + 1.4, v.fire.y + 1.4)
+	for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:
+		var q := Vector2(v.fire.x, v.fire.y) + Vector2(cos(a), sin(a)) * 2.0
+		if ChildPlay.story_side(v, q) != 0:
+			e = q
+			break
+	for i in range(v.people.size() - 1, -1, -1):      # 아이·아기를 모두 뺌
+		if v.people[i].is_child():
+			v.people.remove_at(i)
+	_elder(v, e.x, e.y)
+	var st := ChildPlay._state(v)
+	var n0 := int(st["n"])
+	var kids := 0
+	for r in v.people:
+		if r.is_child():
+			kids += 1
+	check(kids == 0, "마을에 아이가 없음")
+	for i in 4:
+		ChildPlay._story_call(v, st, st["g"])
+	check(int(st["n"]) == n0 and ChildPlay.games(v).is_empty(), "아이가 없으면 이야기가 열리지 않음 (%d → %d)" % [n0, int(st["n"])])
+	var k := _kid(v, "보리", 1.6, e.x + 1.5, e.y + 0.8)      # 아이가 하나뿐이면 그 아이만 듣는다
+	k.action = "play"
+	k.steps = [ResidentAI.act(900.0, "play")]
+	ChildPlay._story_call(v, st, st["g"])
+	check(int(st["n"]) <= n0 + 1, "아이 하나: 이야기는 많아야 한 번 열림")
 
 
 func test_story_arc() -> void:

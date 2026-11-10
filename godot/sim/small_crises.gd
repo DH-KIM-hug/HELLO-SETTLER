@@ -475,7 +475,7 @@ func _gnat_startle(v: Village) -> void:
 			any = true
 			if r.action != "crisis_hide" and r.action != "crisis_smoke":
 				v.raise_fear(r, Balance.GNAT_STARTLE_FEAR)
-				if r.action in ["work", "build", "haul", "idle", "social", "play", "chop", "gather"]:
+				if r.action in ["work", "build", "haul", "idle", "social", "play", "chop", "gather", "forage"]:
 					ResidentAI.cancel(v, r)         # 일이 멈춘다 — 다음 결정에서 숨는다
 	if any:
 		gnat_startles += 1

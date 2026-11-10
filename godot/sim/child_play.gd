@@ -619,7 +619,7 @@ static func _story_call(v: Village, st: Dictionary, gs: Array) -> void:
 				n_kids += 1
 				if _story_free(v, k) and _story_reach(v, k, e, left):
 					near.append(k)
-		if near.size() < mini(STORY_KIDS, n_kids):     # 둘은 모여야 (아이가 하나뿐인 마을은 그 아이만)
+		if near.is_empty() or near.size() < mini(STORY_KIDS, n_kids):     # 둘은 모여야 (아이가 하나뿐인 마을은 그 아이만 · 아이가 없으면 없음)
 			continue
 		near.sort_custom(func(a: Resident, b: Resident) -> bool:      # 가까운 아이부터 자리만큼
 			var da := Vector2(a.x - e.x, a.y - e.y).length_squared()
