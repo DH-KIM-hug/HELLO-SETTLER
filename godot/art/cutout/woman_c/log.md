@@ -226,6 +226,58 @@ feet3_footlock_close_0_05_1_ppu44_x3.mp4, feet3_footlock_close_0_05_1_ppu20_x6.m
 feet3_live_cutout_vs_frames_ppu44_x2.mp4, feet3_live_cutout_vs_frames_ppu20_x4.mp4.
 Tool: `shot_cutC_compare.gd` env `CUTC_DYE=<8 dye entries>` (both dolls), `CUTC_LOCK=<0..1>`.
 
+## 2026-11-10 v11 — remaining states: sit, eat, look up, kneel, hoe (+ sickle / mallet), gather
+No parts pasted: every state sheet is a whole-sheet drawing over a puppet reference (`tools/cutout_c/pose_states.py` ->
+`gen_state.sh` -> `build_frames.py`), whole cells only, root line anchoring, same dye masks as walk / carry.
+
+Clips and frames per view (frames.json `frames_per_clip`; drawn cells are reused inside a loop, `ENTRIES` in pose_states.py):
+sit 2 (breathing), eat 8 entries from 4 drawn cells (bread up / bite / chew with a small head nod / down), lookup 8 entries
+from 4 cells (hand to the brow, front view only as on the old doll), kneel 5 entries from 2 cells (hands together, bow with
+a head tilt; 4 views), hoe 4 (wind-up, top, strike, pull; 4 views), gather 4 (half bend, pick, rise, stand; 3/4 views only). sit / eat / gather mirror exactly where the old doll
+does (`SIDE_ONLY`), lookup is front only (`FRONT_ONLY`). 48 new cells, 144 in all, 220 frame records.
+Atlas 1608x1384 -> 1608x2112 (cell 134x176), x3 textures (atlas + 2 masks).
+
+Props stay overlay sprites (the old doll's `PROPS` sheet, same indices): bread in eat; hoe / sickle / mallet in the hoe clip —
+one body sheet for all three (hammer / build = hoe clip + mallet, as on the old doll). frames.json `prop` = angle, hand
+position, grip per frame (fists found on the drawing: eat 32 of 32 frames, hoe 12 of 16, else the puppet's). Head-up tools
+(sickle 7, mallet 9) are turned half a turn so the head points to the blade side (`frame_lib.gd` `PROP_HEAD_UP`).
+Back view: the tool is behind the body and is kept above the root line (`TOOL_HALF`), so it is hidden by the skirt
+(the old doll shows a sliver of the blade under the hem).
+
+Leftovers of v10 done here:
+- front / back standing sheets redrawn from the same kind of reference as the 3/4 ones (`raw/pose_idle_{front,back}.png`),
+  same scale, hem and boots as the walking frames.
+- speckles (3/4 back carry-idle and walk, seen with a dyed dress): the dye classifier, not the drawing. Seam lines inside the
+  sleeves read as skin, the sack knot as dress rose, and the apron's lower corner (below the hem in its own columns) took the
+  legwear class. `classify()`: cream that continues up out of the leg rows is cloth, not a stocking; islands of a class under
+  48 px (sheet), or under 220 px when wholly inside the figure, take the class around them (a far fist at the silhouette edge
+  is kept). Checked on all 144 cells (masks before / after side by side): hands, stockings and boots keep their class.
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/pose_{sit_q_front,sit_q_back,pray_front,work_front,work_q_front,work_q_back,work_back,idle_front,idle_back}.png | v11 references | pose_states.py / pose_ref.py | - | 1536x1024 | 2026-11-10 | yes | sit sheets: sit + kneel + eat of that 3/4 view; pray_front: lookup + kneel front; work 3/4 sheets: hoe + gather; work_front: hoe; work_back: hoe + kneel back |
+| raw/sit_q_front.png | take s1 of 2 | codex-cli 0.163.0 (built-in image gen) | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/sit_q_back.png | take s2 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/pray_front.png | take s1 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/work_q_front.png | take s2 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/work_q_back.png | take s1 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/work_front.png, raw/work_back.png | take s1 of 1 | same | - | 1536x1024 | 2026-11-10 | yes | - |
+| raw/idle_front.png, raw/idle_back.png | take p1 of 2 | same | - | 1536x1024 | 2026-11-10 | yes | replaces the free-drawn v2 sheets |
+
+Extra takes and `raw/check_*.png` deleted; logs of the chosen takes kept (`tools/cutout_c/logs/log_state_*`,
+`log_pose_idle_{front,back}_p1.txt`).
+
+Still weak: hoe top pose in the 3/4 views — the fists are beside the head, so only the blade shows above it and a short tool
+(mallet, sickle) is hidden behind the head for about a quarter of the loop; back view shows no tool at all; work is shown in
+the personal dress (no job outfit sheets yet, so no outfit puff either); gather bends for 2 of 8 phases (old doll 4 of 8) and
+less deep; lookup raises the hand without tilting the head back; carry / carry-idle still always show the flour sack; the
+near boot's shoe mask is ragged where its dark shading reads as ink; sleep and baby-in-arms are not drawn (old doll).
+
+Shots: godot_shots/cutC/states4_{sit,eat,lookup,kneel,hoe,gather}_ppu{20,44}.png, states4_hoe_mallet_ppu{20,44}.png,
+states4_speckfix_dyed_{walk,hold}_ppu{20,44}.png, states4_sit_eat_stand_ppu44.mp4, states4_hoe_ppu44.mp4.
+Tool: `shot_cutC_compare.gd` env `CUTC_CLIPS=<clips>`, `CUTC_PROP=<prop index for hoe>`, `CUTC_SEQ=sit_eat|hoe|pray|gather`
+(live, scripted), `CUTC_TOOL=<tool id>`.
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to
