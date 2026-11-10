@@ -49,6 +49,7 @@ var _near_shadow: Node3D        # 그림자 전용 묶음 (가까이 LOD일 때�
 var _shadow_items := {}         # 건물 id → [노드 변환, [[메시, 재질, 건물 기준 Transform3D]…]]
 var _shadow_dirty := false
 ## (2D 그림 건물 — view/bld2d/bld2d.gd, RENDERING.md 확정 2026-11-08) 건물마다 그림 판 + 3D 모델은 그림자 대역
+var wheat_accent := ""            # (Q8) 밀밭 꾸밈 그림 — "" 없음 · Bld2D.Pics.WHEAT_ACCENTS의 이름 ("scarecrow" · "flowers"). 바꾸면 _bld_key를 비워 다시 그림
 var _bld2d_on := false            # 지금 그림으로 그리는가 (Bld2D.enabled — 바뀌면 건물을 다시 만듦)
 var _card_items := {}             # 건물 id → [[그림, 마을 기준 원점(올림 포함), k, flip]…] (멀리 묶음 · 접촉 그림자)
 var _contact: MultiMeshInstance3D # 접촉 그림자 타원 (모든 건물 = 그리기 1번, 늘 보임)
@@ -1481,15 +1482,13 @@ func _build_shape(n: Node3D, b: Building) -> void:
 	far.name = "far"
 	n.add_child(far)
 	if b.type == "농장":
-		_build_wheat(near, far, b)
-		if _bld2d_on:                 # (2D) 밀밭 그림 (자람 단계 셋) — 3D 줄기는 그림자만
-			Bld2D.proxify(near)
-			Bld2D.proxify(far)
-			# [보이는 살림 Q6] 뒤쪽 건물의 더미 줄을 가리는 밭은 그림을 줄여 놓는다 (화면만 — BldEcon.wheat_cap. 밭 자리·수확은 그대로)
-			var wk := econ.wheat_build_k(b) if econ != null else 1.0
-			near.scale = Vector3.ONE * wk
-			far.scale = Vector3.ONE * wk
-			_add_card(n, b, Bld2D.wheat_pic(wheat_stage(b, v.t)), wk)
+		if _bld2d_on:
+			# (2D · Q8 낮은 노란 밀밭) 눕힌 흙 + 이랑마다 세운 밀 줄 + 앞 울타리 — 모두 흙 그림과 같은 높이에. 줄마다 제 깊이에 서서
+			# 밭 안의 주민은 앞줄에 허리까지 묻히고 머리·어깨는 보인다. 키 큰 3D 줄기(긴 그림자 대역)는 만들지 않는다
+			for pic: String in Bld2D.wheat_cards(wheat_stage(b, v.t), wheat_accent):
+				_add_card(n, b, pic, 1.0, false, true)
+		else:
+			_build_wheat(near, far, b)
 		_set_yard(far, b, far.get_child_count() > 0)
 		_apply_bld_lod(n)
 		return
@@ -1536,11 +1535,12 @@ static func _cam_right2() -> Vector2:
 
 
 ## (2D) 건물 노드에 그림 판을 달고 기록 (멀리 묶음 · 접촉 그림자). 땅에 눕힌 그림은 발자리 네 귀퉁이 중 가장 높은 곳 위로
-func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false) -> void:
+## on_ground = 세운 그림도 그 높이에 (눕힌 그림 위에 서는 것 — 밭 흙 위의 밀 줄·울타리)
+func _add_card(n: Node3D, b: Building, pic: String, k := 1.0, flip := false, on_ground := false) -> void:
 	if not Bld2D.has(pic):
 		return
 	var lift := 0.0
-	if int(Bld2D.info(pic).get("mode", 0)) == 1:
+	if on_ground or int(Bld2D.info(pic).get("mode", 0)) == 1:
 		var s := b.size()
 		var top := gy(b.x, b.y)
 		for a in 4:

@@ -47,9 +47,21 @@ static func type_pic(type: String, variant := 0, era := 1) -> String:
 	return String(list[absi(variant) % list.size()])
 
 
-## 밀밭 자람 단계(VillageView.wheat_stage 0~2) → 그림
+## 밀밭 자람 단계(VillageView.wheat_stage 0~2) → 밭 전체를 한 장으로 눌러 놓은 그림 (건물 카드 그림 · 자리 셈 — 더미 줄·풍선 높이)
 static func wheat_pic(stage: int) -> String:
 	return String(Pics.WHEAT[clampi(stage, 0, Pics.WHEAT.size() - 1)])
+
+
+## 낮은 노란 밀밭 (Q8 · GAME_DESIGN 104): 마을 화면에서는 밭을 겹으로 그린다 — 눕힌 흙 + 이랑마다 세운 밀 줄(뒤→앞) + 앞 울타리
+## (+ 꾸밈 accent: Pics.WHEAT_ACCENTS의 이름, 없으면 ""). 줄마다 제 깊이(front)에 서므로 밭 안에 선 주민은 앞줄에 허리까지 묻히고
+## 뒷줄은 가린다 — 건물 그림 판의 보통 깊이 규칙 그대로 (방위를 돌려도 같음). 그림: tools/bld2d/wheat_field.py
+static func wheat_cards(stage: int, accent := "") -> Array:
+	var out: Array = [Pics.WHEAT_SOIL]
+	out.append_array(Pics.WHEAT_ROWS[clampi(stage, 0, Pics.WHEAT_ROWS.size() - 1)])
+	out.append(Pics.WHEAT_FENCE)
+	if Pics.WHEAT_ACCENTS.has(accent):
+		out.append(Pics.WHEAT_ACCENTS[accent])
+	return out
 
 
 ## 짓는 터 여덟 단계(VillageView.SITE_STAGES) → 네 장: 말뚝·바닥 · 뼈대 · 벽 · 서까래
@@ -91,6 +103,8 @@ static func material(name: String) -> ShaderMaterial:
 	m.set_shader_parameter("tex", near_texture(name))
 	m.set_shader_parameter("geo", Vector4(d.get("w", 2.5), d.get("h", 2.5), d.get("front", 1.1), d.get("dx", 0.0)))
 	m.set_shader_parameter("mode", float(d.get("mode", 0)))
+	m.set_shader_parameter("sway", float(d.get("sway", 0.0)))
+	m.set_shader_parameter("lean", float(d.get("lean", 0.0)))
 	_mats[name] = m
 	return m
 
@@ -134,10 +148,14 @@ static func multi_material() -> ShaderMaterial:
 	var geo := PackedVector4Array()
 	var uvr := PackedVector4Array()
 	var pm := PackedFloat32Array()
+	var sw := PackedFloat32Array()
+	var ln := PackedFloat32Array()
 	var n := Pics.PICS.size()
 	geo.resize(n)
 	uvr.resize(n)
 	pm.resize(n)
+	sw.resize(n)
+	ln.resize(n)
 	for name: String in Pics.PICS:
 		var d: Dictionary = Pics.PICS[name]
 		var i: int = d["i"]
@@ -145,12 +163,16 @@ static func multi_material() -> ShaderMaterial:
 		geo[i] = Vector4(d["w"], d["h"], d["front"], d["dx"])
 		uvr[i] = Vector4(r.position.x, r.position.y, r.size.x, r.size.y)
 		pm[i] = float(d["mode"])
+		sw[i] = float(d.get("sway", 0.0))
+		ln[i] = float(d.get("lean", 0.0))
 	_multi_mat = ShaderMaterial.new()
 	_multi_mat.shader = MULTI_SHADER
 	_multi_mat.set_shader_parameter("atlas", load(Pics.ATLAS))
 	_multi_mat.set_shader_parameter("geo", geo)
 	_multi_mat.set_shader_parameter("uvr", uvr)
 	_multi_mat.set_shader_parameter("pmode", pm)
+	_multi_mat.set_shader_parameter("psway", sw)
+	_multi_mat.set_shader_parameter("plean", ln)
 	return _multi_mat
 
 

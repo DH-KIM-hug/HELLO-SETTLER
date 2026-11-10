@@ -671,7 +671,8 @@ func test_plants() -> void:
 	Flora2D.override = oldf
 
 
-## (v3) 밀밭: 뒤쪽 건물의 더미 줄을 가리는 밭은 그림을 낮춤 (두 방위) — 밭 자리·수확은 그대로
+## (Q8) 낮은 노란 밀밭: 익어도 주민 가슴 높이라 뒤쪽 건물의 더미 줄을 가리지 않는다 — 그림을 줄이는 규칙은 없어짐 (두 방위).
+## 밭은 눕힌 흙 + 세운 밀 줄 여섯 + 앞 울타리로 겹쳐 그리고, 가리는지 보는 판(_covers)도 줄마다 하나씩. 밭 자리·수확은 그대로
 func test_wheat() -> void:
 	var scene := _scene()
 	var av := _village(scene)
@@ -690,63 +691,59 @@ func test_wheat() -> void:
 	a.stock["판자"] = 0.0
 	var band := BldEcon.pile_band(a, saw)
 	check(band.size() == 3 and float(band[1]) < float(band[2]) and float(band[0]) > 0.0, "제재소의 더미 줄 %s" % [band])
-	var d := Bld2D.info(Bld2D.wheat_pic(2))
-	var h := float(d["h"]) * float(BldEcon.WHEAT_FILL[2])
-	var fr := float(d["front"])
+	# 그림: 세 단계 모두 흙 한 장(눕힘) + 줄 여섯 + 울타리. 선 그림은 낮다 — 익은 줄도 주민 키(화면 0.83칸쯤)의 0.65배 아래
+	var tall := 0.0
+	var layered := true
+	for stg in 3:
+		var names := Bld2D.wheat_cards(stg)
+		var up := 0
+		for nm: String in names:
+			var rd := Bld2D.info(nm)
+			layered = layered and not rd.is_empty()
+			if not rd.is_empty() and int(rd.get("mode", 0)) == 0:
+				up += 1
+				tall = maxf(tall, float(rd["h"]))
+		layered = layered and names.size() == 8 and up == 7
+	check(layered and tall > 0.3 and tall < 0.83 * 0.65, "밀밭 = 흙 + 밀 줄 여섯 + 울타리 (세 단계) · 가장 키 큰 줄 %.2f칸 (주민 가슴 높이)" % tall)
+	check(Bld2D.wheat_cards(2, "scarecrow").size() == 9 and Bld2D.wheat_cards(2, "없는 꾸밈").size() == 8, "꾸밈 그림은 고른 때만 한 장 더")
 	var mid := (float(band[1]) + float(band[2])) * 0.5
-	var all_b: Array = a.buildings.duplicate()
+	farm.ready_at = a.t - 1.0                # 익은 밀 (가장 키 큰 그림)
 	for st in [0, 1]:
 		var sd := BldEcon.step_dirs(st)
 		var tw: Vector2 = sd[0]
 		var rt: Vector2 = sd[1]
-		var o := Vector2(saw.x, saw.y) + rt * mid + tw * (float(band[0]) + BldEcon.WHEAT_CLEAR)
-		# 두 건물만 놓고 규칙을 봄 (다른 건물이 섞이지 않게)
-		a.buildings.clear()
-		a.buildings.append(saw)
-		a.buildings.append(farm)
-		farm.ready_at = a.t - 1.0            # 익은 밀 (키 큰 그림)
-		farm.x = o.x + tw.x * 5.0
-		farm.y = o.y + tw.y * 5.0
-		var k := BldEcon.wheat_cap(a, farm, st)
-		check(k < 1.0 and k > BldEcon.WHEAT_MIN_K and (5.0 + fr * k) * BldEcon.APRON_SIN >= h * k - 0.01,
-			"방위 걸음 %d: 더미 줄 5칸 앞의 익은 밭은 %.2f배로 — 윗선이 줄에 닿지 않음" % [st, k])
-		check(is_equal_approx(BldEcon.wheat_cap(a, farm, (st + 2) % 4), 1.0), "방위 걸음 %d: 반대편에서 보면 (밭이 건물 뒤) 그대로" % st)
-		farm.x = o.x + tw.x * 1.0
-		farm.y = o.y + tw.y * 1.0
-		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), BldEcon.WHEAT_MIN_K), "방위 걸음 %d: 바로 앞 밭도 %.2f배보다 작게는 줄이지 않음 (그때는 더미를 옆으로)" % [st, BldEcon.WHEAT_MIN_K])
-		farm.x = o.x + tw.x * 30.0
-		farm.y = o.y + tw.y * 30.0
-		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 멀리 앞의 밭은 그대로" % st)
-		farm.x = o.x + tw.x * 5.0 + rt.x * 12.0
-		farm.y = o.y + tw.y * 5.0 + rt.y * 12.0
-		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 옆으로 비켜 선 밭은 그대로" % st)
-		farm.x = o.x + tw.x * 5.0
-		farm.y = o.y + tw.y * 5.0
-		farm.ready_at = a.t + Balance.GROW_FIRST
-		check(is_equal_approx(BldEcon.wheat_cap(a, farm, st), 1.0), "방위 걸음 %d: 싹(낮은 그림)은 그대로" % st)
-		farm.ready_at = a.t - 1.0
-		# 마을 전체에서 화면까지: 그 방위의 카메라로 — 밭 그림 판이 그 크기로 서고, 제재소 더미는 밭 그림에 가리지 않음
-		a.buildings.clear()
-		a.buildings.append_array(all_b)
-		_yaw_cam(scene, vw, st)
-		econ._apron_frame = -1
-		for i in 4:
-			vw.sync(0.3, true)
-		var want := BldEcon.wheat_cap(a, farm, st)
-		var built := float(econ._wheat_built.get(farm.id, -1.0))
-		var org: Vector3 = (vw._blds[saw.id] as Node3D).position
-		var piles := _pile_xy(econ, org, "planks_", 4.5)
-		var hid := piles.is_empty()
-		for c: Array in econ._covers:
-			if int(c[4]) != farm.id:
-				continue
-			for pl: Vector2 in piles:
-				var dv := Vector2(float(c[0]), float(c[1])) - (Vector2(org.x, org.z) + econ._r2 * pl.x + econ._f2 * pl.y)
-				var al := dv.dot(econ._f2)
-				if al > 0.05 and al * BldEcon.APRON_SIN < float(c[3]) and absf(dv.dot(econ._r2)) < float(c[2]) + BldEcon.PILE_HALF:
-					hid = true
-		check(econ.step == st and want < 1.0 and is_equal_approx(econ.wheat_k(farm), want) and absf(built - want) < 0.011 and not hid,
-			"방위 걸음 %d: 밭 그림 판 %.2f배 (규칙 %.2f) · 제재소 판자 더미 %d개는 밭 그림에 안 가림" % [st, built, want, piles.size()])
+		var o := Vector2(saw.x, saw.y) + rt * mid + tw * float(band[0])
+		for ahead: float in [5.0, 2.0]:      # 더미 줄 5칸 앞 (옛 그림은 줄여야 했던 자리) · 2칸 앞 (바로 앞)
+			farm.x = o.x + tw.x * ahead
+			farm.y = o.y + tw.y * ahead
+			vw._bld_key.erase(farm.id)
+			_yaw_cam(scene, vw, st)
+			econ._apron_frame = -1
+			for i in 4:
+				vw.sync(0.3, true)
+			var cards := 0
+			var full := true
+			for c: Node in (vw._blds[farm.id] as Node3D).get_children():
+				if c is MeshInstance3D and c.has_meta(&"pic"):
+					cards += 1
+					full = full and is_equal_approx(float((c as MeshInstance3D).get_instance_shader_parameter("k")), 1.0)
+			var org: Vector3 = (vw._blds[saw.id] as Node3D).position
+			var piles := _pile_xy(econ, org, "planks_", 4.5)
+			var hid := piles.is_empty()
+			var covers := 0
+			var low := true
+			for c: Array in econ._covers:
+				if int(c[4]) != farm.id:
+					continue
+				covers += 1
+				low = low and float(c[3]) <= tall + 0.001
+				for pl: Vector2 in piles:
+					var dv := Vector2(float(c[0]), float(c[1])) - (Vector2(org.x, org.z) + econ._r2 * pl.x + econ._f2 * pl.y)
+					var al := dv.dot(econ._f2)
+					if al > 0.05 and al * BldEcon.APRON_SIN < float(c[3]) and absf(dv.dot(econ._r2)) < float(c[2]) + BldEcon.PILE_HALF:
+						hid = true
+			check(econ.step == st and cards == 8 and full and covers == 7 and low and not hid,
+				"방위 걸음 %d · 더미 줄 %d칸 앞의 익은 밭: 그림 %d장 제 크기 · 가림 판 %d개(줄마다, 낮음) · 제재소 판자 더미 %d개는 안 가림" % [st, int(ahead), cards, covers, piles.size()])
 	scene.queue_free()
 
 

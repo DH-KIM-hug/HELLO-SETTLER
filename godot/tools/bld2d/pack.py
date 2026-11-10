@@ -23,8 +23,10 @@ ATLAS_W = 2048
 PAD = 4
 
 
-def resize_rgba(img: Image.Image, w: int, h: int) -> Image.Image:
-    """Premultiplied Lanczos; rim pixels lean to the ink colour so the alpha-cut edge reads as the outline (spike key.py)."""
+def resize_rgba(img: Image.Image, w: int, h: int, ink=None) -> Image.Image:
+    """Premultiplied Lanczos; rim pixels lean to the ink colour so the alpha-cut edge reads as the outline (spike key.py).
+    ink = the picture's own line colour (table key "ink" — the wheat rows are drawn with a golden/green line, not the dark one)."""
+    INK = np.array(ink, np.float32) if ink is not None else globals()["INK"]
     a = np.asarray(img).astype(np.float32)
     al = a[..., 3:4] / 255.0
     prem = a[..., :3] * al
@@ -83,16 +85,16 @@ def main() -> None:
         h = w * img.height / img.width
         nw = min(img.width, max(32, round(w * table.NEAR_PPU)))
         nh = max(8, round(nw * img.height / img.width))
-        near = resize_rgba(img, nw, nh) if (nw, nh) != img.size else img
+        near = resize_rgba(img, nw, nh, p.get("ink")) if (nw, nh) != img.size else img
         if src.parent != ART:
             save_small(near, ART / f"{name}.png")
         fw = max(16, round(w * p.get("atlas", table.FAR_PPU)))
         fh = max(8, round(fw * img.height / img.width))
-        fars[name] = resize_rgba(img, fw, fh)
+        fars[name] = resize_rgba(img, fw, fh, p.get("ink"))
         mode = 1 if p.get("mode", "card") == "ground" else 0
         rows[name] = dict(w=round(w, 4), h=round(h, 4), front=round(float(p.get("front", w * table.FRONT_K)), 4),
                           dx=float(p.get("dx", 0.0)), mode=mode, shadow=float(p.get("shadow", 1.0 if mode == 0 else 0.0)),
-                          px=[nw, nh])
+                          sway=float(p.get("sway", 0.0)), lean=float(p.get("lean", 0.0)), px=[nw, nh])
     # shelf-pack the far pictures (tallest first)
     order = sorted(fars, key=lambda n: -fars[n].height)
     x = y = shelf = 0
@@ -125,15 +127,19 @@ def main() -> None:
          "extends RefCounted", "",
          f"const ATLAS := \"res://art/bld2d/far_atlas.png\"",
          f"const ATLAS_SIZE := Vector2i({ATLAS_W}, {H})",
-         "## name -> {w, h (world units on screen), front, dx, mode (0 card · 1 ground), shadow, px (near size), uv (atlas rect), i (index)}",
+         "## name -> {w, h (world units on screen), front, dx, mode (0 card · 1 ground), shadow, sway (wind lean), lean (depth-only lean toward the camera), px (near size), uv (atlas rect), i (index)}",
          "const PICS := {"]
     for n, r in rows.items():
         L.append(f"\t\"{n}\": {{\"w\": {r['w']}, \"h\": {r['h']}, \"front\": {r['front']}, \"dx\": {r['dx']}, \"mode\": {r['mode']}, "
-                 f"\"shadow\": {r['shadow']}, \"px\": Vector2i({r['px'][0]}, {r['px'][1]}), "
+                 f"\"shadow\": {r['shadow']}, \"sway\": {r['sway']}, \"lean\": {r['lean']}, \"px\": Vector2i({r['px'][0]}, {r['px'][1]}), "
                  f"\"uv\": Rect2({r['uv'][0]:.6f}, {r['uv'][1]:.6f}, {r['uv'][2]:.6f}, {r['uv'][3]:.6f}), \"i\": {r['i']}}},")
     L.append("}")
     L.append("const TYPES := " + json.dumps(table.TYPES, ensure_ascii=False))
     L.append("const WHEAT := " + json.dumps(table.WHEAT))
+    L.append("const WHEAT_ROWS := " + json.dumps(table.WHEAT_ROWS))
+    L.append(f"const WHEAT_SOIL := \"{table.WHEAT_SOIL}\"")
+    L.append(f"const WHEAT_FENCE := \"{table.WHEAT_FENCE}\"")
+    L.append("const WHEAT_ACCENTS := " + json.dumps(table.WHEAT_ACCENTS))
     L.append("const SITES := " + json.dumps(table.SITES))
     L.append("const ALTAR := " + json.dumps(table.ALTAR))
     OUT_GD.parent.mkdir(parents=True, exist_ok=True)

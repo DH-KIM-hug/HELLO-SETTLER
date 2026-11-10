@@ -8,7 +8,8 @@
 ## 움직임은 셰이더(bld_econ.gdshader)가 화면 시계로 — 목록이 바뀔 때만 버퍼를 올린다.
 ## [Q6 남은 것 — 2026-11-10] 더미·일꾼이 가려지지 않게 (전부 화면만):
 ##  · '앞'은 지금 카메라 방위 걸음(step 0~3)으로 — 방위가 바뀔 때만 꽃·풀을 다시 잰다 (apron_ver · place_key)
-##  · 민들레·큰 버섯(FloraView)·밀밭 그림도 더미 앞마당에서는 낮춤 (plant_cap · wheat_k)
+##  · 민들레·큰 버섯(FloraView)도 더미 앞마당에서는 낮춤 (plant_cap). 밀밭은 낮은 밭(Q8 — 익어도 주민 가슴 높이)이라 줄이지 않는다:
+##    가리는 것은 밀 줄 하나하나(_cover_scan)뿐이고, 그래도 가리는 더미는 아래 규칙대로 옆으로 옮긴다
 ##  · 다른 건물 그림이 앞을 가리면 더미를 제 건물 앞줄에서 옆으로 (_slot — 건물은 안 옮김)
 ##  · 채집 일꾼 인형은 나무·바위 그림의 깊이 면 앞·화면 옆에 세움 (stand_pos — 시뮬 자리·수확은 그대로) + 그 앞 꽃을 낮춤
 ##  · 둘레에 벨 나무·캘 바위가 없으면 그림 풍선 (bub_no_tree · bub_no_rock) · 조각은 그 일꾼이 정말 베고 캘 때만
@@ -36,7 +37,7 @@ const LAYOUT := {
 	"well": {"out": Vector2(0.95, 0.3), "fx": &"drops", "fx_at": Vector2(0.0, 1.1)},
 	"saltpan": {"out": Vector2(1.5, 0.9), "fx": &"stars", "fx_at": Vector2(0.0, 0.55)},
 	"mushroom_hut": {"out": Vector2(1.3, 0.3)},
-	"wheat_green": {"out": Vector2(1.5, 0.35)},
+	"wheat_green": {"out": Vector2(2.1, 0.12)},     # 볏단 더미 = 낮은 밭(Q8)의 앞 울타리 오른쪽 끝 옆 (울타리·밀 줄을 덮지 않게)
 	"lumber": {"out": Vector2(-1.35, 0.4), "fx_at": Vector2(0.1, 0.5)},      # 움직임 = 도끼 박힌 그루터기 위
 	"quarry": {"out": Vector2(1.85, 0.45), "fx_at": Vector2(-0.35, 1.45)},    # 움직임 = 구덩이 속 바위 위
 }
@@ -63,9 +64,6 @@ const NUDGE_OUT := 1.2           # 건물 그림 반 폭 + 이것 안에서만 (
 const NUDGE_STEP := 0.25         # 반대편·바깥이 다 가리면 이 간격으로 훑음
 const NUDGE_GAP := 0.7           # 그 건물의 다른 더미 자리와 이만큼은 띄움
 ## 밀밭(세워 놓는 큰 그림)이 뒤쪽 건물의 더미 줄을 가리면 밭 그림을 가리지 않는 크기까지 줄인다 (밭 자리·수확은 그대로)
-const WHEAT_FILL := [0.27, 1.0, 0.96]     # 밀 그림에서 실제로 그려진 키 몫 (싹 · 푸른 줄기 · 익은 이삭)
-const WHEAT_MIN_K := 0.45        # 이보다 작게는 줄이지 않음 (그래도 가리면 더미를 옆으로)
-const WHEAT_CLEAR := 0.06        # 밭 그림 윗선은 더미 줄보다 이만큼 앞에서 끝남 (딱 걸쳐 '가림'으로 읽히지 않게)
 ## 채집 일꾼이 서는 자리 (화면만): 나무·바위 그림의 깊이 면 앞 · 화면 옆으로 비켜서 옆모습 도끼질·곡괭이질이 보이게
 const GATHER_OPS := {"나무꾼": "chop", "채석장": "dig"}      # 그 일터 일꾼의 채집 걸음 (ResidentAI.work_task의 done)
 const STAND_FRONT := 0.3         # 그림의 깊이 면보다 이만큼 카메라 쪽
@@ -134,9 +132,6 @@ var rock_draw := {}              # 바위 자리 Vector2 → 그린 크기 (Vill
 var stands := {}                 # 주민 id → [dx, dz, 몫 0~1, 바라보는 쪽] (채집 일꾼 인형을 비켜 세운 만큼)
 var _spots := {}                 # 채집 일터 id → 앞마당 한 줄 [x, y, 0, 옆 폭, 나무·바위 x, y]
 var _apron_sig := 0
-var _bld_sig := 0
-var _wheat := {}                 # 농장 id → [k, 자람 단계]
-var _wheat_built := {}           # 농장 id → 지금 밭 그림 판에 쓴 k (VillageView._build_shape가 물을 때 적음)
 var _covers: Array = []          # 세워 놓은 건물 그림 판 [밑변 가운데 x, z, 반 폭, 가리는 키, 건물 id]
 var _cover_sig := 0
 var _cov_by := {}                # 건물 id → 그 건물 더미 줄을 가릴 수 있는 판 [옆, 앞, 반 폭, 키] (건물 자리에서)
@@ -408,11 +403,6 @@ func _rebuild() -> void:
 		var pk := pic_k(v, b)
 		var pic := String(pk[0])
 		var k := float(pk[1])
-		if b.type == "농장" and not b.is_site():       # 밀밭 그림: 뒤쪽 건물의 더미 줄을 가리면 줄인 크기로 (다르면 그 밭 노드만 다시)
-			var wk := wheat_k(b)
-			if _wheat_built.has(b.id) and absf(wk - float(_wheat_built[b.id])) > 0.01:
-				vw._bld_key.erase(b.id)
-			k *= wk
 		if b.is_site():
 			sites2[b.id] = true
 		elif _sites.has(b.id) and _seen_once:
@@ -447,9 +437,6 @@ func _rebuild() -> void:
 	for id: int in _prod.keys():
 		if not blds.has(id):
 			_prod.erase(id)
-	for id: int in _wheat_built.keys():
-		if not blds.has(id):
-			_wheat_built.erase(id)
 	if spots2 != _spots:             # 일꾼 자리가 바뀜 → 앞마당 다시 (꽃·풀은 다음 살핌에 다시 놓임)
 		_spots = spots2
 		_apron_frame = -1
@@ -751,10 +738,6 @@ func _aprons_now() -> Array:
 		return _aprons
 	_apron_frame = fr
 	var list := apron_list(v)
-	var bsig := hash([list, step])
-	if bsig != _bld_sig:             # 건물·방위가 바뀜 → 밀밭 크기도 다시
-		_bld_sig = bsig
-		_wheat.clear()
 	for id: int in _spots:
 		list.append(_spots[id])
 	var sig := hash([list, step])
@@ -814,55 +797,8 @@ static func pile_band(vil: Village, b: Building) -> Array:
 	return [base + maxf(in_at.y, out_at.y), minf(in_at.x, out_at.x) - m, maxf(in_at.x, out_at.x) + m]
 
 
-## 밀밭 그림의 크기 몫: 방위 걸음 st에서 밭 그림이 뒤쪽 건물(밭·제단 빼고)의 더미 줄을 가리지 않는 가장 큰 k (WHEAT_MIN_K~1).
-## 그림 밑변은 밭 자리에서 카메라 쪽 front × k · 키 h × k → 줄에서 a0 앞에 선 밭은 (a0 + front k) sin ≥ h k 이면 줄을 안 가린다
-static func wheat_cap(vil: Village, farm: Building, st: int) -> float:
-	var stage := VillageView.wheat_stage(farm, vil.t)
-	var d := Bld2D.info(Bld2D.wheat_pic(stage))
-	if d.is_empty() or int(d.get("mode", 0)) != 0:
-		return 1.0
-	var sd := step_dirs(st)
-	var tw: Vector2 = sd[0]
-	var rt: Vector2 = sd[1]
-	var h := float(d["h"]) * float(WHEAT_FILL[clampi(stage, 0, 2)])
-	var fr := float(d["front"])
-	var hw := float(d["w"]) * 0.5 * COVER_W
-	var k := 1.0
-	for b: Building in vil.buildings:
-		if b == farm or b.site_type() == Awakening.ALTAR or b.site_type() == "농장":
-			continue
-		var band := pile_band(vil, b)
-		if band.is_empty():
-			continue
-		var dv := Vector2(farm.x - b.x, farm.y - b.y)
-		var a0 := dv.dot(tw) - float(band[0]) - WHEAT_CLEAR
-		if a0 <= -fr or (a0 + fr * k) * APRON_SIN >= h * k:
-			continue
-		var lat := dv.dot(rt)
-		if lat + hw < float(band[1]) or lat - hw > float(band[2]):
-			continue
-		k = minf(k, maxf(WHEAT_MIN_K, a0 * APRON_SIN / maxf(h - fr * APRON_SIN, 0.01)))
-	return k
-
-
-## 이 밭의 그림 크기 몫 (건물·방위·자람 단계가 바뀔 때만 다시 셈)
-func wheat_k(b: Building) -> float:
-	var stage := VillageView.wheat_stage(b, v.t)
-	var e: Array = _wheat.get(b.id, [])
-	if e.is_empty() or int(e[1]) != stage:
-		e = [wheat_cap(v, b, step) if on else 1.0, stage]
-		_wheat[b.id] = e
-	return float(e[0])
-
-
-## VillageView._build_shape가 밭 그림 판을 달 때 물음 — 쓴 크기를 적어 둔다 (달라지면 _rebuild가 그 밭 노드를 다시 만들게 함)
-func wheat_build_k(b: Building) -> float:
-	var k := wheat_k(b)
-	_wheat_built[b.id] = k
-	return k
-
-
 ## 세워 놓은 건물 그림 판 목록 (다른 건물 앞 더미를 가리는지 볼 것) — 바뀌었을 때만 건물별 목록(_cov_by)을 버린다
+## 밀밭(Q8)은 한 장이 아니라 낮은 밀 줄 여러 겹 (Bld2D.wheat_cards) — 줄마다 제 자리·제 키로 (눕힌 흙은 아무것도 가리지 않는다)
 func _cover_scan() -> void:
 	var cards: Array = []
 	var hidden: Dictionary = vw.hidden_blds
@@ -874,12 +810,16 @@ func _cover_scan() -> void:
 		if d.is_empty() or int(d.get("mode", 0)) == 1:
 			continue
 		var k := float(pk[1])
-		var fill := COVER_FILL
 		if b.type == "농장" and not b.is_site():
-			k *= wheat_k(b)
-			fill = float(WHEAT_FILL[clampi(VillageView.wheat_stage(b, v.t), 0, 2)])
+			for nm: String in Bld2D.wheat_cards(VillageView.wheat_stage(b, v.t), vw.wheat_accent):
+				var rd := Bld2D.info(nm)
+				if rd.is_empty() or int(rd.get("mode", 0)) == 1:
+					continue
+				var rb := Vector2(b.x, b.y) + _f2 * float(rd["front"]) + _r2 * float(rd.get("dx", 0.0))
+				cards.append([rb.x, rb.y, float(rd["w"]) * 0.5, float(rd["h"]), b.id])
+			continue
 		var base := Vector2(b.x, b.y) + _f2 * (float(d["front"]) * k) + _r2 * (float(d.get("dx", 0.0)) * k)
-		cards.append([base.x, base.y, float(d["w"]) * k * 0.5 * COVER_W, float(d["h"]) * k * fill, b.id])
+		cards.append([base.x, base.y, float(d["w"]) * k * 0.5 * COVER_W, float(d["h"]) * k * COVER_FILL, b.id])
 	var sig := hash(cards)
 	if sig != _cover_sig:
 		_cover_sig = sig

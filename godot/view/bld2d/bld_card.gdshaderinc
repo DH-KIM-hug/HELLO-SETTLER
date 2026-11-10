@@ -22,6 +22,23 @@ vec3 bld_place(vec2 corner, vec3 org, vec4 geo, float mode, float flip, float k,
 	return org + right * x - back_h * (corner.y * geo.y * k / sb);
 }
 
+// Wind (the wheat rows): the top edge leans along the camera right by amp world units, the foot stays put (same curve as the
+// flower cards, flora_card.gdshaderinc). The phase runs along the strip and from row to row, so a wave crosses the field.
+vec3 bld_sway(vec3 w, vec2 corner, vec3 org, vec4 geo, float amp, float k, float t, mat4 inv_view) {
+	vec3 right = normalize(vec3(inv_view[0].x, 0.0, inv_view[0].z));
+	float up01 = corner.y + 0.5;
+	float phase = org.x * 0.7 + org.z * 0.9 + geo.z * 2.6 + corner.x * geo.x * 0.8;
+	return w + right * (amp * k * up01 * up01 * sin(t * 1.3 + phase));
+}
+
+// Depth-only lean (the wheat rows): view-space z to add to a card vertex — the foot comes toward the camera along the view ray by
+// lean world units, the top stays, the picture does not move on screen. Rows standing one behind another then form one sloping
+// surface (the top of the wheat): the screen outline (outline_post, by depth jumps) draws no line between them, and a villager
+// standing among them is covered up to the top of the wheat. tools/bld2d/wheat_field.py (LEAN_S) sets the amounts.
+float bld_lean(vec2 corner, float lean, float k) {
+	return lean * k * (0.5 - corner.y);
+}
+
 vec3 bld_srgb_to_linear(vec3 c) {
 	return mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), c));
 }
