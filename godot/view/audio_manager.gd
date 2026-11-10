@@ -79,6 +79,12 @@ const HUSH_DB := -34.0
 var listener := Vector2.ZERO         # 듣는 자리 (카메라가 보는 땅 위의 점)
 var screen_residents := Callable()   # () -> Array[Resident] 화면 안의 주민 (없으면 모든 주민)
 var clock_override := -1.0           # 시험용: 0 이상이면 이 현실 시각(초)을 씀
+# 장례 종 한 번만 (2026-11-11): 누가 떠나면 울리던 종을 조금 기다렸다 울린다 — 그 사이 장례 연출(긴 것 · 짧은 판)이 그 죽음을 맡으면
+# 연출의 종만 들리게 이 종은 버린다. 연출이 없으면(빠르게 가며 멈춤을 껐을 때 · 자리를 비운 동안 · 따라잡는 중) 예전처럼 한 번 울림.
+const DEATH_BELL_WAIT := 0.6         # 이만큼(현실 초) 기다렸다 울림
+const DEATH_BELL_OWN := 2.0          # 연출이 맡은 뒤 이만큼(현실 초) 안에 오는 종도 울리지 않음
+var _bell_at := -1.0                 # 기다리는 장례 종이 울릴 현실 시각 (음수 = 없음)
+var _bell_own_until := -1.0e9        # 이 현실 시각까지는 장례 연출이 종을 맡음
 
 # 음악
 var track := ""                      # 지금 곡
@@ -305,6 +311,7 @@ func _stream(path: String, loop := false) -> AudioStream:
 func attach(v: Village) -> void:
 	village = v
 	_seen.clear()
+	_bell_at = -1.0                    # 다른 마을로 바뀌면 기다리던 장례 종은 버림
 	if v != null:
 		_seen = _snapshot(v)
 		evening = "none"
@@ -318,6 +325,7 @@ func _process(dt: float) -> void:
 	_run_pending(t)
 	if village != null and not menu:
 		_watch_village(dt)
+	_run_bell(t)
 	_update_music()
 	_update_ambient(dt)
 	_update_muffle(dt)
@@ -407,6 +415,30 @@ func _update_muffle(dt: float) -> void:
 	var rate := 1.0 / LID_SWEEP if goal < _muffle else 1.0
 	_muffle = move_toward(_muffle, goal, rate * dt)
 	apply_muffle(_muffle, hush)
+
+
+## 장례 연출이 이 죽음의 종을 맡는다 (view/stage_director.gd — 연출이 시작될 때): 기다리던 종을 버리고, secs(현실 초) 동안 오는 종도 버림
+static func death_staged(secs := DEATH_BELL_OWN) -> void:
+	var a := get_instance()
+	if a != null:
+		a._bell_at = -1.0
+		a._bell_own_until = a.now() + maxf(0.0, secs)
+
+
+## 장례의 짧은 판이 줄 서 있는 동안 (큰 시트가 닫히길 기다림): 기다리는 종을 조금 더 붙잡아 둔다 — 짧은 판이 끝내 못 나오면 그때 울림
+static func death_hold() -> void:
+	var a := get_instance()
+	if a != null and a._bell_at >= 0.0:
+		a._bell_at = maxf(a._bell_at, a.now() + DEATH_BELL_WAIT)
+
+
+## 기다리던 장례 종 (매 화면): 때가 되었고 연출이 맡지 않았으면 한 번 — 아주 작고 낮은 종 (A17). 빠르게 돌릴 땐 없음
+func _run_bell(t: float) -> void:
+	if _bell_at < 0.0 or t < _bell_at:
+		return
+	_bell_at = -1.0
+	if t >= _bell_own_until and not fast():
+		play_sfx("funeral", "Village", -4.0)
 
 
 ## (E1-1 깨달음) 세상이 멈춤: 마을 소리·바람·물·새·마을 음악을 잦아들게 — 0 = 그대로 ~ 1 = 거의 고요 (연출이 매 화면 정함, 끝나면 0)
@@ -665,8 +697,8 @@ func _watch_village(dt: float) -> void:
 		fx("bell", "Village", -2.0)
 		festival()
 		say("wedding")
-	if int(s["funerals"]) > int(o["funerals"]) and not fast():
-		fx("funeral", "Village", -4.0)       # 장례: 아주 작고 낮은 종 한 번 (A17)
+	if int(s["funerals"]) > int(o["funerals"]) and not fast() and now() >= _bell_own_until:
+		_bell_at = now() + DEATH_BELL_WAIT   # 장례: 아주 작고 낮은 종 한 번 (A17) — 조금 뒤에 (_run_bell). 장례 연출이 맡으면 그 종만 들림
 	if float(s["howl"]) > float(o["howl"]) and not fast():
 		fx("wolf_howl", "Village", HOWL_DB)   # 밤에 깊은 숲의 늑대 (B3) — 멀리서 작게, 하루 한 번 (빠르게 돌릴 땐 끔)
 	if int(s["born"]) > int(o["born"]):

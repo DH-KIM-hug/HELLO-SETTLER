@@ -178,12 +178,14 @@ const SCENES := {
 	#   → (화면이 따뜻한 어둠에 잠깐 잠김) → ④ 무덤가로 걸어 들어와 둥글게 섬 → 돌 하나가 세워짐 → 꽃을 한 송이씩 내려놓음 (고개 숙임)
 	#   → ⑤ 손글씨 카드 · 낮은 종 → ⑥ 사람들이 천천히 흩어지고 돌 위에 작은 빛이 머묾.
 	#   깨닫기 전에도 일어나므로 기도·제단·지켜보는 이 이야기 없음 ("pray" 역할은 안 뒤에만 채워짐 — 짧게 무릎).
+	#   소리 (2026-11-11 — 모두 낮고 작게): 낮은 바람(low_wind — 처음 · 고개 숙인 조용한 때) · 느린 발소리(slow_steps — 줄지어 걸을 때) · 돌 놓는 소리(stone_place)
+	#   · 종은 자막 때 한 번뿐 — 죽음마다 울리던 종(GameAudio의 장례 종)은 이 연출이 맡는 동안 울리지 않음 (StageDirector.play → GameAudio.death_staged).
 	"first_death": {"dur": 14.4, "short": 0.6, "rate": 4.0, "at": "ctx", "cast": "funeral", "light_r": 2.4, "hud": false,
 		"reason": "마을이 이별을 배워요",
 		"card": {"find": "그 위에 돌을 세웠다", "at": 10.9},
 		"beats": [
 			{"t": 0.0, "cam": {"size": 8.6, "pitch": 34.0, "lift": 0.9, "dur": 1.6}, "vignette": 0.55, "hush": [0.8, 1.6], "dark": [0.22, 2.2],
-				"fx": ["seeds_wind", -10.0, "Room", 0.8],
+				"fx": ["low_wind", -6.0, "Room", 0.95],
 				"dolls": [{"who": "crowd", "gait": "walk", "droop": 1.0, "go": "gather", "secs": 2.1, "look": "door", "stagger": 0.3},
 					{"who": "mourners", "gait": "walk", "droop": 1.0, "go": "gather", "secs": 1.7, "look": "cam", "delay": 0.4, "stagger": 0.25}]},
 			{"t": 2.2, "cam": {"size": 6.8, "pitch": 32.0, "lift": 0.9, "dur": 1.5}, "fx": ["sigh_0", -13.0, "Room"],
@@ -192,11 +194,11 @@ const SCENES := {
 				"says": [{"who": "hand", "texts": ["…"], "moods": ["sad"], "secs": 2.0}]},
 			{"t": 4.7, "flowers": "all", "cam": {"size": 8.4, "pitch": 34.0, "lift": 0.8, "dur": 1.7},
 				"dolls": [{"who": "all", "go": "line", "secs": 1.3, "look": "ahead", "stagger": 0.1}]},
-			{"t": 6.0, "dolls": [{"who": "all", "go": "off", "secs": 2.0, "look": "ahead"}], "veil": [1.0, 0.6]},
+			{"t": 6.0, "dolls": [{"who": "all", "go": "off", "secs": 2.0, "look": "ahead"}], "veil": [1.0, 0.6], "fx": ["slow_steps", -6.0, "Room", 0.95]},
 			{"t": 6.7, "cam": {"mark": "grave_cam", "size": 7.0, "pitch": 34.0, "lift": 0.7, "cut": true}, "light_at": "grave",
 				"dolls": [{"who": "all", "place": "approach", "look": "grave"}, {"who": "all", "go": "grave", "secs": 2.2, "look": "grave", "stagger": 0.12}], "veil": [0.0, 0.7]},
-			{"t": 9.2, "grave": "stone", "fxs": [["glow", "grave", 2.2, 0.3]], "fx": ["finger_place", -9.0, "Room", 0.85], "light": [0.45, 1.4]},
-			{"t": 9.8, "lay": {"who": "all", "stagger": 0.22}, "dolls": [{"who": "all", "bow": [1.0, 0.16], "stagger": 0.22}]},
+			{"t": 9.2, "grave": "stone", "fxs": [["glow", "grave", 2.2, 0.3]], "fx": ["stone_place", -8.0, "Room", 0.95], "light": [0.45, 1.4]},
+			{"t": 9.8, "lay": {"who": "all", "stagger": 0.22}, "dolls": [{"who": "all", "bow": [1.0, 0.16], "stagger": 0.22}], "fx": ["low_wind", -10.0, "Room", 0.85]},
 			{"t": 10.6, "dolls": [{"who": "pray", "anim": "pray", "stagger": 0.1}]},
 			{"t": 11.2, "caption": "{who:이/가} 세상을 떠났다.\n사람들은 처음으로 이별을 배웠다.", "fx": [["paper", -9.0, "Room"], ["funeral", -9.0, "Room"]]},
 			{"t": 12.4, "grave": "light", "dolls": [{"who": "pray", "anim": "idle"}, {"who": "crowd", "back": 3.0, "stagger": 0.3}]},
@@ -227,13 +229,14 @@ const MINIS := {
 		]},
 	# 또 누군가 떠남 (E1-5): 무덤 곁에 있던 이웃 몇이 꽃을 들고 돌아봄 → 꽃이 한 송이씩 놓임 · 고개 숙임 (눈물 말풍선 그림 하나) → 돌 위의 작은 빛.
 	# 글은 연대기의 그 줄뿐 (카드 없음). 무덤 곁에 아무도 없으면 꽃과 빛만.
+	# 소리 (2026-11-11): 돌 놓는 소리 · 낮은 바람 → 돌 위에 빛이 들 때 낮은 종 한 번 (죽음마다 울리던 종 대신 — StageDirector._start_mini → GameAudio.death_staged)
 	"death_more": {"dur": 3.0, "cast": "grave",
 		"beats": [
-			{"t": 0.0, "flowers": "near", "fx": ["finger_place", -13.0, "Village", 0.8],
+			{"t": 0.0, "flowers": "near", "fx": [["stone_place", -11.0, "Village", 0.95], ["low_wind", -10.0, "Village", 0.95]],
 				"dolls": [{"who": "near", "look": "grave", "droop": 1.0, "stagger": 0.12}]},
 			{"t": 0.4, "lay": {"who": "near", "stagger": 0.28}, "dolls": [{"who": "near", "bow": [1.5, 0.14], "stagger": 0.28}],
 				"says": [{"who": "near", "texts": ["…"], "moods": ["sad"], "secs": 2.2, "delay": 0.3}]},
-			{"t": 1.7, "grave": "light", "fxs": [["glow", "grave", 1.2, 0.35]]},
+			{"t": 1.7, "grave": "light", "fxs": [["glow", "grave", 1.2, 0.35]], "fx": ["funeral", -5.0, "Village"]},
 		]},
 }
 

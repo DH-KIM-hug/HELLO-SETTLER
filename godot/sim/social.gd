@@ -245,6 +245,8 @@ static func _can_stop(v: Village, a: Resident, b: Resident) -> bool:
 			return false
 		if r.is_child() and not ChildPlay.game_of(v, r.id).is_empty():     # [아이·아기] 놀이 중인 아이는 멈춰 세우지 않는다 (만남 자체는 그대로 — sim/child_play.gd)
 			return false
+		if ChildPlay.in_story(v, r.id):                                    # [저녁 이야기] 이야기하는 어르신 · 듣는(들으러 가는) 아이는 멈춰 세우지 않는다 —
+			return false                                                   # 이야기가 끊기지 않게 (만남 자체는 그대로 — 아이 놀이와 같은 규칙)
 	return true
 
 

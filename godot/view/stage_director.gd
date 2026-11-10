@@ -539,6 +539,8 @@ func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 		_begin_moment(ctx)
 	else:
 		_roles = roles(q, _focus_point(q))
+	if String(spec.get("cast", "")) == "funeral":  # 이 죽음의 종은 연출이 맡는다 (자막 때 한 번) — 죽음마다 울리던 종은 연출 내내 울리지 않음
+		GameAudio.death_staged(float(spec.get("dur", 0.0)) * k)
 	_slow_down()
 	_chip_l.text = "천천히 — %s" % String(spec.get("reason", ""))
 	_chip.visible = _chip_wanted()
@@ -819,6 +821,8 @@ func _end() -> void:
 			view.stage_say.erase(rid)
 	_said.clear()
 	var naming := _naming_due()
+	if String(spec.get("cast", "")) == "funeral":  # 끝났거나 건너뜀: 종을 맡은 시간을 줄임 (곧 이어 다른 죽음이 있으면 그 종은 예전처럼)
+		GameAudio.death_staged()
 	_end_moment()
 	_vig = 0.0
 	_vig_goal = 0.0
@@ -1546,6 +1550,8 @@ func idle_step(dt: float) -> void:
 		var m: Dictionary = _minis[i]
 		if float(m["t"]) < 0.0:
 			if _sheet_open():                          # 큰 시트에 가려 안 보임 — 닫히길 기다림
+				if String((m["spec"] as Dictionary)["cast"]) == "grave":
+					GameAudio.death_hold()                 # 그동안 장례 종도 기다림 (짧은 판이 끝내 못 나오면 그때 울림)
 				m["wait"] = float(m["wait"]) + dt
 				if float(m["wait"]) > MINI_WAIT:
 					_minis.remove_at(i)
@@ -1596,6 +1602,7 @@ func _start_mini(m: Dictionary) -> bool:
 	_dolls.bind(view, q)
 	if kind == "grave":
 		_grave_stage(c, view, q, false)
+		GameAudio.death_staged(float((m["spec"] as Dictionary).get("dur", 0.0)))   # 이 죽음의 종은 짧은 판이 맡는다 (돌 위의 빛과 함께 한 번)
 	m["cast"] = c
 	m["t"] = 0.0
 	mini_log.append({"id": String(m["id"]), "t": q.t})

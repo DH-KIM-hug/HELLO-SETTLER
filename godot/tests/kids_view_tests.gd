@@ -20,7 +20,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	var old := CutoutResident.override
 	CutoutResident.override = 1
-	run.timed(self, ["test_first_steps_view", "test_story_view", "test_bubble_dodge", "test_hop_view", "test_skip_view"])
+	run.timed(self, ["test_first_steps_view", "test_story_view", "test_bubble_dodge", "test_hop_view", "test_skip_view", "test_play_sounds"])
 	CutoutResident.override = old
 
 
@@ -637,3 +637,84 @@ func test_skip_view() -> void:
 	check(_sim_sig(v) == sig, "시뮬은 그대로 (화면만)")
 	_drop(scene)
 
+
+
+## 놀이의 소리 (2026-11-11): 사방치기 = 금 긋는 소리 · 칸을 디딜 때마다 디딤 (끝의 환호는 그대로), 물수제비 = 물에 닿을 때마다 퐁 —
+## 빌려 쓰던 소리(finger_place · drip)는 쓰지 않음. 파일이 있고 짧으며 라이선스 목록에 있음
+func test_play_sounds() -> void:
+	print("== 아이·아기: 놀이의 소리 — 금 긋는 소리 · 디딤 · 퐁 (제 소리)")
+	var src := FileAccess.get_file_as_string("res://view/kids_view.gd")
+	var unused := PackedStringArray()
+	for id: String in ["chalk_scratch", "hop_step", "skip_plip", "small_cheer"]:
+		if not src.contains('GameAudio.fx("%s"' % id):
+			unused.append(id)
+	check(unused.is_empty() and not src.contains('fx("drip"') and not src.contains('fx("finger_place"'),
+		"화면이 제 소리를 부름 (빌려 쓰던 소리 없음 · 끝의 환호는 그대로) %s" % ", ".join(unused))
+	var lic := FileAccess.get_file_as_string("res://audio/LICENSES.csv")
+	var bad := PackedStringArray()
+	for row: Array in [["chalk_scratch", 0.5, 1.7], ["hop_step", 0.1, 0.7], ["skip_plip", 0.15, 0.7]]:
+		var id := String(row[0])
+		var st: AudioStream = load(GameAudio.SFX_DIR + id + ".mp3") if ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3") else null
+		if st == null or st.get_length() < float(row[1]) or st.get_length() > float(row[2]) or not lic.contains(id):
+			bad.append("%s %.2f초" % [id, st.get_length() if st != null else 0.0])
+	check(bad.is_empty(), "새 소리 셋: 길이 · 라이선스 목록에 있음 %s" % ", ".join(bad))
+	# 장면에서: 사방치기 한 판 — 칸이 그려질 때 금 긋는 소리 한 번, 뛰는 동안 디딤 소리
+	var a := GameAudio.get_instance()
+	var mine := a == null
+	if mine:
+		a = GameAudio.new()
+		run.root.add_child(a)
+		GameAudio._inst = a
+	var old_clock := a.clock_override
+	var old_speed := a.speed
+	var old_listener := a.listener
+	a.clock_override = 9000.0
+	a.speed = 1.0
+	for id: String in ["chalk_scratch", "hop_step"]:
+		a._recent.erase(id)
+	var v := _village(10.0)
+	var c0 := Vector2(v.fire.x + 6.0, v.fire.y + 6.0)
+	for k in 200:
+		var q := Vector2(v.fire.x + 4.0 + float(k % 14), v.fire.y + 4.0 + float(k / 14))
+		if ChildPlay._open(v, q):
+			c0 = q
+			break
+	_far_away(v, c0)
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.8 + 0.4 * i, c0.x + 0.2 * i, c0.y))
+	var hp := {}
+	for n in 60:
+		hp = ChildPlay.hop_spot(v, kids[0], Vector2(kids[0].x, kids[0].y) + Vector2(1.5, 0.0).rotated(float(n) * 0.9), n)
+		if not hp.is_empty():
+			break
+	check(not hp.is_empty(), "칸을 그을 자리가 있음")
+	if not hp.is_empty():
+		var c: Vector2 = hp["c"]
+		var g := ChildPlay.open_hop(v, kids[0], c, int(hp["dir"]), 3)
+		g["c1"] = 1.0e9
+		_join_all(g, kids)
+		for i in 3:
+			ChildPlay.step(v, ChildPlay.IV)
+		a.listener = c
+		var scene := _scene()
+		var vw := VillageView.new(v, scene.get("terrain"))
+		scene.add_child(vw)
+		_aim(scene, c, 44.0)
+		var chalk := (a._recent.get("chalk_scratch", []) as Array).size()     # 화면이 붙는 순간 칸이 그려지면 그때 난 소리도 센다
+		var hops := 0
+		for i in 600:
+			ChildPlay.step(v, 0.05 * 288.0)
+			a.clock_override += 0.05
+			var t := a.clock_override
+			vw.sync(0.05)
+			chalk += (a._recent.get("chalk_scratch", []) as Array).filter(func(x: float) -> bool: return x >= t - 1.0e-4).size()
+			hops += (a._recent.get("hop_step", []) as Array).filter(func(x: float) -> bool: return x >= t - 1.0e-4).size()
+		check(chalk == 1 and hops >= 3, "사방치기: 금 긋는 소리 한 번 (%d) · 칸을 디디는 소리 여러 번 (%d)" % [chalk, hops])
+		_drop(scene)
+	a.clock_override = old_clock
+	a.speed = old_speed
+	a.listener = old_listener
+	if mine:
+		GameAudio._inst = null
+		a.free()

@@ -506,6 +506,8 @@ func _props_tick(g: Dictionary, dt: float) -> void:
 			gr = Grid.new()
 			gr.node = _grid_node(g)
 			_grids[gid] = gr
+			if not _was_fast:                      # 금을 긋는 소리 한 번 (마른 땅을 긁는 소리 — 빠른 흐름에선 칸이 곧바로 보이므로 없음)
+				GameAudio.fx("chalk_scratch", "Village", -9.0, Vector2(float(g["x"]), float(g["y"])))
 		gr.seen = _frame
 	# 물수제비: 돌 · 물결 고리
 	if kind == "skip":
@@ -750,7 +752,7 @@ func _skip_tick(g: Dictionary, pr: Props, n_on: int) -> void:
 		var rad := RING_R * pow(0.9, float(j)) * (1.12 if last else 1.0)
 		_ring(Vector3(q.x, wl, q.y), rad)
 		_ring(Vector3(q.x, wl, q.y), rad * 0.55, 0.17)     # 안쪽 고리 하나 더 (조금 늦게)
-		GameAudio.fx("drip", "Village", -8.0 if not last else -11.0, q, 0.8 if last else 1.05 + 0.09 * float(j))
+		GameAudio.fx("skip_plip", "Village", -6.0 if not last else -9.0, q, 0.8 if last else 1.05 + 0.09 * float(j))     # 닿을 때마다 가벼운 퐁 (튈수록 높게, 가라앉을 땐 낮게)
 	pr.touch = done
 	if state == 1 and not _was_fast:
 		var q := from + d * float(st[1])
@@ -915,7 +917,7 @@ func pose(r: Resident, m: ResidentModel, dt: float) -> void:
 								lean = 0.1 * foot * (1.0 - 0.6 * sq)
 								if k.land != j:                    # 착! (발소리 한 번)
 									k.land = j
-									GameAudio.fx("finger_place", "Village", -13.0, p, 1.25 if two else 1.45)
+									GameAudio.fx("hop_step", "Village", -12.0, p, 0.94 if two else 1.1)     # 두 발은 조금 낮게, 깨금발은 가볍게
 							k.yaw = out_yaw if j <= n_rows else out_yaw + PI
 						2:                                 # 끝 칸: 폴짝 돌아섬
 							moving = false

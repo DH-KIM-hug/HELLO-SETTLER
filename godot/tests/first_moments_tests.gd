@@ -27,7 +27,7 @@ func all() -> void:
 	run.timed(self, ["test_events", "test_tables_and_words", "test_cast", "test_miracle_scene", "test_miracle_skip", "test_baby_scene", "test_baby_naming",
 		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade",
 		"test_death_tables", "test_death_cast", "test_death_scene", "test_death_skip_and_aware", "test_death_more_and_fold", "test_death_away",
-		"test_death_sim_same", "test_grave_stays", "test_death_fast_off"])
+		"test_death_sim_same", "test_grave_stays", "test_death_fast_off", "test_death_sounds", "test_death_bell_once"])
 	Village.start_aware = _old_aware
 	fs.reset()
 	Market.reset()
@@ -1388,6 +1388,187 @@ func test_death_fast_off() -> void:
 		d.skip()
 	_gframes(scene, 0.5)
 	gs.stop_died = old_stop
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 장례의 소리 (2026-11-11): 낮은 바람 · 느린 발소리 · 돌 놓는 소리 — 빌려 쓰던 소리(seeds_wind · finger_place)는 쓰지 않음. 종은 장면마다 한 줄뿐
+func test_death_sounds() -> void:
+	var sp: Dictionary = Stagings.SCENES["first_death"]
+	var mn: Dictionary = Stagings.MINIS["death_more"]
+	var fd: Array = Stagings.sound_ids(sp)
+	var dm: Array = Stagings.sound_ids(mn)
+	check("low_wind" in fd and "slow_steps" in fd and "stone_place" in fd and "funeral" in fd and not "seeds_wind" in fd and not "finger_place" in fd,
+		"첫 죽음: 낮은 바람 · 느린 발소리 · 돌 놓는 소리 · 낮은 종 (%s)" % str(fd))
+	check("stone_place" in dm and "low_wind" in dm and "funeral" in dm and not "finger_place" in dm, "또 누군가 떠남: 돌 놓는 소리 · 낮은 바람 · 낮은 종 (%s)" % str(dm))
+	var at := {}                                # 소리 → 그 소리가 처음 나는 박자의 때 (첫 죽음)
+	var bells: Array = [0, 0]
+	var loud := PackedStringArray()
+	for si in 2:
+		for b: Dictionary in ([sp, mn][si] as Dictionary)["beats"]:
+			for r: Array in Stagings.fx_rows(b.get("fx", [])):
+				bells[si] = int(bells[si]) + int(String(r[0]) == "funeral")
+				if si == 0 and not at.has(String(r[0])):
+					at[String(r[0])] = float(b["t"])
+				if String(r[0]) in ["low_wind", "slow_steps", "stone_place", "funeral"] and float(r[1]) > -5.0:
+					loud.append(String(r[0]))
+	check(int(bells[0]) == 1 and int(bells[1]) == 1, "종은 긴 연출 · 짧은 판에 한 줄씩 (%s)" % str(bells))
+	var stone_t := -1.0
+	var line_t := -1.0
+	for b: Dictionary in sp["beats"]:
+		if String(b.get("grave", "")) == "stone":
+			stone_t = float(b["t"])
+		for dl: Dictionary in b.get("dolls", []):
+			if String(dl.get("go", "")) == "off":
+				line_t = float(b["t"])
+	check(is_equal_approx(float(at.get("stone_place", -9.0)), stone_t) and is_equal_approx(float(at.get("slow_steps", -9.0)), line_t)
+		and is_zero_approx(float(at.get("low_wind", -9.0))) and float(at.get("funeral", -9.0)) > stone_t,
+		"박자: 바람은 처음 · 발소리는 줄지어 걸을 때 · 돌 소리는 돌이 세워질 때 · 종은 그 뒤 자막 때")
+	check(loud.is_empty(), "조용한 장면 — 낮고 작게 (−5dB 아래) %s" % ", ".join(loud))
+	var lic := FileAccess.get_file_as_string("res://audio/LICENSES.csv")
+	var bad := PackedStringArray()
+	for row: Array in [["slow_steps", 1.2, 4.2], ["low_wind", 2.0, 5.0], ["stone_place", 0.3, 1.0]]:
+		var id := String(row[0])
+		var st: AudioStream = load(GameAudio.SFX_DIR + id + ".mp3") if ResourceLoader.exists(GameAudio.SFX_DIR + id + ".mp3") else null
+		if st == null or st.get_length() < float(row[1]) or st.get_length() > float(row[2]) or not lic.contains(id):
+			bad.append("%s %.2f초" % [id, st.get_length() if st != null else 0.0])
+	check(bad.is_empty(), "새 소리 셋: 길이 · 라이선스 목록에 있음 %s" % ", ".join(bad))
+
+
+## 한 화면씩: 현실 시계 → 소리 쪽 (마을 살핌 · 기다리던 종) → 장면 (감독 · 무덤). 돌려줌: 그동안 울린 장례 종의 수
+func _bell_frames(a: GameAudio, scene: Node, secs: float) -> int:
+	var n := 0
+	for i in int(roundf(secs / 0.1)):
+		a.clock_override += 0.1
+		var t := a.clock_override
+		a._watch_village(0.1)
+		a._run_bell(t)
+		_gframes(scene, 0.1)
+		n += (a._recent.get("funeral", []) as Array).filter(func(x: float) -> bool: return x >= t - 1.0e-4).size()
+	return n
+
+
+## 한 사람이 떠남 — 장례 수도 하나 오름 (행렬이 없던 죽음이어도 종 길을 시험하도록 맞춤. 소리 쪽은 이 수만 본다)
+func _die(v: Village, r: Resident) -> void:
+	var f0 := int(v.stats.get("funerals", 0))
+	v.kill(r, "노환")
+	v.stats["funerals"] = f0 + 1
+
+
+## 장례 종은 한 번만 (2026-11-11): 장례 연출(긴 것 · 짧은 판)이 그 죽음을 맡으면 연출의 종만 들린다 — 죽음마다 울리던 종(GameAudio)은 버림.
+## 연출이 없으면 (따라잡는 중 · 멈춤을 꺼 두고 빠르게) 예전처럼 한 번, 소리를 끄는 빠르기에선 예전처럼 없음.
+func test_death_bell_once() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var a := GameAudio.get_instance()
+	var mine := a == null
+	if mine:
+		a = GameAudio.new()
+		run.root.add_child(a)
+		GameAudio._inst = a
+	var old_clock := a.clock_override
+	var old_speed := a.speed
+	a.clock_override = 7000.0
+	a.speed = 1.0
+	a._recent.erase("funeral")
+	a._bell_at = -1.0
+	a._bell_own_until = -1.0e9
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	a.attach(v)
+	# ① 첫 죽음 (긴 연출) — 소리 쪽이 먼저 봄: 종은 기다리다가, 연출이 시작되면 버림. 연출 중에 또 한 사람이 떠나도 종은 연출의 것 하나
+	_die(v, _grown(v, []))
+	a._watch_village(0.0)
+	var held := a._bell_at >= 0.0 and (a._recent.get("funeral", []) as Array).is_empty()
+	vw.sync(0.1)
+	d.watch(v, true)
+	check(d.playing() and d.id == "first_death" and held and a._bell_at < 0.0, "첫 죽음: 종이 곧바로 울리지 않고 기다림 → 긴 연출이 시작되면 버림")
+	var n0 := _bell_frames(a, scene, 3.0)
+	v.stats["funerals"] = int(v.stats["funerals"]) + 1     # 연출 중에 또 한 사람 (소리 쪽이 보는 장례 수만)
+	var n1 := _bell_frames(a, scene, 7.5)                  # 자막(11.2초) 앞까지
+	var n2 := _bell_frames(a, scene, 1.5)                  # 자막 — 연출의 종
+	var n3 := _bell_frames(a, scene, 5.0)                  # 끝난 뒤까지
+	check(n0 == 0 and n1 == 0 and n2 == 1 and n3 == 0 and not d.playing() and a._bell_at < 0.0,
+		"긴 연출: 종은 자막 때 한 번뿐 (처음 %d · 중간 %d · 자막 %d · 끝 %d)" % [n0, n1, n2, n3])
+	# ② 또 누군가 떠남 (짧은 판) — 감독이 먼저 봄: 죽음마다 울리던 종은 없고, 돌 위에 빛이 들 때 짧은 판의 종 한 번
+	a.clock_override += 30.0
+	d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+	var ml := d.mini_log.size()
+	_die(v, _grown(v, []))
+	vw.sync(0.1)
+	d.watch(v, true)
+	_gframes(scene, 0.1)
+	var started := not d.playing() and d.minis_busy() and d.mini_log.size() == ml + 1
+	var m0 := _bell_frames(a, scene, 1.2)
+	var m1 := _bell_frames(a, scene, 1.0)
+	var m2 := _bell_frames(a, scene, 3.0)
+	check(started and m0 == 0 and m1 == 1 and m2 == 0 and a._bell_at < 0.0, "짧은 판: 종은 빛이 들 때 한 번뿐 (처음 %d · 빛 %d · 끝 %d)" % [m0, m1, m2])
+	# ③ 큰 시트에 가려 짧은 판이 기다리는 동안엔 종도 기다림 → 시트가 닫혀 짧은 판이 나오면 그 종만
+	var sheet: Control = scene.get("altar_sheet")
+	check(sheet != null, "제단 시트가 있음")
+	if sheet != null:
+		a.clock_override += 30.0
+		d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+		ml = d.mini_log.size()
+		sheet.visible = true
+		_die(v, _grown(v, []))
+		vw.sync(0.1)
+		d.watch(v, true)
+		var w0 := _bell_frames(a, scene, 2.0)
+		var waiting := d.minis_busy() and d.mini_log.size() == ml and a._bell_at >= 0.0
+		sheet.visible = false
+		var w1 := _bell_frames(a, scene, 1.4)
+		var w2 := _bell_frames(a, scene, 1.0)
+		var w3 := _bell_frames(a, scene, 3.0)
+		check(waiting and w0 == 0 and d.mini_log.size() == ml + 1 and w1 == 0 and w2 == 1 and w3 == 0,
+			"시트에 가린 동안: 종도 기다림 → 짧은 판이 나오면 그 종만 (기다림 %d · 처음 %d · 빛 %d · 끝 %d)" % [w0, w1, w2, w3])
+		# 시트가 끝내 닫히지 않아 짧은 판을 그만둠 → 기다리던 종이 예전처럼 한 번
+		a.clock_override += 30.0
+		d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+		ml = d.mini_log.size()
+		sheet.visible = true
+		_die(v, _grown(v, []))
+		vw.sync(0.1)
+		d.watch(v, true)
+		var x0 := _bell_frames(a, scene, StageDirector.MINI_WAIT - 0.5)
+		var x1 := _bell_frames(a, scene, 2.5)
+		var x2 := _bell_frames(a, scene, 2.0)
+		sheet.visible = false
+		check(x0 == 0 and x1 == 1 and x2 == 0 and not d.minis_busy() and d.mini_log.size() == ml, "짧은 판이 끝내 못 나오면: 예전의 종 한 번 (기다림 %d · 그만둠 %d · 뒤 %d)" % [x0, x1, x2])
+	# ④ 연출이 없는 죽음 (따라잡는 중): 예전처럼 한 번 — 조금(DEATH_BELL_WAIT) 뒤에
+	a.clock_override += 30.0
+	d._last_death[v] = v.t - StageDirector.FOLD_T - 60.0
+	ml = d.mini_log.size()
+	_die(v, _grown(v, []))
+	vw.sync(0.1)
+	d.watch(v, false)
+	var c0 := _bell_frames(a, scene, 0.4)
+	var c1 := _bell_frames(a, scene, 0.6)
+	var c2 := _bell_frames(a, scene, 3.0)
+	check(not d.playing() and not d.minis_busy() and d.mini_log.size() == ml and c0 == 0 and c1 == 1 and c2 == 0,
+		"연출이 없으면 (따라잡는 중) 예전처럼 종 한 번 (곧바로 %d · 조금 뒤 %d · 그 뒤 %d)" % [c0, c1, c2])
+	# ⑤ 멈춤을 꺼 두고 빠르게 (연출이 지나감 — 감독은 아무것도 맡지 않음): 소리를 끄지 않는 빠르기에선 예전처럼 한 번, 끄는 빠르기에선 예전처럼 없음
+	a.clock_override += 30.0
+	a.speed = GameAudio.FAST_SPEED * 0.5
+	v.stats["funerals"] = int(v.stats["funerals"]) + 1
+	var f1 := _bell_frames(a, scene, 2.0)
+	a.clock_override += 30.0
+	a.speed = GameAudio.FAST_SPEED
+	v.stats["funerals"] = int(v.stats["funerals"]) + 1
+	var f0 := _bell_frames(a, scene, 2.0)
+	check(f1 == 1 and f0 == 0, "빠르게 지나갈 때: 종 한 번 (%d) · 소리를 끄는 빠르기에선 없음 (%d)" % [f1, f0])
+	a.attach(null)
+	a.clock_override = old_clock
+	a.speed = old_speed
+	a._bell_own_until = -1.0e9
+	if mine:
+		GameAudio._inst = null
+		a.free()
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()

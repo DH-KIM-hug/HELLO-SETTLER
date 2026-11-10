@@ -92,6 +92,16 @@ SFX = {
     "small_cheer":     (1.0, -26, False, "three or four small happy people giving one short soft wordless cheer together, a gentle little yay, quiet, cute and warm"),
     "gift_twinkle":    (1.0, -25, False, "a tiny soft magical shimmer, a few delicate high glassy twinkles descending gently, quiet and sweet"),
     "door_creak":      (0.9, -27, False, "a small wooden cottage door opening slowly, one short soft gentle creak, cozy and quiet"),
+    # 아이 놀이 (view/kids_view.gd 사방치기 · 물수제비 — 2026-11-11): 빌려 쓰던 finger_place · drip 대신. 작고 마른 소리, 닿을 때마다 한 번
+    # (hop_step은 세 번 해 봐도 0.14~0.17초 — 발 한 번 디디는 소리라 짧다. 가장 긴 두 번째 것을 씀. 빌려 쓰던 finger_place는 0.03초)
+    "chalk_scratch":   (1.2, -28, False, "a small stick scratching a line into dry packed earth, one short dry gritty scrape, light, soft and quiet"),
+    "hop_step":        (0.5, -27, False, "a small child's single soft hop landing on packed dirt, one light muffled footstep thump with a little dusty scuff, tiny and gentle"),
+    "skip_plip":       (0.5, -26, False, "a small flat pebble touching calm water once, a single very light tiny plip, delicate and quiet"),
+    # 장례 (view/stagings.gd 첫 죽음 · 그 짧은 판 — 2026-11-11): 빌려 쓰던 seeds_wind · finger_place 대신. 조용한 장면이라 낮고 작게
+    # (stone_place는 '쿵' 한 마디만 쓰면 0.07초로 끊김 — 울림과 흙 내려앉는 꼬리를 프롬프트에 넣어 0.5초)
+    "slow_steps":      (3.0, -31, False, "several people walking slowly along a soft dirt path, sparse soft unhurried footsteps, quiet, gentle and solemn"),
+    "low_wind":        (3.5, -31, False, "a low gentle wind passing over an open grassy field, soft deep airy hush, calm, slowly fading away to silence"),
+    "stone_place":     (0.7, -27, False, "a large flat stone lowered onto soft earth, one soft deep heavy thud with a low dull resonance that lingers for a moment, then a little soil settling, quiet"),
 }
 # 톡 반응 소리 — 짧게 (TAP_MAX초에서 끊음), 무음 문턱 −42dB
 TAP = {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf", "sneeze_0", "sneeze_1", "sigh_0", "sigh_1",
@@ -115,7 +125,7 @@ TINY_AF = f"asetrate=44100*{TINY_RATE:.4f},aresample=44100,atempo={1.08 / TINY_R
 MUSICAL = {"awaken_swell"}
 STYLE_MUSIC = "cinematic underscore, a single musical phrase, no voice, no lyrics, no drums, no background noise"
 # 멀리서 들리는 소리 — 'close-up' 꼬리말 대신
-FAR = {"wolf_howl"}
+FAR = {"wolf_howl", "low_wind"}
 STYLE_FAR = "distant natural outdoor recording, single sound, no music, no voice, no background noise"
 LOOP_XFADE = 0.5      # 반복 파일: 끝 0.5초를 처음 0.5초에 겹쳐(같은 힘 곡선) 이음매 딸깍 없앰
 

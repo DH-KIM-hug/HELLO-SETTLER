@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc",
+	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc", "test_story_no_stop",
 		"test_minder", "test_peek", "test_first_steps", "test_save", "test_village_day", "test_watch_determinism", "test_view"])
 
 
@@ -1301,6 +1301,81 @@ func test_skip() -> void:
 		cst["last2"] = ""
 		win = win or ChildPlay._pick_kind(cold, cst, n) == "skip"
 	check(Health.season_of(int(Health.jar_date(cold)["month"])) == "겨울" and not win and ChildPlay.skip_spot(cold, p, 1).is_empty(), "겨울엔 물수제비 없음 (물가가 얼 때)")
+
+
+## 저녁 이야기 자리의 사람(이야기하는 어르신 · 듣는 아이)은 지나가던 이웃이 불러 세우지 않는다 (Social._can_stop — 놀이 중인 아이와 같은 규칙).
+## 만남(사이 값)은 그대로 · 이야기는 이어짐 · 이야기가 끝나면 같은 둘이 다시 멈춰 설 수 있다
+func test_story_no_stop() -> void:
+	print("== 아이·아기: 이야기 자리 — 지나가던 이웃이 어르신을 불러 세우지 않음 (만남은 그대로) · 끝나면 다시 멈춰 섬")
+	var v := _village(19.3)
+	var e := Vector2(v.fire.x + 1.4, v.fire.y + 1.4)
+	for a: float in [0.785, 0.2, 1.4, -0.4, 2.0, -1.0, 2.6, 3.4, 4.2, 5.0]:
+		var q := Vector2(v.fire.x, v.fire.y) + Vector2(cos(a), sin(a)) * 2.0
+		if ChildPlay.story_side(v, q) != 0:
+			e = q
+			break
+	var nb: Resident = null                    # 지나가던 어른 이웃 · 또 다른 어른
+	var nb2: Resident = null
+	for r in v.people:
+		if r.is_adult() and not r.is_elder():
+			if nb == null:
+				nb = r
+			elif nb2 == null:
+				nb2 = r
+	var el := _elder(v, e.x, e.y)
+	var kids: Array = []
+	for i in 3:
+		kids.append(_kid(v, ["보리", "새별", "한솔"][i], 1.5 + 0.3 * i, e.x + 2.0 + 0.3 * i, e.y + 1.0))
+	for r: Resident in [nb, nb2]:
+		r.x = e.x - 0.9
+		r.y = e.y - 0.5 - 0.4 * float(r == nb2)
+		r.sleeping = false
+		r.action = "rest"
+		r.anim = "idle"
+		r.steps = [ResidentAI.act(3000.0, "idle")]
+	check(Social._can_stop(v, el, nb) and Social._can_stop(v, nb, nb2), "이야기 전: 어르신과 이웃은 멈춰 설 수 있음")
+	check(ChildPlay.try_play(v, kids[0], e + Vector2(3.0, 1.0), 900.0), "아이가 이야기를 들으러 감")
+	ChildPlay.try_play(v, kids[1], e + Vector2(3.0, 1.0), 900.0)
+	var gs := ChildPlay.games(v)
+	check(gs.size() == 1 and String(gs[0]["kind"]) == "story" and int(gs[0]["el"]) == el.id, "이야기 자리가 열림")
+	if gs.size() != 1:
+		return
+	var g: Dictionary = gs[0]
+	var k0: Resident = kids[0]                 # 첫 아이는 앉고, 둘째는 아직 오는 길
+	var s0 := ChildPlay.seat(g, int(g["sl"][ChildPlay.idx(g, k0.id)]))
+	k0.x = s0.x
+	k0.y = s0.y
+	while not k0.steps.is_empty() and String(k0.steps[0]["k"]) != "do": k0.steps.remove_at(0)
+	for i in 3:
+		ChildPlay.step(v, ChildPlay.IV)
+	check(int(g["go"]) == 1 and ChildPlay.story_seated(v, el.id), "이야기가 흐름")
+	check(not Social._can_stop(v, el, nb) and not Social._can_stop(v, nb, el), "이야기하는 어르신 + 지나가던 이웃: 멈춰 세우지 않음 (누가 먼저든)")
+	check(not Social._can_stop(v, k0, nb) and not Social._can_stop(v, nb, kids[1]), "듣는 아이 · 들으러 오는 아이도")
+	check(Social._can_stop(v, nb, nb2), "이야기 자리 밖의 둘은 그대로 멈춰 설 수 있음")
+	# 만남 자체는 그대로 (사이 값) — 걸음을 끼우지 않고 말 장면도 없음
+	var sig := _elder_sig(el)
+	var nb_sig := "%d|%s" % [nb.steps.size(), nb.doing]
+	var n_ev := v.social_events.size()
+	var from := v.events.serial
+	Social.meet(v, el, nb, Social._can_stop(v, el, nb))
+	var busy: Dictionary = v.social.get("busy", {})
+	check(is_equal_approx(float(Social.rec(v, el.id, nb.id, false).get("met", -1.0)), v.t), "만남(사이 값)은 그대로 적힘")
+	check(_elder_sig(el) == sig and nb_sig == "%d|%s" % [nb.steps.size(), nb.doing] and not busy.has(str(el.id)) and not busy.has(str(nb.id))
+		and v.social_events.size() == n_ev and _events(v, from, &"talk_started").is_empty(), "멈춰 서는 걸음 · 말 장면 · talk_started 없음 (어르신은 앉은 그대로)")
+	for i in 3:
+		ChildPlay.step(v, ChildPlay.IV)
+	check(ChildPlay.games(v).size() == 1 and ChildPlay._story_on(v, g) and ChildPlay.story_seated(v, k0.id), "이야기는 이어짐")
+	# 이야기가 끝남 (어르신이 일어났다 다시 앉음) → 같은 둘이 다시 멈춰 설 수 있다
+	el.steps = [ResidentAI.walk(e.x + 0.2, e.y)]
+	ChildPlay.step(v, ChildPlay.IV)
+	check(ChildPlay.games(v).is_empty() and not ChildPlay.in_story(v, el.id), "어르신이 일어나면 이야기 끝")
+	el.steps = [ResidentAI.act(3000.0, "sit")]
+	check(Social._can_stop(v, el, nb), "이야기가 끝난 뒤: 같은 둘이 멈춰 설 수 있음")
+	from = v.events.serial
+	var ev2 := Social.meet(v, el, nb, Social._can_stop(v, el, nb))
+	busy = v.social.get("busy", {})
+	check(not ev2.is_empty() and busy.has(str(el.id)) and busy.has(str(nb.id)) and _events(v, from, &"talk_started").size() == 1,
+		"… 그리고 실제로 멈춰 서서 이야기함 (talk_started)")
 
 
 func test_story_arc() -> void:
