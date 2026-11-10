@@ -27,7 +27,7 @@ func all() -> void:
 	run.timed(self, ["test_events", "test_tables_and_words", "test_cast", "test_miracle_scene", "test_miracle_skip", "test_baby_scene", "test_baby_naming",
 		"test_away_no_replay", "test_sim_same", "test_hud_retreat", "test_bubbles_safe", "test_moment_sounds", "test_mini_readable", "test_door_and_shade",
 		"test_death_tables", "test_death_cast", "test_death_scene", "test_death_skip_and_aware", "test_death_more_and_fold", "test_death_away",
-		"test_death_sim_same", "test_grave_stays"])
+		"test_death_sim_same", "test_grave_stays", "test_death_fast_off"])
 	Village.start_aware = _old_aware
 	fs.reset()
 	Market.reset()
@@ -1348,6 +1348,46 @@ func test_death_away() -> void:
 	d2.watch(v, true)
 	check(not d2.playing() and not d2.minis_busy() and (d2._pend.get(v, []) as Array).is_empty(), "막 연 병의 옛 무덤은 연출하지 않음")
 	d2.free()
+	_drop(scene)
+	Village.start_aware = _old_aware
+	fs.reset()
+
+
+## 빠르게 가는 중 + '죽음에 멈춤'을 껐다 → 장례 연출이 배속을 내리지 않는다 (무덤의 돌·꽃은 그대로). 켜 두면 연출한다.
+func test_death_fast_off() -> void:
+	fs.reset()
+	Village.start_aware = false
+	var gs := GameSettings.get_current()
+	var old_stop := gs.stop_died
+	var scene := _scene()
+	var v: Village = scene.get("village")
+	var d: StageDirector = scene.get("director")
+	var vw: VillageView = scene.get("view")
+	var c: JarClock = scene.get("clock")
+	v.advance(Balance.HOUR)
+	d.watch(v, true)
+	var fast_i := Balance.SPEEDS.size() - 1
+	gs.stop_died = false
+	c.set_speed(fast_i)
+	var a := _grown(v, [])
+	v.kill(a, "노환")
+	vw.sync(0.1)
+	d.watch(v, true)
+	_gframes(scene, 0.3)
+	check(not d.playing() and not d.minis_busy() and c.speed_i == fast_i and d.log.is_empty() and fs.play_count("first_death") == 0,
+		"꺼 둔 죽음 · 빠르게 → 연출 없이 지나감 (배속 %d)" % c.speed_i)
+	var gv: GraveView = vw.get_node_or_null(GraveView.NODE_NAME)
+	check(gv != null and bool(gv.shown(a.id)["stone"]), "그래도 무덤엔 돌")
+	c.set_speed(Balance.SPEED_DEFAULT_I)                # 보통 빠르기에서는 꺼 두어도 연출 (멈출 것이 없다)
+	var b := _grown(v, [])
+	v.kill(b, "노환")
+	vw.sync(0.1)
+	d.watch(v, true)
+	check(d.playing() or d.minis_busy(), "보통 빠르기 → 꺼 두어도 연출")
+	if d.playing():
+		d.skip()
+	_gframes(scene, 0.5)
+	gs.stop_died = old_stop
 	_drop(scene)
 	Village.start_aware = _old_aware
 	fs.reset()

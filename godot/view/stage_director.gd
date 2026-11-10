@@ -383,6 +383,8 @@ func _fold_deaths(q: Village, pend: Array, can_stage: bool) -> void:
 		if (pend[i] as Dictionary)["kind"] == &"died":
 			died.push_front(pend[i])
 			pend.remove_at(i)
+	if _passes_by("died"):                         # 빠르게 가는 중 + '죽음에 멈춤'을 껐다 → 붙잡지 않음 (알림 한 줄 · 무덤의 꽃은 그대로)
+		return
 	var live: Array = died.filter(func(e: Dictionary) -> bool: return can_stage and q.t - float(e["t"]) < STALE)
 	if live.is_empty():
 		return
@@ -404,6 +406,15 @@ func _fold_deaths(q: Village, pend: Array, can_stage: bool) -> void:
 	lead["v"]["also"] = also
 	_last_death[q] = last
 	pend.push_front(lead)
+
+
+## 빠르게 가는 중이고 설정 "빠르게 갈 때 멈출 일"에서 그 갈래를 껐다 — 연출이 배속을 내리지 않는다 (JarClock의 짧은 알림만).
+## 켜 둔 갈래는 JarClock이 먼저 보통으로 내리므로 여기 올 때는 이미 빠르지 않다.
+func _passes_by(cat: String) -> bool:
+	var c := _clock()
+	if c == null or c.creation or c.skipping:
+		return false
+	return float(Balance.SPEEDS[c.speed_i]) > JarClock.normal_speed() + 1e-6 and not JarClock.stop_on(cat)
 
 
 ## 사건 줄에서 이 무리의 &"awakened"를 읽는다 (ADR-0001 — 구독은 커서로, 시뮬레이션은 구독자를 모른다)
