@@ -9,8 +9,6 @@
 ## 변형: game (= base) — 게임 코드 그대로. 뒤에 '+이름'을 붙여 거인의 손만 바꾼다:
 ##   game+nohelp    거인이 아무것도 주지 않는다 (하늘 낟알 없음 · 소원 안 들어줌) — 공물 거두기·제단 넓히기는 그대로
 ##   game+nofloor   '어린것이 드물면 한 집이 아기를 맞는다'(Balance.BIRTH_LITTLE_MIN)만 끈 것처럼 — 걸음 묶음마다 Village.birth_floor_t를 지금으로 써서 쉬는 날이 끝나지 않게 한다
-##   game+calmfloor 흉내 (게임에 없는 안 — 6.9장): 지난 병 하루 안에 먹을 것이 바닥난 적이 있으면(Village.last_short_t · Balance.STARVED_RECENT) 그 걸음 묶음에는 아기를 맞지 않는다.
-##                  쉬는 날 셈은 건드리지 않는다 (묶음 앞에 birth_floor_t를 지금으로 써 두었다가 묶음 뒤에 되돌림)
 ##   (여럿: game+nohelp+nofloor)
 ##
 ## 1단계(2026-11-10 오전)에는 나이 먹는 빠르기(x2 · adult3 …)와 출산 속도 규칙(kids · room · gap · floor …)을 이 도구가 흉내 냈다 —
@@ -29,8 +27,6 @@ var jw: JarWorld
 var variant := "game"
 var no_help := false               # '+nohelp': 하늘 낟알·소원 없음
 var no_floor := false              # '+nofloor': 빠듯한 때 아기 맞기를 끈 것처럼
-var calm_floor := false            # '+calmfloor': 지난 하루 안에 먹을 것이 바닥났으면 아기를 맞지 않는 것처럼 (흉내)
-var held := {}                     # 마을 instance id → [되돌릴 birth_floor_t, 써 둔 값]
 var drng := RandomNumberGenerator.new()
 var seed_v := 0
 var mig_per_day := 0
@@ -76,8 +72,6 @@ func _initialize() -> void:
 				no_help = true
 			"nofloor":
 				no_floor = true
-			"calmfloor":
-				calm_floor = true
 			_:
 				push_error("unknown option " + parts[i])
 				quit(1)
@@ -147,19 +141,12 @@ func _before() -> void:
 		if no_floor:
 			q.birth_floor_t = q.t
 			floor_last[id] = q.t
-		elif calm_floor and q.t - q.last_short_t < Balance.STARVED_RECENT:
-			held[id] = [q.birth_floor_t, q.t]
-			q.birth_floor_t = q.t
 
 
 ## 걸음 묶음 뒤: birth_floor_t가 바뀌었으면 그런 아기가 하나 태어난 것 (병 하루에 하나까지라 놓치지 않는다)
 func _after() -> void:
 	for q: Village in jw.settlements:
 		var id := q.get_instance_id()
-		if held.has(id):                  # '+calmfloor': 묶음 동안 막아 둔 것을 되돌린다 (쉬는 날 셈은 그대로)
-			if q.birth_floor_t == float(held[id][1]):
-				q.birth_floor_t = float(held[id][0])
-			held.erase(id)
 		var was := float(floor_last.get(id, -1.0))
 		if q.birth_floor_t != was:
 			if not no_floor and q.birth_floor_t >= 0.0:
@@ -359,10 +346,11 @@ func _flush_day(v: Village) -> void:
 	var pop: int = n[0] + n[1] + n[2] + n[3]
 	if d_short > 0:
 		short_days += 1
-	print("DAY v=%s seed=%d day=%d pop=%d baby=%d child=%d adult=%d elder=%d born=%d died=%d starved=%d houses=%d cap=%d built=%d couples=%d fert=%d singles=%d workers=%d carers=%d blocked=%.2f foodmin=%.2f short=%d gate_food=%.2f gate_care=%.2f lean=%d helps=%d era=%d pts=%.1f notes=%.0f sett=%d" % [
+	print("DAY v=%s seed=%d day=%d pop=%d baby=%d child=%d adult=%d elder=%d born=%d died=%d starved=%d houses=%d cap=%d built=%d couples=%d fert=%d singles=%d workers=%d carers=%d blocked=%.2f foodmin=%.2f short=%d gate_food=%.2f gate_care=%.2f lean=%d helps=%d era=%d pts=%.1f notes=%.0f sett=%d hand=%.0f trips=%d wild=%.0f tools=%.0f" % [
 		variant, seed_v, cur_day + 1, pop, n[0], n[1], n[2], n[3], born, died, starved, houses, cap, built, couples, fert, singles, workers, carers,
 		float(d_blocked) / d_samples, d_food_min, 1 if d_short > 0 else 0, float(d_gate_food) / d_samples, float(d_gate_care) / d_samples,
-		lean, helps, v.era, v.era_pts, income, jw.settlements.size()])
+		lean, helps, v.era, v.era_pts, income, jw.settlements.size(),
+		float(v.stats.get("forage_food", 0.0)), int(v.stats.get("forage_trips", 0)), v.wild_food, float(v.stock.get("도구", 0.0))])
 	kid_days.append([cur_day + 1, int(n[0]) + int(n[1]), pop, born])
 	# 촌장이 보는 것 (읽기만): 창고 · 집 필요(house_need) · 땅 한계 · 짓는 터 · 일 없는 어른
 	var hn := v.house_need()

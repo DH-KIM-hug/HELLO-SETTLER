@@ -265,6 +265,23 @@ const SEASON_GROW_MAX := 1.1
 const FARM_FAV_DAYS := 0.15            # (정함) 거인님이 밀을 좋아하신다고 믿으면 이만큼 날을 더 (다른 물건의 ×1.5 대신 — 식량이라 바치는 몫이 너무 커지지 않게)
 const PLANK_RESERVE := 4                # 촌장이 남기는 비상용 판자 (나무꾼·제재소 제외)
 const IDLE_FOR_NEW_JOB := 2             # 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 예외)
+## 맨손 채집 (2026-11-10 메인 판단 — 사용자 위임 · docs/measure/lifespan_2026-11-10.md 6.10 · design/gdd/daily-schedule.md R4.6):
+## 연장이 모자라 일터가 없는 어른은 마을 둘레의 들과 숲 가에서 먹을 것을 손으로 거둬 바구니에 담아 온다.
+## 연장을 쥔 일보다 훨씬 적게, 추운 철엔 덜, 둘레의 땅이 내는 만큼만 (끝없는 사람을 먹이지 못한다).
+const FORAGE_ITEM := "버섯"             # 창고에 들어가는 이름 (이미 있는 먹을 것 · 바구니 그림 mushroom_basket) — 새 물건을 만들지 않는다
+const FORAGE_LOAD := 44.0               # 바구니 하나 (식량 단위 — 한 사람의 하루는 DAY ÷ FOOD_IV = 96. 36으로 재 보니 겨울에 둘레는 남는데 손이 모자랐다)
+const FORAGE_LOAD_MIN := 0.5            # 둘레에 남은 것이 바구니의 이만큼도 안 되면 나가지 않는다
+const FORAGE_TIME := 2400.0             # 숙여 거두는 시간 (병 초)
+const FORAGE_RANGE := 10.0              # 모닥불에서 이 안의 들·숲 가 (칸 — 한 번 다녀오는 데 병 두 시간 남짓, 재 보니 하루 서너 번)
+const FORAGE_GROUND := 8000.0           # 둘레의 들이 병 하루에 내는 양 (따뜻한 철 · 식량 단위 — 여든세 사람 하루치. 한겨울엔 쉰 사람치)
+const FORAGE_PER_TREE := 60.0           # … 서 있는 나무 한 그루마다 더 (숲 바닥)
+const FORAGE_TREES_MAX := 50            # … 나무는 이만큼까지만 센다
+const FORAGE_KEEP_DAYS := 1.5           # 거두지 않아도 이만큼 날치까지만 쌓인다 (들에서 시든다)
+const FORAGE_WINTER := 0.6              # 가장 추운 철에 나는 양 (따뜻한 철의 몫 — 밭 자람 Health.season_grow를 따라 줄어든다)
+const FORAGE_ENOUGH_DAYS := 1.0         # 창고 먹을 것이 이만큼 날치면 나가지 않는다 (집안일로) — 하루치도 안 남았을 때만 나간다
+const FORAGE_HUNGRY_MULT := 1.5         # 배가 고픈데 나갈 수 있으면: 빈 창고 앞에서 기다리는 것(먹기 점수)보다 이만큼 앞선다
+const FORAGE_SCORE := 5.0               # 할 일 점수 (나르기와 같음 — 짓기·나르기가 먼저)
+const FORAGE_NOTE_DAYS := 30.0          # (정함) 연대기 '바구니를 들고 나갔다' 줄은 이만큼에 한 번
 const FARM_SAFETY := 1.3                # 농장 생산 < 소비 × 1.3 이면 식량 부족
 const FARM_FEEDS := 6.0                 # 먹을 것이 모자랄 때 촌장의 어림: 밭 하나 = 죽으로 6명 (빵을 구우면 × BREAD/PORRIDGE = 12명 — v5-0, 밭이 넘치게 지어지지 않게)
 const FOREST_MIN := 40                  # 나무가 이만큼 아래면 산림관

@@ -120,6 +120,10 @@ var stats := {"born": 0, "died": 0, "built": 0, "starved": 0, "marriages": 0, "m
 var found: Array[Dictionary] = []     # 떨어진 물건 (작은 시험 병만 — 넓은 세상은 WorldWater.found, sim/found_objects.gd · E3-16)
 var birth_log: Array = []             # 테스트용: 출생 때 집 정원 {t, home, occ_before, cap}
 var birth_floor_t := -1.0             # 어린것이 드물어 (먹을 것 문이 닫힌 채) 한 집이 아기를 맞은 마지막 때 (병 초 · -1 = 아직 없음) — 병 하루에 하나까지 (Balance.BIRTH_LITTLE_REST_DAYS). 저장됨
+var wild_food := 0.0                  # 마을 둘레의 들·숲 가에 지금 나 있는 먹을 것 (식량 단위 · 맨손 채집 — Balance.FORAGE_*). 저장됨
+var forage_note_t := -1.0e9           # 연대기에 '바구니를 들고 나갔다'를 마지막으로 적은 때 (병 초). 저장됨
+var _fg_t := -1.0                     # (저장 안 함) forage_open()을 마지막으로 센 걸음
+var _fg_ok := false
 var violations: Array = []            # 테스트용: 규칙 위반 기록
 var basins_said: Array = []
 var _starve_day := -1
@@ -1806,6 +1810,51 @@ func life_events(dt: float) -> void:
 	_marriages(dt)
 	_births(dt)
 	_deaths(dt)
+	_wild_grow(dt)
+
+
+# ───────────────────────── 맨손 채집 (design/gdd/daily-schedule.md R4.6 · 2026-11-10) ─────────────────────────
+## 철에 따라 들이 내는 몫 (FORAGE_WINTER ~ 1) — 밭 자람(Health.season_grow)이 1 아래로 내려가는 만큼 줄어든다
+func forage_season() -> float:
+	var g := Health.season_grow(self)
+	var k := clampf((g - Balance.SEASON_GROW_MIN) / (1.0 - Balance.SEASON_GROW_MIN), 0.0, 1.0)
+	return lerpf(Balance.FORAGE_WINTER, 1.0, k)
+
+
+## 마을 둘레(모닥불에서 FORAGE_RANGE 안)가 병 하루에 내는 먹을 것 — 들 + 서 있는 나무(숲 바닥), 철에 따라
+func forage_day() -> float:
+	var n := 0
+	var r2 := Balance.FORAGE_RANGE * Balance.FORAGE_RANGE
+	for tr: Dictionary in trees:
+		if tr["s"] == "tree" and Vector2(float(tr["x"]) - fire.x, float(tr["y"]) - fire.y).length_squared() <= r2:
+			n += 1
+			if n >= Balance.FORAGE_TREES_MAX:
+				break
+	return (Balance.FORAGE_GROUND + Balance.FORAGE_PER_TREE * n) * forage_season()
+
+
+## 둘레의 먹을 것이 자란다 — 거두지 않으면 FORAGE_KEEP_DAYS 날치에서 멈춘다 (주사위 없음)
+func _wild_grow(dt: float) -> void:
+	if dt <= 0.0:
+		return
+	var day := forage_day()
+	wild_food = minf(wild_food + day * dt / DAY, day * Balance.FORAGE_KEEP_DAYS)
+
+
+## 맨손 채집을 나갈 때인가: 일터 없는 어른이 남은 연장보다 많고 (연장이 모자람), 창고 먹을 것이 FORAGE_ENOUGH_DAYS 날치에 못 미친다.
+## 같은 걸음 안에서는 한 번만 센다
+func forage_open() -> bool:
+	if _fg_t == t:
+		return _fg_ok
+	_fg_t = t
+	_fg_ok = false
+	var idle := 0
+	for p in people:
+		if p.is_adult() and p.job < 0 and Production.caring_for(self, p) == null:
+			idle += 1
+	if float(idle) > float(stock.get("도구", 0.0)):
+		_fg_ok = food_total() < Balance.FORAGE_ENOUGH_DAYS * Production.day_need(self)
+	return _fg_ok
 
 
 func _siblings(a: Resident, b: Resident) -> bool:
@@ -3866,7 +3915,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

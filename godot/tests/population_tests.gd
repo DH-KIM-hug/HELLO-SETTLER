@@ -22,7 +22,8 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 인구 (population.md)")
 	run.timed(self, ["test_rates", "test_rates_mc", "test_fertile_couples", "test_offline_spare", "test_hints", "test_hint_words", "test_homeless_note",
-		"test_two_rate_aging", "test_old_age_rate", "test_little_cap", "test_little_floor", "test_little_floor_pick", "test_little_first_birth", "test_little_save"])
+		"test_two_rate_aging", "test_old_age_rate", "test_little_cap", "test_little_floor", "test_little_floor_pick", "test_little_first_birth", "test_little_save",
+		"test_forage_gate", "test_forage_trip", "test_forage_pool", "test_forage_words_save"])
 
 
 func _bad(texts: Array) -> String:
@@ -495,3 +496,223 @@ func test_little_save() -> void:
 	od.erase("birth_floor_t")
 	var o := Village.from_dict(od)
 	check(o.birth_floor_t == -1.0, "옛 저장 (값 없음) → 아직 없음 (%.1f)" % o.birth_floor_t)
+
+
+# ───────────────────────── 맨손 채집 (design/gdd/daily-schedule.md R4.6 · 2026-11-10) ─────────────────────────
+## 일터 없는 어른 열둘 (부부 하나 포함), 낮 10시, 창고 먹을 것 days날치, 남은 연장 tools개, 둘레엔 바구니 열 개치
+func _forage_village(tools: float, days: float) -> Village:
+	var a := _pace_village(12, 0)
+	var v: Village = a["v"]
+	v.t = 6.0 * Balance.DAY + 10.0 * Balance.HOUR - fmod(v.start_clock, Balance.DAY)
+	v.stock["도구"] = tools
+	_set_food(v, days)
+	v.wild_food = 10.0 * Balance.FORAGE_LOAD
+	return v
+
+
+func _loose(v: Village) -> Array:
+	return v.people.filter(func(q: Resident) -> bool: return q.is_adult() and q.job < 0 and q.home < 0)
+
+
+## 나가는 때: 일터 없는 어른이 남은 연장보다 많고 창고가 모자랄 때만. 노인·아이·다친 사람·일터 있는 어른·밤·첫 한 시간은 나가지 않는다
+func test_forage_gate() -> void:
+	var v := _forage_village(3.0, 0.5)
+	check(is_equal_approx(v.hour_now(), 10.0) and v.is_work_time() and not v.in_opening(), "낮 10시 · 일하는 시간 (%.1f시)" % v.hour_now())
+	check(v.forage_open(), "일터 없는 어른이 남은 연장보다 많고 먹을 것이 모자라면 나간다")
+	var w := _forage_village(12.0, 0.5)
+	check(not w.forage_open(), "남은 연장이 일터 없는 어른만큼 있으면 나가지 않는다 (연장을 쥘 차례)")
+	var x := _forage_village(3.0, Balance.FORAGE_ENOUGH_DAYS + 0.2)
+	check(not x.forage_open(), "창고가 넉넉하면 나가지 않는다")
+	var pool0 := v.wild_food
+	var went := 0
+	var loose := _loose(v)
+	for r: Resident in loose:
+		ResidentAI.decide(v, r)
+		if r.action == "forage":
+			went += 1
+	check(went >= loose.size() - 2 and is_equal_approx(v.wild_food, pool0 - went * Balance.FORAGE_LOAD),
+		"낮에 일터 없는 어른 %d명 가운데 %d명이 바구니를 들고 나감 · 둘레의 몫이 그만큼 줄어듦" % [loose.size(), went])
+	for q: Village in [w, x]:
+		var n := 0
+		for r: Resident in _loose(q):
+			ResidentAI.decide(q, r)
+			if r.action == "forage":
+				n += 1
+		check(n == 0 and is_equal_approx(q.wild_food, 10.0 * Balance.FORAGE_LOAD), "연장이 남거나 창고가 넉넉한 마을에선 아무도 나가지 않음")
+	var y := _forage_village(3.0, 0.5)
+	var ys := _loose(y)
+	var elder: Resident = ys[0]
+	elder.age = Balance.AGE_ELDER + 1.0
+	var hurt: Resident = ys[1]
+	hurt.injured_left = 3.0 * Balance.DAY
+	var worker: Resident = ys[2]
+	worker.job = y.store().id
+	var kid := y.add_person("다온", "m", 3.0, "", y.fire.x, y.fire.y, null, null)
+	var bad := 0
+	for r: Resident in [elder, hurt, worker, kid]:
+		ResidentAI.decide(y, r)
+		if r.action == "forage":
+			bad += 1
+	check(bad == 0, "노인·다친 사람·일터 있는 어른·아이는 나가지 않는다")
+	# 배고픈 사람: 창고가 비었으면 그 앞에서 기다리지 않고 나간다 (둘레에 거둘 것이 있을 때만)
+	var hungry: Resident = ys[4]
+	hungry.hunger = 2.0
+	hungry.last_action = "forage"
+	_set_food(y, 0.0)
+	ResidentAI.decide(y, hungry)
+	check(hungry.action == "forage", "배고픈데 창고가 비었으면 바구니를 들고 나간다 (%s)" % hungry.action)
+	var hungry2: Resident = ys[5]
+	hungry2.hunger = 2.0
+	y.wild_food = 0.0
+	ResidentAI.decide(y, hungry2)
+	check(hungry2.action == "eat", "둘레에도 거둘 것이 없으면 창고 앞에서 먹을 것을 찾는다 (%s)" % hungry2.action)
+	y.wild_food = 10.0 * Balance.FORAGE_LOAD
+	y.t = 6.0 * Balance.DAY + 23.0 * Balance.HOUR - fmod(y.start_clock, Balance.DAY)
+	var late: Resident = ys[3]
+	ResidentAI.decide(y, late)
+	check(late.action != "forage", "밤에는 나가지 않는다 (%s)" % late.action)
+	var o := _proto()                        # 첫 한 시간: 연장을 다 치워도 나가지 않는다 (첫날 대본 그대로)
+	o.stock["도구"] = 0.0
+	o.wild_food = 10.0 * Balance.FORAGE_LOAD
+	var n_o := 0
+	for r: Resident in o.people:
+		if r.is_adult():
+			ResidentAI.decide(o, r)
+			if r.action == "forage":
+				n_o += 1
+	check(o.in_opening() and n_o == 0 and is_equal_approx(o.wild_food, 10.0 * Balance.FORAGE_LOAD), "첫 한 시간엔 나가지 않는다")
+
+
+## 한 번 다녀오기: 떠날 때 둘레에서 바구니만큼 잡아 두고 → 숙여 거두고 (gather) → 바구니를 안고 (carry) → 창고에. 도중에 그만두면 되돌린다
+func test_forage_trip() -> void:
+	var v := _forage_village(0.0, 0.3)
+	var loose := _loose(v)
+	var r: Resident = loose[0]
+	var pool0 := v.wild_food
+	var m0 := float(v.stock.get(Balance.FORAGE_ITEM, 0.0))
+	check(ResidentAI._forage(v, r), "나갈 수 있다")
+	r.action = "forage"
+	var spot := Vector2(float(r.steps[0]["x"]), float(r.steps[0]["y"]))
+	check(r.steps.size() == 4 and r.steps[0]["k"] == "walk" and r.steps[1]["anim"] == "gather" and is_equal_approx(float(r.steps[1]["left"]), Balance.FORAGE_TIME)
+		and spot.distance_to(v.fire) <= Balance.FORAGE_RANGE + 1.3 and not v.water_at(spot.x, spot.y),
+		"걸음: 둘레의 들·숲 가(모닥불에서 %.1f칸)로 걸어가 숙여 거두고 창고로" % spot.distance_to(v.fire))
+	check(is_equal_approx(v.wild_food, pool0 - Balance.FORAGE_LOAD) and r.carry == "", "떠날 때 둘레의 몫에서 바구니 하나만큼 잡아 둔다")
+	var seen := {}
+	var from := Vector2(r.x, r.y)
+	var jump := 0.0
+	var guard := 0
+	while float(v.stock.get(Balance.FORAGE_ITEM, 0.0)) <= m0 and guard < 2000:
+		guard += 1
+		ResidentAI.update(v, r, 30.0)
+		jump = maxf(jump, from.distance_to(Vector2(r.x, r.y)))
+		from = Vector2(r.x, r.y)
+		seen[r.anim + ("+" + r.carry if r.carry != "" else "")] = true
+	check(seen.has("walk") and seen.has("gather") and seen.has("carry+" + Balance.FORAGE_ITEM), "모습: 걷기 → 숙여 거두기 → 바구니를 안고 걷기 (%s)" % str(seen.keys()))
+	check(jump <= r.walk_speed() * 30.0 * 2.0 + 0.01, "순간 이동 없음 (한 걸음에 가장 멀리 %.2f칸)" % jump)
+	check(is_equal_approx(float(v.stock[Balance.FORAGE_ITEM]), m0 + Balance.FORAGE_LOAD) and int(v.stats.get("forage_trips", 0)) == 1
+		and is_equal_approx(float(v.stats.get("forage_food", 0.0)), Balance.FORAGE_LOAD),
+		"창고에 바구니 하나만큼 (%.0f) — 한 사람 하루치(%.0f)보다 적다" % [Balance.FORAGE_LOAD, Balance.DAY / Balance.FOOD_IV])
+	check(guard * 30.0 < 0.3 * Balance.DAY and guard * 30.0 > Balance.FORAGE_TIME, "한 번 다녀오는 데 병 %.1f시간" % (guard * 30.0 / Balance.HOUR))
+	# 거두기 전에 그만둠 → 둘레에 되돌림
+	var a: Resident = loose[1]
+	var pool1 := v.wild_food
+	var m1 := float(v.stock[Balance.FORAGE_ITEM])
+	check(ResidentAI._forage(v, a) and is_equal_approx(v.wild_food, pool1 - Balance.FORAGE_LOAD), "두 번째 사람도 제 몫을 잡는다")
+	ResidentAI.cancel(v, a)
+	check(is_equal_approx(v.wild_food, pool1) and is_equal_approx(float(v.stock[Balance.FORAGE_ITEM]), m1) and a.steps.is_empty(), "거두기 전에 그만두면 둘레의 몫이 그대로 돌아온다")
+	# 거둔 뒤에 그만둠 → 든 것은 창고로
+	var b: Resident = loose[2]
+	check(ResidentAI._forage(v, b), "세 번째 사람")
+	ResidentAI.run_op(v, b, b.steps[1]["done"])
+	b.steps.pop_front()
+	b.steps.pop_front()
+	check(b.carry == Balance.FORAGE_ITEM and is_equal_approx(b.carry_amt, Balance.FORAGE_LOAD), "거두면 바구니에 (%s %.0f)" % [b.carry, b.carry_amt])
+	ResidentAI.cancel(v, b)
+	check(is_equal_approx(v.wild_food, pool1 - Balance.FORAGE_LOAD) and is_equal_approx(float(v.stock[Balance.FORAGE_ITEM]), m1 + Balance.FORAGE_LOAD) and b.carry == "",
+		"거둔 뒤에 그만두면 든 것은 창고로 (사라지지도 두 번 생기지도 않음)")
+	# 둘레에 남은 것이 적을 때
+	var c: Resident = loose[3]
+	v.wild_food = Balance.FORAGE_LOAD * 0.7
+	check(ResidentAI._forage(v, c) and v.wild_food == 0.0 and is_equal_approx(float(c.steps[1]["done"]["amt"]), Balance.FORAGE_LOAD * 0.7), "남은 것이 바구니보다 적으면 남은 만큼만")
+	var d: Resident = loose[4]
+	v.wild_food = Balance.FORAGE_LOAD * (Balance.FORAGE_LOAD_MIN - 0.1)
+	check(not ResidentAI._forage(v, d) and d.steps.is_empty() and is_equal_approx(v.wild_food, Balance.FORAGE_LOAD * (Balance.FORAGE_LOAD_MIN - 0.1)), "반 바구니도 안 되면 나가지 않는다")
+
+
+## 둘레의 땅이 내는 만큼만: 하루에 forage_day, 거두지 않으면 FORAGE_KEEP_DAYS 날치에서 멈춤, 추운 철엔 덜, 나무가 많으면 조금 더 (상한)
+func test_forage_pool() -> void:
+	var v := _forage_village(0.0, 0.3)
+	var day := v.forage_day()
+	check(v.forage_season() == 1.0 and day >= Balance.FORAGE_GROUND and day <= Balance.FORAGE_GROUND + Balance.FORAGE_PER_TREE * Balance.FORAGE_TREES_MAX,
+		"첫 빵 전: 철 몫 1 · 하루 %.0f (사람 %.0f명 하루치)" % [day, day / (Balance.DAY / Balance.FOOD_IV)])
+	v.wild_food = 0.0
+	v._wild_grow(0.25 * Balance.DAY)
+	check(is_equal_approx(v.wild_food, day * 0.25), "병 6시간에 하루 몫의 4분의 1")
+	v._wild_grow(10.0 * Balance.DAY)
+	check(is_equal_approx(v.wild_food, day * Balance.FORAGE_KEEP_DAYS), "거두지 않으면 %.1f날치에서 멈춘다" % Balance.FORAGE_KEEP_DAYS)
+	v._wild_grow(0.0)
+	v._wild_grow(-5.0)
+	check(is_equal_approx(v.wild_food, day * Balance.FORAGE_KEEP_DAYS), "걸음 0·음수는 아무 일 없음")
+	# 하루에 거둘 수 있는 것은 둘레가 내는 만큼 — 사람이 아무리 많아도
+	var per_head := Balance.DAY / Balance.FOOD_IV
+	check(day / per_head < 100.0 and Balance.FORAGE_LOAD < per_head * 0.5, "둘레는 끝없는 사람을 먹이지 못한다 (하루 %.0f명치 · 바구니 하나 = 한 사람 하루의 %.0f%%)" % [day / per_head, 100.0 * Balance.FORAGE_LOAD / per_head])
+	# 철: 밭 자람이 가장 낮을 때 FORAGE_WINTER, 1 이상이면 1
+	v.stats["first_bread"] = 1
+	v._sg_day = int(floor((v.start_clock + v.t) / Balance.DAY))
+	v._sg = Balance.SEASON_GROW_MIN
+	check(is_equal_approx(v.forage_season(), Balance.FORAGE_WINTER) and is_equal_approx(v.forage_day(), day * Balance.FORAGE_WINTER), "가장 추운 철: 따뜻한 철의 %.0f%%" % (100.0 * Balance.FORAGE_WINTER))
+	v._sg = Balance.SEASON_GROW_MAX
+	check(v.forage_season() == 1.0, "한여름에도 1을 넘지 않는다")
+	v._sg = 0.5 * (Balance.SEASON_GROW_MIN + 1.0)
+	check(is_equal_approx(v.forage_season(), 0.5 * (Balance.FORAGE_WINTER + 1.0)), "그 사이는 고르게")
+	# 나무: 둘레의 서 있는 나무만, 상한까지
+	v._sg = 1.0
+	var keep := v.trees.duplicate(true)
+	v.trees.clear()
+	check(is_equal_approx(v.forage_day(), Balance.FORAGE_GROUND), "나무가 없으면 들이 내는 만큼만")
+	for i in Balance.FORAGE_TREES_MAX + 20:
+		var tr: Dictionary = (keep[0] as Dictionary).duplicate(true)
+		tr["x"] = v.fire.x + 3.0
+		tr["y"] = v.fire.y + 0.01 * i
+		tr["s"] = "tree"
+		v.trees.append(tr)
+	check(is_equal_approx(v.forage_day(), Balance.FORAGE_GROUND + Balance.FORAGE_PER_TREE * Balance.FORAGE_TREES_MAX), "나무는 %d그루까지만 센다" % Balance.FORAGE_TREES_MAX)
+	for tr: Dictionary in v.trees:
+		tr["x"] = v.fire.x + Balance.FORAGE_RANGE + 5.0
+	check(is_equal_approx(v.forage_day(), Balance.FORAGE_GROUND), "둘레 밖의 나무는 세지 않는다")
+	# 주사위를 쓰지 않는다 (자람)
+	var s0 := v.rng.state
+	var s1 := v.pop_rng.state
+	v._wild_grow(3600.0)
+	check(v.rng.state == s0 and v.pop_rng.state == s1, "자람은 주사위를 굴리지 않는다")
+
+
+## 연대기·말: 숫자·금지어 없음, 한 달에 한 번만. 저장 → 불러오기에 둘레의 몫과 마지막 줄 때가 그대로
+func test_forage_words_save() -> void:
+	var v := _forage_village(0.0, 0.3)
+	var loose := _loose(v)
+	var n0 := v.book.size()
+	var r: Resident = loose[0]
+	check(ResidentAI._forage(v, r), "나감")
+	var lines: Array = []
+	for i in range(n0, v.book.size()):
+		lines.append(String(v.book[i]["text"]))
+	check(lines.size() == 1 and String(lines[0]).contains(r.name) and String(lines[0]).contains("바구니"), "연대기 한 줄: %s" % str(lines))
+	check(r.say != "" and _bad(lines + [r.say, r.doing]) == "", "연대기·말·하는 일에 숫자·금지어 없음 (%s%s)" % [_bad(lines + [r.say, r.doing]), r.say])
+	var n1 := v.book.size()
+	var r1: Resident = loose[1]
+	check(ResidentAI._forage(v, r1) and v.book.size() == n1, "곧이어 나간 사람은 줄을 더하지 않는다")
+	v.t += (Balance.FORAGE_NOTE_DAYS + 0.1) * Balance.DAY
+	check(ResidentAI._forage(v, loose[2]) and v.book.size() == n1 + 1, "한 달쯤 뒤엔 다시 한 줄")
+	ResidentAI.run_op(v, r1, r1.steps[1]["done"])
+	check(_bad([r1.doing]) == "", "돌아오는 길의 하는 일에도 없음 (%s)" % r1.doing)
+	var d: Dictionary = bytes_to_var(var_to_bytes(v.to_dict()))
+	check(d.has("wild_food") and d.has("forage_note_t") and not d.has("_fg_t") and not d.has("_fg_ok"), "저장에 둘레의 몫과 마지막 줄 때 (세어 둔 값은 넣지 않음)")
+	var w := Village.from_dict(d)
+	check(is_equal_approx(w.wild_food, v.wild_food) and w.forage_note_t == v.forage_note_t, "불러오면 같은 값 (%.0f)" % w.wild_food)
+	d.erase("wild_food")
+	d.erase("forage_note_t")
+	var o := Village.from_dict(d)
+	check(o.wild_food == 0.0 and o.forage_note_t < -1.0e8, "옛 저장 (값 없음) → 빈 둘레에서 다시 자란다")
+	o._wild_grow(Balance.DAY)
+	check(o.wild_food > 0.0, "옛 저장도 하루 뒤엔 거둘 것이 있다 (%.0f)" % o.wild_food)
