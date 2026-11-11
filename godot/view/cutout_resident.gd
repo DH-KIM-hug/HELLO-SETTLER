@@ -115,7 +115,8 @@ var react_off := Vector3.ZERO    # 부모(VillageView) 틀 기준 옮김: y = �
 var react_sq := Vector2.ONE      # (가로, 세로) 배율 — 찌그러짐·늘어남
 var react_roll := 0.0            # 바라보는 쪽으로 숙이는 기울기 (rad, 발끝 중심)
 var react_turn := 0.0            # 종이 인형이 세로 축으로 도는 바퀴 수 (0.5 = 반대쪽을 봄)
-var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴)
+var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴) · (E2-1 2차, 하루의 흐름만) sit · eat · walk · carry · hold · stand
+var react_speed := -1.0          # (E2-1 2차) walk·carry 힌트로 그린 인형만 걸을 때의 땅 빠르기 (칸/현실 초) — -1이면 잰 값 그대로
 
 
 static func enabled() -> bool:
@@ -356,12 +357,18 @@ func react_top() -> float:
 	return _doll_h
 
 
+## (E2-1 2차) 하루의 흐름(view/daily_view.gd)이 그린 인형에만 입히는 동작: 힌트 → 동작. 소품은 eat만 빵, 나머지는 빈손 (화면만 — 시뮬의 짐·식량은 그대로)
+const REACT_CLIPS := {"sit": "sit", "eat": "eat", "walk": "walk", "carry": "carry", "hold": "hold", "stand": "idle"}
+
+
 ## 반응하는 동안의 동작: 걷던 발은 멈추고(짐은 든 채), 올려다보기는 서 있을 때만 — 일·앉기·잠은 그대로
 func _react_clip(clip: String) -> String:
 	if react_hint == "" or _baby:
 		return clip
 	if react_hint == "lookup" and (clip == "idle" or clip == "walk"):
 		return "lookup"
+	if REACT_CLIPS.has(react_hint):                 # (E2-1 2차) 하루의 흐름이 정한 동작 — 잠·기도는 그대로
+		return clip if clip == "sleep" or clip == "kneel" else String(REACT_CLIPS[react_hint])
 	if clip == "walk":
 		return "idle"
 	if clip == "carry":
@@ -448,6 +455,8 @@ func _refresh_doll() -> void:
 	if doll == null:
 		return
 	var s := doll_state()
+	if REACT_CLIPS.has(react_hint) and not _baby and s["clip"] != "sleep" and s["clip"] != "kneel":
+		s["prop"] = 0 if react_hint == "eat" else -1     # (E2-1 2차) 그림만: 한 입 먹는 빵 · 그 밖엔 연장을 내려놓은 빈손
 	_update_shift(bool(s["work"]))
 	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
 	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
@@ -467,7 +476,7 @@ func _refresh_doll() -> void:
 	var rate: float = Lib.CLIP_RATE[clip]
 	if clip == "walk" or clip == "carry":
 		# 발이 미끄러지지 않게: 주기/초 = 땅 빠르기 ÷ (한 주기 걸음 × 키 배율). 모르면 보통 걸음
-		var g := _ground
+		var g := _gspeed()
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else 1.0)
 		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], clip) * _doll_h / float(Lib.lib()["fig"])
@@ -556,7 +565,7 @@ func _refresh_frames() -> void:
 		fdoll.set_prop(_d_prop, _item_kind if fc == "carry" or fc == "hold" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
 	var rate: float = 0.0 if walking else Lib.CLIP_RATE["hold" if fc == "rock" else fc]
 	if walking:
-		var g := _ground
+		var g := _gspeed()
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait
 		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 화면 움직임을 그 보기의 걸음 축에 투영한 몫만큼 (발이 땅에 붙게,
@@ -586,7 +595,13 @@ func frame_load() -> String:
 func g_cycle(fc: String, rate: float) -> float:
 	if rate <= 0.0 or not (fc == "walk" or fc == "carry" or fc == "cradle"):
 		return 0.0
-	return (_ground if _ground >= 0.0 else GROUND_NORMAL * _gait) / rate
+	var g := _gspeed()
+	return (g if g >= 0.0 else GROUND_NORMAL * _gait) / rate
+
+
+## 걸음 동작을 맞출 땅 빠르기: 하루의 흐름이 그린 인형만 걷게 할 때는 그 빠르기 (E2-1 2차), 아니면 잰 값
+func _gspeed() -> float:
+	return react_speed if react_speed >= 0.0 and (react_hint == "walk" or react_hint == "carry") else _ground
 
 
 ## 땅에 맞는 걸음 빠르기 want(주기/초) · 장면 길이 fdt(초) → {travel: 걸음 대신 멈춘 보폭인가, rate: 걸음 빠르기 (상·하한·계단)}

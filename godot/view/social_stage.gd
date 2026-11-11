@@ -48,6 +48,19 @@ func busy(id: int) -> bool:
 	return _poses.has(id)
 
 
+## (E2-1 2차) 그 사람이 지금 펼쳐진 장면의 종류 ("" = 없음 — court · old_walk · vignette …) — 하루의 흐름이 같은 저녁에 산책을 두 번 그리지 않게
+func scene_kind(id: int) -> String:
+	for sc: Dictionary in scenes:
+		if id in sc["ev"]["who"]:
+			return String(sc["ev"]["kind"])
+	return ""
+
+
+## (E2-1 2차) 하루의 흐름(DailyView)이 쥐고 있는 사람인가 — 장면 중 + 제자리로 돌아가는 중. 그런 사람은 화면 장면에 고르지 않는다
+func _daily_holds(id: int) -> bool:
+	return vw != null and vw.has_meta(&"daily_view") and (vw.get_meta(&"daily_view") as DailyView).holding(id)
+
+
 # ───────────────────────── 매 화면 ─────────────────────────
 func sync(dt: float, fast: bool) -> void:
 	_clock += dt
@@ -470,7 +483,7 @@ func _try_vignette() -> void:
 	var opts: Array = []
 	var free: Array[Resident] = []
 	for r in v.people:
-		if r.sleeping or r.is_baby() or r.anim == "walk" or _in_scene(r.id) or not Social.FREE_ACTS.has(r.action) or ChildPlay.in_story(v, r.id):
+		if r.sleeping or r.is_baby() or r.anim == "walk" or _in_scene(r.id) or _daily_holds(r.id) or not Social.FREE_ACTS.has(r.action) or ChildPlay.in_story(v, r.id):
 			continue                   # (Q2-b) 저녁 이야기 자리의 어르신·아이들은 화면 장면에 뽑지 않는다
 		free.append(r)
 	# 저녁 모닥불: 앉은 사람 중 하나가 노래, 곁의 둘셋이 손뼉

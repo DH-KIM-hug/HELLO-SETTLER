@@ -1,6 +1,8 @@
 ## 하루의 흐름 (E2-1) 캡처 — 어른의 작은 하루 장면 넷: 아침 기지개 · 우물가 세수 · 저녁 수다 · 별 보기 (view/daily_view.gd).
 ## 실행 (창이 필요): godot --path godot -s res://tools/shot_daily.gd
 ##   DAILY_ONLY=live,stretch,wash,chat,stars (그 묶음만) · DAILY_TAG=d1 (파일 이름 앞머리)
+## (E2-1 2차) godot --path godot -s res://tools/shot_daily.gd -- d2 → 모닥불 아침 · 콧노래 · 점심 보따리 · 노을 산책 (노부부 포함)
+##   d2_<장면>_<확대>_<n><이름>.png · d2_<장면>_sheet.png · d2_sheet.png (전부 한 장) · DAILY_ONLY=fire,hum,lunch,stroll
 ## 넓은 세상(world.tscn) 마을을 1080×1920(논리 360×640)으로 찍는다 → godot_shots/daily/
 ##   <앞머리>_<장면>_<확대>_<n>.png (그 자리 둘레를 오려 냄) · <앞머리>_<장면>_sheet.png (한 장 모음)
 ##   확대: 20 = 기본 확대 · 44 = 가까이
@@ -10,6 +12,7 @@ extends SceneTree
 
 const ADD := ["목조주택", "목조주택", "목조주택", "우물"]
 const SCENES := ["live", "stretch", "wash", "chat", "stars"]
+const SCENES2 := ["fire", "hum", "lunch", "stroll"]            # -- d2
 
 var scene: Node
 var vp: SubViewport
@@ -35,6 +38,13 @@ func _initialize() -> void:
 	if OS.get_environment("DAILY_TAG") != "":
 		tag = OS.get_environment("DAILY_TAG")
 	var only := OS.get_environment("DAILY_ONLY")
+	var d2 := "d2" in OS.get_cmdline_user_args()
+	if d2 and OS.get_environment("DAILY_TAG") == "":
+		tag = "d2"
+	if not UserPaths.of("user://save").begins_with(UserPaths.TOOL_ROOT + "/"):      # 도구 폴더가 아니면 진짜 저장일 수 있다 — 아무것도 하지 않는다
+		push_error("shot_daily: 도구 폴더가 아님 — 그만둠")
+		plan = [_finish]
+		return
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/daily").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	CutoutResident.override = 1
@@ -50,10 +60,12 @@ func _initialize() -> void:
 	scene.world_seed = 20261107
 	vp.add_child(scene)
 	plan = [_build]
-	for s: String in SCENES:
+	for s: String in (SCENES2 if d2 else SCENES):
 		if only != "" and not (s in only.split(",")):
 			continue
 		call("_plan_" + s)
+	if d2:
+		plan.append(_sheet_all)
 	plan.append(_finish)
 
 
@@ -616,3 +628,275 @@ func _s_stars(with_kid: bool) -> int:
 func _go_stars(with_kid: bool) -> int:
 	print("별 보기 시작: %s" % str(dv.active(DailyView.STARS) > 0 or dv.start_stars(one, kid if with_kid else mate)))
 	return 0
+
+
+# ═════════════════════════ E2-1 2차 (-- d2): 모닥불 아침 · 콧노래 · 점심 보따리 · 노을 산책 ═════════════════════════
+## 스스로 시작하는 장면을 모두 끔 (찍을 장면만 손으로 시작)
+func _mute() -> void:
+	for k in range(DailyView.STRETCH, DailyView.STROLL + 1):
+		dv.mute[k] = true
+
+
+## 2차 장면 준비: 잔잔한 날(잔치·위기·추위 없음)이 될 때까지 하루씩 넘기고, 스스로 시작하는 장면을 끄고,
+## 짧은 이야기(SocialStage)가 그 사람들을 먼저 데려가지 않게 비워 둠 (캡처 자리만 — 놀이에서는 먼저 쥔 쪽이 이김)
+func _fresh2(hour: float, who: Array) -> void:
+	_fresh(hour, who)
+	for i in 4:
+		if dv.calm() == "":
+			break
+		print("  잔잔하지 않은 날 (%s) — 하루 더" % dv.calm())
+		_to_hour(fposmod(hour + 12.0, 24.0))
+		_fresh(hour, who)
+	_mute()
+	scene.view.social._clear_all()
+	scene.view.social._next_v = 60.0
+
+
+## 건물·물·모닥불·큰 나무에서 떨어진 빈 땅 (모닥불의 화면 앞쪽부터 찾음 — 캡처 자리만)
+func _open_spot(rad := 3.0) -> Vector2:
+	for trees: bool in [true, false]:
+		for ring: float in [5.0, 6.5, 8.0, 10.0, 12.0]:
+			for k: int in [0, 1, 11, 2, 10, 3, 9, 4, 8, 5, 7, 6]:
+				var ang := TAU * float(k) / 12.0
+				var c := v.fire + (_front() * cos(ang) + _right() * sin(ang)) * ring
+				var ok := true
+				for i in range(-4, 5):
+					for j in range(-4, 5):
+						ok = ok and dv.open_at(c + Vector2(float(i), float(j)) * rad / 4.0)
+				if ok and trees:
+					for tr: Dictionary in v.trees:
+						ok = ok and c.distance_to(Vector2(float(tr["x"]), float(tr["y"]))) > rad
+				if ok:
+					return c
+	return v.fire + _front() * 6.0
+
+
+func _gone(kind: int) -> bool:
+	return _sc(kind) == null
+
+
+func _sheet_all() -> int:
+	var all := PackedStringArray()
+	for g: String in SCENES2:
+		all.append_array(PackedStringArray(sheets.get(g, [])))
+	if all.is_empty():
+		return 1
+	var out := out_dir.path_join("%s_sheet.png" % tag)
+	_grid(all, out, 6, 0.4)
+	print("모음: %s (%d장)" % [out, all.size()])
+	return 1
+
+
+# ───────────────────────── ⑥ 모닥불 아침 ─────────────────────────
+func _trio() -> Array:
+	return [one, pal, third] if third != null else [one, mate, pal]
+
+
+func _plan_fire() -> void:
+	plan.append(_begin.bind("fire"))
+	plan.append(_cast_once)
+	for ppu: float in [20.0, 44.0]:
+		plan.append(_s_fire)
+		plan.append(_centre.bind(ppu, 20))
+		plan.append(_go_fire)
+		plan.append(_sleep.bind(0.8))
+		plan.append(_centre.bind(ppu, 1))
+		plan.append(_shot.bind("fire_%d_1walk" % int(ppu)))
+		plan.append(_until.bind(_at.bind(DailyView.FIRE, 0.0), 8.0))
+		var base := DailyView.FIRE_WARM + DailyView.FIRE_SIT
+		var i := 2
+		for l: Array in [[0.9, "warm"], [DailyView.FIRE_WARM + 0.45, "sit"], [base + 0.6, "bite1"], [base + DailyView.FIRE_STEP + 0.6, "bite2"], [base + DailyView.FIRE_STEP * 2.0 + 0.6, "bite3"]]:
+			plan.append(_until.bind(_at.bind(DailyView.FIRE, float(l[0])), 9.0))
+			plan.append(_centre.bind(ppu, 1))
+			plan.append(_shot.bind("fire_%d_%d%s" % [int(ppu), i, String(l[1])]))
+			i += 1
+		plan.append(_until.bind(_over, 12.0))
+		plan.append(_centre.bind(ppu, 2))
+		plan.append(_shot.bind("fire_%d_%dafter" % [int(ppu), i]))
+	plan.append(_sheet.bind("fire"))
+
+
+func _s_fire() -> int:
+	var who := _trio()
+	_fresh2(7.2, who)
+	var f := v.fire
+	_hold(who[0], "idle", f - _right() * 2.6 + _front() * 1.2, "쉬는 중")
+	_hold(who[1], "rest", f + _right() * 2.4 + _front() * 1.6, "쉬는 중")
+	_hold(who[2], "idle", f + _right() * 0.3 + _front() * 3.2, "쉬는 중")
+	_follow = null
+	_c = f + _front() * 0.5
+	scene.refresh()
+	print("모닥불: 불 %s · 잔잔 '%s' · 불가 자리 %d" % [str(dv.fire_lit()), dv.calm(), dv.fire_seats([]).size()])
+	return 20
+
+
+func _go_fire() -> int:
+	var why := ""
+	for r: Resident in _trio():
+		why += " %s%s[%s/%s 한가 %s · 불에서 %.1f]" % [r.name, _why(r), r.action, r.anim, str(DailyView.still(r)), Vector2(r.x - v.fire.x, r.y - v.fire.y).length()]
+	print("모닥불 아침 시작: %s%s" % [str(dv.start_fire(_trio())), why])
+	return 0
+
+
+# ───────────────────────── ⑦ 콧노래 ─────────────────────────
+func _plan_hum() -> void:
+	plan.append(_begin.bind("hum"))
+	plan.append(_cast_once)
+	for ppu: float in [20.0, 44.0]:
+		plan.append(_s_hum)
+		plan.append(_centre.bind(ppu, 20))
+		plan.append(_go_hum)
+		var i := 1
+		for gap: float in [0.5, 0.8, 0.9]:
+			plan.append(_sleep.bind(gap))
+			plan.append(_centre.bind(ppu, 1))
+			plan.append(_shot.bind("hum_%d_%d" % [int(ppu), i]))
+			i += 1
+		plan.append(_sleep.bind(1.0))
+		plan.append(_centre.bind(ppu, 1))
+		plan.append(_shot.bind("hum_%d_%dafter" % [int(ppu), i]))
+	plan.append(_sheet.bind("hum"))
+
+
+func _s_hum() -> int:
+	_fresh2(10.0, [one, pal])
+	var c := _open_spot(2.0)
+	_hold(one, "work", c - _right() * 0.8, "일하는 중")
+	_hold(pal, "work", c + _right() * 1.0 + _front() * 0.3, "일하는 중")
+	one.happiness = 0.9
+	one.hunger = minf(one.hunger, 0.2)
+	one.fear = 0.0
+	one.cold = 0.0
+	_follow = null
+	_c = c
+	scene.refresh()
+	return 20
+
+
+func _go_hum() -> int:
+	print("  %s%s" % [one.name, _why(one)])
+	print("콧노래 시작: %s (잔잔 '%s')" % [str(dv.start_hum(one)), dv.calm()])
+	return 0
+
+
+# ───────────────────────── ⑧ 점심 보따리 ─────────────────────────
+func _plan_lunch() -> void:
+	plan.append(_begin.bind("lunch"))
+	plan.append(_cast_once)
+	for l: Array in [[20.0, false], [44.0, false], [44.0, true]]:
+		var ppu := float(l[0])
+		var with_kid := bool(l[1])
+		var nm := "lunchkid" if with_kid else "lunch"
+		plan.append(_s_lunch.bind(with_kid))
+		plan.append(_centre.bind(ppu, 20))
+		plan.append(_go_lunch.bind(with_kid))
+		plan.append(_sleep.bind(0.8))
+		plan.append(_centre.bind(ppu, 1))
+		plan.append(_shot.bind("%s_%d_1carry" % [nm, int(ppu)]))
+		plan.append(_until.bind(_at.bind(DailyView.LUNCH, 0.0), 9.0))
+		var g := DailyView.LUNCH_GIVE
+		var i := 2
+		var shots: Array = [[0.3, "give"], [0.75, "give"], [g + 0.35, "sit"], [g + 0.5 + 0.6, "bite"], [g + 2.0 + 0.6, "bite"]]
+		if with_kid:
+			shots = [[0.6, "give"], [g + 0.5 + 0.6, "bite"], [g + 2.0 + 0.6, "bite"]]
+		for s: Array in shots:
+			plan.append(_until.bind(_at.bind(DailyView.LUNCH, float(s[0])), 9.0))
+			plan.append(_centre.bind(ppu, 1))
+			plan.append(_shot.bind("%s_%d_%d%s" % [nm, int(ppu), i, String(s[1])]))
+			i += 1
+		plan.append(_until.bind(_gone.bind(DailyView.LUNCH), 9.0))
+		plan.append(_sleep.bind(0.7))
+		plan.append(_centre.bind(ppu, 1))
+		plan.append(_shot.bind("%s_%d_%dback" % [nm, int(ppu), i]))
+		plan.append(_until.bind(_over, 9.0))
+		if not with_kid:
+			plan.append(_centre.bind(ppu, 2))
+			plan.append(_shot.bind("%s_%d_%dafter" % [nm, int(ppu), i + 1]))
+	plan.append(_sheet.bind("lunch"))
+
+
+func _s_lunch(with_kid: bool) -> int:
+	var c0 := kid if with_kid else one
+	_fresh2(12.1, [c0, mate])
+	var c := _open_spot(3.0)
+	_hold(mate, "work", c + _right() * 0.6, "일하는 중")
+	if with_kid:
+		_hold(kid, "play", c - _right() * 1.6 + _front() * 0.7, "노는 중", "idle")
+	else:
+		_hold(one, "rest", c - _right() * 2.2 + _front() * 0.5, "쉬는 중")
+	_follow = null
+	_c = c - _right() * 0.3
+	scene.refresh()
+	return 20
+
+
+func _go_lunch(with_kid: bool) -> int:
+	print("점심 보따리 시작: %s (잔잔 '%s')" % [str(dv.start_lunch(kid if with_kid else one, mate)), dv.calm()])
+	return 0
+
+
+# ───────────────────────── ⑨ 노을 산책 ─────────────────────────
+var _ages: Array = []
+
+
+func _stroll_at(phase: int, dt: float) -> bool:
+	var sc := _sc(DailyView.STROLL)
+	if sc == null:
+		return true
+	var t1 := sc.len / sc.sp
+	return sc.ready and sc.t >= [0.0, t1, t1 + DailyView.STROLL_PAUSE][phase] + dt
+
+
+func _plan_stroll() -> void:
+	plan.append(_begin.bind("stroll"))
+	plan.append(_cast_once)
+	for l: Array in [[20.0, false], [44.0, false], [20.0, true], [44.0, true]]:
+		var ppu := float(l[0])
+		var old := bool(l[1])
+		var nm := "strollold" if old else "stroll"
+		plan.append(_s_stroll.bind(old))
+		plan.append(_centre.bind(ppu, 20))
+		plan.append(_go_stroll)
+		var i := 1
+		for s: Array in [[0, 1.0, "out"], [0, 2.6, "out"], [1, 0.8, "dusk"], [2, 1.4, "back"]]:
+			plan.append(_until.bind(_stroll_at.bind(int(s[0]), float(s[1])), 12.0))
+			plan.append(_centre.bind(ppu, 1))
+			plan.append(_shot.bind("%s_%d_%d%s" % [nm, int(ppu), i, String(s[2])]))
+			i += 1
+		plan.append(_until.bind(_over, 12.0))
+		plan.append(_centre.bind(ppu, 2))
+		plan.append(_shot.bind("%s_%d_%dafter" % [nm, int(ppu), i]))
+	plan.append(_young)
+	plan.append(_sheet.bind("stroll"))
+
+
+func _s_stroll(old: bool) -> int:
+	if old and _ages.is_empty():                # 노부부 (캡처용: 같은 짝의 나이만 올림)
+		_ages = [one.age, mate.age]
+		one.age = Balance.AGE_ELDER + 3.0
+		mate.age = Balance.AGE_ELDER + 2.0
+	_fresh2(18.6, [one, mate])
+	var c := _open_spot(3.5)
+	_hold(one, "idle", c - _right() * 0.5, "쉬는 중")
+	_hold(mate, "rest", c + _right() * 0.6 + _front() * 0.2, "쉬는 중")
+	_follow = one
+	_c = c
+	scene.refresh()
+	return 20
+
+
+func _go_stroll() -> int:
+	var ok := dv.start_stroll(one, mate)
+	var sc := _sc(DailyView.STROLL)
+	print("노을 산책 시작: %s (잔잔 '%s'%s)" % [str(ok), dv.calm(), "" if sc == null else " · 길이 %.1f · 빠르기 %.2f · 노부부 %s" % [sc.len, sc.sp, str(sc.old)]])
+	if not ok:
+		print("  못 시작: %s%s · %s%s · 짝 %s · 가만 %s/%s · 거리 %.2f" % [one.name, _why(one), mate.name, _why(mate), str(one.partner == mate.id), str(DailyView.still(one)), str(DailyView.still(mate)), Vector2(one.x - mate.x, one.y - mate.y).length()])
+	return 0
+
+
+func _young() -> int:
+	if not _ages.is_empty():
+		one.age = _ages[0]
+		mate.age = _ages[1]
+		_ages.clear()
+	return 1

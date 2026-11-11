@@ -6,6 +6,8 @@
 ##   · 일하는 몸짓·짐·식사·잠·연출·아이 놀이·저녁 이야기·슬픔·톡 반응 중인 사람은 고르지 않고, 장면 중에 그렇게 되면 바로 놓음
 ##   · 한 사람은 한 장면에만 · 빠른 흐름에서는 아무것도 없음 · 끝나면 인형이 제자리·제 모습으로 (뚝 옮겨지지 않고 걸어서)
 ##   · 풍선은 그림만 · 멀리서 볼수록 몸짓이 큼
+## (E2-1 2차) 모닥불 아침 · 콧노래 · 점심 보따리 · 노을 산책: 잔잔한 날(추위·위기·분무 없음)에만, 소품은 그림뿐, 쉬던 사람은 걸어서 오가고,
+##   시뮬이 그 저녁에 이미 함께 걷게 한 짝은 산책을 또 그리지 않음, 짧은 이야기(SocialStage)는 하루의 흐름이 쥔 사람을 고르지 않음
 ## 장면 하나씩 보는 시험은 '멈춘 마을' 하나를 함께 쓴다 (시뮬은 흐르지 않고 화면만 흐름 — 시각은 v.t로 맞춤).
 extends RefCounted
 
@@ -32,7 +34,8 @@ func all() -> void:
 	print("== 하루의 흐름: 기지개 · 우물 세수 · 저녁 수다 · 별 보기 (E2-1)")
 	var old := CutoutResident.override
 	CutoutResident.override = 1
-	run.timed(self, ["test_picks", "test_source", "test_sim_same", "test_stretch", "test_wash", "test_chat", "test_stars", "test_never_busy", "test_drop", "test_exclusive", "test_gate", "test_zoom"])
+	run.timed(self, ["test_picks", "test_source", "test_sim_same", "test_stretch", "test_wash", "test_chat", "test_stars", "test_never_busy", "test_drop", "test_exclusive", "test_gate", "test_zoom",
+		"test_fire", "test_hum", "test_lunch", "test_stroll", "test_calm", "test_social_skip", "test_sim_same2"])
 	if _scn != null:
 		_drop(_scn)
 		_scn = null
@@ -93,7 +96,8 @@ func _view(scene: Node, v: Village) -> VillageView:
 
 
 ## 멈춘 마을 + 새 화면 (시험마다 새 DailyView) — [장면, 마을, 화면, DailyView]
-func _fix(hour := 10.0) -> Array:
+## second: 2차 장면(모닥불·콧노래·점심·산책)도 스스로 시작하게 — 끄면(기본) 1차 장면만 (1차 시험이 2차 장면에 흔들리지 않게)
+func _fix(hour := 10.0, second := false) -> Array:
 	if _scn == null:
 		_scn = _scene()
 		_fv = _village(20261110, 10.0)
@@ -108,6 +112,8 @@ func _fix(hour := 10.0) -> Array:
 	_clock(v, hour)
 	var vw := _view(_scn, v)
 	var dv := DailyView.of(vw)
+	if not second:
+		dv.mute = {DailyView.FIRE: true, DailyView.HUM: true, DailyView.LUNCH: true, DailyView.STROLL: true}
 	_aim(_scn, v.fire, 44.0)
 	return [_scn, v, vw, dv]
 
@@ -305,20 +311,28 @@ func _law(v: Village, vw: VillageView, dv: DailyView) -> String:
 			return "자는 사람 %s (%s)" % [r.name, DailyView.NAMES[kind]]
 		if r.carry != "":
 			return "짐 든 사람 %s" % r.name
-		if r.anim == "eat" or r.anim == "work" or r.anim == "carry" or r.anim == "pray" or r.anim == "play":
+		var fed := kind == DailyView.LUNCH and dv.role_of(id) == 1          # 점심 보따리를 받는 사람: 시뮬에서는 그 자리에서 계속 일하는 중
+		if r.anim == "eat" or (r.anim == "work" and not fed) or r.anim == "carry" or r.anim == "pray" or r.anim == "play":
 			return "일하거나 먹는 몸짓의 사람 %s (%s/%s)" % [r.name, r.action, r.anim]
-		if not ["walk", "idle", "sit"].has(r.anim) and not (bed and r.anim == "sleep"):
+		if not ["walk", "idle", "sit"].has(r.anim) and not (bed and r.anim == "sleep") and not fed:
 			return "뜻밖의 몸짓 %s (%s/%s)" % [r.name, r.action, r.anim]
-		if r.is_baby() or (r.age < Balance.AGE_ADULT and kind != DailyView.STARS):
+		if r.is_baby() or (r.age < Balance.AGE_ADULT and kind != DailyView.STARS and not (kind == DailyView.LUNCH and dv.role_of(id) == 0)):
 			return "아이를 어른 장면에 %s" % r.name
+		if kind >= DailyView.FIRE and dv.calm() != "":
+			return "잔잔하지 않은 날의 2차 장면 %s (%s)" % [r.name, dv.calm()]
 		if r.grief_until > v.t or r.is_sick() or r.is_injured():
 			return "슬프거나 아픈 사람 %s" % r.name
 		if not ChildPlay.game_of(v, id).is_empty() or ChildPlay.in_story(v, id):
 			return "놀이·저녁 이야기 속 사람 %s" % r.name
 		if vw.staged.has(id) or vw.pose_over.has(id) or (vw.social != null and vw.social.busy(id)):
 			return "다른 연출 속 사람 %s" % r.name
-	if dv.active(DailyView.STRETCH) > DailyView.STRETCH_AT_ONCE or dv.active(DailyView.WASH) > 1 or dv.active(DailyView.CHAT) > 1 or dv.active(DailyView.STARS) > 1:
+	if dv.active(DailyView.STRETCH) > DailyView.STRETCH_AT_ONCE or dv.active(DailyView.WASH) > 1 or dv.active(DailyView.CHAT) > 1 or dv.active(DailyView.STARS) > 1 \
+			or dv.active(DailyView.FIRE) > 1 or dv.active(DailyView.LUNCH) > 1 or dv.active(DailyView.STROLL) > 1 or dv.hummers().size() > 1:
 		return "한꺼번에 너무 많은 장면"
+	for id in dv.hummers():
+		var r := v.person(id)
+		if r == null or r.anim != "work" or r.happiness < DailyView.HUM_MOOD or r.hunger >= Balance.HUNGRY_AT or r.is_sick() or dv.holding(id):
+			return "콧노래가 어울리지 않는 사람 %d" % id
 	return ""
 
 
@@ -371,11 +385,12 @@ func test_sim_same() -> void:
 	_flow([va, vb], [wb], [db], 24.0 - to, real, out)                               # 저녁 → 자정
 	var st := db.started
 	var pm := int(st[DailyView.CHAT]) + int(st[DailyView.STARS])
-	print("     시작한 장면: 기지개 %d · 세수 %d · 수다 %d · 별 보기 %d (그린 자리와 시뮬 자리의 가장 큰 차이 %.2f칸)" % [int(st[DailyView.STRETCH]), int(st[DailyView.WASH]), int(st[DailyView.CHAT]), int(st[DailyView.STARS]), float(out.get("off", 0.0))])
+	print("     시작한 장면: 기지개 %d · 세수 %d · 수다 %d · 별 보기 %d · 모닥불 %d · 콧노래 %d · 점심 %d · 산책 %d (그린 자리와 시뮬 자리의 가장 큰 차이 %.2f칸)" % [int(st[DailyView.STRETCH]), int(st[DailyView.WASH]), int(st[DailyView.CHAT]), int(st[DailyView.STARS]),
+		int(st[DailyView.FIRE]), int(st[DailyView.HUM]), int(st[DailyView.LUNCH]), int(st[DailyView.STROLL]), float(out.get("off", 0.0))])
 	check(am > 0 and pm > 0, "여느 하루에 장면이 실제로 벌어짐 (아침 %d · 저녁 %d)" % [am, pm])
 	check(bool(out.get("same", false)), "화면(하루의 흐름)을 붙이든 말든 저장 지문·난수·사건 번호·창고·주민의 일과 자리가 같음 (ADR-0001)")
 	check(not out.has("bad"), "장면에 든 사람은 늘 빈손·깨어 있음·일하는 몸짓 아님·다른 연출 밖 %s" % str(out.get("bad", "")))
-	check(float(out.get("off", 0.0)) <= maxf(DailyView.MAX_OFF, DailyView.STAR_HOME_R) + 1.0, "그린 자리는 시뮬 자리에서 멀리 벗어나지 않음 (%.2f칸)" % float(out.get("off", 0.0)))
+	check(float(out.get("off", 0.0)) <= maxf(maxf(DailyView.MAX_OFF, DailyView.STAR_HOME_R), DailyView.FIRE_OFF) + 1.0, "그린 자리는 시뮬 자리에서 멀리 벗어나지 않음 (%.2f칸)" % float(out.get("off", 0.0)))
 	var day_ok := true
 	var per := {}
 	var once := {}
@@ -383,7 +398,8 @@ func test_sim_same() -> void:
 		var kind := int(e[1])
 		var k := "%d/%d" % [int(e[0]), kind]
 		per[k] = int(per.get(k, 0)) + 1
-		var lim: int = {DailyView.STRETCH: DailyView.STRETCH_PER_DAY, DailyView.WASH: DailyView.WASH_PER_DAY, DailyView.CHAT: DailyView.CHAT_PER_DAY, DailyView.STARS: DailyView.STAR_PER_DAY}[kind]
+		var lim: int = {DailyView.STRETCH: DailyView.STRETCH_PER_DAY, DailyView.WASH: DailyView.WASH_PER_DAY, DailyView.CHAT: DailyView.CHAT_PER_DAY, DailyView.STARS: DailyView.STAR_PER_DAY,
+			DailyView.FIRE: DailyView.FIRE_PER_DAY, DailyView.HUM: DailyView.HUM_PER_DAY, DailyView.LUNCH: DailyView.LUNCH_PER_DAY, DailyView.STROLL: DailyView.STROLL_PER_DAY}[kind]
 		day_ok = day_ok and int(per[k]) <= lim
 		if kind != DailyView.STARS:
 			for id: int in e[2]:
@@ -1007,3 +1023,792 @@ func test_zoom() -> void:
 		"멀리서(ppu 20) 볼수록 크게: 키 ×%.2f / ×%.2f · 기울임 %.2f / %.2f" % [float(far[0]), float(near[0]), float(far[1]), float(near[1])])
 	check(absf(float(far[1])) <= TapReact.ZOOM_ROLL_MAX + 1.0e-6, "기울임은 넘어지지 않을 만큼만")
 	_done(s)
+
+
+# ═════════════════════════ E2-1 2차: 모닥불 아침 · 콧노래 · 점심 보따리 · 노을 산책 ═════════════════════════
+## 그 종류들만 스스로 시작하게 (나머지는 끔)
+func _only(dv: DailyView, keep: Array) -> void:
+	dv.mute = {}
+	for k in range(DailyView.STRETCH, DailyView.STROLL + 1):
+		if not keep.has(k):
+			dv.mute[k] = true
+
+
+## 아기 부모가 아닌 멀쩡한 어른들 (아기를 안은 사람은 장면에 들지 않으므로)
+func _loose(v: Village, n: int) -> Array:
+	var out: Array = []
+	for r: Resident in _adults(v, 99):
+		var nursing := false
+		for b in v.people:
+			nursing = nursing or (b.is_baby() and not b.dead and r.id in b.parents)
+		if not nursing and out.size() < n:
+			out.append(r)
+	return out
+
+
+## 건물·물·모닥불에서 떨어진 빈 땅의 한가운데 (반지름 rad 안이 모두 걸을 수 있는 땅 — 없으면 INF)
+func _clearing(dv: DailyView, v: Village, rad := 3.0) -> Vector2:
+	for ring: float in [5.0, 6.5, 8.0, 10.0, 12.0]:
+		for k in 12:
+			var c := v.fire + Vector2.from_angle(TAU * float(k) / 12.0) * ring
+			var ok := true
+			for i in range(-4, 5):
+				for j in range(-4, 5):
+					ok = ok and dv.open_at(c + Vector2(float(i), float(j)) * rad / 4.0)
+			if ok:
+				return c
+	return Vector2.INF
+
+
+func _hint(vw: VillageView, r: Resident) -> String:
+	return _doll(vw, r).react_hint
+
+
+func _prop_kinds(dv: DailyView) -> Array:
+	return dv.bub.props.map(func(it: Array) -> String: return String(it[0]))
+
+
+func test_fire() -> void:
+	var s := _fix(10.0, true)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [DailyView.FIRE])
+	var ppl := _loose(v, 4)
+	check(ppl.size() == 4, "(준비) 아기 부모가 아닌 멀쩡한 어른 넷")
+	var trio: Array = ppl.slice(0, 3)
+	var a: Resident = ppl[0]
+	var b: Resident = ppl[1]
+	var c: Resident = ppl[2]
+	_park(v, trio)
+	var f := v.fire
+	_aim(s[0], f, 44.0)
+	_steps(vw, dv, 0.1)
+	var rt := dv._right
+	var fr := dv._front
+	var place := func() -> void:
+		var pa := f - rt * 2.6 + fr * 1.2
+		var pb := f + rt * 2.4 + fr * 1.6
+		var pc := f + rt * 0.3 + fr * 3.2
+		_put(a, pa.x, pa.y, "idle", "idle")
+		_put(b, pb.x, pb.y, "sit", "rest")
+		_put(c, pc.x, pc.y, "idle", "social")
+		vw.sync(0.0, true)
+	place.call()
+	_steps(vw, dv, 1.0)
+	check(dv.active(DailyView.FIRE) == 0 and not dv.holding(a.id), "이른 아침이 아니면 (10시) 스스로 모이지 않음")
+	_clock(v, 7.0)
+	check(dv.fire_lit() and dv.calm() == "" and dv.fire_seats([]).size() >= 3, "(준비) 불이 붙은 잔잔한 아침 · 불가 자리 %d곳 (%s · 추위 %.2f)" % [dv.fire_seats([]).size(), dv.calm(), Health.cold_of(Health.base_temp(v, v.t))])
+	var before := _work(v)
+	var stock0 := str(v.stock)
+	_steps(vw, dv, 0.8)
+	var cast := dv.cast(DailyView.FIRE)
+	check(cast.size() == 3 and cast.has(a.id) and cast.has(b.id) and cast.has(c.id), "아침(07:00), 모닥불 가까이의 한가한 어른 셋이 스스로 불가로")
+	var last := {}
+	for r: Resident in trio:
+		last[r.id] = dv.drawn(r.id)
+	var jump := 0.0
+	var walks := true
+	for i in int((DailyView.FIRE_APPROACH_MAX + 0.5) / DT):
+		if dv.playing(DailyView.FIRE):
+			break
+		_tick(vw, dv)
+		for r: Resident in trio:
+			var p := dv.drawn(r.id)
+			var d := p.distance_to(last[r.id])
+			jump = maxf(jump, d)
+			if d > 0.02:
+				walks = walks and _hint(vw, r) == "walk"
+			last[r.id] = p
+	check(dv.playing(DailyView.FIRE) and walks and jump <= DailyView.FIRE_WALK * DT + 0.001, "저마다 걸어서 불가 자리로 (걷는 동작 · 뚝 옮겨지지 않음 — 한 화면에 %.3f칸)" % jump)
+	var seat_ok := true
+	var pts: Array = trio.map(func(r: Resident) -> Vector2: return dv.drawn(r.id))
+	for i in 3:
+		var p: Vector2 = pts[i]
+		seat_ok = seat_ok and p.distance_to(f) >= DailyView.FIRE_NEAR - 0.01 and (p - f).dot(fr) > -0.5
+		for j in i:
+			seat_ok = seat_ok and p.distance_to(pts[j]) >= DailyView.FIRE_GAP - 0.01
+	check(seat_ok, "불 속이 아니라 불가에 · 서로 겹치지 않게 · 화면에서 불 뒤가 아닌 자리 (불에서 %.2f · %.2f · %.2f칸)" % [(pts[0] as Vector2).distance_to(f), (pts[1] as Vector2).distance_to(f), (pts[2] as Vector2).distance_to(f)])
+	var by_model := {}
+	var seen := {}
+	for r: Resident in trio:
+		by_model[_doll(vw, r)] = r.id
+		seen[r.id] = {}
+	var pics := {}
+	var bread := {}
+	var small := true
+	var most := 0
+	var faced := 0
+	var dur := DailyView.FIRE_WARM + DailyView.FIRE_SIT + DailyView.FIRE_STEP * 2.0 + DailyView.FIRE_BITE + 0.5 + DailyView.FIRE_UP
+	for i in int((dur - 0.3) / DT):
+		_tick(vw, dv)
+		for r: Resident in trio:
+			(seen[r.id] as Dictionary)[_hint(vw, r)] = true
+		most = maxi(most, dv.bub.items.size())
+		for it: Array in dv.bub.items:
+			pics[String(it[1])] = true
+			bread[int(by_model.get(it[0], -1))] = true
+			small = small and bool(it[3])
+		if i == int(DailyView.FIRE_WARM * 0.5 / DT):
+			for r: Resident in trio:
+				faced += 1 if _faces(_doll(vw, r), f - dv.drawn(r.id), 0.6) else 0
+	var acts := true
+	for r: Resident in trio:
+		var g: Dictionary = seen[r.id]
+		acts = acts and g.has("hold") and g.has("sit") and g.has("eat")
+	check(acts and faced == 3, "서서 불 쪽으로 손을 쬐고 → 앉아서 → 저마다 빵을 한 입 (%s · 불을 본 사람 %d)" % [str((seen[a.id] as Dictionary).keys()), faced])
+	check(pics.keys() == ["bread"] and bread.size() == 3 and not bread.has(-1) and small and most <= 2, "작은 빵 그림 풍선만, 한 사람씩 차례로 (글 없음 · 한꺼번에 많아야 %d)" % most)
+	check(_work(v) == before and str(v.stock) == stock0, "시뮬의 자리·할 일·배고픔·창고는 그대로 (빵은 그림뿐)")
+	jump = 0.0
+	for r: Resident in trio:
+		last[r.id] = dv.drawn(r.id)
+	for i in int(8.0 / DT):
+		_tick(vw, dv)
+		for r: Resident in trio:
+			if dv.holding(r.id):
+				jump = maxf(jump, dv.drawn(r.id).distance_to(last[r.id]))
+				last[r.id] = dv.drawn(r.id)
+	var rest_ok := true
+	for r: Resident in trio:
+		rest_ok = rest_ok and not dv.holding(r.id) and _resting(vw, r)
+	check(rest_ok and jump <= DailyView.BACK_MAX * DT + 0.001 and dv.bub.items.is_empty(), "끝나면 걸어서 제자리로 돌아가 제 모습 (한 화면에 많아야 %.3f칸)" % jump)
+	_steps(vw, dv, 1.5)
+	check(dv.active(DailyView.FIRE) == 0 and int(dv.started[DailyView.FIRE]) == 1, "같은 시간 칸(30분)에는 한 번만")
+	# 조건
+	var again := func() -> void:
+		dv.clear()
+		dv._did.clear()
+		v.hand.soaks.clear()
+		place.call()
+	again.call()
+	check(not dv.start_fire([a]) and not dv.start_fire(ppl) and not dv.start_fire([a, a]), "혼자·넷·같은 사람 둘은 아님 (둘이나 셋)")
+	_put(c, f.x + DailyView.FIRE_R + 1.5, f.y, "idle", "idle")
+	vw.sync(0.0, true)
+	check(not dv.start_fire(trio), "모닥불에서 먼 사람은 부르지 않음")
+	again.call()
+	_put(c, c.x, c.y, "work", "work")
+	vw.sync(0.0, true)
+	check(not dv.start_fire(trio), "일하는 사람은 부르지 않음")
+	again.call()
+	v.hand.soaks.append([f.x, f.y, 30.0])
+	check(not dv.fire_lit() and not dv.start_fire(trio), "물에 꺼진 모닥불에는 모이지 않음")
+	again.call()
+	check(dv.start_fire([a, b]) and _until(vw, dv, DailyView.FIRE, DailyView.FIRE_APPROACH_MAX + 0.5), "둘이서도 불가에")
+	v.hand.soaks.append([f.x + 0.5, f.y + 1.0, 30.0])
+	_steps(vw, dv, 2.0 * DT)
+	check(dv.active(DailyView.FIRE) == 0 and dv.kind_of(a.id) == 0, "불을 쬐는 중에 거인의 분무가 오면 바로 접음")
+	v.hand.soaks.clear()
+	_done(s)
+
+
+func test_hum() -> void:
+	var s := _fix(10.0, true)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [DailyView.HUM])
+	var ppl := _loose(v, 3)
+	var a: Resident = ppl[0]
+	var b: Resident = ppl[1]
+	var k: Resident = ppl[2]
+	_park(v, ppl)
+	var mood := {}
+	for r in v.people:
+		mood[r.id] = [r.happiness, r.hunger, r.fear, r.cold, r.sick_left]
+		if not ppl.has(r):
+			r.happiness = 0.2
+	var c := v.fire + Vector2(0.0, 2.0)
+	_aim(s[0], c, 44.0)
+	var undo := func() -> void:
+		_put(a, c.x - 1.0, c.y, "work", "work")
+		a.happiness = 0.85
+		a.hunger = 0.2
+		a.fear = 0.0
+		a.cold = 0.0
+		a.sick_left = 0.0
+		dv._hums.clear()
+		dv._did.clear()
+		vw.sync(0.0, true)
+	undo.call()
+	_put(b, c.x + 1.0, c.y, "work", "work")
+	b.happiness = 0.2
+	b.hunger = 0.2
+	b.fear = 0.0
+	b.cold = 0.0
+	_put(k, c.x, c.y + 1.5, "idle", "idle")
+	k.happiness = 0.9
+	vw.sync(0.0, true)
+	check(dv.calm() == "", "(준비) 잔잔한 날 (%s)" % dv.calm())
+	var before := _work(v)
+	_steps(vw, dv, 1.0)
+	check(dv.humming(a.id) and not dv.humming(b.id) and not dv.humming(k.id) and dv.hummers().size() == 1, "일하는 기분 좋은 사람만 콧노래 (시무룩한 사람·쉬는 사람은 아님)")
+	var it: Array = dv.bub.items[0] if dv.bub.items.size() == 1 else []
+	check(not it.is_empty() and it[0] == _doll(vw, a) and String(it[1]) == "note" and bool(it[3]), "머리 위에 작은 음표 그림 풍선 하나 (글 없음)")
+	check(not dv.holding(a.id) and _hint(vw, a) == "" and _doll(vw, a).react_sq == Vector2.ONE and _work(v) == before, "몸짓·자리는 그대로 (쥐지 않음) · 시뮬도 그대로")
+	_steps(vw, dv, DailyView.HUM_DUR)
+	check(not dv.humming(a.id) and dv.bub.items.is_empty(), "잠깐 뒤 사라짐 (%.1f초)" % DailyView.HUM_DUR)
+	b.happiness = 0.9
+	_steps(vw, dv, 2.0)
+	check(dv.hummers().is_empty() and int(dv.started[DailyView.HUM]) == 1, "콧노래 사이에는 쉼 (%.0f초)" % DailyView.HUM_GAP)
+	_steps(vw, dv, DailyView.HUM_GAP)
+	check(int(dv.started[DailyView.HUM]) == 2 and ((dv.history[-1] as Array)[2] as Array) == [b.id], "쉬고 나면 다른 사람이")
+	_steps(vw, dv, DailyView.HUM_GAP + 1.0)
+	check(int(dv.started[DailyView.HUM]) == 2, "한 사람은 하루 한 번")
+	var cases: Array = [
+		["배고픈", func() -> void: a.hunger = 0.9],
+		["시무룩한", func() -> void: a.happiness = 0.3],
+		["겁먹은", func() -> void: a.fear = 0.5],
+		["추위에 떠는", func() -> void: a.cold = 0.6],
+		["아픈", func() -> void: a.sick_left = 50.0],
+		["슬퍼하는", func() -> void: a.grief_until = v.t + 1000.0],
+		["일손을 놓은", func() -> void: _put(a, c.x - 1.0, c.y, "idle", "idle")],
+		["말풍선이 뜬", func() -> void:
+			a.say = "…"
+			a.say_t = 3.0],
+	]
+	for cs: Array in cases:
+		undo.call()
+		(cs[1] as Callable).call()
+		vw.sync(0.0, true)
+		check(not dv.start_hum(a) and not dv.humming(a.id), "%s 사람은 콧노래하지 않음" % String(cs[0]))
+	for cs: Array in cases:
+		undo.call()
+		var ok := dv.start_hum(a)
+		_steps(vw, dv, 0.3)
+		ok = ok and dv.humming(a.id) and dv.bub.items.size() == 1
+		(cs[1] as Callable).call()
+		_steps(vw, dv, 2.0 * DT)
+		check(ok and not dv.humming(a.id) and dv.bub.items.is_empty(), "콧노래 중에 %s 사람이 되면 바로 그침" % String(cs[0]))
+	undo.call()
+	dv._today.clear()
+	for i in DailyView.HUM_PER_DAY + 3:
+		dv._did.clear()
+		dv._hums.clear()
+		dv._hum_t = -1.0e9
+		_steps(vw, dv, 0.7)
+	check(int(dv._today.get(DailyView.HUM, 0)) == DailyView.HUM_PER_DAY, "하루에 많아야 %d번" % DailyView.HUM_PER_DAY)
+	for r in v.people:
+		if mood.has(r.id):
+			var m0: Array = mood[r.id]
+			r.happiness = m0[0]
+			r.hunger = m0[1]
+			r.fear = m0[2]
+			r.cold = m0[3]
+			r.sick_left = m0[4]
+	_done(s)
+
+
+func test_lunch() -> void:
+	var s := _fix(10.0, true)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [DailyView.LUNCH])
+	var ppl := _loose(v, 3)
+	var a: Resident = ppl[0]          # 가져갈 사람
+	var w: Resident = ppl[1]          # 일하는 식구
+	var x: Resident = ppl[2]          # 식구가 아닌 사람
+	a.partner = w.id
+	w.partner = a.id
+	x.partner = -1
+	_park(v, ppl)
+	_steps(vw, dv, 0.1)
+	var c := _clearing(dv, v)
+	check(c != Vector2.INF and not DailyView.family(x, w) and DailyView.family(a, w), "(준비) 빈 땅 · 식구 둘과 남 하나")
+	_aim(s[0], c, 44.0)
+	var place := func() -> void:
+		_put(w, c.x, c.y, "work", "work")
+		_put(a, c.x - 2.6, c.y + 0.5, "idle", "rest")
+		_put(x, c.x + 1.5, c.y - 1.0, "idle", "idle")
+		vw.sync(0.0, true)
+	place.call()
+	_steps(vw, dv, 1.0)
+	check(dv.active(DailyView.LUNCH) == 0 and not dv.holding(a.id), "한낮이 아니면 (10시) 스스로 시작하지 않음")
+	_clock(v, 12.0)
+	check(dv.calm() == "", "(준비) 잔잔한 날 (%s)" % dv.calm())
+	var before := _work(v)
+	var stock0 := str(v.stock)
+	_steps(vw, dv, 0.8)
+	check(dv.kind_of(a.id) == DailyView.LUNCH and dv.role_of(a.id) == 0 and dv.role_of(w.id) == 1 and not dv.holding(x.id), "한낮(12:00), 쉬던 식구가 가까이서 일하는 식구에게 (남은 아님)")
+	var last := dv.drawn(a.id)
+	var jump := 0.0
+	var carried := true
+	var bundle := true
+	var shown := false
+	var stays := true
+	for i in int((DailyView.LUNCH_APPROACH_MAX + 0.5) / DT):
+		if dv.playing(DailyView.LUNCH):
+			break
+		_tick(vw, dv)
+		var p := dv.drawn(a.id)
+		var d := p.distance_to(last)
+		jump = maxf(jump, d)
+		last = p
+		if dv.playing(DailyView.LUNCH):
+			break
+		if d > 0.02:
+			carried = carried and _hint(vw, a) == "carry"
+		bundle = bundle and _prop_kinds(dv) == ["bundle"]
+		for it: Array in dv.bub.items:
+			shown = shown or (it[0] == _doll(vw, a) and String(it[1]) == "bundle" and not bool(it[3]))
+		stays = stays and dv.drawn(w.id).distance_to(Vector2(w.x, w.y)) < 0.001 and _hint(vw, w) == "still"
+	check(dv.playing(DailyView.LUNCH) and carried and jump <= DailyView.LUNCH_WALK * DT + 0.001, "보따리를 들고 걸어감 (순간이동 없음 — 한 화면에 %.3f칸)" % jump)
+	check(bundle and shown, "가는 내내 보따리 그림이 손에 · 처음엔 보따리 그림 풍선")
+	check(stays, "일하던 사람은 그 자리에서 일하던 그대로")
+	var gap := dv.drawn(a.id).distance_to(dv.drawn(w.id))
+	check(absf(gap - DailyView.LUNCH_SIDE) < 0.03, "일하는 사람 바로 곁에 섬 (%.2f칸)" % gap)
+	var sa := {}
+	var sw := {}
+	var kinds: Array = []
+	var heart := false
+	var only_pics := true
+	var faced := 0
+	var n := int((DailyView.LUNCH_GIVE + DailyView.LUNCH_SIT + DailyView.LUNCH_UP - 0.2) / DT)
+	for i in n:
+		_tick(vw, dv)
+		sa[_hint(vw, a)] = true
+		sw[_hint(vw, w)] = true
+		for pk: String in _prop_kinds(dv):
+			if kinds.is_empty() or String(kinds[-1]) != pk:
+				kinds.append(pk)
+		for it: Array in dv.bub.items:
+			heart = heart or (it[0] == _doll(vw, w) and String(it[1]) == "heart" and bool(it[3]))
+			only_pics = only_pics and String(it[1]) == "heart"
+		if i == int((DailyView.LUNCH_GIVE + 0.3) / DT):
+			faced += 1 if _faces(_doll(vw, a), dv.drawn(w.id) - dv.drawn(a.id), 0.6) else 0
+			faced += 1 if _faces(_doll(vw, w), dv.drawn(a.id) - dv.drawn(w.id), 0.6) else 0
+	check(sa.has("hold") and sa.has("sit") and sa.has("eat") and sw.has("stand") and sw.has("sit") and sw.has("eat"), "건네고 → 둘이 나란히 앉아 → 한 입씩 (%s / %s)" % [str(sa.keys()), str(sw.keys())])
+	check(kinds == ["bundle", "cloth"] and heart and only_pics and faced == 2, "보따리는 손에서 손으로, 앉아서는 펼친 보따리 · 받는 사람의 작은 하트 · 서로 쪽을 봄 (%s · %d)" % [str(kinds), faced])
+	check(_work(v) == before and str(v.stock) == stock0, "시뮬의 일·자리·배고픔·창고는 그대로 (보따리·빵은 그림뿐 · 일하던 사람은 시뮬에서 계속 일함)")
+	last = dv.drawn(a.id)
+	jump = 0.0
+	var walked := false
+	for i in int(8.0 / DT):
+		_tick(vw, dv)
+		if dv.holding(a.id):
+			var d := dv.drawn(a.id).distance_to(last)
+			jump = maxf(jump, d)
+			last = dv.drawn(a.id)
+			walked = walked or (d > 0.01 and _hint(vw, a) == "walk")
+	check(not dv.holding(a.id) and not dv.holding(w.id) and _resting(vw, a) and _resting(vw, w) and dv.bub.props.is_empty(), "끝나면 둘 다 제자리·제 모습 (소품도 사라짐)")
+	check(walked and jump <= DailyView.BACK_MAX * DT + 0.001, "가져온 사람은 걸어서 제자리로 돌아감 (한 화면에 많아야 %.3f칸)" % jump)
+	check(int(dv.started[DailyView.LUNCH]) == 1, "같은 시간 칸(30분)에는 한 번만")
+	# 조건
+	var again := func() -> void:
+		dv.clear()
+		dv._did.clear()
+		place.call()
+	again.call()
+	check(not dv.start_lunch(x, w), "식구가 아니면 가져가지 않음")
+	_put(a, c.x - (DailyView.LUNCH_NEAR + 0.6), c.y, "idle", "rest")
+	vw.sync(0.0, true)
+	check(not dv.start_lunch(a, w), "멀리 있는 식구는 가지 않음 (%.0f칸 밖 — 순간이동 없음)" % DailyView.LUNCH_NEAR)
+	again.call()
+	_put(a, c.x - 2.0, c.y, "work", "work")
+	vw.sync(0.0, true)
+	check(not dv.start_lunch(a, w), "일하는 사람은 가져가지 않음")
+	again.call()
+	_put(w, c.x, c.y, "idle", "idle")
+	vw.sync(0.0, true)
+	check(not dv.start_lunch(a, w), "쉬는 식구에게는 가져가지 않음")
+	again.call()
+	var mum := w if w.sex == "f" else a
+	var dad := a if w.sex == "f" else w
+	var kid := v.add_person("달래", "f", 2.6, "", c.x - 1.8, c.y + 0.8, mum, dad)
+	kid.parents = PackedInt32Array([mum.id, dad.id])
+	_put(kid, c.x - 1.8, c.y + 0.8, "idle", "play")
+	vw.sync(0.0, true)
+	check(dv.start_lunch(kid, w) and dv.role_of(kid.id) == 0 and dv.kind_of(w.id) == DailyView.LUNCH, "아이도 보따리를 가져감")
+	check(not dv.start_lunch(a, w), "이미 받고 있는 사람에게 또 가지 않음")
+	check(_until(vw, dv, DailyView.LUNCH, DailyView.LUNCH_APPROACH_MAX + 0.5), "(준비) 아이가 곁에 닿음")
+	w.action = "haul"
+	w.anim = "walk"
+	w.steps = [ResidentAI.walk(w.x + 5.0, w.y)]
+	_steps(vw, dv, 2.0 * DT)
+	check(dv.kind_of(kid.id) == 0 and dv.active(DailyView.LUNCH) == 0, "받는 사람이 시뮬에서 다른 일로 떠나면 바로 접음")
+	_put(w, c.x, c.y, "work", "work")
+	_steps(vw, dv, 6.0)
+	check(not dv.holding(kid.id) and _resting(vw, kid), "아이도 걸어서 제자리로")
+	_done(s)
+
+
+func test_stroll() -> void:
+	var s := _fix(10.0, true)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [DailyView.STROLL])
+	var ppl := _loose(v, 3)
+	var a: Resident = ppl[0]
+	var b: Resident = ppl[1]
+	var x: Resident = ppl[2]
+	a.partner = b.id
+	b.partner = a.id
+	x.partner = -1
+	_park(v, ppl)
+	_steps(vw, dv, 0.1)
+	var c := _clearing(dv, v, 3.5)
+	check(c != Vector2.INF, "(준비) 빈 땅")
+	_aim(s[0], c, 44.0)
+	var place := func() -> void:
+		_put(a, c.x - 0.5, c.y, "idle", "idle")
+		_put(b, c.x + 0.6, c.y + 0.2, "idle", "rest")
+		_put(x, c.x - 1.2, c.y + 1.4, "idle", "idle")
+		vw.sync(0.0, true)
+	place.call()
+	_steps(vw, dv, 1.0)
+	check(dv.active(DailyView.STROLL) == 0 and not dv.holding(a.id), "해 질 무렵이 아니면 (10시) 스스로 시작하지 않음")
+	_clock(v, 18.5)
+	check(dv.calm() == "", "(준비) 잔잔한 날 (%s)" % dv.calm())
+	var before := _work(v)
+	_steps(vw, dv, 0.8)
+	check(dv.kind_of(a.id) == DailyView.STROLL and dv.kind_of(b.id) == DailyView.STROLL and not dv.holding(x.id), "해 질 무렵(18:30), 가까이 한가히 있던 짝이 스스로 산책 (짝이 아닌 사람은 아님)")
+	check(_until(vw, dv, DailyView.STROLL, DailyView.STROLL_APPROACH_MAX + 0.5), "나란히 서서 걷기 시작")
+	var sc: DailyView.Scene = dv._scenes[0]
+	var t1 := sc.len / sc.sp
+	var lo := 2.0 * sc.gap - 0.02
+	var hi := 2.0 * sc.gap + DailyView.STROLL_LEAD + 0.02
+	var side := true
+	var jump := 0.0
+	var walks := true
+	var faced := true
+	var dusk := 0
+	var other := false
+	var paused := true
+	var far := 0.0
+	var hands := false
+	var la := dv.drawn(a.id)
+	var lb := dv.drawn(b.id)
+	for i in int((sc.dur - 0.1) / DT):
+		_tick(vw, dv)
+		var pa := dv.drawn(a.id)
+		var pb := dv.drawn(b.id)
+		var g := pa.distance_to(pb)
+		side = side and g >= lo and g <= hi
+		jump = maxf(jump, maxf(pa.distance_to(la), pb.distance_to(lb)))
+		la = pa
+		lb = pb
+		far = maxf(far, ((pa + pb) * 0.5).distance_to(sc.focus))
+		hands = hands or not dv.bub.props.is_empty()
+		if sc.t > 0.3 and sc.t < t1 - 0.2:
+			walks = walks and _hint(vw, a) == "walk" and _hint(vw, b) == "walk"
+			faced = faced and _faces(_doll(vw, a), sc.dir, 0.6) and _faces(_doll(vw, b), sc.dir, 0.6)
+		elif sc.t > t1 + 0.2 and sc.t < t1 + DailyView.STROLL_PAUSE - 0.2:
+			paused = paused and _hint(vw, a) == "still" and _hint(vw, b) == "still"
+		for it: Array in dv.bub.items:
+			if String(it[1]) == "dusk" and it[0] == _doll(vw, a):
+				dusk += 1
+			else:
+				other = true
+	check(side, "가는 내내 나란히 (서로 %.2f~%.2f칸)" % [lo, hi])
+	check(walks and faced and jump <= sc.sp * DT + 0.001 and sc.sp < Balance.WALK_SCREEN, "둘 다 걷는 동작으로 같은 쪽을 보며 천천히 (%.2f칸/초 — 보통 걸음 %.2f)" % [sc.sp, Balance.WALK_SCREEN])
+	check(paused and dusk > 10 and not other, "가다가 나란히 서서 노을을 봄 (노을 그림 풍선 하나 · 글 없음)")
+	check(far >= sc.len - 0.3 and far <= DailyView.STROLL_LEN + 0.3 and not hands, "멀리 가지 않음 (%.2f칸) · 젊은 짝은 손을 잡지 않음" % far)
+	check(_work(v) == before, "시뮬의 자리·할 일은 그대로 (걷는 것은 그린 인형만)")
+	_steps(vw, dv, 5.0)
+	check(not dv.holding(a.id) and not dv.holding(b.id) and _resting(vw, a) and _resting(vw, b), "돌아와서 제자리·제 모습")
+	check(int(dv.started[DailyView.STROLL]) == 1 and dv.active(DailyView.STROLL) == 0, "같은 시간 칸(30분)에는 한 번만 · 한 짝은 하루 한 번")
+	# 노부부
+	var again := func() -> void:
+		dv.clear()
+		dv._did.clear()
+		dv._slot.clear()
+		dv._today.clear()
+		place.call()
+	again.call()
+	var ages := [a.age, b.age]
+	a.age = Balance.AGE_ELDER + 1.0
+	b.age = Balance.AGE_ELDER + 2.0
+	vw.sync(0.0, true)
+	check(dv.start_stroll(a, b) and _until(vw, dv, DailyView.STROLL, DailyView.STROLL_APPROACH_MAX + 0.5), "노부부도 산책")
+	sc = dv._scenes[0]
+	var held := true
+	var close := true
+	for i in int(1.5 / DT):
+		_tick(vw, dv)
+		held = held and _prop_kinds(dv) == ["hands"]
+		close = close and dv.drawn(a.id).distance_to(dv.drawn(b.id)) <= 2.0 * DailyView.STROLL_SIDE_OLD + DailyView.STROLL_LEAD + 0.02
+	check(sc.old and held and close and sc.sp == DailyView.STROLL_SPEED_OLD and sc.sp < DailyView.STROLL_SPEED, "노부부는 손을 잡고, 더 가까이·더 천천히")
+	a.age = ages[0]
+	b.age = ages[1]
+	# 조건
+	again.call()
+	check(not dv.start_stroll(a, x) and not dv.start_stroll(a, a), "짝이 아니면 함께 걷지 않음")
+	_put(b, c.x + DailyView.STROLL_NEAR + 1.0, c.y, "idle", "idle")
+	vw.sync(0.0, true)
+	check(not dv.start_stroll(a, b), "멀리 떨어진 짝은 부르지 않음")
+	again.call()
+	_put(b, c.x + 0.6, c.y + 0.2, "work", "work")
+	vw.sync(0.0, true)
+	check(not dv.start_stroll(a, b), "일하는 사람은 산책하지 않음")
+	again.call()
+	_put(b, c.x + 0.6, c.y + 0.2, "walk", "haul")
+	vw.sync(0.0, true)
+	check(not dv.start_stroll(a, b), "어디론가 걸어가는 사람은 세우지 않음")
+	# 시뮬이 그 저녁에 이미 함께하게 한 짝 (짧은 이야기: 걸으며 이야기 · 노부부의 저녁)
+	again.call()
+	var n0 := int(dv.started[DailyView.STROLL])
+	vw.social.scenes.append({"ev": {"who": [a.id, b.id], "kind": "old_walk"}})
+	check(vw.social.scene_kind(a.id) == "old_walk" and vw.social.scene_kind(x.id) == "", "(준비) 짧은 이야기가 그 짝의 저녁 만남을 펼치는 중")
+	dv._scan_stroll(DailyView.day_of(v), 0, null)
+	vw.social.scenes.clear()
+	_steps(vw, dv, 1.5)
+	check(dv.active(DailyView.STROLL) == 0 and int(dv.started[DailyView.STROLL]) == n0, "시뮬이 그 저녁에 이미 함께하게 한 짝은 산책을 또 그리지 않음")
+	dv._did.clear()
+	_steps(vw, dv, 1.5)
+	check(dv.active(DailyView.STROLL) == 1 and int(dv.started[DailyView.STROLL]) == n0 + 1, "(대조) 그런 만남이 없던 짝은 산책")
+	_done(s)
+
+
+## 2차 장면 넷 모두: 분무(병 속의 비)·추위·위기·빠른 흐름·첫 한 시간에는 시작하지 않고, 하던 장면도 바로 접음
+func test_calm() -> void:
+	var s := _fix(12.0, true)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [])
+	var ppl := _loose(v, 4)
+	var a: Resident = ppl[0]
+	var b: Resident = ppl[1]
+	var w: Resident = ppl[2]
+	var x: Resident = ppl[3]
+	for pr: Array in [[a, b], [w, x]]:
+		(pr[0] as Resident).partner = (pr[1] as Resident).id
+		(pr[1] as Resident).partner = (pr[0] as Resident).id
+	_park(v, ppl)
+	var f := v.fire
+	_aim(s[0], f, 44.0)
+	_steps(vw, dv, 0.1)
+	var rt := dv._right
+	var fr := dv._front
+	var mood := [w.happiness, w.hunger, w.fear, w.cold]
+	var reset := func() -> void:
+		dv.clear()
+		dv._did.clear()
+		var pa := f + fr * 2.6 - rt * 0.55
+		var pb := f + fr * 2.6 + rt * 0.55
+		var pw := f + fr * 2.6 + rt * 3.0
+		var px := f + fr * 3.8 + rt * 1.6
+		_put(a, pa.x, pa.y, "idle", "idle")
+		_put(b, pb.x, pb.y, "idle", "rest")
+		_put(w, pw.x, pw.y, "work", "work")
+		_put(x, px.x, px.y, "idle", "rest")
+		w.happiness = 0.9
+		w.hunger = 0.2
+		w.fear = 0.0
+		w.cold = 0.0
+		vw.sync(0.0, true)
+	var starts: Array = [
+		["모닥불 아침", func() -> bool: return dv.start_fire([a, b])],
+		["콧노래", func() -> bool: return dv.start_hum(w)],
+		["점심 보따리", func() -> bool: return dv.start_lunch(x, w)],
+		["노을 산책", func() -> bool: return dv.start_stroll(a, b)],
+	]
+	for st: Array in starts:
+		reset.call()
+		check(dv.calm() == "" and bool((st[1] as Callable).call()), "(대조) 잔잔한 날에는 %s 시작 (%s)" % [String(st[0]), dv.calm()])
+	var date0: Dictionary = v.created_date.duplicate()
+	var winter := func() -> void:
+		_clock(v, 7.0)                                         # 겨울 아침 (온대의 겨울 한낮은 '춥다' 금을 넘지 않음)
+		var best := 0.0
+		var pick := int(date0["month"])
+		for mo in range(1, 13):
+			v.created_date["month"] = mo
+			var cold := Health.cold_of(Health.base_temp(v, v.t))
+			if cold > best:
+				best = cold
+				pick = mo
+		v.created_date["month"] = pick
+	var wet := f + fr * 2.0 + rt * 1.0
+	var gates: Array = [
+		["거인의 분무가 막 적신 곳 (병 속의 비)", func() -> void: v.hand.soaks.append([wet.x, wet.y, 20.0]), func() -> void: v.hand.soaks.clear()],
+		["추운 날 (겨울 아침)", winter, func() -> void:
+			v.created_date = date0.duplicate()
+			_clock(v, 12.0)],
+		["식량이 모자란 날", func() -> void: v.deficit = 0.4, func() -> void: v.deficit = 0.0],
+		["위기가 막 시작된 때", func() -> void: v.crises.append({"t": v.t, "kind": "hunger", "text": ""}), func() -> void: v.crises.clear()],
+		["작은 위기(떠돌이 물방울) 중", func() -> void: v.smalls.drop_phase = "fall", func() -> void: v.smalls.drop_phase = "calm"],
+		["빠른 흐름", func() -> void: vw.fast = true, func() -> void: vw.fast = false],
+		["보통보다 빠른 빠르기", func() -> void: vw.social.stage_on = false, func() -> void: vw.social.stage_on = true],
+	]
+	check(v.crises.is_empty() and v.deficit == 0.0 and v.smalls != null and SmallCrises.active_count(v) == 0 and v.hand.soaks.is_empty(), "(준비) 위기·분무가 없는 마을")
+	for g: Array in gates:
+		var bad: Array = []
+		for st: Array in starts:
+			reset.call()
+			(g[1] as Callable).call()
+			if bool((st[1] as Callable).call()) or not dv.cast().is_empty() or not dv.hummers().is_empty():
+				bad.append("시작됨: " + String(st[0]))
+			(g[2] as Callable).call()
+			reset.call()
+			var ok := bool((st[1] as Callable).call())
+			_steps(vw, dv, 0.3)
+			ok = ok and (not dv.cast().is_empty() or not dv.hummers().is_empty())
+			(g[1] as Callable).call()
+			_steps(vw, dv, 2.0 * DT)
+			if not ok or not dv.cast().is_empty() or not dv.hummers().is_empty():
+				bad.append("접지 않음: " + String(st[0]))
+			(g[2] as Callable).call()
+		check(bad.is_empty(), "%s: 넷 다 시작하지 않고, 하던 장면도 바로 접음 %s" % [String(g[0]), str(bad)])
+	reset.call()
+	dv.clear()
+	w.happiness = mood[0]
+	w.hunger = mood[1]
+	w.fear = mood[2]
+	w.cold = mood[3]
+	# 첫 한 시간(대본)
+	var v2 := Village.new_prototype(20261110)
+	v2.water.offline = true
+	var w2 := _view(s[0], v2)
+	var d2 := DailyView.of(w2)
+	w2.sync(0.0, true)
+	var p2: Array = []
+	for r in v2.people:
+		if r.age >= Balance.AGE_ADULT and p2.size() < 2:
+			p2.append(r)
+	var none := v2.in_opening() and not d2.on() and p2.size() == 2
+	if none:
+		none = not d2.start_fire(p2) and not d2.start_hum(p2[0]) and not d2.start_lunch(p2[0], p2[1]) and not d2.start_stroll(p2[0], p2[1])
+		for i in 10:
+			w2.sync(DT)
+			d2.step(0.3)
+		none = none and d2.history.is_empty() and d2.hummers().is_empty()
+	check(none, "첫 한 시간(대본)에는 2차 장면도 없음")
+	w2.queue_free()
+	_done(s)
+
+
+## 짧은 이야기(SocialStage)의 화면 장면은 하루의 흐름이 쥔 사람을 고르지 않음 (1차 때 남은 일)
+func test_social_skip() -> void:
+	var s := _fix(18.5)
+	var v: Village = s[1]
+	var vw: VillageView = s[2]
+	var dv: DailyView = s[3]
+	_only(dv, [])
+	var ppl := _loose(v, 2)
+	var a: Resident = ppl[0]
+	var b: Resident = ppl[1]
+	_park(v, ppl)
+	var f := v.fire
+	_put(a, f.x - 1.0, f.y + 1.8, "sit", "social")
+	_put(b, f.x + 1.0, f.y + 1.8, "sit", "social")
+	vw.sync(0.0, true)
+	var st := vw.social
+	check(dv.start_chat([a, b]) and dv.holding(a.id) and dv.holding(b.id) and st._daily_holds(a.id), "(준비) 저녁 불가에 앉은 둘의 수다 — 하루의 흐름이 쥠")
+	var n0 := st.scenes.size()
+	for i in 12:
+		st._try_vignette()
+	check(st.scenes.size() == n0 and st.scene_kind(a.id) == "" and st.scene_kind(b.id) == "", "짧은 이야기의 화면 장면은 하루의 흐름이 쥔 사람을 고르지 않음")
+	dv.clear()
+	check(not st._daily_holds(a.id), "(준비) 놓음")
+	for i in 12:
+		if st.scenes.size() == n0:
+			st._try_vignette()
+	check(st.scenes.size() > n0 and (st.scene_kind(a.id) != "" or st.scene_kind(b.id) != ""), "(대조) 놓은 뒤에는 그 둘을 고름 (%s)" % st.scene_kind(a.id))
+	_steps(vw, dv, 0.3)
+	check(not dv.start_chat([a, b]), "거꾸로, 짧은 이야기가 쥔 사람은 하루의 흐름이 고르지 않음")
+	_done(s)
+
+
+## 2차 장면을 될 때마다 억지로 시작 (시간 창·하루 상한·한 사람 하루 한 번을 건너뜀 — 잔잔한 날·사람 조건은 그대로)
+func _force(v: Village, dv: DailyView) -> void:
+	if not dv.on() or dv.calm() != "":
+		return
+	if dv.active(DailyView.FIRE) == 0:
+		var near: Array = []
+		for r in v.people:
+			if r.age >= Balance.AGE_ADULT and Vector2(r.x - v.fire.x, r.y - v.fire.y).length() <= DailyView.FIRE_R and (DailyView.still(r) or dv.commuter(r)) and not dv.holding(r.id):
+				near.append(r)
+		if near.size() >= 3 and dv.start_fire(near.slice(0, 3)):
+			pass
+		elif near.size() >= 2:
+			dv.start_fire(near.slice(0, 2))
+	if dv.hummers().is_empty():
+		for r in v.people:
+			if r.anim == "work" and dv.start_hum(r):
+				break
+	if dv.active(DailyView.LUNCH) == 0:
+		for w in v.people:
+			if w.anim != "work" or dv.active(DailyView.LUNCH) > 0:
+				continue
+			for c in v.people:
+				if DailyView.family(c, w) and dv.start_lunch(c, w):
+					break
+	if dv.active(DailyView.STROLL) == 0:
+		for a in v.people:
+			var b := v.person(a.partner) if a.partner > a.id else null
+			if b != null and dv.start_stroll(a, b):
+				break
+
+
+## 2차 장면을 한껏 벌여도 시뮬은 같음: 같은 씨앗의 두 마을 — 하나는 화면 없이, 하나는 화면 + 억지로 시작시킨 2차 장면
+func test_sim_same2() -> void:
+	var scene := _scene()
+	var seed_v := 20261112
+	var va := _village(seed_v, 6.2)
+	var vb := _village(seed_v, 6.2)
+	check(_digest(va) == _digest(vb) and _work(va) == _work(vb), "(준비) 같은 씨앗의 두 마을은 같음")
+	var wb := _view(scene, vb)
+	_aim(scene, vb.fire, 20.0)
+	var db := DailyView.of(wb)
+	var real := 0.25 if quick else 0.2
+	var jar := real * 288.0
+	var same := true
+	var bad := ""
+	var off := 0.0
+	var days := 1 if quick else 2
+	var wins: Array = [[6.3, 9.1], [11.4, 13.6], [17.9, 20.1]] if quick else [[6.3, 20.4]]
+	# 새 마을의 첫 며칠은 모두 바빠서 한낮·해 질 녘에 한가한 식구가 드물다 → 두 마을에 '똑같이' 한 짝을 빈 땅에 차려 둠
+	# (시뮬에 넣는 것은 양쪽이 같으므로, 그 뒤의 차이는 화면 장면이 만든 것뿐)
+	var pair: Array = []
+	for r in va.people:
+		var q := va.person(r.partner) if r.partner > r.id else null
+		if pair.is_empty() and q != null and r.age >= Balance.AGE_ADULT and q.age >= Balance.AGE_ADULT:
+			pair = [r.id, q.id]
+	var set_l := -1
+	var set_s := -1
+	for day in days:
+		for win: Array in wins:
+			var skip := fposmod(float(win[0]) - va.hour_now(), 24.0) * Balance.HOUR
+			va.advance(skip)
+			vb.advance(skip)
+			for i in int((float(win[1]) - float(win[0])) * Balance.HOUR / jar):
+				va.advance(jar)
+				vb.advance(jar)
+				var h := vb.hour_now()
+				var lunch := set_l != day and h >= 12.0 and h < 13.0
+				var dusk := set_s != day and h >= 18.4 and h < 19.4
+				if not pair.is_empty() and (lunch or dusk):
+					set_l = day if lunch else set_l
+					set_s = day if dusk else set_s
+					var spot := _clearing(db, vb, 3.5)
+					if spot != Vector2.INF:
+						for q: Village in [va, vb]:
+							var pa := q.person(int(pair[0]))
+							var pb := q.person(int(pair[1]))
+							_put(pb, spot.x, spot.y, "work" if lunch else "idle", "work" if lunch else "idle")
+							_put(pa, spot.x - (2.4 if lunch else 0.9), spot.y + 0.4, "idle", "rest")
+							pa.steps = [ResidentAI.act(Balance.HOUR, pa.anim)]
+							pb.steps = [ResidentAI.act(Balance.HOUR, pb.anim)]
+				wb.sync(real)
+				db.step(real)
+				_force(vb, db)
+				var law := _law(vb, wb, db)
+				if law != "" and bad == "":
+					bad = "%05.2f시 %s" % [vb.hour_now(), law]
+				for id in db.cast():
+					var r := vb.person(id)
+					off = maxf(off, db.drawn(id).distance_to(Vector2(r.x, r.y)))
+				if i % 20 == 0:
+					same = same and _digest(va) == _digest(vb) and _work(va) == _work(vb)
+	same = same and _digest(va) == _digest(vb) and _work(va) == _work(vb)
+	var st := db.started
+	var n2 := int(st[DailyView.FIRE]) + int(st[DailyView.LUNCH]) + int(st[DailyView.STROLL])
+	print("     억지로 시작시킨 2차 장면: 모닥불 %d · 콧노래 %d · 점심 %d · 산책 %d (그린 자리와 시뮬 자리의 가장 큰 차이 %.2f칸)" % [int(st[DailyView.FIRE]), int(st[DailyView.HUM]), int(st[DailyView.LUNCH]), int(st[DailyView.STROLL]), off])
+	check(int(st[DailyView.LUNCH]) > 0 and int(st[DailyView.STROLL]) > 0 and int(st[DailyView.FIRE]) > 0, "네 장면 모두 한 번 이상 벌어짐 (점심·산책은 두 마을에 똑같이 차린 자리에서)")
+	check(int(st[DailyView.HUM]) > 0 and n2 > 0, "2차 장면이 실제로 많이 벌어짐 (콧노래 %d · 모닥불·점심·산책 %d)" % [int(st[DailyView.HUM]), n2])
+	check(same, "2차 장면을 한껏 벌여도 저장 지문·난수·사건 번호·창고·주민의 일·자리·배고픔이 화면 없는 마을과 같음 (ADR-0001)")
+	check(bad == "", "2차 장면에 든 사람도 규칙을 지킴 (빈손·깨어 있음·다른 연출 밖·잔잔한 날) %s" % bad)
+	check(off <= DailyView.FIRE_OFF + 1.0, "그린 자리는 시뮬 자리에서 멀리 벗어나지 않음 (%.2f칸)" % off)
+	wb.queue_free()
+	_drop(scene)
