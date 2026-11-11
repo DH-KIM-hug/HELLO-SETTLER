@@ -2345,6 +2345,12 @@ func house_need() -> Dictionary:
 
 func chief_build() -> void:
 	Production.self_learn(self)          # 새로 배워야 하는 건물을 스스로 깨쳤나 (시대가 열린 지 MUST_LEARN_SELF_DAYS — 연대기 한 줄)
+	_chief_build({})
+
+
+## 촌장의 한 번 — skip: 돌이 들어올 길이 없어 지금은 못 짓는 바람들 (그 아래 바람을 보려고 다시 부를 때만 채워진다 — GD 9장 · growth 바).
+## 보통은 비어 있고, 비어 있으면 예전과 한 줄도 다르지 않다.
+func _chief_build(skip: Dictionary) -> void:
 	var pending := 0
 	for b in buildings:
 		if b.is_site():
@@ -2380,60 +2386,63 @@ func chief_build() -> void:
 	var oven_n := count_type("화덕") + count_type("빵집") * 3
 	var want := ""
 	var fav := _fav_want()
-	if wish != "":
+	var spent := quarry_spent()           # 채석장은 있는데 어느 채석장 둘레에도 캘 돌 바위가 없다
+	var dry := spent and stone_rocks_left() and not skip.has("채석장")     # … 그런데 병 안에는 바위가 남아 있다
+	if wish != "" and not skip.has(wish):
 		want = wish                   # 들어준 소원이 우선순위 맨 위 (기획서 6.7)
-	elif count_type("농장") == 0 and n_houses >= 1:
+	elif count_type("농장") == 0 and n_houses >= 1 and not skip.has("농장"):
 		want = "농장"
-	elif count_type("나무꾼") == 0 and n_houses >= 1:
+	elif count_type("나무꾼") == 0 and n_houses >= 1 and not skip.has("나무꾼"):
 		want = "나무꾼"
-	elif int(stats.get("died", 0)) > 0 and count_type("묘지") == 0 and VillageEra.can_build(self, "묘지"):
+	elif int(stats.get("died", 0)) > 0 and count_type("묘지") == 0 and VillageEra.can_build(self, "묘지") and not skip.has("묘지"):
 		want = "묘지"                 # 첫 죽음 뒤 (슬픔 — 묻을 곳부터)
-	elif homeless > 0 and bool(hn["homeless"]):
+	elif homeless > 0 and bool(hn["homeless"]) and not skip.has("집"):
 		want = "집"
 		house_fit = int(hn["fit_homeless"])                   # 집 없는 사람이 들 자리가 모자람 (침대 수 또는 한 집에 함께 들 자리)
-	elif count_type("농장") > 0 and mill_n == 0:
+	elif count_type("농장") > 0 and mill_n == 0 and not skip.has("맷돌간"):
 		want = "맷돌간"               # v5: 첫 수확이 다가오면 밀을 빻을 곳 (A22 — 날밀은 못 먹는다)
-	elif count_type("농장") > 0 and oven_n == 0:
+	elif count_type("농장") > 0 and oven_n == 0 and not skip.has("화덕"):
 		want = "화덕"                 # 모닥불 곁 공용 화덕
-	elif food_low and food_short and count_type("농장") < 2 and n_houses >= 1:
+	elif food_low and food_short and count_type("농장") < 2 and n_houses >= 1 and not skip.has("농장"):
 		want = "농장"                 # v5: 시작 건량은 하루치 — 밭이 모자라면 둘째 밭을 집보다 먼저 (첫 며칠 굶주림 막기)
-	elif food_short or (food_low and count_type("농장") * Balance.FARM_FEEDS * yld / Balance.PORRIDGE_YIELD < pop + 6):
+	elif (food_short or (food_low and count_type("농장") * Balance.FARM_FEEDS * yld / Balance.PORRIDGE_YIELD < pop + 6)) and not skip.has("농장"):
 		want = "농장"                 # v5: 창고 먹을 것이 이틀치 아래면 촌장은 밭부터 (집보다 먼저) — v5-0: 밭 하나가 먹이는 사람 수는 빵을 구우면 두 배 (죽 기준 6명)
-	elif bool(hn["short"]) or (bool(hn["crowded"]) and basics and not food_low):
+	elif (bool(hn["short"]) or (bool(hn["crowded"]) and basics and not food_low)) and not skip.has("집"):
 		house_fit = 1 if bool(hn["short"]) else int(hn["fit_crowded"])
 		want = "집"                   # v5: 먹을 것이 모자라면 아이 낳을 큰 집은 미룬다
-	elif count_type("농장") > 0 and mill_n * Balance.MILL_PER < maxi(pop, 1):
+	elif count_type("농장") > 0 and mill_n * Balance.MILL_PER < maxi(pop, 1) and not skip.has("맷돌간"):
 		want = "맷돌간"
-	elif count_type("농장") > 0 and oven_n * Balance.OVEN_PER < maxi(pop, 1):
+	elif count_type("농장") > 0 and oven_n * Balance.OVEN_PER < maxi(pop, 1) and not skip.has("화덕"):
 		want = "화덕"
-	elif fav != "":
+	elif fav != "" and not skip.has(fav):
 		want = fav                    # 거인님이 좋아하시는 물건의 일터 (받은 제물, 11.1)
-	elif _want_picker():
+	elif _want_picker() and not skip.has("버섯꾼"):
 		want = "버섯꾼"               # [하늘의 것] 큰 버섯이 여럿 서 있으면 베어 올 사람 (WORLD_EVENTS 2.6)
-	elif count_type("우물") == 0:
+	elif count_type("우물") == 0 and not skip.has("우물"):
 		want = "우물"
-	elif count_type("나무꾼") < 2:
+	elif count_type("나무꾼") < 2 and not skip.has("나무꾼"):
 		want = "나무꾼"
-	elif float(stock["판자"]) < 12.0 and count_type("제재소") == 0:
+	elif float(stock["판자"]) < 12.0 and count_type("제재소") == 0 and not skip.has("제재소"):
 		want = "제재소"
-	elif float(stock["돌"]) < 6.0 and count_type("채석장") == 0:
-		want = "채석장"
-	elif _standing_trees() < Balance.FOREST_MIN and count_type("산림관") == 0:
+	elif float(stock["돌"]) < 6.0 and (count_type("채석장") == 0 or (dry and idle >= Balance.IDLE_FOR_NEW_JOB)) and not skip.has("채석장"):
+		want = "채석장"               # 하나도 없을 때 · 있는 채석장 둘레를 다 캤는데 병 안에 바위가 남았을 때 (남은 바위 곁에 하나 더 — GD 9장)
+	elif _standing_trees() < Balance.FOREST_MIN and count_type("산림관") == 0 and not skip.has("산림관"):
 		want = "산림관"
-	elif salt_known and count_type("소금밭") == 0 and salt_flat_near() != null:
+	elif salt_known and count_type("소금밭") == 0 and salt_flat_near() != null and not skip.has("소금밭"):
 		want = "소금밭"
-	elif VillageEra.want_early(self) != "":
+	elif VillageEra.want_early(self) != "" and not skip.has(VillageEra.want_early(self)):
 		want = VillageEra.want_early(self)    # 첫 죽음 뒤 묘지 · 자주 앓으면 약초꾼 (A6)
-	elif era >= 1 and count_type("방앗간") == 0 and _upgradable("맷돌간") != null:
+	elif era >= 1 and count_type("방앗간") == 0 and _upgradable("맷돌간") != null and not skip.has("방앗간"):
 		want = "방앗간"               # 풍차가 맷돌간을 대신 (넓혀 지음)
-	elif era >= 2 and count_type("빵집") == 0 and _upgradable("화덕") != null:
+	elif era >= 2 and count_type("빵집") == 0 and _upgradable("화덕") != null and not skip.has("빵집"):
 		want = "빵집"                 # 읍내: 공용 화덕을 빵집으로
-	elif Wildlife.want(self) != "":
+	elif Wildlife.want(self) != "" and not skip.has(Wildlife.want(self)):
 		want = Wildlife.want(self)            # [들짐승] 식량 다양성 — 물고기가 사는 호숫가 어부 · 사슴 무리 쪽 사냥꾼 (WILDLIFE 6)
 	else:
 		want = VillageEra.want_late(self)     # 치료소 → 교회 → 광장 → 망루 → 나루터 (A6 — RESIDENT_AI 6.2)
-	if want == "":
+	if want == "" or skip.has(want):
 		return
+	var token := want                     # 이 바람의 이름 (집은 "집" — 못 지으면 이 이름으로 건너뜀)
 	var upgrade: Building = null
 	if want == "집":
 		want = era_house
@@ -2447,6 +2456,7 @@ func chief_build() -> void:
 	if not _affordable(want):
 		# 자재가 모자라 못 지으면 그 자재를 만드는 일터부터 (교착 방지 — 정함)
 		var free_plank := float(stock["판자"]) - _owed("판자")
+		var free_stone := float(stock["돌"]) - _owed("돌")
 		var need_p := int(Balance.B[want]["plank"]) + (0 if (want == "나무꾼" or want == "제재소") else Balance.PLANK_RESERVE)
 		if free_plank < need_p and count_type("제재소") == 0 and _affordable("제재소"):
 			want = "제재소"
@@ -2454,6 +2464,16 @@ func chief_build() -> void:
 		elif count_type("채석장") == 0 and _affordable("채석장"):
 			want = "채석장"
 			upgrade = null
+		elif dry and free_stone < int(Balance.B[want]["stone"]) and _affordable("채석장") and idle >= Balance.IDLE_FOR_NEW_JOB:
+			want = "채석장"          # 돌이 모자란데 있는 채석장 둘레는 다 캤다 → 남은 바위 곁에 하나 더 (보통 건물과 같은 값 · 같은 규칙)
+			upgrade = null
+		elif spent and free_stone < int(Balance.B[want]["stone"]):
+			# 돌이 들어올 길이 지금은 없다 (창고에 없고, 캘 바위도 닿지 않고, 채석장을 더 지을 수도 없다) → 이 바람은 두고 그 아래 것을 본다.
+			# '아직 나르지 않은' 것(채석장 둘레에 바위가 남음)이나 채석장이 아예 없을 때는 여기 오지 않는다 — 예전처럼 기다린다.
+			var next := skip.duplicate()
+			next[token] = true
+			_chief_build(next)
+			return
 		else:
 			return
 	var d: Dictionary = Balance.B[want]
@@ -2478,7 +2498,15 @@ func chief_build() -> void:
 		var what := "작은 옛 집" if upgrade.is_house() else upgrade.label()
 		log_line("촌장 %s%s %s%s %s%s 넓히기로 했다." % [cn, josa(cn, "이", "가"), what, josa(what, "을", "를"), Balance.label(want), josa(Balance.label(want), "으로", "로")])
 		return
+	var trees_was := trees                # 자리 찾기는 고른 자리의 나무를 치운다 — 그 자리를 버리면 되돌린다 (아래)
 	var spot: Variant = find_spot(want)
+	if want == "채석장" and spent and (spot == null or not stone_in_reach((spot as Vector2).x, (spot as Vector2).y)):
+		# 하나 더 짓는 채석장인데 자리가 없거나 고른 자리에서 남은 바위가 닿지 않는다 (바위가 영역 밖 · 물 건너) → 짓지 않고, 채석장 없이 그 아래 바람을 본다
+		trees = trees_was
+		var no_quarry := skip.duplicate()
+		no_quarry["채석장"] = true
+		_chief_build(no_quarry)
+		return
 	if spot == null:
 		return
 	var sp: Vector2 = spot
@@ -2512,6 +2540,39 @@ func _upgradable(type: String) -> Building:
 ## [하늘의 것] 버섯꾼을 둘 만한가: 하늘의 것에 익숙해졌고 다 자란 먹는 버섯이 둘 넘게 서 있다
 func _want_picker() -> bool:
 	return flora != null and flora.trust and count_type("버섯꾼") == 0 and flora.edible_mature() >= 2
+
+
+## 캘 것이 남은 돌 바위인가 (회색 바위 — 하얀 광맥 바위는 소금이라 세지 않는다)
+func _stone_rock(rk: Dictionary) -> bool:
+	return float(rk["amt"]) > 0.0 and String(rk.get("ore", "돌")) == "돌"
+
+
+## 이 자리에 선 채석장의 둘레(Balance.GATHER_RANGE — ResidentAI.work_task가 석수를 보내는 범위)에 캘 돌 바위가 있나
+func stone_in_reach(x: float, y: float) -> bool:
+	for rk: Dictionary in rocks:
+		if _stone_rock(rk) and Vector2(float(rk["x"]) - x, float(rk["y"]) - y).length() <= Balance.GATHER_RANGE:
+			return true
+	return false
+
+
+## 병 안에 캘 돌 바위가 하나라도 남았나 (닫힌 병 — 바위는 창조 때 정해지고 거인이 자갈을 떨어뜨릴 때만 는다, SHOP 2.4)
+func stone_rocks_left() -> bool:
+	for rk: Dictionary in rocks:
+		if _stone_rock(rk):
+			return true
+	return false
+
+
+## 채석장은 있는데 (짓는 터 포함) 어느 채석장 둘레에도 캘 돌 바위가 없다 — 돌이 더 들어올 길이 지금은 없다.
+## 채석장이 하나도 없으면 false (첫 채석장은 예전 규칙대로). 저장하는 값 없이 지금 상태만 본다 (옛 저장 그대로).
+func quarry_spent() -> bool:
+	var any := false
+	for b in buildings:
+		if b.type == "채석장":
+			any = true
+			if stone_in_reach(b.x, b.y):
+				return false
+	return any
 
 
 ## 자재가 넉넉한가 — 짓고 있는 현장에 줄 몫을 빼고, 비상용 판자 4장은 남긴다 (나무꾼·제재소 제외, 9장)
@@ -2624,6 +2685,9 @@ func _find_spot(type: String) -> Variant:
 	elif type == "농장":
 		var best_p: Variant = null
 		var bv := 0.0
+		var graves := VillageEra.has_graves(self)      # (Q8 ⑧) 무덤·묘지를 가리지 않는 자리부터 — 없으면 예전 규칙 (주사위 수는 그대로)
+		var clear_p: Variant = null
+		var cv := 0.0
 		for k in 200:
 			var a := rng.randf() * TAU
 			var d := 3.0 + rng.randf() * 14.0
@@ -2633,6 +2697,11 @@ func _find_spot(type: String) -> Variant:
 			if val > bv and is_free(x, y, size):
 				bv = val
 				best_p = Vector2(x, y)
+			if graves and val > cv and not VillageEra.field_by_grave(self, Vector2(x, y)) and is_free(x, y, size):
+				cv = val
+				clear_p = Vector2(x, y)
+		if clear_p != null:
+			best_p = clear_p
 		if best_p != null:
 			_clear_trees(best_p, size)
 			return best_p
@@ -2648,16 +2717,17 @@ func _find_spot(type: String) -> Variant:
 						_clear_trees(p, size)
 						return p
 				d += 0.5
-	var rad := 2.0
 	var tr_r := territory_r()
-	while rad < tr_r:
-		for k in 24:
-			var a := k / 24.0 * TAU + rad
-			var p := c + Vector2(cos(a), sin(a)) * rad
-			if is_free(p.x, p.y, size):
-				_clear_trees(p, size)
-				return p
-		rad += 0.8
+	for pass_i in (2 if type == "묘지" else 1):       # (Q8 ⑨) 묘지는 먼저 밭 안·밭 바로 뒤가 아닌 자리를 찾고, 없으면 예전 규칙대로
+		var rad := 2.0
+		while rad < tr_r:
+			for k in 24:
+				var a := k / 24.0 * TAU + rad
+				var p := c + Vector2(cos(a), sin(a)) * rad
+				if is_free(p.x, p.y, size) and (type != "묘지" or pass_i == 1 or not VillageEra.yard_by_field(self, p)):
+					_clear_trees(p, size)
+					return p
+			rad += 0.8
 	return null
 
 
