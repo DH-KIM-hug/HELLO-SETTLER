@@ -827,7 +827,7 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		for k in d["out"]:
 			if not _full(v, k):
 				all_full = false
-		if all_full:
+		if all_full and not own_heap(b):     # (2026-11-11 Q11-b) 넉넉해서 생산은 쉬어도 자기 건물 앞에 쌓인 것은 마저 나른다 (기획서 9장) — 마을의 비축이 밭 앞에 묶여 있지 않게
 			return false
 	if dry:
 		return true
@@ -901,6 +901,14 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 	r.steps.append(walk(spot.x, spot.y))
 	r.steps.append(act(90.0, "work"))
 	return true
+
+
+## 자기 건물 앞에 나를 만큼 쌓였나 (수레 물건은 4분의 1 수레 — haul_min, 나머지는 4개). 넉넉해서 쉬는 일꾼도 이것은 창고로 나른다
+static func own_heap(b: Building) -> bool:
+	for k: String in b.out:
+		if float(b.out[k]) >= maxf(4.0, haul_min(k)):
+			return true
+	return false
 
 
 ## 건물 앞 산출물을 한 번에 나르는 양 중 가장 작은 것 (낟알·가루·빵은 수레 — Balance.BULK)
@@ -999,26 +1007,37 @@ static func haul_task(v: Village, r: Resident) -> bool:
 static func _haul_out(v: Village, r: Resident, s: Building, cap: int) -> bool:
 	# ① 건물 앞 산출물 → 바로 다음 건물 (입구가 REFILL_AT 아래인 가장 가까운 곳 — production-chain R3) · 없으면 창고
 	# (2026-11-11 Q7-b) 다음 건물이 기다리는 짐이 먼저다 — 밭 앞 밀을 창고로 나르느라 맷돌간 앞 밀가루가 화덕으로 못 가던 일 (첫 빵이 하루 밀림)
-	for b in v.buildings:
-		if not b.built or b.is_store:
-			continue
-		for k: String in b.out:
-			var n0 := float(b.out[k])
-			if n0 >= haul_min(k) and _haul_direct(v, r, b, k, n0):
-				return true
+	# (2026-11-11 Q11-b) 가장 많이 쌓인 더미부터 — 지은 차례대로 고르면 먼저 지은 밭의 작은 더미만 반 수레씩 실어 가고, 나중 지은 밭 앞에 마을 비축이 통째로 남는다
+	var heaps := waiting_heaps(v, r)
+	for h: Array in heaps:
+		var b0: Building = h[1]
+		if _haul_direct(v, r, b0, String(h[2]), float(h[0])):
+			return true
+	for h: Array in heaps:
+		var b: Building = h[1]
+		var k := String(h[2])
+		var n := float(h[0])
+		var take := minf(load_of(r, k), floorf(n))
+		b.out[k] = n - take
+		r.doing = "%s 나르는 중" % k
+		var put := op("stock_add", {"k": k, "amt": take})
+		_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
+		return true
+	return false
+
+
+## 나르기를 기다리는 건물 앞 더미 [양, 건물, 물건, 차례, 짐 수] — 여러 짐이 쌓인 것부터 (수레 물건은 수레로, 나머지는 사람 짐으로 센다 · 같으면 먼저 지은 건물 · 그 건물의 산출 차례)
+static func waiting_heaps(v: Village, r: Resident) -> Array:
+	var heaps: Array = []
 	for b in v.buildings:
 		if not b.built or b.is_store:
 			continue
 		for k: String in b.out:
 			var n := float(b.out[k])
 			if n >= haul_min(k):
-				var take := minf(load_of(r, k), floorf(n))
-				b.out[k] = n - take
-				r.doing = "%s 나르는 중" % k
-				var put := op("stock_add", {"k": k, "amt": take})
-				_carry_steps(v, r, Vector2(b.x + 0.7, b.y + 0.5), Vector2(s.x + 0.8, s.y + 0.6), k, take, put, put)
-				return true
-	return false
+				heaps.append([n, b, k, heaps.size(), n / maxf(1.0, load_of(r, k))])
+	heaps.sort_custom(func(a: Array, c: Array) -> bool: return a[4] > c[4] or (a[4] == c[4] and a[3] < c[3]))
+	return heaps
 
 
 ## 건물 b 앞의 k를 바로 다음 건물 입구로 (production-chain R3) — 보낼 곳이 없으면 false (창고로)
