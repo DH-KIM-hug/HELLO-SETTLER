@@ -1,6 +1,7 @@
-## 개미굴 원정 시험판 화면 (ROADMAP Q10 1걸음 · docs/WORLD_EVENTS.md 2.1c) — 따로 도는 한 장면. 마을과 아직 이어지지 않았다.
+## 개미굴 원정 시험판 화면 (ROADMAP Q10 1.5걸음 · docs/WORLD_EVENTS.md 2.1c) — 따로 도는 한 장면. 마을과 아직 이어지지 않았다.
 ## 굴을 옆에서 자른 그림(_draw 기본 도형만)으로 sim/nest_expedition.gd 한 판을 보여 주고, 거인의 다섯 손짓을 받는다:
-##   아래 도구 단추를 누르고 → 굴 속 한 곳을 누른다 (유리 톡은 굴 아무 데나).
+##   아래 도구 단추로 도구를 쥐면 바꿀 때까지 쥔 채다 → 굴 속 한 곳을 누를 때마다 쓴다 (유리 톡은 단추를 누르면 바로).
+##   굴은 판마다 생김새가 다르고 (옆 굴 자리 · 막힌 것 · 큰 병정 방), 어두운 방 안은 거인에게도 보이지 않는다 — 기척(일렁임)만.
 ## 화면은 시뮬레이션을 읽기만 하고 ex.gesture()로만 건드린다. 일어난 일은 EventStream에서 꺼내 한 줄 딱지·말풍선으로 띄운다.
 ## 실행: godot --path godot proto/nest/nest_proto.tscn  (개발판에서는 설정 → '개미굴 원정 시험판')
 ## 글: 거인에게 보이는 딱지·단추는 숫자를 써도 된다. 주민 말풍선(BUBBLES)은 숫자·금지어 없이.
@@ -9,53 +10,50 @@ extends Control
 
 const W := 360.0
 const H := 640.0
-const ROOM_NAMES := ["곳간 방", "병정 방", "여왕 방"]
+const ROOM_NAMES := {"food": "곳간 방", "soldier": "병정 방", "egg": "알 방", "queen": "여왕 방"}
 const LOOT_NAMES := {"food": "쟁여 둔 먹이", "sweet": "단물 방울", "shell": "껍질 조각", "jaw": "턱", "wing": "날개"}
 const TOOL_NAMES := {&"lamp": "등불", &"water": "물", &"tweezers": "핀셋", &"tap": "유리 톡", &"sugar": "각설탕"}
 const TOOL_HINTS := {
-	&"lamp": "등불 — 밝힐 방을 누르세요 (빛은 개미도 부릅니다)",
-	&"water": "물 — 옆 굴에 부으면 막힙니다 (원정대 위에 부으면 쓸려요)",
-	&"tweezers": "핀셋 — 조약돌이나 큰 병정을 누르세요 (빗나가면 흙이 무너져요)",
-	&"tap": "유리 톡 — 굴을 누르면 모두 잠깐 굳습니다 (주민도 놀라요)",
-	&"sugar": "각설탕 — 놓을 곳을 누르세요 (병정이 몰려갑니다)"}
+	&"lamp": "등불 — 밝힐 방을 누르세요 (아직 먼 방을 비추면 깨어납니다)",
+	&"water": "물 — 옆 굴에 부으면 막힙니다 (우글우글하면 넘쳐요)",
+	&"tweezers": "핀셋 — 보이는 조약돌·큰 병정을 누르세요 (어둠 속을 더듬으면 깨어납니다)",
+	&"tap": "유리 톡 — 단추를 누르면 바로, 모두 잠깐 굳습니다 (주민도 놀라요)",
+	&"sugar": "각설탕 — 놓을 곳을 누르세요 (보이는 병정이 몰려갑니다)"}
 const WHY_NAMES := {&"tired": "지쳐서 물러남", &"scared": "겁이 나서 물러남", &"hurt": "다쳐서 물러남"}
 const DOING_NAMES := {&"walk": "나아가는 중", &"push": "창으로 미는 중", &"hold": "방패로 버티는 중", &"dig": "길을 여는 중",
 	&"pot": "화로 피우는 중", &"rest": "숨 고르는 중", &"back": "돌아가는 중", &"cheer": "만세!"}
 ## 알림 코드 → [딱지 글, 좋음(1)·나쁨(-1)·그냥(0)]
 const NOTES := {
 	&"lit": ["방이 밝아졌다", 1], &"lamp_out": ["등불이 꺼졌다", 0],
-	&"light_draws": ["빛을 보고 병정이 올라온다", -1], &"light_wakes": ["빛에 깬 병정들이 몰려나온다", -1],
-	&"overflow": ["물이 넘쳐 큰길로!", -1], &"side_washed": ["옆 굴의 개미가 쓸려 나갔다", 1],
+	&"light_draws": ["빛을 보고 병정이 올라온다", -1], &"light_wakes": ["아직 먼 방을 비췄다 — 방이 깨어났다", -1],
+	&"overflow": ["옆 굴이 꽉 차 물이 큰길로 넘쳤다!", -1], &"side_washed": ["옆 굴의 개미가 쓸려 나갔다", 1],
 	&"side_blocked": ["옆 굴이 물에 막힘", 1], &"side_waiting": ["물 뒤에 원군이 모여 있다", 0], &"side_open": ["옆 굴 물이 빠졌다", 0],
 	&"splash_squad": ["원정대가 물에 쓸려 밀려났다", -1], &"splash_ants": ["개미가 물에 쓸려 밀려났다", 1], &"splash_none": ["물만 쏟았다 — 진창", 0],
 	&"big_picked": ["큰 병정을 집어냈다", 1], &"pebble_picked": ["조약돌을 집어냈다", 1], &"rubble_picked": ["흙더미를 치웠다", 1],
 	&"tweeze_miss": ["빗나감 — 흙이 무너져 길이 막혔다", -1], &"leaderless": ["우두머리를 잃고 병정들이 흔들린다", 1],
 	&"charge_cancelled": ["들이받으려다 멈칫", 1], &"pot_reset": ["놀라서 화로를 놓쳤다", -1], &"frozen": ["쨍! 모두 굳었다", 0],
 	&"sugar_lure": ["병정들이 단내를 따라간다", 1], &"sugar_none": ["단내를 맡은 병정이 없다", 0],
-	&"sugar_gone": ["설탕을 다 먹었다 — 힘이 난 병정이 돌아온다", -1], &"sugar_onto_squad": ["설탕 가는 길에 원정대가! 덮친다", -1],
+	&"sugar_gone": ["설탕을 다 먹었다 — 원군은 물고 돌아가고, 방 병정은 힘이 나서 돌아온다", 0], &"sugar_onto_squad": ["설탕 가는 길에 원정대가! 덮친다", -1],
 	&"pot_start": ["연기 화로를 피우는 중", 0], &"alarm_fight": ["굴이 깨어났다 — 옆 굴로 원군이 온다", -1],
 	&"alarm_scout": ["정찰 개미가 알렸다 — 원군이 온다", -1], &"smoke": ["연기가 찼다 — 방을 비웠다", 1],
 	&"moving_out": ["굴 전체가 이사 간다!", 1], &"scout_runs": ["정찰 개미가 알리러 달린다", -1],
 	&"scout_startled": ["짖는 소리에 정찰 개미가 뒤집혔다", 1], &"charge": ["큰 병정이 몸을 세운다!", -1],
 	&"charge_blocked": ["방패로 막았다", 1], &"charge_hit": ["들이받혔다!", -1], &"dark_fumble": ["어두워서 더듬는 중", -1],
 	&"mud_slow": ["진창에 발이 빠진다", -1], &"pebble_block": ["조약돌이 길을 막았다 — 미는 중", 0], &"pebble_cleared": ["조약돌을 밀어냈다", 1],
-	&"rubble_block": ["무너진 흙을 파내는 중", -1], &"rubble_cleared": ["흙더미를 파냈다", 0], &"dog_hides": ["강아지가 뒤로 숨었다", 0]}
+	&"rubble_block": ["무너진 흙을 파내는 중", -1], &"rubble_cleared": ["흙더미를 파냈다", 0], &"dog_hides": ["강아지가 뒤로 숨었다", 0],
+	&"roused": ["서툰 손짓에 굴이 술렁인다 — 병정이 사나워지고 원군이 더 온다", -1],
+	&"sugar_blind": ["보이지 않는 방에 단것을 던졌다", -1], &"big_sudden": ["어둠 속에서 큰 병정이 불쑥!", -1],
+	&"big_seen": ["큰 병정과 마주쳤다 — 미리 봐 둔 놈", 0],
+	&"puddle_dark": ["캄캄한 물웅덩이 — 더듬어 건넌다", -1], &"puddle_lit": ["밝아서 웅덩이를 딛고 건넌다", 1]}
 ## 주민 말풍선 — 숫자 없음, 거인을 모른다 (깨닫기 전). 알림 코드 → 말
 const BUBBLES := {
 	&"lit": "어? 환해졌다!", &"lamp_out": "다시 캄캄해…", &"dark_fumble": "안 보여…", &"splash_squad": "으악, 물이다!",
 	&"big_picked": "큰 놈이 사라졌어!", &"charge_hit": "윽!", &"charge_blocked": "막았다!", &"frozen": "땅이 울렸어!",
 	&"sugar_onto_squad": "왜 이쪽으로 몰려와!", &"pebble_block": "영차, 영차", &"smoke": "연기 피웠다!", &"moving_out": "굴이 이사 간다!",
 	&"tweeze_miss": "흙이 무너졌어!", &"mud_slow": "발이 빠져…", &"pot_reset": "아이코, 화로!", &"pebble_picked": "돌이 없어졌네?",
+	&"big_sudden": "으악, 저게 뭐야!", &"puddle_dark": "물이야… 깊이를 모르겠어", &"roused": "굴이 웅웅거려…",
 	&"tired": "더는 못 버텨…", &"scared": "무, 무서워…", &"hurt": "아야, 물렸어…", &"withdraw": "돌아가자!"}
 
-## 굴 길 — [s, 화면 자리]
-const MAIN_PTS := [
-	[0.0, Vector2(50, 72)], [8.0, Vector2(50, 140)], [28.0, Vector2(290, 140)], [30.0, Vector2(322, 140)],
-	[33.0, Vector2(322, 195)], [36.0, Vector2(322, 250)], [38.0, Vector2(290, 250)], [58.0, Vector2(70, 250)],
-	[60.0, Vector2(40, 250)], [63.0, Vector2(40, 305)], [66.0, Vector2(40, 372)], [68.0, Vector2(70, 372)],
-	[88.0, Vector2(290, 372)], [91.0, Vector2(326, 372)], [96.0, Vector2(326, 430)]]
-const SIDE_PTS := [[0.0, Vector2(40, 305)], [24.0, Vector2(318, 305)]]
-const ROOM_RECTS := [Rect2(36, 114, 268, 48), Rect2(56, 224, 248, 48), Rect2(56, 346, 248, 48)]
 const JAR := Rect2(6, 46, 348, 398)
 const MAX_LABELS := 3                  # 떠오르는 딱지는 한꺼번에 셋까지
 const SURFACE_Y := 72.0
@@ -87,6 +85,11 @@ var opt_spear := 1
 var opt_shield := 1
 var opt_guards := 4
 var opt_seed := 1001
+var opt_nest := 1
+var opt_layout := -1                  # -1 = 씨앗이 고른다
+var main_pts: Array = []              # 큰길 — [s, 화면 자리] (판마다 굴 생김새에 맞춰 짓는다)
+var side_pts := {}                    # 옆 굴 번호 → [[s, 자리], …]
+var room_rects: Array[Rect2] = []
 var _acc := 0.0
 var _clock := 0.0
 var _cursor := 0
@@ -127,13 +130,16 @@ func _fit() -> void:
 
 
 # ───────────────────────── 한 판 ─────────────────────────
-func start(seed_value: int, spear: int, shield: int, n_guards: int) -> void:
+func start(seed_value: int, spear: int, shield: int, n_guards: int, nest_no := 1, layout_no := -1) -> void:
 	opt_seed = seed_value
 	opt_spear = spear
 	opt_shield = shield
 	opt_guards = n_guards
+	opt_nest = nest_no
+	opt_layout = layout_no
 	ex = NestExpedition.new()
-	ex.setup(seed_value, NestExpedition.default_roster(n_guards, spear, shield), true)
+	ex.setup(seed_value, NestExpedition.default_roster(n_guards, spear, shield), true, null, nest_no, layout_no)
+	_build_geometry()
 	_cursor = 0
 	_labels.clear()
 	_bubbles.clear()
@@ -203,7 +209,7 @@ func _pull_events() -> void:
 					_bubble(who if who > 0 else _front_id(), String(BUBBLES[code]))
 			&"nest_room_entered":
 				var v: Dictionary = e["v"]
-				_label("%s에 들어섰다%s" % [ROOM_NAMES[int(v["room"]) - 1], " — 캄캄하다" if bool(v["dark"]) else ""], at, 0)
+				_label("%s에 들어섰다%s" % [room_name(int(v["room"]) - 1), " — 캄캄하다" if bool(v["dark"]) else ""], at, 0)
 			&"nest_room_cleared":
 				var v2: Dictionary = e["v"]
 				var parts: PackedStringArray = []
@@ -250,8 +256,8 @@ func _free_y(x: float, w: float, y: float, dir: float) -> float:
 			if absf(ly - y) < 16.0 and x < lp.x + float(l["w"]) + 3.0 and lp.x < x + w + 3.0:
 				y = ly + 16.5 * dir
 				hit = true
-		for r in ROOM_RECTS.size():                  # 방 이름 글씨도 가리지 않는다 (딱지는 위로 떠오르므로 아래쪽 여유를 더 둔다)
-			var rc: Rect2 = ROOM_RECTS[r]
+		for r in room_rects.size():                  # 방 이름 글씨도 가리지 않는다 (딱지는 위로 떠오르므로 아래쪽 여유를 더 둔다)
+			var rc: Rect2 = room_rects[r]
 			var nx := rc.position.x + (34.0 if r == 0 else 6.0)
 			if y > rc.position.y - 18.0 and y < rc.position.y + 25.0 and x < nx + 46.0 and nx < x + w:
 				y = rc.position.y - 19.0 if dir < 0.0 else rc.position.y + 26.0
@@ -286,8 +292,50 @@ func _front_id() -> int:
 
 
 # ───────────────────────── 굴 길 ↔ 화면 ─────────────────────────
-static func pt(seg: int, s: float) -> Vector2:
-	var pts: Array = SIDE_PTS if seg == NestExpedition.SIDE else MAIN_PTS
+## 이 판의 굴 생김새대로 화면 길을 짓는다: 방은 가로줄, 방 사이 굴은 번갈아 오른쪽·왼쪽 세로줄, 옆 굴은 그 가운데서 가로로
+func _build_geometry() -> void:
+	main_pts.clear()
+	side_pts.clear()
+	room_rects.clear()
+	var n := ex.n_rooms
+	var y0 := 140.0 if n <= 3 else 124.0
+	var dy := 116.0 if n <= 3 else 86.0
+	main_pts.append([0.0, Vector2(50, SURFACE_Y)])
+	main_pts.append([NestBalance.ENTRY_END, Vector2(50, y0)])
+	for i in n:
+		var y := y0 + dy * float(i)
+		var a := float(ex.rooms[i][0])
+		var b := float(ex.rooms[i][1])
+		var ltr := i % 2 == 0
+		var xa := (50.0 if i == 0 else 70.0) if ltr else 290.0
+		var xb := 290.0 if ltr else 70.0
+		if i > 0:
+			main_pts.append([a, Vector2(xa, y)])
+		main_pts.append([b, Vector2(xb, y)])
+		room_rects.append(Rect2(minf(xa, xb) - 14.0, y - 26.0, absf(xb - xa) + 28.0, 48.0))
+		var cx := 322.0 if ltr else 40.0
+		main_pts.append([b + 1.5, Vector2(cx, y)])
+		if i < n - 1:
+			var b2 := float(ex.rooms[i + 1][0])
+			var ym := y + dy * 0.5
+			main_pts.append([(b + b2) * 0.5, Vector2(cx, ym)])
+			main_pts.append([b2 - 1.5, Vector2(cx, y + dy)])
+			if ex.side_at.has(i + 1):
+				side_pts[i + 1] = [[0.0, Vector2(cx, ym)], [NestBalance.SIDE_LEN, Vector2(44.0 if ltr else 318.0, ym)]]
+		else:
+			main_pts.append([ex.deep_end, Vector2(cx, minf(y + 52.0, JAR.end.y - 12.0))])
+
+
+func room_name(r: int) -> String:
+	if ex == null or r < 0 or r >= ex.n_rooms:
+		return ""
+	return String(ROOM_NAMES.get(String(ex.room_kind[r]), "방"))
+
+
+func pt(seg: int, s: float) -> Vector2:
+	var pts: Array = main_pts if seg == NestExpedition.MAIN else side_pts.get(seg, main_pts)
+	if pts.is_empty():
+		return Vector2.ZERO
 	if s <= float(pts[0][0]):
 		var p0: Vector2 = pts[0][1]
 		if seg == NestExpedition.MAIN and s < 0.0:
@@ -301,26 +349,29 @@ static func pt(seg: int, s: float) -> Vector2:
 	return pts[pts.size() - 1][1]
 
 
-static func dir_at(seg: int, s: float) -> Vector2:
+func dir_at(seg: int, s: float) -> Vector2:
 	var d := pt(seg, s + 0.6) - pt(seg, maxf(0.0, s - 0.6))
 	return d.normalized() if d.length() > 0.001 else Vector2.RIGHT
 
 
 ## 누른 자리에서 가장 가까운 굴 길 — [seg, s, 거리]
-static func nearest(p: Vector2) -> Array:
+func nearest(p: Vector2) -> Array:
 	var best := [0, 0.0, 1.0e9]
+	if ex == null:
+		return best
 	var s := 0.0
-	while s <= NestBalance.DEEP_END:
+	while s <= ex.deep_end:
 		var d := p.distance_to(pt(NestExpedition.MAIN, s))
 		if d < float(best[2]):
 			best = [NestExpedition.MAIN, s, d]
 		s += 0.5
-	s = 1.0
-	while s <= NestBalance.SIDE_LEN:
-		var d2 := p.distance_to(pt(NestExpedition.SIDE, s))
-		if d2 < float(best[2]) - 1.0:
-			best = [NestExpedition.SIDE, s, d2]
-		s += 0.5
+	for seg: int in side_pts:
+		s = 1.0
+		while s <= NestBalance.SIDE_LEN:
+			var d2 := p.distance_to(pt(seg, s))
+			if d2 < float(best[2]) - 1.0:
+				best = [seg, s, d2]
+			s += 0.5
 	return best
 
 
@@ -346,14 +397,22 @@ func press(p: Vector2) -> void:
 	for i in NestExpedition.GESTURES.size():
 		if _tool_rect(i).has_point(p):
 			var g: StringName = NestExpedition.GESTURES[i]
-			if not ex.can_use(g):
-				_say("%s — 아직 쓸 수 없어요 (%d초)" % [TOOL_NAMES[g], int(ceil(ex.cd_left(g)))])
+			if g == &"tap":                              # 유리 톡은 자리가 없다 — 단추를 누르면 바로 (쥔 도구는 그대로)
+				if not ex.can_use(g):
+					_say("%s — 아직 쓸 수 없어요 (%d초)" % [TOOL_NAMES[g], int(ceil(ex.cd_left(g)))])
+				else:
+					use_tool(g, p)
 				return
-			tool = &"" if tool == g else g
+			tool = &"" if tool == g else g               # 쥔 도구는 바꿀 때까지 그대로 — 굴을 누를 때마다 쓴다
+			if tool != &"":
+				_say(String(TOOL_HINTS[tool]))
 			return
 	if tool == &"" or not JAR.grow(6.0).has_point(p):
 		if tool == &"" and JAR.has_point(p):
 			_say("먼저 아래에서 도구를 고르세요")
+		return
+	if not ex.can_use(tool):
+		_say("%s — 아직 쓸 수 없어요 (%d초)" % [TOOL_NAMES[tool], int(ceil(ex.cd_left(tool)))])
 		return
 	use_tool(tool, p)
 
@@ -366,16 +425,16 @@ func use_tool(g: StringName, p: Vector2) -> bool:
 		pass
 	elif g == &"lamp":
 		var room := -1
-		for r in 3:
-			if (ROOM_RECTS[r] as Rect2).grow(8.0).has_point(p):
+		for r in room_rects.size():
+			if room_rects[r].grow(8.0).has_point(p):
 				room = r
 		if room < 0:
 			var n := nearest(p)
-			if float(n[2]) > 34.0 or int(n[0]) != NestExpedition.MAIN or NestExpedition.zone_of(float(n[1])) == 0:
+			if float(n[2]) > 34.0 or int(n[0]) != NestExpedition.MAIN or ex.zone_of(float(n[1])) == 0:
 				_say("등불은 방을 눌러 주세요")
 				return false
-			room = NestExpedition.zone_of(float(n[1])) - 1
-		s = NestExpedition.room_mid(room)
+			room = ex.zone_of(float(n[1])) - 1
+		s = ex.room_mid(room)
 	else:
 		var n2 := nearest(p)
 		if float(n2[2]) > 34.0:
@@ -385,7 +444,6 @@ func use_tool(g: StringName, p: Vector2) -> bool:
 		s = float(n2[1])
 	var ok := ex.gesture(g, seg, s)
 	if ok:
-		tool = &""
 		_pull_events()
 	else:
 		_say("거기에는 쓸 수 없어요")
@@ -452,36 +510,50 @@ func _draw_ground() -> void:
 func _hollow_color(seg: int, s: float) -> Color:
 	if seg == NestExpedition.MAIN and s <= ex.smoke_end():
 		return C_SMOKE
-	if seg == NestExpedition.MAIN and NestExpedition.zone_of(s) == 0:
+	if seg == NestExpedition.MAIN and ex.zone_of(s) == 0:
 		return C_DAY
 	return C_DARK if ex.is_dark(seg, s) else C_LIT
 
 
 func _draw_hollows() -> void:
-	# 옆 굴 (끝은 화면 밖 깊은 곳으로)
-	draw_line(pt(1, 0.0), Vector2(JAR.end.x - 2.0, 305.0), C_DARK, TUNNEL_W)
-	if ex.water_left > 0.0:
-		var a := clampf(ex.water_left / 3.0, 0.35, 0.9)
-		draw_line(pt(1, 0.0) + Vector2(8, 0), Vector2(JAR.end.x - 2.0, 305.0), Color(C_WATER, a), TUNNEL_W - 4.0)
-		for i in 6:
-			var wx := 60.0 + float(i) * 46.0 + sin(_clock * 3.0 + float(i)) * 4.0
-			draw_line(Vector2(wx, 301.0), Vector2(wx + 10.0, 301.0), Color(1, 1, 1, 0.5), 1.5)
+	# 옆 굴 (끝은 병 가장자리 너머 깊은 곳으로) — 늘 어둡다. 연기에 막힌 옆 굴은 뿌옇다.
+	for seg: int in side_pts:
+		var a0: Vector2 = side_pts[seg][0][1]
+		var a1: Vector2 = side_pts[seg][1][1]
+		var right := a1.x > a0.x
+		var tip := Vector2(JAR.end.x - 2.0 if right else JAR.position.x + 2.0, a1.y)
+		var sealed := ex.junction(seg) <= ex.smoke_end()
+		draw_line(a0, tip, C_SMOKE.darkened(0.3) if sealed else C_DARK, TUNNEL_W)
+		var w := ex.water_in(seg)
+		if w > 0.0:
+			var al := clampf(w / 3.0, 0.35, 0.9)
+			draw_line(a0.lerp(a1, 0.04), tip, Color(C_WATER, al), TUNNEL_W - 4.0)
+			for i in 6:
+				var wp := a0.lerp(a1, 0.1 + 0.15 * float(i)) + Vector2(sin(_clock * 3.0 + float(i)) * 4.0, -4.0)
+				draw_line(wp, wp + Vector2(10, 0), Color(1, 1, 1, 0.5), 1.5)
+		elif not sealed:
+			_shimmer(Rect2(minf(a0.x, a1.x) + 16.0, a0.y - 6.0, absf(a1.x - a0.x) - 24.0, 12.0), ex.stir(seg, true), 40 + seg)
+		_txt(Vector2(a1.x - 44.0 if right else a1.x + 4.0, a1.y + 4.0), "옆 굴 →" if right else "← 옆 굴", 10, Color(1, 1, 1, 0.6))
 	# 큰길
 	var s := 0.0
-	while s < NestBalance.DEEP_END:
+	while s < ex.deep_end:
 		var a2 := pt(0, s)
 		var b2 := pt(0, s + 1.0)
 		draw_line(a2, b2, _hollow_color(0, s + 0.5), TUNNEL_W)
 		draw_circle(b2, TUNNEL_W * 0.5, _hollow_color(0, s + 0.5))
 		s += 1.0
-	# 방
-	for r in 3:
-		var rc: Rect2 = ROOM_RECTS[r]
-		var col := _hollow_color(0, NestExpedition.room_mid(r))
+	# 방 — 어두운 방 안은 보이지 않는다: 기척(일렁임)과 물음표만
+	for r in ex.n_rooms:
+		var rc: Rect2 = room_rects[r]
+		var mid := ex.room_mid(r)
+		var col := _hollow_color(0, mid)
 		draw_rect(rc, col)
 		draw_circle(Vector2(rc.position.x, rc.get_center().y), rc.size.y * 0.5, col)
 		draw_circle(Vector2(rc.end.x, rc.get_center().y), rc.size.y * 0.5, col)
-		_txt(Vector2(rc.position.x + (34.0 if r == 0 else 6.0), rc.position.y - 5.0), ROOM_NAMES[r], 10, Color(1, 1, 1, 0.75), HORIZONTAL_ALIGNMENT_LEFT, -1.0, true)
+		_txt(Vector2(rc.position.x + (34.0 if r == 0 else 6.0), rc.position.y - 5.0), room_name(r), 10, Color(1, 1, 1, 0.75), HORIZONTAL_ALIGNMENT_LEFT, -1.0, true)
+		if ex.hidden(0, mid):
+			_shimmer(rc.grow_individual(-8.0, -8.0, -8.0, -8.0), ex.stir(r), r)
+			_txt(Vector2(rc.get_center().x - 5.0, rc.get_center().y + 7.0), "?", 20, Color(1, 1, 1, 0.22), HORIZONTAL_ALIGNMENT_LEFT, -1.0, true)
 		if ex.lamp_left > 0.0 and ex.lit_room == r + 1:         # 등불
 			var lp := Vector2(rc.get_center().x, rc.position.y + 2.0)
 			draw_circle(lp, 14.0, Color(1.0, 0.92, 0.5, 0.35))
@@ -492,16 +564,36 @@ func _draw_hollows() -> void:
 				var px := rc.position.x + 20.0 + float(i) * (rc.size.x - 40.0) / 6.0 + sin(_clock * 0.9 + float(i) * 1.7) * 8.0
 				var py := rc.get_center().y + cos(_clock * 0.7 + float(i) * 2.3) * 9.0
 				draw_circle(Vector2(px, py), 9.0 + sin(_clock + float(i)) * 2.0, Color(1, 1, 1, 0.38))
-	_txt(Vector2(250, 322), "옆 굴 →", 10, Color(1, 1, 1, 0.6))
-	_txt(Vector2(300, 444) - Vector2(0, 6), "깊은 곳", 10, Color(1, 1, 1, 0.6))
+	var deep := pt(0, ex.deep_end)
+	_txt(Vector2(deep.x - 44.0 if deep.x > 180.0 else deep.x + 14.0, deep.y + 4.0), "깊은 곳", 10, Color(1, 1, 1, 0.6))
+
+
+## 보이지 않는 곳의 기척 — 수를 알려 주지 않는 일렁임 (1 = 꿈틀: 드문드문 · 2 = 우글우글: 빽빽하고 밝게). 개미 수와 무늬 수는 상관없다.
+func _shimmer(rc: Rect2, lv: int, key: int) -> void:
+	if lv <= 0 or rc.size.x <= 0.0:
+		return
+	var n := 4 if lv == 1 else 11
+	for i in n:
+		var fx := float((i * 53 + key * 17) % 97) / 97.0
+		var fy := float((i * 31 + key * 7) % 89) / 89.0
+		var c := rc.position + Vector2(rc.size.x * fx + sin(_clock * 0.8 + float(i) * 1.3) * 5.0, rc.size.y * fy)
+		var al := (0.2 + 0.3 * absf(sin(_clock * (1.6 + 0.2 * float(i)) + float(i) * 1.9))) * (1.0 if lv == 2 else 0.7)
+		var a0 := _clock * 1.5 + float(i)
+		draw_arc(c, 3.0 + (1.5 if lv == 2 else 0.0), a0, a0 + PI * 0.9, 6, Color(0.96, 0.82, 0.56, al), 1.5)
 
 
 func _draw_things() -> void:
 	for m: Dictionary in ex.mud:                                # 진창
 		var mp := pt(0, float(m["s"]))
 		_oval(mp, float(m["r"]) * 5.0, 7.0, dir_at(0, float(m["s"])), Color(0.25, 0.42, 0.6, 0.55))
+	if ex.puddle:                                               # 물웅덩이 — 어두우면 더듬어 건넌다
+		var wp := pt(0, ex.block_s)
+		var wd := dir_at(0, ex.block_s)
+		_oval(wp, 15.0, 8.5, wd, Color("2f6f9f"))
+		_oval(wp + Vector2(-2, -1), 10.0, 4.5, wd, Color(C_WATER, 0.85))
+		draw_line(wp + Vector2(-5, -2), wp + Vector2(3, -2), Color(1, 1, 1, 0.6), 1.2)
 	if ex.pebble:
-		var pp := pt(0, NestBalance.PEBBLE_S)
+		var pp := pt(0, ex.block_s)
 		draw_circle(pp, 10.0, Color("8d8f92"))
 		draw_circle(pp + Vector2(-3, -3), 3.5, Color("b9bcc0"))
 		draw_arc(pp, 10.0, 0, TAU, 20, UiTheme.INK, 1.0)
@@ -529,19 +621,16 @@ func _smooth(key: int, target: Vector2) -> Vector2:
 	return cur
 
 
-func _revealed(a: NestExpedition.Ant) -> bool:
-	return ex.has_dog and not ex.dog_out and ex.dog_bark_left > 0.0 and a.seg == NestExpedition.MAIN and absf(a.s - ex.dog_s) <= NestBalance.DOG_RANGE
-
-
 func _draw_ants() -> void:
 	for a in ex.ants:
-		if a.state == &"out":
+		if a.state == &"out" or not ex.ant_visible(a):            # 어두운 방·옆 굴 속의 개미는 거인에게도 보이지 않는다
+			_vis.erase(1000 + a.id)
 			continue
 		var d := dir_at(a.seg, a.s)
 		var n := Vector2(-d.y, d.x)
-		var lane := float((a.id * 37) % 11 - 5) * (1.5 if NestExpedition.room_at(a.s) > 0 and a.seg == 0 else 0.8)
+		var lane := float((a.id * 37) % 11 - 5) * (1.5 if ex.room_at(a.s) > 0 and a.seg == 0 else 0.8)
 		var p := _smooth(1000 + a.id, pt(a.seg, a.s) + n * lane)
-		var dim := ex.is_dark(a.seg, a.s) and not _revealed(a) and not (a.seg == 0 and a.s <= ex.smoke_end())
+		var dim := false
 		var col := C_ANT_DIM if dim else C_ANT
 		if ex.is_dark(a.seg, a.s) and not dim:
 			col = Color("8a6a50")
@@ -603,7 +692,8 @@ func _draw_squad() -> void:
 			col = col.lerp(Color("cfc8ba"), 0.55)
 		if g.state == &"go" and g.dark and not torch:             # 횃불 빛 (어둠 속 원정대 둘레)
 			torch = true
-			draw_circle(p, 22.0, Color(1.0, 0.8, 0.4, 0.16))
+			draw_circle(p, 46.0, Color(1.0, 0.8, 0.4, 0.10))      # 이 안의 개미만 보인다 (NestBalance.TORCH_R)
+			draw_circle(p, 24.0, Color(1.0, 0.8, 0.4, 0.14))
 		# 창 — 2단은 길고 끝이 밝다
 		var thrust := 2.5 * absf(sin(_clock * 9.0 + float(g.id))) if g.doing == &"push" else 0.0
 		var reach := (11.0 if g.spear == 1 else 15.0) + thrust
@@ -697,23 +787,23 @@ func _draw_hints() -> void:
 	var c: Color = TOOL_COLORS[tool]
 	match tool:
 		&"lamp":
-			for r in 3:
+			for r in ex.n_rooms:
 				if not ex.cleared[r]:
-					draw_rect((ROOM_RECTS[r] as Rect2).grow(3.0), Color(c, a), false, 2.5)
+					draw_rect(room_rects[r].grow(3.0), Color(c, a), false, 2.5)
 		&"water":
-			draw_line(pt(1, 1.0), pt(1, NestBalance.SIDE_LEN), Color(c, a), 4.0)
+			for seg: int in side_pts:
+				draw_line(pt(seg, 1.0), pt(seg, NestBalance.SIDE_LEN), Color(c, a), 4.0)
 		&"tweezers":
 			if ex.pebble:
-				draw_arc(pt(0, NestBalance.PEBBLE_S), 16.0, 0, TAU, 20, Color(1, 1, 1, a + 0.2), 2.5)
+				draw_arc(pt(0, ex.block_s), 16.0, 0, TAU, 20, Color(1, 1, 1, a + 0.2), 2.5)
 			for rb: Dictionary in ex.rubble:
 				draw_arc(pt(0, float(rb["s"])), 16.0, 0, TAU, 20, Color(1, 1, 1, a + 0.2), 2.5)
 			for an in ex.ants:
-				if an.kind == &"big" and an.standing() and not ex.is_dark(an.seg, an.s):
+				if an.kind == &"big" and an.standing() and ex.ant_visible(an):
 					draw_arc(_vis.get(1000 + an.id, pt(an.seg, an.s)), 15.0, 0, TAU, 20, Color(1, 1, 1, a + 0.2), 2.5)
-		&"tap":
-			draw_rect(JAR.grow(-4.0), Color(1, 1, 1, a), false, 3.0)
 		&"sugar":
-			draw_line(pt(1, 1.0), pt(1, NestBalance.SIDE_LEN), Color(1, 1, 1, a * 0.7), 3.0)
+			for seg: int in side_pts:
+				draw_line(pt(seg, 1.0), pt(seg, NestBalance.SIDE_LEN), Color(1, 1, 1, a * 0.7), 3.0)
 
 
 func _draw_labels() -> void:
@@ -779,8 +869,10 @@ func _draw_hud() -> void:
 	draw_rect(Rect2(0, 0, W, 44), UiTheme.PAPER)
 	_btn(Rect2(4, 4, 56, 36), "나가기", false)
 	_btn(Rect2(300, 4, 56, 36), "빠르게" if speed < 1.5 else "보통", speed > 1.5)
-	for r in 3:
-		var rc := Rect2(66.0 + float(r) * 62.0, 6.0, 58.0, 32.0)
+	var nr := ex.n_rooms
+	var chip_w := (184.0 - float(nr - 1) * 3.0) / float(nr)
+	for r in nr:
+		var rc := Rect2(64.0 + float(r) * (chip_w + 3.0), 6.0, chip_w, 32.0)
 		var st := "아직"
 		var col := UiTheme.CHIP_OFF
 		if ex.cleared[r]:
@@ -790,7 +882,7 @@ func _draw_hud() -> void:
 			st = "싸움"
 			col = UiTheme.CHIP_BAD
 		draw_rect(rc, col)
-		_txt(rc.position + Vector2(0, 13), ROOM_NAMES[r], 10, UiTheme.CHIP_TEXT, HORIZONTAL_ALIGNMENT_CENTER, rc.size.x, true)
+		_txt(rc.position + Vector2(0, 13), room_name(r), 10, UiTheme.CHIP_TEXT, HORIZONTAL_ALIGNMENT_CENTER, rc.size.x, true)
 		_txt(rc.position + Vector2(0, 27), st, 11, UiTheme.CHIP_TEXT, HORIZONTAL_ALIGNMENT_CENTER, rc.size.x)
 	_txt(Vector2(252, 27), "%d:%02d" % [int(ex.t) / 60, int(ex.t) % 60], 13, UiTheme.INK, HORIZONTAL_ALIGNMENT_CENTER, 46.0, true)
 	# 형편 한 줄
@@ -798,11 +890,12 @@ func _draw_hud() -> void:
 	var sk := int(sit[1])
 	draw_rect(Rect2(6, 448, 348, 20), Color("e3f3dc") if sk > 0 else (Color("f8ddd2") if sk < 0 else UiTheme.PAPER_DEEP))
 	_txt(Vector2(12, 462), String(sit[0]), 12, C_GOOD if sk > 0 else (C_BAD if sk < 0 else UiTheme.INK), HORIZONTAL_ALIGNMENT_LEFT, -1.0, true)
-	var foes := 0
+	var foes := 0                                                 # 보이는 것만 센다 — 어두운 방 속은 거인도 모른다
 	for a in ex.ants:
-		if a.fighter() and a.standing():
+		if a.fighter() and a.standing() and ex.ant_visible(a):
 			foes += 1
-	_txt(Vector2(250, 462), "남은 병정 %d" % foes, 11, UiTheme.INK_SOFT, HORIZONTAL_ALIGNMENT_RIGHT, 98.0)
+	_txt(Vector2(250, 462), "보이는 병정 %d" % foes, 11, UiTheme.INK_SOFT, HORIZONTAL_ALIGNMENT_RIGHT, 98.0)
+	_txt(Vector2(JAR.end.x - 126.0, JAR.position.y + 15.0), "%s 굴 · 생김새 %s" % ["첫" if ex.nest == 1 else "둘째", ex.layout_name], 10, UiTheme.INK_SOFT, HORIZONTAL_ALIGNMENT_RIGHT, 120.0, true)
 	# 원정대 칸
 	var n := ex.guards.size()
 	var cw := (348.0 - float(n - 1) * 4.0) / float(n)
@@ -840,7 +933,7 @@ func _draw_hud() -> void:
 			draw_rect(Rect2(rc3.position, Vector2(rc3.size.x, rc3.size.y * k)), Color(0.15, 0.13, 0.12, 0.62))
 			_txt(rc3.position + Vector2(0, 32), "%d" % int(ceil(left)), 20, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER, rc3.size.x, true)
 		draw_rect(rc3, UiTheme.ACCENT if on else UiTheme.INK, false, 3.0 if on else 1.0)
-	var hint := "도구를 고르고 굴 속을 누르세요"
+	var hint := "도구를 쥐고 굴 속을 누르세요 — 쥔 도구는 바꿀 때까지 그대로"
 	var hc := UiTheme.INK_SOFT
 	if _hint_t > 0.0:
 		hint = _hint
@@ -954,10 +1047,12 @@ func _build_start() -> void:
 	_start = made[0]
 	var vb: VBoxContainer = made[1]
 	_lab(vb, "개미굴 원정 (시험판)", "Title")
-	_lab(vb, "원정대는 스스로 굴에 들어가 병정개미를 밀어내고, 비운 방에 연기를 피웁니다. 여왕 방에 연기가 차면 굴이 이사 갑니다.\n명령은 없습니다. 다섯 가지 손짓으로만 도울 수 있고, 손짓마다 뒤탈이 있습니다.", "Small")
+	_lab(vb, "원정대는 스스로 굴에 들어가 병정개미를 밀어내고, 비운 방에 연기를 피웁니다. 여왕 방에 연기가 차면 굴이 이사 갑니다.\n명령은 없습니다. 다섯 가지 손짓으로만 도울 수 있고, 손짓마다 뒤탈이 있습니다. 굴마다 생김새가 다르고, 어두운 방 안은 보이지 않습니다.", "Small")
 	_choice(vb, "창", "opt_spear", [1, 2], ["1단", "2단"])
 	_choice(vb, "방패", "opt_shield", [1, 2], ["1단", "2단"])
 	_choice(vb, "지킴이", "opt_guards", [3, 4, 5], ["셋", "넷", "다섯"])
+	_choice(vb, "굴", "opt_nest", [1, 2], ["첫 굴 (방 셋)", "둘째 굴 (방 넷)"])
+	_choice(vb, "생김새", "opt_layout", [-1, 0, 1, 2], ["씨앗대로", "가", "나", "다"])
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 6)
 	vb.add_child(hb)
@@ -981,7 +1076,7 @@ func _build_start() -> void:
 	go.text = "원정 시작"
 	go.theme_type_variation = "Primary"
 	go.custom_minimum_size = Vector2(0, UiTheme.TOUCH + 6)
-	go.pressed.connect(func() -> void: start(int(_seed_edit.text) if _seed_edit.text.is_valid_int() else opt_seed, opt_spear, opt_shield, opt_guards))
+	go.pressed.connect(func() -> void: start(int(_seed_edit.text) if _seed_edit.text.is_valid_int() else opt_seed, opt_spear, opt_shield, opt_guards, opt_nest, opt_layout))
 	vb.add_child(go)
 	var back := Button.new()
 	back.text = "나가기"
@@ -1001,7 +1096,7 @@ func _show_result() -> void:
 	var won: bool = r["outcome"] == &"won"
 	_lab(vb, "굴이 이사 갔다!" if won else "원정대가 돌아왔다", "Title")
 	var deepest := int(r["deepest"])
-	_lab(vb, "가장 깊이 간 곳: %s\n비운 방: %d / 3 · 걸린 시간 %d초" % [ROOM_NAMES[deepest - 1] if deepest > 0 else "굴 어귀", int(r["cleared"]), int(float(r["secs"]))])
+	_lab(vb, "가장 깊이 간 곳: %s\n비운 방: %d / %d · 걸린 시간 %d초" % [room_name(deepest - 1) if deepest > 0 else "굴 어귀", int(r["cleared"]), ex.n_rooms, int(float(r["secs"]))])
 	var parts: PackedStringArray = []
 	for k: String in NestBalance.LOOT_KEYS:
 		if int(r["loot"][k]) > 0:
@@ -1031,7 +1126,7 @@ func _show_result() -> void:
 	var same := Button.new()
 	same.text = "같은 굴 한 번 더"
 	same.custom_minimum_size = Vector2(0, UiTheme.TOUCH)
-	same.pressed.connect(func() -> void: start(opt_seed, opt_spear, opt_shield, opt_guards))
+	same.pressed.connect(func() -> void: start(opt_seed, opt_spear, opt_shield, opt_guards, opt_nest, opt_layout))
 	vb.add_child(same)
 
 

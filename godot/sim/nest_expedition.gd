@@ -1,4 +1,4 @@
-## 개미굴 원정 — 시뮬레이션 핵심 (docs/WORLD_EVENTS.md 2.1c "개미굴 원정" · ROADMAP Q10 1걸음: 따로 도는 시험판).
+## 개미굴 원정 — 시뮬레이션 핵심 (docs/WORLD_EVENTS.md 2.1c "개미굴 원정" · ROADMAP Q10 1.5걸음: 따로 도는 시험판).
 ## 원정대(지킴이 셋~다섯 + 강아지)가 스스로 굴에 들어가 병정개미를 창으로 밀어내고, 방패로 버티고, 비운 방에 연기를 피운다.
 ## 여왕 방에 연기가 차면 굴 전체가 이사 간다 (= 이김). 아무도 죽지 않는다 — 개미는 뒤집혀 버둥대다 알을 물고 달아나고, 주민은 지치거나 다치면 스스로 물러난다.
 ## 거인은 명령하지 않는다. 다섯 손짓(등불 · 물 · 핀셋 · 유리 톡 · 각설탕)만 — 모두 양날이고 다시 쓸 때까지 시간이 걸린다.
@@ -19,7 +19,7 @@ class_name NestExpedition
 extends RefCounted
 
 const MAIN := 0
-const SIDE := 1
+const SIDE := 1                        # 옛 이름 — 옆 굴은 seg >= 1 (굴 번호)
 const GESTURES: Array[StringName] = [&"lamp", &"water", &"tweezers", &"tap", &"sugar"]
 
 
@@ -85,8 +85,31 @@ var dog_bark_left := 0.0
 var dog_out := false
 var _next_ant := 1
 
-var cleared: Array[bool] = [false, false, false]
-var entered: Array[bool] = [false, false, false]
+var nest := 1                          # 굴 번호 (1 = 첫 굴 방 셋, 2 = 둘째 굴 방 넷)
+var layout := 0                        # 이 굴의 생김새 (NestBalance.NESTS[nest].layouts 번호) — 씨앗이 고른다
+var layout_name := ""
+var rooms: Array = []                  # [[시작, 끝]]
+var room_kind: Array[StringName] = []  # food · soldier · egg · queen
+var n_rooms := 3
+var deep_end := 90.0
+var max_secs := 170.0
+var side_at := {}                      # 옆 굴 seg(= 굴 번호) → 큰길과 만나는 자리
+var water := {}                        # 옆 굴 seg → 물에 막힌 남은 시간
+var block_kind: StringName = &"none"   # pebble · puddle · none
+var block_s := -100.0
+var puddle := false
+var big_rooms: Array = []
+var tough := 1.0                       # 이 굴 개미의 버팀 ×
+var bite_k := 1.0
+var reinf_n := 2
+var _reinf_turn := 0
+var big_met := {}                      # 큰 병정 id → 이미 마주침 (담력은 한 번만 깎인다)
+var big_shown := {}                    # 큰 병정 id → 등불로 미리 봄
+var roused := {}                       # 방 → 눈먼 손짓에 깨어남
+var cleared: Array[bool] = []
+var enter_t: Array[float] = []          # 방마다 들어선 때 (-1 = 아직)
+var room_secs: Array[float] = []        # 방마다 들어서서 비우기까지 걸린 초 (-1 = 못 비움)
+var entered: Array[bool] = []
 var deepest := 0                       # 가장 깊이 들어간 방 (0 = 입구까지)
 var lit_room := 0                      # 등불이 켜진 방 (1~3, 0 = 없음)
 var lamp_left := 0.0
@@ -96,7 +119,6 @@ var pebble := true
 var pebble_work := 0.0
 var rubble: Array[Dictionary] = []     # [{s, work}]
 var mud: Array[Dictionary] = []        # [{s, left}]
-var water_left := 0.0                  # 옆 굴이 물에 막힌 남은 시간
 var sugar_on := false
 var sugar_seg := 0
 var sugar_s := 0.0
@@ -107,13 +129,14 @@ var tweeze_seg := 0
 var tweeze_s := 0.0
 var tweeze_left := 0.0
 var freeze_left := 0.0                  # 유리 톡: 주민이 굳은 남은 시간
-var ant_freeze_left := 0.0              # 개미가 굳은 남은 시간 (주민보다 먼저 풀린다)
+var ant_freeze_left := 0.0              # 개미가 굳은 남은 시간 (NestBalance.TAP_ANT_SECS)
 var mood := 1.0                        # 이 굴의 사나움 (무는 힘 ×) — 굴마다 다르다
 var reinf_max := 0                     # 이 굴의 원군 총수
 var cd := {}                           # 손짓 → 다시 쓸 때까지 남은 초
 var alarm := false
 var reinf_t := 0.0
 var reinf_sent := 0
+var sated := 0                         # 단것을 물고 돌아간 원군
 var pot_who := -1
 var pot_prog := 0.0                    # 0~1
 var rest_left := 0.0
@@ -127,6 +150,8 @@ var result := {}
 var used := {}                         # 손짓 → 쓴 횟수
 var flipped := 0
 var washed := 0
+var overflows := 0                     # 물이 넘친 횟수
+var blind_uses := 0                    # 보이지 않는 곳에 넣은 핀셋·각설탕
 var inputs: Array = []                 # 받아들여진 손짓 [걸음, kind, seg, s] — 다시 돌려 보기용
 var _noted := {}                       # 한 번만 내는 알림
 var _fumble_t := -100.0                # '어두워서 더듬는 중' 알림은 8초에 한 번까지
@@ -142,10 +167,42 @@ static func default_roster(n: int, spear: int, shield: int, skill := 3) -> Array
 	return out
 
 
-func setup(seed_value: int, roster: Array[Dictionary], dog := true, stream: EventStream = null) -> void:
+## nest_no = 굴 번호 (1·2), layout_no = 생김새 (-1 = 씨앗이 고른다). 명단의 nerve(0~1)는 없으면 씨앗으로.
+func setup(seed_value: int, roster: Array[Dictionary], dog := true, stream: EventStream = null, nest_no := 1, layout_no := -1) -> void:
 	seed_v = seed_value
 	rng.seed = hash([seed_value, 0x6e657374])
 	events = stream if stream != null else EventStream.new()
+	nest = nest_no if NestBalance.NESTS.has(nest_no) else 1
+	var nd: Dictionary = NestBalance.NESTS[nest]
+	var lays: Array = nd["layouts"]
+	layout = layout_no if layout_no >= 0 and layout_no < lays.size() else posmod(hash([seed_value, 0x6c6179]), lays.size())
+	var lay: Dictionary = lays[layout]
+	layout_name = String(lay["name"])
+	rooms = (nd["rooms"] as Array).duplicate(true)
+	n_rooms = rooms.size()
+	for k: String in nd["kinds"]:
+		room_kind.append(StringName(k))
+		cleared.append(false)
+		enter_t.append(-1.0)
+		room_secs.append(-1.0)
+		entered.append(false)
+	deep_end = float(nd["deep"])
+	max_secs = float(nd["max_secs"])
+	tough = float(nd["grit"])
+	bite_k = float(nd["bite"])
+	reinf_n = int(nd["reinf_n"])
+	for k: int in lay["sides"]:
+		side_at[k] = tunnel_mid(k)
+		water[k] = 0.0
+	block_kind = StringName(String(lay["block"]))
+	if block_kind != &"none":
+		var bt := int(lay["block_t"])
+		var t0 := 0.0 if bt == 0 else float(rooms[bt - 1][1])
+		var t1 := float(rooms[bt][0])
+		block_s = lerpf(t0, t1, NestBalance.BLOCK_AT)
+	pebble = block_kind == &"pebble"
+	puddle = block_kind == &"puddle"
+	big_rooms = (lay["bigs"] as Array).duplicate()
 	for k: StringName in GESTURES:
 		cd[k] = 0.0
 		used[k] = 0
@@ -159,28 +216,39 @@ func setup(seed_value: int, roster: Array[Dictionary], dog := true, stream: Even
 		g.spear = clampi(int(r.get("spear", 1)), 1, 2)
 		g.shield = clampi(int(r.get("shield", 1)), 1, 2)
 		g.skill = clampi(int(r.get("skill", 3)), 0, 10)
+		var nv := rng.randf_range(float(NestBalance.NERVE_START[0]), float(NestBalance.NERVE_START[1]))
+		g.nerve = clampf(float(r.get("nerve", nv)), 0.3, 1.0)
 		g.s = -float(i) * NestBalance.SPACING
 		guards.append(g)
 		i += 1
 	has_dog = dog
 	mood = rng.randf_range(float(NestBalance.MOOD[0]), float(NestBalance.MOOD[1]))
-	reinf_max = rng.randi_range(int(NestBalance.REINF_MAX[0]), int(NestBalance.REINF_MAX[1]))
+	reinf_max = rng.randi_range(int(nd["reinf"][0]), int(nd["reinf"][1]))
 	dog_s = 1.0
-	for ri in 3:
-		var room: Array = NestBalance.ROOMS[ri]
-		var n: Array = (NestBalance.ROOM_ANTS[ri] as Array).duplicate()
-		if ri > 0:
-			n[2] = int(n[2]) + rng.randi_range(-NestBalance.SOLDIER_JITTER, NestBalance.SOLDIER_JITTER)
-		var kinds: Array[StringName] = [&"worker", &"scout", &"soldier", &"big"]
-		for ki in 4:
+	for ri in n_rooms:
+		var room: Array = rooms[ri]
+		var kind := String(room_kind[ri])
+		var n: Array = (NestBalance.ROOM_ANTS[kind] as Array).duplicate()
+		var has_big := big_rooms.has(ri)
+		if int(n[2]) > 0:
+			n[2] = int(n[2]) + rng.randi_range(-NestBalance.SOLDIER_JITTER, NestBalance.SOLDIER_JITTER) + int(nd["soldier_add"])
+			if not has_big and kind != "egg":
+				n[2] = int(n[2]) + NestBalance.NO_BIG_SOLDIERS
+			if lay.has("add"):
+				n[2] = int(n[2]) + int(lay["add"][ri])
+		var kinds: Array[StringName] = [&"worker", &"scout", &"soldier"]
+		for ki in 3:
 			for _j in int(n[ki]):
 				var a := _spawn(kinds[ki], MAIN, rng.randf_range(float(room[0]) + 5.0, float(room[1]) - 2.0), ri)
-				if kinds[ki] == &"big":
-					a.s = float(room[1]) - 5.0
 				a.goal = a.s
-	var q := _spawn(&"queen", MAIN, float(NestBalance.ROOMS[2][1]) - 2.5, 2)
+				if kind == "egg" and kinds[ki] == &"soldier" and NestBalance.EGG_ANGRY:
+					a.angry = true
+		if has_big:
+			var b := _spawn(&"big", MAIN, float(room[1]) - 5.0, ri)
+			b.goal = b.s
+	var q := _spawn(&"queen", MAIN, float(rooms[n_rooms - 1][1]) - 2.5, n_rooms - 1)
 	q.goal = q.s
-	_emit(&"nest_started", {"v": {"guards": guards.size(), "dog": dog, "seed": seed_value}})
+	_emit(&"nest_started", {"v": {"guards": guards.size(), "dog": dog, "seed": seed_value, "nest": nest, "layout": layout}})
 
 
 func _spawn(kind: StringName, seg: int, s: float, home: int) -> Ant:
@@ -191,9 +259,9 @@ func _spawn(kind: StringName, seg: int, s: float, home: int) -> Ant:
 	a.seg = seg
 	a.s = s
 	a.home = home
-	a.grit = float(NestBalance.GRIT.get(String(kind), 99.0)) * rng.randf_range(1.0 - NestBalance.GRIT_JITTER, 1.0 + NestBalance.GRIT_JITTER)
+	a.grit = float(NestBalance.GRIT.get(String(kind), 99.0)) * tough * rng.randf_range(1.0 - NestBalance.GRIT_JITTER, 1.0 + NestBalance.GRIT_JITTER)
 	a.grit0 = a.grit
-	a.charge_t = NestBalance.BIG_CHARGE_EVERY * 0.6
+	a.charge_t = NestBalance.BIG_CHARGE_EVERY * NestBalance.BIG_CHARGE_FIRST_K
 	ants.append(a)
 	return a
 
@@ -212,52 +280,105 @@ func _note(code: StringName, seg: int, s: float, who := -1, once := false) -> vo
 
 
 # ───────────────────────── 굴 길 ─────────────────────────
-## 큰길 위 자리가 딸린 방 (1~3) — 등불·'제 방을 지킴'의 구역. 입구 굴은 0.
-static func zone_of(s: float) -> int:
+## 굴 k(방 k와 k+1 사이, 0 = 입구 굴)의 한가운데
+func tunnel_mid(k: int) -> float:
+	if k <= 0:
+		return NestBalance.ENTRY_END * 0.5
+	return (float(rooms[k - 1][1]) + float(rooms[mini(k, n_rooms - 1)][0])) * 0.5
+
+
+## 큰길 위 자리가 딸린 방 (1~) — 등불·'제 방을 지킴'의 구역 (방 + 앞뒤 굴의 반씩). 입구 굴은 0.
+func zone_of(s: float) -> int:
 	if s < NestBalance.ENTRY_END:
 		return 0
-	if s < NestBalance.PEBBLE_S:
-		return 1
-	if s < NestBalance.JUNCTION_S:
-		return 2
-	return 3
+	for k in range(1, n_rooms):
+		if s < tunnel_mid(k):
+			return k
+	return n_rooms
 
 
-## 방 안이면 1~3, 굴이면 0
-static func room_at(s: float) -> int:
-	for r in 3:
-		if s >= float(NestBalance.ROOMS[r][0]) and s <= float(NestBalance.ROOMS[r][1]):
+## 방 안이면 1~, 굴이면 0
+func room_at(s: float) -> int:
+	for r in n_rooms:
+		if s >= float(rooms[r][0]) and s <= float(rooms[r][1]):
 			return r + 1
 	return 0
 
 
-static func room_mid(r: int) -> float:
-	return (float(NestBalance.ROOMS[r][0]) + float(NestBalance.ROOMS[r][1])) * 0.5
+func room_mid(r: int) -> float:
+	r = clampi(r, 0, n_rooms - 1)
+	return (float(rooms[r][0]) + float(rooms[r][1])) * 0.5
 
 
-static func path_dist(seg_a: int, s_a: float, seg_b: int, s_b: float) -> float:
+func junction(seg: int) -> float:
+	return float(side_at.get(seg, 0.0))
+
+
+func path_dist(seg_a: int, s_a: float, seg_b: int, s_b: float) -> float:
 	if seg_a == seg_b:
 		return absf(s_a - s_b)
 	if seg_a == MAIN:
-		return absf(s_a - NestBalance.JUNCTION_S) + s_b
-	return s_a + absf(s_b - NestBalance.JUNCTION_S)
+		return absf(s_a - junction(seg_b)) + s_b
+	if seg_b == MAIN:
+		return s_a + absf(s_b - junction(seg_a))
+	return s_a + absf(junction(seg_a) - junction(seg_b)) + s_b
 
 
+func water_in(seg: int) -> float:
+	return float(water.get(seg, 0.0))
+
+
+## 그 자리가 어두운가 (원정대가 더듬는다). 입구 굴과 첫 방(곳간)은 햇빛이 든다. 옆 굴은 늘 어둡다.
 func is_dark(seg: int, s: float) -> bool:
-	if seg == SIDE:
+	if seg != MAIN:
 		return true
 	var z := zone_of(s)
-	if z == 0:
+	if z <= 1:
 		return false
 	return not (lamp_left > 0.0 and lit_room == z)
+
+
+## 그 자리가 거인에게 보이지 않는가 — 어둡고, 아직 연기를 피우지 않은 곳
+func hidden(seg: int, s: float) -> bool:
+	if not is_dark(seg, s):
+		return false
+	if seg != MAIN:
+		return true
+	return not cleared[zone_of(s) - 1]
+
+
+## 거인에게 이 개미가 보이는가: 밝은 곳 · 연기를 피운 방 · 횃불(지킴이·강아지) 곁
+func ant_visible(a: Ant) -> bool:
+	if a.state == &"out":
+		return false
+	if not hidden(a.seg, a.s):
+		return true
+	for g in guards:
+		if g.state != &"out" and path_dist(a.seg, a.s, MAIN, g.s) <= NestBalance.TORCH_R:
+			return true
+	return has_dog and not dog_out and path_dist(a.seg, a.s, MAIN, dog_s) <= NestBalance.TORCH_R
+
+
+## 보이지 않는 곳의 기척 (수는 알려 주지 않는다): 0 = 조용 · 1 = 꿈틀 · 2 = 우글우글. where = 방 번호(0~) 또는 옆 굴이면 side = true, seg
+func stir(where: int, side := false) -> int:
+	var n := 0
+	for a in ants:
+		if not a.standing() or a.kind == &"queen" or a.kind == &"worker":
+			continue
+		if side:
+			if a.seg == where:
+				n += 1
+		elif a.seg == MAIN and zone_of(a.s) == where + 1:
+			n += 1
+	return 0 if n == 0 else (2 if n >= NestBalance.STIR_MANY else 1)
 
 
 ## 연기가 찬 곳의 깊은 쪽 끝 — 개미는 이보다 얕은 곳으로 오지 않는다
 func smoke_end() -> float:
 	var e := -1.0
-	for r in 3:
+	for r in n_rooms:
 		if cleared[r]:
-			e = float(NestBalance.ROOMS[r][1])
+			e = float(rooms[r][1])
 	return e
 
 
@@ -270,7 +391,7 @@ func active() -> Array[Guard]:
 
 
 func cur_room() -> int:
-	for r in 3:
+	for r in n_rooms:
 		if not cleared[r]:
 			return r
 	return -1
@@ -294,16 +415,17 @@ func big_in(room: int) -> Ant:
 func side_ants() -> int:
 	var n := 0
 	for a in ants:
-		if a.seg == SIDE and a.standing():
+		if a.seg != MAIN and a.standing():
 			n += 1
 	return n
 
 
-## 방 r(0~2)에 아직 서 있는 병정·큰 병정 수 (제 방을 지키는 것 + 그 구역에 들어와 있는 것)
+## 방 r에 아직 서 있는 병정·큰 병정 수 (제 방을 지키는 것 + 그 구역에 들어와 있는 것).
+## 각설탕에 꾀여 구역 밖(옆 굴 등)으로 나간 병정은 세지 않는다 — 그 사이에 연기를 피우면 돌아올 방이 없어 달아난다.
 func fighters_in(r: int) -> int:
 	var n := 0
 	for a in ants:
-		if a.fighter() and a.standing() and ((a.seg == MAIN and zone_of(a.s) == r + 1) or (a.home == r and (a.state == &"home" or a.state == &"lured"))):
+		if a.fighter() and a.standing() and ((a.seg == MAIN and zone_of(a.s) == r + 1) or (a.home == r and a.state == &"home")):
 			n += 1
 	return n
 
@@ -350,28 +472,42 @@ func _lamp(seg: int, s: float) -> bool:
 	for g in active():
 		if zone_of(g.s) == z:
 			g.nerve = minf(1.0, g.nerve + NestBalance.NERVE_LIT)
-	_noted.erase(&"light_wakes")
+	for a in ants:                                 # 빛에 드러난 큰 병정 — 미리 본 것은 덜 무섭다
+		if a.kind == &"big" and a.standing() and a.seg == MAIN and zone_of(a.s) == z:
+			big_shown[a.id] = true
 	_note(&"lit", MAIN, room_mid(z - 1))
+	var f := _front()                              # 원정대가 아직 먼 방을 비추면 그 방이 깬다
+	if z >= 2 and not cleared[z - 1] and (f == null or (zone_of(f.s) != z and f.s < float(rooms[z - 1][0]) - NestBalance.LAMP_NEAR)):
+		_rouse(z - 1)
+		_note(&"light_wakes", MAIN, room_mid(z - 1))
 	return true
 
 
 func _water(seg: int, s: float) -> bool:
-	if seg == SIDE:
-		if water_left > 0.0:                      # 이미 젖은 데 또 — 넘쳐서 큰길로
-			water_left = NestBalance.WATER_BLOCK
-			_splash(NestBalance.JUNCTION_S, NestBalance.WATER_R + 2.0)
-			_note(&"overflow", MAIN, NestBalance.JUNCTION_S)
-			return true
-		water_left = NestBalance.WATER_BLOCK
+	if seg != MAIN:
+		if not side_at.has(seg):
+			return false
 		var n := 0
 		for a in ants:
-			if a.seg == SIDE and a.standing():
-				_flee(a, false)
+			if a.seg == seg and a.standing():
 				n += 1
+		# 이미 젖은 데 또 붓거나, 굴이 개미로 꽉 차 있으면 물이 빠지지 못해 큰길로 쏟아진다 (개미는 그대로 남는다)
+		if water_in(seg) > 0.0 or n >= NestBalance.OVERFLOW_ANTS:
+			for a in ants:
+				if a.seg == seg and a.standing():
+					_stun(a, NestBalance.WATER_STUN)
+			overflows += 1
+			_splash(junction(seg), NestBalance.OVERFLOW_R)
+			_note(&"overflow", MAIN, junction(seg))
+			return true
+		water[seg] = NestBalance.WATER_BLOCK
+		for a in ants:
+			if a.seg == seg and a.standing():
+				_flee(a, false)
 		washed += n
-		_note(&"side_washed" if n > 0 else &"side_blocked", SIDE, clampf(s, 2.0, NestBalance.SIDE_LEN - 2.0))
+		_note(&"side_washed" if n > 0 else &"side_blocked", seg, clampf(s, 2.0, NestBalance.SIDE_LEN - 2.0))
 		return true
-	if s < NestBalance.ENTRY_END * 0.5 or s > NestBalance.DEEP_END:
+	if s < NestBalance.ENTRY_END * 0.5 or s > deep_end:
 		return false
 	_splash(s, NestBalance.WATER_R)
 	return true
@@ -406,7 +542,9 @@ func _splash(s: float, r: float) -> void:
 func _tweezers(seg: int, s: float) -> bool:
 	if tweeze_on:
 		return false
-	if seg == MAIN and (s < NestBalance.ENTRY_END * 0.5 or s > NestBalance.DEEP_END):
+	if seg != MAIN and not side_at.has(seg):
+		return false
+	if seg == MAIN and (s < NestBalance.ENTRY_END * 0.5 or s > deep_end):
 		return false
 	tweeze_on = true
 	tweeze_seg = seg
@@ -415,12 +553,38 @@ func _tweezers(seg: int, s: float) -> bool:
 	return true
 
 
+func _lit_by_torch(seg: int, s: float) -> bool:
+	for g in guards:
+		if g.state != &"out" and path_dist(seg, s, MAIN, g.s) <= NestBalance.TORCH_R:
+			return true
+	return false
+
+
+## 서툰 손짓(보이지 않는 방에 넣은 핀셋·각설탕, 원정대가 멀리 있는 방에 켠 등불)이 방 r을 통째로 깨운다:
+## 그 방 병정들이 사나워져 버티고 서고 (버팀 ×, 무는 힘 ×), 굴에 경보가 돌아 원군 한 무리가 더, 곧바로 온다
+func _rouse(r: int) -> void:
+	if r < 0 or r >= n_rooms or cleared[r] or roused.has(r):
+		return
+	roused[r] = true
+	for a in ants:
+		if a.fighter() and a.home == r and a.standing():
+			a.grit *= NestBalance.ROUSE_GRIT
+			a.angry = true
+	for g in active():
+		g.nerve -= NestBalance.ROUSE_NERVE
+	_alarm(&"fight")
+	reinf_max += reinf_n
+	reinf_t = minf(reinf_t, NestBalance.ROUSE_REINF_SECS)
+	_note(&"roused", MAIN, room_mid(r))
+
+
 func _tweeze_close() -> void:
 	tweeze_on = false
+	var blind := hidden(tweeze_seg, tweeze_s) and not _lit_by_torch(tweeze_seg, tweeze_s)
 	var best: Ant = null
 	var bd := NestBalance.TWEEZE_R
 	for a in ants:
-		if a.kind == &"big" and a.standing():
+		if a.kind == &"big" and a.standing() and ant_visible(a):      # 보이지 않는 것은 집지 못한다
 			var d := path_dist(a.seg, a.s, tweeze_seg, tweeze_s)
 			if d <= bd:
 				bd = d
@@ -431,9 +595,10 @@ func _tweeze_close() -> void:
 		_note(&"big_picked", best.seg, best.s)
 		_emit(&"nest_tweezed", {"v": {"what": &"big", "hit": true}, "at": Vector2(tweeze_seg, tweeze_s)})
 		return
-	if tweeze_seg == MAIN and pebble and absf(tweeze_s - NestBalance.PEBBLE_S) <= NestBalance.TWEEZE_R:
+	if tweeze_seg == MAIN and pebble and absf(tweeze_s - block_s) <= NestBalance.TWEEZE_R:
 		pebble = false
-		_note(&"pebble_picked", MAIN, NestBalance.PEBBLE_S)
+		cd[&"tweezers"] = minf(float(cd[&"tweezers"]), NestBalance.CD_TWEEZE_PEBBLE)   # 가벼운 것은 금방 다시
+		_note(&"pebble_picked", MAIN, block_s)
 		_emit(&"nest_tweezed", {"v": {"what": &"pebble", "hit": true}, "at": Vector2(tweeze_seg, tweeze_s)})
 		return
 	if tweeze_seg == MAIN:
@@ -444,12 +609,15 @@ func _tweeze_close() -> void:
 				_emit(&"nest_tweezed", {"v": {"what": &"rubble", "hit": true}, "at": Vector2(tweeze_seg, tweeze_s)})
 				return
 		# 빗나감 — 흙이 무너져 길을 막는다
-		rubble.append({"s": clampf(tweeze_s, NestBalance.ENTRY_END, NestBalance.DEEP_END - 4.0), "work": 0.0})
+		rubble.append({"s": clampf(tweeze_s, NestBalance.ENTRY_END, deep_end - 4.0), "work": 0.0})
 		for g in active():
 			if absf(g.s - tweeze_s) <= 8.0:
 				g.nerve -= NestBalance.TWEEZE_MISS_NERVE
+		if blind:
+			blind_uses += 1
+			_rouse(zone_of(tweeze_s) - 1)
 	_note(&"tweeze_miss", tweeze_seg, tweeze_s)
-	_emit(&"nest_tweezed", {"v": {"what": &"none", "hit": false}, "at": Vector2(tweeze_seg, tweeze_s)})
+	_emit(&"nest_tweezed", {"v": {"what": &"none", "hit": false, "blind": blind}, "at": Vector2(tweeze_seg, tweeze_s)})
 
 
 func _big_gone(big: Ant, picked: bool) -> void:
@@ -483,13 +651,21 @@ func _tap() -> bool:
 
 
 func _sugar(seg: int, s: float) -> bool:
-	if seg == MAIN and (s < NestBalance.ENTRY_END or s > NestBalance.DEEP_END - 2.0):
+	if seg == MAIN and (s < NestBalance.ENTRY_END or s > deep_end - 2.0):
 		return false
 	if seg == MAIN and s < smoke_end():
 		return false                               # 연기 찬 방에는 개미가 오지 않는다
+	if seg != MAIN and not side_at.has(seg):
+		return false
+	if seg == MAIN and hidden(MAIN, s) and not _lit_by_torch(MAIN, s):
+		# 보이지 않는 방에 떨어진 단것 — 어디로 꾈지 모른 채 그 방을 통째로 깨운다
+		blind_uses += 1
+		_rouse(zone_of(s) - 1)
+		_note(&"sugar_blind", MAIN, s)
+		return true
 	sugar_on = true
 	sugar_seg = seg
-	sugar_s = clampf(s, 0.5, NestBalance.SIDE_LEN - 1.0) if seg == SIDE else s
+	sugar_s = clampf(s, 0.5, NestBalance.SIDE_LEN - 1.0) if seg != MAIN else s
 	sugar_left = NestBalance.SUGAR_SECS
 	_sugar_hit = false
 	# 가까운 병정부터 SUGAR_MAX마리까지만 끌린다 (같은 거리면 먼저 태어난 순 — 씨앗이 같으면 늘 같다)
@@ -543,7 +719,7 @@ func step() -> void:
 	_dog(dt)
 	_reinforce(dt)
 	_lamp_draw(dt)
-	if t >= NestBalance.MAX_SECS and not withdrawing:
+	if t >= max_secs and not withdrawing:
 		_withdraw(&"timeout")
 
 
@@ -555,11 +731,12 @@ func _timers(dt: float) -> void:
 		lamp_left -= dt
 		if lamp_left <= 0.0:
 			_note(&"lamp_out", MAIN, room_mid(lit_room - 1))
-	if water_left > 0.0:
-		water_left -= dt
-		if water_left <= 0.0:
-			_noted.erase(&"side_waiting")
-			_note(&"side_open", SIDE, NestBalance.SIDE_LEN * 0.5)
+	for k: int in water:
+		if float(water[k]) > 0.0:
+			water[k] = float(water[k]) - dt
+			if float(water[k]) <= 0.0:
+				_noted.erase(&"side_waiting")
+				_note(&"side_open", k, NestBalance.SIDE_LEN * 0.5)
 	var i := mud.size() - 1
 	while i >= 0:
 		mud[i]["left"] = float(mud[i]["left"]) - dt
@@ -573,10 +750,14 @@ func _timers(dt: float) -> void:
 			for a in ants:
 				if a.state == &"lured":
 					a.state = &"attack" if a.home < 0 else &"home"
-					a.angry = false
+					a.angry = a.home >= 0 and (roused.has(a.home) or (room_kind[a.home] == &"egg" and NestBalance.EGG_ANGRY))
 					if path_dist(a.seg, a.s, sugar_seg, sugar_s) <= 2.0:      # 단것을 먹고 힘이 난다
-						a.grit = maxf(a.grit, a.grit0 * NestBalance.SUGAR_FED_GRIT)
-						a.fed = true
+						if a.home < 0:                         # 원군은 지킬 방이 없다 — 단것을 물고 굴 깊이 돌아간다
+							_flee(a, false)
+							sated += 1
+						else:
+							a.grit = maxf(a.grit, a.grit0 * NestBalance.SUGAR_FED_GRIT)
+							a.fed = true
 			_note(&"sugar_gone", sugar_seg, sugar_s)
 	if tweeze_on and not over:
 		tweeze_left -= dt
@@ -629,12 +810,13 @@ func _brain(dt: float) -> void:
 		var ra := room_at(f.s + NestBalance.DOOR)      # 방 어귀에 닿으면 들어선 것
 		if ra > 0 and not entered[ra - 1]:
 			entered[ra - 1] = true
+			enter_t[ra - 1] = t
 			deepest = maxi(deepest, ra)
 			_emit(&"nest_room_entered", {"v": {"room": ra, "dark": is_dark(MAIN, room_mid(ra - 1))}, "at": Vector2(MAIN, f.s), "who": f.id})
-		if not alarm and f.s >= NestBalance.PEBBLE_S + 1.0:
+		if not alarm and zone_of(f.s) >= 2:
 			_alarm(&"fight")
 	# 연기 화로: 이 방에 서 있는 병정이 없고 곁에 싸울 개미가 없으면 맨 뒤 사람이 피운다
-	var room: Array = NestBalance.ROOMS[cur]
+	var room: Array = rooms[cur]
 	var can_pot := f != null and rest_left <= 0.0 and f.s >= float(room[0]) + 3.0 and fighters_in(cur) == 0 and not _threat_near(act)
 	if can_pot:
 		var who: Guard = act[act.size() - 1]
@@ -670,17 +852,23 @@ func _alarm(why: StringName) -> void:
 		return
 	alarm = true
 	reinf_t = NestBalance.REINF_FIRST
-	_note(StringName("alarm_" + String(why)), SIDE, NestBalance.SIDE_LEN * 0.6)
+	var sg := 1
+	for k: int in side_at:
+		if junction(k) > smoke_end():
+			sg = k
+			break
+	_note(StringName("alarm_" + String(why)), sg, NestBalance.SIDE_LEN * 0.6)
 
 
 func _clear_room(r: int, who: Guard) -> void:
 	cleared[r] = true
+	room_secs[r] = t - enter_t[r] if enter_t[r] >= 0.0 else 0.0
 	pot_prog = 0.0
 	pot_who = -1
 	rest_left = NestBalance.REST_SECS
-	var room: Array = NestBalance.ROOMS[r]
+	var room: Array = rooms[r]
 	var got := {}
-	var tbl: Dictionary = NestBalance.LOOT[r]
+	var tbl: Dictionary = NestBalance.LOOT[String(room_kind[r])]
 	for k: String in NestBalance.LOOT_KEYS:
 		if tbl.has(k):
 			var n := rng.randi_range(int(tbl[k][0]), int(tbl[k][1]))
@@ -689,14 +877,14 @@ func _clear_room(r: int, who: Guard) -> void:
 	for a in ants:
 		if not a.standing() and a.state != &"flip":
 			continue
-		if r == 2 or (a.seg == MAIN and a.s <= float(room[1]) + 1.0) or a.home == r:
+		if r == n_rooms - 1 or (a.seg != MAIN and junction(a.seg) <= float(room[1])) or (a.seg == MAIN and a.s <= float(room[1]) + 1.0) or a.home == r:
 			_flee(a, true)
 	for g in active():
 		g.nerve = minf(1.0, g.nerve + NestBalance.NERVE_ROOM)
 	_note(&"smoke", MAIN, room_mid(r), who.id)
 	_emit(&"nest_room_cleared", {"v": {"room": r + 1, "loot": got}, "at": Vector2(MAIN, room_mid(r)), "who": who.id})
-	if r == 2:
-		_note(&"moving_out", MAIN, room_mid(2))
+	if r == n_rooms - 1:
+		_note(&"moving_out", MAIN, room_mid(r))
 		for g in guards:
 			if g.state == &"go":
 				g.doing = &"cheer"
@@ -735,7 +923,8 @@ func _finish(what: StringName) -> void:
 		if c:
 			n_clear += 1
 	result = {"outcome": what, "secs": t, "deepest": deepest, "cleared": n_clear, "hurt": hurt, "left": left,
-		"loot": loot.duplicate(), "flipped": flipped, "washed": washed, "used": used.duplicate(), "seed": seed_v, "dead": 0}
+		"loot": loot.duplicate(), "flipped": flipped, "washed": washed, "used": used.duplicate(), "seed": seed_v, "dead": 0,
+		"nest": nest, "layout": layout, "overflows": overflows, "blind": blind_uses, "room_secs": room_secs.duplicate()}
 	_emit(&"nest_ended", {"v": result.duplicate(true)})
 
 
@@ -779,30 +968,32 @@ func _flip(a: Ant, by: Guard) -> void:
 func _ant_clamp(a: Ant, from: float, to: float) -> float:
 	if a.seg != MAIN:
 		return clampf(to, 0.0, NestBalance.SIDE_LEN)
-	if pebble and (from < NestBalance.PEBBLE_S) != (to < NestBalance.PEBBLE_S):
-		to = NestBalance.PEBBLE_S + (0.5 if from >= NestBalance.PEBBLE_S else -0.5)
+	if pebble and (from < block_s) != (to < block_s):
+		to = block_s + (0.5 if from >= block_s else -0.5)
 	if a.state != &"flee":
 		to = maxf(to, smoke_end() + 0.6)
-	return clampf(to, NestBalance.ENTRY_END, NestBalance.DEEP_END)
+	return clampf(to, NestBalance.ENTRY_END, deep_end)
 
 
 func _ant_move(a: Ant, tseg: int, ts: float, d: float) -> void:
 	if a.seg == tseg:
 		a.s = _ant_clamp(a, a.s, move_toward(a.s, ts, d))
 	elif a.seg == MAIN:                            # 옆 굴로 들어가려면 만나는 곳까지
-		var ns := _ant_clamp(a, a.s, move_toward(a.s, NestBalance.JUNCTION_S, d))
+		var j := junction(tseg)
+		var ns := _ant_clamp(a, a.s, move_toward(a.s, j, d))
 		a.s = ns
-		if absf(ns - NestBalance.JUNCTION_S) < 0.01 and water_left <= 0.0:
-			a.seg = SIDE
+		if absf(ns - j) < 0.01 and water_in(tseg) <= 0.0:
+			a.seg = tseg
 			a.s = 0.0
 	else:                                          # 옆 굴에서 큰길로 (물이 차 있으면 끝에서 기다린다)
-		if water_left > 0.0:
-			_note(&"side_waiting", SIDE, a.s, -1, true)
+		if water_in(a.seg) > 0.0:
+			_note(&"side_waiting", a.seg, a.s, -1, true)
 			return
 		a.s = move_toward(a.s, 0.0, d)
 		if a.s <= 0.0:
+			var j2 := junction(a.seg)
 			a.seg = MAIN
-			a.s = _ant_clamp(a, NestBalance.JUNCTION_S, NestBalance.JUNCTION_S)
+			a.s = _ant_clamp(a, j2, j2)
 
 
 func _ants(dt: float) -> void:
@@ -826,17 +1017,17 @@ func _ant_one(a: Ant, dt: float) -> void:
 			if a.timer <= 0.0:
 				a.state = a.back
 		&"flee":
-			if a.seg == SIDE:
+			if a.seg != MAIN:
 				a.s += NestBalance.FLEE_SPEED * dt
 				if a.s >= NestBalance.SIDE_LEN:
 					a.state = &"out"
 			else:
 				a.s += (NestBalance.QUEEN_FLEE_SPEED if a.kind == &"queen" else NestBalance.FLEE_SPEED) * dt
-				if a.s >= NestBalance.DEEP_END:
+				if a.s >= deep_end:
 					a.state = &"out"
 		&"alarm":                                  # 정찰 개미가 병정 방으로 알리러 달린다
 			var dest := room_mid(1)
-			if cleared[1] or (pebble and a.s < NestBalance.PEBBLE_S):
+			if cleared[1] or (pebble and (a.s < block_s) != (dest < block_s)):
 				_flee(a, false)                        # 길이 막혀 알리지 못하고 숨는다
 				return
 			_ant_move(a, MAIN, dest, speed * dt)
@@ -868,12 +1059,8 @@ func _ant_home(a: Ant, speed: float, dt: float) -> void:
 			if g.state == &"go" and zone_of(g.s) == a.home + 1:
 				a.state = &"attack"
 				return
-		if a.kind == &"soldier" and _woken(a) and _front() != null:
-			a.state = &"attack"                        # 빛에 깬 병정이 원정대를 찾아 나선다
-			_note(&"light_wakes", MAIN, room_mid(a.home), -1, true)
-			return
 	# 제 방 안에서 어슬렁
-	var room: Array = NestBalance.ROOMS[maxi(a.home, 0)]
+	var room: Array = rooms[maxi(a.home, 0)]
 	if a.seg != MAIN or absf(a.s - a.goal) < 0.3:
 		if a.kind == &"big":
 			a.goal = float(room[1]) - rng.randf_range(3.0, 9.0)
@@ -910,7 +1097,7 @@ func _ant_attack(a: Ant, speed: float, dt: float) -> void:
 		var d := path_dist(a.seg, a.s, MAIN, g.s)
 		if d <= bd + 2.0 and (best == null or g.biters < best.biters):
 			best = g
-	if best == null or (a.home >= 0 and zone_of(best.s) != a.home + 1 and bd > NestBalance.AGGRO and not _woken(a)):
+	if best == null or (a.home >= 0 and zone_of(best.s) != a.home + 1 and bd > NestBalance.AGGRO):
 		a.target = -1
 		a.state = &"home" if a.home >= 0 else &"attack"
 		return
@@ -924,11 +1111,6 @@ func _ant_attack(a: Ant, speed: float, dt: float) -> void:
 		_bite(a, best, dt)
 		if a.kind == &"big":
 			_big_charge(a, best, dt)
-
-
-## 등불이 원정대 없는 방을 비추면 그 방 병정이 깬다
-func _woken(a: Ant) -> bool:
-	return a.home >= 0 and lamp_left > 0.0 and lit_room == a.home + 1
 
 
 func _ant_lured(a: Ant, speed: float, dt: float) -> void:
@@ -958,7 +1140,7 @@ func _bite(a: Ant, g: Guard, dt: float) -> void:
 	take *= _dark_k(g, NestBalance.DARK_TAKE_K)
 	if a.angry:
 		take *= NestBalance.SUGAR_ANGRY_BITE
-	g.stam -= float(NestBalance.BITE.get(String(a.kind), 0.0)) * mood * take * dt
+	g.stam -= float(NestBalance.BITE.get(String(a.kind), 0.0)) * mood * bite_k * take * dt
 	g.biters += 1
 	a.biting = true
 
@@ -1008,21 +1190,21 @@ func _guards(dt: float) -> void:
 			if a.fighter() and a.standing() and a.seg == MAIN and a.home == cur and a.state != &"lured" and a.s > act[0].s:
 				near = minf(near, a.s)
 		if near < 1.0e8 and near - (NestBalance.REACH - 1.0) > goal:
-			goal = minf(near - (NestBalance.REACH - 1.0), float(NestBalance.ROOMS[cur][1]) - 1.0)
+			goal = minf(near - (NestBalance.REACH - 1.0), float(rooms[cur][1]) - 1.0)
 	# 길 막힘 (조약돌 · 무너진 흙) — 맨 앞사람 앞의 가장 가까운 것
-	var block_s := 1.0e9
+	var stop_s := 1.0e9
 	var block_i := -2                              # -1 = 조약돌, 0~ = 흙더미 번호
 	if not act.is_empty():
-		if pebble and NestBalance.PEBBLE_S > act[0].s - 0.5 and NestBalance.PEBBLE_S < goal + 1.0:
-			block_s = NestBalance.PEBBLE_S
+		if pebble and block_s > act[0].s - 0.5 and block_s < goal + 1.0:
+			stop_s = block_s
 			block_i = -1
 		for i in rubble.size():
 			var rs := float(rubble[i]["s"])
-			if rs > act[0].s - 0.5 and rs < goal + 1.0 and rs < block_s:
-				block_s = rs
+			if rs > act[0].s - 0.5 and rs < goal + 1.0 and rs < stop_s:
+				stop_s = rs
 				block_i = i
 	if block_i != -2:
-		goal = minf(goal, block_s - 0.8)
+		goal = minf(goal, stop_s - 0.8)
 	var n_bite := 0
 	for a in ants:
 		if a.biting:
@@ -1030,6 +1212,8 @@ func _guards(dt: float) -> void:
 	var outnum := maxi(0, n_bite - act.size())
 	var diggers := 0
 	var idx := 0
+	var crowd := float(NestBalance.CROWD_PUSH.get(clampi(act.size(), 3, 5), 1.0)) if act.size() >= 3 else 1.0
+	_big_sight(act)
 	for g in act:
 		g.dark = is_dark(MAIN, g.s)
 		# 스스로 물러남
@@ -1062,7 +1246,7 @@ func _guards(dt: float) -> void:
 		g.hold = g.biters >= 2 or g.stam < NestBalance.HOLD_BELOW
 		if tgt != null:
 			var push := float(NestBalance.SPEAR_PUSH[g.spear]) * (1.0 + NestBalance.SKILL_PUSH * g.skill)
-			push *= _dark_k(g, NestBalance.DARK_PUSH_K) * lerpf(NestBalance.TIRED_PUSH_MIN, 1.0, clampf(g.stam, 0.0, 1.0))
+			push *= crowd * _dark_k(g, NestBalance.DARK_PUSH_K) * lerpf(NestBalance.TIRED_PUSH_MIN, 1.0, clampf(g.stam, 0.0, 1.0))
 			if g.hold:
 				push *= NestBalance.HOLD_PUSH_K
 			tgt.grit -= push * dt
@@ -1071,6 +1255,8 @@ func _guards(dt: float) -> void:
 				_flip(tgt, g)
 			if tf:
 				g.nerve -= (NestBalance.NERVE_OUTNUM * outnum + (NestBalance.NERVE_DARK if g.dark else 0.0)) * dt
+				if not g.dark:
+					g.nerve = minf(1.0, g.nerve + NestBalance.NERVE_LIT_REGEN * dt)
 				if g.dark and t - _fumble_t >= 8.0:
 					_fumble_t = t
 					_note(&"dark_fumble", MAIN, g.s, g.id)
@@ -1085,7 +1271,7 @@ func _guards(dt: float) -> void:
 		if pot_who == g.id:
 			g.doing = &"pot"
 			continue
-		if block_i != -2 and g.s >= block_s - 0.8 - float(act.size()) * NestBalance.SPACING - 0.2 and absf(g.s - slot) < 0.3:
+		if block_i != -2 and g.s >= stop_s - 0.8 - float(act.size()) * NestBalance.SPACING - 0.2 and absf(g.s - slot) < 0.3:
 			g.doing = &"dig"
 			g.stam -= NestBalance.DIG_STAM * dt
 			diggers += 1
@@ -1098,24 +1284,33 @@ func _guards(dt: float) -> void:
 				sp *= NestBalance.MUD_SPEED_K
 				_note(&"mud_slow", MAIN, g.s, g.id, true)
 				break
+		if puddle and absf(g.s - block_s) <= NestBalance.PUDDLE_HALF and slot > g.s:
+			if g.dark:                                 # 어두우면 한 발씩 더듬어 건넌다
+				sp *= NestBalance.PUDDLE_DARK_K / maxf(0.01, _dark_k(g, NestBalance.DARK_SPEED_K))
+				g.stam -= NestBalance.PUDDLE_STAM * dt
+				g.nerve -= NestBalance.PUDDLE_NERVE * dt
+				_note(&"puddle_dark", MAIN, block_s, g.id, true)
+			else:
+				sp *= NestBalance.PUDDLE_LIT_K
+				_note(&"puddle_lit", MAIN, block_s, g.id, true)
 		var ns := move_toward(g.s, slot, sp * dt)
 		if block_i != -2:
-			ns = minf(ns, block_s - 0.8)
+			ns = minf(ns, stop_s - 0.8)
 		g.s = ns
 	if diggers > 0:
 		if block_i == -1:
-			_note(&"pebble_block", MAIN, NestBalance.PEBBLE_S, -1, true)
+			_note(&"pebble_block", MAIN, block_s, -1, true)
 			pebble_work += float(diggers) * dt
 			if pebble_work >= NestBalance.PEBBLE_WORK:
 				pebble = false
-				_note(&"pebble_cleared", MAIN, NestBalance.PEBBLE_S)
+				_note(&"pebble_cleared", MAIN, block_s)
 		elif block_i >= 0 and block_i < rubble.size():
-			_note(&"rubble_block", MAIN, block_s, -1, true)
+			_note(&"rubble_block", MAIN, stop_s, -1, true)
 			rubble[block_i]["work"] = float(rubble[block_i]["work"]) + float(diggers) * dt
 			if float(rubble[block_i]["work"]) >= NestBalance.RUBBLE_WORK:
 				rubble.remove_at(block_i)
 				_noted.erase(&"rubble_block")
-				_note(&"rubble_cleared", MAIN, block_s)
+				_note(&"rubble_cleared", MAIN, stop_s)
 	# 물러나는 사람
 	for g in guards:
 		if g.state == &"retreat":
@@ -1123,6 +1318,25 @@ func _guards(dt: float) -> void:
 			if g.s <= 0.0:
 				g.s = 0.0
 				g.state = &"out"
+
+
+## 큰 병정과 처음 마주침 — 어둠 속에서 불쑥이면 모두 크게 놀란다. 등불로 미리 봤거나 밝은 방이면 덜하다.
+func _big_sight(act: Array[Guard]) -> void:
+	if act.is_empty():
+		return
+	for a in ants:
+		if a.kind != &"big" or not a.standing() or a.seg != MAIN or big_met.has(a.id):
+			continue
+		if absf(a.s - act[0].s) > NestBalance.TORCH_R + 1.5:
+			continue
+		big_met[a.id] = true
+		var sudden := is_dark(MAIN, a.s) and not big_shown.has(a.id)
+		var warned := has_dog and not dog_out and dog_bark_left > 0.0      # 강아지가 방금 짖어 알려 줬다 — 덜 놀란다
+		for g in act:
+			g.nerve -= (NestBalance.NERVE_BIG_SIGHT * (NestBalance.BARK_DARK_EASE if warned else 1.0)) if sudden else NestBalance.NERVE_BIG_SIGHT_LIT
+		if sudden and not warned:                  # 어둠 속에서 불쑥 — 모두 얼어붙는다 (개미는 아니다)
+			freeze_left = maxf(freeze_left, NestBalance.BIG_SUDDEN_FREEZE)
+		_note(&"big_sudden" if sudden else &"big_seen", MAIN, a.s, act[0].id)
 
 
 func _leave(g: Guard, why: StringName) -> void:
@@ -1135,7 +1349,7 @@ func _leave(g: Guard, why: StringName) -> void:
 	if pot_who == g.id:
 		pot_who = -1
 	for o in active():
-		o.nerve -= NestBalance.NERVE_MATE_HURT if why == &"hurt" else NestBalance.NERVE_MATE_LEFT
+		o.nerve -= NestBalance.NERVE_MATE_HURT if why == &"hurt" else (NestBalance.NERVE_MATE_LEFT_DARK if is_dark(MAIN, g.s) else NestBalance.NERVE_MATE_LEFT)
 	_emit(&"nest_guard_left", {"v": {"why": why, "room": zone_of(g.s)}, "at": Vector2(MAIN, g.s), "who": g.id})
 
 
@@ -1166,8 +1380,8 @@ func _dog(dt: float) -> void:
 	if hide:
 		want = f.s - 2.5
 		_note(&"dog_hides", MAIN, dog_s, -1, true)
-	if pebble and f.s < NestBalance.PEBBLE_S:
-		want = minf(want, NestBalance.PEBBLE_S - 0.6)
+	if pebble and f.s < block_s:
+		want = minf(want, block_s - 0.6)
 	dog_s = move_toward(dog_s, maxf(0.0, want), NestBalance.GUARD_SPEED * 1.4 * dt)
 	if dog_bark_cd <= 0.0:
 		var n := 0
@@ -1194,12 +1408,21 @@ func _reinforce(dt: float) -> void:
 	if reinf_t > 0.0:
 		return
 	reinf_t = NestBalance.REINF_EVERY
-	var n := mini(NestBalance.REINF_N, reinf_max - reinf_sent)
+	# 연기가 지나간 옆 굴은 막혔다 — 열린 옆 굴들로 번갈아 온다
+	var open: Array[int] = []
+	for k: int in side_at:
+		if junction(k) > smoke_end():
+			open.append(k)
+	if open.is_empty():
+		return
+	var seg: int = open[_reinf_turn % open.size()]
+	_reinf_turn += 1
+	var n := mini(reinf_n, reinf_max - reinf_sent)
 	for i in n:
-		var a := _spawn(&"soldier", SIDE, NestBalance.SIDE_LEN - float(i) * 1.2, -1)
+		var a := _spawn(&"soldier", seg, NestBalance.SIDE_LEN - float(i) * 1.2, -1)
 		a.state = &"attack"
 	reinf_sent += n
-	_emit(&"nest_reinforce", {"v": {"n": n, "sent": reinf_sent}, "at": Vector2(SIDE, NestBalance.SIDE_LEN)})
+	_emit(&"nest_reinforce", {"v": {"n": n, "sent": reinf_sent}, "at": Vector2(seg, NestBalance.SIDE_LEN)})
 
 
 func _lamp_draw(dt: float) -> void:
@@ -1210,17 +1433,17 @@ func _lamp_draw(dt: float) -> void:
 		return
 	_draw_t = NestBalance.LAMP_DRAW_EVERY
 	# 빛을 보고 깊은 곳에서 병정 하나가 더 올라온다 (굴에 원래 있던 수와 따로)
-	var a := _spawn(&"soldier", MAIN, NestBalance.DEEP_END, -1)
+	var a := _spawn(&"soldier", MAIN, deep_end, -1)
 	a.state = &"attack"
 	a.drawn = true
 	lamp_drawn += 1
-	_note(&"light_draws", MAIN, NestBalance.DEEP_END - 2.0)
+	_note(&"light_draws", MAIN, deep_end - 2.0)
 
 
 # ───────────────────────── 시험·측정용 ─────────────────────────
 ## 지금 상태의 지문 (결정성 시험)
 func state_hash() -> int:
-	var parts: Array = [step_n, outcome, deepest, pebble, lit_room, snappedf(lamp_left, 0.001), snappedf(water_left, 0.001), reinf_sent, flipped, washed]
+	var parts: Array = [step_n, outcome, deepest, pebble, lit_room, snappedf(lamp_left, 0.001), water.values(), nest, layout, roused.size(), reinf_sent, flipped, washed]
 	for g in guards:
 		parts.append([g.id, snappedf(g.s, 0.0001), snappedf(g.stam, 0.0001), snappedf(g.nerve, 0.0001), g.state, g.why])
 	for a in ants:

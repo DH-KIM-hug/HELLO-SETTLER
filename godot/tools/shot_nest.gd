@@ -1,46 +1,44 @@
-## 개미굴 원정 시험판(proto/nest/nest_proto.tscn) 캡처 — 실행 (창이 필요): godot --path godot -s res://tools/shot_nest.gd
+## 개미굴 원정 시험판(proto/nest/nest_proto.tscn) 캡처 (ROADMAP Q10 1.5걸음) — 실행 (창이 필요): godot --path godot -s res://tools/shot_nest.gd
 ## 화면은 1080×1920 (논리 360×640)으로 그려 절반 크기(540×960)로 남긴다. godot_shots/nest/ 아래:
-##   n1_start.png            시작 창
-##   n1_run_1..8.png         슬기롭게 돕는 자동 거인(tools/nest_bots.gd "sensible", 장비 1/1) 한 판 —
-##                           ① 캄캄한 방에 들어섬 ② 등불 ③ 옆 굴 원군 ④ 물로 옆 굴 막음 ⑤ 각설탕 미끼 ⑥ 큰 병정을 핀셋으로 ⑦ 여왕 방 연기(굴이 이사) ⑧ 결과 창
-##   n1_nohelp_1..4.png      돕지 않은 한 판 — ① 어둠 속 더듬기 ② 한 사람이 물러남 ③ 모두 돌아섬 ④ 결과 창
-##   n1_pick_sugar.png       도구(각설탕)를 골랐을 때 — 쓸 곳 안내
-##   n1_sheet.png · n1_nohelp_sheet.png   한 장으로 모은 것
-## 씨앗은 위 장면이 차례로 다 나오는 첫 굴을 스스로 찾는다 (SHOT_SEED=숫자 · SHOT_SEED_NONE=숫자 로 정할 수 있다).
+##   n2_start.png                     시작 창 (굴 · 생김새 고르기)
+##   n2_lay_a|b|c_1..5.png · _sheet   첫 굴의 생김새 가·나·다, 슬기롭게 돕는 자동 거인(장비 1/1) 한 판씩 —
+##                                    ① 막 들어섬(생김새가 보인다) ② 어두운 방 앞(안은 기척뿐) ③ 등불로 드러남 ④ 옆 굴 원군 ⑤ 결과 창
+##   n2_hidden.png · n2_revealed.png  '다' 생김새의 ②·③ (어두운 방 ↔ 등불로 드러난 방)
+##   n2_armed.png                     도구(핀셋)를 쥔 채 — 쓸 곳 안내
+##   n2_nest2_1..5.png · _sheet       둘째 굴 (방 넷, 장비 2/2)
+##   n2_overflow_1..2.png             외운 순서(scripted)를 '다' 생김새에 그대로 — 우글우글한 옆 굴에 물을 부어 큰길로 넘친 순간
+## 씨앗은 장면이 다 나오는 첫 굴을 스스로 찾는다. 찍을 때는 같은 씨앗을 미리 한 번 돌려 (결정적이다) 찍을 시각을 정해 둔다.
 extends SceneTree
 
 const Sheet := preload("res://tools/contact_sheet.gd")
 const STEPS_PER_FRAME := 4
-## [사건 종류, 알림 코드("" = 상관없음), 그 뒤 기다릴 시간(초)]
-const HELP_STAGES := [
-	[&"nest_room_entered", &"dark", 0.6], [&"nest_note", &"lit", 1.0], [&"nest_reinforce", &"", 0.5], [&"nest_note", &"side_washed", 0.7],
-	[&"nest_note", &"sugar_lure", 1.8], [&"nest_note", &"big_picked", 0.5], [&"nest_note", &"moving_out", 1.0]]
-const NOHELP_STAGES := [[&"nest_note", &"dark_fumble", 1.5], [&"nest_guard_left", &"", 0.7], [&"nest_withdrew", &"", 1.5]]
+## 장면 = [사건 종류("time" = 정한 시각), 알림 코드("" = 상관없음), 그 사건 뒤(앞이면 −) 몇 초]
+const S_LAYOUT := [["time", &"", 2.5], [&"nest_note", &"lit", -0.3], [&"nest_note", &"lit", 0.9], [&"nest_reinforce", &"", 2.4]]
+const S_OVERFLOW := [[&"nest_note", &"overflow", -0.4], [&"nest_note", &"overflow", 0.5]]
+const JOBS := [
+	{"name": "lay_a", "nest": 1, "layout": 0, "bot": "sensible", "tier": 1, "stages": S_LAYOUT, "want": &"won"},
+	{"name": "lay_b", "nest": 1, "layout": 1, "bot": "sensible", "tier": 1, "stages": S_LAYOUT, "want": &"won"},
+	{"name": "lay_c", "nest": 1, "layout": 2, "bot": "sensible", "tier": 1, "stages": S_LAYOUT, "want": &"won"},
+	{"name": "nest2", "nest": 2, "layout": 1, "bot": "sensible", "tier": 2, "stages": S_LAYOUT, "want": &"won"},
+	{"name": "overflow", "nest": 1, "layout": 2, "bot": "scripted", "tier": 1, "stages": S_OVERFLOW, "want": &"", "stop": true}]
 
 var vp: SubViewport
 var proto: NestProto
 var out_dir := ""
 var frame := 0
-var _phase := "start"
+var _job := -1
+var _times: Array = []                 # 이번 판에서 찍을 시각 (차례대로)
+var _shot := 0
 var _grab := 0
 var _grab_name := ""
-var _stages: Array = []
-var _stage := 0
-var _due := -1.0
-var _cur := 0
-var _prefix := ""
-var _help_paths: PackedStringArray = []
-var _nohelp_paths: PackedStringArray = []
-var _seed_help := 0
-var _seed_none := 0
+var _paths: PackedStringArray = []
+var _running := false
+var _started := false
 
 
 func _initialize() -> void:
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/nest").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
-	_seed_help = int(OS.get_environment("SHOT_SEED")) if OS.get_environment("SHOT_SEED") != "" else _find("sensible", HELP_STAGES, &"won")
-	_seed_none = int(OS.get_environment("SHOT_SEED_NONE")) if OS.get_environment("SHOT_SEED_NONE") != "" else _find("none", NOHELP_STAGES, &"withdrew")
-	print("shot_nest: sensible seed %d · no-help seed %d" % [_seed_help, _seed_none])
 	vp = SubViewport.new()
 	vp.size = Vector2i(1080, 1920)
 	vp.size_2d_override = Vector2i(360, 640)
@@ -53,66 +51,53 @@ func _initialize() -> void:
 	proto.snap = true
 
 
-## 한 사건이 지금 기다리는 장면의 것인가
-static func _hit(e: Dictionary, st: Array) -> bool:
-	if e["kind"] != st[0]:
-		return false
-	if st[1] == &"":
-		return true
-	if st[0] == &"nest_room_entered":
-		return bool((e["v"] as Dictionary)["dark"])
-	if st[1] == &"side_washed":                    # 옆 굴에 물 — 개미가 있었든(쓸려 나감) 없었든(막힘)
-		return e["v"] is StringName and (e["v"] == &"side_washed" or e["v"] == &"side_blocked")
-	return e["v"] is StringName and e["v"] == st[1]
+## 한 판을 미리 돌려 장면마다 찍을 시각을 구한다 — 장면이 하나라도 안 나오면 []
+static func plan_times(job: Dictionary, sd: int) -> Array:
+	var ex := NestExpedition.new()
+	var tier := int(job["tier"])
+	ex.setup(sd, NestExpedition.default_roster(4, tier, tier), true, null, int(job["nest"]), int(job["layout"]))
+	var b := NestBots.new(String(job["bot"]), sd)
+	while not ex.done:
+		b.act(ex)
+		ex.step()
+	if job["want"] != &"" and ex.result["outcome"] != job["want"]:
+		return []
+	var out: Array = []
+	for st: Array in job["stages"]:
+		if st[0] is String and st[0] == "time":
+			out.append(float(st[2]))
+			continue
+		var found := -1.0
+		for e: Dictionary in ex.events.since(0):
+			if e["kind"] == st[0] and (st[1] == &"" or (e["v"] is StringName and e["v"] == st[1])):
+				found = float(e["t"])
+				break
+		if found < 0.0:
+			return []
+		out.append(maxf(0.2, found + float(st[2])))
+	for i in range(1, out.size()):                 # 차례가 뒤집히면 (원군이 등불보다 먼저 등) 쓰지 않는다
+		if float(out[i]) <= float(out[i - 1]) + 0.3:
+			return []
+	return out
 
 
-## 장면 차례를 한 걸음 나아가게 한다 — 지금 찍을 때면 true (찾기와 찍기가 같은 규칙을 쓴다)
-func _advance(ex: NestExpedition) -> bool:
-	if _stage >= _stages.size():
-		return false
-	if _due >= 0.0:
-		if ex.t >= _due:
-			_due = -1.0
-			_stage += 1
-			_cur = ex.events.serial
-			return true
-		return false
-	for e: Dictionary in ex.events.since(_cur):
-		_cur = int(e["n"])
-		if _hit(e, _stages[_stage]):
-			_due = float(e["t"]) + float(_stages[_stage][2])
-			break
-	return false
-
-
-## 장면이 차례로 다 나오고 끝이 want인 첫 씨앗
-func _find(bot: String, stages: Array, want: StringName) -> int:
-	for sd in range(1000, 1400):
-		var ex := NestExpedition.new()
-		ex.setup(sd, NestExpedition.default_roster(4, 1, 1), true)
-		var b := NestBots.new(bot, sd)
-		_stages = stages
-		_stage = 0
-		_due = -1.0
-		_cur = 0
-		while not ex.done:
-			b.act(ex)
-			ex.step()
-			_advance(ex)
-		if _stage >= stages.size() and ex.result["outcome"] == want and (bot != "none" or int(ex.result["deepest"]) >= 2):
-			return sd
-	push_warning("shot_nest: no seed shows every scene for '%s' — using 1000" % bot)
-	return 1000
-
-
-func _begin(bot: String, sd: int, stages: Array, prefix: String) -> void:
-	_stages = stages
-	_stage = 0
-	_due = -1.0
-	_cur = 0
-	_prefix = prefix
-	proto.bot = NestBots.new(bot, sd) if bot != "none" else null
-	proto.start(sd, 1, 1, 4)
+func _begin(job: Dictionary) -> void:
+	var sd := 1000
+	_times = []
+	while sd < 1300 and _times.is_empty():
+		_times = plan_times(job, sd)
+		if _times.is_empty():
+			sd += 1
+	if _times.is_empty():
+		push_warning("shot_nest: no seed shows every scene for '%s'" % job["name"])
+		sd = 1000
+	print("shot_nest: %s — seed %d · times %s" % [job["name"], sd, str(_times)])
+	_shot = 0
+	_paths = PackedStringArray()
+	var tier := int(job["tier"])
+	proto.bot = NestBots.new(String(job["bot"]), sd) if job["bot"] != "none" else null
+	proto.start(sd, tier, tier, 4, int(job["nest"]), int(job["layout"]))
+	_running = true
 
 
 func _save(name: String) -> String:
@@ -128,50 +113,52 @@ func _process(_dt: float) -> bool:
 	frame += 1
 	if frame < 12:
 		return false
+	var job: Dictionary = JOBS[_job] if _job >= 0 and _job < JOBS.size() else {}
 	if _grab > 0:
 		_grab -= 1
 		if _grab == 0:
 			var path := _save(_grab_name)
-			if _grab_name == "n1_pick_sugar":
+			if _grab_name == "n2_armed":
 				proto.tool = &""
-			elif _prefix == "n1_run_":
-				_help_paths.append(path)
-			elif _prefix == "n1_nohelp_":
-				_nohelp_paths.append(path)
-			if _grab_name == "n1_run_4":                       # 도구를 골랐을 때의 안내 (쓸 곳이 깜빡인다)
-				proto.tool = &"sugar"
+			elif not _grab_name.begins_with("n2_start"):
+				_paths.append(path)
+			if _grab_name == "n2_lay_a_1":                  # 도구를 쥔 채 — 쓸 곳이 깜빡인다
+				proto.tool = &"tweezers"
 				proto.tick(0.0)
-				_grab_name = "n1_pick_sugar"
+				_grab_name = "n2_armed"
 				_grab = 3
+			if job.get("name", "") == "lay_c" and (_shot == 2 or _shot == 3):
+				DirAccess.copy_absolute(path, out_dir.path_join("n2_hidden.png" if _shot == 2 else "n2_revealed.png"))
 		return false
-	match _phase:
-		"start":
-			_grab_name = "n1_start"
-			_grab = 3
-			_phase = "help"
-		"help":
-			_begin("sensible", _seed_help, HELP_STAGES, "n1_run_")
-			_phase = "run_help"
-		"nohelp":
-			_begin("none", _seed_none, NOHELP_STAGES, "n1_nohelp_")
-			_phase = "run_nohelp"
-		"run_help", "run_nohelp":
-			for i in STEPS_PER_FRAME:
-				if proto.ex.done:
-					break
-				proto.tick(NestBalance.DT)
-				if _advance(proto.ex):
-					_grab_name = "%s%d" % [_prefix, _stage]
-					_grab = 3
-					return false
-			if proto.ex.done:
-				proto.tick(0.0)
-				_grab_name = "%s%d" % [_prefix, _stages.size() + 1]
-				_grab = 4
-				_phase = "nohelp" if _phase == "run_help" else "sheet"
-		"sheet":
-			Sheet.make(_help_paths, out_dir.path_join("n1_sheet.png"), 0.5)
-			Sheet.make(_nohelp_paths, out_dir.path_join("n1_nohelp_sheet.png"), 0.5)
+	if not _started:
+		_started = true
+		_grab_name = "n2_start"
+		_grab = 3
+		return false
+	if not _running:
+		if _job >= 0 and not _paths.is_empty() and not bool(job.get("stop", false)):
+			Sheet.make(_paths, out_dir.path_join("n2_%s_sheet.png" % job["name"]), 0.5)
+		_job += 1
+		if _job >= JOBS.size():
 			print("shot_nest: done — ", out_dir)
 			return true
+		_begin(JOBS[_job])
+		return false
+	for i in STEPS_PER_FRAME:
+		if proto.ex.done:
+			break
+		proto.tick(NestBalance.DT)
+		if _shot < _times.size() and proto.ex.t >= float(_times[_shot]) - 0.0001:
+			_shot += 1
+			_grab_name = "n2_%s_%d" % [job["name"], _shot]
+			_grab = 3
+			if bool(job.get("stop", false)) and _shot >= _times.size():
+				_running = false
+			return false
+	if proto.ex.done:
+		proto.tick(0.0)
+		_shot += 1
+		_grab_name = "n2_%s_%d" % [job["name"], _shot]
+		_grab = 4
+		_running = false
 	return false
