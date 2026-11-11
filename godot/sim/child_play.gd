@@ -1431,9 +1431,13 @@ static func _care_tick(v: Village, st: Dictionary) -> void:
 		var key := str(b.id)
 		if b.age >= TODDLE_AGE:
 			if not walked.has(key) and not v.is_night():
+				var first := b.age < TODDLE_AGE + FIRST_WINDOW
+				if first and Milestones.steps_hold(v, b):
+					continue                          # 병의 첫 걸음마 (Q9 ⑦ 고비): 이웃이 모일 때까지 잠깐 기다린다
 				walked[key] = 1
-				if b.age < TODDLE_AGE + FIRST_WINDOW:
+				if first:
 					_first_steps(v, b)
+					Milestones.on_first_steps(v, b)
 			continue
 		if not day or pk.has(key) or minder(v, b, v.people) != null:
 			continue
