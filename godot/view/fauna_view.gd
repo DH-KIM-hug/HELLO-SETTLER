@@ -24,6 +24,7 @@ const AMB_R_HI := 16.0
 const WANDER_R := 1.6                   # 제자리 둘레를 어슬렁거리는 반지름
 const FLEE_R := 1.4                     # 주민이 이만큼 오면 달아남
 const FLEE_D := 1.2
+const SHOO_HOME := 0.4                  # (Q18) 비켜 날 자리 안에 살던 날것은 집을 그 둘레에서 이만큼 밖으로 (잔치 동안)
 const CRAWL := {"ladybug": 0.18, "snail": 0.05, "grasshopper": 0.22, "beetle": 0.16, "butterfly": 0.6, "bee": 0.8, "caterpillar": 0.04}
 const FLY_H := {"butterfly": 0.75, "bee": 0.55}
 const PERCH_H := {"butterfly": 0.3, "bee": 0.32}   # 꽃에 앉은 높이 (꽃숲 꽃 끝쯤)
@@ -67,6 +68,7 @@ var _fly_key := ""
 var _time := 0.0
 var _trail: Array = []                  # 달팽이 자국 {p: Vector3, yaw, t}
 var _trail_mm: MultiMeshInstance3D
+var shoo: Array = []                    # (Q18 — 잔치 화면) 나비·꿀벌이 비켜 나는 자리 [[가운데 Vector2, 반지름] …] — 화면만 (MilestoneView가 잔치 동안 넣는다)
 
 
 func _init(village: Village, view: VillageView) -> void:
@@ -498,8 +500,45 @@ func _near_clip(e: Dictionary, fast: bool) -> void:
 			ap.seek(fmod(float(e["ph"]), ap.current_animation_length), true)
 
 
+## (Q18) 나비·꿀벌이 비켜 날 자리를 정함 (잔칫상 · 등 · 키 재는 기둥의 화면 앞 — 소품을 가리지 않게). 빈 목록 = 끝: 옮겨 둔 집을 되돌린다. 화면만
+func set_shoo(list: Array) -> void:
+	shoo = list
+	if list.is_empty():
+		for e: Dictionary in _crit:
+			if e.has("home0"):
+				e["home"] = e["home0"]
+				e.erase("home0")
+
+
+## 날것 e가 비켜 날 자리 안이면 바깥으로 날려 보냄 (그 안에 살던 것은 집도 둘레 밖으로). 날려 보냈으면 true
+func _shoo_check(e: Dictionary) -> bool:
+	var p: Vector2 = e["p"]
+	for s: Array in shoo:
+		var c: Vector2 = s[0]
+		var rr := float(s[1])
+		var hd: Vector2 = (e["home"] as Vector2) - c
+		if hd.length() < rr + SHOO_HOME:
+			if not e.has("home0"):
+				e["home0"] = e["home"]
+			e["home"] = c + (hd.normalized() if hd.length() > 0.01 else Vector2.RIGHT) * (rr + SHOO_HOME)
+		var d := p - c
+		if d.length() < rr:
+			var g: Vector2 = c + (d.normalized() if d.length() > 0.01 else Vector2.RIGHT) * (rr + FLEE_D)
+			if v.water_at(g.x, g.y):
+				g = e["home"]
+			e["goal"] = g
+			e["fl"] = false
+			e["wait"] = 0.0
+			e["flee"] = 1.5
+			e["st"] = "fly"
+			return true
+	return false
+
+
 ## 주민이 곁에 오면 조금 달아남 (날것은 높이, 기는 것은 반대쪽으로, 달팽이는 껍데기에 숨음)
 func _flee_check(e: Dictionary) -> void:
+	if not shoo.is_empty() and e["kind"] in FLYERS and _shoo_check(e):
+		return
 	var p: Vector2 = e["p"]
 	for r in v.people:
 		var d := Vector2(r.x - p.x, r.y - p.y)
