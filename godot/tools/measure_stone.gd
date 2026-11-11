@@ -211,7 +211,8 @@ func _sites(v: Village) -> String:
 	return out
 
 
-## 밀밭에 가린 무덤 (홀로 선 돌 n/모두 · 묘지 n/모두) — 규칙의 값(보는 축 45° · 3.6 · 2.8)을 여기 적어 둠: 고치기 전 코드에서도 같은 셈으로 재려고
+## 밀밭에 가린 무덤 (홀로 선 돌 n/모두 · 묘지 n/모두) — 규칙의 값(보는 축 45° · 3.6 · 2.8)을 여기 적어 둠: 고치기 전 코드에서도 같은 셈으로 재려고.
+## 뒤의 `low a+b`는 낮은 눈높이(34°)에서 발치 꽃까지 가리는 것 (4.2 · Q12 — 홀로 선 돌 a · 묘지 b)
 func _hidden(v: Village) -> String:
 	var farms: Array[Vector2] = []
 	for b: Building in v.buildings:
@@ -219,12 +220,16 @@ func _hidden(v: Village) -> String:
 			farms.append(Vector2(b.x, b.y))
 	var lone := 0
 	var lone_hid := 0
+	var lone_low := 0
+	var yard_low := 0
 	for g: Dictionary in v.graves:
 		if bool(g.get("yard", false)):
 			continue
 		lone += 1
 		if _covered(farms, Vector2(float(g["x"]), float(g["y"])), 0.0):
 			lone_hid += 1
+		if _covered(farms, Vector2(float(g["x"]), float(g["y"])), 0.0, 4.2):
+			lone_low += 1
 	var yards := 0
 	var yard_hid := 0
 	for b: Building in v.buildings:
@@ -232,16 +237,18 @@ func _hidden(v: Village) -> String:
 			yards += 1
 			if _covered(farms, Vector2(b.x, b.y), b.size()):
 				yard_hid += 1
-	return "grave %d/%d yard %d/%d" % [lone_hid, lone, yard_hid, yards]
+			if _covered(farms, Vector2(b.x, b.y), b.size(), 4.2):
+				yard_low += 1
+	return "grave %d/%d yard %d/%d low %d+%d" % [lone_hid, lone, yard_hid, yards, lone_low, yard_low]
 
 
-func _covered(farms: Array[Vector2], q: Vector2, pad: float) -> bool:
+func _covered(farms: Array[Vector2], q: Vector2, pad: float, far := 3.6) -> bool:
 	var ax := Vector2(sin(PI / 4.0), cos(PI / 4.0))
 	for f: Vector2 in farms:
 		var d := q - f
 		var u := absf(d.dot(ax))
 		var w := absf(d.dot(Vector2(ax.y, -ax.x)))
-		if minf(u, w) < 2.8 + pad and maxf(u, w) < 3.6 + pad:
+		if minf(u, w) < 2.8 + pad and maxf(u, w) < far + pad:
 			return true
 	return false
 

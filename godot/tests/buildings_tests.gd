@@ -19,7 +19,8 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 건물 (buildings GDD)")
 	run.timed(self, ["test_upgrade_pick_second", "test_upgrade_pick_first", "test_upgrade_none", "test_wheat_stage", "test_wheat_reaped", "test_grave_siting", "test_grave_old_save",
-		"test_second_quarry", "test_stone_stuck", "test_opening_stone_rules_off", "test_field_grave", "test_yard_field"])
+		"test_second_quarry", "test_stone_stuck", "test_opening_stone_rules_off", "test_field_grave", "test_yard_field",
+		"test_spent_quarry_leaves", "test_spent_quarry_restaffed", "test_dropped_quarry_spot_no_trace", "test_grave_far_low_view"])
 
 
 ## 작은 옛 집 둘만 있는 마을 (오두막 cap 4 → 목조주택 cap 6 순서)
@@ -341,6 +342,209 @@ func test_stone_stuck() -> void:
 	k.wishes = ["제재소"]
 	k.chief_build()
 	check(_site_types(k) == ["오두막"] and k.wishes == ["제재소"], "못 짓는 소원(제재소)은 남겨 두고 집을 짓는다 (%s)" % [_site_types(k)])
+
+
+# ───────────────────────── 다 캔 채석장 (Q12 ① · GAME_DESIGN 8.1) ─────────────────────────
+func _quarry(v: Village) -> Building:
+	for b in v.buildings:
+		if b.type == "채석장" and b.built:
+			return b
+	return null
+
+
+## 일터 없는 어른 하나를 그 일터에 세운다 (연장 하나를 들고)
+func _staff(v: Village, b: Building) -> Resident:
+	for p in v.people:
+		if p.is_adult() and p.job < 0:
+			p.job = b.id
+			b.worker = p.id
+			return p
+	return null
+
+
+func _free_adults(v: Village) -> int:
+	var n := 0
+	for p in v.people:
+		if p.is_adult() and p.job < 0:
+			n += 1
+	return n
+
+
+## (Q12 ①) 둘레의 바위를 다 캔 채석장의 석수는 일터를 내려놓는다 — 연장은 창고로, 말·연대기 줄 없음, 주사위 없음. 새 사람도 서지 않는다
+func test_spent_quarry_leaves() -> void:
+	print("== 다 캔 채석장: 석수가 일터를 내려놓는다 (Q12)")
+	var v := _stone_village(0, 20)
+	var q := _quarry(v)
+	var w := _staff(v, q)
+	check(q != null and w != null and v.quarry_no_rock(q) and v.stone_rocks_left(), "시험 마을: 석수가 선 채석장 둘레는 다 캤고 먼 바위가 남았다")
+	if q == null or w == null:
+		return
+	v.stock["도구"] = 0.0
+	var s0 := v.rng.state
+	var book0 := v.book.size()
+	var said0 := w.say
+	v._leave_spent_quarries()              # 내려놓는 것만 (바로 뒤의 배정은 아래에서 따로 본다)
+	check(q.worker == -1 and w.job == -1, "석수가 일터를 내려놓았다 (일꾼 %d · 그 사람의 일터 %d)" % [q.worker, w.job])
+	check(is_equal_approx(float(v.stock["도구"]), 1.0), "연장은 창고로 돌아왔다 (%.0f)" % float(v.stock["도구"]))
+	check(v.rng.state == s0 and v.book.size() == book0 and w.say == said0, "주사위를 쓰지 않고, 연대기 줄도 말도 없다")
+	# 20초마다의 일자리 살핌(assign_jobs)이 스스로 알아챈다 — 석수가 선 채로 다시 시작해서
+	w.job = q.id
+	q.worker = w.id
+	v.stock["도구"] = 0.0
+	v.assign_jobs()
+	check(q.worker == -1 and w.job != q.id, "20초마다의 일자리 살핌에서 석수가 일터를 내려놓았다 (일꾼 %d · 그 사람의 일터 %d)" % [q.worker, w.job])
+	# 그 사람은 보통 차례로 다른 일을 한다 — '캘 바위가 없어요'로 서 있지 않는다
+	w.steps.clear()
+	ResidentAI.decide(v, w)
+	check(w.doing != "캘 바위가 없어요", "내려놓은 사람은 채석장 앞에 서 있지 않는다 (지금 하는 일: %s)" % w.doing)
+	# 연장과 일터 없는 어른이 있어도 다 캔 채석장에는 새 사람이 서지 않는다 — 다른 빈 일터는 예전처럼 채운다
+	v.stock["도구"] = 5.0
+	var free0 := _free_adults(v)
+	v.assign_jobs()
+	v.assign_jobs()
+	var others := 0
+	for b in v.buildings:
+		if b.built and b.type != "채석장" and b.def().get("job", false) and b.worker >= 0:
+			others += 1
+	check(free0 > 0 and q.worker == -1, "일터 없는 어른 %d명 · 연장 5 → 다 캔 채석장은 비워 둔다" % free0)
+	check(others >= 1, "다른 빈 일터(밭·나무꾼)는 예전처럼 사람이 선다 (%d곳)" % others)
+	# 둘레에 바위가 남은 채석장의 석수는 그대로 일한다
+	var k := _stone_village(6, 20)
+	var kq := _quarry(k)
+	var kw := _staff(k, kq)
+	k.assign_jobs()
+	check(not k.quarry_no_rock(kq) and kq.worker == kw.id and kw.job == kq.id, "둘레에 캘 바위가 남은 채석장: 석수는 그대로")
+	# 하얀 광맥 바위(소금)만 남았을 때: 소금을 모르면 캘 것이 없다 (내려놓음) · 알면 캘 것이 있다 (그대로) — 석수를 보내는 잣대와 같다
+	var a := _stone_village(0, 0)
+	var aq := _quarry(a)
+	a.rocks.append({"x": aq.x + 3.0, "y": aq.y, "amt": 20, "res": 0, "ore": "소금"})
+	var aw := _staff(a, aq)
+	a.salt_known = false
+	a.assign_jobs()
+	check(aq.worker == -1, "소금을 모르는 마을: 하얀 바위만 남은 채석장도 다 캔 것 (일꾼 %d)" % aq.worker)
+	a.salt_known = true
+	a.stock["도구"] = 5.0
+	a.assign_jobs()
+	check(not a.quarry_no_rock(aq) and aq.worker >= 0, "소금을 아는 마을: 하얀 바위가 캘 것 — 다시 사람이 선다 (일꾼 %d · 처음 석수 %d)" % [aq.worker, aw.id])
+	# 옛 저장: 저장하는 값이 없어, 석수가 서 있던 채로 저장된 마을도 불러온 뒤 첫 살핌에서 내려놓는다
+	var o := _stone_village(0, 20)
+	_staff(o, _quarry(o))
+	var o2 := Village.from_dict(bytes_to_var(var_to_bytes(o.to_dict())))
+	o2.assign_jobs()
+	check(_quarry(o2).worker == -1, "불러온 마을 (석수가 다 캔 채석장에 서 있던 저장)에서도 내려놓는다")
+
+
+## (Q12 ①) 내려놓은 석수는 새 채석장을 맡는다 · 거인의 자갈(회색 돌멩이)이 둘레에 떨어지면 옛 채석장에도 다시 사람이 선다
+func test_spent_quarry_restaffed() -> void:
+	print("== 다 캔 채석장: 새 채석장 · 다시 온 바위 (Q12)")
+	var v := _stone_village(0, 20)
+	var q := _quarry(v)
+	var far: Dictionary = {}
+	for rk: Dictionary in v.rocks:
+		if float(rk["amt"]) > 0.0 and far.is_empty():
+			far = rk
+	var w := _staff(v, q)
+	for b in v.buildings:                    # 다른 일터는 모두 사람이 서 있고, 남은 어른도 손이 비지 않았다 — 일터 없는 어른은 내려놓은 석수 한 사람뿐
+		if b.built and b != q and b.def().get("job", false) and b.worker < 0:
+			_staff(v, b)
+	for p in v.people:
+		if p.is_adult() and p.job < 0:
+			p.job = v.buildings[0].id
+	check(w != null and not far.is_empty(), "시험 마을: 석수 한 사람 · 먼 바위")
+	if w == null or far.is_empty():
+		return
+	var q2 := v.add_building("채석장", float(far["x"]) - 2.0, float(far["y"]) - 2.0, true)
+	v.stock["도구"] = 0.0                   # 새 연장은 없다 — 내려놓은 연장을 그대로 들고 간다
+	v.assign_jobs()
+	check(q.worker == -1 and q2.worker == w.id and w.job == q2.id, "다 캔 채석장의 석수가 새 채석장을 맡았다 (옛 %d · 새 %d · 그 사람 %d)" % [q.worker, q2.worker, w.id])
+	check(is_equal_approx(float(v.stock["도구"]), 0.0), "연장은 내려놓았다가 그대로 다시 들었다 (창고 %.0f)" % float(v.stock["도구"]))
+	# 거인이 회색 돌멩이를 옛 채석장 둘레에 떨어뜨렸다 (SHOP 2.4 — 바위가 하나 더 생김) → 다시 사람이 선다
+	var g := _stone_village(0, 0)
+	var gq := _quarry(g)
+	g.stock["도구"] = 5.0
+	g.assign_jobs()
+	check(gq.worker == -1 and g.quarry_no_rock(gq), "바위가 하나도 없는 병: 채석장은 비어 있다")
+	g.rocks.append({"x": gq.x + 4.0, "y": gq.y + 1.0, "amt": 20, "res": 0})
+	g.assign_jobs()
+	check(not g.quarry_no_rock(gq) and gq.worker >= 0, "둘레에 바위가 다시 생김 → 채석장에 다시 사람이 선다 (일꾼 %d)" % gq.worker)
+	var gw := g.person(gq.worker)
+	gw.steps.clear()
+	check(ResidentAI.work_task(g, gw, false) and gw.doing != "캘 바위가 없어요", "그 석수는 새 바위를 캐러 간다 (%s)" % gw.doing)
+
+
+## (Q12 ③) 하나 더 지을 채석장 자리로 골랐다 접은 곳은 흔적이 없다 — 나무도 민들레도 내려앉은 꽃씨도 그대로, 주사위도 그대로
+func test_dropped_quarry_spot_no_trace() -> void:
+	print("== 접은 채석장 자리: 민들레·꽃씨가 그대로 (Q12)")
+	var probe := _far_rock_village()
+	var spot: Variant = probe.find_spot("채석장")      # 촌장이 고를 (그리고 접을) 자리 — 같은 마을이면 같은 자리
+	check(spot != null and not probe.stone_in_reach((spot as Vector2).x, (spot as Vector2).y), "시험 마을: 채석장 자리는 잡히지만 남은 바위가 닿지 않는다 (%s)" % [spot])
+	if spot == null:
+		return
+	var sp: Vector2 = spot
+	_seed_flora(probe, sp)
+	var probe_d := probe.flora.dands.size()
+	var probe_p := probe.flora.pending.size()
+	probe.find_spot("채석장")
+	check(probe.flora.dands.size() < probe_d and probe.flora.pending.size() < probe_p, "자리 찾기는 그 자리의 민들레·꽃씨를 치운다 (이 시험이 무는 자리 — 민들레 %d → %d · 꽃씨 %d → %d)" %
+		[probe_d, probe.flora.dands.size(), probe_p, probe.flora.pending.size()])
+	var u := _far_rock_village()
+	_seed_flora(u, sp)
+	var d0 := u.flora.dands.size()
+	var p0 := u.flora.pending.size()
+	var t0 := u.trees.size()
+	var ids0: Array = u.flora.dands.map(func(d: Dictionary) -> int: return int(d["id"]))
+	u.chief_build()
+	check(u.count_type("채석장") == 1 and _site_types(u) == ["오두막"], "채석장 자리를 접고 그 아래 바람(집)을 지었다 (%s)" % [_site_types(u)])
+	var hut: Building = null
+	for b in u.buildings:
+		if b.is_site():
+			hut = b
+	var hut_far := hut != null and Vector2(hut.x - sp.x, hut.y - sp.y).length() > hut.size() + 2.0
+	check(hut_far, "새 집터는 접은 채석장 자리와 떨어져 있다 (집터가 치운 것과 섞이지 않음)")
+	check(u.flora.dands.size() == d0 and u.flora.pending.size() == p0 and u.flora.dands.map(func(d: Dictionary) -> int: return int(d["id"])) == ids0,
+		"접은 자리의 민들레·내려앉은 꽃씨가 그대로 (민들레 %d → %d · 꽃씨 %d → %d)" % [d0, u.flora.dands.size(), p0, u.flora.pending.size()])
+	check(u.trees.size() == t0 or hut == null or not hut_far, "나무도 그대로 (%d → %d — 집터가 치운 것 말고는)" % [t0, u.trees.size()])
+	# 주사위: 민들레가 있든 없든 접는 길에서 뽑는 수가 같다 (되돌리는 데 주사위를 쓰지 않음)
+	var n1 := _far_rock_village()
+	var n2 := _far_rock_village()
+	_seed_flora(n2, sp)
+	n1.chief_build()
+	n2.chief_build()
+	check(n1.rng.state == n2.rng.state, "민들레가 있든 없든 주사위 상태가 같다")
+
+
+## 채석장 둘레는 다 캤고 남은 바위 하나가 영역 바로 밖에 (채석장 자리는 잡히지만 그 자리에서 바위가 닿지 않아 접는 마을)
+func _far_rock_village() -> Village:
+	var u := _stone_village(0, 0)
+	u.stats["died"] = 1
+	u.rocks[0]["x"] = u.center.x + 60.0     # 영역(반지름 32) 바로 밖 — 영역 끝에 자리는 잡히지만 바위까지 30칸 (GATHER_RANGE 20 밖)
+	u.rocks[0]["y"] = u.center.y
+	u.rocks[0]["amt"] = 20
+	return u
+
+
+func _seed_flora(v: Village, sp: Vector2) -> void:
+	for i in 3:
+		v.flora.dands.append({"id": 88800 + i, "x": sp.x + 0.2 * i, "y": sp.y - 0.1 * i, "st": "flower", "st_t": 0.0, "cycles": 0, "seeds": 0, "res": 0})
+	for i in 2:
+		v.flora.pending.append({"x": sp.x - 0.2 * i, "y": sp.y + 0.1, "at": v.t + 1.0e6})
+
+
+## (Q12 ②) 밭 뒤 무덤의 '먼 거리'는 첫 이별 연출의 낮은 눈높이(34°)에서도 돌과 발치의 꽃이 다 보이는 거리다
+func test_grave_far_low_view() -> void:
+	print("== 밭과 무덤 사이 거리: 낮은 눈높이에서도 발치 꽃까지 (Q12)")
+	var back_row := 0.79                   # 익은 밀 맨 뒷줄 (밭 가운데에서)
+	var ear := 1.52                        # 이삭 끝 높이
+	var foot := 0.5                        # 돌 발치의 꽃
+	var low := deg_to_rad(34.0)            # 첫 이별 연출의 눈높이 (Stagings first_death)
+	var need := back_row + ear / sin(low) + foot
+	check(VillageEra.GRAVE_FIELD_FAR >= need and VillageEra.GRAVE_FIELD_FAR < need + 0.5, "GRAVE_FIELD_FAR %.2f ≥ 낮은 눈높이에서 발치 꽃까지 %.2f (여유 %.2f)" %
+		[VillageEra.GRAVE_FIELD_FAR, need, VillageEra.GRAVE_FIELD_FAR - need])
+	var f := Vector2(9.0, 9.0)
+	var ax := _view_axis()
+	check(VillageEra.field_covers(f, f + ax * 4.1, 0.0) and not VillageEra.field_covers(f, f + ax * 4.3, 0.0),
+		"밭 바로 뒤 4.1칸은 가리는 자리 · 4.3칸은 괜찮은 자리")
+	check(VillageEra.field_covers(f, f + ax * 3.7, 0.0), "예전 값(3.6)으로는 괜찮던 3.7칸도 이제 가리는 자리 (낮은 눈높이에서 꽃이 가리던 곳)")
 
 
 ## 평소의 첫 며칠에는 새 규칙이 켜지지 않는다: 채석장 둘레를 다 캔 적이 없으면 촌장의 차례는 예전과 한 줄도 다르지 않다

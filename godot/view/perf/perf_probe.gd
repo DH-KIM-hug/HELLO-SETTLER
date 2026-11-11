@@ -666,7 +666,7 @@ static func _stats(a: Array) -> Dictionary:
 
 # ───────────────────────── 끝 ─────────────────────────
 func _finish() -> void:
-	var path := "user://perf_results_%s.json" % String(results.get("tag", "run"))
+	var path := UserPaths.of("user://perf_results_%s.json" % String(results.get("tag", "run")))   # 도구 스크립트(-s)로 뜬 판은 user://_tool/… (Q12)
 	var fa := FileAccess.open(path, FileAccess.WRITE)
 	if fa != null:
 		fa.store_string(JSON.stringify(results, "\t"))

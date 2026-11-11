@@ -159,14 +159,14 @@ static func now_time_of_day() -> String:
 ## 저장 폴더 (창조 중간 저장 creation.json도 여기)
 static func save_dir() -> String:
 	var sm := GameSave.get_instance()
-	return sm.dir if sm != null else GameSave.DIR
+	return sm.dir if sm != null else UserPaths.of(GameSave.DIR)
 
 
 ## 만들던 창조 (앱이 꺼졌다 켜짐 — OPENING 5). 저장된 병이 이미 있으면 창조 파일은 지난 것 → 지움
 static func resume_plan(sm: GameSave = null) -> CreationPlan:
 	if sm == null:
 		sm = GameSave.get_instance()
-	var dir := sm.dir if sm != null else GameSave.DIR
+	var dir := sm.dir if sm != null else UserPaths.of(GameSave.DIR)
 	var pk := sm.peek() if sm != null and sm.has_save() else {}
 	if not pk.is_empty() and not bool(pk.get("pending", false)):     # 병이 이미 저장됨 = 창조는 끝났음 (지난 파일) — 사 둔 새 병을 만드는 중이면 남긴다 (C1)
 		CreationPlan.clear(dir)
