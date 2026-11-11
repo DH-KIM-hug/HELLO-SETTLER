@@ -584,6 +584,7 @@ static func _care(v: Village, r: Resident) -> bool:
 			r.steps.append(act(120.0, "carry", op("stroll_meet", {"name": bn})))
 		r.steps.append(walk(hm.x, hm.y + 0.4))
 		r.steps.append(act(3.0, "idle", op("stroll_end"), false, op("stroll_end")))
+		ChildOutings.on_stroll(v, r, baby)     # E2-3: 이 산책이 유모차 산책인가 (표시뿐 — 걸음·난수 그대로)
 		return true
 	var obj := bn + Village.josa(bn, "을", "를")
 	var acts := [["%s 흔들어 재우는 중" % obj, "sit"], ["%s에게 젖을 먹이는 중" % bn, "sit"], ["%s 안고 어르는 중" % obj, "idle"]]

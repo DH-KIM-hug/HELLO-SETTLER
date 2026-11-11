@@ -28,6 +28,9 @@ const SAY := {
 	"baby": ["까르르", "꺄아", "아부부"],
 	"plop": ["에헤헤", "아부"],
 	"first": ["걸었다!", "어머, 걸었어!"],
+	"errand_here": ["이거요!", "심부름 왔어요!", "여기요!"],                    # (E2-2) 첫 심부름
+	"errand_thanks": ["아이고, 기특해라.", "혼자 왔니? 장하다.", "고맙구나."],
+	"fish_got": ["잡았다!", "잡았어!", "와, 잡았다!"],                        # (E2-2) 첫 낚시
 }
 const JOIN_SECS := 0.7            # 놀이 자리로 섞여 들어가는 시간 (현실 초)
 const LEAVE_SECS := 0.45
@@ -105,6 +108,7 @@ var _steps := {}                  # 첫걸음마: 아기 id → Steps
 var _steps_par := {}              # 첫걸음마: 부모 id → 아기 id
 var _back := Vector3.BACK         # 카메라 쪽 (땅 위)
 var bub: KidBubbles               # 그림 말풍선 (저녁 이야기 — 글 없음)
+var out: OutingView               # (E2-2 · E2-3) 유모차 산책 · 첫 심부름 · 첫 낚시 (view/outing_view.gd)
 var _story := {}                  # 이야기하는 어르신 id → 놀이
 var fx_log: Array = []            # (시험) 놓은 빛·하트 [종류, 자리]
 var _grids := {}                  # 사방치기 칸: 놀이 id → Grid (놀이가 끝난 뒤에도 한동안 남음)
@@ -201,6 +205,8 @@ func _init(village: Village = null, view: VillageView = null) -> void:
 	vw = view
 	bub = KidBubbles.new()
 	add_child(bub)
+	out = OutingView.new(village, view, self)
+	add_child(out)
 	if v != null:
 		_cursor = v.events.clear_to_end()
 
@@ -313,6 +319,7 @@ func begin(dt: float, fast: bool) -> void:
 				_steps_end(id)
 	_events(fast)
 	bub.clear()
+	out.begin(dt, fast)
 	var tell := {}
 	if not fast:
 		for g: Dictionary in v.kids.get("g", []):
@@ -777,6 +784,8 @@ func _skip_tick(g: Dictionary, pr: Props, n_on: int) -> void:
 
 # ───────────────────────── 매 화면: 놀이 속 아이 (주민마다, social.pose 뒤) ─────────────────────────
 func pose(r: Resident, m: ResidentModel, dt: float) -> void:
+	if out.pose(r, m, dt):                     # (E2-2) 심부름·낚시 인형 · 유모차를 들여다보는 이웃
+		return
 	if not _steps_par.is_empty() and _steps_par.has(r.id):
 		_steps_parent(r, m)
 		return
@@ -1086,6 +1095,12 @@ func babies(dt: float, fast: bool) -> void:
 		if bm.baby_mode == "cradle":
 			_cradle(r, bm, b, dt)
 			continue
+		if bm.baby_mode == "pram":             # (E2-3) 유모차 속 — 자리·높이는 OutingView.after
+			if b.back != null:
+				b.back.visible = false
+				b.front.visible = false
+			b.has = false
+			continue
 		if b.back != null:
 			b.back.visible = false
 			b.front.visible = false
@@ -1099,6 +1114,7 @@ func babies(dt: float, fast: bool) -> void:
 			b.has = false
 			bm.set_body_warp()
 			bm.set_body_lift(0.0)
+	out.after(dt, fast)
 
 
 func _free_baby(id: int) -> void:

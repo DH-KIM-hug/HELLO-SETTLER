@@ -428,6 +428,7 @@ static func step(v: Village, dt: float) -> void:
 	if float(st["cacc"]) >= CARE_IV:
 		st["cacc"] = 0.0
 		_care_tick(v, st)
+	ChildOutings.step(v, dt)                  # E2-2 · E2-3: 유모차 산책 · 첫 심부름 · 첫 낚시 (얹은 그림 — 살림은 건드리지 않음)
 
 
 static func _tick_games(v: Village, st: Dictionary, gs: Array) -> void:
@@ -1395,6 +1396,8 @@ static func baby_doing(v: Village, baby: Resident) -> String:
 		return "집 안의 아기" if v.bld(baby.home) != null else "모닥불 곁의 아기"
 	var m := minder(v, baby, v.people)
 	if baby.age < TODDLE_AGE:
+		if int(ChildOutings.pram(v).get("b", -1)) == baby.id:
+			return "유모차를 타고 마을을 도는 중"
 		if m == null:
 			return "문 앞 요람에 누워 있는 중" if v.bld(baby.home) != null else "모닥불 곁의 아기"
 		return "%s 품에 안겨 있는 중" % _kin(baby, m)
