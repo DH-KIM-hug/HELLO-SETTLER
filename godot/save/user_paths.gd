@@ -50,3 +50,54 @@ static func of(path: String) -> String:
 ## 이 프로세스가 도구 스크립트로 떴나
 static func by_tool() -> bool:
 	return tool_script(OS.get_cmdline_args()) != ""
+
+
+# ───────────────────────── 도구 폴더의 지난 그림 카드 치우기 (2026-11-11 ROADMAP Q13 ② · SAVE 6) ─────────────────────────
+# 도구로 뜬 판의 그림 카드는 user://_tool/<도구>/chron_pics 에 쌓인다 (찍을 때마다 새 이름). 도구가 뜰 때 **제 폴더의 지난 카드만** 치운다.
+# 지울 수 있는 것은 `user://_tool/<도구 이름>/chron_pics/*.png` 뿐 — 그 꼴이 아닌 길은 아무것도 지우지 않고 돌아간다 (진짜 저장 · 진짜 그림 카드 · 다른 폴더).
+# 상태 없음: '한 번만'은 고친 시각으로 가른다 — 이 프로세스가 뜨기 전에 적힌 카드만 지우므로 여러 번 불러도 이번 판이 찍은 카드는 남는다.
+const PIC_SUB := "chron_pics"
+const PIC_EXT := "png"
+
+
+## 순수 함수: dir이 그 도구의 그림 카드 폴더인가 — 글자 그대로 `user://_tool/<tool>/chron_pics` 일 때만 참.
+## 도구 이름이 비었거나 (진짜 놀이) 이름에 길 조각(/ \ .. :)이 섞였으면 거짓
+static func is_tool_pics(dir: String, tool: String) -> bool:
+	if tool == "" or tool == "." or tool.contains("..") or tool.contains("/") or tool.contains("\\") or tool.contains(":") or tool != tool.validate_filename():
+		return false
+	if not dir.begins_with(TOOL_ROOT + "/") or dir.contains(".."):
+		return false
+	return dir == TOOL_ROOT.path_join(tool).path_join(PIC_SUB)
+
+
+## dir(= 그 도구의 그림 카드 폴더)에서 before(유닉스 초)보다 먼저 적힌 `*.png`만 지운다. 돌려주는 값: 지운 장 수 · 거절하면 -1 (아무것도 지우지 않음).
+## 폴더 안의 다른 파일 · 하위 폴더 · 폴더 자신은 건드리지 않는다
+static func sweep_pics(dir: String, tool: String, before: int) -> int:
+	if not is_tool_pics(dir, tool):
+		return -1
+	var real := ProjectSettings.globalize_path(dir)
+	if not real.begins_with(ProjectSettings.globalize_path(TOOL_ROOT + "/")) or not real.contains("/_tool/"):
+		return -1                            # 한 번 더: 진짜 길로 풀어도 도구 폴더 안이어야 한다
+	var da := DirAccess.open(dir)
+	if da == null:
+		return 0                             # 아직 찍은 적 없음
+	var n := 0
+	for f: String in da.get_files():
+		if f != f.get_file() or f.get_extension().to_lower() != PIC_EXT:
+			continue
+		var p := dir.path_join(f)
+		if not p.begins_with(TOOL_ROOT + "/") or int(FileAccess.get_modified_time(p)) >= before:
+			continue                         # 이번 판이 찍은 카드는 남긴다
+		if da.remove(f) == OK:
+			n += 1
+	return n
+
+
+## 이 프로세스가 도구 스크립트로 떴고 dir이 제 그림 카드 폴더일 때만 지난 카드를 치운다 (StageDirector가 기본 폴더를 정하는 자리에서 부름).
+## 진짜 놀이(-s 없음)는 여기서 -1로 돌아간다 — 아무것도 지우지 않는다
+static func sweep_own_pics(dir: String) -> int:
+	var tool := tool_script(OS.get_cmdline_args())
+	if tool == "" or not dir.begins_with(TOOL_ROOT + "/"):
+		return -1
+	var started := int(Time.get_unix_time_from_system() - Time.get_ticks_msec() / 1000.0)
+	return sweep_pics(dir, tool, started)

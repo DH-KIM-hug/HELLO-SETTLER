@@ -2408,6 +2408,10 @@ func _chief_build(skip: Dictionary) -> void:
 	var fav := _fav_want()
 	var spent := quarry_spent()           # 채석장은 있는데 어느 채석장 둘레에도 캘 돌 바위가 없다
 	var dry := spent and stone_rocks_left() and not skip.has("채석장")     # … 그런데 병 안에는 바위가 남아 있다
+	# (2026-11-11 Q13 ① · GAME_DESIGN 8.1) 다음 채석장은 창고의 돌이 바닥나기 전에: 둘레를 다 캔 그때부터 바란다 (예전엔 돌이 6 아래 · 다른 바람이 없을 때, 또는 돌이 모자라 못 지을 때 —
+	# 그 사이 남은 돌을 다 써 버려 하루 이틀 돌이 끊겼다). 판자가 될 때만 — 안 되면 예전처럼 그 아래 바람을 본다 (막지 않는다). 손이 빈 어른 둘을 기다리지 않는다: 다 캔 채석장은
+	# 석수를 내려놓았으니 (Q12) 새 일터가 느는 것이 아니라 같은 일터가 자리를 옮기는 것. 주사위 · 저장하는 값 · 새 균형 값 없음
+	var next_quarry := dry and _affordable("채석장")
 	if wish != "" and not skip.has(wish):
 		want = wish                   # 들어준 소원이 우선순위 맨 위 (기획서 6.7)
 	elif count_type("농장") == 0 and n_houses >= 1 and not skip.has("농장"):
@@ -2427,6 +2431,8 @@ func _chief_build(skip: Dictionary) -> void:
 		want = "농장"                 # v5: 시작 건량은 하루치 — 밭이 모자라면 둘째 밭을 집보다 먼저 (첫 며칠 굶주림 막기)
 	elif (food_short or (food_low and count_type("농장") * Balance.FARM_FEEDS * yld / Balance.PORRIDGE_YIELD < pop + 6)) and not skip.has("농장"):
 		want = "농장"                 # v5: 창고 먹을 것이 이틀치 아래면 촌장은 밭부터 (집보다 먼저) — v5-0: 밭 하나가 먹이는 사람 수는 빵을 구우면 두 배 (죽 기준 6명)
+	elif next_quarry:
+		want = "채석장"               # (Q13) 있는 채석장 둘레를 다 캤고 병 안에 바위가 남았다 → 남은 바위 곁에 하나 더, 돌이 남아 있을 때 미리 (먹을 것 · 묻을 곳 · 집 없는 사람 다음, 돌이 드는 집보다 먼저)
 	elif (bool(hn["short"]) or (bool(hn["crowded"]) and basics and not food_low)) and not skip.has("집"):
 		house_fit = 1 if bool(hn["short"]) else int(hn["fit_crowded"])
 		want = "집"                   # v5: 먹을 것이 모자라면 아이 낳을 큰 집은 미룬다
@@ -2501,8 +2507,8 @@ func _chief_build(skip: Dictionary) -> void:
 		return
 	# 촌장은 직장 없는 성인이 2명 이상일 때만 새 일터 (식량 부족 시 농장 · 빵 사슬 예외 · 들어준 소원은 그래도 짓는다)
 	var food_job := (want == "농장" and (food_short or food_low)) or want in ["맷돌간", "화덕", "방앗간", "빵집"]
-	if d.get("job", false) and idle < Balance.IDLE_FOR_NEW_JOB and not food_job and want != wish:
-		return
+	if d.get("job", false) and idle < Balance.IDLE_FOR_NEW_JOB and not food_job and want != wish and not (want == "채석장" and next_quarry):
+		return                                    # (Q13) 다 캔 채석장을 잇는 채석장은 예외 — 옮겨 짓는 일터
 	if upgrade == null and d.has("replaces"):     # v5: 방앗간·빵집은 맷돌간·화덕을 넓혀 짓는다 (일꾼·자리 그대로)
 		upgrade = _upgradable(String(d["replaces"]))
 	var c := chief()
