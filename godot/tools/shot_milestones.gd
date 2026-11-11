@@ -1,5 +1,5 @@
 ## 자람의 보상 (Q9) 캡처 — sim/milestones.gd · view/milestone_view.gd · view/ui/milestone_stamps.gd · view/ui/chronicle_sheet.gd.
-## 실행 (창 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_milestones.gd [-- [m3] <크게 자른 확인용 그림을 둘 폴더>]
+## 실행 (창 필요 — 헤드리스 아님): godot --path godot -s res://tools/shot_milestones.gd [-- [m3|m4] <크게 자른 확인용 그림을 둘 폴더>]
 ##   m3 = Q9 ⑦ 묶음 (고비 여섯 — 첫걸음마 · 마을에서 난 첫 어른)만 찍는다. 없으면 2차 묶음(m2_*).
 ## 넓은 세상(world.tscn, 시드 20261106) 기본 키트. 세로 화면 540×960. 화덕이 없으면 모닥불 곁 빈자리에 하나 세우고,
 ## 첫 빵 + 식구 열둘 고비를 넘긴 뒤 찍는다 (같은 날 고비 둘 → 그날 저녁 잔치는 '식구 열둘').
@@ -17,6 +17,12 @@
 ##   m3_grown_feast.png (마을에서 난 첫 아이가 어른이 된 날 저녁의 작은 잔치) · m3_sheet.png
 ##   첫걸음마 장면은 도구가 차린다: 걸음마 나이의 아기를 한 집에 두고, 어머니와 이웃 넷을 문 가까이에서 쉬는 것으로 놓는다 —
 ##   부르고·걸어와 서고·손뼉 치고·고비를 넘는 것은 마을(sim/milestones.gd)이 스스로 한다. 어른이 됨·식구 스물·첫 겨울은 도구가 넘긴다.
+## 결과 (m4 — Q9 ⑭⑮, 고비 일곱):
+##   m4_strip_none.png · m4_strip_three.png · m4_strip_seven.png (도장 띠 — 자리 일곱: 없음 · 셋 · 일곱) ·
+##   m4_steps_wait.png (이웃이 문 앞에 와서 기다림) · m4_steps_cheer.png (첫걸음마 — 모인 이웃이 손뼉) ·
+##   m4_sheaf_near.png · m4_sheaf_far.png (창고 문 위 햇밀 다발 — 가까이 64 · 마을 20) · m4_green_feast.png (햇밀 잔치 — 작은 잔치) · m4_sheet.png
+##   푸른 밀 고개는 도구가 '끝났다'고 적는다 (Village.stats lean_green_y · lean_green_end_y) — 알아차리고 다발을 걸고 잔치를 여는 것은 마을이 한다.
+##   창고가 없으면 모닥불 곁 빈자리에 하나 세운다.
 ## 저장 (2026-11-11 확인): 이 도구는 진짜 저장(user://save)을 읽지도 쓰지도 않는다 — 장면을 직접 띄우므로 저장을 쓰지 않는 병이고
 ##   (test_village.use_save = false), 그래도 틀리지 않게 저장 관리자를 끄고 폴더를 제 것(SAVE_DIR)으로 돌린다. 처음 겪는 일 안내 창의 대기 줄도
 ##   거인 묶음(저장 관리자의 player.firsts) 대신 이 도구만의 Firsts를 쓴다. 연대기 그림 카드(연출이 찍는 화면 — StageDirector)는
@@ -53,8 +59,8 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var args := OS.get_cmdline_user_args()
 	for a: String in args:
-		if a == "m3":
-			mode = "m3"
+		if a == "m3" or a == "m4":
+			mode = a
 		else:
 			crop_dir = a
 			DirAccess.make_dir_recursive_absolute(crop_dir)
@@ -203,8 +209,8 @@ func _process(_dt: float) -> bool:
 		_wait -= 1
 		return false
 	var v: Village = scene.village
-	if mode == "m3":
-		var r := _m3(v)
+	if mode == "m3" or mode == "m4":
+		var r := _m3(v) if mode == "m3" else _m4(v)
 		if r == NEXT:
 			step += 1
 		return r == DONE
@@ -475,5 +481,145 @@ func _m3(v: Village) -> int:
 			_save("m3_strip_six")
 			Sheet.make(shots, out_dir.path_join("m3_sheet.png"), 0.5)
 			print("sheet ", out_dir.path_join("m3_sheet.png"))
+			return DONE
+	return NEXT
+
+
+# ───────────────────────── m4 (Q9 ⑭⑮ — 고비 일곱 · 햇밀 다발 · 첫걸음마 이웃) ─────────────────────────
+## 창고가 없으면 모닥불 곁 빈자리에 하나 (이미 있으면 그대로)
+func _need_store(v: Village) -> Building:
+	var st := Milestones.sheaf_house(v)
+	if st != null and st.type == "창고":
+		return st
+	for ring in [6.0, 7.0, 8.5, 10.0, 12.0]:
+		for i in 16:
+			var a := TAU * float(i) / 16.0 + 1.1
+			var p := v.fire + Vector2(cos(a), sin(a)) * float(ring)
+			if Milestones.spot_free(v, p) and Milestones.spot_free(v, p + Vector2(1.6, 1.6)) and Milestones.spot_free(v, p + Vector2(-1.6, 1.6)) and Milestones.spot_free(v, p + Vector2(0.0, 2.4)):
+				return v.add_building("창고", p.x, p.y, true)
+	return v.add_building("창고", v.fire.x - 7.0, v.fire.y + 3.0, true)
+
+
+## 푸른 밀 고개가 끝났다고 적는다 (LeanSeasons.hourly가 적는 것과 같은 통계) — 그다음은 마을이 스스로
+func _green(v: Village) -> void:
+	var st := _need_store(v)
+	var y := int(Health.jar_date(v)["year"])
+	v.stats["lean_green_y"] = y
+	v.stats["lean_green_end_y"] = y
+	scene.world.advance(2.0)
+	var rec: Dictionary = (v.milestones.get("passed", {}) as Dictionary).get("green", {})
+	var hang := MilestoneView.sheaf(v)
+	print("고비 기록 (푸른 밀 고개): ", rec, " · 창고 %d (%.1f, %.1f) · 다발 %s · %.2f시" % [st.id, st.x, st.y, hang, v.hour_now()])
+	for b: Dictionary in v.book.slice(maxi(0, v.book.size() - 2)):
+		print("  연대기: ", b["text"])
+
+
+func _m4(v: Village) -> int:
+	match step:
+		0:
+			if frame < 10:
+				root.size = Vector2i(540, 960)
+				return STAY
+			scene.set_debug_mode(false)
+			_advance_to(8.0)
+			scene.paused = true
+			_look(v.fire, 32.0)
+			_settle()
+			scene.chronicle.open(0)                   # 도장 띠 — 자리 일곱, 넘은 고비 없음
+			_wait = 14
+		1:
+			_save("m4_strip_none")
+			scene.chronicle.close()
+			_reach(v)                                 # 첫 빵 + 식구 열둘
+			_baby_scene(v)
+			_wait = 2
+		2:
+			_idle_near(v)
+			scene.world.advance(ChildPlay.CARE_IV)    # 마을이 이웃을 부를 때까지
+			_tries += 1
+			if not v.milestones.has("steps_call") and _tries < 60:
+				return STAY
+			var call: Dictionary = v.milestones.get("steps_call", {})
+			steps_at = float(call.get("at", v.t))
+			var called := 0
+			for p in v.people:
+				called += 1 if p.doing == Milestones.CLAP_DOING else 0
+			print("불렀다 (%d번째 살핌): 걸음마는 병 %.0f초 뒤 (마감 %.0f초 뒤) · 부른 이웃 %d" % [_tries, steps_at - v.t, float(call.get("last", steps_at)) - v.t, called])
+			scene.world.advance(maxf(steps_at - v.t - 300.0, 1.0))
+			_look(ChildPlay.door(v, baby) + Vector2(0.9, 0.9), CLOSE)
+			_settle()
+			_tries = 0
+			_wait = 14
+		3:
+			_save("m4_steps_wait")                    # 이웃이 문 앞에 와서 기다린다 (아직 걸음마 전)
+			print("  기다리는 이웃 ", Milestones.clappers(v, baby.id), " · 넘겼나 ", Milestones.is_passed(v, "steps"))
+			scene.world.advance(maxf(steps_at - v.t - 40.0, 1.0))
+			scene.paused = false
+			_wait = 2
+		4:
+			_tries += 1
+			if not Milestones.is_passed(v, "steps") and _tries < 900:
+				return STAY
+			print("고비 기록 (첫걸음마): ", (v.milestones.get("passed", {}) as Dictionary).get("steps", {}), " · 화면 손뼉 ", _mv().clappers())
+			for b: Dictionary in v.book.slice(maxi(0, v.book.size() - 2)):
+				print("  연대기: ", b["text"])
+			_wait = 70
+		5:
+			_save("m4_steps_cheer")
+			print("  화면 손뼉 ", _mv().clappers())
+			_wait = 260                               # 손뼉이 끝나고 흩어질 때까지
+		6:
+			scene.paused = true
+			scene.chronicle.open(0)                   # 도장 셋 (첫 빵 · 첫걸음마 · 식구 열둘)
+			_wait = 14
+		7:
+			_save("m4_strip_three")
+			scene.chronicle.close()
+			_green(v)
+			_look(_spot("green") + Vector2(-0.6, -0.6), CLOSE)
+			_wait = 10
+		8:
+			_settle()
+			_wait = 14
+		9:
+			_save("m4_sheaf_near")
+			print("  다발 그림 ", _mv().sign_node("green") != null, " · 올림 ", _mv().sheaf_lift())
+			_look((_spot("green") + v.fire) * 0.5, FAR)
+			_wait = 10
+		10:
+			_settle()
+			_wait = 14
+		11:
+			_save("m4_sheaf_far")
+			scene.paused = false
+			_look(v.fire + Vector2(0.0, 0.4), NEAR)
+			_settle()
+			_wait = 20
+		12:
+			_advance_to(19.2)                         # 작은 잔치 한가운데 (18:30 → 20:00)
+			_wait = 1
+		13:
+			_wait = 40
+		14:
+			_settle()
+			_wait = 14
+		15:
+			_save("m4_green_feast")
+			scene.paused = true
+			_grow(v)                                  # 마을에서 난 첫 어른 (도구가 넘김)
+			var i := 0
+			while v.people.size() < Milestones.POP_BIG:   # 식구 스물 + 첫 겨울 (도구가 넘김) — 도장 일곱
+				v.add_person(NAMES[i % NAMES.size()] + "네", "f" if i % 2 == 0 else "m", 20.0 + float(i), "", v.fire.x - 2.0, v.fire.y - 1.5 + 0.3 * float(i), null, null)
+				i += 1
+			scene.world.advance(2.0)
+			if not Milestones.is_passed(v, "winter"):
+				Milestones._pass(v, "winter")
+			print("넘은 고비: ", (v.milestones.get("passed", {}) as Dictionary).keys())
+			scene.chronicle.open(0)
+			_wait = 14
+		16:
+			_save("m4_strip_seven")
+			Sheet.make(shots, out_dir.path_join("m4_sheet.png"), 0.5)
+			print("sheet ", out_dir.path_join("m4_sheet.png"))
 			return DONE
 	return NEXT

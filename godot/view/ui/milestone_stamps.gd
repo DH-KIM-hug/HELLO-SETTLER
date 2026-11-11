@@ -4,6 +4,7 @@
 ## (2026-11-11 메인 판단, 사용자 위임 — '창세 신화' 탭 맨 아래에 있던 것을 올림). compact = false는 큰 도장 (넓은 자리용).
 ## 도장 여섯 (Q9 ⑦ 2026-11-11 — 첫걸음마 · 첫 어른이 늘어): 얇은 띠도 도장 아래에 이름 — 옆에 쓰면 540 px에 여섯이 안 들어간다.
 ## 넘는 차례(Milestones.ORDER)대로 왼쪽부터, 도장 사이는 가는 점선으로 잇고, 다음 고비 자리는 점선 동그라미를 조금 진하게.
+## 도장 일곱 (Q9 ⑭ 2026-11-11 — 첫 푸른 밀 고개 '첫 고개'가 늘어): 일곱까지는 같은 크기로 한 줄에 들어간다 (540 px 화면 — 한 칸에 이름 한 줄).
 ## 일곱을 넘으면(여덟까지 봄) 도장과 글씨를 한 단계 줄인다 (MANY).
 class_name MilestoneStamps
 extends VBoxContainer
@@ -14,7 +15,7 @@ const PAPER := Color("fdf6dc")                     # 수첩 종이 (도장 안 �
 const STAMP := 46.0                                # 도장 한 칸 (px)
 const STAMP_SMALL := 30.0                          # 얇은 띠의 도장 한 칸 (px)
 const STAMP_TINY := 28.0                           # 도장이 MANY를 넘을 때 얇은 띠의 한 칸
-const MANY := 6                                    # 이보다 많으면 한 단계 작게
+const MANY := 7                                    # 이보다 많으면 한 단계 작게
 const LABEL_TINY := 10                             # 그때의 이름 글씨 (px)
 const NEXT_RING := Color(0.45, 0.35, 0.24, 0.62)   # 다음 고비 자리의 점선 동그라미
 const TILT := [-0.10, 0.07, -0.05, 0.11, -0.08, 0.05, 0.09, -0.06]     # 손으로 찍은 듯한 기울기
@@ -161,6 +162,13 @@ class Stamp extends Control:
 					draw_line(Vector2(3.5, y / s) * s, Vector2(9.5 - float(k), y / s) * s, ink, 1.8 * w, true)
 				draw_circle(Vector2(-5.0, -2.5) * s, 3.0 * s, ink)
 				draw_colored_polygon(PackedVector2Array([Vector2(-8.5, 11.0) * s, Vector2(-5.0, 1.0) * s, Vector2(-1.5, 11.0) * s]), ink)
+			"green":                                    # 햇밀 이삭 (대 + 낟알 네 쌍 + 끝 낟알)
+				draw_line(Vector2(0.0, 12.0) * s, Vector2(0.0, -8.0) * s, ink, 1.8 * w, true)
+				for k in 4:
+					var y := -6.0 + 4.2 * float(k)
+					for sg: float in [-1.0, 1.0]:
+						draw_line(Vector2(0.8 * sg, y + 2.4) * s, Vector2(5.6 * sg, y - 2.6) * s, ink, 3.0 * w, true)
+				draw_line(Vector2(0.0, -8.0) * s, Vector2(0.0, -12.5) * s, ink, 3.0 * w, true)
 			"winter":                                   # 눈꽃
 				for k in 3:
 					var a := PI / 2.0 + PI * float(k) / 3.0

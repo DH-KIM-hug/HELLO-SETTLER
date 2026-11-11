@@ -284,6 +284,8 @@ static func on_altar_built(v: Village, b: Building) -> void:
 static func gather_ring(v: Village, secs: float, doing: String, only_free := false) -> void:
 	var ps: Array[Resident] = []
 	for p in witnesses(v):
+		if only_free and Milestones.at_steps(p):
+			continue                                      # 첫걸음마를 보러 불려 간 사람은 기도 종에 가지 않는다 (Q9 ⑮ — 병마다 한 번뿐인 일)
 		if not only_free or p.action in FREE_ACTIONS:     # 저녁 기도: 일손을 놓은 사람만 (쉬기·노닥이기·놀기·기도)
 			ps.append(p)
 	var n := maxi(1, ps.size())
