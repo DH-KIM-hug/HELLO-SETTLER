@@ -21,7 +21,7 @@ func all() -> void:
 	print("== 보이는 살림 (건물 쪽)")
 	var old := Bld2D.override
 	Bld2D.override = 1
-	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_yaw", "test_plants", "test_wheat", "test_front", "test_stall_gather", "test_bubbles", "test_sim_unchanged"])
+	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_yaw", "test_plants", "test_wheat", "test_notch", "test_regrow", "test_front", "test_stall_gather", "test_bubbles", "test_sim_unchanged"])
 	Bld2D.override = old
 
 
@@ -982,6 +982,254 @@ func test_bubbles() -> void:
 	for it: Array in econ.items:
 		drawn += 1 if String(it[0]).begins_with("bub_") else 0
 	check(drawn == 0, "풀리면 풍선이 사라짐")
+	scene.queue_free()
+
+
+## (Q8 ⑥ — 보기만) 무덤 앞에서 낮춘 홈의 옆선: 창 안은 전과 똑같이 끝까지 내리고, 창 밖은 이삭 무리마다 한 키로 서서 층층이 (줄마다 어긋나게)
+## 제 키로 돌아온다 — 벽도 곧은 빗금도 아니다. 셰이더(bld_notch_sink)와 같은 값.
+func test_notch() -> void:
+	var h := 1.5
+	var cut := [-0.45, 0.45, BldEcon.GRAVE_MIN_H]
+	var depth := h - float(cut[2])
+	var ramp := BldEcon.cut_ramp(h, float(cut[2]))
+	var reach := ramp * BldEcon.NOTCH_REACH
+	var seeds: Array = []
+	for i in 6:
+		seeds.append(BldEcon.row_seed(Vector3(31.0, 0.0, 17.0), 0.9 - 0.3 * float(i)))
+	var inside := true
+	var plain := true
+	var mono := true
+	var bounded := true
+	var no_wall := true
+	var ends := true
+	var flat_share := 0.0
+	var levels_min := 99
+	for seed: float in seeds:
+		for x: float in [-0.45, -0.2, 0.0, 0.3, 0.45]:
+			inside = inside and is_equal_approx(BldEcon.notch_sink(x, cut, h, seed), depth) and is_equal_approx(BldEcon.cut_sink(x, cut, h), depth)
+		for side: float in [-1.0, 1.0]:
+			var edge := float(cut[1]) if side > 0.0 else float(cut[0])
+			var prev := depth
+			var flat := 0
+			var n := 0
+			var levels := {}
+			var d := 0.0
+			while d < reach + 0.6:
+				d += 0.004
+				var sk := BldEcon.notch_sink(edge + side * d, cut, h, seed)
+				plain = plain and is_equal_approx(BldEcon.notch_sink(edge + side * d, cut, h, -1.0), BldEcon.cut_sink(edge + side * d, cut, h))
+				mono = mono and sk <= prev + 1e-5
+				bounded = bounded and sk >= -1e-6 and sk <= depth + 1e-6
+				if d < reach:
+					n += 1
+					if absf(sk - prev) < 1e-6:
+						flat += 1
+						levels[snappedf(sk, 0.001)] = true
+				prev = sk
+			no_wall = no_wall and BldEcon.notch_sink(edge + side * 0.002, cut, h, seed) > depth * 0.97
+			ends = ends and is_zero_approx(BldEcon.notch_sink(edge + side * (reach + 2.0 * BldEcon.NOTCH_CLUMP * 1.25), cut, h, seed))
+			flat_share += float(flat) / float(maxi(n, 1)) / float(seeds.size() * 2)
+			levels_min = mini(levels_min, levels.size())
+	check(inside, "홈의 창 안: 밀 줄은 전과 똑같이 끝까지 내려간다 (%.2f칸 — 무덤이 그대로 보인다)" % depth)
+	check(plain, "밀 줄이 아닌 판(씨 < 0)은 옛 비탈 그대로")
+	check(mono and bounded, "창 밖: 밖으로 갈수록 높아지기만 하고 (다시 꺼지지 않음) 창 안보다 깊지 않다")
+	check(no_wall and ends, "창 끝에 벽이 서지 않고 (바닥에서 올라섬), 옛 비탈 너비 %.2f칸 + 이삭 두 무리 안에서 제 키로 돌아온다" % reach)
+	check(flat_share > 0.5 and levels_min >= 2, "이삭 무리마다 한 키로 선다: 비탈의 %d%%가 평평 (이삭이 비틀리지 않음) · 줄마다 %d층 이상" % [int(flat_share * 100.0), levels_min])
+	var differ := 0                           # 여섯 줄이 같은 자리에서 서로 다른 키 — 화면에서 한 줄로 겹치지 않는다
+	for k in 12:
+		var x := 0.45 + 0.04 * float(k + 1)
+		var vals := {}
+		for seed: float in seeds:
+			vals[snappedf(BldEcon.notch_sink(x, cut, h, seed), 0.01)] = true
+		differ += 1 if vals.size() >= 3 else 0
+	var lr := 0
+	for seed: float in seeds:
+		lr += 1 if absf(BldEcon.notch_sink(0.45 + 0.2, cut, h, seed) - BldEcon.notch_sink(-0.45 - 0.2, cut, h, seed)) > 0.01 else 0
+	check(differ >= 6 and lr >= 3, "줄마다 · 좌우마다 어긋난다 (열두 자리 가운데 %d곳에서 세 가지 넘는 키 · 좌우가 다른 줄 %d)" % [differ, lr])
+	var inc := FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshaderinc")
+	var same := inc.contains("BLD_NOTCH_CLUMP = %s;" % str(BldEcon.NOTCH_CLUMP)) and inc.contains("BLD_NOTCH_REACH = %s;" % str(BldEcon.NOTCH_REACH)) \
+		and inc.contains("BLD_NOTCH_STEP = %s;" % str(BldEcon.NOTCH_STEP)) and inc.contains("BLD_NOTCH_ROUND = %s;" % str(BldEcon.NOTCH_ROUND))
+	var used := true
+	for f: String in ["res://view/bld2d/bld_card.gdshader", "res://view/bld2d/bld_card_multi.gdshader"]:
+		var src := FileAccess.get_file_as_string(f)
+		used = used and src.contains("bld_notch_sink(")
+	used = used and FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshader").contains("bld_grow(")
+	check(same and used, "셰이더(가까이 · 멀리 묶음)가 같은 값·같은 셈을 쓴다 (다시 자람은 밭의 제 그림 판에서)")
+
+
+## 밭 노드의 익은 줄 그림 판마다 자람 몫 (줄 번호 → 0~1 · 적힌 적 없으면 1) · 깔린 그루터기 판 수 · 건물 그림 판 수
+func _regrow_look(vw: VillageView, id: int) -> Array:
+	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+	var grow := {}
+	var stubs := 0
+	var cards := 0
+	for c: Node in (vw._blds[id] as Node3D).get_children():
+		if not (c is MeshInstance3D) or c.is_queued_for_deletion():
+			continue
+		if not c.has_meta(&"pic"):
+			stubs += 1 if String(c.name).begins_with(BldEcon.REGROW_STUB) else 0
+			continue
+		cards += 1
+		var idx := ripe.find(String(c.get_meta(&"pic")))
+		if idx >= 0:
+			var g: Variant = (c as MeshInstance3D).get_instance_shader_parameter("grow")
+			grow[idx] = 1.0 if g == null else float(g)
+	return [grow, stubs, cards]
+
+
+## (Q8 ⑦ — 보기만) 볏단을 실어 가면 그루터기 줄이 뒷줄부터 한 줄씩 다시 자란다. 화면만의 일: 시뮬 값·wheat_rows는 그대로,
+## 힘주어 살피거나 시간을 건너뛰면 곧바로 끝 모습, 다시 베면 그 줄은 바로 그루터기.
+func test_regrow() -> void:
+	# 순서: 그루터기 가운데 맨 뒷줄부터 앞으로, REGROW_GAP 간격
+	var ord := BldEcon.regrow_order(4, 0, 6)
+	var ord_ok := ord.size() == 4
+	for k in ord.size():
+		ord_ok = ord_ok and int(ord[k][0]) == 2 + k and is_equal_approx(float(ord[k][1]), float(k) * BldEcon.REGROW_GAP)
+	var part := BldEcon.regrow_order(4, 2, 6)
+	check(ord_ok and part.size() == 2 and int(part[0][0]) == 2 and int(part[1][0]) == 3 and BldEcon.regrow_order(2, 2, 6).is_empty()
+		and BldEcon.regrow_order(1, 3, 6).is_empty(), "다시 자라는 순서: 뒷줄부터 앞으로 %.1f초 간격 (네 줄 %s) · 줄지 않았으면 없음" % [BldEcon.REGROW_GAP, ord])
+	check(is_zero_approx(BldEcon.regrow_at(5.0, 5.0)) and is_equal_approx(BldEcon.regrow_at(5.0 + BldEcon.REGROW_ROW * 0.5, 5.0), 0.5)
+		and is_equal_approx(BldEcon.regrow_at(99.0, 5.0), 1.0) and is_zero_approx(BldEcon.regrow_at(1.0, 5.0)), "한 줄은 %.1f초에 걸쳐 자란다 (아직 차례가 아니면 0)" % BldEcon.REGROW_ROW)
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	var farm := _add(a, "농장", true)
+	check(farm != null, "농장을 놓음")
+	if farm == null:
+		scene.queue_free()
+		return
+	vw.bld_force_lod = 0
+	farm.ready_at = maxf(a.t - 1.0, 0.0)     # 익은 밭 (음수는 '아직 심지 않음')
+	var full := BldEcon.out_full("밀")
+	farm.out["밀"] = full
+	for i in 3:
+		vw.sync(0.3, true)
+	var rows_cut := BldEcon.wheat_rows(a, farm)
+	var st0 := _regrow_look(vw, farm.id)
+	check(rows_cut.count(Bld2D.ROW_STUBBLE) == BldEcon.REAP_ROWS and econ._regrow.is_empty() and int(st0[1]) == 0,
+		"벤 밀이 한 수레: 앞 %d줄이 그루터기 · 자라는 줄 없음" % BldEcon.REAP_ROWS)
+	# 실어 갔다 (시뮬 값만 바뀜) — 힘주지 않은 화면이 제 박자로 알아챈다
+	farm.out["밀"] = 0.0
+	var rows_ripe := BldEcon.wheat_rows(a, farm)
+	var snap0 := _snap(a)
+	for i in 4:
+		vw.sync(0.1)
+	var st1 := _regrow_look(vw, farm.id)
+	var g1: Dictionary = st1[0]
+	var sched: Dictionary = econ._regrow.get(farm.id, {})
+	check(rows_ripe.count(Bld2D.ROW_RIPE) == 6 and BldEcon.wheat_rows(a, farm) == rows_ripe, "실어 간 밭: wheat_rows는 곧바로 모두 익은 밀 (자라는 동안에도 같은 값)")
+	check(sched.size() == 4 and sched.has(2) and sched.has(5) and float(sched[2]) < float(sched[3]) and float(sched[4]) < float(sched[5]),
+		"그루터기였던 네 줄이 뒷줄부터 차례로 자라기 시작 %s" % [sched.keys()])
+	check(g1.size() == 6 and is_equal_approx(float(g1[0]), 1.0) and is_equal_approx(float(g1[1]), 1.0) and float(g1[2]) < 1.0 and is_zero_approx(float(g1[5]))
+		and float(g1[2]) >= float(g1[3]), "그림: 뒤 두 줄은 그대로 · 셋째 줄 %.2f만큼 자람 · 맨 앞줄은 아직 그루터기 (0)" % float(g1[2]))
+	check(int(st1[1]) == 4 and int(st1[2]) == 8, "자라는 줄 밑에 그루터기 판 %d장 (건물 그림 판 %d장은 그대로)" % [int(st1[1]), int(st1[2])])
+	# 가운데쯤: 뒷줄은 다 자랐고 앞줄은 아직
+	var rose := true
+	var last := float(g1[2])
+	for i in 14:
+		vw.sync(0.1)
+		var gi: Dictionary = _regrow_look(vw, farm.id)[0]
+		rose = rose and float(gi[2]) >= last - 1e-5
+		last = float(gi[2])
+	var st2 := _regrow_look(vw, farm.id)
+	var g2: Dictionary = st2[0]
+	sched = econ._regrow.get(farm.id, {})
+	check(rose and is_equal_approx(float(g2[2]), 1.0) and not sched.has(2) and sched.has(5) and float(g2[5]) < 1.0 and float(g2[3]) > float(g2[5]) and int(st2[1]) == sched.size(),
+		"1.8초 뒤: 셋째 줄은 다 자람 · 앞줄은 자라는 중 (%.2f) — 다 자란 줄의 그루터기 판은 치움 (남은 %d장)" % [float(g2[5]), int(st2[1])])
+	for i in 30:
+		vw.sync(0.1)
+	var st3 := _regrow_look(vw, farm.id)
+	var done := true
+	for idx: int in (st3[0] as Dictionary):
+		done = done and is_equal_approx(float(st3[0][idx]), 1.0)
+	check(done and econ._regrow.is_empty() and int(st3[1]) == 0 and int(st3[2]) == 8,
+		"다 자람 (%.1f초쯤): 여섯 줄 모두 익은 밀 · 그루터기 판 없음 · 적어 둔 것 없음" % (BldEcon.REGROW_ROW + 3.0 * BldEcon.REGROW_GAP))
+	check(_snap(a) == snap0 and BldEcon.wheat_rows(a, farm) == rows_ripe, "자라는 내내 주민·건물·창고 값은 그대로 (화면만의 일)")
+	farm.out["밀"] = full
+	check(BldEcon.wheat_rows(a, farm) == rows_cut, "wheat_rows는 쌓인 밀만 읽는다 — 같은 값이면 같은 줄 (자란 적이 있어도)")
+	# 힘주어 살핌 (불러오기 · 큰 시간 건너뛰기 바로 뒤): 자라던 것을 곧바로 끝 모습으로, 다시 시작하지 않음
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	for i in 5:
+		vw.sync(0.1)
+	var mid_n: int = (econ._regrow.get(farm.id, {}) as Dictionary).size()
+	vw.sync(0.0, true)
+	var st4 := _regrow_look(vw, farm.id)
+	done = true
+	for idx: int in (st4[0] as Dictionary):
+		done = done and is_equal_approx(float(st4[0][idx]), 1.0)
+	for i in 4:
+		vw.sync(0.1)
+	check(mid_n == 4 and done and int(st4[1]) == 0 and econ._regrow.is_empty(), "자라는 도중 힘주어 살피면 곧바로 끝 모습 (반쯤 자란 줄 없음 · 다시 자라지도 않음)")
+	# 힘주어 살핀 화면에서 실어 간 것을 처음 봤을 때도 (불러온 저장) 자라는 시늉 없음
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	vw.sync(0.3, true)
+	for i in 4:
+		vw.sync(0.1)
+	check(econ._regrow.is_empty() and int(_regrow_look(vw, farm.id)[1]) == 0, "힘주어 살핀 화면에서 처음 본 변화는 자라는 시늉 없이 끝 모습")
+	# 시간을 건너뜀 (두 번 살피는 사이 병의 시간이 많이 흐름)
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	a.t += BldEcon.REGROW_SKIP + 60.0
+	for i in 4:
+		vw.sync(0.1)
+	check(econ._regrow.is_empty() and int(_regrow_look(vw, farm.id)[1]) == 0 and BldEcon.wheat_rows(a, farm).count(Bld2D.ROW_RIPE) == 6,
+		"시간을 건너뛴 사이 실어 갔으면 자라는 시늉 없이 익은 밀")
+	# 거꾸로 (다시 벰): 자라던 줄을 다시 베면 그 줄은 바로 그루터기 — 남은 줄만 이어 자란다
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	for i in 4:
+		vw.sync(0.1)
+	farm.out["밀"] = full * 0.5
+	for i in 4:
+		vw.sync(0.1)
+	var rows_half := BldEcon.wheat_rows(a, farm)
+	sched = econ._regrow.get(farm.id, {})
+	var st5 := _regrow_look(vw, farm.id)
+	check(rows_half.count(Bld2D.ROW_STUBBLE) == 2 and sched.size() == 2 and sched.has(2) and sched.has(3) and int(st5[1]) == 2 and int(st5[2]) == 8,
+		"자라는 중에 앞 두 줄을 다시 벰: 그 두 줄은 그루터기 그림 · 뒤 두 줄만 이어 자람")
+	farm.out["밀"] = full
+	for i in 4:
+		vw.sync(0.1)
+	check(econ._regrow.is_empty() and int(_regrow_look(vw, farm.id)[1]) == 0 and BldEcon.wheat_rows(a, farm) == rows_cut, "네 줄을 다 다시 베면 자라는 줄 없음 (베는 쪽은 전과 같이 바로)")
+	# 멀리 LOD: 지금 그림 밭은 멀리 묶음에 들지 않아 (멀리 모양이 없다) 제 그림 판이 그대로 그린다 — 같은 자람
+	vw.sync(0.3, true)
+	vw.bld_force_lod = 1
+	vw._bld_lod(true)
+	vw._sync_far_batch(true)
+	farm.out["밀"] = 0.0
+	for i in 4:
+		vw.sync(0.1)
+	var st6 := _regrow_look(vw, farm.id)
+	var own_vis := true
+	for c: Node in (vw._blds[farm.id] as Node3D).get_children():
+		if c is MeshInstance3D:
+			own_vis = own_vis and (c as MeshInstance3D).visible
+	check(vw.bld_far and not vw._batched(vw._blds[farm.id]) and own_vis and float(st6[0][2]) < 1.0 and int(st6[1]) == 4,
+		"멀리에서도 밭은 제 그림 판으로 자란다 (묶음에 들지 않음 · 셋째 줄 %.2f)" % float(st6[0][2]))
+	for i in 45:
+		vw.sync(0.1)
+	check(econ._regrow.is_empty() and int(_regrow_look(vw, farm.id)[1]) == 0, "멀리에서도 끝까지 자라고 그루터기 판을 치움")
+	# 그림을 끄면 자라던 것도 기억도 비움
+	vw.bld_force_lod = 0
+	vw._bld_lod(true)
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	for i in 4:
+		vw.sync(0.1)
+	var was_on := econ._regrow.size()
+	econ.on = false
+	vw.sync(0.1)
+	check(was_on == 1 and econ._regrow.is_empty() and econ._reap_seen.is_empty() and int(_regrow_look(vw, farm.id)[1]) == 0, "보이는 살림을 끄면 자라던 줄은 끝 모습으로 · 기억도 비움")
+	econ.on = true
+	vw.bld_force_lod = -1
 	scene.queue_free()
 
 

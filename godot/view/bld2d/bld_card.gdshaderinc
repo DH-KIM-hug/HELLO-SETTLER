@@ -59,6 +59,73 @@ float bld_cut_sink(float x, vec3 cut, float h) {
 	return depth * (1.0 - smoothstep(0.0, BLD_CUT_RAMP * max(1.0, depth / BLD_CUT_DEEP), d));
 }
 
+// (Q8 ⑥) How a WHEAT row is drawn in that window (BldEcon.notch_sink — the same sum). Inside the window: the full dip, as
+// bld_cut_sink (what stands behind is seen exactly as before). Outside it the row does not come back up on one smooth slope
+// shared by all six rows (their dips lined up on the screen → a clean V with sheared ears, a scissor cut). It climbs back in
+// ear clumps over the same reach (ramp * BLD_NOTCH_REACH): every clump (BLD_NOTCH_CLUMP wide, a little wider or narrower per
+// row and per side) stands at one height, so its ears are not sheared, and rises to it from the one before in a short
+// rounded step at its inner edge (BLD_NOTCH_STEP = the share of the clump the step takes; the first one starts from the dip,
+// so there is no wall at the edge of the window). The clump by the gap is the shortest, each one further out about an ear
+// taller, along a gentle shoulder ((1 - s)^BLD_NOTCH_ROUND), and each reads the shoulder at its own spot (hash): rows do not
+// line up, the side is ragged like the top of the field. seed = per row (bld_row_seed); < 0 = bld_cut_sink (fence).
+const float BLD_NOTCH_CLUMP = 0.16;
+const float BLD_NOTCH_REACH = 1.0;
+const float BLD_NOTCH_STEP = 0.36;
+const float BLD_NOTCH_ROUND = 1.3;
+float bld_hash(float p) {
+	p = fract(p * 0.1031);
+	p *= p + 33.33;
+	p *= p + p;
+	return fract(p);
+}
+
+float bld_row_seed(vec3 org, float front) {
+	return 1.0 + fract(front * 3.7 + 0.31) * 61.0 + fract(org.x * 0.37 + org.z * 0.71) * 7.0;
+}
+
+float bld_notch_level(float i, float s0, float cw, float ramp) {
+	if (i < 0.0) {
+		return 1.0;
+	}
+	float s = clamp((i + 0.25 + 0.35 * bld_hash(s0 + i * 7.31)) * cw / (ramp * BLD_NOTCH_REACH), 0.0, 1.0);
+	return pow(1.0 - s, BLD_NOTCH_ROUND);
+}
+
+float bld_notch_sink(float x, vec3 cut, float h, float seed) {
+	float d = max(max(cut.x - x, x - cut.y), 0.0);
+	float depth = h - min(cut.z, h);
+	if (seed < 0.0 || d <= 0.0 || depth <= 0.0) {
+		return bld_cut_sink(x, cut, h);
+	}
+	float s0 = seed + step(cut.y, x) * 5.3;
+	float cw = BLD_NOTCH_CLUMP * (0.75 + 0.5 * bld_hash(s0));
+	float u = d / cw;
+	float i = floor(u);
+	float ramp = BLD_CUT_RAMP * max(1.0, depth / BLD_CUT_DEEP);
+	return depth * mix(bld_notch_level(i - 1.0, s0, cw, ramp), bld_notch_level(i, s0, cw, ramp), smoothstep(0.0, BLD_NOTCH_STEP, u - i));
+}
+
+// (Q8 ⑦) Grow-back of a wheat row after its sheaves were carted away (BldEcon regrow — view only): grow 0 → 1. The picture rises
+// out of the ground (x = how much of its height shows, eased) and is squashed a little while short (y = picture scale), ear
+// clumps a touch apart in time so the top is not a ruler line. z = how ripe it looks (0 young green → 1 the picture's gold).
+const float BLD_GROW_SQUASH = 0.6;
+const float BLD_GROW_CLUMP = 0.31;
+const float BLD_GROW_LATE = 0.3;
+const vec3 BLD_GROW_YOUNG = vec3(0.55, 1.04, 0.95);
+vec3 bld_grow(float grow, float x, float seed) {
+	float u = x / BLD_GROW_CLUMP + seed;
+	float i = floor(u);
+	float late = mix(bld_hash(seed * 3.1 + i * 5.77), bld_hash(seed * 3.1 + (i + 1.0) * 5.77), smoothstep(0.5, 1.0, u - i));
+	float g = clamp(grow * (1.0 + BLD_GROW_LATE) - BLD_GROW_LATE * late, 0.0, 1.0);
+	float e = g * g * (3.0 - 2.0 * g);
+	return vec3(e, mix(BLD_GROW_SQUASH, 1.0, e), smoothstep(0.35, 0.95, g));
+}
+
+// Picture v for a card fragment: sunk by sink (world units) and squashed to sc of its height, both from the foot. < 0 = nothing there.
+float bld_sunk_v(float v, float sink, float sc, float h) {
+	return 1.0 - ((1.0 - v) + sink / h) / sc;
+}
+
 // Pull (the ripe wheat forest — Bld2D.wheat_pull): view-space z to add to every vertex of a card. The whole row comes toward the
 // camera along the view ray, the picture does not move on screen. The rows of the forest then stand almost in one plane — the
 // field's front face: the screen outline (outline_post, by depth jumps) draws no line between them, the forest is one mass, and
