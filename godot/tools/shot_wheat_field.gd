@@ -16,13 +16,20 @@
 ##              <tag>_grave_behind_ppu44.png · _ppu20.png                          옛 저장: 밭 한가운데 바로 뒤의 무덤 → 좁은 홈
 ##              <tag>_grave_new_ppu44.png · _ppu20.png                             새 자리 고르기: 옛 자리가 밭 바로 뒤일 때 무덤이 놓이는 곳
 ##              셋째 인자로 골라 찍기: reap,tools,piles,grave,site
-## 인자: -- <tag> [all|grave|compare|harvest|carry|w3] [w3 장면]
+##    (w4)      2026-11-11 밀밭 남은 손질 ⑥⑦ — <tag>_notch_mid_ppu44.png · _ppu20.png          밭 한가운데 바로 뒤의 무덤: 홈 옆선 (이삭 무리가 들쭉날쭉 낮아짐)
+##              <tag>_notch_yaw1_side_ppu44.png · _ppu20.png · _yaw2_mid_… · _yaw3_side_…    카메라를 한·두·세 걸음 돌려서, 그 보기에서 밭 뒤(가운데 · 옆으로 비킨 자리)의 무덤
+##              <tag>_regrow_strip_ppu44.png · _ppu20.png   볏단을 실어 간 뒤 다시 자람: 실어 가기 전 → 0.5 · 1.2 · 2.0 · 2.8초 → 다 자람 (여섯 장을 한 장에)
+##              셋째 인자로 골라 찍기: notch,regrow
+## 인자: -- <tag> [all|grave|compare|harvest|carry|w3|w4] [w3·w4 장면]
+## 저장: 진짜 저장·설정·연대기 그림(user://chron_pics)을 건드리지 않게 이 도구만의 폴더(SAVE_DIR)로 돌린다 (shot_milestones와 같은 식).
 ## 시뮬레이션은 멈춘 채(paused) 밭 값(ready_at)만 바꿔 찍는다.
 extends SceneTree
 
 const PHYS := Vector2i(1080, 1920)
 const LOGICAL := Vector2i(360, 640)
 const STAGES := ["sprout", "green", "ripe"]
+const SAVE_DIR := "user://shot_wheat_save"       # 이 도구만의 저장 폴더 (진짜 저장을 건드리지 않게)
+const REGROW_AT := [0.5, 1.2, 2.0, 2.8, 4.4]     # (w4) 다시 자람을 찍는 때 (시작한 뒤 화면 초 — BldEcon의 다시 자람 시계)
 
 var out_dir := ""
 var tag := "w1"
@@ -39,6 +46,8 @@ var folk: Array[Resident] = []
 var aim_at := Vector2.INF        # 카메라가 볼 자리 (INF = 밭 가운데)
 var mill: Building
 var farm2: Building
+var _frames: Array[Image] = []   # (w4) 한 장으로 이어 붙일 그림들
+var _rg_t0 := -1.0               # (w4) 다시 자람이 시작된 때 (BldEcon._regrow_t)
 
 
 func _initialize() -> void:
@@ -49,6 +58,15 @@ func _initialize() -> void:
 		mode = args[1]
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/wheat").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
+	# 진짜 저장·설정을 건드리지 않게 (머리말 '저장')
+	var sm := GameSave.get_instance()
+	if sm != null:
+		sm.enabled = false
+		sm.dir = SAVE_DIR
+	GameSettings.path = SAVE_DIR.path_join("settings.cfg")
+	StoreStrip.cfg_path = SAVE_DIR.path_join("hud.cfg")
+	Inquiry.id_path = SAVE_DIR.path_join("install_id.cfg")
+	DirAccess.make_dir_recursive_absolute(SAVE_DIR)
 	Bld2D.override = 1
 	Flora2D.override = 1
 	CutoutResident.override = 1
@@ -100,6 +118,21 @@ func _initialize() -> void:
 			plan.append(_grave_site)
 			for ppu: float in [44.0, 20.0]:
 				plan.append_array([_aim.bind(ppu), _hold.bind(ppu), _save.bind("grave_new_ppu%d" % int(ppu), ppu)])
+	elif mode == "w4":
+		var pick: PackedStringArray = (args[2] if args.size() > 2 else "notch,regrow").split(",")
+		plan.append(_stage.bind(2))
+		if pick.has("notch"):
+			for sc: Array in [[0, 0.0, "mid"], [1, 0.9, "yaw1_side"], [2, 0.0, "yaw2_mid"], [3, -1.2, "yaw3_side"]]:
+				plan.append(_grave_at.bind(int(sc[0]), float(sc[1])))
+				for ppu: float in [44.0, 20.0]:
+					plan.append_array([_aim.bind(ppu), _run.bind(8), _save.bind("notch_%s_ppu%d" % [sc[2], int(ppu)], ppu)])
+			plan.append(_grave_gone)
+		if pick.has("regrow"):
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_regrow_ready, _aim.bind(ppu), _run.bind(30), _grab.bind(ppu), _regrow_go])
+				for t: float in REGROW_AT:
+					plan.append_array([_regrow_until.bind(t), _grab.bind(ppu)])
+				plan.append(_strip.bind("regrow_strip_ppu%d" % int(ppu)))
 	if mode != "all":
 		plan.append(func() -> int:
 			quit()
@@ -154,7 +187,10 @@ func _setup() -> int:
 	root.add_child(vp)
 	scene = load("res://scenes/world.tscn").instantiate()
 	scene.world_seed = 20261107
+	scene.firsts = Firsts.new()                       # 거인 묶음의 대기 줄이 아니라 이 도구만의 것
 	vp.add_child(scene)
+	if scene.director != null:
+		scene.director.pic_dir = SAVE_DIR.path_join("chron_pics")
 	return 20
 
 
@@ -287,9 +323,9 @@ func _grave(near: bool) -> int:
 
 
 ## 주민 셋을 앞 울타리 앞에 나란히 세움 (키 견줌 · 밭 안에는 아무도 없게)
-func _front_folk() -> int:
-	var f := _fdir(0)
-	var r := _rdir(0)
+func _front_folk(st := 0) -> int:
+	var f := _fdir(st)
+	var r := _rdir(st)
 	var edge := float(Bld2D.info(Bld2D.Pics.WHEAT_FENCE)["front"]) + 0.3
 	for i in folk.size():
 		var q := folk[i]
@@ -606,3 +642,96 @@ func _save(name: String, ppu: float, cells := 8.0) -> int:
 	img.save_png(path)
 	print("saved ", path, " ", img.get_size())
 	return 1
+
+
+## (w4) 카메라를 st 걸음 돌리고, 그 보기에서 밭 바로 뒤 (가운데에서 화면 오른쪽으로 side칸)에 무덤 하나 — 주민은 그 보기의 울타리 앞에
+func _grave_at(st: int, side: float) -> int:
+	_yaw(st)
+	var back := float(Bld2D.info(Bld2D.wheat_cards(2)[1])["front"])
+	var gp := Vector2(farm.x, farm.y) + _fdir(st) * (back - 0.9) + _rdir(st) * side
+	farm.ready_at = v.t - 1.0
+	farm.out["밀"] = 0.0
+	_one_grave(gp)
+	_front_folk(st)
+	scene.view._grave_key = ""
+	_redraw()
+	print("grave_at st=", st, " view step=", scene.view.econ.step, " side=", side, " cuts ", BldEcon.grave_cuts(v, farm, scene.view.econ.step, 2))
+	return 40
+
+
+## (w4) 무덤을 치우고 처음 보기로
+func _grave_gone() -> int:
+	v.graves.clear()
+	scene.view._grave_key = ""
+	_yaw(0)
+	_redraw()
+	return 20
+
+
+## (w4) 다시 자람 준비: 벤 밀이 한 수레 (앞 네 줄이 그루터기) + 낫 든 일꾼 둘 + 이삭 멘 사람
+func _regrow_ready() -> int:
+	_reap_half()
+	farm.out["밀"] = BldEcon.out_full("밀")
+	_redraw()
+	_rg_t0 = -1.0
+	_frames.clear()
+	print("regrow ready: rows ", BldEcon.wheat_rows(v, farm))
+	return 30
+
+
+## (w4) 볏단을 실어 갔다 — 시뮬 값만 바꾼다. 힘주어 살피지 않는다 (화면이 제 박자로 알아채고 자라게 그린다)
+func _regrow_go() -> int:
+	farm.out["밀"] = 0.0
+	return 0
+
+
+## (w4) 다시 자람이 시작되고 t초 (BldEcon의 다시 자람 시계) 지날 때까지 기다린다
+func _regrow_until(t: float) -> int:
+	var e: BldEcon = scene.view.econ
+	if _rg_t0 < 0.0 and e._regrow.has(farm.id):
+		_rg_t0 = INF
+		for idx: int in e._regrow[farm.id]:
+			_rg_t0 = minf(_rg_t0, float(e._regrow[farm.id][idx]))
+		print("regrow started at ", _rg_t0, " rows ", e._regrow[farm.id], " wheat_rows ", BldEcon.wheat_rows(v, farm))
+	if _rg_t0 < 0.0 or e._regrow_t - _rg_t0 < t:
+		step -= 1                     # 이 걸음을 다시
+		return 0
+	print("regrow t=", snappedf(e._regrow_t - _rg_t0, 0.01), " left ", e._regrow.get(farm.id, {}), " far=", scene.view.bld_far)
+	return 0
+
+
+## (w4) 밭 둘레를 잘라 모아 둔다 (_strip이 이어 붙임)
+func _grab(ppu: float) -> int:
+	var img := vp.get_texture().get_image()
+	var w := mini(int(5.6 * ppu * 3.0), img.get_width())
+	var h := mini(int(4.4 * ppu * 3.0), img.get_height())
+	img = img.get_region(Rect2i((img.get_width() - w) / 2, (img.get_height() - h) / 2 - int(h * 0.12), w, h))
+	if ppu < 30.0:
+		img.resize(img.get_width() * 2, img.get_height() * 2, Image.INTERPOLATE_NEAREST)
+	else:
+		img.resize(img.get_width() * 3 / 4, img.get_height() * 3 / 4, Image.INTERPOLATE_LANCZOS)
+	_frames.append(img)
+	return 0
+
+
+## (w4) 모아 둔 그림을 세 장씩 줄지어 한 장으로
+func _strip(name: String) -> int:
+	if _frames.is_empty():
+		return 0
+	var fw := _frames[0].get_width()
+	var fh := _frames[0].get_height()
+	var cols := 3
+	var rows_n := int(ceil(_frames.size() / float(cols)))
+	var gap := 6
+	var out := Image.create(cols * fw + (cols - 1) * gap, rows_n * fh + (rows_n - 1) * gap, false, Image.FORMAT_RGBA8)
+	out.fill(Color.WHITE)
+	for i in _frames.size():
+		var f := _frames[i]
+		f.convert(Image.FORMAT_RGBA8)
+		out.blit_rect(f, Rect2i(0, 0, fw, fh), Vector2i((i % cols) * (fw + gap), (i / cols) * (fh + gap)))
+	var path := out_dir.path_join("%s_%s.png" % [tag, name])
+	out.save_png(path)
+	print("saved ", path, " ", out.get_size())
+	_frames.clear()
+	return 1
+

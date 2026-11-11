@@ -19,13 +19,16 @@ instance uniform float k = 1.0;                  // size multiplier (building si
 instance uniform float lift = 0.0;               // raise (ground mode: over the highest corner of the footprint)
 instance uniform vec3 cut = vec3(0.0, 0.0, -1.0);   // cut window x0, x1, cap (world units, bld_cut_sink) — z < 0 = none
 instance uniform float pull = 0.0;               // the whole card toward the camera along the view ray (depth only) — ripe wheat rows
+instance uniform float grow = 1.0;               // (Q8 ⑦) a wheat row growing back after the cart took its sheaves: 0 stubble → 1 ripe (bld_grow)
 
 varying vec2 v_loc;                              // card-local position in world units (x right, y up from the foot)
+varying float v_seed;                            // wheat rows (sway > 0): per-row seed of the ragged notch / grow-back · -1 = none
 
 void vertex() {
 	vec3 org = MODEL_MATRIX[3].xyz + vec3(0.0, lift, 0.0);
 	vec2 corner = VERTEX.xy;
 	v_loc = vec2(corner.x * flip * geo.x, (corner.y + 0.5) * geo.y) * k;
+	v_seed = sway > 0.0 ? bld_row_seed(org, geo.z) : -1.0;
 	vec3 w = bld_place(VERTEX.xy, org, geo, mode, flip, k, INV_VIEW_MATRIX);
 	if (sway > 0.0) {
 		w = bld_sway(w, VERTEX.xy, org, geo, sway, k, TIME, INV_VIEW_MATRIX);
@@ -38,8 +41,15 @@ void vertex() {
 
 void fragment() {
 	vec2 uv = UV;
-	if (cut.z >= 0.0) {
-		uv.y -= bld_cut_sink(v_loc.x, cut, geo.y * k) / (geo.y * k);
+	float h = geo.y * k;
+	float sink = cut.z >= 0.0 ? bld_notch_sink(v_loc.x, cut, h, v_seed) : 0.0;
+	vec3 gr = vec3(1.0);
+	if (grow < 1.0) {
+		gr = bld_grow(grow, v_loc.x, max(v_seed, 0.0));
+		sink = h * gr.y - min(h * gr.x, h - sink);
+	}
+	if (sink > 0.0) {
+		uv.y = bld_sunk_v(uv.y, sink, gr.y, h);
 		if (uv.y < 0.0) {
 			discard;
 		}
@@ -48,7 +58,7 @@ void fragment() {
 	if (t.a < alpha_cut) {
 		discard;
 	}
-	ALBEDO = t.rgb;
+	ALBEDO = mix(t.rgb * BLD_GROW_YOUNG, t.rgb, gr.z);
 	ROUGHNESS = 1.0;
 }
 
