@@ -194,6 +194,14 @@ func _initialize() -> void:
 					plan.append_array([_reap_at.bind(st), _run.bind(70), _aim.bind(ppu), _run.bind(10), _grab2.bind("y", ppu, 7.4, 6.0, 0.4)])
 				plan.append(_strip.bind("reap_yaws_ppu%d" % int(ppu), 2, "y"))
 			plan.append(_yaw.bind(0))
+		if pick.has("reapc"):
+			# (Q16) 방식 C 인형으로 거두는 장면을 네 보기(카메라 0~3걸음)에서 — 낫 든 일꾼 둘 + 이삭 멘 사람 둘
+			plan.append(_doll_c.bind(true))
+			for ppu: float in [44.0, 20.0]:
+				for st in 4:
+					plan.append_array([_reap_at.bind(st), _reap_face.bind(st), _dress_c.bind(true), _run.bind(70), _aim.bind(ppu), _run.bind(10), _who, _grab2.bind("y", ppu, 7.4, 6.0, 0.4)])
+				plan.append(_strip.bind("reap_yaws_c_ppu%d" % int(ppu), 2, "y"))
+			plan.append_array([_yaw.bind(0), _doll_c.bind(false)])
 		if pick.has("tools"):
 			for c: bool in [false, true]:
 				plan.append(_doll_c.bind(c))
@@ -907,6 +915,22 @@ func _reap_at(st: int) -> int:
 	_redraw()
 	print("reap_at st=", st, " rows ", BldEcon.wheat_rows(v, farm))
 	return 30
+
+
+## (Q16) 낫질하는 두 일꾼 가운데 하나(오른쪽)는 게임 규칙 그대로 밀 숲 앞 가장자리에서 옆모습 (BldEcon.wheat_stand가 돌려 세움),
+## 다른 하나(왼쪽)는 벤 그루터기 줄로 나와 카메라 걸음마다 다른 쪽을 본다 — 네 장면에 걸쳐 앞·비스듬한 앞·비스듬한 뒤·뒤
+func _reap_face(st: int) -> int:
+	var f := _fdir(st)
+	var r := _rdir(st)
+	var a: Array = [f, r + f * 0.5, r * 0.7 - f, -f]
+	var d: Vector2 = a[st]
+	var q := folk[1]                  # 왼쪽 일꾼 (오른쪽은 둘째 카메라 걸음에서 방앗간에 가린다)
+	q.x += f.x * 1.05
+	q.y += f.y * 1.05
+	q.px = q.x
+	q.py = q.y
+	q.facing = atan2(d.x, d.y)
+	return 2
 
 
 ## 방식 C 인형 (장면 그림 — docs/RESIDENTS_2D 7장)을 켜고 끈다. 켤 때는 그 인형을 쓸 수 있는 겉모습의 어른 넷을 세운다

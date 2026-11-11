@@ -16,7 +16,7 @@ const ADD := ["목조주택", "목조주택", "창고", "방앗간", "빵집", "
 const PPUS := [20.0, 44.0]
 var CLIPS := ["walk", "carry", "idle"]      # CUTC_CLIPS="sit,eat,lookup,kneel,hoe,gather" (2026-11-10 states4): 띠에 찍을 동작
 ## 띠에서 옛 인형이 드는 소품 (게임의 CutoutResident와 같게): 먹기 = 빵, 괭이질 = 괭이 (CUTC_PROP=9 → 나무망치 등)
-const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6}
+const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6, "reap": 7}
 ## (2026-11-10 states5) CUTC_LOAD="밀,밀가루,빵": 나르기·안고 서기 띠의 짐 (칸마다 차례로 — 하나면 모든 칸이 그 짐). 옛 인형은 게임과 같은
 ## 소품 (CutoutResident.CARRY_PROP, 없으면 바구니), 방식 C 인형은 그 짐의 그림. 없으면 밀가루.
 ## CUTC_TAG=flour: 띠 파일 이름에 붙임 (strip_tmp_flour_ppu20_carry_0.png) — 여러 번 찍어도 덮어쓰지 않게
@@ -26,6 +26,8 @@ const STRIP_PROP := {"carry": 2, "hold": 2, "eat": 0, "hoe": 6}
 ## CUTC_HEAD=1: 띠 두 인형의 머리 묶음 (0 = a, 1 = b) · CUTC_HAT=1: 모자 (묶음 번호 — 1·4 = 챙 넓은 모자)
 ## CUTC_MODE=family: 집 앞 마을 장면 — 왼쪽 셋은 옛 인형, 오른쪽 셋은 방식 C (같은 생김새): 자는 사람 · 아기를 안고 선 사람 · 아기를 안고 걷는 사람
 ##   (바라보는 쪽을 앞·비스듬한 앞·비스듬한 뒤·뒤로 돌려 가며 family_tmp_ppu<P>_<n>.png 네 장)
+## (2026-11-11 Q16) CUTC_CLIPS="q16seq": 걷기 → 낫질 → 나르기를 한 줄에 (같은 바닥 줄 — 동작이 바뀔 때 키·발 자리가 튀는지), 칸마다 [동작, 위상]
+const Q16_SEQ := [["walk", 0.06], ["walk", 0.56], ["reap", 0.08], ["reap", 0.3], ["reap", 0.46], ["reap", 0.65], ["carry", 0.06], ["carry", 0.56]]
 const LOAD_KINDS := ["밀", "밀가루", "빵", "통나무", "판자", "돌", "물", "낟알", "과일", "생선", "솜", "버섯"]
 const SP := 0.7            # 띠의 칸 간격 (세계)
 const ROW := 1.5          # 위·아래 줄의 깊이 차 (세계, 카메라 쪽)
@@ -321,6 +323,10 @@ func _strip_loop(_dt: float) -> int:
 				ph = (float(i % 4) + 0.5) / 4.0
 			if clip == "sleep":
 				ph = (float(i % 4) + 0.5) / 4.0
+			if clip == "q16seq":
+				oc = Q16_SEQ[i][0]
+				nc = oc
+				ph = Q16_SEQ[i][1]
 			var baby_clip := clip == "cradle" or clip == "rock"         # states6: 아기 안기 (옛 인형 = 안기 팔만)
 			if clip == "cradle":
 				oc = "carry"
