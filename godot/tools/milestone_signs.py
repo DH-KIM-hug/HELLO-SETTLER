@@ -2,6 +2,7 @@
 """자람의 보상 장식 그림 (docs/PROGRESSION.md 4.5 — Q9 첫 묶음): 빵 간판 · 마을 이름 표지판.
 Q9 ⑦ (2026-11-11): 문 앞 작은 바람개비 (첫걸음마) · 키 재는 기둥 (마을에서 난 첫 아이가 어른이 됨).
 Q9 ⑭ (2026-11-11): 곳간 문 위 햇밀 다발 (첫 푸른 밀 고개를 넘김).
+Q15 (2026-11-11): 잔치 소품 그림판 feast_props.png (잔칫상 · 등 · 손에 든 빵 · 손뼉 금 · 새 끈).
 
 임시 그림 — 그림 서브에이전트(codex exec)의 정식 그림이 오기 전까지 쓰는, 같은 팔레트·같은 굵은 갈색 테두리의 손그림.
 외부 그림을 쓰지 않는다 (도형만). 1칸 = 150점 (art/bld2d와 같은 촘촘함).
@@ -269,6 +270,142 @@ def wheat_sheaf(path):
     finish(im, w, h, path)
 
 
+# ───────────────────────── Q15 잔치 소품 (그림판 한 장) ─────────────────────────
+FEAST_ATLAS = (512, 160)                # view/milestone_view.gd FX_ATLAS · FX_PICS와 같게 (칸: x, y, 너비, 높이 — 점)
+FEAST_CELLS = {"spread": (2, 2, 258, 108), "lantern": (264, 2, 60, 156), "loaf": (328, 2, 48, 40),
+               "clap": (380, 2, 54, 54), "ribbon": (438, 2, 54, 46)}
+
+
+def _bun(d, x0, y0, x1, y1, slashes=3, ow=OW):
+    """둥근 빵 하나 (빵 간판의 빵과 같은 빛깔): 윗면 밝게 + 칼집"""
+    oval(d, x0, y0, x1, y1, LOAF, ow)
+    m = ow * 0.8
+    d.pieslice([(x0 + m) * S, (y0 + m) * S, (x1 - m) * S, (y1 - m - (y1 - y0) * 0.12) * S], 185, 355, fill=LOAF_L)
+    oval(d, x0 + m, y0 + (y1 - y0) * 0.36, x1 - m, y1 - m, LOAF, 0)
+    for k in range(slashes):
+        x = x0 + (x1 - x0) * (0.32 + 0.18 * k)
+        line(d, [(x - 2.5, y0 + (y1 - y0) * 0.2), (x + 2.5, y0 + (y1 - y0) * 0.46)], WOOD_D, max(2, ow - 2))
+
+
+def _spread():
+    """잔칫상: 통나무 다리 둘에 얹은 긴 널 + 흰 보 + 둥근 빵 셋 + 열매 그릇 + 물병. 모닥불 곁 (잔치 동안만)"""
+    w, h = 258, 108
+    im, d = canvas(w, h)
+    # 다리 (통나무 토막)
+    for x in (44, 214):
+        box(d, x - 13, 66, x + 13, h - 5, WOOD_D, 5, 4)
+        plain(d, x - 8, 72, x - 5, h - 11, WOOD)
+    # 널
+    box(d, 6, 54, w - 6, 74, WOOD, 6)
+    plain(d, 14, 58, w - 14, 61, WOOD_L)
+    # 보 (앞으로 드리운 자락 + 붉은 단)
+    poly(d, [(62, 56), (196, 56), (190, 90), (179, 82), (168, 90), (157, 82), (146, 90), (135, 82), (124, 90), (113, 82), (102, 90), (91, 82), (80, 90), (68, 84)], PETAL, 4)
+    line(d, [(70, 66), (188, 66)], ROOF, 3)
+    box(d, 54, 49, 204, 61, PETAL, 5, 4)
+    # 열매 그릇 (왼쪽)
+    for bx, by in ((24, 37), (33, 33), (42, 37), (29, 42), (38, 42)):
+        oval(d, bx - 6, by - 6, bx + 6, by + 6, ROOF, 3)
+    poly(d, [(12, 40), (54, 40), (47, 55), (19, 55)], BOARD_D, 4)
+    # 빵 셋 (가운데가 크다)
+    _bun(d, 66, 24, 110, 55)
+    _bun(d, 146, 25, 188, 55)
+    _bun(d, 102, 14, 154, 54)
+    # 물병 (오른쪽)
+    line(d, [(236, 30), (246, 32), (246, 42), (236, 46)], LINE, 5)
+    box(d, 214, 20, 238, 55, STONE, 9, 4)
+    box(d, 218, 12, 234, 24, STONE, 4, 4)
+    plain(d, 219, 28, 222, 48, BOARD)
+    # 발치
+    tuft(d, 14, h - 1, 3, 13)
+    tuft(d, 128, h - 1, 3, 11, True)
+    tuft(d, 244, h - 1, 3, 13)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def _lantern():
+    """막대에 건 작은 등: 굽은 나무 팔 + 줄 + 둥근 등 (붉은 갓 · 밝은 속) + 술. 잔칫상 양옆 (잔치 동안만)"""
+    w, h = 60, 156
+    im, d = canvas(w, h)
+    px = 16
+    # 막대 + 굽은 팔
+    line(d, [(px, 34), (px, 12), (40, 12)], LINE, 11)
+    line(d, [(px, 34), (px, 12), (40, 12)], WOOD, 5)
+    box(d, px - 5, 26, px + 5, h - 4, WOOD, 4, 4)
+    plain(d, px - 2, 34, px, h - 12, WOOD_L)
+    # 줄
+    line(d, [(40, 12), (40, 26)], LINE, 4)
+    # 등
+    oval(d, 24, 28, 56, 70, WHEAT_L, 4)
+    oval(d, 31, 36, 49, 60, PETAL, 0)
+    for x in (33, 47):
+        d.arc([(x - 9 if x < 40 else x - 5) * S, 30 * S, (x + 5 if x < 40 else x + 9) * S, 68 * S], 100 if x < 40 else 280, 260 if x < 40 else 80, fill=HEART, width=2 * S)
+    box(d, 31, 23, 49, 32, ROOF, 3, 3)
+    box(d, 33, 66, 47, 74, ROOF, 3, 3)
+    line(d, [(40, 74), (40, 86)], ROOF, 3)
+    # 발치
+    oval(d, px + 4, h - 13, px + 18, h - 2, STONE, 3)
+    tuft(d, px - 9, h - 1, 3, 11)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def _loaf():
+    """손에 든 빵 한 덩이 (한 입 베어 문 자국) — 잔치에서 먹는 사람의 입가에"""
+    w, h = 48, 40
+    im, d = canvas(w, h)
+    _bun(d, 3, 6, 45, 38, 2, 4)
+    d.ellipse([31 * S, 0 * S, 51 * S, 19 * S], fill=(0, 0, 0, 0))           # 베어 문 자리
+    d.arc([31 * S, 0 * S, 51 * S, 19 * S], 95, 215, fill=LINE, width=4 * S)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def _clap():
+    """손뼉 '짝' — 사방으로 튀는 짧은 금 여섯 + 가운데 작은 별"""
+    w, h = 54, 54
+    im, d = canvas(w, h)
+    cx, cy = 27, 27
+    for k in range(6):
+        a = k * math.tau / 6 - math.pi / 2
+        r0, r1 = (11, 23) if k % 2 == 0 else (12, 20)
+        p0 = (cx + math.cos(a) * r0, cy + math.sin(a) * r0)
+        p1 = (cx + math.cos(a) * r1, cy + math.sin(a) * r1)
+        line(d, [p0, p1], LINE, 8)
+        line(d, [p0, p1], HEART if k % 2 == 0 else PETAL, 4)
+    pts = []
+    for i in range(8):
+        a = i * math.tau / 8 - math.pi / 2
+        r = 8 if i % 2 == 0 else 3.6
+        pts.append((cx + math.cos(a) * r, cy + math.sin(a) * r))
+    poly(d, pts, PETAL, 3)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def _ribbon():
+    """새로 묶은 붉은 끈 (나비매듭) — 키 재는 기둥의 새 눈금"""
+    w, h = 54, 46
+    im, d = canvas(w, h)
+    cx, cy = 27, 18
+    poly(d, [(cx - 3, cy + 4), (cx - 15, cy + 25), (cx - 5, cy + 22)], ROOF, 3)
+    poly(d, [(cx + 3, cy + 4), (cx + 15, cy + 25), (cx + 5, cy + 22)], ROOF, 3)
+    poly(d, [(cx, cy), (cx - 23, cy - 13), (cx - 23, cy + 12)], ROOF, 4)
+    poly(d, [(cx, cy), (cx + 23, cy - 13), (cx + 23, cy + 12)], ROOF, 4)
+    line(d, [(cx - 17, cy - 4), (cx - 9, cy - 1)], PETAL, 3)
+    line(d, [(cx + 17, cy - 4), (cx + 9, cy - 1)], PETAL, 3)
+    box(d, cx - 7, cy - 7, cx + 7, cy + 7, HEART, 4, 4)
+    return im.resize((w, h), Image.LANCZOS)
+
+
+def feast_props(path):
+    """잔치 소품 그림판 (Q15): 잔칫상 · 등 · 손에 든 빵 · 손뼉 금 · 새 끈 — 칸 자리는 FEAST_CELLS"""
+    sheet = Image.new("RGBA", FEAST_ATLAS, (0, 0, 0, 0))
+    for name, fn in (("spread", _spread), ("lantern", _lantern), ("loaf", _loaf), ("clap", _clap), ("ribbon", _ribbon)):
+        x, y, w, h = FEAST_CELLS[name]
+        im = fn()
+        assert im.size == (w, h), (name, im.size)
+        sheet.alpha_composite(im, (x, y))
+    sheet.save(path)
+    print("wrote", path, sheet.size)
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "art", "milestones")
@@ -278,3 +415,4 @@ if __name__ == "__main__":
     pinwheel(os.path.join(out, "pinwheel.png"))
     height_post(os.path.join(out, "height_post.png"))
     wheat_sheaf(os.path.join(out, "wheat_sheaf.png"))
+    feast_props(os.path.join(out, "feast_props.png"))
