@@ -773,6 +773,40 @@ func test_wheat() -> void:
 						hid = true
 			check(econ.step == st and cards == 8 and full and covers == 7 and low and not hid,
 				"방위 걸음 %d · 더미 줄 %d칸 앞의 익은 밭: 그림 %d장 제 크기 · 가림 판 %d개(줄마다, 제 키) · 제재소 판자 더미 %d개는 안 가림" % [st, int(ahead), cards, covers, piles.size()])
+	# (Q8) 제 건물보다 넓은 밀 숲이 바로 앞 한가운데에 서면 (좁은 우물 — 곁의 자리가 모두 숲 뒤): 더미가 숲 옆 끝 바로 밖으로 나온다
+	var well := _add(a, "우물", true)
+	check(well != null, "우물을 놓음")
+	if well != null:
+		well.out["물"] = BldEcon.out_full("물")
+		var tw0: Vector2 = BldEcon.step_dirs(0)[0]
+		var ww := float(Bld2D.info(String(BldEcon.pic_k(a, well)[0]))["w"]) * float(BldEcon.pic_k(a, well)[1])
+		var reach := 0.0                # 가장 멀리 나간 더미 — 곁의 자리(NUDGE_OUT) 밖이면 숲 옆 끝 규칙(_field_side)이 쓰인 것
+		_yaw_cam(scene, vw, 0)
+		for gap: float in [2.6, 2.2, 1.9]:
+			farm.x = well.x + tw0.x * gap
+			farm.y = well.y + tw0.y * gap
+			vw._bld_key.erase(farm.id)
+			econ._apron_frame = -1
+			for i in 4:
+				vw.sync(0.3, true)
+			var worg: Vector3 = (vw._blds[well.id] as Node3D).position
+			var wp := _pile_xy(econ, worg, "water_", 3.6)
+			var whid := wp.is_empty()
+			var far := 0.0
+			for pl: Vector2 in wp:
+				far = maxf(far, absf(pl.x))
+				for c: Array in econ._covers:
+					if int(c[4]) != farm.id:
+						continue
+					var dv := Vector2(float(c[0]), float(c[1])) - (Vector2(worg.x, worg.z) + econ._r2 * pl.x + econ._f2 * pl.y)
+					var al := dv.dot(econ._f2)
+					if al > 0.05 and al * BldEcon.APRON_SIN < float(c[3]) and absf(dv.dot(econ._r2)) < float(c[2]) + BldEcon.PILE_HALF:
+						whid = true
+			reach = maxf(reach, far)
+			check(econ.step == 0 and not whid and far <= ww * 0.5 + BldEcon.NUDGE_OUT + BldEcon.FIELD_OUT + 0.01,
+				"우물 %.1f칸 앞 한가운데의 익은 밭: 물 더미 %d개가 숲 옆 끝 밖에 보임 (우물에서 옆으로 %.2f칸 — 곁 %.2f칸 · 더 나가도 %.2f칸 안)"
+				% [gap, wp.size(), far, ww * 0.5 + BldEcon.NUDGE_OUT, ww * 0.5 + BldEcon.NUDGE_OUT + BldEcon.FIELD_OUT])
+		print("     (Q8) 우물 물 더미가 가장 멀리 나간 자리 %.2f칸 · 곁의 자리 끝 %.2f칸" % [reach, ww * 0.5 + BldEcon.NUDGE_OUT])
 	scene.queue_free()
 
 

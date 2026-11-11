@@ -10,6 +10,7 @@
 ##  · '앞'은 지금 카메라 방위 걸음(step 0~3)으로 — 방위가 바뀔 때만 꽃·풀을 다시 잰다 (apron_ver · place_key)
 ##  · 민들레·큰 버섯(FloraView)도 더미 앞마당에서는 낮춤 (plant_cap). 밀밭(Q8 — 익으면 주민 키의 1.5배쯤인 금빛 밀 숲)은 줄이지 않는다:
 ##    가리는 것은 밀 줄 하나하나(_cover_scan · 제 키로)이고, 가려지는 더미는 아래 규칙대로 옆으로 옮긴다
+##    (제 건물 앞줄의 반대편 → 바깥 → 그래도 가리면 숲 옆 끝 바로 밖 _field_side. 밭의 볏단은 앞 울타리 오른쪽 끝, 가리면 왼쪽 끝)
 ##  · 다른 건물 그림이 앞을 가리면 더미를 제 건물 앞줄에서 옆으로 (_slot — 건물은 안 옮김)
 ##  · 채집 일꾼 인형은 나무·바위 그림의 깊이 면 앞·화면 옆에 세움 (stand_pos — 시뮬 자리·수확은 그대로) + 그 앞 꽃을 낮춤
 ##  · 둘레에 벨 나무·캘 바위가 없으면 그림 풍선 (bub_no_tree · bub_no_rock) · 조각은 그 일꾼이 정말 베고 캘 때만
@@ -63,16 +64,16 @@ const NUDGE := [0.8, 1.6]        # 옆으로 옮겨 보는 걸음 — 반대편,
 const NUDGE_OUT := 1.2           # 건물 그림 반 폭 + 이것 안에서만 (제 건물 곁 — 앞마당 폭 APRON_SIDE 안)
 const NUDGE_STEP := 0.25         # 반대편·바깥이 다 가리면 이 간격으로 훑음
 const NUDGE_GAP := 0.7           # 그 건물의 다른 더미 자리와 이만큼은 띄움
+const FIELD_OUT := 0.8           # (Q8) 제 건물보다 넓은 밀 숲 뒤라 곁의 자리가 다 가리면: 숲 옆 끝 바로 밖으로, 건물 곁에서 이만큼 더 멀리까지
 ## 밀밭 그림(줄마다 세운 판)이 그 뒤 무덤을 가리면 그 줄을 무덤 폭만큼 낮춘다 (grave_cut — 밭 자리·수확은 그대로)
-const GRAVE_CLEAR := 0.7         # (E1-5) 밀 줄 윗선은 무덤 자리보다 이만큼 앞에서 끝남 — 돌 발치의 꽃까지 보이게 (돌 그림 밑변 + 꽃 줄)
-const GRAVE_HALF_W := 0.7        # 무덤 돌·꽃의 반 폭 (밀 줄을 이 폭으로 벤다)
+const GRAVE_CLEAR := 0.5         # (E1-5) 밀 줄 윗선은 무덤 자리보다 이만큼 앞에서 끝남 — 돌 발치의 꽃까지 보이게 (돌 그림 밑변 + 꽃 줄)
+const GRAVE_HALF_W := 0.5        # 무덤 돌·꽃의 반 폭 (밀 줄을 이 폭으로 벤다) — (2026-11-11) 좁은 홈: 네 칸 밭이 통째로 그루터기가 되지 않게
 const GRAVE_MIN_H := 0.1         # 무덤 바로 앞의 줄도 이 키(그루터기)는 남김
-const GRAVE_RAMP := 1.2          # 낮춘 창 밖에서 제 키로 돌아오는 길이 (bld_card.gdshaderinc BLD_CUT_RAMP와 같은 값) — 길고 완만한 비탈
-const GRAVE_DEEP := 0.8          # 이보다 깊이 낮춘 줄은 비탈도 그만큼 길게 (깊이 / 이 값 배 — BLD_CUT_DEEP와 같은 값): 깊은 골도 벼랑이 아니라 언덕
-const GRAVE_SIDE := 0.2          # 창 옆에 남는 밭 어깨(창 끝 ~ 밭 끝)가 GRAVE_RAMP + 이보다 좁으면 그쪽은 밭 끝까지 낮춘다 (뿔처럼 선 밀 한 줌이 없게).
+const GRAVE_RAMP := 0.6          # 낮춘 창 밖에서 제 키로 돌아오는 길이 (bld_card.gdshaderinc BLD_CUT_RAMP와 같은 값) — 길고 완만한 비탈
+const GRAVE_DEEP := 1.6          # 이보다 깊이 낮춘 줄은 비탈도 그만큼 길게 (깊이 / 이 값 배 — BLD_CUT_DEEP와 같은 값): 깊은 골도 벼랑이 아니라 언덕
+const GRAVE_SIDE := 0.45         # 창 옆에 남는 밭 어깨(창 끝 ~ 밭 끝)가 이보다 좁으면 그쪽은 밭 끝까지 낮춘다 (뿔처럼 선 밀 한 줌이 없게) — 그 밖에는 홈만.
                                  # 밭 폭(가장 넓은 익은 줄)으로 재므로 여섯 줄이 같은 쪽을 함께 남기거나 함께 낮춘다
-const REAP_ROWS := 4             # (Q8 거두기 — 보기만) 익은 밭은 일하는 낮 동안 앞줄부터 이만큼 그루터기로 (여섯 줄 중 — 뒤 두 줄은 늘 서 있음)
-const REGROW := [1.5, 4.5, 8.0]  # 일을 마친 뒤 벤 줄: 이 시간(시)까지 그루터기 · 싹 · 푸른 밀, 그 뒤 다시 익음 (아침 일 전에 숲이 다 참)
+const REAP_ROWS := 4             # (Q8 거두기 — 보기만) 익은 밭은 벤 밀이 한 수레(out_full) 찰 때까지 앞줄부터 이만큼 그루터기로 (여섯 줄 중 — 뒤 두 줄은 늘 서 있음)
 const WHEAT_STAND := 0.26        # 밀 숲 앞면(맨 앞 익은 줄)에서 이만큼 카메라 쪽에 선다 — 숲 안으로는 들어가지 않는다 (wheat_stand)
 const WHEAT_IN := 0.35           # ... 줄 끝에서 이만큼 안쪽까지만
 const WHEAT_EDGE := 0.6          # 숲 옆·뒤로 들어서는 사람은 이 길이에 걸쳐 앞 가장자리로 비켜 든다 (자리가 튀지 않게)
@@ -852,9 +853,9 @@ static func grave_cut(vil: Village, farm: Building, st: int, pic: String) -> Arr
 	if not out.is_empty():
 		var fw := field_half_w()
 		var far := hw + cut_ramp(h, float(out[2]))
-		if float(out[0]) + fw < GRAVE_RAMP + GRAVE_SIDE:
+		if float(out[0]) + fw < GRAVE_SIDE:
 			out[0] = -far
-		if fw - float(out[1]) < GRAVE_RAMP + GRAVE_SIDE:
+		if fw - float(out[1]) < GRAVE_SIDE:
 			out[1] = far
 	return out
 
@@ -881,34 +882,30 @@ static func cut_sink(x: float, cut: Array, h: float) -> float:
 
 
 ## (Q8 거두기 — 보기만, ADR-0001) 밭 여섯 줄(뒤→앞)의 모습 (Bld2D.ROW_*): 익기 전에는 모두 자람 단계 그대로.
-## 익은 밭에 일꾼이 있으면 일하는 낮 동안 앞줄부터 한 줄씩 그루터기가 되고 (하루 REAP_ROWS줄), 일을 마친 밤사이 그 줄들이
-## 싹 → 푸른 밀 → 익은 밀로 다시 자란다 (REGROW). 시뮬의 수확량·시간은 그대로 — 시각과 익은 때(ready_at)만 읽는 순수 함수.
+## 익은 밭은 시뮬이 정말 거둔 만큼 앞줄부터 그루터기다 (2026-11-11 — 옛 그림은 시계를 따라 베어 실제 수확과 어긋났다):
+## 밭이 벤 밀은 실어 갈 때까지 밭 곁에 볏단으로 쌓인다 (b.out["밀"] — 볏단 더미와 같은 값) → 그 몫 (한 수레 out_full에 대해)만큼
+## REAP_ROWS줄 가운데 앞에서부터 (reaped_rows). 볏단을 실어 가면 그 줄은 다시 익은 밀 (밭은 익은 뒤 쉬지 않고 거둔다 — 시뮬과 같음).
+## 밭의 값(익은 때 · 쌓인 밀)만 읽는 순수 함수 — 시각·일꾼 자리와 상관없다.
 static func wheat_rows(vil: Village, b: Building) -> Array:
 	var stage := VillageView.wheat_stage(b, vil.t)
 	var out: Array = []
 	out.resize(Bld2D.Pics.WHEAT_STUBBLE.size())
 	out.fill(stage)
-	if stage < Bld2D.ROW_RIPE or b.worker < 0 or b.is_site():
+	if stage < Bld2D.ROW_RIPE or b.is_site():
 		return out
-	var h := vil.hour_now()
-	var per := (Balance.WORK_TO - Balance.WORK_FROM) / float(REAP_ROWS + 1)      # 한 줄 베는 데 (시)
-	var since := (vil.t - b.ready_at) / Village.HOUR                             # 익은 지 (시)
-	var n := 0
-	var state := Bld2D.ROW_STUBBLE
-	if h >= Balance.WORK_FROM and h < Balance.WORK_TO:
-		n = mini(int((h - Balance.WORK_FROM) / per), int(since / per))
-	else:
-		var e := fposmod(h - Balance.WORK_TO, 24.0)                              # 일을 마친 지 (시)
-		n = int(maxf(since - e, 0.0) / per)
-		if e >= float(REGROW[2]):
-			state = Bld2D.ROW_RIPE
-		elif e >= float(REGROW[1]):
-			state = 1
-		elif e >= float(REGROW[0]):
-			state = 0
-	for i in clampi(n, 0, REAP_ROWS):
-		out[out.size() - 1 - i] = state
+	for i in reaped_rows(float(b.out.get("밀", 0.0))):
+		out[out.size() - 1 - i] = Bld2D.ROW_STUBBLE
 	return out
+
+
+## 밭 곁에 쌓인 벤 밀 cut → 그루터기가 된 앞줄 수 (0 ~ REAP_ROWS): 한 수레의 1/REAP_ROWS마다 한 줄 (반올림 — 반 줄을 넘기면 그 줄을 벤 것)
+static func reaped_rows(cut: float) -> int:
+	return clampi(int(floor(reaped_frac(cut) * REAP_ROWS + 0.5)), 0, REAP_ROWS)
+
+
+## 벤 밀이 한 수레에서 차지하는 몫 (0~1) — 거둔 정도
+static func reaped_frac(cut: float) -> float:
+	return clampf(cut / maxf(out_full("밀"), 1.0), 0.0, 1.0)
 
 
 ## 밭 b의 그림 판 목록 (Bld2D.wheat_cards — 지금 자람 단계·거두는 줄)
@@ -972,7 +969,7 @@ func _cover_scan() -> void:
 				if rd.is_empty() or int(rd.get("mode", 0)) == 1:
 					continue
 				var rb := Vector2(b.x, b.y) + _f2 * float(rd["front"]) + _r2 * float(rd.get("dx", 0.0))
-				cards.append([rb.x, rb.y, float(rd["w"]) * 0.5, float(rd["h"]), b.id])
+				cards.append([rb.x, rb.y, float(rd["w"]) * 0.5, float(rd["h"]), b.id, 1])     # 여섯째 칸 = 밀 줄 (_field_side)
 				if Bld2D.is_ripe_row(nm):
 					var hw := float(rd["w"]) * 0.5
 					if fld.is_empty():
@@ -1008,7 +1005,7 @@ func _cov_for(id: int, org: Vector3) -> Array:
 		var lat := dv.dot(_r2)
 		if along <= 0.0 or (along - 6.0) * APRON_SIN >= float(c[3]) or absf(lat) > float(c[2]) + 8.0:
 			continue
-		out.append([lat, along, float(c[2]), float(c[3])])
+		out.append([lat, along, float(c[2]), float(c[3]), c.size() > 5])
 	_cov_by[id] = out
 	return out
 
@@ -1090,8 +1087,41 @@ func _slot(org: Vector3, sx: float, sy: float, bushes: Array) -> Vector3:
 			if best != sx:
 				sx = best
 				y = _bush_y(sx, sy, bushes)
+		if _covered(sx, y):          # (Q8) 그래도 가림 = 제 건물보다 넓은 밀 숲 바로 뒤 → 그 숲의 옆 끝 바로 밖으로 (거인이 보는 자리)
+			var e := _field_side(sx, y)
+			if not is_nan(e):
+				sx = e
+				y = _bush_y(sx, sy, bushes)
 	_used.append(sx)
 	return _at(org, sx, y)
+
+
+## (Q8) 자리 (sx, sy)를 가리는 밀 줄들의 옆 끝 바로 밖 — 가까운 쪽부터, 건물 곁(_slot_max + FIELD_OUT) 안에서
+## 아무 그림에도 안 가리고 이미 놓인 더미와 안 겹치는 첫 자리. 없으면 NAN (제자리)
+func _field_side(sx: float, sy: float) -> float:
+	var lo := INF
+	var hi := -INF
+	for c: Array in _cov:
+		var a := float(c[1]) - sy
+		if bool(c[4]) and a > 0.05 and a * APRON_SIN < float(c[3]) and absf(sx - float(c[0])) < float(c[2]) + PILE_HALF:
+			lo = minf(lo, float(c[0]) - float(c[2]) - PILE_HALF - 0.05)
+			hi = maxf(hi, float(c[0]) + float(c[2]) + PILE_HALF + 0.05)
+	if lo > hi:
+		return NAN
+	var ends: Array = [lo, hi] if sx - lo <= hi - sx else [hi, lo]
+	for c0: float in ends:
+		var sg := -1.0 if c0 < sx else 1.0
+		for n in 4:
+			var c := c0 + sg * NUDGE_STEP * float(n)
+			if absf(c) > _slot_max + FIELD_OUT:
+				break
+			var taken := false
+			for ox: float in _used:
+				if absf(ox - c) < NUDGE_GAP:
+					taken = true
+			if not taken and not _covered(c, sy):
+				return c
+	return NAN
 
 
 func _bush_y(sx: float, sy: float, bushes: Array) -> float:
