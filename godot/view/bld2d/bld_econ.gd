@@ -71,17 +71,33 @@ const GRAVE_HALF_W := 0.5        # 무덤 돌·꽃의 반 폭 (밀 줄을 이 �
 const GRAVE_MIN_H := 0.1         # 무덤 바로 앞의 줄도 이 키(그루터기)는 남김
 const GRAVE_RAMP := 0.6          # 낮춘 창 밖에서 제 키로 돌아오는 길이 (bld_card.gdshaderinc BLD_CUT_RAMP와 같은 값) — 길고 완만한 비탈
 const GRAVE_DEEP := 1.6          # 이보다 깊이 낮춘 줄은 비탈도 그만큼 길게 (깊이 / 이 값 배 — BLD_CUT_DEEP와 같은 값): 깊은 골도 벼랑이 아니라 언덕
-const GRAVE_SIDE := 0.45         # 창 옆에 남는 밭 어깨(창 끝 ~ 밭 끝)가 이보다 좁으면 그쪽은 밭 끝까지 낮춘다 (뿔처럼 선 밀 한 줌이 없게) — 그 밖에는 홈만.
-                                 # 밭 폭(가장 넓은 익은 줄)으로 재므로 여섯 줄이 같은 쪽을 함께 남기거나 함께 낮춘다
+const GRAVE_SIDE := 1.2          # 창 옆에 남는 밭 어깨(창 끝 ~ 밭 끝)가 이보다 좁으면 그쪽은 밭 끝까지 낮춘다 (뿔처럼 선 밀 한 줌이 없게) — 그 밖에는 홈만.
+                                 # 밭 폭(가장 넓은 익은 줄)과 밭 자리(x + dx)로 재므로 여섯 줄이 같은 쪽을 함께 남기거나 함께 낮춘다.
+                                 # (Q14 ⑫ — 0.45에서 넓힘: 좁게 남은 어깨는 뿔처럼 선 밀 한 줌으로 보였다. 무덤 폭보다 넓은 숲만 남긴다)
+const GRAVE_TUFT := 0.24         # (Q14 ⑫) 줄 하나로도 잰다: 그 줄이 제 끝까지 가는 동안 제 키로 돌아와 이만큼(이삭 한 무리 반)도 서지 못하면
+                                 # (창 끝 ~ 줄 끝 < 비탈 + 이것) 그 줄은 줄 끝까지 낮춘다 — 홈과 밭 끝 사이에 가는 밀 한 포기가 홀로 남지 않는다
 const NOTCH_CLUMP := 0.16        # (Q8 ⑥ 홈 옆선 — 보기만) 밀 줄이 홈 밖에서 제 키로 돌아올 때 한 덩이로 서는 이삭 무리의 폭 (bld_card.gdshaderinc BLD_NOTCH_CLUMP와 같은 값)
 const NOTCH_REACH := 1.0         # 무리들이 제 키에 닿는 거리 = cut_ramp × 이것 (BLD_NOTCH_REACH) — 1 = 옛 비탈(cut_sink)과 같은 너비, 홈이 더 넓어지지 않는다
 const NOTCH_STEP := 0.36        # 무리 폭 가운데 앞 무리의 키에서 제 키로 둥글게 올라서는 몫 — 나머지는 한 키로 선다 (이삭이 비틀리지 않게 · BLD_NOTCH_STEP)
 const NOTCH_ROUND := 1.3         # 어깨의 둥글기: 무리의 낮춤 = (1 - s)^이것 (1 = 곧은 비탈 · BLD_NOTCH_ROUND)
+const NOTCH_WIDE := 0.56         # (Q14 ⑪) 무리 사이 경계가 제자리에서 밀리는 폭 (무리 폭의 몫 · ±절반) — 좁은 무리와 넓은 무리가 섞인다 (BLD_NOTCH_WIDE).
+                                 # 고른 폭의 무리가 고른 키로 올라서면 화면에서는 맨 뒷줄 하나의 계단이 그대로 보였다 (정면 홈 왼쪽의 계단진 비탈)
+const NOTCH_VARY := 0.4          # 무리는 제 가운데 자리에서 어깨를 읽는다 (넓은 무리는 크게, 좁은 무리는 조금 올라선다) ± 이것의 절반 (무리 폭의 몫 · BLD_NOTCH_VARY).
+                                 # 1 - NOTCH_WIDE보다 작아야 밖의 무리가 안쪽 무리보다 낮아지지 않는다
+const NOTCH_SHORT := 0.15        # 줄·좌우마다 제 키로 돌아오는 거리가 이 몫까지 짧다 (BLD_NOTCH_SHORT) — 줄들의 어깨가 서로 다른 곳에서 끝난다
 const REAP_ROWS := 4             # (Q8 거두기 — 보기만) 익은 밭은 벤 밀이 한 수레(out_full) 찰 때까지 앞줄부터 이만큼 그루터기로 (여섯 줄 중 — 뒤 두 줄은 늘 서 있음)
 const REGROW_ROW := 1.5          # (Q8 ⑦ 다시 자람 — 보기만) 볏단을 실어 간 뒤 한 줄이 그루터기에서 익은 밀로 자라는 시간 (화면 초 · 보통 빠르기 기준)
 const REGROW_GAP := 0.7          # 맨 뒷줄부터 이 간격으로 다음 줄(앞쪽)이 따라 자란다 — 네 줄이면 3.6초
 const REGROW_SKIP := 1800.0      # 두 번 살피는 사이 병의 시간이 이보다 많이 흘렀으면 건너뛴 것 (병 초) — 자라는 모습 없이 곧바로 끝 모습
 const REGROW_STUB := "regrow_stub_"   # 자라는 줄 밑에 잠깐 깔리는 그루터기 판의 이름 (밭 노드 아래 · 'pic' 표시 없음 — 건물 그림 판으로 세지 않는다)
+const REGROW_YOUNG := "regrow_young_" # (Q14 ⑬) 자라는 줄 앞에 잠깐 서는 어린 밀 판의 이름 + 단계(0 싹 · 1 푸른 밀) + "_" + 줄 번호 — 그 줄의 싹·푸른 밀 그림 그대로
+const REGROW_SPROUT := [0.0, 0.14, 0.30, 0.46]   # 한 줄의 자람 몫 g(0~1)에서 싹이: 돋기 시작 · 다 돋음 · 물러나기 시작 · 다 물러남
+const REGROW_GREEN := [0.08, 0.42, 0.76, 0.98]   # 푸른 밀이: 〃 (싹이 물러나기 전에 그 위로 자라 있고, 익은 밀이 제 위로 올라선 뒤에 물러난다)
+const REGROW_RIPE := 0.30        # 익은 밀 그림은 이때부터 오른다 — 푸른 잎 뒤에서 올라 이삭 끝이 잎 위로 나온다 (납작한 연두 조각이 땅에서 솟지 않는다)
+const REGROW_FRONT := 0.015      # 어린 밀 판은 그 줄의 익은 판보다 이만큼(푸른 밀) · 두 배(싹) 카메라 쪽 깊이에 — 앞줄의 익은 판(0.065쯤 앞)보다는 뒤
+const REGROW_WALK := 0.45        # 자라기 시작할 때 숲 앞에 섰던 사람은 이 시간(다시 자람 시계)에 걸쳐 새 앞면으로 물러난다 (한 화면에 1칸 넘게 튀지 않게)
+const GROW_CLUMP := 0.31         # bld_card.gdshaderinc BLD_GROW_CLUMP · BLD_GROW_LATE와 같은 값 (grow_rise — 시험)
+const GROW_LATE := 0.3
 const WHEAT_STAND := 0.26        # 밀 숲 앞면(맨 앞 익은 줄)에서 이만큼 카메라 쪽에 선다 — 숲 안으로는 들어가지 않는다 (wheat_stand)
 const WHEAT_IN := 0.35           # ... 줄 끝에서 이만큼 안쪽까지만
 const WHEAT_EDGE := 0.6          # 숲 옆·뒤로 들어서는 사람은 이 길이에 걸쳐 앞 가장자리로 비켜 든다 (자리가 튀지 않게)
@@ -151,7 +167,7 @@ var apron_ver := 0               # 앞마당(건물·일꾼 자리·방위)이 �
 var tree_draw := {}              # 나무 자리 Vector2 → [꽃 모델, 그린 크기] (VillageView._sync_trees가 적음 — 일꾼이 설 자리)
 var rock_draw := {}              # 바위 자리 Vector2 → 그린 크기 (VillageView._sync_rocks가 적음)
 var stands := {}                 # 주민 id → [dx, dz, 몫 0~1, 바라보는 쪽] (채집 일꾼 인형을 비켜 세운 만큼)
-var fields: Array = []           # 익은 밀 숲: [밭 x, y, 앞면 front, 맨 뒷줄 front, 앞면 줄 반 폭, 숲 반 폭] (_cover_scan — wheat_stand)
+var fields: Array = []           # 익은 밀 숲: [밭 x, y, 앞면 front, 맨 뒷줄 front, 앞면 줄 반 폭, 숲 반 폭, 밭 id] (_cover_scan — wheat_stand)
 var _spots := {}                 # 채집 일터 id → 앞마당 한 줄 [x, y, 0, 옆 폭, 나무·바위 x, y]
 var _apron_sig := 0
 var _covers: Array = []          # 세워 놓은 건물 그림 판 [밑변 가운데 x, z, 반 폭, 가리는 키, 건물 id]
@@ -169,6 +185,8 @@ var _regrow_t := 0.0             # 다시 자람 시계: 화면 초, 보통보�
 var _regrow_vt := -1.0           # 지난 화면의 병 시각 (시계를 맞추는 데)
 var _regrow_look_vt := 0.0       # 지난번 살핀 때의 병 시각 (건너뛰었는지)
 var _regrow_once := false        # 처음 살필 때는 적어 두기만 (불러온 마을의 밭이 자라는 시늉을 하지 않게)
+var _regrow_walk := {}           # (Q14) 밭 id → [시작한 때 (_regrow_t), 그때의 숲 앞면 front, 새 앞면 front] — 숲 앞에 섰던 사람이 물러나는 동안
+var _young_mats := {}            # (Q14 ⑬) 푸른 밀 줄 그림 → 깊이로 기울지 않는 재질 (어린 밀 판은 익은 줄 면 가까이 서므로 발이 앞으로 나오면 앞줄을 가린다)
 var _seen_once := false          # 처음 살필 때는 통·퐁 없음 (불러온 마을이 한꺼번에 튀지 않게)
 var _r2 := Vector2.RIGHT         # 화면 오른쪽 (마을 기준 땅 위 x·z)
 var _f2 := Vector2.DOWN          # 카메라 쪽
@@ -868,13 +886,26 @@ static func grave_cut(vil: Village, farm: Building, st: int, pic: String) -> Arr
 		else:
 			out = [minf(float(out[0]), lat - GRAVE_HALF_W), maxf(float(out[1]), lat + GRAVE_HALF_W), minf(float(out[2]), cap)]
 	if not out.is_empty():
-		var fw := field_half_w()
-		var far := hw + cut_ramp(h, float(out[2]))
-		if float(out[0]) + fw < GRAVE_SIDE:
-			out[0] = -far
-		if fw - float(out[1]) < GRAVE_SIDE:
-			out[1] = far
+		var ends := cut_ends(float(out[0]), float(out[1]), float(out[2]), h, hw, float(d.get("dx", 0.0)))
+		out[0] = ends.x
+		out[1] = ends.y
 	return out
+
+
+## (Q14 ⑫) 벤 창 [x0, x1] (줄 그림 가운데 기준 · 키 cap까지)의 양 끝을 밭 끝에 맞춘다 → 고친 (x0, x1). 순수 (시험).
+## ① 밭 전체로: 창 끝에서 밭 끝(가장 넓은 줄)까지 남는 어깨가 GRAVE_SIDE보다 좁으면 그쪽은 끝까지 낮춘다 — 밭 자리로 재므로
+##    (x + dx) 그 창에 걸린 줄들이 모두 같은 답을 낸다 (어느 줄은 낮추고 어느 줄은 세워 두어 한 줄만 뿔처럼 남는 일이 없다).
+## ② 줄 하나로: 그 줄이 제 끝 전에 제 키로 돌아와 GRAVE_TUFT만큼도 서지 못하면 그 줄만 끝까지 낮춘다 (밭보다 좁은 줄 — 맨 뒷줄 · 맨 앞줄).
+static func cut_ends(x0: float, x1: float, cap: float, h: float, hw: float, dx: float) -> Vector2:
+	var fw := field_half_w()
+	var ramp := cut_ramp(h, cap)
+	var far := hw + ramp
+	var need := ramp + GRAVE_TUFT
+	if x0 + dx + fw < GRAVE_SIDE or x0 + hw < need:
+		x0 = -far
+	if fw - (x1 + dx) < GRAVE_SIDE or hw - x1 < need:
+		x1 = far
+	return Vector2(x0, x1)
 
 
 ## 키 h인 줄을 cap까지 낮춘 창 밖에서 제 키로 돌아오는 길이 (bld_cut_sink와 같은 셈)
@@ -905,6 +936,8 @@ static func cut_sink(x: float, cut: Array, h: float) -> float:
 ## 짧고 둥글게 올라선다 (NOTCH_STEP = 무리 폭 가운데 그 오름이 차지하는 몫 · 첫 무리는 홈 바닥에서 올라서므로 창 끝에 벽이 서지 않는다).
 ## 홈 곁의 무리가 가장 낮고 밖으로 갈수록 이삭 하나쯤씩 높다 — (1 - s)^NOTCH_ROUND 완만한 어깨.
 ## 무리마다 어깨를 읽는 자리가 달라 (row_hash) 줄끼리 어긋나고, 옆선이 밭 윗선처럼 들쭉날쭉.
+## (Q14 ⑪) 무리의 폭이 고르지 않다 (경계가 밀림 — NOTCH_WIDE): 넓은 무리는 크게, 좁은 무리는 조금 올라서고 (제 가운데 자리의 어깨 ± NOTCH_VARY),
+## 줄·좌우마다 돌아오는 거리도 조금씩 다르다 (NOTCH_SHORT) — 고른 폭·고른 키면 화면에서 맨 뒷줄의 계단 하나가 곧은 빗금으로 보였다.
 ## seed = 줄마다의 씨 (row_seed) · 음수면 cut_sink 그대로 (울타리처럼 밀이 아닌 판)
 static func notch_sink(x: float, cut: Array, h: float, seed: float) -> float:
 	if cut.size() != 3 or seed < 0.0:
@@ -915,16 +948,36 @@ static func notch_sink(x: float, cut: Array, h: float, seed: float) -> float:
 		return cut_sink(x, cut, h)
 	var s0 := seed + (5.3 if x >= float(cut[1]) else 0.0)
 	var cw := NOTCH_CLUMP * (0.75 + 0.5 * row_hash(s0))
+	var reach := cut_ramp(h, float(cut[2])) * NOTCH_REACH * (1.0 - NOTCH_SHORT * row_hash(s0 + 2.9))
 	var u := d / cw
-	var i := floorf(u)
-	var ramp := cut_ramp(h, float(cut[2]))
-	return depth * lerpf(_notch_level(i - 1.0, s0, cw, ramp), _notch_level(i, s0, cw, ramp), smoothstep(0.0, NOTCH_STEP, u - i))
+	var c := floorf(u)                        # 무리 번호: 경계가 밀려 있으므로 (NOTCH_WIDE) 앞뒤 무리일 수 있다
+	var e0 := _notch_edge(c, s0)
+	var e1 := e0
+	if u < e0:
+		c -= 1.0
+		e0 = _notch_edge(c, s0)
+	else:
+		e1 = _notch_edge(c + 1.0, s0)
+		if u >= e1:
+			c += 1.0
+			e0 = e1
+			e1 = _notch_edge(c + 1.0, s0)
+	return depth * lerpf(_notch_level(c - 1.0, (_notch_edge(c - 1.0, s0) + e0) * 0.5, s0, cw, reach), _notch_level(c, (e0 + e1) * 0.5, s0, cw, reach),
+		smoothstep(0.0, NOTCH_STEP, (u - e0) / (e1 - e0)))
 
 
-static func _notch_level(i: float, s0: float, cw: float, ramp: float) -> float:
+## 무리 j의 안쪽 경계 (무리 폭 단위) — 첫 무리는 창 끝에서 시작
+static func _notch_edge(j: float, s0: float) -> float:
+	if j <= 0.0:
+		return 0.0
+	return j + NOTCH_WIDE * (row_hash(s0 + j * 3.17) - 0.5)
+
+
+## 무리 i (가운데 자리 mid — 무리 폭 단위)의 낮춤 몫 0~1
+static func _notch_level(i: float, mid: float, s0: float, cw: float, reach: float) -> float:
 	if i < 0.0:
 		return 1.0
-	var s := clampf((i + 0.25 + 0.35 * row_hash(s0 + i * 7.31)) * cw / (ramp * NOTCH_REACH), 0.0, 1.0)
+	var s := clampf((mid + NOTCH_VARY * (row_hash(s0 + i * 7.31) - 0.5)) * cw / reach, 0.0, 1.0)
 	return pow(1.0 - s, NOTCH_ROUND)
 
 
@@ -953,6 +1006,41 @@ static func regrow_order(was: int, n: int, total: int) -> Array:
 	for i in range(was - 1, n - 1, -1):      # i = 앞에서부터 센 줄 (0 = 맨 앞) — 그루터기 가운데 가장 뒤의 것부터
 		out.append([total - 1 - i, float(was - 1 - i) * REGROW_GAP])
 	return out
+
+
+## (Q14 ⑬ — 보기만) 한 줄의 자람 몫 g(0~1)에서 그 줄의 세 그림이 얼마나 서 있는가 → [싹 오름, 싹 남음, 푸른 밀 오름, 푸른 밀 남음, 익은 밀 오름] (0~1).
+## 그루터기 → 싹이 돋고 → 푸른 잎이 싹 위로 자라고 (싹은 그 뒤에서 물러남) → 익은 밀이 푸른 잎 뒤에서 올라 이삭이 잎 위로 나오고 →
+## 익은 밀이 다 자랄 즈음 푸른 잎이 땅으로 물러난다. 오름 = 그림 판의 grow (bld_grow — 땅에서 솟음), 남음 = 그 키의 몫까지만 (판의 cut — 땅으로 내려감).
+## 줄의 윗선(regrow_top)은 내려가지 않는다 · g = 1이면 어린 밀은 남지 않고 익은 밀만 제 키로. 순수 (시험)
+static func regrow_phases(g: float) -> Array:
+	return [clampf((g - float(REGROW_SPROUT[0])) / (float(REGROW_SPROUT[1]) - float(REGROW_SPROUT[0])), 0.0, 1.0),
+		1.0 - smoothstep(float(REGROW_SPROUT[2]), float(REGROW_SPROUT[3]), g),
+		clampf((g - float(REGROW_GREEN[0])) / (float(REGROW_GREEN[1]) - float(REGROW_GREEN[0])), 0.0, 1.0),
+		1.0 - smoothstep(float(REGROW_GREEN[2]), float(REGROW_GREEN[3]), g),
+		clampf((g - REGROW_RIPE) / (1.0 - REGROW_RIPE), 0.0, 1.0)]
+
+
+## grow인 그림 판이 x(그림 가운데에서 화면 오른쪽)에서 제 키의 얼마까지 올라와 있는가 (bld_grow의 x와 같은 셈 — 시험). seed = row_seed
+static func grow_rise(grow: float, x: float, seed: float) -> float:
+	if grow >= 1.0:
+		return 1.0
+	var u := x / GROW_CLUMP + seed
+	var i := floorf(u)
+	var late := lerpf(row_hash(seed * 3.1 + i * 5.77), row_hash(seed * 3.1 + (i + 1.0) * 5.77), smoothstep(0.5, 1.0, u - i))
+	var g := clampf(grow * (1.0 + GROW_LATE) - GROW_LATE * late, 0.0, 1.0)
+	return g * g * (3.0 - 2.0 * g)
+
+
+## 다시 자라는 줄 idx(뒤→앞)의 윗선 높이 (칸) — 싹 · 푸른 밀 · 익은 밀 세 판 가운데 가장 높은 것 (그루터기는 빼고). 순수 (시험)
+static func regrow_top(g: float, idx: int, x: float, seed: float) -> float:
+	var ph := regrow_phases(g)
+	var top := 0.0
+	for st in 3:
+		var h := float(Bld2D.info(String(Bld2D.Pics.WHEAT_ROWS[st][idx]))["h"])
+		var up := float(ph[st * 2])
+		var keep := float(ph[st * 2 + 1]) if st < 2 else 1.0
+		top = maxf(top, minf(h * grow_rise(up, x, seed), h * keep))
+	return top
 
 
 ## (Q8 거두기 — 보기만, ADR-0001) 밭 여섯 줄(뒤→앞)의 모습 (Bld2D.ROW_*): 익기 전에는 모두 자람 단계 그대로.
@@ -991,7 +1079,11 @@ static func wheat_cards(vil: Village, b: Building, accent := "") -> Array:
 ## 숲은 한 덩어리로 그려져 (Bld2D.wheat_pull) 안에 선 사람은 보이지 않는다 — 밭 일꾼(밭 한가운데로 걸어가 일함)은 앞면 바로 앞에서
 ## 밀을 베는 것으로 보인다. 자리만의 순수 함수 (가장자리에서 0부터 이어짐 — 튀지 않음) · 시뮬은 건드리지 않는다.
 func wheat_stand(r: Resident, x: float, z: float) -> Vector3:
-	for f: Array in fields:
+	for f0: Array in fields:
+		var f := f0
+		if not _regrow_walk.is_empty() and _regrow_walk.has(int(f0[6])):     # 다시 자라기 시작한 밭: 앞면이 한 화면에 튀지 않는다
+			f = f0.duplicate()
+			f[2] = _stand_face(int(f0[6]), float(f0[2]))
 		var d := Vector2(x - float(f[0]), z - float(f[1]))
 		var a := d.dot(_sf)
 		var l := d.dot(_sr)
@@ -1047,7 +1139,7 @@ func _cover_scan() -> void:
 				if Bld2D.is_ripe_row(nm):
 					var hw := float(rd["w"]) * 0.5
 					if fld.is_empty():
-						fld = [b.x, b.y, face, float(rd["front"]), hw, hw]
+						fld = [b.x, b.y, face, float(rd["front"]), hw, hw, b.id]
 					fld[3] = minf(float(fld[3]), float(rd["front"]))
 					fld[5] = maxf(float(fld[5]), hw)
 					if is_equal_approx(float(rd["front"]), face):
@@ -1389,6 +1481,9 @@ func _regrow_look() -> void:
 				t0 = maxf(t0, float(sched[idx]) + REGROW_GAP)
 			for o: Array in regrow_order(was, n, rows.size()):
 				sched[int(o[0])] = t0 + float(o[1])
+			var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+			var to := float(Bld2D.info(String(ripe[rows.size() - 1 - n]))["front"])
+			_regrow_walk[b.id] = [_regrow_t, _stand_face(b.id, float(Bld2D.info(String(ripe[rows.size() - 1 - was]))["front"])), to]
 		if sched.is_empty():
 			if _regrow.has(b.id):
 				_regrow_end(b.id)
@@ -1414,28 +1509,93 @@ func _regrow_draw() -> void:
 			_regrow_apply(id, sched)
 
 
-## 밭 id의 익은 줄에 sched대로 (없는 줄은 다 자람) 자람 몫을 적는다 — sched가 비면 모두 끝 모습 + 깔았던 그루터기 판을 치움
+## 밭 id의 익은 줄에 sched대로 (없는 줄은 다 자람) 자람 몫을 적는다 — sched가 비면 모두 끝 모습 + 깔았던 그루터기 · 어린 밀 판을 치움
 func _regrow_apply(id: int, sched: Dictionary) -> void:
 	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
 	var n: Node3D = vw._blds.get(id)
+	var walk := _regrow_walk.has(id)
+	var face := _stand_face(id, INF)
 	if n != null and is_instance_valid(n):
 		for c: Node in n.get_children():
 			if not (c is MeshInstance3D):
 				continue
 			if not c.has_meta(&"pic"):
-				if String(c.name).begins_with(REGROW_STUB) and not sched.has(int(c.get_meta(&"row", -1))):
+				if c.has_meta(&"regrow") and not sched.has(int(c.get_meta(&"row", -1))):     # 그루터기 · 어린 밀 판
 					c.queue_free()
 				continue
 			var idx := ripe.find(String(c.get_meta(&"pic")))
 			if idx < 0:
 				continue
-			(c as MeshInstance3D).set_instance_shader_parameter("grow", regrow_at(_regrow_t, float(sched[idx])) if sched.has(idx) else 1.0)
-			if sched.has(idx) and n.get_node_or_null(REGROW_STUB + str(idx)) == null and not _regrow_has(n, String(Bld2D.Pics.WHEAT_STUBBLE[idx])):
+			var mi := c as MeshInstance3D
+			var pull := float(c.get_meta(&"pull", 0.0))
+			if walk:                               # 사람이 물러나는 동안은 숲도 그 앞면까지만 당겨 그린다 (그 사람을 뒤의 줄이 덮지 않게 — 깊이만, 그림은 그대로)
+				pull = minf(pull, maxf(0.0, face - float(Bld2D.info(String(ripe[idx]))["front"])) * Bld2D.WHEAT_PULL / Bld2D.PITCH_COS)
+			mi.set_instance_shader_parameter("pull", pull)
+			if not sched.has(idx):
+				mi.set_instance_shader_parameter("grow", 1.0)
+				continue
+			var g := regrow_at(_regrow_t, float(sched[idx]))
+			mi.set_instance_shader_parameter("grow", float(regrow_phases(g)[4]) if _regrow_young(n, mi, id, idx, g, pull) else g)
+			if n.get_node_or_null(REGROW_STUB + str(idx)) == null and not _regrow_has(n, String(Bld2D.Pics.WHEAT_STUBBLE[idx])):
 				var u := Bld2D.card(String(Bld2D.Pics.WHEAT_STUBBLE[idx]), 1.0, false, float(c.get_meta(&"lift", 0.0)), [], -Bld2D.STUBBLE_BACK)
 				u.name = REGROW_STUB + str(idx)
 				u.remove_meta(&"pic")              # 건물 그림 판으로 세지 않는다 (다 자라면 치우는 잠깐의 판)
 				u.set_meta(&"row", idx)
+				u.set_meta(&"regrow", true)
 				n.add_child(u)
+
+
+## (Q14 ⑬) 자라는 줄 idx 앞에 그 줄의 싹 · 푸른 밀 그림 판을 세우고 자람 몫 g대로 올리고 물린다 (regrow_phases) → 세웠는가.
+## 익은 판(rc)의 깊이 pull 바로 앞에 선다. 무덤 앞이라 그 어린 밀 그림도 낮춰야 하는 줄에는 세우지 않는다 (false — 익은 그림만 옛 방식으로 오른다).
+func _regrow_young(n: Node3D, rc: MeshInstance3D, id: int, idx: int, g: float, pull: float) -> bool:
+	if not rc.has_meta(&"young"):
+		var ok := false
+		for b: Building in v.buildings:
+			if b.id == id:
+				ok = grave_cut(v, b, step, String(Bld2D.Pics.WHEAT_ROWS[0][idx])).is_empty() and grave_cut(v, b, step, String(Bld2D.Pics.WHEAT_ROWS[1][idx])).is_empty()
+				break
+		rc.set_meta(&"young", ok)
+	if not bool(rc.get_meta(&"young")):
+		return false
+	var ph := regrow_phases(g)
+	for st in 2:
+		var nm := REGROW_YOUNG + str(st) + "_" + str(idx)
+		var u := n.get_node_or_null(nm) as MeshInstance3D
+		var up := float(ph[st * 2])
+		var keep := float(ph[st * 2 + 1])
+		if u != null and u.is_queued_for_deletion():
+			continue
+		if up <= 0.0 or keep <= 0.0:
+			if u != null:
+				u.queue_free()
+			continue
+		var pic := String(Bld2D.Pics.WHEAT_ROWS[st][idx])
+		if u == null:
+			u = Bld2D.card(pic, 1.0, false, float(rc.get_meta(&"lift", 0.0)))
+			u.name = nm
+			if float(Bld2D.info(pic).get("lean", 0.0)) > 0.0:
+				if not _young_mats.has(pic):
+					var m := Bld2D.material(pic).duplicate() as ShaderMaterial
+					m.set_shader_parameter("lean", 0.0)
+					_young_mats[pic] = m
+				u.material_override = _young_mats[pic]
+			u.remove_meta(&"pic")                # 건물 그림 판으로 세지 않는다
+			u.set_meta(&"row", idx)
+			u.set_meta(&"regrow", true)
+			n.add_child(u)
+		u.set_instance_shader_parameter("pull", pull + REGROW_FRONT * float(2 - st))
+		u.set_instance_shader_parameter("grow", up)
+		u.set_instance_shader_parameter("cut", Vector3(-99.0, 99.0, keep * float(Bld2D.info(pic)["h"])) if keep < 1.0 else Vector3(0.0, 0.0, -1.0))
+	return true
+
+
+## 다시 자라기 시작한 밭 id에서 사람이 설 숲 앞면 front: 옛 앞면에서 새 앞면(face)으로 REGROW_WALK에 걸쳐 — 그 밖의 밭은 face 그대로
+func _stand_face(id: int, face: float) -> float:
+	var w: Array = _regrow_walk.get(id, [])
+	if w.is_empty():
+		return face
+	var to := minf(float(w[2]), face)
+	return lerpf(minf(float(w[1]), to), to, smoothstep(0.0, 1.0, (_regrow_t - float(w[0])) / REGROW_WALK))
 
 
 ## 밭 노드에 그 그림(pic)의 건물 그림 판이 이미 있는가 (무덤 앞에서 낮춘 줄 밑의 그루터기)
@@ -1449,6 +1609,7 @@ func _regrow_has(n: Node3D, pic: String) -> bool:
 ## 밭 id의 다시 자람을 끝낸다 (끝 모습으로)
 func _regrow_end(id: int) -> void:
 	_regrow.erase(id)
+	_regrow_walk.erase(id)
 	_regrow_apply(id, {})
 
 

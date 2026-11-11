@@ -68,10 +68,17 @@ float bld_cut_sink(float x, vec3 cut, float h) {
 // so there is no wall at the edge of the window). The clump by the gap is the shortest, each one further out about an ear
 // taller, along a gentle shoulder ((1 - s)^BLD_NOTCH_ROUND), and each reads the shoulder at its own spot (hash): rows do not
 // line up, the side is ragged like the top of the field. seed = per row (bld_row_seed); < 0 = bld_cut_sink (fence).
+// (Q14) Even clumps climbing by even steps showed on screen as the back row's staircase — a ruled diagonal with teeth. So the
+// clump borders are shifted (BLD_NOTCH_WIDE, in clump widths: narrow and wide clumps mix), each clump reads the shoulder at its
+// own middle (a wide clump steps up a lot, a narrow one a little) +- BLD_NOTCH_VARY / 2 (VARY < 1 - WIDE keeps it rising
+// outward), and each row / side is back at full height a little sooner (up to BLD_NOTCH_SHORT of the reach).
 const float BLD_NOTCH_CLUMP = 0.16;
 const float BLD_NOTCH_REACH = 1.0;
 const float BLD_NOTCH_STEP = 0.36;
 const float BLD_NOTCH_ROUND = 1.3;
+const float BLD_NOTCH_WIDE = 0.56;
+const float BLD_NOTCH_VARY = 0.4;
+const float BLD_NOTCH_SHORT = 0.15;
 float bld_hash(float p) {
 	p = fract(p * 0.1031);
 	p *= p + 33.33;
@@ -83,12 +90,21 @@ float bld_row_seed(vec3 org, float front) {
 	return 1.0 + fract(front * 3.7 + 0.31) * 61.0 + fract(org.x * 0.37 + org.z * 0.71) * 7.0;
 }
 
-float bld_notch_level(float i, float s0, float cw, float ramp) {
+// how far clump i (its middle at mid, in clump widths) is sunk, 0..1
+float bld_notch_level(float i, float mid, float s0, float cw, float reach) {
 	if (i < 0.0) {
 		return 1.0;
 	}
-	float s = clamp((i + 0.25 + 0.35 * bld_hash(s0 + i * 7.31)) * cw / (ramp * BLD_NOTCH_REACH), 0.0, 1.0);
+	float s = clamp((mid + BLD_NOTCH_VARY * (bld_hash(s0 + i * 7.31) - 0.5)) * cw / reach, 0.0, 1.0);
 	return pow(1.0 - s, BLD_NOTCH_ROUND);
+}
+
+// inner border of clump j, in clump widths (the first clump starts at the edge of the window)
+float bld_notch_edge(float j, float s0) {
+	if (j <= 0.0) {
+		return 0.0;
+	}
+	return j + BLD_NOTCH_WIDE * (bld_hash(s0 + j * 3.17) - 0.5);
 }
 
 float bld_notch_sink(float x, vec3 cut, float h, float seed) {
@@ -99,10 +115,24 @@ float bld_notch_sink(float x, vec3 cut, float h, float seed) {
 	}
 	float s0 = seed + step(cut.y, x) * 5.3;
 	float cw = BLD_NOTCH_CLUMP * (0.75 + 0.5 * bld_hash(s0));
+	float reach = BLD_CUT_RAMP * max(1.0, depth / BLD_CUT_DEEP) * BLD_NOTCH_REACH * (1.0 - BLD_NOTCH_SHORT * bld_hash(s0 + 2.9));
 	float u = d / cw;
-	float i = floor(u);
-	float ramp = BLD_CUT_RAMP * max(1.0, depth / BLD_CUT_DEEP);
-	return depth * mix(bld_notch_level(i - 1.0, s0, cw, ramp), bld_notch_level(i, s0, cw, ramp), smoothstep(0.0, BLD_NOTCH_STEP, u - i));
+	float c = floor(u);                // the clump: its borders are shifted, so it may be the one before or after
+	float e0 = bld_notch_edge(c, s0);
+	float e1 = e0;
+	if (u < e0) {
+		c -= 1.0;
+		e0 = bld_notch_edge(c, s0);
+	} else {
+		e1 = bld_notch_edge(c + 1.0, s0);
+		if (u >= e1) {
+			c += 1.0;
+			e0 = e1;
+			e1 = bld_notch_edge(c + 1.0, s0);
+		}
+	}
+	return depth * mix(bld_notch_level(c - 1.0, (bld_notch_edge(c - 1.0, s0) + e0) * 0.5, s0, cw, reach), bld_notch_level(c, (e0 + e1) * 0.5, s0, cw, reach),
+		smoothstep(0.0, BLD_NOTCH_STEP, (u - e0) / (e1 - e0)));
 }
 
 // (Q8 ⑦) Grow-back of a wheat row after its sheaves were carted away (BldEcon regrow — view only): grow 0 → 1. The picture rises

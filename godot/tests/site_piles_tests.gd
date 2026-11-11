@@ -21,7 +21,7 @@ func all() -> void:
 	print("== 보이는 살림 (건물 쪽)")
 	var old := Bld2D.override
 	Bld2D.override = 1
-	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_yaw", "test_plants", "test_wheat", "test_notch", "test_regrow", "test_front", "test_stall_gather", "test_bubbles", "test_sim_unchanged"])
+	run.timed(self, ["test_pics", "test_rules", "test_site", "test_workplace", "test_gather", "test_apron", "test_yaw", "test_plants", "test_wheat", "test_notch", "test_notch_ends", "test_regrow", "test_regrow_young", "test_front", "test_stall_gather", "test_bubbles", "test_sim_unchanged"])
 	Bld2D.override = old
 
 
@@ -1049,13 +1049,250 @@ func test_notch() -> void:
 	check(differ >= 6 and lr >= 3, "줄마다 · 좌우마다 어긋난다 (열두 자리 가운데 %d곳에서 세 가지 넘는 키 · 좌우가 다른 줄 %d)" % [differ, lr])
 	var inc := FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshaderinc")
 	var same := inc.contains("BLD_NOTCH_CLUMP = %s;" % str(BldEcon.NOTCH_CLUMP)) and inc.contains("BLD_NOTCH_REACH = %s;" % str(BldEcon.NOTCH_REACH)) \
-		and inc.contains("BLD_NOTCH_STEP = %s;" % str(BldEcon.NOTCH_STEP)) and inc.contains("BLD_NOTCH_ROUND = %s;" % str(BldEcon.NOTCH_ROUND))
+		and inc.contains("BLD_NOTCH_STEP = %s;" % str(BldEcon.NOTCH_STEP)) and inc.contains("BLD_NOTCH_ROUND = %s;" % str(BldEcon.NOTCH_ROUND)) \
+		and inc.contains("BLD_NOTCH_WIDE = %s;" % str(BldEcon.NOTCH_WIDE)) and inc.contains("BLD_NOTCH_VARY = %s;" % str(BldEcon.NOTCH_VARY)) \
+		and inc.contains("BLD_NOTCH_SHORT = %s;" % str(BldEcon.NOTCH_SHORT)) and inc.contains("BLD_GROW_CLUMP = %s;" % str(BldEcon.GROW_CLUMP)) \
+		and inc.contains("BLD_GROW_LATE = %s;" % str(BldEcon.GROW_LATE))
+	check(BldEcon.NOTCH_VARY < 1.0 - BldEcon.NOTCH_WIDE, "(Q14 ⑪) 무리의 폭·키가 고르지 않아도 (경계 ±%.2f · 키 ±%.2f) 밖의 무리가 안쪽 무리보다 낮아지지 않는 값"
+		% [BldEcon.NOTCH_WIDE * 0.5, BldEcon.NOTCH_VARY * 0.5])
 	var used := true
 	for f: String in ["res://view/bld2d/bld_card.gdshader", "res://view/bld2d/bld_card_multi.gdshader"]:
 		var src := FileAccess.get_file_as_string(f)
 		used = used and src.contains("bld_notch_sink(")
 	used = used and FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshader").contains("bld_grow(")
 	check(same and used, "셰이더(가까이 · 멀리 묶음)가 같은 값·같은 셈을 쓴다 (다시 자람은 밭의 제 그림 판에서)")
+
+
+## (Q14 ⑫ — 보기만) 홈과 밭 끝 사이에 가는 밀 한 포기가 홀로 남지 않는다: 무덤을 밭 뒤에서 좌우로 옮겨 가며 (네 방향 · 세 거리)
+## 벤 줄마다 — 남긴 어깨는 제 키로 GRAVE_TUFT 넘게 서 있고 밭 끝까지 GRAVE_SIDE 넘게 남으며, 아니면 그쪽은 줄 끝까지 낮춘다.
+## 무덤 하나로 한 줄이 양쪽 다 낮아지는 일은 없다 (밭이 통째로 그루터기가 되지 않음).
+func test_notch_ends() -> void:
+	var a := Village.new_prototype(20261109)
+	var farm := _add(a, "농장", true)
+	check(farm != null, "농장을 놓음 (홈의 끝)")
+	if farm == null:
+		return
+	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+	var fw := BldEcon.field_half_w()
+	var back := float(Bld2D.info(String(ripe[0]))["front"])
+	var tuft := true
+	var wide := true
+	var one_side := true
+	var clean := true
+	var mid_two := true
+	var side_low := true
+	var cut_n := 0
+	var low_n := 0
+	var thin := INF
+	for st in 4:
+		var sd := BldEcon.step_dirs(st)
+		for behind: float in [0.6, 0.9, 1.7]:
+			for k in range(-54, 55):
+				var side := 0.05 * float(k)
+				var gp := Vector2(farm.x, farm.y) + (sd[0] as Vector2) * (back - behind) + (sd[1] as Vector2) * side
+				a.graves = [{"id": 99901, "name": "시험", "x": gp.x, "y": gp.y, "t": a.t, "yard": false, "yard_id": -1}]
+				for pic: String in ripe:
+					var cut := BldEcon.grave_cut(a, farm, st, pic)
+					if cut.is_empty():
+						continue
+					cut_n += 1
+					var d := Bld2D.info(pic)
+					var h := float(d["h"])
+					var hw := float(d["w"]) * 0.5
+					var dx := float(d.get("dx", 0.0))
+					var depth := h - float(cut[2])
+					var ramp := BldEcon.cut_ramp(h, float(cut[2]))
+					var low := [float(cut[0]) <= -hw - ramp + 1e-4, float(cut[1]) >= hw + ramp - 1e-4]
+					one_side = one_side and not (bool(low[0]) and bool(low[1]))
+					for e in 2:
+						var sgn := -1.0 if e == 0 else 1.0
+						var edge := float(cut[e]) * sgn          # 창 끝이 줄 가운데에서 그쪽으로 얼마나
+						var at_end := BldEcon.cut_sink(sgn * hw, cut, h)
+						if bool(low[e]):
+							low_n += 1
+							clean = clean and is_equal_approx(at_end, depth)
+						else:
+							var stand := hw - edge - ramp        # 제 키로 서 있는 폭
+							thin = minf(thin, stand)
+							tuft = tuft and stand >= BldEcon.GRAVE_TUFT - 1e-4
+							wide = wide and fw - edge - sgn * dx >= BldEcon.GRAVE_SIDE - 1e-4
+							clean = clean and is_zero_approx(at_end)
+					if k == 0:
+						mid_two = mid_two and not bool(low[0]) and not bool(low[1])
+					elif absf(side) >= 0.3:
+						side_low = side_low and bool(low[1 if side > 0.0 else 0])
+	a.graves = []
+	check(cut_n > 600 and low_n > 300, "무덤을 밭 뒤에서 좌우로 옮기며 본 벤 줄 %d개 (한쪽을 끝까지 낮춘 것 %d)" % [cut_n, low_n])
+	check(tuft and wide, "남긴 어깨는 홀로 선 포기가 아니다: 제 키로 선 폭이 가장 좁은 것도 %.2f칸 (%.2f 넘게) · 밭 끝까지 %.1f칸 넘게" % [thin, BldEcon.GRAVE_TUFT, BldEcon.GRAVE_SIDE])
+	check(clean, "낮춘 쪽은 줄 끝까지 내려가 있고, 남긴 쪽은 줄 끝에서 제 키")
+	check(one_side and mid_two and side_low, "밭 가운데 뒤의 무덤은 양쪽 숲을 남긴 홈 · 옆으로 0.3칸 넘게 비키면 그쪽은 밭 끝까지 낮춤 · 한 줄이 양쪽 다 낮아지지는 않는다")
+	# 순수 셈 (cut_ends): 줄 끝 가까이 걸친 창은 끝까지 넓히고, 가운데 창은 그대로
+	var h0 := 1.5
+	var hw0 := fw
+	var r0 := BldEcon.cut_ramp(h0, 0.1)
+	var keep := BldEcon.cut_ends(-0.5, 0.5, 0.1, h0, hw0, 0.0)
+	var wr := BldEcon.cut_ends(hw0 - 1.6, hw0 - 0.6, 0.1, h0, hw0, 0.0)
+	var wl := BldEcon.cut_ends(-hw0 + 0.6, -hw0 + 1.6, 0.1, h0, hw0, 0.0)
+	check(is_equal_approx(keep.x, -0.5) and is_equal_approx(keep.y, 0.5) and is_equal_approx(wr.x, hw0 - 1.6) and is_equal_approx(wr.y, hw0 + r0)
+		and is_equal_approx(wl.x, -hw0 - r0) and is_equal_approx(wl.y, -hw0 + 1.6), "cut_ends: 가운데 창은 그대로 · 끝에서 0.6칸 남기는 창은 그쪽만 줄 끝 + 비탈까지")
+
+
+## 밭 노드에 잠깐 선 판 (다시 자람 — 'regrow' 표시): [어린 밀 판 이름 → grow, 잠깐 선 판 모두]
+func _regrow_temp(vw: VillageView, id: int) -> Array:
+	var young := {}
+	var temp := 0
+	for c: Node in (vw._blds[id] as Node3D).get_children():
+		if not (c is MeshInstance3D) or c.is_queued_for_deletion() or not c.has_meta(&"regrow"):
+			continue
+		temp += 1
+		if String(c.name).begins_with(BldEcon.REGROW_YOUNG):
+			var g: Variant = (c as MeshInstance3D).get_instance_shader_parameter("grow")
+			young[String(c.name)] = 1.0 if g == null else float(g)
+	return [young, temp]
+
+
+## (Q14 ⑬ · ⑭ — 보기만) 다시 자라는 줄은 그루터기 → 싹 → 푸른 밀 → 익은 밀 (그 줄의 제 그림으로 — 납작한 연두 조각이 아니다).
+## 줄의 윗선은 내려가지 않고, 어느 빠르기에서도 (멈춤 · 보통 · 빠르게 · 아주 빠르게) 자람이 뒤로 가거나 튀지 않으며,
+## 힘주어 살피거나 시간을 건너뛰면 어린 밀 판 없이 곧바로 끝 모습.
+func test_regrow_young() -> void:
+	var p0 := BldEcon.regrow_phases(0.0)
+	var p1 := BldEcon.regrow_phases(1.0)
+	var smooth := true
+	var prev := p0
+	for k in 500:
+		var ph := BldEcon.regrow_phases(float(k + 1) / 500.0)
+		for j in 5:
+			smooth = smooth and absf(float(ph[j]) - float(prev[j])) < 0.03
+		smooth = smooth and float(ph[0]) >= float(prev[0]) and float(ph[2]) >= float(prev[2]) and float(ph[4]) >= float(prev[4]) \
+			and float(ph[1]) <= float(prev[1]) and float(ph[3]) <= float(prev[3])
+		prev = ph
+	check(p0 == [0.0, 1.0, 0.0, 1.0, 0.0] and p1 == [1.0, 0.0, 1.0, 0.0, 1.0] and smooth,
+		"한 줄의 세 그림: 처음엔 아무것도 없고 (그루터기만) 끝엔 익은 밀만 · 오르는 것은 오르기만, 물러나는 것은 물러나기만 · 튀지 않음")
+	var mid := BldEcon.regrow_phases(0.36)
+	check(float(mid[2]) > 0.5 and is_equal_approx(float(mid[3]), 1.0) and float(mid[4]) > 0.0 and float(mid[4]) < 0.2 and float(mid[1]) < 1.0,
+		"가운데쯤 (0.36): 푸른 잎이 반 넘게 자라 있고 싹은 물러나는 중 · 익은 밀은 막 오르기 시작 (%.2f)" % float(mid[4]))
+	var top_ok := true
+	var top_end := true
+	var blade := true
+	for idx in range(2, 6):
+		var ripe_d := Bld2D.info(String(Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE][idx]))
+		var green_h := float(Bld2D.info(String(Bld2D.Pics.WHEAT_ROWS[1][idx]))["h"])
+		var seed := BldEcon.row_seed(Vector3(31.0, 0.0, 17.0), float(ripe_d["front"]))
+		for xi in 9:
+			var x := -1.2 + 0.3 * float(xi)
+			var last := 0.0
+			for k in 400:
+				var t := BldEcon.regrow_top(float(k + 1) / 400.0, idx, x, seed)
+				top_ok = top_ok and t >= last - 1e-4
+				last = t
+			top_end = top_end and is_zero_approx(BldEcon.regrow_top(0.0, idx, x, seed)) and is_equal_approx(last, float(ripe_d["h"]))
+			# 푸른 잎이 다 자랐을 때 (익은 밀은 아직 그 밑): 윗선 = 푸른 밀 그림의 키 — 잎 끝 모양 그대로
+			blade = blade and is_equal_approx(BldEcon.regrow_top(float(BldEcon.REGROW_GREEN[1]), idx, x, seed), green_h)
+	check(top_ok and top_end and blade, "자라는 줄의 윗선은 내려가지 않는다 (싹이 물러날 땐 푸른 잎이, 푸른 잎이 물러날 땐 익은 밀이 이미 더 높다) · 0에서 익은 밀의 키까지")
+	var scene := _scene()
+	var av := _village(scene)
+	var a: Village = av[0]
+	var vw: VillageView = av[1]
+	var econ: BldEcon = vw.econ
+	var farm := _add(a, "농장", true)
+	check(farm != null, "농장을 놓음 (어린 밀)")
+	if farm == null:
+		scene.queue_free()
+		return
+	vw.bld_force_lod = 0
+	farm.ready_at = maxf(a.t - 1.0, 0.0)
+	var full := BldEcon.out_full("밀")
+	var dt := 1.0 / 30.0
+	var snap0: Array = []
+	var t_start := a.t
+	for sp: Array in [["멈춤", 0.0], ["보통", 288.0], ["빠르게", 720.0], ["아주 빠르게", 1440.0]]:
+		var spd := float(sp[1])
+		var rate := maxf(1.0, spd / 288.0)
+		farm.out["밀"] = full
+		vw.sync(0.3, true)
+		farm.out["밀"] = 0.0
+		if snap0.is_empty():
+			snap0 = _snap(a)
+		var last_g := {}
+		var last_y := {}
+		var back_n := 0
+		var step := 0.0
+		var young_max := 0
+		var temp_max := 0
+		var saw := {}
+		var frames := 0
+		var began := -1
+		var done_at := -1
+		var span := int(ceil((BldEcon.REGROW_ROW + 3.0 * BldEcon.REGROW_GAP) / (dt * rate)))
+		for i in span + 16:
+			a.t += spd * dt                      # 병의 시계만 민다 (시뮬은 돌리지 않음 — 화면이 읽는 것은 시각뿐)
+			vw.sync(dt)
+			frames += 1
+			var gi: Dictionary = _regrow_look(vw, farm.id)[0]
+			for idx: int in gi:
+				var g := float(gi[idx])
+				if last_g.has(idx):
+					back_n += 1 if g < float(last_g[idx]) - 1e-5 else 0
+					step = maxf(step, g - float(last_g[idx]))
+				last_g[idx] = g
+			var tmp := _regrow_temp(vw, farm.id)
+			var yg: Dictionary = tmp[0]
+			for nm: String in yg:
+				back_n += 1 if last_y.has(nm) and float(yg[nm]) < float(last_y[nm]) - 1e-5 else 0
+				saw[nm] = true
+			last_y = yg
+			young_max = maxi(young_max, yg.size())
+			temp_max = maxi(temp_max, int(tmp[1]))
+			if began < 0 and not econ._regrow.is_empty():
+				began = frames
+			elif began >= 0 and done_at < 0 and econ._regrow.is_empty():
+				done_at = frames
+		var end := _regrow_look(vw, farm.id)
+		var all_up := true
+		for idx: int in (end[0] as Dictionary):
+			all_up = all_up and is_equal_approx(float(end[0][idx]), 1.0)
+		var bound := rate * dt / BldEcon.REGROW_ROW / (1.0 - BldEcon.REGROW_RIPE) + 0.002
+		check(back_n == 0 and step <= bound, "%s: 자람이 뒤로 가지 않고 튀지 않는다 (한 화면에 가장 큰 걸음 %.3f ≤ %.3f)" % [sp[0], step, bound])
+		check(saw.size() == 8 and young_max >= 2 and temp_max <= 12, "%s: 네 줄마다 싹 · 푸른 밀 판이 섰다 갔다 (어린 밀 판 %d가지 · 한때 가장 많이 %d장 · 잠깐 선 판 모두 %d장까지)"
+			% [sp[0], saw.size(), young_max, temp_max])
+		check(began > 0 and done_at > began and done_at - began <= span + 2 and done_at - began >= span - 2 and all_up and econ._regrow.is_empty()
+			and econ._regrow_walk.is_empty() and int(_regrow_temp(vw, farm.id)[1]) == 0 and int(end[2]) == 8,
+			"%s: 끝 모습 — 여섯 줄 모두 익은 밀 · 잠깐 선 판 없음 (알아챈 뒤 %d화면 — 제 박자 %d화면)" % [sp[0], done_at - began, span])
+	var t_now := a.t
+	a.t = t_start                             # 시험이 민 시계만 되돌려 견준다
+	check(_snap(a) == snap0, "어느 빠르기에서도 주민·건물·창고 값은 그대로 (화면만의 일)")
+	a.t = t_now
+	# 자라는 도중 힘주어 살핌 (불러오기 · 시간 건너뛰기 바로 뒤)
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	for i in 30:
+		vw.sync(dt)
+	var mid_young: int = (_regrow_temp(vw, farm.id)[0] as Dictionary).size()
+	vw.sync(0.0, true)
+	var st := _regrow_look(vw, farm.id)
+	var up := true
+	for idx: int in (st[0] as Dictionary):
+		up = up and is_equal_approx(float(st[0][idx]), 1.0)
+	check(mid_young >= 2 and up and econ._regrow.is_empty() and int(_regrow_temp(vw, farm.id)[1]) == 0,
+		"자라는 도중 (어린 밀 판 %d장) 힘주어 살피면 곧바로 끝 모습 — 어린 밀 판도 남지 않는다" % mid_young)
+	# 자라는 도중 시간을 건너뜀 (힘주지 않은 화면)
+	farm.out["밀"] = full
+	vw.sync(0.3, true)
+	farm.out["밀"] = 0.0
+	for i in 30:
+		vw.sync(dt)
+	mid_young = (_regrow_temp(vw, farm.id)[0] as Dictionary).size()
+	a.t += BldEcon.REGROW_SKIP + 60.0
+	vw.sync(dt)
+	st = _regrow_look(vw, farm.id)
+	up = true
+	for idx: int in (st[0] as Dictionary):
+		up = up and is_equal_approx(float(st[0][idx]), 1.0)
+	check(mid_young >= 2 and up and econ._regrow.is_empty() and int(_regrow_temp(vw, farm.id)[1]) == 0,
+		"자라는 도중 시간을 건너뛰면 다음 화면에 곧바로 끝 모습")
+	vw.bld_force_lod = -1
+	scene.queue_free()
 
 
 ## 밭 노드의 익은 줄 그림 판마다 자람 몫 (줄 번호 → 0~1 · 적힌 적 없으면 1) · 깔린 그루터기 판 수 · 건물 그림 판 수

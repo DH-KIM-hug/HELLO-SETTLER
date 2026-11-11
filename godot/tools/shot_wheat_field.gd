@@ -20,7 +20,20 @@
 ##              <tag>_notch_yaw1_side_ppu44.png · _ppu20.png · _yaw2_mid_… · _yaw3_side_…    카메라를 한·두·세 걸음 돌려서, 그 보기에서 밭 뒤(가운데 · 옆으로 비킨 자리)의 무덤
 ##              <tag>_regrow_strip_ppu44.png · _ppu20.png   볏단을 실어 간 뒤 다시 자람: 실어 가기 전 → 0.5 · 1.2 · 2.0 · 2.8초 → 다 자람 (여섯 장을 한 장에)
 ##              셋째 인자로 골라 찍기: notch,regrow
-## 인자: -- <tag> [all|grave|compare|harvest|carry|w3|w4] [w3·w4 장면]
+##    (w5)      2026-11-11 밀 숲 남은 손질 (ROADMAP Q14 ⑩~⑭ · ⑯) — 네 보기(카메라 0~3걸음)를 한 장에 2×2로
+##              <tag>_ripe_yaws_ppu44.png · _ppu20.png              익은 숲 (벤 줄 없음)
+##              <tag>_notch_mid_yaws_… · <tag>_notch_side_yaws_…    밭 뒤 무덤 앞의 홈 (가운데 · 옆으로 비킨 자리)
+##              <tag>_notch_sweep_left_ppu44.png · _right_…          무덤을 옆으로 조금씩 옮겨 가며 (홈과 밭 끝 사이에 외톨이 줄기가 남는지 ⑫)
+##              <tag>_notch_close_ppu44.png                          홈 양쪽 옆선을 크게 (⑪)
+##              <tag>_reap_yaws_ppu44.png · _ppu20.png              거두는 장면: 낫 든 일꾼 둘 + 이삭 멘 사람 둘 (옆으로 · 뒤로 걸어감)
+##              <tag>_sickle_4views.png · <tag>_ear_4views.png · …_c.png   낫질 · 이삭 메기 네 보기 (컷아웃 인형 · 방식 C 인형)
+##              <tag>_regrow_strip_ppu44.png · _ppu20.png · <tag>_regrow_close_ppu44.png   다시 자람을 촘촘히 (⑬ 어린 밀 잎 모양)
+##              <tag>_regrow_speeds_ppu44.png                        배속마다 한 줄 (멈춤 · 보통 · 빠르게 · 아주 빠르게 — 도구가 병의 시계 v.t만 그 빠르기로 흘림) ⑭
+##              <tag>_regrow_skip_ppu44.png                          자라는 도중 → 힘주어 살핀 화면 (불러오기·시간 건너뛰기 뒤와 같은 길) = 곧바로 끝 모습
+##              <tag>_far_stone_p48_ppu44.png · _ppu20.png · <tag>_far_stone_p34_s86.png · _s70.png   밭 뒤 4.2칸(GRAVE_FIELD_FAR)의 무덤: 평소 기울기 48° · 첫 배웅 연출 34° ⑯
+##              <tag>_far_yard_…                                     같은 거리의 묘지 (가까운 끝이 4.2칸)
+##              셋째 인자로 골라 찍기: ripe,notch,sweep,reap,tools,regrow,speed,far
+## 인자: -- <tag> [all|grave|compare|harvest|carry|w3|w4|w5] [w3·w4·w5 장면]
 ## 저장: 진짜 저장·설정·연대기 그림(user://chron_pics)을 건드리지 않게 이 도구만의 폴더(SAVE_DIR)로 돌린다 (shot_milestones와 같은 식).
 ## 시뮬레이션은 멈춘 채(paused) 밭 값(ready_at)만 바꿔 찍는다.
 extends SceneTree
@@ -28,8 +41,11 @@ extends SceneTree
 const PHYS := Vector2i(1080, 1920)
 const LOGICAL := Vector2i(360, 640)
 const STAGES := ["sprout", "green", "ripe"]
-const SAVE_DIR := "user://shot_wheat_save"       # 이 도구만의 저장 폴더 (진짜 저장을 건드리지 않게)
+const SAVE_DIR := "user://_tool/shot_wheat_field/save"   # 이 도구만의 저장 폴더 (도구 폴더 user://_tool 아래 — 진짜 저장을 건드리지 않게)
 const REGROW_AT := [0.5, 1.2, 2.0, 2.8, 4.4]     # (w4) 다시 자람을 찍는 때 (시작한 뒤 화면 초 — BldEcon의 다시 자람 시계)
+const REGROW_FINE := [0.15, 0.35, 0.55, 0.75, 0.95, 1.2, 1.5, 1.9, 2.4, 3.0, 9.0]     # (w5) 촘촘히 (맨 앞 '실어 가기 전'과 함께 열두 장)
+const SPEED_AT := [0.3, 0.8, 1.5, 2.4, 9.0]      # (w5) 배속마다 찍는 때 (다시 자람 시계)
+const SPEEDS := [["pause", 0.0], ["normal", 288.0], ["fast", 720.0], ["vfast", 1440.0]]     # (w5) 병의 시간 초/현실 초 (Balance.SPEEDS의 보통 · 빠르게 · 아주 빠르게)
 
 var out_dir := ""
 var tag := "w1"
@@ -48,6 +64,20 @@ var mill: Building
 var farm2: Building
 var _frames: Array[Image] = []   # (w4) 한 장으로 이어 붙일 그림들
 var _rg_t0 := -1.0               # (w4) 다시 자람이 시작된 때 (BldEcon._regrow_t)
+var _sets := {}                  # (w5) 이름 → 이어 붙일 그림들
+var _spd := 0.0                  # (w5) 도구가 병의 시계를 흘리는 빠르기 (병의 초/현실 초 — 0 = 멈춤)
+var _watch := false              # (w5) 화면마다 익은 줄의 자람 몫을 살핀다 (뒤로 가거나 튀는지)
+var _w_last := {}                # 줄 번호 → 지난 화면의 자람 몫
+var _w_bad := 0
+var _w_step := 0.0
+var _w_temp := 0
+var _w_hop := 0.0
+var _w_pos := {}
+var _w_frames := 0
+var _go_frame := 0
+var _folk_was: Array[Resident] = []
+var _far_at := Vector2.ZERO
+var yard: Building
 
 
 func _initialize() -> void:
@@ -133,6 +163,74 @@ func _initialize() -> void:
 				for t: float in REGROW_AT:
 					plan.append_array([_regrow_until.bind(t), _grab.bind(ppu)])
 				plan.append(_strip.bind("regrow_strip_ppu%d" % int(ppu)))
+	elif mode == "w5":
+		var pick: PackedStringArray = (args[2] if args.size() > 2 else "ripe,notch,sweep,reap,tools,regrow,speed,far").split(",")
+		plan.append(_stage.bind(2))
+		if pick.has("ripe"):
+			for ppu: float in [44.0, 20.0]:
+				for st in 4:
+					plan.append_array([_ripe_at.bind(st), _aim.bind(ppu), _run.bind(8), _grab2.bind("y", ppu, 7.4, 6.0, 0.6)])
+				plan.append(_strip.bind("ripe_yaws_ppu%d" % int(ppu), 2, "y"))
+			plan.append(_yaw.bind(0))
+		if pick.has("notch"):
+			for sc: Array in [["mid", [0.0, 0.0, 0.0, 0.0]], ["side", [0.9, 0.9, -0.9, -1.2]]]:
+				for ppu: float in [44.0, 20.0]:
+					for st in 4:
+						plan.append_array([_grave_at.bind(st, float(sc[1][st])), _aim.bind(ppu), _run.bind(8), _grab2.bind("y", ppu, 7.0, 5.6, 0.7)])
+					plan.append(_strip.bind("notch_%s_yaws_ppu%d" % [sc[0], int(ppu)], 2, "y"))
+			plan.append(_grave_gone)
+		if pick.has("sweep"):
+			for sc: Array in [["left", [-0.4, -0.7, -1.0, -1.3, -1.6, -1.9]], ["right", [0.4, 0.7, 1.0, 1.3, 1.6, 1.9]]]:
+				for side: float in sc[1]:
+					plan.append_array([_grave_at.bind(0, side), _aim.bind(44.0), _run.bind(8), _grab2.bind("y", 44.0, 5.4, 3.6, 0.8)])
+				plan.append(_strip.bind("notch_sweep_%s_ppu44" % sc[0], 3, "y"))
+			for side: float in [0.0, 0.9]:
+				plan.append_array([_grave_at.bind(0, side), _aim.bind(44.0), _run.bind(8), _grab2.bind("y", 44.0, 4.6, 2.4, 1.0, 1.6)])
+			plan.append(_strip.bind("notch_close_ppu44", 1, "y"))
+			plan.append(_grave_gone)
+		if pick.has("reap"):
+			for ppu: float in [44.0, 20.0]:
+				for st in 4:
+					plan.append_array([_reap_at.bind(st), _run.bind(70), _aim.bind(ppu), _run.bind(10), _grab2.bind("y", ppu, 7.4, 6.0, 0.4)])
+				plan.append(_strip.bind("reap_yaws_ppu%d" % int(ppu), 2, "y"))
+			plan.append(_yaw.bind(0))
+		if pick.has("tools"):
+			for c: bool in [false, true]:
+				plan.append(_doll_c.bind(c))
+				plan.append_array([_four.bind("work"), _dress_c.bind(c), _run.bind(70), _aim.bind(60.0), _run.bind(16), _who, _save.bind("sickle_4views%s" % ("_c" if c else ""), 60.0, 4.6)])
+				plan.append_array([_four.bind("carry"), _dress_c.bind(c), _run.bind(70), _aim.bind(60.0), _run.bind(16), _who, _save.bind("ear_4views%s" % ("_c" if c else ""), 60.0, 4.6)])
+			plan.append_array([_doll_c.bind(false), _aim_reset])
+		if pick.has("regrow"):
+			for ppu: float in [44.0, 20.0]:
+				plan.append_array([_regrow_ready, _aim.bind(ppu), _run.bind(30), _grab2.bind("y", ppu, 5.6, 4.0, 0.5, 0.62 if ppu >= 30.0 else 0.0), _grab2.bind("c", ppu, 4.4, 2.0, 0.25, 1.0), _regrow_go, _watch_on])
+				for t: float in REGROW_FINE:
+					plan.append_array([_regrow_until.bind(t), _grab2.bind("y", ppu, 5.6, 4.0, 0.5, 0.62 if ppu >= 30.0 else 0.0), _grab2.bind("c", ppu, 4.4, 2.0, 0.25, 1.0)])
+				plan.append(_watch_off.bind("regrow ppu%d" % int(ppu)))
+				plan.append(_strip.bind("regrow_strip_ppu%d" % int(ppu), 4, "y"))
+				if ppu > 30.0:
+					plan.append(_strip.bind("regrow_close_ppu%d" % int(ppu), 2, "c"))
+				else:
+					plan.append(_drop.bind("c"))
+		if pick.has("speed"):
+			for sp: Array in SPEEDS:
+				plan.append_array([_regrow_ready, _aim.bind(44.0), _run.bind(30), _speed_go.bind(float(sp[1])), _watch_on])
+				for t: float in SPEED_AT:
+					plan.append_array([_regrow_until.bind(t), _grab2.bind("y", 44.0, 5.0, 3.2, 0.4, 0.5)])
+				plan.append(_watch_off.bind("speed %s" % sp[0]))
+			plan.append(_strip.bind("regrow_speeds_ppu44", SPEED_AT.size(), "y"))
+			# 자라는 도중에 힘주어 살핀 화면 (불러오기 · 시간 건너뛰기 뒤 — VillageView.sync force) → 곧바로 끝 모습
+			plan.append_array([_regrow_ready, _aim.bind(44.0), _run.bind(30), _regrow_go, _regrow_until.bind(1.0), _grab2.bind("y", 44.0, 5.6, 4.0, 0.5, 0.62),
+				_skip_now, _grab2.bind("y", 44.0, 5.6, 4.0, 0.5, 0.62), _run.bind(40), _grab2.bind("y", 44.0, 5.6, 4.0, 0.5, 0.62)])
+			plan.append(_strip.bind("regrow_skip_ppu44", 3, "y"))
+		if pick.has("far"):
+			for yd: bool in [false, true]:
+				var nm := "yard" if yd else "stone"
+				plan.append(_far_grave.bind(yd))
+				for ppu: float in [44.0, 20.0]:
+					plan.append_array([_aim.bind(ppu), _run.bind(10), _save.bind("far_%s_p48_ppu%d" % [nm, int(ppu)], ppu, 9.0)])
+				for size: float in [8.6, 7.0]:
+					plan.append_array([_pitch.bind(34.0, size), _run.bind(12), _save.bind("far_%s_p34_s%d" % [nm, int(size * 10.0)], 0.0)])
+				plan.append(_pitch_off)
 	if mode != "all":
 		plan.append(func() -> int:
 			quit()
@@ -160,7 +258,11 @@ func _initialize() -> void:
 		return 1)
 
 
-func _process(_dt: float) -> bool:
+func _process(dt: float) -> bool:
+	if v != null and _spd > 0.0:          # (w5) 병의 시계만 그 배속으로 (시뮬은 멈춘 채 — 화면의 다시 자람 시계가 읽는 값)
+		v.t += _spd * dt
+	if _watch:
+		_watch_tick()
 	frame += 1
 	if frame < 6:
 		return false
@@ -413,7 +515,7 @@ func _reap_half() -> int:
 	farm.out["밀"] = roundf(BldEcon.out_full("밀") * 0.5)
 	var p := Vector2(farm.x, farm.y)
 	var spots := [p + r * 0.75 + f * 0.25, p - r * 0.7 - f * 0.3, p + r * 1.5 + f * 1.9]
-	for i in folk.size():
+	for i in mini(folk.size(), spots.size()):          # 네 보기(_four)를 먼저 찍었으면 넷째 사람은 제자리
 		var q := folk[i]
 		var act := "work" if i < 2 else "carry"
 		_put(q, spots[i], act, r if i == 2 else Vector2.ZERO)
@@ -714,13 +816,15 @@ func _grab(ppu: float) -> int:
 	return 0
 
 
-## (w4) 모아 둔 그림을 세 장씩 줄지어 한 장으로
-func _strip(name: String) -> int:
+## (w4) 모아 둔 그림을 cols 장씩 줄지어 한 장으로 (key: _grab2가 모은 묶음 — 비면 _grab의 것)
+func _strip(name: String, cols := 3, key := "") -> int:
+	if key != "":
+		_frames.assign(_sets.get(key, []))
+		_sets.erase(key)
 	if _frames.is_empty():
 		return 0
 	var fw := _frames[0].get_width()
 	var fh := _frames[0].get_height()
-	var cols := 3
 	var rows_n := int(ceil(_frames.size() / float(cols)))
 	var gap := 6
 	var out := Image.create(cols * fw + (cols - 1) * gap, rows_n * fh + (rows_n - 1) * gap, false, Image.FORMAT_RGBA8)
@@ -735,3 +839,289 @@ func _strip(name: String) -> int:
 	_frames.clear()
 	return 1
 
+
+
+# ───────────────────────── (w5) ROADMAP Q14 ─────────────────────────
+
+## 밭 둘레 cw × ch칸을 잘라 key 묶음에 모은다 (up: 화면 가운데에서 위로 몇 칸이 그림 가운데인가 · scale: 0 = 알아서 — 먼 확대는 2배 점 그대로)
+func _grab2(key: String, ppu: float, cw: float, ch: float, up := 0.5, scale := 0.0) -> int:
+	var img := vp.get_texture().get_image()
+	var px := ppu * 3.0
+	var w := mini(int(cw * px), img.get_width())
+	var h := mini(int(ch * px), img.get_height())
+	img = img.get_region(Rect2i((img.get_width() - w) / 2, clampi((img.get_height() - h) / 2 - int(up * px), 0, img.get_height() - h), w, h))
+	if scale <= 0.0:
+		scale = 2.0 if ppu < 30.0 else 0.7
+	if scale > 1.0:
+		img.resize(int(img.get_width() * scale), int(img.get_height() * scale), Image.INTERPOLATE_NEAREST)
+	elif scale < 1.0:
+		img.resize(int(img.get_width() * scale), int(img.get_height() * scale), Image.INTERPOLATE_LANCZOS)
+	if not _sets.has(key):
+		_sets[key] = []
+	(_sets[key] as Array).append(img)
+	return 0
+
+
+func _drop(key: String) -> int:
+	_sets.erase(key)
+	return 0
+
+
+func _need_folk(n: int) -> void:
+	for q: Resident in v.people:
+		if folk.size() >= n:
+			break
+		if q.is_adult() and not folk.has(q):
+			folk.append(q)
+
+
+## 카메라를 st 걸음 돌리고 벤 줄 없는 익은 숲 — 주민 셋은 그 보기의 울타리 앞에
+func _ripe_at(st: int) -> int:
+	_yaw(st)
+	v.graves.clear()
+	scene.view._grave_key = ""
+	farm.ready_at = v.t - 1.0
+	farm.out["밀"] = 0.0
+	_front_folk(st)
+	_redraw()
+	return 30
+
+
+## 카메라를 st 걸음 돌리고 그 보기에서 거두는 장면: 벤 밀 반 수레 (앞 두 줄 그루터기) + 낫 든 일꾼 둘 (밭 안 — 화면에선 숲 앞 가장자리)
+## + 이삭 멘 사람 둘 (밭 앞을 오른쪽으로 걸어감 · 밭 왼쪽 곁을 뒤로 걸어감 = 뒷모습)
+func _reap_at(st: int) -> int:
+	_yaw(st)
+	var f := _fdir(st)
+	var r := _rdir(st)
+	_need_folk(4)
+	farm.ready_at = v.t - 3.0 * 86400.0
+	farm.out["밀"] = roundf(BldEcon.out_full("밀") * 0.5)
+	var p := Vector2(farm.x, farm.y)
+	var spots := [p + r * 0.75 + f * 0.25, p - r * 0.7 - f * 0.3, p + r * 1.5 + f * 1.9, p - r * 2.75 + f * 0.9]
+	var dirs := [Vector2.ZERO, Vector2.ZERO, r, -f]
+	for i in folk.size():
+		var q := folk[i]
+		_put(q, spots[i], "work" if i < 2 else "carry", dirs[i])
+		q.job = farm.id if i < 2 else -1
+	farm.worker = folk[0].id
+	_redraw()
+	print("reap_at st=", st, " rows ", BldEcon.wheat_rows(v, farm))
+	return 30
+
+
+## 방식 C 인형 (장면 그림 — docs/RESIDENTS_2D 7장)을 켜고 끈다. 켤 때는 그 인형을 쓸 수 있는 겉모습의 어른 넷을 세운다
+func _doll_c(on: bool) -> int:
+	CutoutResident.FrameLib.spike = 1 if on else -1
+	_need_folk(4)
+	var off := Vector2(farm.x, farm.y) + _fdir(0) * 9.0 + _rdir(0) * 9.0
+	if on:
+		_redraw()
+		var ok: Array[Resident] = []
+		for q: Resident in v.people:
+			var m: Variant = scene.view.residents.get(q.id)
+			if q.is_adult() and m is CutoutResident and String((m as CutoutResident).dlook.get("body", "")) == "adult" \
+					and int((m as CutoutResident).dlook.get("personal", -1)) == 0:
+				ok.append(q)
+		print("doll C: ", ok.size(), " adults can wear it")
+		if ok.size() >= 4 and _folk_was.is_empty():
+			for q in folk:                   # 앞서 세운 사람들은 화면 밖으로
+				_put(q, off, "idle", Vector2.ZERO)
+				q.job = -1
+			_folk_was.assign(folk)
+			folk.assign(ok.slice(0, 4))
+	elif not _folk_was.is_empty():
+		for q in folk:
+			_put(q, off, "idle", Vector2.ZERO)
+			q.job = -1
+		folk.assign(_folk_was)
+		_folk_was.clear()
+	return 10
+
+
+## (Q14 ⑩ · 연출) 방식 C 인형을 입을 수 있는 어른이 넷이 안 되는 세상이면, 세운 네 사람의 겉모습(보기 쪽 dlook — 이 실행에서만)을
+## 평상복 0번으로 바꿔 그 인형을 입힌다. 시뮬레이션 값은 건드리지 않는다
+func _dress_c(on: bool) -> int:
+	if not on:
+		return 0
+	for q in folk:
+		var m: Variant = scene.view.residents.get(q.id)
+		if m is CutoutResident and String((m as CutoutResident).dlook.get("body", "")) == "adult":
+			(m as CutoutResident).dlook["personal"] = 0
+	return 2
+
+
+## 네 사람이 지금 어느 인형으로 그려지는지 적는다 (방식 C가 그 동작을 그리는가)
+func _who() -> int:
+	var line := ""
+	for q in folk:
+		var m: Variant = scene.view.residents.get(q.id)
+		if m is CutoutResident:
+			line += "%s[%s %s C=%s] " % [q.name, (m as CutoutResident)._d_clip, q.carry, str((m as CutoutResident)._f_on)]
+	print("who: ", line)
+	return 0
+
+
+func _speed_go(spd: float) -> int:
+	_regrow_go()
+	_spd = spd
+	return 0
+
+
+func _watch_on() -> int:
+	_watch = true
+	_w_last.clear()
+	_w_bad = 0
+	_w_step = 0.0
+	_w_frames = 0
+	_w_temp = 0
+	_w_hop = 0.0
+	_w_pos.clear()
+	_go_frame = frame
+	return 0
+
+
+## 화면마다: 익은 줄 그림 판의 자람 몫이 뒤로 가지 않았는가 · 한 화면에 얼마나 뛰었는가
+func _watch_tick() -> void:
+	var n: Node3D = scene.view._blds.get(farm.id)
+	if n == null or not is_instance_valid(n):
+		return
+	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+	var any := false
+	for c: Node in n.get_children():
+		if not (c is MeshInstance3D) or not c.has_meta(&"pic"):
+			continue
+		var idx := ripe.find(String(c.get_meta(&"pic")))
+		if idx < 0:
+			continue
+		var gv: Variant = (c as MeshInstance3D).get_instance_shader_parameter("grow")
+		var g := 1.0 if gv == null else float(gv)
+		if _w_last.has(idx):
+			var was := float(_w_last[idx])
+			if g < was - 1.0e-5:
+				_w_bad += 1
+				print("  !! row ", idx, " went back ", was, " -> ", g, " frame ", frame)
+			_w_step = maxf(_w_step, g - was)
+		_w_last[idx] = g
+		any = any or g < 1.0
+	if any:
+		_w_frames += 1
+	_w_temp = maxi(_w_temp, _temp_cards())
+	for q in folk:                       # 밭 곁 사람의 그려진 자리가 한 화면에 얼마나 튀었는가 (숲 앞면이 바뀔 때)
+		var m: Variant = scene.view.residents.get(q.id)
+		if m is Node3D:
+			var p: Vector3 = (m as Node3D).position
+			if _w_pos.has(q.id):
+				_w_hop = maxf(_w_hop, Vector2(p.x - _w_pos[q.id].x, p.z - _w_pos[q.id].z).length())
+			_w_pos[q.id] = p
+
+
+func _temp_cards() -> int:
+	var n: Node3D = scene.view._blds.get(farm.id)
+	var temp := 0
+	for c: Node in n.get_children():
+		if not c.has_meta(&"pic") and String(c.name).begins_with("regrow_") and not c.is_queued_for_deletion():
+			temp += 1
+	return temp
+
+
+func _watch_off(label: String) -> int:
+	_watch = false
+	var e: BldEcon = scene.view.econ
+	print("watch [", label, "] v.t speed ", _spd, ": growing frames ", _w_frames, " (", frame - _go_frame, " since go), went back ", _w_bad,
+		" times, biggest step ", snappedf(_w_step, 0.001), " · most temp cards ", _w_temp, " · biggest hop of a person ", snappedf(_w_hop, 0.001),
+		" cells · left: sched ", e._regrow.size(), " temp cards ", _temp_cards())
+	_spd = 0.0
+	return 0
+
+
+## 힘주어 살핀 화면 (불러오기 · 시간 건너뛰기 · 내려놓기 뒤와 같은 길 — scene.refresh → VillageView.sync(0, true))
+func _skip_now() -> int:
+	var e: BldEcon = scene.view.econ
+	var before := e._regrow.size()
+	scene.refresh()
+	var n: Node3D = scene.view._blds.get(farm.id)
+	var low := 0
+	var ripe: Array = Bld2D.Pics.WHEAT_ROWS[Bld2D.ROW_RIPE]
+	for c: Node in n.get_children():
+		if c.has_meta(&"pic") and ripe.has(String(c.get_meta(&"pic"))):
+			var gv: Variant = (c as MeshInstance3D).get_instance_shader_parameter("grow")
+			if gv != null and float(gv) < 1.0:
+				low += 1
+	print("skip: growing fields before ", before, " -> after ", e._regrow.size(), " · rows still low ", low, " · temp cards ", _temp_cards())
+	return 2
+
+
+## (⑯) 밭 가운데에서 보는 축을 따라 꼭 GRAVE_FIELD_FAR칸 뒤 — 촌장이 고를 수 있는 가장 가까운 '밭 뒤' 자리 — 에 새 무덤 하나 (꽃 다섯 송이),
+## 또는 가까운 끝이 그 거리인 묘지 (가운데는 묘지 크기만큼 더 뒤) + 그 안의 무덤 다섯
+func _far_grave(yd: bool) -> int:
+	_yaw(0)
+	var f := _fdir(0)
+	var fp := Vector2(farm.x, farm.y)
+	farm.ready_at = v.t - 1.0
+	farm.out["밀"] = 0.0
+	v.graves.clear()
+	if yard != null:
+		v.buildings.erase(yard)
+		yard = null
+	var far := VillageEra.GRAVE_FIELD_FAR
+	var gp := fp - f * far
+	if yd:
+		var pad: float = Balance.B["묘지"]["size"]
+		gp = fp - f * (far + pad)
+		yard = v.add_building("묘지", gp.x, gp.y, true)
+		yard.built_t = v.t - 86400.0
+		for i in 5:
+			var at := VillageEra.local_to_world(yard, -0.75 + 0.75 * (i % 3), -0.6 + 0.6 * ((i / 3) % 3))
+			v.graves.append({"id": 99901 + i, "name": "시험", "x": at.x, "y": at.y, "t": v.t, "yard": true, "yard_id": yard.id})
+		print("far yard: centre ", gp, " ", (gp - fp).length(), " cells behind · yard_by_field ", VillageEra.yard_by_field(v, gp),
+			" · one step nearer ", VillageEra.yard_by_field(v, gp + f * 0.05))
+	else:
+		v.graves.append({"id": 99901, "name": "시험", "x": gp.x, "y": gp.y, "t": v.t, "yard": false, "yard_id": -1})
+		print("far stone: ", gp, " ", (gp - fp).length(), " cells behind · grave_by_field ", VillageEra.grave_by_field(v, gp),
+			" · one step nearer ", VillageEra.grave_by_field(v, gp + f * 0.05))
+	var gone := 0
+	for t in v.trees.duplicate():         # 그 사이에 선 나무는 치운다 (밀만 가리는지 보려고)
+		var d := Vector2(t.x, t.y) - fp
+		if d.dot(f) < 0.5 and d.dot(f) > -(far + 4.0) and absf(d.dot(_rdir(0))) < 3.0:
+			v.trees.erase(t)
+			gone += 1
+	_front_folk(0)
+	aim_at = fp - f * (far * 0.5)
+	_far_at = gp
+	scene.view._grave_key = ""
+	scene.view._bld_key.clear()
+	_redraw()
+	var cuts := 0
+	for c: Array in BldEcon.grave_cuts(v, farm, scene.view.econ.step, 2):
+		cuts += 0 if c.is_empty() else 1
+	print("far: cut cards ", cuts, " · trees moved away ", gone)
+	return 40
+
+
+## 연출 기울기로 (첫 배웅 연출: 34° · 화면 세로 size칸) 무덤을 바라본다 — JarCamera.hold (StageDirector가 쓰는 것과 같은 길)
+func _pitch(deg: float, size: float) -> int:
+	scene.cam.hold = {}
+	var keep := aim_at
+	aim_at = _far_at
+	_aim(float(LOGICAL.y) / size)
+	aim_at = keep
+	var tg: Vector3 = scene.cam.target + Vector3(0.0, 0.8, 0.0)
+	scene.cam.hold = {"target": tg, "size": size, "pitch": deg, "yaw": scene.cam._yaw_deg, "dist": JarCamera.inside_dist(size, deg_to_rad(deg)), "near": 1.0}
+	scene.cam._apply()
+	scene.view.sync(0.0, true)
+	print("pitch ", deg, " size ", size, " ppu ", scene.cam.ppu)
+	return 14
+
+
+func _pitch_off() -> int:
+	scene.cam.hold = {}
+	scene.cam._apply()
+	aim_at = Vector2.INF
+	if yard != null:
+		v.buildings.erase(yard)
+		yard = null
+	v.graves.clear()
+	scene.view._grave_key = ""
+	scene.view._bld_key.clear()
+	_redraw()
+	return 10
