@@ -7,7 +7,7 @@ extends RefCounted
 
 const LANGS := {"ko": "한국어"}          # 지금은 한국어만 (보여 주기만)
 
-static var path := "user://settings.cfg"  # 시험은 다른 파일로 바꿔 씀
+static var path := UserPaths.of("user://settings.cfg")  # 시험은 다른 파일로 바꿔 씀 · 도구 스크립트(-s)로 뜬 판은 기본이 user://_tool/… (save/user_paths.gd)
 static var _cur: GameSettings
 
 var music := true

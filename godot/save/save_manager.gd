@@ -24,7 +24,7 @@ const PREVIEW_EVERY := 300.0
 
 static var _inst: GameSave
 
-var dir := DIR
+var dir := UserPaths.of(DIR)          # 진짜 놀이는 DIR 그대로 · 도구 스크립트(-s)로 뜬 판은 user://_tool/<도구>/save (save/user_paths.gd — Q12 도구 지킴이)
 var enabled := true
 ## 병 id → {kind: "jar"/"world", village, world, clock, meta, serial, book_n, event_t}
 var jars: Dictionary = {}

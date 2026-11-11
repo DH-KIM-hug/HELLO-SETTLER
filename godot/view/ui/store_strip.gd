@@ -16,7 +16,7 @@ const WARM_BG := Color(0.98, 0.86, 0.6, 0.95)
 const UP := Color("4e9a5b")
 const DOWN := Color("98663f")
 
-static var cfg_path := "user://hud.cfg"   # 시험은 다른 파일로
+static var cfg_path := UserPaths.of("user://hud.cfg")   # 시험은 다른 파일로 · 도구 스크립트(-s)로 뜬 판은 기본이 user://_tool/… (save/user_paths.gd)
 
 var scene: Object
 var book := StoreBook.new()

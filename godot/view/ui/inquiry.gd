@@ -10,7 +10,7 @@ const DIVIDER := "---- 아래는 지우지 말아 주세요 ----"
 const BUILD := 1                          # export_presets.cfg version/code 와 같게
 const FAIL_TOAST := "메일 앱을 열 수 없어요. 주소를 복사했어요."
 
-static var id_path := "user://install_id.cfg"   # 시험은 다른 파일로 바꿔 씀
+static var id_path := UserPaths.of("user://install_id.cfg")   # 시험은 다른 파일로 바꿔 씀 · 도구 스크립트(-s)로 뜬 판은 기본이 user://_tool/… (save/user_paths.gd)
 
 
 ## 설치 ID (32자리 16진수) — 처음 한 번 만들어 user://에 저장, 그 뒤로는 읽기만

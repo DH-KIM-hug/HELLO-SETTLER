@@ -896,7 +896,8 @@ func test_stall_gather() -> void:
 				q["s"] = "stump"
 		check(BldEcon.gather_empty(a, b) and BldEcon.stall_pic(a, b) == pic, "%s: 둘레에 하나도 없으면 '%s' 풍선" % [ty, pic])
 		b.worker = -1
-		check(BldEcon.stall_pic(a, b) == "", "%s: 일꾼이 없는 일터는 이 풍선이 아님 (빈 밀짚모자 쪽)" % ty)
+		# (Q12 ①) 다 캔 채석장은 석수가 일터를 내려놓으므로 일꾼이 없어도 '캘 바위가 없다' 풍선이 남는다 — 나무꾼은 예전 그대로
+		check(BldEcon.stall_pic(a, b) == (pic if rock else ""), "%s: 일꾼이 없는 일터 — %s" % [ty, "석수가 떠난 다 캔 채석장도 이 풍선" if rock else "이 풍선이 아님 (빈 밀짚모자 쪽)"])
 		b.worker = r.id
 		vw.sync(0.3, true)
 		var early := _near(vw, b, pic).size()

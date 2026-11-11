@@ -1573,10 +1573,13 @@ func assign_jobs() -> void:
 			if bw == null and b.def().get("job", false):
 				_assign_jobs()
 				return
+			if b.type == "채석장" and quarry_no_rock(b):     # (Q12) 다 캔 채석장 — 석수가 일터를 내려놓는다
+				_assign_jobs()
+				return
 			if Balance.JOB_STAND_IN and free_well and bw != null and bw.sick_left > 0.0 and int(Balance.JOB_FIRST.get(b.type, 50)) < 10:     # (Q7-c) 먹을 것 일터의 일꾼이 앓아누웠고 맡을 사람이 있다
 				_assign_jobs()
 				return
-		elif tools and b.def().get("job", false):
+		elif tools and b.def().get("job", false) and not (b.type == "채석장" and quarry_no_rock(b)):     # (Q12) 캘 바위가 없는 채석장에는 사람을 넣지 않는다 (헛돌지 않게 여기서도 뺀다)
 			if free_well if (Balance.JOB_STAND_IN and int(Balance.JOB_FIRST.get(b.type, 50)) < 10) else free_adult:     # (Q7-c) 먹을 것 일터에는 앓는 사람을 넣지 않는다
 				_assign_jobs()
 				return
@@ -1607,6 +1610,7 @@ func _assign_jobs() -> void:
 				log_line("%s%s 늙어서 일을 내려놓았다." % [p.name, josa(p.name, "은", "는")])
 	if Balance.JOB_STAND_IN:
 		_hand_over_sick()
+	_leave_spent_quarries()
 	var order := buildings.duplicate()      # v5: 먹을 것 일터부터 사람을 넣는다 (밭 → 화덕 → 맷돌 → …) — 일손이 모자라면 빵 사슬이 비지 않게
 	order.sort_custom(func(a: Building, c: Building) -> bool:
 		var pa := int(Balance.JOB_FIRST.get(a.type, 50))
@@ -1620,6 +1624,8 @@ func _assign_jobs() -> void:
 		if b.worker >= 0:
 			continue
 		if float(stock["도구"]) < 1.0:
+			continue
+		if b.type == "채석장" and quarry_no_rock(b):     # (Q12) 둘레에 캘 바위가 없는 채석장은 비워 둔다 — 거인의 자갈(회색 돌멩이)이 닿는 곳에 떨어지면 다시 사람이 선다
 			continue
 		# 후보 점수 = 해당 숙련 × 2 − 거리 (RESIDENT_AI 5.1, 특징·현재 직업 숙련은 아직 없음)
 		var best: Resident = null
@@ -1645,6 +1651,20 @@ func _assign_jobs() -> void:
 		b.worker = best.id
 		stock["도구"] = float(stock["도구"]) - 1.0
 		speak(best, "오늘부터 %s에서 일해요" % b.label(), 5)
+
+
+## (2026-11-11 Q12 ① · GAME_DESIGN 8.1) 다 캔 채석장의 석수는 그 자리에 서 있지 않는다: 둘레(Balance.GATHER_RANGE)에 캘 바위가 없으면 일터를 내려놓는다
+## (연장은 창고로) — 일터 없는 어른이 되어 바로 아래 배정에서 새 채석장을 맡거나, 일터가 없으면 나르기·짓기를 한다 (ResidentAI의 보통 차례).
+## 들고 오던 마지막 돌은 그대로 창고에 내려놓는다 (하던 걸음을 끊지 않는다). 말·연대기 줄 없음 · 난수를 쓰지 않는다 · 저장하는 값 없음 (지금 상태만 봄)
+func _leave_spent_quarries() -> void:
+	for b in buildings:
+		if b.type != "채석장" or not b.built or b.worker < 0 or not quarry_no_rock(b):
+			continue
+		var w := person(b.worker)
+		b.worker = -1
+		if w != null:
+			w.job = -1
+			stock["도구"] = float(stock["도구"]) + 1.0
 
 
 ## (2026-11-11 Q7-c · docs/measure/growth_2026-11-11.md) 먹을 것 일터(밭·화덕·맷돌간 — JOB_FIRST < 10)의 일꾼이 앓아누우면, 일터 없는 성한 어른이 있을 때
@@ -2498,11 +2518,16 @@ func _chief_build(skip: Dictionary) -> void:
 		var what := "작은 옛 집" if upgrade.is_house() else upgrade.label()
 		log_line("촌장 %s%s %s%s %s%s 넓히기로 했다." % [cn, josa(cn, "이", "가"), what, josa(what, "을", "를"), Balance.label(want), josa(Balance.label(want), "으로", "로")])
 		return
-	var trees_was := trees                # 자리 찾기는 고른 자리의 나무를 치운다 — 그 자리를 버리면 되돌린다 (아래)
+	var trees_was := trees                # 자리 찾기는 고른 자리의 나무·민들레·내려앉은 꽃씨를 치운다 (_clear_trees — 새 배열로 바꿔 넣음) — 그 자리를 버리면 되돌린다 (아래)
+	var dands_was: Array = flora.dands if flora != null else []
+	var pending_was: Array = flora.pending if flora != null else []
 	var spot: Variant = find_spot(want)
 	if want == "채석장" and spent and (spot == null or not stone_in_reach((spot as Vector2).x, (spot as Vector2).y)):
 		# 하나 더 짓는 채석장인데 자리가 없거나 고른 자리에서 남은 바위가 닿지 않는다 (바위가 영역 밖 · 물 건너) → 짓지 않고, 채석장 없이 그 아래 바람을 본다
 		trees = trees_was
+		if flora != null:                 # (Q12 ③) 접은 자리의 민들레·꽃씨도 되돌린다 — 접은 자리는 흔적이 없다 (주사위는 쓰지 않음)
+			flora.dands = dands_was
+			flora.pending = pending_was
 		var no_quarry := skip.duplicate()
 		no_quarry["채석장"] = true
 		_chief_build(no_quarry)
@@ -2553,6 +2578,15 @@ func stone_in_reach(x: float, y: float) -> bool:
 		if _stone_rock(rk) and Vector2(float(rk["x"]) - x, float(rk["y"]) - y).length() <= Balance.GATHER_RANGE:
 			return true
 	return false
+
+
+## 이 채석장의 석수가 캘 바위가 둘레에 하나도 없나 — ResidentAI.work_task가 석수를 보내는 것과 같은 잣대
+## (남은 양이 있고 캘 줄 아는 바위: 돌, 소금을 알면 하얀 광맥 바위도 · Balance.GATHER_RANGE 안). 다른 석수가 잠깐 맡아 둔 바위(res)도 '있는 것'으로 센다
+func quarry_no_rock(b: Building) -> bool:
+	for rk: Dictionary in rocks:
+		if float(rk["amt"]) > 0.0 and SkyDrops.rock_minable(self, rk) and Vector2(float(rk["x"]) - b.x, float(rk["y"]) - b.y).length() <= Balance.GATHER_RANGE:
+			return false
+	return true
 
 
 ## 병 안에 캘 돌 바위가 하나라도 남았나 (닫힌 병 — 바위는 창조 때 정해지고 거인이 자갈을 떨어뜨릴 때만 는다, SHOP 2.4)

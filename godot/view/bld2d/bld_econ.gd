@@ -13,7 +13,7 @@
 ##    (제 건물 앞줄의 반대편 → 바깥 → 그래도 가리면 숲 옆 끝 바로 밖 _field_side. 밭의 볏단은 앞 울타리 오른쪽 끝, 가리면 왼쪽 끝)
 ##  · 다른 건물 그림이 앞을 가리면 더미를 제 건물 앞줄에서 옆으로 (_slot — 건물은 안 옮김)
 ##  · 채집 일꾼 인형은 나무·바위 그림의 깊이 면 앞·화면 옆에 세움 (stand_pos — 시뮬 자리·수확은 그대로) + 그 앞 꽃을 낮춤
-##  · 둘레에 벨 나무·캘 바위가 없으면 그림 풍선 (bub_no_tree · bub_no_rock) · 조각은 그 일꾼이 정말 베고 캘 때만
+##  · 둘레에 벨 나무·캘 바위가 없으면 그림 풍선 (bub_no_tree · bub_no_rock — 채석장은 석수가 떠난 뒤에도) · 조각은 그 일꾼이 정말 베고 캘 때만
 class_name BldEcon
 extends Node3D
 
@@ -295,7 +295,8 @@ static func stall_pic(vil: Village, b: Building) -> String:
 				return String(WANT[k])
 		return ""
 	if GATHER.has(b.type):           # 채집 일터: 일꾼은 있는데 둘레에 벨 나무·캘 바위가 없다 (사슬 막힘 판정에 없는 것 — 자리만 봄)
-		if b.built and b.worker >= 0 and gather_empty(vil, b):
+		# (Q12 ①) 다 캔 채석장은 석수가 일터를 내려놓고 새 사람도 서지 않는다 (Village._leave_spent_quarries) — 그래서 채석장은 일꾼이 없어도 이 풍선
+		if b.built and (b.worker >= 0 or b.type == "채석장") and gather_empty(vil, b):
 			return "bub_no_tree" if b.type == "나무꾼" else "bub_no_rock"
 	var s: Dictionary = vil._stall.get(b.id, {})
 	if bool(s.get("stalled", false)):
