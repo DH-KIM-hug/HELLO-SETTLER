@@ -2,6 +2,8 @@
 ##   병들: 선반의 병마다 카드 (이름 · n일째 · 시대 · 인구 · 기후) + [들어가기] (지금 보는 병은 '지금 보는 병'). 사 둔 빈 병은 [만들기]
 ##   기념품 (Q19): 병 목록 바로 아래 — 주워 온 기념품이 작은 그림으로 (주운 차례, 여러 줄). 누르면 선반의 것과 같은 종이 쪽지
 ##     (무엇 · 어느 지구 · 병 며칠째 · 누가). 없으면 조용한 한 줄. 개수·진행도·보상 말 없음
+##     (Q20 ㊱) 쪽지는 그림 줄들 **아래**에 그 높이만큼 벌어진 띠에 뜬다 (누른 그림과 같은 세로줄, 띠가 보이게 시트가 스스로 밀림) —
+##     예전처럼 누른 그림 바로 위에 떠서 윗줄 그림을 가리지 않는다. 누른 그림만 또렷하고 나머지는 옅게
 ##   새 병: 다음 병까지 지폐 진행도 → [새 병 사기 6,000] (세 번째 30,000 · 네 번째부터 80,000) · 기후 고르기 (지금은 온대 — "다른 기후는 곧")
 ##   거인의 등불: 비운 동안 흐르는 시간 12 → 16 → 20 → 24시간 (SAVE.md 3 — 2,000 · 6,000 · 15,000)
 ##   키트 업그레이드: 밀밭 1,000 · 목조 주택 6,000 · 가족 하나 더 8,000/12,000 · 암반 컵 하나 더 4,000 — 그 건물을 지어 본 뒤 열림, 산 것은 끄고 켬
@@ -23,6 +25,9 @@ var buy_box: VBoxContainer
 var souv_box: VBoxContainer             # [기념품 Q19] 주워 온 기념품 (그림 줄 또는 조용한 한 줄)
 var souv_flow: HFlowContainer           # 지금 그려 둔 그림 줄 (없으면 null)
 var souvenir_note: SouvenirNote         # 그림을 누르면 뜨는 쪽지 (선반의 것과 같은 것 — view/room/souvenir_note.gd)
+var souv_gap: Control                   # (Q20) 그림 줄 아래, 쪽지가 뜰 띠 (쪽지가 열린 동안만 쪽지 높이만큼 벌어진다)
+var souv_open := -1                     # (Q20) 지금 쪽지가 열린 그림 번호 (없으면 -1)
+var scroll: ScrollContainer
 var lamp_box: VBoxContainer
 var kit_box: VBoxContainer
 var notes_l: Label
@@ -61,7 +66,7 @@ func _init() -> void:
 	notes_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	notes_l.add_theme_font_override("font", UiTheme.font(true))
 	star_l = _label(outer, "", "Small")
-	var scroll := ScrollContainer.new()
+	scroll = ScrollContainer.new()
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	outer.add_child(scroll)
@@ -106,6 +111,7 @@ func _init() -> void:
 	confirm.answered.connect(_on_confirm)
 	souvenir_note = SouvenirNote.new()                # 맨 위에 (시트 어디를 눌러도 닫히기만)
 	add_child(souvenir_note)
+	souvenir_note.visibility_changed.connect(_on_note_visibility)
 
 
 func _ready() -> void:
@@ -223,6 +229,9 @@ func _process(dt: float) -> void:
 	if _t >= 0.5:
 		_t = 0.0
 		_refresh()
+	if souv_open >= 0:
+		_reveal_gap()                                   # (Q20) 화면 크기가 바뀌어도 띠는 보이는 곳에 · 쪽지는 띠 위에
+		_place_note()
 
 
 func _cur() -> int:
@@ -317,9 +326,17 @@ func _souvenir_sig() -> String:
 
 
 func _fill_souvenirs() -> void:
+	# 그림 줄을 다시 그려도 (자동 저장 등으로 시트가 새로 채워질 때) 열린 쪽지는 같은 기념품이면 그대로 둔다
+	var keep := souv_open if souvenir_note != null and souvenir_note.is_open() else -1
+	var keep_key := String(souvenir_note.shown.get("key", "")) if keep >= 0 else ""
 	_clear(souv_box)
 	souv_flow = null
+	souv_gap = null
+	souv_open = -1
 	var list := souvenir_list()
+	if keep >= 0 and not (keep < list.size() and list[keep] is Dictionary and String((list[keep] as Dictionary).get("key", "")) == keep_key):
+		keep = -1
+		souvenir_note.close()
 	if list.is_empty():
 		var l := _label(souv_box, SOUVENIR_EMPTY, "Small")
 		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -343,21 +360,101 @@ func _fill_souvenirs() -> void:
 		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 		b.pressed.connect(open_souvenir.bind(i))
 		souv_flow.add_child(b)
+	souv_gap = Control.new()                            # (Q20) 쪽지가 뜰 띠 — 닫혀 있으면 자리를 차지하지 않는다
+	souv_gap.name = "SouvenirGap"
+	souv_gap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	souv_gap.visible = false
+	souv_box.add_child(souv_gap)
+	if keep >= 0:
+		_show_note(keep)
 
 
-## 그림을 누름 → 선반의 것과 같은 작은 쪽지 (무엇 · 어느 지구 · 병 며칠째 · 누가). 열었으면 true
+const NOTE_PAD := 4.0                   # (Q20) 띠 안에서 쪽지 위아래 틈 (px)
+const SOUV_DIM := 0.4                   # (Q20) 쪽지가 열린 동안 다른 그림의 짙기
+
+
+## 그림을 누름 → 선반의 것과 같은 작은 쪽지 (무엇 · 어느 지구 · 병 며칠째 · 누가). 열었으면 true.
+## (Q20 ㊱) 쪽지는 그림 줄들 아래의 띠에 뜬다 — 어떤 기념품 그림도 가리지 않는다. 띠가 보이도록 시트가 스스로 밀린다
 func open_souvenir(i: int) -> bool:
 	var list := souvenir_list()
 	if i < 0 or i >= list.size() or not (list[i] is Dictionary):
 		return false
-	var at := get_viewport_rect().size * 0.5 if is_inside_tree() else Vector2(180, 320)
-	if souv_flow != null:
-		var b := souv_flow.get_node_or_null("Souvenir%d" % i) as Control
-		if b != null:
-			at = b.global_position + Vector2(b.size.x * 0.5, 28.0)      # 쪽지는 누른 자리 34px 위에 뜬다 → 그림 바로 위에 붙게
 	GameAudio.fx("glass_tap_light", "Room", -12.0)
-	souvenir_note.open(list[i], at)
+	_show_note(i)
 	return true
+
+
+func _show_note(i: int) -> void:
+	var list := souvenir_list()
+	var at := get_viewport_rect().size * 0.5 if is_inside_tree() else Vector2(180, 320)
+	souvenir_note.open(list[i], at)
+	souv_open = i
+	if souv_flow == null or souv_gap == null:
+		return
+	for c: Node in souv_flow.get_children():
+		if c is Control:
+			(c as Control).modulate = Color(1, 1, 1, 1.0 if c.name == "Souvenir%d" % i else SOUV_DIM)
+	souv_gap.custom_minimum_size = Vector2(0.0, souvenir_note.panel.size.y + NOTE_PAD * 2.0)
+	souv_gap.visible = true
+	_settle_layout(panel)
+	_reveal_gap()
+	_place_note()
+
+
+## (Q20) 띠가 다 보이게 시트를 민다 (띠가 스크롤 칸 아래로 나가 있으면 그만큼, 위로 나가 있으면 그만큼)
+func _reveal_gap() -> void:
+	if souv_gap == null or not souv_gap.visible:
+		return
+	var over := souv_gap.get_global_rect().end.y - scroll.get_global_rect().end.y
+	var under := scroll.get_global_rect().position.y - souv_gap.get_global_rect().position.y
+	var before := scroll.scroll_vertical
+	if over > 0.5:
+		scroll.scroll_vertical += int(ceil(over))
+	elif under > 0.5:
+		scroll.scroll_vertical -= int(ceil(under))
+	if scroll.scroll_vertical != before:
+		_settle_layout(scroll)
+
+
+## (Q20) 쪽지를 띠 위에: 누른 그림과 같은 세로줄 (띠 안으로 밀어 넣음)
+func _place_note() -> void:
+	if souv_gap == null or souv_flow == null or souv_open < 0 or not souvenir_note.is_open():
+		return
+	var gap := souv_gap.get_global_rect()
+	var sz := souvenir_note.panel.size
+	var b := souv_flow.get_node_or_null("Souvenir%d" % souv_open) as Control
+	var cx := b.get_global_rect().get_center().x if b != null else gap.get_center().x
+	var right := minf(gap.end.x, get_viewport_rect().size.x - gap.position.x) if is_inside_tree() else gap.end.x      # 화면 밖으로도 나가지 않게
+	var x := clampf(cx - sz.x * 0.5, gap.position.x, maxf(gap.position.x, right - sz.x))
+	souvenir_note.panel.global_position = Vector2(x, gap.position.y + NOTE_PAD)
+
+
+## (Q20) 쪽지가 닫히면 (어디를 눌러도 닫힌다) 띠를 접고 그림을 모두 또렷하게
+func _on_note_visibility() -> void:
+	if souvenir_note.is_open():
+		return
+	souv_open = -1
+	if souv_gap != null and is_instance_valid(souv_gap):
+		souv_gap.visible = false
+	if souv_flow != null and is_instance_valid(souv_flow):
+		for c: Node in souv_flow.get_children():
+			if c is Control:
+				(c as Control).modulate = Color.WHITE
+
+
+## (Q20) 칸들을 지금 바로 다시 놓는다 (위에서 아래로) — 띠를 벌린 그 화면에서 쪽지 자리를 알아야 해서 다음 화면을 기다리지 않는다
+## 두 번 돈다: 여러 줄로 접히는 칸(HFlowContainer)은 한 번 놓여 봐야 제 높이를 알고, 그 높이로 위 칸이 다시 놓인다
+static func _settle_layout(n: Node) -> void:
+	for i in 2:
+		_sort_down(n)
+
+
+static func _sort_down(n: Node) -> void:
+	if n is Container:
+		n.notification(Container.NOTIFICATION_SORT_CHILDREN)
+	for c: Node in n.get_children():
+		if c is Control and (c as Control).visible:
+			_sort_down(c)
 
 
 # ───────────────────────── 새 병 사기 ─────────────────────────

@@ -32,7 +32,7 @@ func all() -> void:
 	StartFlow.navigate = false                         # (Q19) 장면 시험은 장면을 실제로 바꾸지 않는다
 	run.timed(self, ["test_made_once", "test_take", "test_jar_round_trip", "test_old_save", "test_giant_round_trip", "test_new_jar_keeps",
 		"test_determinism", "test_stone_spot", "test_words", "test_shelf_layout",
-		"test_q19_state", "test_q19_save", "test_q19_sides", "test_q19_glide_math", "test_q19_altar", "test_q19_sheet",
+		"test_q19_state", "test_q19_save", "test_q19_sides", "test_q19_glide_math", "test_q19_altar", "test_q19_sheet", "test_q20_sheet_note",
 		"test_q19_room_glide", "test_q19_room_twinkle", "test_q19_title"])
 	StartFlow.navigate = old_nav
 	StartFlow.take()
@@ -670,6 +670,76 @@ func test_q19_sheet() -> void:
 	_drop(sm)
 
 
+# ───────────────────────── (Q20 ㊱) 선반 시트: 쪽지가 다른 기념품 그림을 가리지 않는다 ─────────────────────────
+## 쪽지 네모가 덮은 그림 이름들 (없어야 한다) — 스크롤 칸 안에 보이는 그림만 본다
+func _note_covers(sh: ShelfSheet) -> Array:
+	var out: Array = []
+	var nr := sh.souvenir_note.panel.get_global_rect()
+	var clip := sh.scroll.get_global_rect()
+	for c: Node in sh.souv_flow.get_children():
+		var r := (c as Control).get_global_rect().intersection(clip)
+		if r.size.y > 0.0 and r.intersects(nr):
+			out.append(String(c.name))
+	return out
+
+
+func test_q20_sheet_note() -> void:
+	var sm := _manager()
+	var size0 := run.root.size
+	run.root.size = Vector2i(360, 640)
+	var sh := ShelfSheet.new()
+	run.root.add_child(sh)
+	sm.player.souvenirs = _recs(23)
+	sh.open()
+	ShelfSheet._settle_layout(sh)
+	check(sh.souv_flow.get_child_count() == 23 and sh.souv_gap != null and not sh.souv_gap.visible and sh.souv_open < 0, "닫혀 있을 때는 쪽지 자리(띠)가 접혀 있다")
+	var rows := {}
+	for c: Node in sh.souv_flow.get_children():
+		rows[int(round((c as Control).position.y))] = true
+	check(rows.size() >= 3, "360×640: 기념품 스물셋이 여러 줄 (%d줄)" % rows.size())
+	var flow_h0 := sh.souv_flow.size.y
+	for pick: int in [0, 3, 11, 22]:                     # 첫 줄 · 첫 줄 가운데 · 가운데 줄 · 마지막 줄
+		check(sh.open_souvenir(pick), "그림 %d을 누른다" % pick)
+		var nr := sh.souvenir_note.panel.get_global_rect()
+		var gap := sh.souv_gap.get_global_rect()
+		var flow := sh.souv_flow.get_global_rect()
+		var clip := sh.scroll.get_global_rect()
+		check(sh.souvenir_note.is_open() and sh.souv_open == pick and String(sh.souvenir_note.shown.get("key", "")) == String(_rec(pick)["key"]), "그 기념품의 쪽지")
+		check(_note_covers(sh).is_empty(), "쪽지가 어느 기념품 그림도 가리지 않는다 (그림 %d · 쪽지 %s · 가린 것 %s)" % [pick, nr, _note_covers(sh)])
+		check(sh.souv_gap.visible and gap.position.y >= flow.end.y - 0.5 and gap.grow(0.5).encloses(nr), "쪽지는 기념품 줄 아래에 벌어진 띠 안 (띠 %s)" % gap)
+		check(nr.position.y >= clip.position.y - 0.5 and nr.end.y <= clip.end.y + 0.5 and nr.position.x >= 0.0 and nr.end.x <= 360.0, "쪽지가 시트 안에 다 보인다 (시트를 밀어서 — 밀림 %d)" % sh.scroll.scroll_vertical)
+		var b := sh.souv_flow.get_node("Souvenir%d" % pick) as Control
+		var want_x := clampf(b.get_global_rect().get_center().x - nr.size.x * 0.5, gap.position.x, minf(gap.end.x, 360.0 - gap.position.x) - nr.size.x)
+		check(absf(nr.position.x - want_x) < 1.0 and is_equal_approx(b.modulate.a, 1.0) and is_equal_approx((sh.souv_flow.get_node("Souvenir%d" % ((pick + 1) % 23)) as Control).modulate.a, ShelfSheet.SOUV_DIM),
+			"누른 그림과 같은 세로줄 · 누른 그림만 또렷하다")
+		check(is_equal_approx(sh.souv_flow.size.y, flow_h0), "기념품 줄은 그대로 (그림이 밀리지 않는다)")
+		var ln := SouvenirNote.lines(sh.souvenir_note.shown)
+		check(ln == SouvenirNote.lines(_rec(pick)) and ln[0] == String(Souvenirs.NAME[String(_rec(pick)["id"])]) and ln[1] == "솔방울 지구" and ln[2] == "병 %d일째" % int(_rec(pick)["day"]),
+			"쪽지 글은 그대로 (무엇 · 어느 지구 · 병 며칠째 · 누가) — %s" % str(ln))
+	check(sh.souv_box.find_children("*", "Label", true, false).is_empty(), "개수 · 진행도 글 없음 (그림과 빈 띠뿐)")
+	# 시트가 다시 채워져도 (자동 저장 등) 같은 기념품이면 쪽지는 그대로
+	sm.giant["q20_probe"] = 1
+	sh._refresh()
+	check(sh.souvenir_note.is_open() and sh.souv_open == 22 and sh.souv_gap.visible and _note_covers(sh).is_empty(), "시트가 다시 채워져도 쪽지는 그대로 · 여전히 가리지 않는다")
+	# 닫으면 띠가 접힌다
+	sh.souvenir_note.close()
+	ShelfSheet._settle_layout(sh)
+	var clear_all := true
+	for c: Node in sh.souv_flow.get_children():
+		clear_all = clear_all and is_equal_approx((c as Control).modulate.a, 1.0)
+	check(sh.souv_open < 0 and not sh.souv_gap.visible and clear_all, "쪽지를 닫으면 띠가 접히고 그림이 모두 또렷해진다")
+	# 몇 개뿐일 때 (한 줄)
+	sm.player.souvenirs = _recs(4)
+	sh._refresh()
+	check(sh.open_souvenir(1) and _note_covers(sh).is_empty() and sh.souv_gap.get_global_rect().grow(0.5).encloses(sh.souvenir_note.panel.get_global_rect()), "한 줄뿐일 때도 줄 아래 띠에")
+	sh.close()
+	check(not sh.souvenir_note.is_open() and sh.souv_open < 0, "시트를 닫으면 쪽지도 닫힌다")
+	run.root.remove_child(sh)
+	sh.free()
+	run.root.size = size0
+	_drop(sm)
+
+
 # ───────────────────────── 장면 도우미 ─────────────────────────
 ## 저장이 있는 넓은 세상 장면 (이어하기 길 — 방에서 날아 들어오는 연출은 건너뜀)
 func _scene(sm: GameSave, seed_v: int) -> Node:
@@ -875,6 +945,8 @@ func test_q19_room_glide() -> void:
 # ───────────────────────── (l) 가장자리 반짝임 ─────────────────────────
 func test_q19_room_twinkle() -> void:
 	var sm := _manager()
+	var size0 := run.root.size
+	run.root.size = Vector2i(360, 640)                 # 폰 세로 화면 (Q20 ㉟ — 소품이 화면 양 끝에 걸리는 크기)
 	var s := _scene(sm, 32)
 	var cam: JarCamera = s.get("cam")
 	var glide: ShelfGlide = s.get("shelf_glide")
@@ -895,12 +967,41 @@ func test_q19_room_twinkle() -> void:
 	var cl := tw.center_of(-1)
 	check(c.x > vs.x - 60.0 and cl.x < 60.0 and c.y == cl.y and c.y >= top + 33.0 and c.y <= vs.y - bottom - 33.0,
 		"화면 끝 · 위 띠 아래 · 아래 띠 위 (%s · %s / 위 %.0f 아래 %.0f)" % [c, cl, top, bottom])
+	# (Q20 ㉟) 꼬리표는 방 소품(설탕 그릇 · 등불 · 화분 · 물뿌리개 · 핀셋) 위에 서지 않는다
 	var edge_y := room.souvenir_edge_y(cam.camera, 0.0)
-	check(absf(c.y - clampf(edge_y, top + 34.0, vs.y - bottom - 34.0)) < 1.0, "선반 높이에 (%.0f)" % edge_y)
-	check(tw.rect_of(1).has_point(c) and tw.rect_of(-1).has_point(cl) and tw.rect_of(1).size.x >= 44.0, "누르는 칸이 반짝임을 덮는다")
-	check(tw.glow() >= ShelfTwinkle.REST and tw.glow() <= 1.0, "부드러운 밝기")
+	var props: Array = room.prop_edge_rects(cam.camera, ShelfTwinkle.strip_w())
+	check(vs == Vector2(360, 640) and _tab_hits(tw, props).is_empty() and tw.clear, "360×640: 양쪽 꼬리표가 방 소품 네모와 겹치지 않는다 (%s · 겹친 것 %s)" % [tw.mark_rect(1), _tab_hits(tw, props)])
+	var old_hits := {}
+	for p: Dictionary in props:
+		for side: int in [1, -1]:
+			if int(p["side"]) == side and (p["rect"] as Rect2).intersects(Rect2(vs.x - 34.0 if side > 0 else 0.0, clampf(edge_y, top + 34.0, vs.y - bottom - 34.0) - 17.0, 34.0, 34.0)):
+				old_hits["%s%d" % [p["name"], side]] = true
+	check(old_hits.has("sugar_bowl1") and old_hits.has("oil_lamp-1"), "예전 자리(선반 높이 %.0f)는 설탕 그릇(오른쪽) · 등불(왼쪽) 위였다 — %s" % [edge_y, old_hits.keys()])
+	check(c.y < edge_y - 100.0 and tw.mark_rect(1).end.x == vs.x and tw.mark_rect(-1).position.x == 0.0 and tw.mark_rect(1).size == Vector2(ShelfTwinkle.tab_w(), ShelfTwinkle.TAB_H),
+		"소품보다 높은 빈 곳 · 화면 끝에 붙은 꼬리표 (%.0f < 선반 %.0f)" % [c.y, edge_y])
+	var hud_hit: Array = []
+	for r: Rect2 in tw.hud_rects():
+		for side: int in [1, -1]:
+			if r.intersects(tw.mark_rect(side)):
+				hud_hit.append(r)
+	check(hud_hit.is_empty(), "띠 · 단추와도 겹치지 않는다 (%s)" % str(hud_hit))
+	check(tw.rect_of(1).has_point(c) and tw.rect_of(-1).has_point(cl) and tw.rect_of(1).size.x >= 44.0, "누르는 칸이 꼬리표를 덮는다")
+	check(tw.glow() >= ShelfTwinkle.REST and tw.glow() <= 1.0 and tw.nudge() >= 0.0 and tw.nudge() <= ShelfTwinkle.NUDGE, "부드러운 밝기 · 작은 밀림")
 	tw.seek(0.5)
-	check(tw.glow() > 0.95, "몇 초마다 한 번 밝아진다")
+	check(tw.glow() > 0.95 and tw.nudge() < 0.01, "몇 초마다 한 번 밝아진다")
+	tw.seek(0.25)
+	check(is_equal_approx(tw.nudge(), ShelfTwinkle.NUDGE) and tw.mark_rect(1) == Rect2(c - tw.mark_rect(1).size * 0.5, tw.mark_rect(1).size), "그동안 바깥쪽으로 살짝 밀린다 (%.0f px · 잰 자리는 그대로)" % tw.nudge())
+	# 소품이 다 가린 높이뿐이면: 겹친 넓이가 가장 작은 곳 (clear = false) — 그래도 선다
+	var tw2 := ShelfTwinkle.new()
+	run.root.add_child(tw2)
+	tw2.place(true, true, 300.0, 100.0, 500.0, [Rect2(0, 0, 37, 640), {"rect": Rect2(323, 0, 37, 250)}])
+	check(not tw2.clear and tw2.shown(1) and tw2.center_of(1).y >= 100.0 and tw2.center_of(1).y <= 500.0, "빈 곳이 없으면 가장 덜 겹치는 높이에 (%.0f)" % tw2.center_of(1).y)
+	tw2.place(true, false, 300.0, 100.0, 500.0, [{"rect": Rect2(323, 200, 37, 200)}, Rect2(0, 250, 37, 100)])
+	check(tw2.clear and tw2.center_of(1).y < 200.0 - ShelfTwinkle.TAB_H * 0.5 and tw2.center_of(1).y > 160.0, "가까운 빈 곳 (위쪽 먼저) — %.0f" % tw2.center_of(1).y)
+	tw2.place(true, false, 300.0, 100.0, 500.0)
+	check(tw2.clear and tw2.center_of(1).y == 300.0, "비킬 것이 없으면 바라는 높이 그대로")
+	run.root.remove_child(tw2)
+	tw2.free()
 	# 누르면 그쪽으로
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
@@ -933,7 +1034,8 @@ func test_q19_room_twinkle() -> void:
 	# 움직임 줄이기: 미끄러지지 않고 바로 · 반짝임은 가만히
 	GameSettings.get_current().set_meta("reduce_motion", true)
 	_step(s, 0.1)
-	check(tw.still and is_equal_approx(tw.glow(), 0.75), "움직임 줄이기: 깜박이지 않는다")
+	tw.seek(0.25)
+	check(tw.still and is_equal_approx(tw.glow(), 0.75) and tw.nudge() == 0.0, "움직임 줄이기: 깜박이지도 밀리지도 않는다 (가만한 꼬리표)")
 	(tw.get_node("HitL") as Control).gui_input.emit(press)
 	check(not glide.active and absf(cam.shelf_pan - stop_l) < 0.001, "움직임 줄이기: 누르면 바로 그 자리")
 	GameSettings.get_current().remove_meta("reduce_motion")
@@ -944,7 +1046,18 @@ func test_q19_room_twinkle() -> void:
 	_step(s, 0.2)
 	check(not tw.shown(1) and not tw.shown(-1), "다 보면 반짝임이 사라진다")
 	_remove(s)
+	run.root.size = size0
 	_drop(sm)
+
+
+## (Q20 ㉟) 보이는 꼬리표가 덮은 소품 이름들 (없어야 한다)
+func _tab_hits(tw: ShelfTwinkle, props: Array) -> Array:
+	var out: Array = []
+	for p: Dictionary in props:
+		for side: int in [1, -1]:
+			if tw.shown(side) and int(p["side"]) == side and (p["rect"] as Rect2).intersects(tw.mark_rect(side)):
+				out.append("%s%s" % [p["name"], "R" if side > 0 else "L"])
+	return out
 
 
 # ───────────────────────── (m) 타이틀 ─────────────────────────
@@ -965,6 +1078,8 @@ func test_q19_title() -> void:
 	sm.save_all(true)
 	sm.unload()
 	var before := _giant_file(sm)
+	var size0 := run.root.size
+	run.root.size = Vector2i(360, 640)                 # 폰 세로 화면 (Q20 ㉟)
 	var t: Node = load(StartFlow.TITLE_SCENE).instantiate()
 	run.root.add_child(t)
 	var cam: JarCamera = t.get("cam")
@@ -979,6 +1094,13 @@ func test_q19_title() -> void:
 	var box: Control = t.get("title_box")
 	var btn: Control = t.get("button")
 	check(c.y > box.position.y + box.size.y and c.y < btn.position.y, "제목 아래 · 버튼 위 (%s)" % c)
+	var props: Array = room.prop_edge_rects(cam.camera, ShelfTwinkle.strip_w())
+	var prop_names := {}
+	for p: Dictionary in props:
+		prop_names["%s%d" % [p["name"], p["side"]]] = true
+	check(prop_names.has("sugar_bowl1") and prop_names.has("oil_lamp-1") and _tab_hits(tw, props).is_empty() and tw.clear,
+		"(Q20) 타이틀 360×640: 꼬리표가 방 소품 네모와 겹치지 않는다 (%s · 겹친 것 %s)" % [tw.mark_rect(1), _tab_hits(tw, props)])
+	check(not tw.mark_rect(1).intersects(box.get_global_rect()) and not tw.mark_rect(1).intersects(btn.get_global_rect()), "제목 · 버튼과도 겹치지 않는다")
 	var press := InputEventMouseButton.new()
 	press.button_index = MOUSE_BUTTON_LEFT
 	press.pressed = true
@@ -1024,4 +1146,20 @@ func test_q19_title() -> void:
 	check(not tw2.shown(1) and not tw2.shown(-1), "다시 켠 타이틀에도 반짝임이 없다 (본 것으로 남음)")
 	run.root.remove_child(t2)
 	t2.free()
+	# (Q20 ㉟) 왼쪽에만 안 본 것이 남은 타이틀: 왼쪽 꼬리표도 등불 · 물뿌리개 · 핀셋을 비켜 선다
+	var t3: Node = load(StartFlow.TITLE_SCENE).instantiate()
+	run.root.add_child(t3)
+	var tw3: ShelfTwinkle = t3.get("shelf_twinkle")
+	var room3: GiantRoom = t3.get("room")
+	var both: Array = _recs(30)                         # 양쪽에 놓이는 수 · 아직 안 본 것
+	(t3.get("info") as Dictionary)["souvenirs"] = both
+	room3.set_souvenirs(both)
+	for i in 20:
+		t3._process(1.0 / 30.0)
+	var props3: Array = room3.prop_edge_rects((t3.get("cam") as JarCamera).camera, ShelfTwinkle.strip_w())
+	check(tw3.shown(1) and tw3.shown(-1) and _tab_hits(tw3, props3).is_empty() and tw3.clear and (t3.get("shelf_glide") as ShelfGlide).runs == 0,
+		"(Q20) 타이틀 양쪽: 두 꼬리표 모두 소품을 비켜 선다 · 저절로 미끄러지지 않는다 (%s · 겹친 것 %s)" % [tw3.mark_rect(-1), _tab_hits(tw3, props3)])
+	run.root.remove_child(t3)
+	t3.free()
+	run.root.size = size0
 	_drop(sm)
