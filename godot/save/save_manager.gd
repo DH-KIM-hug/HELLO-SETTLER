@@ -339,7 +339,8 @@ func peek() -> Dictionary:
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
 	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0)), "id": int(pick.get("id", 1)),
 		"preview": pick.get("preview", {}),
-		"shelf": jl.duplicate(true), "pending": gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty()}
+		"shelf": jl.duplicate(true), "pending": gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty(),
+		"souvenirs": (gp.get("souvenirs", []) as Array).duplicate(true) if gp.get("souvenirs", []) is Array else []}     # [기념품 Q17] 타이틀의 선반에도 (옛 저장엔 없음 → 빈 선반)
 
 
 # ───────────────────────── 찍어 두기 (화면 쪽 — 짧게) ─────────────────────────
@@ -354,7 +355,7 @@ func giant_payload() -> Dictionary:
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
 		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
-		"climates": giant.get("climates", []).duplicate(), "firsts": player.firsts.to_dict(), "last_save_unix": Time.get_unix_time_from_system(),
+		"climates": giant.get("climates", []).duplicate(), "firsts": player.firsts.to_dict(), "souvenirs": player.souvenirs.duplicate(true), "last_save_unix": Time.get_unix_time_from_system(),
 		"star_since_unix": star_since()}
 
 
@@ -504,6 +505,24 @@ func giant_action(v: Village) -> void:
 		save_jar(id, false)
 		flush()
 	stats["sync"] += 1
+
+
+## (Q17) 별지기가 기다리는 기념품을 주웠다 → 병의 기다리는 줄에서 빼고 (Souvenirs.take) 별지기의 것으로 (player.souvenirs),
+## 거인 묶음과 그 병을 함께 적는다 (giant_action과 같은 길 — 저장만 한다: 경이·두려움·손길 사건을 건드리지 않는다).
+## 돌려주는 것: 선반에 놓인 기록 {id, jar 지구 이름, day 병 며칠째, maker(알 때만), unix, key} — 주울 것이 없었으면 빈 사전
+func take_souvenir(v: Village, id: String) -> Dictionary:
+	var got := Souvenirs.take(v, id)
+	if got.is_empty():
+		return {}
+	var jid := _jar_of(v)
+	var meta: Dictionary = jars[jid]["meta"] if jid >= 0 else {}
+	var rec := {"id": id, "jar": String(meta.get("name", "")), "day": int(got.get("day", 1)), "unix": Time.get_unix_time_from_system(),
+		"key": "%d:%d:%s" % [jid, int(meta.get("created_unix", 0)), id]}      # 병 자리 + 병을 만든 현실 시각 + 고비
+	if not String(got.get("name", "")).is_empty():
+		rec["maker"] = String(got["name"])
+	player.add_souvenir(rec)
+	giant_action(v)
+	return rec
 
 
 func _jar_of(v: Village) -> int:

@@ -51,6 +51,7 @@ var sunflower_view: SunflowerView     # 초거대 해바라기·씨앗비·목�
 var wterrain: WorldTerrain
 var extra_views: Array = []          # 두 번째 무리부터 [Village, VillageView]
 var minimap: WorldMinimap
+var souvenir_note: SouvenirNote       # [기념품 Q17] 선반의 기념품을 누르면 뜨는 쪽지 (view/room/souvenir_note.gd)
 var _focus: Village
 var _rot_shown := 0
 var _fog_v := -1
@@ -601,6 +602,7 @@ var shelf_slots: Array = []          # [{x: cm, id, empty, info}] — 지금 병
 var shelf_hud: PanelContainer
 var shelf_hud_l: Label
 var shelf_hud_btn: Button
+var _shelf_jar_range := Vector2.ZERO  # 옆 병들이 놓인 폭 (cm) — 기념품 자리와 합쳐 cam.shelf_range가 된다
 var _shelf_focus := -1               # 지금 화면 가운데의 병 자리 (shelf_slots 번호)
 
 
@@ -653,8 +655,26 @@ func refresh_shelf() -> void:
 				"preview": (s["info"] as Dictionary).get("preview", {})})
 	if room_zoom != null:
 		room_zoom.room.set_shelf_jars(others)
-	cam.shelf_range = Vector2(lo, hi) if others.size() > 0 else Vector2.ZERO
-	cam.shelf_pan = clampf(cam.shelf_pan, lo, hi)
+		room_zoom.room.set_souvenirs(shelf_souvenirs())        # [기념품 Q17] 옆 병이 바뀌면 기념품 자리도 다시
+	_shelf_jar_range = Vector2(lo, hi)
+	_shelf_bounds()
+
+
+## [기념품 Q17] 선반을 밀 수 있는 폭 = 옆 병들 + 기념품이 선 자리 (병 둘레는 등불·소품으로 차 있어 기념품은 옆으로 밀어서 본다)
+func shelf_stops() -> Array:
+	return room_zoom.room.souvenir_stops() if room_zoom != null and room_zoom.room != null else []
+
+
+func _shelf_bounds() -> void:
+	var lo := _shelf_jar_range.x
+	var hi := _shelf_jar_range.y
+	for x: float in shelf_stops():
+		lo = minf(lo, x)
+		hi = maxf(hi, x)
+	var r := Vector2(lo, hi) if lo < hi else Vector2.ZERO
+	if r != cam.shelf_range:
+		cam.shelf_range = r
+		cam.shelf_pan = clampf(cam.shelf_pan, lo, hi)
 
 
 ## 화면 가운데에 가장 가까운 병 자리
@@ -676,9 +696,15 @@ func _shelf_process(dt: float) -> void:
 	var in_room := cam.beyond >= JarCamera.B_ROOM - 0.02 and not cam.flying
 	var held := not _touches.is_empty() or _drag
 	var goal := 0.0
+	_shelf_bounds()
+	var at_souvenirs := false                          # 기념품 무리 앞에 멈춰 있다 (옆 병의 이름·[들어가기]를 띄우지 않는다)
 	if in_room:
 		var f := shelf_focus()
 		goal = float(f.get("x", 0.0))
+		for x: float in shelf_stops():                   # [기념품 Q17] 기념품 무리도 멈출 자리
+			if absf(x - cam.shelf_pan) < absf(goal - cam.shelf_pan):
+				goal = x
+				at_souvenirs = true
 	if not held or not in_room:
 		var np := lerpf(cam.shelf_pan, goal, 1.0 - exp(-10.0 * dt))
 		if absf(np - goal) < 0.02:
@@ -687,7 +713,7 @@ func _shelf_process(dt: float) -> void:
 			cam.shelf_pan = np
 			cam._apply()
 	var f2 := shelf_focus() if in_room else {}
-	var show := in_room and not f2.is_empty() and float(f2["x"]) != 0.0 and absf(cam.shelf_pan - float(f2["x"])) < GiantRoom.SHELF_GAP * 0.35
+	var show := in_room and not at_souvenirs and not f2.is_empty() and float(f2["x"]) != 0.0 and absf(cam.shelf_pan - float(f2["x"])) < GiantRoom.SHELF_GAP * 0.35
 	shelf_hud.visible = show
 	if show:
 		if bool(f2["empty"]):
@@ -1247,6 +1273,10 @@ func _room_tap(sp: Vector2) -> void:
 	if not note.is_empty():
 		open_glass_note(note)
 		return
+	var sv := room_zoom.room.pick_souvenir(cam.camera, sp)     # [기념품 Q17] 선반의 기념품 = 작은 쪽지 (유리 톡이 아니다)
+	if not sv.is_empty():
+		open_souvenir_note(sv, sp)
+		return
 	var now := Time.get_ticks_msec() / 1000.0
 	var f := shelf_focus()
 	var fx := float(f.get("x", 0.0))                  # 옆 병을 보고 있으면 그 병 (C1)
@@ -1291,6 +1321,25 @@ func glass_note_items() -> Array:
 		if n > 0:
 			out.append({"kind": "wish", "key": "wish:%d" % i, "label": ("소원" if n == 1 else "소원 %d" % n) + who, "v": q})
 	return out
+
+
+## [기념품 Q17] 선반에 세울 기념품 — 거인 저장의 것 (저장 계통이 없는 캡처·시험 장면은 빈 선반)
+func shelf_souvenirs() -> Array:
+	var sm := GameSave.get_instance()
+	return sm.player.souvenirs if sm != null else []
+
+
+## [기념품 Q17] 선반의 기념품을 누름 → 작은 종이 쪽지 (무엇 · 어느 지구 · 병 며칠째 · 누가). 다른 데를 누르면 닫힌다
+func open_souvenir_note(hit: Dictionary, sp: Vector2) -> void:
+	if souvenir_note == null:
+		var layer := CanvasLayer.new()
+		layer.layer = 6
+		add_child(layer)
+		souvenir_note = SouvenirNote.new()
+		layer.add_child(souvenir_note)
+	GameAudio.fx("glass_tap_light", "Room", -12.0)
+	var n := shelf_souvenirs().size()
+	souvenir_note.open(hit["rec"], sp, maxi(0, n - room_zoom.room.souvenirs.size() + 1) if bool(hit["pile"]) else 0)
 
 
 ## 유리에 붙은 편지를 누름 → 그 시트 (편지 = ReturnLetter · 계시·소원 = 그 무리의 제단 시트 — 맨 위에 [계시] / 소원 편지 칸)

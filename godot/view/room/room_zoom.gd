@@ -161,6 +161,8 @@ func refresh_notes() -> void:
 	_notes_t = 0.0
 	if scene != null and scene.has_method("glass_note_items"):
 		notes.sync(scene.call("glass_note_items"))
+	if scene != null and scene.has_method("shelf_souvenirs"):     # [기념품 Q17] 선반의 기념품 (달라졌을 때만 다시 세움)
+		room.set_souvenirs(scene.call("shelf_souvenirs"))
 
 
 ## 마을 소리 먹먹함 (AUDIO 1): 병 안에서는 멀리 축소할수록 조금 (거리), 유리를 지나면 완전히

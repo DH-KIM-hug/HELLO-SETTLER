@@ -22,7 +22,7 @@
 class_name Milestones
 extends RefCounted
 
-const VERSION := 3
+const VERSION := 4
 const ORDER := ["bread", "steps", "pop12", "grown", "green", "pop20", "winter"]     # 보통 넘는 차례 (2026-11-11 측정 — 도장 띠·다음 고비 한 줄의 차례)
 const FEAST_RANK := ["bread", "pop12", "grown", "green", "winter", "pop20"]         # 잔치가 있는 고비 — 뒤로 갈수록 큰 잔치 (같은 날 겹치면 뒤쪽이 먼저). 첫걸음마는 잔치가 없다
 const FEAST_SMALL := ["grown", "green"]                       # 작은 잔치 (Balance.FEAST_SMALL_SECS — 저녁 한때)
@@ -95,6 +95,7 @@ static func step(v: Village, _dt: float) -> void:
 	var day := v.cal_day(v.t)
 	if day != int(m.get("day", 0)):
 		_new_day(v, day)
+		Souvenirs.keep_spot(v)                        # (Q17) 납작한 돌 자리에 건물·무덤이 들어섰으면 하루 한 번 다시 찾는다
 	if not is_passed(v, "bread") and int(v.stats.get("first_bread", 0)) > 0:
 		_pass(v, "bread")
 	var pop := v.people.size()
@@ -149,6 +150,10 @@ static func _upgrade(v: Village) -> void:
 		_baseline_born(v)
 	if was < 3 and green_over(v) and not is_passed(v, "green"):
 		_mark_silent(v, "green")
+	if was < 4:                                       # (Q17) 기념품이 없던 때의 저장: 이미 넘은 고비마다 하나씩 조용히 기다린다 (연대기 줄 없음 · 만든 사람 모름)
+		for id: String in ORDER:
+			if is_passed(v, id):
+				Souvenirs.make(v, id, (v.milestones["passed"] as Dictionary)[id], true)
 
 
 ## 이 병이 푸른 밀 고개를 한 번이라도 넘었나 (LeanSeasons.hourly가 고개가 끝난 해를 적어 둔다 — 저장됨)
@@ -443,6 +448,7 @@ static func _front(q: Resident, front: Array, doing: String) -> void:
 
 static func _mark_silent(v: Village, id: String) -> void:
 	(v.milestones["passed"] as Dictionary)[id] = {"t": v.t, "who": -1, "name": "", "nick": "", "silent": true}
+	Souvenirs.make(v, id, (v.milestones["passed"] as Dictionary)[id], true)     # (Q17) 조용히 넘은 고비도 기념품 하나
 
 
 ## 병의 날이 바뀔 때: 겨울 날 수를 세고, 겨울을 지낸 뒤 봄이 오면 고비
@@ -524,6 +530,7 @@ static func _pass(v: Village, id: String, lead: Resident = null) -> void:
 			text += " 사람들은 이제 '%s'%s 부른다." % [title_of(who), Village.josa(who.name, "이라", "라")]
 	v.log_line(text)
 	v.emit(&"milestone", {"who": who.id if who != null else -1, "at": _spot(v, id, lead), "v": {"id": id, "nick": nick, "feast_day": feast_day}})
+	Souvenirs.make(v, id, rec, false)                 # (Q17) 고비마다 기념품 하나 — 어귀의 납작한 돌 (깨달은 뒤 제단이 섰으면 제단) 위에서 기다린다
 
 
 ## 이끈 주민 후보 (앞에서부터 — 별명이 이미 있으면 다음 후보)

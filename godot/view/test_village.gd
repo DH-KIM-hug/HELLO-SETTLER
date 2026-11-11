@@ -1268,6 +1268,29 @@ func village_views() -> Array:
 	return [[village, view]]
 
 
+## [기념품 Q17] 누른 곳에 기다리는 기념품이 있으면 줍는다: 반짝이며 떠오르고(화면만) 거인의 선반으로.
+## 기적이 아니다 — 경외·겁·오늘 톡 수를 건드리지 않고 giant_acted도 내지 않는다 (save/save_manager.gd take_souvenir가 병과 거인 묶음을 함께 저장)
+func _take_souvenir(sp: Vector2) -> bool:
+	for e: Array in village_views():
+		var q: Village = e[0]
+		var sv := SouvenirView.of(e[1])
+		if sv == null or q == null:
+			continue
+		var id := sv.pick(cam.camera, sp)
+		if id.is_empty():
+			continue
+		sv.take_fx(id)
+		GameAudio.fx("gift_twinkle", "Room", -5.0)
+		var sm := GameSave.get_instance()
+		if sm != null:
+			sm.take_souvenir(q, id)
+		else:
+			Souvenirs.take(q, id)
+		sv.refresh()
+		return true
+	return false
+
+
 func _bar_button(parent: Node, text: String, on_press: Callable) -> Button:
 	var b := Button.new()
 	b.text = text
@@ -1967,6 +1990,8 @@ var _follow_vv: Array = []           # 상세를 연(따라가는) 주민의 [Vi
 func _on_tap(sp: Vector2) -> void:
 	if hand_ctl != null and hand_ctl.aiming():      # 떨어뜨릴 자리 고르기: 누른 곳으로 그림자
 		hand_ctl.aim_at(sp, false)
+		return
+	if _take_souvenir(sp):                  # [기념품 Q17] 돌·제단 위 기념품을 누르면 줍는다 (제단 시트보다 먼저)
 		return
 	var av := pick_altar(sp)                # 제단을 누르면 제단 시트 (그 무리의)
 	if av != null:
