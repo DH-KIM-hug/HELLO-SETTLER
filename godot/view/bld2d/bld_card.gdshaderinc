@@ -51,8 +51,8 @@ float bld_lean(vec2 corner, float lean, float h, float k) {
 // → how far the picture is SUNK into the ground at x (bld_cut_sink): the wheat is not sliced off, it stands lower there — the
 // ears at the top come down with it, so the notch is a dip of shorter wheat (no ruler line, no dark inside of the row showing).
 // cut.z < 0 = no window.
-const float BLD_CUT_RAMP = 1.2;
-const float BLD_CUT_DEEP = 0.8;
+const float BLD_CUT_RAMP = 0.6;
+const float BLD_CUT_DEEP = 1.6;
 float bld_cut_sink(float x, vec3 cut, float h) {
 	float d = max(max(cut.x - x, x - cut.y), 0.0);
 	float depth = h - min(cut.z, h);

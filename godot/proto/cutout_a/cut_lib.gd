@@ -18,9 +18,19 @@ const NSLOT := 11
 ## 반 주기 넘게 넘어가 거꾸로 걷는 것처럼 보이고(수레바퀴 착시), 빠르기 상한에 묶으면 발이 앞으로 미끄러져 뒷걸음질로 보였다 →
 ## 걸음을 멈춘 큰 보폭 자세에 작은 들썩임만 (CutoutResident.walk_rate가 고름)
 ## lookup = 서서 하늘을 올려다보고 한 팔로 위를 가리킴 (2026-11-08 수첩 쪽지 7 "아이들이 자꾸 하늘을 올려다보네" — 끝에 덧붙여 앞 번호는 그대로)
-const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup"]
+## reap = 낫질 (Q8 밀 거두기, 2026-11-11): 허리를 숙이고 작은 낫을 앞으로 내밀었다 당겨 벰 — 끝에 덧붙여 앞 번호는 그대로
+const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup", "reap"]
 const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35, "sit": 0.3, "eat": 0.4, "sleep": 0.22,
-	"kneel": 0.16, "gather": 0.45, "travel": 2.2, "lookup": 0.32}
+	"kneel": 0.16, "gather": 0.45, "travel": 2.2, "lookup": 0.32, "reap": 0.7}
+## 낫 그림 (날이 위 · 자루가 오른쪽 아래)에서 손에 쥐는 자리 (그림 가운데에서, rig) · 낫의 배율 (작은 낫 — 괭이 키의 반쯤)
+const REAP_GRIP := Vector2(48.0, -78.0)
+const REAP_K := 1.15
+## 낫을 쥐는 손: 비스듬한 뒤 보기(2)에서는 먼 팔(b — 몸 앞쪽)이라야 낫이 몸 앞으로 보인다, 그 밖에는 팔 a
+const REAP_HAND := ["a", "a", "b", "a"]
+## (Q8) 어깨에 멘 밀 이삭 — 뒤쪽 보기(비스듬한 뒤 · 뒤)에서 나르기 자리(몸 앞)에 더하는 (회전, dx, dy, 배율 — 음수 = 좌우 뒤집음) · 겹.
+## 몸 뒤 겹 그대로 두면 줄기는 몸에 가리고 이삭만 어깨 너머 머리 옆으로 나온다 (모자처럼 머리 위에 얹히지 않게 옆으로)
+const EAR_BACK := [Vector4(0.35, -48.0, -29.0, 1.0), Vector4(0.0, 40.0, -20.0, -1.0)]
+const EAR_BACK_LAYER := [0, 0]
 ## 지팡이를 내려놓는 동작 (앉기·눕기·무릎·숙이기 — 땅에 선 지팡이가 허공에 뜨지 않게)
 const NO_CANE := ["sit", "eat", "sleep", "kneel", "gather"]
 ## 동작 표 텍스처의 가로: 조각 슬롯 NSLOT칸 + 옷 묶음마다 한 칸 (SETS) = (소품 dx, dy, 몸 내림 dy, 지팡이 숨김) — 몸마다 다른 다리 길이·손 자리
@@ -190,6 +200,9 @@ static func material() -> ShaderMaterial:
 	_mat.set_shader_parameter("fig", float(L["fig"]))
 	var pl: Array = L["prop_layer"]
 	_mat.set_shader_parameter("prop_layer", Vector4i(int(pl[0]), int(pl[1]), int(pl[2]), int(pl[3])))     # 보기마다 소품의 겹 (ORDER)
+	_mat.set_shader_parameter("back_prop", PROPS.find("wheat"))
+	_mat.set_shader_parameter("back_xf", EAR_BACK)
+	_mat.set_shader_parameter("back_layer", Vector2i(int(EAR_BACK_LAYER[0]), int(EAR_BACK_LAYER[1])))
 	_mat.set_shader_parameter("lit_tint", Style.LIT_TINT)
 	_mat.set_shader_parameter("shade_tint", Style.SHADE_TINT)
 	return _mat
@@ -481,6 +494,43 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 				a[1] = Vector4(0, 0, -12.0 * (1.0 - u), 1)
 				var hp := (_hand(a, v, "a", "d") + _hand(a, v, "b", "d")) * 0.5
 				a[10] = Vector4(0, hp.x, hp.y - 60.0 + 120.0 * u, 1)
+		"reap":
+			# (Q8 밀 거두기) 낫질: 허리를 숙이고 낫 든 손을 앞으로 내밀었다가(0~0.4) 몸 쪽으로 당겨 벰(0.4~0.6) → 잠깐 멈춤.
+			# 비스듬한 보기: 낫 그림을 좌우로 뒤집어(배율 음수) 눕힘 = 자루는 손에, 날은 앞으로 뻗어 아래로 휘어 듦. 다른 손은 밀 줄기를 쥠.
+			# 앞·뒤 보기: 낫 든 팔(a)을 몸 옆으로 벌렸다 안으로 당김 — 낫이 몸 옆으로 나와 뒤에서도 보인다
+			var u := 0.0
+			if t < 0.4:
+				u = smoothstep(0.0, 0.4, t)
+			elif t < 0.6:
+				u = 1.0 - smoothstep(0.4, 0.6, t)
+			var hand: String = REAP_HAND[v]
+			var ang := 0.0
+			var grip := REAP_GRIP
+			var k := REAP_K
+			if side:
+				a[1] = Vector4(lerpf(-0.2, -0.12, u), 0, -10.0, 1)
+				a[2] = Vector4(0.1, 0, 0, 1)
+				var reach := Vector4(lerpf(0.45, 1.05, u), 0, 0, 1)
+				var bend := Vector4(lerpf(0.55, 0.2, u), 0, 0, 1)
+				var hold_s := Vector4(0.85 if v == 1 else 0.6, 0, 0, 1)      # 다른 손: 밀 줄기를 잡음
+				var hold_f := Vector4(0.35, 0, 0, 1)
+				a[3] = reach if hand == "a" else hold_s
+				a[5] = bend if hand == "a" else hold_f
+				a[4] = reach if hand == "b" else hold_s
+				a[6] = bend if hand == "b" else hold_f
+				ang = lerpf(-2.0, -1.35, u)
+				grip = Vector2(-grip.x, grip.y)
+				k = -k
+			else:
+				a[1] = Vector4(0, 0, -12.0, 1)
+				a[3] = Vector4(lerpf(-0.25, -0.85, u), 0, 0, 1)
+				a[5] = Vector4(lerpf(0.5, 0.1, u), 0, 0, 1)
+				a[4] = Vector4(-0.1, 0, 0, 1)
+				a[6] = Vector4(-0.9, 0, 0, 1)
+				ang = lerpf(1.25, 0.45, u)
+			var hp := _hand_local(a, v, hand, "d")
+			var c := hp - grip.rotated(ang) * REAP_K
+			a[10] = Vector4(ang, c.x, c.y, k)
 		"sit", "eat":
 			_sit(a, v, side, s, w)
 			if clip == "eat":
@@ -697,6 +747,8 @@ static func bake_anim(mod := Callable()) -> ImageTexture:
 						off = (po[1] as PackedVector2Array)[si * 4 + v]
 					elif clip == "eat":
 						off = _hand_local(a, v, "a", sn) - _hand_local(a, v, "a")
+					elif clip == "reap":
+						off = _hand_local(a, v, REAP_HAND[v], sn) - _hand_local(a, v, REAP_HAND[v], "d")
 					else:
 						off = (po[0] as PackedVector2Array)[si * 4 + v]
 					img.set_pixel(SET_COL + si, y, Color(off.x, off.y, fl.x * leg_len(sn, v), fl.w))

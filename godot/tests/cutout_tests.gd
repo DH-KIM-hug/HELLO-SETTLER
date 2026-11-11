@@ -146,6 +146,28 @@ func test_clip_map() -> void:
 		if st["clip"] != cs[3] or int(st["prop"]) != int(cs[4]) or outfit != want_outfit or m.doll.clip != cs[3] or int(_sel(m).w) != int(cs[4]):
 			bad.append("%s/%s/%s → %s %d 옷 %d" % [cs[0], cs[1], cs[2], st["clip"], st["prop"], outfit])
 	check(bad.is_empty(), "동작·짐·일터 → 인형 클립·소품·옷 대응표 %s" % [bad])
+	# (Q8) 익은 밭을 거두는 밭 일꾼: 낫질(reap) + 작은 낫 — 다른 일터·다른 동작·익지 않은 밭은 그대로
+	var reap_bad: Array = []
+	for cs: Array in [[true, "work", "농장", "reap", 7], [true, "work", "버섯꾼", "hoe", 7], [true, "work", "", "hoe", 9],
+			[true, "walk", "농장", "walk", -1], [false, "work", "농장", "hoe", 6]]:
+		m.reaping = cs[0]
+		m.set_job(cs[2])
+		m.set_item("")
+		m.set_tool(cs[2])
+		m.set_anim(cs[1])
+		m.tick(0.0)
+		var st := m.doll_state()
+		if st["clip"] != cs[3] or int(st["prop"]) != int(cs[4]) or m.doll.clip != cs[3] or int(_sel(m).w) != int(cs[4]):
+			reap_bad.append("%s → %s %d" % [cs, st["clip"], st["prop"]])
+	m.reaping = false
+	check(reap_bad.is_empty() and Lib.CLIPS.find("reap") == Lib.CLIPS.size() - 1 and Lib.CLIP_RATE.has("reap")
+		and CutoutResident.REAP_PROP == Lib.PROPS.find("sickle"),
+		"익은 밭의 일꾼만 낫질 + 낫 (동작 표 끝에 덧붙임 — 앞 번호 그대로) %s" % [reap_bad])
+	# (Q8) 어깨에 멘 이삭: 뒤쪽 두 보기에서만 제 자리로 (뒤 보기는 좌우로 뒤집어 머리 옆으로) — 셰이더에 그 소품 번호·자리가 실림
+	var cm := Lib.material()
+	check(int(cm.get_shader_parameter("back_prop")) == Lib.PROPS.find("wheat") and Lib.PROPS.find("wheat") >= 0
+		and Lib.EAR_BACK.size() == 2 and (Lib.EAR_BACK[1] as Vector4).w < 0.0 and (Lib.EAR_BACK[0] as Vector4).w > 0.0,
+		"멘 이삭은 뒤쪽 보기에서 어깨 너머로 나오게 따로 놓임 (소품 %d)" % Lib.PROPS.find("wheat"))
 	m.free()
 	# 아이: 아이 몸(f) · 같은 걸음을 더 빨리
 	var k := _resident(rng, 56)

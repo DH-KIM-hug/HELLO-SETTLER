@@ -572,26 +572,54 @@ static func on_death(v: Village, p: Resident) -> void:
 		v.speak(walkers[0], "잘 가요, %s" % p.name, 7)
 
 
-## 묘지가 없을 때: 마을 끝 빈 땅에 홀로 (중심에서 7~10칸)
+## (Q8 밀 숲 — 2026-11-11) 홀로 선 무덤은 밭 안·밭 바로 곁을 피한다: 익은 밀은 주민보다 커서, 거인이 보는 네 방위 가운데 어디서든
+## 밭 바로 뒤가 되는 자리의 무덤은 밀에 가린다 (화면이 그 앞의 밀을 낮춰야 함 — BldEcon.grave_cut). 밭 가운데에서 보는 방위 축을 따라
+## GRAVE_FIELD_FAR 안, 그 옆으로 GRAVE_FIELD_SIDE 안 (십자 꼴)이 그 자리. 주사위를 쓰지 않는다 (자리만 — 같은 마을이면 늘 같은 자리).
+const GRAVE_VIEW_YAW := 45.0         # 거인이 보는 방위 (도 — 화면의 JarCamera.BASE_YAW_DEG + 90° × 걸음과 같은 값: 시험이 지킴)
+const GRAVE_FIELD_FAR := 3.6         # 밭 가운데에서 보는 축을 따라 이 안 = 밀 줄에 가리는 거리 (맨 뒷줄 + 밀 키 / sin 48° + 돌 발치)
+const GRAVE_FIELD_SIDE := 2.8        # ... 옆으로 이 안 (밭 반 폭 + 돌·꽃 반 폭)
+const GRAVE_TRIES := 72              # 밭을 피해 찾는 걸음 수 (옛 규칙은 40걸음 — 그 안에서 밭과 상관없는 자리는 예전과 같은 자리)
+
+
+## 묘지가 없을 때: 마을 끝 빈 땅에 홀로 (중심에서 7~10칸). 먼저 밭 곁도 피해 찾고 (GRAVE_TRIES걸음), 없으면 옛 규칙대로 (40걸음)
 static func _lone_grave(v: Village, p: Resident) -> Vector2:
 	var base := v.center + Vector2(-0.6, 0.8).normalized() * 8.0
-	for k in 40:
-		var a := k * 0.9
-		var q := base + Vector2(cos(a), sin(a)) * (0.8 * (k / 6))
-		if v.water_at(q.x, q.y) or not v.water.inside(q.x, q.y, 1.5):
-			continue
-		var ok := true
-		for b in v.buildings:
-			if Vector2(b.x - q.x, b.y - q.y).length() < b.size() + 0.6:
-				ok = false
-				break
-		for g: Dictionary in v.graves:
-			if Vector2(float(g["x"]) - q.x, float(g["y"]) - q.y).length() < 0.7:
-				ok = false
-				break
-		if ok:
-			return q
+	for pass_i in 2:
+		for k in (GRAVE_TRIES if pass_i == 0 else 40):
+			var a := k * 0.9
+			var q := base + Vector2(cos(a), sin(a)) * (0.8 * (k / 6))
+			if v.water_at(q.x, q.y) or not v.water.inside(q.x, q.y, 1.5):
+				continue
+			if pass_i == 0 and grave_by_field(v, q):
+				continue
+			var ok := true
+			for b in v.buildings:
+				if Vector2(b.x - q.x, b.y - q.y).length() < b.size() + 0.6:
+					ok = false
+					break
+			for g: Dictionary in v.graves:
+				if Vector2(float(g["x"]) - q.x, float(g["y"]) - q.y).length() < 0.7:
+					ok = false
+					break
+			if ok:
+				return q
 	return base
+
+
+## q가 어느 밭(짓는 중인 밭 터도)의 안이나 바로 곁(네 방위 어디서 보든 밀 줄 뒤·앞)인지 — 자리만 읽는 순수 함수
+static func grave_by_field(v: Village, q: Vector2) -> bool:
+	var yaw := deg_to_rad(GRAVE_VIEW_YAW)
+	var tw := Vector2(sin(yaw), cos(yaw))
+	var rt := Vector2(cos(yaw), -sin(yaw))
+	for b in v.buildings:
+		if b.type != "농장":
+			continue
+		var d := q - Vector2(b.x, b.y)
+		var u := absf(d.dot(tw))
+		var w := absf(d.dot(rt))
+		if minf(u, w) < GRAVE_FIELD_SIDE and maxf(u, w) < GRAVE_FIELD_FAR:
+			return true
+	return false
 
 
 # ───────────────────────── 물 건너기 · 나루터 ─────────────────────────

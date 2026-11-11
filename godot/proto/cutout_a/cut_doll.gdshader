@@ -29,6 +29,10 @@ uniform float self_lit = 0.5;      // 그늘 속에서도 이만큼 원래 밝�
 uniform float alpha_cut = 0.5;
 uniform float far_shade = 0.84;    // 비스듬한 보기의 먼 다리(leg_b)를 조금 어둡게 — 두 다리가 겹쳐도 둘로 읽힘 (2026-11-08)
 uniform ivec4 prop_layer = ivec4(5, 7, 0, 0);    // 보기마다 소품의 겹 (앞: 몸과 팔 사이, 뒤: 몸 뒤)
+// (Q8) 어깨에 멘 밀 이삭: 뒤쪽 보기(2·3)에서는 몸 앞에 든 자리 그대로면 머리·몸에 가려 안 보인다 → 그 소품만 제 자리·제 겹으로
+uniform int back_prop = -1;                      // 그 소품 번호 (-1 없음)
+uniform vec4 back_xf[2];                         // 보기 2·3: (회전 더함, dx 더함, dy 더함, 배율 곱 — 음수 = 좌우로 뒤집음)
+uniform ivec2 back_layer = ivec2(0, 0);          // 그때의 겹
 
 instance uniform vec4 sel = vec4(0.0, 0.0, -1.0, -1.0);    // 옷 묶음 S, 머리 묶음 T, 모자 묶음 U(-1 없음), 소품(-1 없음)
 instance uniform vec4 st = vec4(0.0, 1.0, 0.0, 0.0);       // 보기 0~3, 뒤집기 ±1, 동작 번호, 시작 위상(0~1)
@@ -97,10 +101,19 @@ void vertex() {
 	} else {
 		vec2 p = VERTEX.xy;
 		vec4 a_own = anim(slot, row0, f);
+		bool bk = group == 3 && cur_view >= 2 && back_prop >= 0 && abs(sel.w - float(back_prop)) < 0.5;
 		int so = int(sel.x + 0.5) * 4 + cur_view;
 		if (group == 3) {
 			// 소품: 원점 둘레 그림 → 회전·배율 → (dx, dy) 자리 (몸 틀) + 이 몸의 손 자리 차이
-			p = xf(p, vec2(0.0), vec4(a_own.x, 0.0, 0.0, 1.0)) * a_own.w + a_own.yz;
+			vec4 pa = a_own;
+			if (bk) {
+				vec4 bx = back_xf[cur_view - 2];
+				pa = vec4(pa.x + bx.x, pa.y + bx.y, pa.z + bx.z, pa.w * bx.w);
+			}
+			if (pa.w < 0.0) {
+				p.x = -p.x;                              // 음수 배율 = 좌우로 뒤집은 그림 (낫질의 낫 · 뒤에서 본 이삭)
+			}
+			p = xf(p, vec2(0.0), vec4(pa.x, 0.0, 0.0, 1.0)) * abs(pa.w) + pa.yz;
 			p += ps.xy;
 		} else if (CUSTOM3.z > 0.5) {
 			// 지팡이: 손(CUSTOM3.xy)이 움직인 만큼만 옮김 — 돌지 않고 곧게 섬
@@ -140,7 +153,7 @@ void vertex() {
 		float cu = max(INV_VIEW_MATRIX[1].y, 0.3);
 		float k = misc.x / fig;
 		vec3 org = MODEL_MATRIX[3].xyz;
-		float layer = group == 3 ? float(prop_layer[cur_view]) - 0.5 : VERTEX.z;
+		float layer = group == 3 ? float(bk ? back_layer[cur_view - 2] : prop_layer[cur_view]) - 0.5 : VERTEX.z;
 		vec3 w = org + right * (p.x * k) + vec3(0.0, p.y * k / cu, 0.0) + back * (layer * layer_eps);
 		VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
 		NORMAL = normalize((VIEW_MATRIX * vec4(back, 0.0)).xyz);

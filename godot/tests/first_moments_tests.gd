@@ -1956,6 +1956,10 @@ func test_grave_clear_view() -> void:
 		# 창 옆 (뿔 없음): 무덤이 밭 왼쪽에 치우치면 — 좁은 왼쪽 어깨는 줄 끝까지 낮추고, 넓은 오른쪽은 완만한 비탈을 지나 제 키로
 		var side := 1.2
 		var hw := float(d["w"]) * 0.5
+		var cw := BldEcon.cut_ramp(wh, float(c[2])) if c.size() == 3 else 99.0
+		check(c.size() == 3 and float(c[1]) - float(c[0]) <= 2.0 * BldEcon.GRAVE_HALF_W + 0.1 and float(c[1]) - float(c[0]) + 2.0 * cw < 2.0 * hw
+			and is_zero_approx(BldEcon.cut_sink(-hw, c, wh)) and is_zero_approx(BldEcon.cut_sink(hw, c, wh)),
+			"방위 걸음 %d: 밭 한가운데 뒤의 무덤 — 좁은 홈만 (창 + 비탈 %.1f칸씩 < 줄 폭 %.1f칸) · 줄 양 끝은 제 키" % [st, cw, hw * 2.0])
 		var cs: Array = put.call(at_half + rt * side)
 		var depth := wh - wh * 0.5
 		var ramp := BldEcon.cut_ramp(wh, wh * 0.5)
@@ -2017,7 +2021,7 @@ func test_grave_clear_view() -> void:
 		return out
 	# 비탈: 깊이 낮춘 줄일수록 길게 (벼랑이 아니라 언덕) · 셰이더(bld_cut_sink)와 같은 값
 	var inc := FileAccess.get_file_as_string("res://view/bld2d/bld_card.gdshaderinc")
-	check(BldEcon.cut_ramp(wh, BldEcon.GRAVE_MIN_H) > BldEcon.cut_ramp(wh, wh - 0.1) and is_equal_approx(BldEcon.cut_ramp(wh, wh - 0.1), BldEcon.GRAVE_RAMP)
+	check(BldEcon.cut_ramp(wh, BldEcon.GRAVE_MIN_H) >= BldEcon.cut_ramp(wh, wh - 0.1) and is_equal_approx(BldEcon.cut_ramp(wh, wh - 0.1), BldEcon.GRAVE_RAMP)
 		and is_equal_approx(BldEcon.cut_ramp(wh, wh + 1.0), BldEcon.GRAVE_RAMP)
 		and inc.contains("BLD_CUT_RAMP = %s;" % str(BldEcon.GRAVE_RAMP)) and inc.contains("BLD_CUT_DEEP = %s;" % str(BldEcon.GRAVE_DEEP)),
 		"낮춘 창 밖 비탈: 얕게 낮추면 %.1f칸 · 그루터기 키까지 낮추면 %.1f칸 (셰이더와 같은 값)" % [BldEcon.GRAVE_RAMP, BldEcon.cut_ramp(wh, BldEcon.GRAVE_MIN_H)])

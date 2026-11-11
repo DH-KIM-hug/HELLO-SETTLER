@@ -561,6 +561,8 @@ func _sync_residents(dt: float) -> void:
 		if r.anim == "work":
 			var jb := v.bld(r.job)
 			m.set_tool(jb.type if jb != null else "")
+			if m is CutoutResident:         # (Q8) 익은 밭의 일꾼은 낫으로 거둔다 (화면만 — 밭의 자람 단계를 읽기만)
+				(m as CutoutResident).reaping = jb != null and jb.type == "농장" and wheat_stage(jb, v.t) >= Bld2D.ROW_RIPE
 		m.set_anim("idle" if rafting else ("work" if r.anim == "torch" else r.anim), r.action)
 		if r.action == "social" and r.anim != "walk" and not fast:
 			_face_partner(r, m)

@@ -52,6 +52,9 @@ const CARRY_PROP := {"빵": 0, "통나무": 1, "판자": 1, "밀": 10, "물": 11
 const PROP_BASKET := 2
 ## 일 연장 → 내려찍는 일 동작(hoe)의 소품: 괭이 6 · 낫 7 · 나무망치 9. 표에 없는 연장(빈손·삽·약초·낚싯대) = 서서 (idle)
 const WORK_PROP := {"tool_hoe": 6, "tool_sickle": 7, "tool_hammer": 9, "tool_axe": 9, "tool_pick": 9}
+## (Q8 밀 거두기) 익은 밭을 거두는 밭 일꾼: 괭이 대신 작은 낫 + 낫질 (Lib "reap") — reaping은 VillageView가 밭의 자람 단계를 읽어 켠다 (화면만)
+const REAP_JOB := "농장"
+const REAP_PROP := 7
 ## 숙여 줍는 일 (약초 · 빈손 일터) · 그렇게 일하는 일터 (사냥꾼: 웅크려 살핌)
 const GATHER_TOOLS := ["tool_herbs"]
 const GATHER_JOBS := ["사냥꾼"]
@@ -86,6 +89,7 @@ var _infant := false
 ## 화면만의 아기 자리 (place_babies): "" 스스로 · carried 부모 품 · cradle 요람 · toddle 부모 곁 걸음마
 var baby_mode := ""
 var toddle_clip := "idle"
+var reaping := false             # (Q8) 익은 밭을 거두는 중 — 일 동작이 낫질 (VillageView._sync_residents가 켬)
 var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기 팔, 소품 없음)
 var baby_held := false           # 품에 정말 아기가 있음 (place_babies) — carry_baby만 켜진 것은 안아 주는 몸짓 (연출 hold)이라 아기 그림을 그리지 않음
 var baby_dye := Vector2i(-1, -1)  # 안긴 아기의 피부 · 머리카락 물감 (place_babies가 넣음 — 방식 C 인형의 아기 그림에 입힘, 화면만)
@@ -388,6 +392,9 @@ func doll_state() -> Dictionary:
 			if a == "work" and WORK_PROP.has(_tool_kind) and not _baby:
 				clip = "hoe"
 				prop = WORK_PROP[_tool_kind]
+				if reaping and _job_name == REAP_JOB:
+					clip = "reap"
+					prop = REAP_PROP
 			elif a == "work" and (GATHER_TOOLS.has(_tool_kind) or GATHER_JOBS.has(_job_name)):
 				clip = "gather"
 		"idle":
