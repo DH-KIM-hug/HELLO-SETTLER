@@ -83,6 +83,19 @@ Q = {
                       boots=[(-9, 0, True), (16, 0, False)]),
     "pick_stand": dict(head=(6, 332), sh=(0, 240), hip=(0, 85), near=((6, 178), (36, 150)), far=((2, 180), (-8, 148)),
                        boots=[(-9, 0, True), (16, 0, False)]),
+    # v14 (Q16, 2026-11-11) reap: she stays bent forward at the hips the whole loop, both boots planted apart (the hoe stance).
+    # near arm = the SICKLE arm (one hand): wind-up back at the hip -> thrust forward low -> sweep back toward herself -> pulled in at
+    # the knee. far arm = holds the stalks in front of her (the wheat is not drawn: the field stands there). tool = direction
+    # hand -> blade head of the sickle; one = True: the grip is the near fist alone (not the fists' midpoint). Wind-up: the sickle
+    # hangs down in front of the skirt (take a strip: pointing up-forward from the hip it lay across her chest like a badge).
+    "reap_back": dict(head=(50, 294), hang=-0.35, sh=(28, 220), hip=(-14, 83), near=((-2, 176), (-6, 134)), far=((70, 184), (102, 156)),
+                      boots=[(-28, 0, True), (24, 0, False)], tool=(0.6, -0.8), one=True),
+    "reap_reach": dict(head=(66, 274), hang=-0.5, sh=(38, 208), hip=(-18, 82), near=((80, 150), (118, 104)), far=((72, 178), (104, 152)),
+                       boots=[(-28, 0, True), (24, 0, False)], tool=(1.0, -0.1), one=True),
+    "reap_cut": dict(head=(64, 270), hang=-0.5, sh=(36, 204), hip=(-18, 82), near=((62, 142), (88, 106)), far=((72, 178), (104, 154)),
+                     boots=[(-28, 0, True), (24, 0, False)], tool=(0.92, -0.38), one=True),
+    "reap_pull": dict(head=(52, 290), hang=-0.35, sh=(28, 218), hip=(-14, 83), near=((22, 154), (40, 114)), far=((68, 190), (98, 170)),
+                      boots=[(-28, 0, True), (24, 0, False)], tool=(0.8, -0.6), one=True),
 }
 # front / back poses: x = image x from the cell centre, h = height. arms = [(elbow, fist) image-left, image-right]
 F = {
@@ -102,7 +115,21 @@ F = {
     # frame on its side (frame flag "lie", like the old doll's sleep) — a = breathed out, b = breathed in
     "sleep_a": dict(head=(0, 336), sh=(0, 240), hip=(0, 85), arms=[((-70, 184), (-16, 164)), ((70, 184), (16, 168))]),
     "sleep_b": dict(head=(0, 339), sh=(0, 243), hip=(0, 85), arms=[((-72, 188), (-16, 168)), ((72, 188), (16, 172))]),
+    # v14 (Q16) reap, front view: bent forward toward the viewer (head lower, over the chest). The sickle arm (her right =
+    # image-left) swings out low to the side and sweeps in across her knees; the other fist holds the stalks in front of her belly.
+    "reap_back": dict(head=(0, 296), sh=(0, 224), hip=(0, 81), arms=[((-92, 190), (-126, 164)), ((60, 172), (38, 142))], tool=(-0.75, -0.66), one=0),
+    "reap_reach": dict(head=(0, 288), sh=(0, 218), hip=(0, 80), arms=[((-98, 172), (-134, 126)), ((60, 170), (38, 140))], tool=(-0.35, -0.94), one=0),
+    "reap_cut": dict(head=(0, 286), sh=(0, 216), hip=(0, 80), arms=[((-82, 152), (-96, 114)), ((60, 170), (38, 140))], tool=(0.25, -0.97), one=0),
+    "reap_pull": dict(head=(0, 294), sh=(0, 222), hip=(0, 81), arms=[((-68, 154), (-46, 120)), ((60, 174), (38, 148))], tool=(0.55, -0.83), one=0),
 }
+# v14 reap, back view = the front poses mirrored left <-> right (her right arm is at the image right when seen from behind)
+# — except the sweep / pulled-in directions: mirrored, the sickle pointed in behind her skirt and was hidden for 3 of 8 phases
+# (take a strip), so seen from behind it hangs down OUTSIDE her skirt there (the old doll: "the sickle shows from behind too").
+REAP_BACK_TOOL = {"reap_cut": (0.45, -0.9), "reap_pull": (0.6, -0.8)}
+for _n in ("reap_back", "reap_reach", "reap_cut", "reap_pull"):
+    _p = F[_n]
+    F[_n + "_m"] = dict(head=_p["head"], sh=_p["sh"], hip=_p["hip"], tool=REAP_BACK_TOOL.get(_n, (-_p["tool"][0], _p["tool"][1])), one=1,
+                        arms=[tuple((-x, h) for x, h in _p["arms"][1]), tuple((-x, h) for x, h in _p["arms"][0])])
 # v12 (states5): the BACK view's tool. Seen from behind her fists are hidden in front of her body, so the tool drawn at the
 # fists was hidden too ("in the back view no tool is visible"). She now works at her image-right side: the tool is held at a
 # hand point beside the body (x = BACK_HAND_X px right of the root, the puppet fists' height) and swings in the image plane —
@@ -124,6 +151,11 @@ SHEETS = {
     "gather_q_front": ("q_front", ["pick_half", "pick_full", "pick_grab", "pick_rise", "pick_stand", "pick_half", "pick_full", "pick_rise"]),
     "gather_q_back": ("q_back", ["pick_half", "pick_full", "pick_grab", "pick_rise", "pick_stand", "pick_half", "pick_full", "pick_rise"]),
     "sleep_front": ("front", ["sleep_a", "sleep_b", "sleep_a", "sleep_b", "sleep_a", "sleep_b", "sleep_a", "sleep_b"]),
+    # v14 (Q16): reaping with the small sickle, 4 poses drawn twice (PICK may take the second drawing of a pose)
+    "reap_q_front": ("q_front", ["reap_back", "reap_reach", "reap_cut", "reap_pull"] * 2),
+    "reap_q_back": ("q_back", ["reap_back", "reap_reach", "reap_cut", "reap_pull"] * 2),
+    "reap_front": ("front", ["reap_back", "reap_reach", "reap_cut", "reap_pull"] * 2),
+    "reap_back": ("back", ["reap_back_m", "reap_reach_m", "reap_cut_m", "reap_pull_m"] * 2),
 }
 
 # clip -> entries (pose, start phase t0, extra head tilt). Timings follow the old doll's clips (cut_lib._pose).
@@ -142,7 +174,12 @@ ENTRIES = {
                ("pick_stand", 0.82, 0.0)],
     # v12: asleep — two drawings (breathed out / in), laid on the side by the game (LIE)
     "sleep": [("sleep_a", 0.0, 0.0), ("sleep_b", 0.5, 0.0)],
+    # v14 (Q16): the old doll's reap (cut_lib "reap": reach 0-0.4, pull 0.4-0.6, short hold) - wind-up, thrust, sweep, pulled in,
+    # and the wind-up drawing again while she waits for the next stroke (5 entries from 4 drawn cells)
+    "reap": [("reap_back", 0.0, 0.0), ("reap_reach", 0.18, 0.0), ("reap_cut", 0.4, 0.0), ("reap_pull", 0.52, 0.0), ("reap_back", 0.78, 0.0)],
 }
+# the back view's reap sheet holds the mirrored poses (name + BACK_POSE_TAIL) - same entries (cell_of)
+BACK_POSE_TAIL = "_m"
 LIE = ("sleep",)        # clips whose frames the game lays flat (frame flag: the whole doll turned 90 degrees, head to the image left)
 # which sheet holds a clip for a game view (0 front, 1 q_front, 2 q_back, 3 back) — the old doll shows sit / eat / gather only in
 # the 3/4 views and look-up only from the front (CutoutResident.SIDE_ONLY / FRONT_ONLY); the other views point at the same cells
@@ -154,9 +191,19 @@ CLIP_SHEET = {
     "hoe": ["work_front", "work_q_front", "work_q_back", "work_back"],
     "gather": ["gather_q_front", "gather_q_front", "gather_q_back", "gather_q_back"],
     "sleep": ["sleep_front"] * 4,
+    "reap": ["reap_front", "reap_q_front", "reap_q_back", "reap_back"],
 }
 # prop overlay per clip: (kind, grip shift along the tool from the fists' midpoint as a fraction of the prop height, over the head?)
-PROP = {"hoe": ("tool", 0.2, False), "eat": ("food", 0.0, True)}
+PROP = {"hoe": ("tool", 0.2, False), "eat": ("food", 0.0, True), "reap": ("tool", 0.0, False)}
+# v14 (Q16) the one-handed sickle of the reap clip: the sprite's handle (SICKLE_GRIP rig from the sprite centre, sprite = head up,
+# handle at the lower right, the hook to the left - the old doll's REAP_GRIP) sits in the fist; SICKLE_K = its size; TOOL_FLIP per
+# game view = the sprite is mirrored so the hook curves DOWN and back toward her (3/4 views) / toward the middle of her body
+# (back view, where the sickle arm is at the image right) - the front view's hook already points inward.
+SICKLE_GRIP = (48.0, -78.0)
+SICKLE_K = 1.0
+TOOL_FLIP = {"reap": [False, True, True, True]}
+# v14 (Q16) clips whose cells are set on the same ground as another clip's (build_frames.py: soles of the drawn boots)
+GROUND_AS = {"reap": "hoe"}
 PICK = {}          # (sheet, pose) -> cell, where the second drawing of a repeated pose is the better one
 SLOPE = {"q_front": 0.3, "q_back": -0.2}         # ground slope of the seated / kneeling poses (px down per px forward)
 LAT = {"q_front": ((-10, 5), (8, -5)), "q_back": ((10, 5), (-8, -5))}      # near / far side offset on the image (x, y down)
@@ -190,7 +237,16 @@ def info(sheet, cell):
         ha, hb = pt(view, p, *a), pt(view, p, *b)
     else:
         ha, hb = pt(view, p, *p["near"][1], 1), pt(view, p, *p["far"][1], -1)
-    if p.get("tool"):
+    one = p.get("one")
+    if one is not None and one is not False:
+        # v14: a one-handed tool (the reap sickle) - Q poses: the near fist; F poses: arms[one]
+        if view in ("front", "back") and int(one) == 1:
+            ha, hb = hb, ha
+        out["one"] = True
+        out["grip"] = ha
+        out["tool"] = p["tool"]
+        out["tool_short"] = p["tool"]
+    elif p.get("tool"):
         out["grip"] = ((ha[0] + hb[0]) / 2, (ha[1] + hb[1]) / 2)
         out["tool"] = p["tool"]
         out["tool_short"] = p.get("tool_short", p["tool"])
@@ -203,6 +259,8 @@ def info(sheet, cell):
 def cell_of(sheet, name):
     """first cell of the sheet that holds the pose (PICK may point at the repeated take instead)"""
     cells = SHEETS[sheet][1]
+    if name not in cells:
+        name += BACK_POSE_TAIL          # v14: the back view's sheet holds the mirrored reap poses
     return PICK.get((sheet, name), cells.index(name))
 
 

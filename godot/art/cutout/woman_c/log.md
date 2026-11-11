@@ -409,6 +409,67 @@ Tool: `shot_cutC_compare.gd` env `CUTC_HEAD`, `CUTC_HAT`, `CUTC_BABY="skin,hair;
 `CUTC_MODE=family` (live capture). The sheets were stacked from the strip captures with a scratch script (same layout as
 `compose_states5.py`; not kept in the repo).
 
+## 2026-11-11 v14 (Q16) — reap clip in four views, one wheat ear over the shoulder
+Reap ("a method C resident popped to the cut-out doll while reaping"): `cutout_resident.gd` asked for clip `reap`, the
+frame library had none. Made exactly like `hoe` (v11): puppet pose sheets (`pose_states.py` Q / F reap poses, back views
+mirrored `_m`) -> `gen_state.sh reap_<view> a` -> `build_frames.py`. Four drawn cells per view (back, reach, cut, pull),
+five entries per cycle (`ENTRIES["reap"]`: back 0.0, reach 0.18, cut 0.4, pull 0.52, back 0.78), `CLIP_RATE` 0.7.
+The sickle is NOT drawn into the frame: as for the hoe it is the overlaid tool sprite (group 3, the old doll's `sickle`
+picture) at the frame's hand point. New for the sickle: it is one-handed (handle baked into the stored hand point,
+`SICKLE_GRIP`, `SICKLE_K`), and in three views the blade has to curve the other way — `TOOL_FLIP["reap"]` stores a
+negative scale, the shader mirrors the sprite (`frame_doll.gdshader` group 3 show test is `!= 0.0`).
+
+Ground: the reap sheets came back with the planted boots lower in the cell than the hoe sheets' (same puppet stance):
+5 / 20 / 30 / 0 rig in front / q_front / q_back / back, i.e. a visible drop when walk -> reap. `GROUND_AS = {"reap":
+"hoe"}` (`pose_states.py`) lifts the whole reap cells so their soles (median lowest opaque row) sit where the hoe cells'
+do in that view (build prints `ground reap <view>: ... lifted by N rig`: 4 / 19 / 31 / 0). Whole-cell shift only — no
+part is cut or moved inside a cell, every anchor rides on the same origin.
+
+Carried wheat ("벤 이삭 하나를 어깨에 메고", GAME_DESIGN 3.0): method C showed a sheaf (`raw/props_a.png` "wheat"), the old
+doll one big ear. No new picture was generated: the method C load "wheat" is now the old doll's own ear picture
+(`art/cutout/woman_a/doll_atlas.png`, prop `wheat`, 199x198 px) — `build_frames.py` `ear_pictures()` mirrors it for the
+back views, turns it as a whole about the hand's place on the stalk and scales it to the atlas density. One picture per
+side (`ear_f` front / q_front, `ear_b` q_back / back), one load record per view (`name` "wheat", `view`, `src`
+"cutout_a/wheat", `pivot` = the seat inside the picture; `frame_lib.gd` builds the load quad around `pivot`). Values:
+`EAR_LEAN` 38 / -28 deg, `EAR_SIDE` 470 rig (old doll 473), `EAR_UP` 57 / 30 px up the stalk. The sheaf is still in
+`raw/props_a.png` but no longer packed. The two ear pictures sit in the unused end of the last cell row (the other
+loads stay in the strip under the cells), so the atlas is 1548x2812 instead of 1548x2844 with the ears in the strip.
+
+| | v13 | v14 |
+|---|---|---|
+| atlas / masks | 1548x2584 | 1548x2812 |
+| cell, columns x rows | 129x152, 12 x 17 | 129x152, 12 x 18 |
+| cells / frame records | 196 / 284 | 212 / 304 |
+| frames_atlas.png | 3,059,052 B | 3,282,854 B |
+| frames_mask0.png | 305,026 B | 328,592 B |
+| frames_mask1.png | 82,619 B | 86,585 B |
+| frames.json | 97,107 B | 106,203 B |
+
+| file | what | model | seed | size | date | chosen | note |
+|---|---|---|---|---|---|---|---|
+| raw/reap_q_front.png | take a of 1 | codex-cli 0.163.0 (built-in image gen) | - | 1536x1024 | 2026-11-11 | yes | 4 frames back / reach / cut / pull, bent forward, empty fist (no sickle drawn) |
+| raw/reap_q_back.png | take a of 1 | same | - | 1536x1024 | 2026-11-11 | yes | same four poses seen from behind (mirrored puppet sheet) |
+| raw/reap_front.png | take a of 1 | same | - | 1536x1024 | 2026-11-11 | yes | same four poses, front |
+| raw/reap_back.png | take a of 1 | same | - | 1536x1024 | 2026-11-11 | yes | same four poses, back (mirrored puppet sheet) |
+
+No rejected takes this round; no picture generated for the ear. The `_a` copies of the takes (identical to the installed
+sheets), `raw/check_*.png`, temporary capture strips and `__pycache__` deleted; logs of the takes kept
+(`tools/cutout_c/logs/log_state_reap_<view>_a.txt`); generator `tools/cutout_c/gen_state.sh`.
+
+Still weak: at ppu 20 the sickle is a thin light mark near the ground (the far-zoom ink outline starts higher up — as
+for the hoe head); in the back view the reap sweep is small (the arm is mostly in front of the body); in the back views
+the ear stands up beside the head on its stalk from the raised hand rather than lying over the shoulder (the carry
+frames hold that hand out to the side), and in q_back it is on the other side than on the old doll (the old doll mirrors
+it there); at the edge of standing wheat a reaper is turned to the side by `BldEcon.wheat_stand()`, so front / back reap
+frames only show on reapers standing in the stubble.
+
+Shots: godot_shots/cutC/q16_reap_ppu{20,44}.png (reap, four views, old doll above / method C below),
+q16_seq_ppu{20,44}.png (walk -> reap -> carry on one ground line), q16_carry_before_ppu{20,44}.png /
+q16_carry_after_ppu{20,44}.png (ear vs sheaf, then ear vs ear), q16_village_reap_ppu{20,44}.png (village, four camera
+headings), q16_sheet.png (contact sheet). Tool: `shot_cutC_compare.gd` clips `reap` / `q16seq`, `CUTC_LOAD=밀`;
+`shot_wheat_field.gd -- <tag> w5 reapc`. The sheets were stacked from the strip captures with a scratch script (not kept
+in the repo).
+
 ## 2026-11-09 v6 — proportions matched to the old cutout ("아니 아직도 긴데요?")
 Measured in game (ppu 44, 3/4 front, `tools/cutout_c/compose_props.py`, flat backdrop plate): old cutout idle height 107 px,
 hem->sole 10 px (0.093); res_A inset 0.117. v5 had 0.17-0.48 and was 7-20% taller. v6: pose_ref HIP_Y 385, HEM_Y 430 (skirt to

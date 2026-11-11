@@ -66,6 +66,24 @@ LOAD_SEAT = {"front": (-104.0, 58.0, -0.1, 1.0), "q_front": (-102.0, 62.0, -0.1,
 # picture's bottom centre from the chin anchor). Front views: the bundle lies on the crossed forearms, which are drawn again over
 # its lower edge (mask1.B); back views: behind the body, the head end peeking out at her side.
 BABY_PIC = {"front": "baby_b", "q_front": "baby_b", "q_back": "baby_back", "back": "baby_back"}
+# v14 (Q16, GAME_DESIGN 3.0 "벤 이삭 하나를 어깨에 메고"): carried wheat = ONE big ear over the shoulder, as on the old doll — and
+# it is the old doll's own ear picture (art/cutout/woman_a, prop "wheat": ear at the upper left, stalk to the lower right, the
+# hand's place on the stalk = that picture's origin), not the sheaf of raw/props_a.png (still in the sheet, no longer packed).
+# One picture per side: front views = as drawn, the hand's place in the raised fist at the image-left shoulder; back views =
+# mirrored, behind body and head, the ear out past the shoulder at the image right. EAR_LEAN = lean of the picture itself (deg
+# from upright, + = ear toward the image left; the frame's own lean of LOAD_SEAT comes on top), whole-picture turn only.
+# EAR_SIDE = side of the ear picture in rig (old doll: 473; back views / LOAD_SEAT's 1.15 so both sides show the same size).
+EAR_PIC = {"front": "ear_f", "q_front": "ear_f", "q_back": "ear_b", "back": "ear_b"}
+EAR_SRC = "wheat"                    # prop name in the old doll's library (cut_lib.gd PROPS)
+EAR_NATIVE = 47.0                    # deg: lean of the ear in the picture as drawn (hand -> middle of the ear / its tip: 53 / 42)
+EAR_LEAN = {"ear_f": 38.0, "ear_b": -28.0}
+EAR_MIRROR = {"ear_f": False, "ear_b": True}
+EAR_SIDE = {"ear_f": 470.0, "ear_b": 470.0 / 1.15}
+# the seat on the stalk: this far up the stalk from the old doll's hand place toward the ear (px of the old doll's picture) -
+# front views: the short end below it is under the fist drawn over the load; back views: the end runs down behind the body
+EAR_UP = {"ear_f": 57.0, "ear_b": 30.0}
+EAR_STALK = (-0.806, -0.592)         # direction of the stalk in the picture as drawn (hand -> ear, image x right / y down)
+EAR_PIVOT = {}                       # picture name -> the hand's place in the packed picture (px from its upper left corner)
 BABY_SIZE = 250.0
 BABY_SEAT = {"front": (12.0, 96.0, 0.0, 0.92), "q_front": (40.0, 90.0, 0.0, 1.0), "q_back": (62.0, 86.0, 0.0, 1.0), "back": (68.0, 86.0, 0.0, 1.0)}
 # v13 closed eyes (sleep): a small eyelid picture per head set, laid over the front head piece of the old cutout library
@@ -407,6 +425,8 @@ def load_pictures():
             baby = name.startswith("baby")
             if baby and name not in BABY_PIC.values():
                 continue
+            if name == "wheat":
+                continue                 # v14: the sheaf is no longer shown (ear_pictures() below)
             k = (BABY_SIZE if baby else LOAD_SIZE[name]) * PX_PER_RIG / max(crop.shape[0], crop.shape[1])
             w, h = max(2, int(round(crop.shape[1] * k))), max(2, int(round(crop.shape[0] * k)))
             pm = crop.copy(); pm[..., :3] *= pm[..., 3:4] / 255.0
@@ -438,6 +458,52 @@ def load_pictures():
                 msk[1:-1, 1:-1] = np.dstack(mr)
                 BABY_BASE[name] = (np.median(crop[skin][:, :3], 0), np.median(crop[hair][:, :3], 0) if hair.any() else None)
             out.append((name, pic, msk))
+    return out + ear_pictures()
+
+
+def ear_pictures():
+    """v14 (Q16): the old doll's single wheat ear as the method C load picture — [(name, RGBA float array, None)] for EAR_PIC.
+    The picture is mirrored (back views) and turned about the hand's place as a whole, then cropped to what is drawn and
+    scaled to the atlas density; EAR_PIVOT[name] = where the hand's place ended up (the seat of the load quad)."""
+    cut = os.path.normpath(os.path.join(ART, "..", "woman_a"))
+    L = json.load(open(os.path.join(cut, "doll_lib.json")))
+    at = np.asarray(Image.open(os.path.join(cut, "doll_atlas.png")).convert("RGBA")).astype(np.float32)
+    H_, W_ = at.shape[:2]
+    q = [q_ for q_ in L["quads"] if int(q_["group"]) == 3 and q_["set"] == EAR_SRC][0]
+    u0, v0, u1, v1 = [int(round(t)) for t in (q["uv"][0] * W_, q["uv"][1] * H_, q["uv"][2] * W_, q["uv"][3] * H_)]
+    src = at[v0:v1, u0:u1].copy()
+    r = q["rect"]
+    gx0 = (0.0 - r[0]) / (r[2] - r[0]) * src.shape[1]          # the hand's place (rig origin of the prop) in the picture, px
+    gy0 = (r[3] - 0.0) / (r[3] - r[1]) * src.shape[0]
+    out = []
+    for name in sorted(set(EAR_PIC.values())):
+        gx, gy = gx0 + EAR_STALK[0] * EAR_UP[name], gy0 + EAR_STALK[1] * EAR_UP[name]
+        pic0, px = src, gx
+        if EAR_MIRROR[name]:
+            pic0, px = src[:, ::-1], src.shape[1] - gx
+        # canvas centred on the hand's place, turned about its centre (premultiplied, bicubic)
+        R = int(np.ceil(np.hypot(*src.shape[:2]))) + 2
+        can = np.zeros((2 * R, 2 * R, 4), np.float32)
+        x0, y0 = int(round(R - px)), int(round(R - gy))
+        pm = pic0.copy(); pm[..., :3] *= pm[..., 3:4] / 255.0
+        can[y0:y0 + src.shape[0], x0:x0 + src.shape[1]] = pm
+        native = -EAR_NATIVE if EAR_MIRROR[name] else EAR_NATIVE
+        turn = EAR_LEAN[name] - native                           # + = anticlockwise on screen = toward the image left
+        chans = [np.asarray(Image.fromarray(np.ascontiguousarray(can[..., i]), "F").rotate(turn, Image.BICUBIC)) for i in range(4)]
+        rot = np.dstack(chans)
+        ys, xs = np.nonzero(rot[..., 3] > 6)
+        bx0, by0, bx1, by1 = xs.min(), ys.min(), xs.max() + 1, ys.max() + 1
+        crop = rot[by0:by1, bx0:bx1]
+        k = EAR_SIDE[name] * PX_PER_RIG / max(src.shape[0], src.shape[1])
+        w, h = max(2, int(round(crop.shape[1] * k))), max(2, int(round(crop.shape[0] * k)))
+        ch_ = [np.asarray(Image.fromarray(np.ascontiguousarray(crop[..., i]), "F").resize((w, h), Image.BOX)) for i in range(4)]
+        al = np.clip(ch_[3], 0, 255)
+        col = np.clip(np.where(al[..., None] > 1, np.dstack(ch_[:3]) / np.maximum(al[..., None], 1) * 255.0, 0), 0, 255)
+        pic = np.zeros((h + 2, w + 2, 4), np.float32)          # 1 px clear rim (mipmaps)
+        pic[1:-1, 1:-1] = np.dstack([col, al])
+        EAR_PIVOT[name] = ((R - bx0) * w / crop.shape[1] + 1.0, (R - by0) * h / crop.shape[0] + 1.0)
+        print(f"  {name}: ear picture {w + 2}x{h + 2} px (turned {turn:+.0f} deg), hand's place at ({EAR_PIVOT[name][0]:.1f}, {EAR_PIVOT[name][1]:.1f}) px")
+        out.append((name, pic, None))
     return out
 
 
@@ -638,6 +704,17 @@ def main():
         if any(f["far"] for f in frs):
             # alternation check (v3 colour-coded far leg): far foot ahead (+) / behind (-) of the head line, per frame
             print(f"  {name} far foot: " + " ".join("%+.0f" % ((f["far"][0] - f["head"]["cx"]) * k) if f["far"] else "?" for f in frs))
+    # v14 (Q16) same ground under a clip as under its neighbour clip: the reap sheets were drawn with the planted boots a few px
+    # lower than the hoe sheets' (same puppet stance) - the whole cell is lifted so its soles (median lowest opaque row of the
+    # frames played) sit where the hoe sheet's do in that view. Whole-cell shift only: every anchor rides on the same origin.
+    for clip_, ref_ in PS.GROUND_AS.items():
+        for vi_ in range(len(VIEWS)):
+            mine_ = sorted(set((e[2], e[3]) for e in entries if e[0] == clip_ and e[1] == VIEWS[vi_]))
+            ref_cells = sorted(set((e[2], e[3]) for e in entries if e[0] == ref_ and e[1] == VIEWS[vi_]))
+            d_ = float(np.median([placed[s_][c_]["f"]["feet"] for s_, c_ in mine_]) - np.median([placed[s_][c_]["f"]["feet"] for s_, c_ in ref_cells]))
+            for s_, c_ in mine_:
+                placed[s_][c_]["oy"] += d_
+            print(f"  ground {clip_} {VIEWS[vi_]}: soles {d_:+.0f} px vs {ref_} -> lifted by {d_ * K_POSE:.0f} rig")
     # colour drift between sheets (the model draws e.g. tan stockings in one sheet, brown in another): per sheet and dye class,
     # scale the colours so the class median matches the median over all sheets -> one base colour per class for the dye
     med = {}
@@ -679,10 +756,10 @@ def main():
     loads = load_pictures()
     loads += [("lid_" + ls[0], ls[1], ls[2]) for ls in lid_pictures()]      # sizes only here; colours once the skin base is known
 
-    def pack(width):
+    def pack(width, items):
         x = y = shelf = 0
         at = {}
-        for name_, pic_, _msk in sorted(loads, key=lambda t: -t[1].shape[0]):
+        for name_, pic_, _msk in sorted(items, key=lambda t: -t[1].shape[0]):
             ph_, pw_ = pic_.shape[:2]
             if x + pw_ + 2 > width:
                 x, y, shelf = 0, y + shelf + 2, 0
@@ -691,11 +768,20 @@ def main():
             shelf = max(shelf, ph_)
         return at, y + shelf + 2
     free_x = (len(order) % cols) * cw
-    load_at, need = pack(AW - free_x) if free_x else ({}, ch + 1)
-    load_org = (free_x, (rows - 1) * ch)
+    load_at, need = pack(AW - free_x, loads) if free_x else ({}, ch + 1)
+    load_pos = {n_: (free_x + xy[0], (rows - 1) * ch + xy[1]) for n_, xy in load_at.items()}
     if need > ch:
-        load_at, need = pack(AW)
-        load_org = (0, AH)
+        # v14: the tall pictures (the wheat ear) into the unused end of the last cell row when they fit there, the others in a
+        # strip under the cells - the strip stays as low as the other loads need
+        load_pos, rest = {}, loads
+        tall = [l_ for l_ in loads if l_[0].startswith("ear_")]
+        if free_x and tall:
+            at_t, need_t = pack(AW - free_x, tall)
+            if need_t <= ch:
+                load_pos = {n_: (free_x + xy[0], (rows - 1) * ch + xy[1]) for n_, xy in at_t.items()}
+                rest = [l_ for l_ in loads if not l_[0].startswith("ear_")]
+        load_at, need = pack(AW, rest)
+        load_pos.update({n_: (xy[0], AH + xy[1]) for n_, xy in load_at.items()})
         AH += int(np.ceil(need / 4.0) * 4)
     atlas = np.zeros((AH, AW, 4), np.float32)
     m0 = np.zeros((AH, AW, 4), np.float32)
@@ -800,12 +886,26 @@ def main():
                 skin = (it["lab"] == 1) & (it["f"]["a"] > 128)
                 yy, xx = np.mgrid[0:CH, 0:CW]
                 got = []
-                for fx, fy in (inf["fists"] if inf["tool"] else inf["fists"][:1]):
+                for fx, fy in (inf["fists"] if inf["tool"] and not inf.get("one") else inf["fists"][:1]):
                     near = skin & ((xx - fx) ** 2 + (yy - fy) ** 2 < FIST_R ** 2)
                     got.append((float(xx[near].mean()), float(yy[near].mean()), True) if near.sum() > 60 else (fx, fy, False))
                 gx, gy = sum(g_[0] for g_ in got) / len(got), sum(g_[1] for g_ in got) / len(got)
                 hx, hy = (gx - it["ox"]) * it["k"], (it["oy"] - gy) * it["k"]
-                if inf["tool"]:
+                if inf.get("one"):
+                    # v14 (Q16) the reap clip's sickle, held in ONE fist: the sprite (head up — FrameLib.PROP_HEAD_UP turns it PI)
+                    # points along the pose's tool direction; its handle (PS.SICKLE_GRIP from the sprite centre) sits in the fist, so
+                    # the hand point stored here is the sprite CENTRE for that angle (grip 0). A mirrored sprite (PS.TOOL_FLIP: the
+                    # hook curves down / toward her) is written as a NEGATIVE scale (frame_doll.gdshader group 3).
+                    tool = inf["tool"]
+                    ang = float(np.arctan2(tool[0], -tool[1]))
+                    flip = PS.TOOL_FLIP[clip][VIEWS.index(v)]
+                    th = ang + np.pi
+                    sgx, sgy = (-PS.SICKLE_GRIP[0] if flip else PS.SICKLE_GRIP[0]), PS.SICKLE_GRIP[1]
+                    cx = hx - float(np.cos(th) * sgx - np.sin(th) * sgy) * PS.SICKLE_K
+                    cy = hy - float(np.sin(th) * sgx + np.cos(th) * sgy) * PS.SICKLE_K
+                    fr["prop"] = [round(ang, 3), round(cx, 1), round(cy, 1), -PS.SICKLE_K if flip else PS.SICKLE_K, 0.0]
+                    fr["prop_short"] = round(ang, 3)
+                elif inf["tool"]:
                     tool, short, grip = inf["tool"], inf["tool_short"], (GRIP_SIDE if side else 0.0)
                     if inf["view"] == "back":
                         # v12 ("in the back view no tool is visible"): her fists are hidden in front of her, so the tool was too.
@@ -870,13 +970,19 @@ def main():
     load_tab, lid_tab, where = [], [], {}
     for lname, pic, msk in [l_ for l_ in loads if not l_[0].startswith("lid_")] + [("lid_" + ls[0], ls[1], ls[2]) for ls in lids]:
         ph, pw = pic.shape[:2]
-        ax0, ay0 = load_org[0] + load_at[lname][0], load_org[1] + load_at[lname][1]
+        ax0, ay0 = load_pos[lname]
         atlas[ay0:ay0 + ph, ax0:ax0 + pw] = pic
         if msk is not None:
             m0[ay0:ay0 + ph, ax0:ax0 + pw, :2] = msk
         where[lname] = dict(uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH], size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)])
-        if not lname.startswith("lid_") and not lname.startswith("baby"):
+        if not lname.startswith("lid_") and not lname.startswith("baby") and not lname.startswith("ear_"):
             load_tab.append(dict(name=lname, **where[lname]))
+        if lname.startswith("ear_"):
+            # pivot = the seat inside the picture (rig from its lower left corner; without it the seat is the bottom centre)
+            where[lname]["pivot"] = [round(EAR_PIVOT[lname][0] / PX_PER_RIG, 1), round((ph - EAR_PIVOT[lname][1]) / PX_PER_RIG, 1)]
+    for vi, v in enumerate(VIEWS):
+        # v14: carried wheat = the old doll's single ear, one picture per side (src = that prop of the old doll's library)
+        load_tab.append(dict(name="wheat", view=vi, pic=EAR_PIC[v], src="cutout_a/" + EAR_SRC, **where[EAR_PIC[v]]))
     for vi, v in enumerate(VIEWS):
         load_tab.append(dict(name="baby", view=vi, pic=BABY_PIC[v], **where[BABY_PIC[v]]))
     for sname, _pic, _msk, rect, layer in lids:

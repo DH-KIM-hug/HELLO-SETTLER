@@ -95,7 +95,7 @@ void vertex() {
 		if ((cur_view == 1 || cur_view == 2) && pid >= 0.0 && pid < 2.5) {
 			pid += 3.0;
 		}
-		show = pid >= 0.0 && abs(set_i - pid) < 0.5 && texelFetch(fdata, ivec2(fi, 2), 0).w > 0.0;
+		show = pid >= 0.0 && abs(set_i - pid) < 0.5 && texelFetch(fdata, ivec2(fi, 2), 0).w != 0.0;
 	} else if (group == 6) {
 		// 감은 눈 (v13): 자는 장면(fdata[3].w)에서만, 그 머리 묶음의 앞 얼굴 위에 — 머리 조각과 같은 자리·배율·기울기.
 		// 사각형은 머리 조각과 똑같은 네 귀퉁이 (frame_lib.mesh): 누운 머리 조각은 한쪽 끝이 뿌리 줄 아래로 조금 내려가 아래의
@@ -136,7 +136,9 @@ void vertex() {
 			float ang = prop.z > 0.5 ? fx.y : pr.x;
 			float th = ang + prop.y;
 			float tc = cos(th), ts = sin(th);
-			p = vec2(tc * VERTEX.x - ts * VERTEX.y, ts * VERTEX.x + tc * VERTEX.y) * pr.w + pr.yz;
+			// 배율이 음수 (v14 낫질): 그림을 좌우로 뒤집어 (컷아웃 인형의 낫질과 같음 — 낫의 휜 날이 아래·몸 쪽으로) 돌린다
+			float vx = pr.w < 0.0 ? -VERTEX.x : VERTEX.x;
+			p = vec2(tc * vx - ts * VERTEX.y, ts * vx + tc * VERTEX.y) * abs(pr.w) + pr.yz;
 			p += fx.x * prop.x * vec2(sin(ang), -cos(ang));
 			layer = cur_view < 2 ? body_layer[cur_view] + 0.5 : -0.5;
 		} else {

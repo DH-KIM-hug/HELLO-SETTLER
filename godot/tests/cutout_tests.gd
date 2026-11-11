@@ -816,6 +816,40 @@ func test_frames_c() -> void:
 		mapped = mapped and Lib.CLIPS.has(c) and FL.clip_index(CutoutResident.FRAME_CLIPS[c]) >= 0
 	check(mapped, "방식 C: 앉기·먹기·올려다보기·무릎·괭이질·줍기가 장면 그림으로 이어짐 (없는 동작은 컷아웃 그대로)")
 	check(FL.spike != 1 and (OS.get_environment("NAZAKJI_FRAMES") == "1" or not FL.enabled()), "방식 C는 기본 꺼짐")
+	# (Q16, 2026-11-11) 낫질도 장면 그림: 네 보기 모두 · 장면마다 낫 자리 (한 손 — 쥐는 자리 0) · 비스듬한 보기와 뒤 보기는 낫 그림을 뒤집음 (배율 음수),
+	# 디딘 발은 괭이질과 같은 자리 (걷다가 낫질로 바뀔 때 발·키가 튀지 않게: 신 자리 · 그림 배율은 모든 동작이 한 틀)
+	check(CutoutResident.FRAME_CLIPS.get("reap", "") == "reap" and FL.clip_index("reap") >= 0 and Lib.CLIP_RATE.has("reap")
+		and int(L["frames_per_clip"].get("reap", 0)) == 5, "방식 C 낫질: FRAME_CLIPS · 장면 그림 5장면 (%s)" % [L["frames_per_clip"].get("reap", 0)])
+	var reap_ok := true
+	var reap_feet := true
+	var reap_note := ""
+	for vn: String in ["front", "q_front", "q_back", "back"]:
+		var hoe_y := 0.0
+		var hoe_n := 0
+		var reap_y := 0.0
+		var reap_n := 0
+		var last_t := -1.0
+		for f: Dictionary in L["frames"]:
+			if f["view"] != vn:
+				continue
+			if f["clip"] == "hoe":
+				for sh: Array in f["shoes"]:
+					hoe_y += float(sh[1])
+					hoe_n += 1
+			if f["clip"] != "reap":
+				continue
+			var pr: Array = f.get("prop", [])
+			reap_ok = reap_ok and pr.size() == 5 and absf(float(pr[3])) > 0.5 and is_zero_approx(float(pr[4])) \
+				and (float(pr[3]) > 0.0) == (vn == "front") and float(f["t0"]) > last_t and f.has("prop_short")
+			last_t = float(f["t0"])
+			for sh: Array in f["shoes"]:
+				reap_y += float(sh[1])
+				reap_n += 1
+		reap_feet = reap_feet and reap_n >= 5 and hoe_n >= 4 and absf(reap_y / maxf(reap_n, 1.0) - hoe_y / maxf(hoe_n, 1.0)) < 14.0
+		reap_note += "%s %.0f/%.0f " % [vn, reap_y / maxf(reap_n, 1.0), hoe_y / maxf(hoe_n, 1.0)]
+	check(reap_ok, "방식 C 낫질: 네 보기 모두 장면마다 낫 자리 (한 손, 앞 보기만 그대로 · 나머지는 뒤집음), 장면 시각이 차례로")
+	check(reap_feet, "방식 C 낫질: 디딘 신의 높이가 괭이질과 같다 (보기마다 낫질/괭이질 rig: %s)" % reap_note)
+	check(is_equal_approx(FL.prop_fit(7).y, PI) and FL.PROP_HEAD_UP.has(CutoutResident.REAP_PROP), "방식 C 낫질: 낫은 머리가 위로 그려진 소품 (반 바퀴)")
 	check(FL.prop_fit(-1) == Vector2.ZERO and FL.prop_fit(6).x > 0.0 and is_zero_approx(FL.prop_fit(6).y) and is_equal_approx(FL.prop_fit(9).y, PI),
 		"방식 C 소품: 괭이는 그대로 · 나무망치는 반 바퀴")
 	# (states5, 2026-11-10) 장면 수: 안고 서기 4 · 줍기 6 (깊이 숙인 장면 4) · 잠 2 · 괭이질 4 · 올려다보기 8
@@ -889,6 +923,27 @@ func test_frames_c() -> void:
 	check(FL.load_name("밀") != FL.load_name("밀가루") and FL.load_name("밀가루") != FL.load_name("빵") and FL.load_name("밀") != FL.load_name("빵"),
 		"방식 C 짐: 밀 · 밀가루 · 빵이 서로 다른 그림")
 	check(FL.load_index("") == -1 and FL.load_name("") == "" and FL.load_name("버섯") == FL.LOAD_ELSE, "방식 C 짐: 빈 손은 짐 없음 · 모르는 짐은 바구니")
+	# (Q16, GAME_DESIGN 3.0 "벤 이삭 하나를 어깨에 메고") 두 인형이 "밀"을 같은 것으로 보여 준다: 옛 인형의 소품 "wheat"(이삭 하나) =
+	# 방식 C 짐 "wheat"의 그림 출처 (보기마다 한 장, 손에 쥔 줄기 자리가 원점). 단(묶음) 그림은 더 싣지 않는다
+	var ear_bad := []
+	var ear_views := {}
+	var old_ear: String = Lib.PROPS[int(CutoutResident.CARRY_PROP["밀"])]
+	if old_ear != "wheat" or FL.LOAD_OF.get("밀", "") != "wheat":
+		ear_bad.append("이름 %s / %s" % [old_ear, FL.LOAD_OF.get("밀", "")])
+	for e: Dictionary in loads:
+		if String(e["name"]) != "wheat":
+			continue
+		var ev := int(e.get("view", -1))
+		if ev < 0 or ev > 3 or ear_views.has(ev) or String(e.get("src", "")) != "cutout_a/" + old_ear or not e.has("pivot"):
+			ear_bad.append("보기 %d 출처 %s" % [ev, e.get("src", "")])
+			continue
+		ear_views[ev] = true
+		var pv: Array = e["pivot"]
+		var esz: Array = e["size"]
+		# 쥔 자리는 그림 안, 이삭은 그 위로 (그림의 절반 넘게가 쥔 자리 위)
+		if float(pv[0]) < 0.0 or float(pv[0]) > float(esz[0]) or float(pv[1]) < 0.0 or float(pv[1]) > float(esz[1]) * 0.5:
+			ear_bad.append("보기 %d 쥔 자리 %s / %s" % [ev, pv, esz])
+	check(ear_bad.is_empty() and ear_views.size() == 4, "방식 C 짐: 밀은 옛 인형과 같은 이삭 하나 (보기 %d개) %s" % [ear_views.size(), ear_bad])
 	var seat_bad := []
 	var seats := {}
 	for f: Dictionary in L["frames"]:

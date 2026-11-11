@@ -111,7 +111,7 @@ static func mesh() -> ArrayMesh:
 				c1.append_array([0, 0, -1, -1])
 				c2.append_array([-1, 0, 0, 0])
 			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
-	# 짐 그림 (group 5, v12): 밑변 가운데가 원점인 사각형 (rig), 묶음 번호 = loads의 번호
+	# 짐 그림 (group 5, v12): 밑변 가운데가 원점인 사각형 (rig), 묶음 번호 = loads의 번호. 밀(Q16)은 옛 인형의 이삭 그림 — 보기마다 한 장
 	var ls: Array = lib().get("loads", [])
 	var first := {}          # 그림 이름 → 묶음 번호 (같은 이름의 첫 번호: 아기 그림은 보기마다 한 장씩 같은 번호를 씀 — v13)
 	for li in ls.size():
@@ -119,10 +119,14 @@ static func mesh() -> ArrayMesh:
 			first[ls[li]["name"]] = li
 		var sz: Array = ls[li]["size"]
 		var luv: Array = ls[li]["uv"]
-		var hw := float(sz[0]) * 0.5
-		var hh := float(sz[1])
+		# (Q16) pivot = 그림 안의 짐 자리 (왼쪽 아래 귀퉁이에서, rig) — 없으면 밑변 가운데. 멘 이삭은 손에 쥔 줄기 자리가 원점
+		var pv: Array = ls[li].get("pivot", [float(sz[0]) * 0.5, 0.0])
+		var qx0 := -float(pv[0])
+		var qx1 := float(sz[0]) - float(pv[0])
+		var qy0 := -float(pv[1])
+		var qy1 := float(sz[1]) - float(pv[1])
 		var b := verts.size()
-		for cr: Array in [[-hw, hh, luv[0], luv[1]], [hw, hh, luv[2], luv[1]], [hw, 0.0, luv[2], luv[3]], [-hw, 0.0, luv[0], luv[3]]]:
+		for cr: Array in [[qx0, qy1, luv[0], luv[1]], [qx1, qy1, luv[2], luv[1]], [qx1, qy0, luv[2], luv[3]], [qx0, qy0, luv[0], luv[3]]]:
 			verts.append(Vector3(cr[0], cr[1], 0))
 			uvs.append(Vector2(cr[2], cr[3]))
 			c0.append_array([0, 0, 0, 5.0])

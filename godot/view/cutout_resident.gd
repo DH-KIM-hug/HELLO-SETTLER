@@ -27,7 +27,8 @@ const Doll := preload("res://proto/cutout_a/cut_doll.gd")
 const FrameLib := preload("res://proto/cutout_c/frame_lib.gd")
 const FrameDoll := preload("res://proto/cutout_c/frame_doll.gd")
 const FRAME_CLIPS := {"walk": "walk", "carry": "carry", "idle": "idle", "hold": "hold", "travel": "walk",
-	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather", "sleep": "sleep"}     # 2026-11-10 states4 · states5 (sleep)
+	"sit": "sit", "eat": "eat", "lookup": "lookup", "kneel": "kneel", "hoe": "hoe", "gather": "gather", "sleep": "sleep",     # 2026-11-10 states4 · states5 (sleep)
+	"reap": "reap"}     # 2026-11-11 Q16: 낫질 (한 손 낫 — 전에는 이 동작만 컷아웃 인형으로 바뀌어 튀었음)
 
 const DOLL_H := 0.88             # 어른의 화면 키 (세계 단위, cut_doll screen_h) — 3D 어른(모자 포함)과 같게 (cutA_lineup)
 ## 걷기 한 주기에 가는 길 = 그 옷 묶음 다리의 보폭 (Lib.stride_rig, rig 단위 × 화면 키 / fig) — 2026-11-08 걷기 점검:
