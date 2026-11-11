@@ -604,6 +604,10 @@ var shelf_hud_l: Label
 var shelf_hud_btn: Button
 var _shelf_jar_range := Vector2.ZERO  # 옆 병들이 놓인 폭 (cm) — 기념품 자리와 합쳐 cam.shelf_range가 된다
 var _shelf_focus := -1               # 지금 화면 가운데의 병 자리 (shelf_slots 번호)
+var shelf_glide := ShelfGlide.new()  # (Q19) 방금 주운 기념품 쪽으로 선반이 한 번 미끄러진다 (view/room/shelf_glide.gd)
+var shelf_twinkle: ShelfTwinkle      # (Q19) 아직 안 본 기념품이 선 쪽 화면 가장자리의 반짝임 (view/room/shelf_twinkle.gd)
+var _glide_stop_at := 0.0            # (Q19) 누르는 바람에 멈춘 자리 (선반을 다시 끌면 평소처럼 가까운 자리로)
+var _note_beyond := 0.0              # (Q19) 기념품 쪽지를 펼친 때의 물러난 정도 — 병 쪽으로 들어가면 쪽지를 닫는다
 
 
 func _setup_shelf() -> void:
@@ -626,6 +630,9 @@ func _setup_shelf() -> void:
 	row.add_child(shelf_hud_l)
 	shelf_hud_btn = _bar_button(row, "들어가기", func() -> void: _enter_focused())
 	shelf_hud_btn.custom_minimum_size = Vector2(96, UiTheme.TOUCH)
+	shelf_twinkle = ShelfTwinkle.new()                 # (Q19) 가장자리 반짝임 — 띠와 같은 층 (시트 아래)
+	root.add_child(shelf_twinkle)
+	shelf_twinkle.tapped.connect(glide_to_side)
 
 
 ## 선반의 병 자리를 다시 (선반 순서 그대로 — 지금 병이 가운데 0, 왼쪽 병은 −, 오른쪽 병은 +) + 사 둔 빈 병은 맨 끝
@@ -697,6 +704,7 @@ func _shelf_process(dt: float) -> void:
 	var held := not _touches.is_empty() or _drag
 	var goal := 0.0
 	_shelf_bounds()
+	_shelf_glide_process(dt, in_room, held)
 	var at_souvenirs := false                          # 기념품 무리 앞에 멈춰 있다 (옆 병의 이름·[들어가기]를 띄우지 않는다)
 	if in_room:
 		var f := shelf_focus()
@@ -705,7 +713,7 @@ func _shelf_process(dt: float) -> void:
 			if absf(x - cam.shelf_pan) < absf(goal - cam.shelf_pan):
 				goal = x
 				at_souvenirs = true
-	if not held or not in_room:
+	if (not held or not in_room) and not shelf_glide.active and not shelf_glide.held:
 		var np := lerpf(cam.shelf_pan, goal, 1.0 - exp(-10.0 * dt))
 		if absf(np - goal) < 0.02:
 			np = goal
@@ -726,6 +734,88 @@ func _shelf_process(dt: float) -> void:
 		var vs := get_viewport().get_visible_rect().size
 		shelf_hud.position = Vector2(12.0, vs.y - bottom_h - 92.0)
 		shelf_hud.size = Vector2(vs.x - 24.0, 0.0)
+	_shelf_seen_process(in_room)
+	if souvenir_note != null and souvenir_note.is_open() and (cam.stage() < 4 or cam.beyond < _note_beyond - 0.04):
+		souvenir_note.close()                            # (Q19) 방을 떠나 병으로 들어가면 쪽지는 닫힌다
+
+
+## (Q19) 선반이 한 번 미끄러진다: 방금 주운 기념품이 있으면 (GiantState.souvenir_glide) 방이 보이는 대로 그 기념품이 선 쪽으로.
+## 같은 기념품으로 두 번 미끄러지지 않는다 (시작하면서 비우고 거인 묶음에 적음). 미끄러지는 중에 누르면 그 자리에 멈춘다
+## (_unhandled_input이 먼저 잡는다 — 그 누름은 유리 톡이 아니다). 화면만 — 병·경이·손길은 건드리지 않는다
+func _shelf_glide_process(dt: float, in_room: bool, held: bool) -> void:
+	if not in_room:
+		shelf_glide.active = false                       # 방을 떠나면 평소처럼 지금 병으로 돌아온다
+		shelf_glide.release()
+		return
+	var sm := GameSave.get_instance()
+	if sm != null and not sm.player.souvenir_glide.is_empty() and not held and not shelf_glide.active \
+			and not _enter_fly and not catching and not leaving:
+		var key := sm.player.souvenir_glide
+		sm.clear_souvenir_glide()
+		var list := shelf_souvenirs()
+		room_zoom.room.set_souvenirs(list)               # 방금 주운 것의 자리가 있도록
+		_shelf_bounds()
+		glide_to_side(room_zoom.room.side_of_key(list, key))
+	if shelf_glide.active:
+		if held:
+			stop_shelf_glide()
+		else:
+			cam.shelf_pan = clampf(shelf_glide.step(dt), cam.shelf_range.x, cam.shelf_range.y)
+			cam._apply()
+	elif shelf_glide.held and absf(cam.shelf_pan - _glide_stop_at) > 0.05:
+		shelf_glide.release()                            # 멈춘 뒤 다시 끌었다 → 손을 떼면 평소처럼 가까운 자리로
+
+
+## (Q19) 그쪽(+1 오른쪽 · −1 왼쪽) 기념품 무리 앞으로 선반이 미끄러진다 — 줍고 난 뒤 한 번 · 가장자리 반짝임을 눌렀을 때.
+## 움직임 줄이기면 미끄러지지 않고 바로 그 자리. 미끄러지기 시작했으면 true
+func glide_to_side(side: int) -> bool:
+	if room_zoom == null or side == 0:
+		return false
+	var goal := room_zoom.room.stop_for(side)
+	if goal == 0.0 or (shelf_glide.active and is_equal_approx(shelf_glide.to, goal)):
+		return false
+	_shelf_bounds()
+	cam.shelf_pan = clampf(shelf_glide.start(cam.shelf_pan, goal, JarCamera.reduce_motion()), cam.shelf_range.x, cam.shelf_range.y)
+	cam._apply()
+	return true
+
+
+## (Q19) 미끄러지는 선반을 그 자리에 세운다 (누름)
+func stop_shelf_glide() -> void:
+	if shelf_glide.active:
+		shelf_glide.stop()
+		_glide_stop_at = cam.shelf_pan
+
+
+## (Q19) 본 것으로 적기 + 가장자리 반짝임: 선반이 그쪽 무리 앞에 와 있으면 그쪽 기념품은 '본 것' (거인 묶음에만 적는다 — 기적이 아니다).
+## 방의 가운데 자리(지금 병 앞)에 있고 아직 안 본 쪽이 있으면 그쪽 화면 가장자리, 선반 높이에 작은 반짝임 (위 띠 아래 · 아래 띠 위)
+func _shelf_seen_process(in_room: bool) -> void:
+	if shelf_twinkle == null:
+		return
+	var sm := GameSave.get_instance()
+	if not in_room or sm == null or _enter_fly or catching or leaving:
+		shelf_twinkle.hide_all()
+		return
+	var list := shelf_souvenirs()
+	var room := room_zoom.room
+	room.set_souvenirs(list)
+	var un := room.unseen_sides(list)
+	if not shelf_glide.active:
+		for side: int in [1, -1]:
+			var keys: Array = un[side]
+			var stop := room.stop_for(side)
+			if not keys.is_empty() and stop != 0.0 and absf(cam.shelf_pan - stop) < Balance.SOUVENIR_SEEN_NEAR:
+				sm.mark_souvenirs_seen(keys)
+				un[side] = []
+	var right := not (un[1] as Array).is_empty()
+	var left := not (un[-1] as Array).is_empty()
+	if shelf_glide.active or absf(cam.shelf_pan) > 0.05 or not (right or left):
+		shelf_twinkle.hide_all()
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var y := room.souvenir_edge_y(cam.camera, cam.shelf_pan)
+	shelf_twinkle.still = JarCamera.reduce_motion()
+	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, top_h + 34.0, vs.y - bottom_h - 34.0)
 
 
 func _enter_focused() -> void:
@@ -1338,6 +1428,7 @@ func open_souvenir_note(hit: Dictionary, sp: Vector2) -> void:
 		souvenir_note = SouvenirNote.new()
 		layer.add_child(souvenir_note)
 	GameAudio.fx("glass_tap_light", "Room", -12.0)
+	_note_beyond = cam.beyond
 	var n := shelf_souvenirs().size()
 	souvenir_note.open(hit["rec"], sp, maxi(0, n - room_zoom.room.souvenirs.size() + 1) if bool(hit["pile"]) else 0)
 
@@ -1513,6 +1604,19 @@ func _unhandled_input(e: InputEvent) -> void:
 	if cam.flying and ((e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed)
 			or (e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)):
 		cam.stop_fly()
+		get_viewport().set_input_as_handled()
+		return
+	# (Q19) 선반이 미끄러지는 중에 화면을 누르면 그 자리에서 멈춤 (유리 톡이 아니다)
+	if shelf_glide.active and ((e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed)
+			or (e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT)):
+		stop_shelf_glide()
+		if e is InputEventScreenTouch:                   # 그 손가락으로 바로 끌 수는 있다 — 톡은 아니다
+			_touches[(e as InputEventScreenTouch).index] = (e as InputEventScreenTouch).position
+			_touch_tap = false
+		elif e.device != InputEvent.DEVICE_ID_EMULATION and _touches.is_empty():
+			_drag = true
+			_tap_ok = false
+			_press_pos = (e as InputEventMouseButton).position
 		get_viewport().set_input_as_handled()
 		return
 	if goto_list != null and goto_list.visible and (e is InputEventScreenTouch or e is InputEventMouseButton) and e.is_pressed():

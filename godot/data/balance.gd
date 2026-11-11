@@ -1192,3 +1192,14 @@ const SOUVENIR_STONE_OFFSETS := [
 	Vector2(-2.40, 2.40), Vector2(1.13, -2.55), Vector2(-2.55, 1.13), Vector2(1.84, 1.84), Vector2(3.54, -0.99),
 	Vector2(-0.99, 3.54), Vector2(2.83, 1.13), Vector2(1.13, 2.83), Vector2(-1.84, -1.84), Vector2(2.26, -3.11), Vector2(-3.11, 2.26),
 ]
+# Q19 (2026-11-12): 주운 기념품이 눈에 띄게 — 선반 시트의 [기념품] 칸 · 주운 뒤 선반이 한 번 미끄러짐 · 화면 가장자리 반짝임 · 처음 한 줄 (모두 화면만)
+const SOUVENIR_GLIDE_SECS := 1.4         # 주운 뒤 방이 보이면 선반이 새 기념품 쪽으로 미끄러지는 길이 (현실 초 — 천천히 떠나 천천히 멈춤)
+const SOUVENIR_TWINKLE_EVERY := 3.4      # 화면 가장자리 반짝임 사이 (현실 초 — 안 본 기념품이 있는 쪽)
+const SOUVENIR_TWINKLE_SECS := 1.3       # 반짝임 한 번의 길이 (현실 초)
+const SOUVENIR_TWINKLE_PX := 34.0        # 반짝임 크기 (화면 px — 가장 클 때)
+const SOUVENIR_TWINKLE_TOUCH := 56.0     # 반짝임을 누를 수 있는 폭·높이 (화면 px)
+const SOUVENIR_SEEN_NEAR := 0.6          # 선반이 그쪽 멈출 자리에서 이만큼(cm) 안이면 '본 것'
+const SOUVENIR_HINT_SECS := 6.0          # 처음 주운 한 줄이 떠 있는 길이 (현실 초 — 보통 알림 3.5초보다 길게)
+const SOUVENIR_SHEET_PIC := 48.0         # 선반 시트 [기념품] 칸의 그림 한 장 (화면 px)
+const SOUVENIR_ALTAR_MIN_PX := 30.0      # 제단 위 기념품이 화면에서 적어도 이만큼 (px — 멀리서도 읽히게, Q17 남은 일)
+const SOUVENIR_BACK_LIFT := 1.5          # 선반 뒷줄 기념품을 이만큼(cm) 올려 세운다 (작은 받침 — 앞줄에 가리지 않게, Q17 남은 일)
