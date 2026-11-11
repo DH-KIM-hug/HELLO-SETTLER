@@ -79,4 +79,5 @@
 - `SaveManager` 자동 로드: `save_all()`, `save_giant()`, `load_all()`, `catch_up(elapsed)`.
 - 각 시뮬 객체에 `to_dict()/from_dict()` (Village·Resident·Building·Health·JarAir·Mold·Flora·Market…). 난수는 `RandomNumberGenerator.state`.
 - 테스트: 저장→불러오기 후 N시간 진행 결과 == 저장 없이 N시간 진행 결과 (결정론). 옛 버전 저장 파일을 테스트 자료로 두고 매번 불러오기 확인. 깨진 칸 복구.
+- **도구 지킴이 (2026-11-11 Q12, 메인 판단 — 사용자 위임)**: 도구 스크립트(`godot -s …` — 캡처·측정·시험)로 띄운 판은 저장·연대기 그림 카드·설정(`settings.cfg`·`hud.cfg`·`install_id.cfg`)·성능 결과를 `user://_tool/<스크립트 이름>/` 아래에 쓴다 (`godot/save/user_paths.gd` `UserPaths.of` — 기본 길을 정하는 자리에서만 바꿈, 상태 없음). 진짜 저장 폴더는 건드리지 않는다. 폴더를 직접 넣은 도구·시험(`GameSave.dir`·`StageDirector.pic_dir`·`GameSettings.path`·`NAZAKJI_SAVE_DIR`)은 그 값 그대로. `-s` 없이 띄운 놀이는 예전 길 그대로. 예외: 엔진 기록 `user://logs/`. `_tool/`은 스스로 비워지지 않는다 (ROADMAP Q13 ②). 시험 `tool_guard`.
 - (v1.1부터 요약 계산 없음 — 등불 시간까지 늘 정밀 계산. 화면 밖 마을의 요약 계산은 성능 작업 ROADMAP B11에서 따로)
