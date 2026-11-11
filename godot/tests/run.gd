@@ -44,7 +44,7 @@ const SUITES := {"milestone": "res://tests/milestone_tests.gd", "world": "res://
 	"start": "res://tests/start_tests.gd", "era": "res://tests/era_tests.gd", "terrain": "res://tests/terrain_tests.gd", "shop": "res://tests/shop_tests.gd",
 	"village": "res://tests/village_era_tests.gd", "looks": "res://tests/resident_look_tests.gd",
 	"animals": "res://tests/animal_model_tests.gd", "wildlife": "res://tests/wildlife_tests.gd", "fauna": "res://tests/fauna_tests.gd", "dogs": "res://tests/dog_tests.gd", "discovery": "res://tests/discovery_tests.gd", "room": "res://tests/room_zoom_tests.gd",
-	"immigrant": "res://tests/immigrant_tests.gd", "crisis": "res://tests/crisis_tests.gd", "shelf": "res://tests/shelf_tests.gd",
+	"immigrant": "res://tests/immigrant_tests.gd", "crisis": "res://tests/crisis_tests.gd", "shelf": "res://tests/shelf_tests.gd", "souvenirs": "res://tests/souvenir_tests.gd",
 	"hand": "res://tests/hand_tests.gd", "portrait": "res://tests/portrait_tests.gd", "people": "res://tests/people_tests.gd", "campfire": "res://tests/campfire_tests.gd", "resources": "res://tests/resource_hud_tests.gd", "notebook": "res://tests/notebook_tests.gd",
 	"carry": "res://tests/carry_tests.gd", "plan": "res://tests/plan_tests.gd",
 	"slowdown": "res://tests/slowdown_tests.gd", "tinyworld": "res://tests/tinyworld_tests.gd", "waterside": "res://tests/waterside_tests.gd", "staging": "res://tests/staging_tests.gd", "social": "res://tests/social_tests.gd",

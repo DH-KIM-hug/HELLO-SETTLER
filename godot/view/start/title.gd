@@ -28,6 +28,8 @@ var save_line: Label
 var version_l: Label
 var gear: Button
 var settings_sheet: SettingsSheet
+var souvenir_note: SouvenirNote
+var _held := false                     # 누르고 있는 중 (선반 밀기)       # [기념품 Q17] 선반의 기념품을 누르면 뜨는 쪽지 (view/room/souvenir_note.gd)
 var info := {}                        # StartFlow.button_info
 var entering := false
 var _idle := 0.0
@@ -100,6 +102,7 @@ func _build_room() -> void:
 	elif not fresh:
 		room.add_mini_village(false, 0)                                # 만들던 병: 풀과 나무만
 	room.set_shelf_jars(shelf_items(info))                            # (C1) 선반의 다른 병들 — 넓은 세상 장면의 방과 같은 자리
+	room.set_souvenirs(info.get("souvenirs", []))                     # [기념품 Q17] 주워 온 기념품이 선반에 서 있다
 	room.set_lamp(true, JarWater.LIGHT)
 	cam = JarCamera.new()
 	world3d.add_child(cam)
@@ -272,6 +275,28 @@ func _process(dt: float) -> void:
 		wave()
 	if SafeArea.insets(get_viewport()) != _insets:
 		layout()
+	_shelf_step(dt)
+
+
+## [기념품 Q17] 선반을 옆으로 밀면 기념품이 선 자리까지 (손을 떼면 가까운 자리 — 병 또는 기념품 무리 — 에 멈춘다)
+func _shelf_step(dt: float) -> void:
+	var stops := room.souvenir_stops()
+	var lo := 0.0
+	var hi := 0.0
+	for x: float in stops:
+		lo = minf(lo, x)
+		hi = maxf(hi, x)
+	cam.shelf_range = Vector2(lo, hi) if lo < hi else Vector2.ZERO
+	if _held:
+		return
+	var goal := 0.0
+	for x: float in stops:
+		if absf(x - cam.shelf_pan) < absf(goal - cam.shelf_pan):
+			goal = x
+	if cam.shelf_pan != goal:
+		var np := lerpf(cam.shelf_pan, goal, 1.0 - exp(-10.0 * dt))
+		cam.shelf_pan = goal if absf(np - goal) < 0.02 else np
+		cam._apply()
 
 
 ## 가만히 두면: 병 유리에 반짝임 한 번 (이어하기 — 병 안 마을이 손 흔드는 대신)
@@ -286,8 +311,23 @@ func wave() -> void:
 func _gui_input(e: InputEvent) -> void:
 	if entering:
 		return
+	if e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+		_held = (e as InputEventMouseButton).pressed
+	elif e is InputEventMouseMotion and _held and ((e as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+		cam.pan_pixels(Vector2((e as InputEventMouseMotion).relative.x, 0.0))        # 선반 밀기 (기념품이 있을 때만 폭이 있다)
+		_idle = 0.0
 	if e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		var p := (e as InputEventMouseButton).position
+		var hit := room.pick_souvenir(cam.camera, p)                  # [기념품 Q17] 선반의 기념품을 누르면 작은 쪽지
+		if not hit.is_empty():
+			if souvenir_note == null:
+				souvenir_note = SouvenirNote.new()
+				ui.add_child(souvenir_note)
+			GameAudio.fx("glass_tap_light", "Room", -12.0)
+			_idle = 0.0
+			var all: Array = info.get("souvenirs", [])
+			souvenir_note.open(hit["rec"], p, maxi(0, all.size() - room.souvenirs.size() + 1) if bool(hit["pile"]) else 0)
+			return
 		if jar_body().grow(10.0).has_point(p):
 			GameAudio.fx("glass_tap_light")
 			GameAudio.buzz()
@@ -317,8 +357,11 @@ func enter() -> void:
 	GameAudio.fx("fly_whoosh", "Room", -6.0)
 	var from := cam.ext_zoom()
 	var to := cam.ext_min() + (1.0 - HANDOFF) * JarCamera.BEYOND_SPAN
+	_held = false
 	var tw := create_tween().set_parallel(true)
 	tw.tween_property(ui, "modulate:a", 0.0, 0.25)
+	if cam.shelf_pan != 0.0:                       # 기념품 쪽을 보고 있었으면 병 앞으로 돌아오며 다가간다 (넘겨받는 자리가 같게)
+		tw.tween_method(func(v: float) -> void: cam.shelf_pan = v, cam.shelf_pan, 0.0, 0.25)
 	tw.tween_method(func(v: float) -> void: cam.set_ext_zoom(v), from, to, ZOOM_TIME).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	tw.chain().tween_callback(go_next)
 
