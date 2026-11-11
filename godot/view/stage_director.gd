@@ -144,6 +144,7 @@ var _skip_btn: Button
 func _init(scene: Node) -> void:
 	sc = scene
 	pic_dir = UserPaths.of(pic_dir)       # 도구 스크립트(-s)로 뜬 판은 기본 그림 카드 폴더가 user://_tool/<도구>/chron_pics (save/user_paths.gd — Q12). 진짜 놀이는 그대로 · 도구가 뒤에 직접 넣은 값이 이긴다
+	UserPaths.sweep_own_pics(pic_dir)     # (Q13 ②) 도구로 뜬 판만: 제 폴더(user://_tool/<도구>/chron_pics)의 지난 그림 카드를 치운다 — 이 프로세스가 뜨기 전 것만. 진짜 놀이는 아무것도 지우지 않는다
 	name = "StageDirector"
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 	mouse_filter = Control.MOUSE_FILTER_IGNORE

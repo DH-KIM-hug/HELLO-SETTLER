@@ -19,7 +19,7 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 건물 (buildings GDD)")
 	run.timed(self, ["test_upgrade_pick_second", "test_upgrade_pick_first", "test_upgrade_none", "test_wheat_stage", "test_wheat_reaped", "test_grave_siting", "test_grave_old_save",
-		"test_second_quarry", "test_stone_stuck", "test_opening_stone_rules_off", "test_field_grave", "test_yard_field",
+		"test_second_quarry", "test_stone_stuck", "test_next_quarry_early", "test_opening_stone_rules_off", "test_field_grave", "test_yard_field",
 		"test_spent_quarry_leaves", "test_spent_quarry_restaffed", "test_dropped_quarry_spot_no_trace", "test_grave_far_low_view"])
 
 
@@ -342,6 +342,104 @@ func test_stone_stuck() -> void:
 	k.wishes = ["제재소"]
 	k.chief_build()
 	check(_site_types(k) == ["오두막"] and k.wishes == ["제재소"], "못 짓는 소원(제재소)은 남겨 두고 집을 짓는다 (%s)" % [_site_types(k)])
+
+
+# ───────────────────────── 다음 채석장을 미리 (Q13 ① · GAME_DESIGN 8.1 · docs/measure/growth_2026-11-11.md 자) ─────────────────────────
+## 자리를 잡은 마을: _stone_village에 집을 넉넉히 (집 없는 사람 없음) · 맷돌간 · 화덕 · 우물 · 제재소 · 둘째 밭 · 둘째 나무꾼을 더 세웠다.
+## 먹을 것 · 판자는 넉넉하고 창고의 돌은 stone개 — 급한 바람(먹을 것 · 집 없는 사람)이 없는 보통 날
+func _settled_stone_village(near: int, far: int, stone: float) -> Village:
+	var v := _stone_village(near, far)
+	for i in 4:
+		v.add_building("오두막", -4.0 + 3.0 * i, 4.0, true)
+	for q: Vector2 in [Vector2(14.0, 3.0), Vector2(16.0, -4.0), Vector2(11.0, -11.0), Vector2(15.0, 10.0)]:
+		v.add_building("농장", q.x, q.y, true)       # 밭 다섯 — 먹을 것이 모자라지 않게 (모자라면 밭이 채석장보다 먼저다)
+	v.add_building("나무꾼", -13.0, 2.0, true)
+	v.add_building("맷돌간", 2.0, -7.0, true)
+	v.add_building("화덕", 5.0, -7.0, true)
+	v.add_building("우물", 0.0, 7.0, true)
+	v.add_building("제재소", -7.0, -4.0, true)
+	v.assign_homes()
+	v.stock["돌"] = stone
+	v.stock["빵"] = 400.0
+	return v
+
+
+## 손이 빈 어른을 n명만 남긴다 (나머지는 일터가 있는 것으로 — test_stone_stuck의 방식)
+func _leave_free(v: Village, n: int) -> void:
+	var left := 0
+	for p in v.people:
+		if p.is_adult() and p.job < 0:
+			if left < n:
+				left += 1
+			else:
+				p.job = v.buildings[0].id
+
+
+## (Q13 ①) 있는 채석장 둘레를 다 캤고 병에 바위가 남았으면, 창고에 돌이 남아 있을 때 미리 다음 채석장 터를 잡는다 —
+## 급한 바람(묻을 곳) 다음 · 손이 빈 어른을 기다리지 않는다 (옮겨 짓는 일터) · 판자가 모자라면 예전 차례 그대로 (막지 않는다) · 주사위 · 저장하는 값 없음
+func test_next_quarry_early() -> void:
+	print("== 다음 채석장을 미리: 돌이 남아 있을 때 (Q13)")
+	var c := _settled_stone_village(6, 20, 10.0)       # 견줄 마을: 둘레에 바위가 남았다
+	c.chief_build()
+	var usual := _site_types(c)
+	check(not c.quarry_spent() and c.count_type("채석장") == 1, "둘레에 캘 바위가 남은 마을 (돌 10): 채석장을 더 짓지 않는다 — 촌장이 고른 것 %s" % [usual])
+	var v := _settled_stone_village(0, 20, 10.0)
+	var s0 := v.rng.state
+	check(v.quarry_spent() and v.stone_rocks_left() and float(v.stock["돌"]) >= 6.0 and _free_adults(v) >= Balance.IDLE_FOR_NEW_JOB,
+		"시험 마을: 둘레는 다 캤고 먼 바위가 남았다 · 창고의 돌 %.0f (예전 문턱 6 이상) · 손이 빈 어른 %d" % [float(v.stock["돌"]), _free_adults(v)])
+	v.chief_build()
+	var q2: Building = null
+	for b in v.buildings:
+		if b.type == "채석장" and not b.built:
+			q2 = b
+	check(_site_types(v) == ["채석장"] and q2 != null and v.stone_in_reach(q2.x, q2.y), "돌이 남아 있어도 남은 바위 곁에 채석장 터부터 (%s)" % [_site_types(v)])
+	check(v.rng.state == s0 and is_equal_approx(float(v.stock["돌"]), 10.0), "주사위를 쓰지 않고 창고의 돌도 그대로 (%.0f)" % float(v.stock["돌"]))
+	v.chief_build()
+	check(v.count_type("채석장") == 2 and not v.quarry_spent() and _site_types(v).slice(1) == usual,
+		"새 터가 선 뒤에는 또 짓지 않고 평소 차례로 돌아간다 (%s · 견줄 마을 %s)" % [_site_types(v), usual])
+	# 급한 바람이 먼저: 첫 이별 뒤 묻을 곳 → 그다음이 채석장
+	var g := _settled_stone_village(0, 20, 10.0)
+	g.stats["died"] = 1
+	g.chief_build()
+	g.chief_build()
+	check(_site_types(g) == ["묘지", "채석장"], "묻을 곳이 먼저, 그다음 채석장 (%s)" % [_site_types(g)])
+	# 손이 빈 어른이 없어도 짓는다: 다 캔 채석장은 석수를 내려놓았으니 새 일터가 느는 것이 아니라 일터가 자리를 옮기는 것 (보통 새 일터는 손이 빈 어른 둘을 기다린다)
+	for n: int in [1, 0]:
+		var h := _settled_stone_village(0, 20, 10.0)
+		_leave_free(h, n)
+		var hs := h.rng.state
+		h.chief_build()
+		check(_free_adults(h) == n and _site_types(h) == ["채석장"] and h.rng.state == hs, "손이 빈 어른 %d명 → 그래도 남은 바위 곁에 채석장 터 (%s)" % [n, _site_types(h)])
+	# … 이 예외는 다 캔 채석장을 잇는 채석장뿐: 둘레에 바위가 남은 마을은 일손이 없으면 채석장을 더 짓지 않는다
+	var c1 := _settled_stone_village(6, 20, 0.0)
+	_leave_free(c1, 0)
+	c1.chief_build()
+	c1.chief_build()
+	check(c1.count_type("채석장") == 1, "둘레에 바위가 남은 마을 · 손이 빈 어른 0 · 돌 0 → 채석장은 하나 그대로 (%s)" % [_site_types(c1)])
+	# 판자가 모자라면 (채석장 판자 2 + 남겨 둘 4) 채석장을 바라지 않는다 — 판자가 같은 견줄 마을과 같다
+	var c2 := _settled_stone_village(6, 20, 10.0)
+	c2.stock["판자"] = 5.0
+	c2.chief_build()
+	var p := _settled_stone_village(0, 20, 10.0)
+	p.stock["판자"] = 5.0
+	p.chief_build()
+	check(p.count_type("채석장") == 1 and _site_types(p) == _site_types(c2), "판자가 모자람 → 채석장은 미루고 평소 차례 (%s · 견줄 마을 %s)" % [_site_types(p), _site_types(c2)])
+	# 병 안의 바위를 다 캤으면 미리 지을 것도 없다 — 평소 차례
+	var e := _settled_stone_village(0, 0, 10.0)
+	e.chief_build()
+	check(e.quarry_spent() and e.count_type("채석장") == 1 and _site_types(e) == usual, "병 안에 바위가 없음 → 채석장을 더 짓지 않는다 (%s)" % [_site_types(e)])
+	# 남은 바위가 영역 밖 멀리 있으면 자리를 접고 평소 차례 (쓸모없는 채석장을 세우지 않는다)
+	var u := _settled_stone_village(0, 0, 10.0)
+	u.rocks[0]["x"] = 400.0
+	u.rocks[0]["y"] = 400.0
+	u.rocks[0]["amt"] = 20
+	u.chief_build()
+	check(u.stone_rocks_left() and u.count_type("채석장") == 1 and _site_types(u) == usual, "남은 바위가 닿지 않는 먼 곳 → 채석장 없이 평소 차례 (%s)" % [_site_types(u)])
+	# 옛 저장: 저장하는 값이 없어 불러온 마을에서도 그대로
+	var o := Village.from_dict(bytes_to_var(var_to_bytes(_settled_stone_village(0, 20, 10.0).to_dict())))
+	o.chief_off = true
+	o.chief_build()
+	check(_site_types(o) == ["채석장"], "불러온 마을 (둘레를 다 캔 채석장 · 돌 10)에서도 미리 짓는다 (%s)" % [_site_types(o)])
 
 
 # ───────────────────────── 다 캔 채석장 (Q12 ① · GAME_DESIGN 8.1) ─────────────────────────
