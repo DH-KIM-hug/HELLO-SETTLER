@@ -1268,6 +1268,9 @@ func village_views() -> Array:
 	return [[village, view]]
 
 
+const SOUVENIR_FIRST_LINE := "선반에 올려 두었어요. 선반을 옆으로 밀면 보여요."
+
+
 ## [기념품 Q17] 누른 곳에 기다리는 기념품이 있으면 줍는다: 반짝이며 떠오르고(화면만) 거인의 선반으로.
 ## 기적이 아니다 — 경외·겁·오늘 톡 수를 건드리지 않고 giant_acted도 내지 않는다 (save/save_manager.gd take_souvenir가 병과 거인 묶음을 함께 저장)
 func _take_souvenir(sp: Vector2) -> bool:
@@ -1284,6 +1287,9 @@ func _take_souvenir(sp: Vector2) -> bool:
 		var sm := GameSave.get_instance()
 		if sm != null:
 			sm.take_souvenir(q, id)
+			if sm.player.take_hint_due():                    # (Q19) 맨 처음 주운 것 — 한 번만, 알림 줄에 (별지기에게 보이는 말)
+				clock.notice = SOUVENIR_FIRST_LINE
+				clock.notice_t = Balance.SOUVENIR_HINT_SECS
 		else:
 			Souvenirs.take(q, id)
 		sv.refresh()

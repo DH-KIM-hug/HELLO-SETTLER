@@ -9,6 +9,13 @@
 ##   s1_altar_far · s1_altar_close (깨달은 뒤 — 제단 윗돌 위) ·
 ##   s1_shelf_one · s1_shelf_four · s1_shelf_nine · s1_shelf_pile (선반: 1 · 4 · 9 · 아주 많음 → '…' 바구니) · s1_shelf_note (쪽지) ·
 ##   s1_shelf_neighbours (옆 병이 양쪽에 있을 때) · s1_title_shelf · s1_title_note (타이틀의 같은 선반) · s1_sheet (모아 보기)
+## (Q19) 눈에 띄게 — 세 번째:
+##   godot --path godot -s res://tools/shot_souvenirs.gd -- q19     (godot_shots/souvenirs/s2_*.png + 모아 보기 s2_sheet.png)
+##   s2_first_line (맨 처음 주운 뒤 알림 줄) · s2_altar_default · s2_altar_people · s2_altar_people_close (제단 위 — 기본 확대, 둘레에 주민, 가까이) ·
+##   s2_glide_mid · s2_glide_end (줍고 방으로 나오면 선반이 한 번 미끄러진다 — 중간 · 끝) ·
+##   s2_room_twinkle_right · _rest · _left · _both (방 가운데 자리의 가장자리 반짝임 — 밝을 때 · 쉴 때 · 왼쪽 · 양쪽) ·
+##   s2_shelf_back_right · s2_shelf_back_left (가득 찬 선반 — 뒷줄) ·
+##   s2_sheet_zero · _four · _many · _note (선반 시트의 '기념품' 칸) · s2_title_twinkle · s2_title_glided (타이틀)
 ## 병 안 장면은 도구가 차린다: 고비 기록(첫 빵 · 식구 열둘)은 시험과 같은 길로 마을이 스스로 넘고, 그 밖의 기념품은 조용히 놓는다 (Souvenirs.make).
 ## 줍기는 진짜 누르기 길로 (test_village._take_souvenir — 화면 네모 가운데를 누름).
 ## 저장: 진짜 저장(user://save)을 읽지도 쓰지도 않는다 — 모든 길을 도구 지킴이(save/user_paths.gd)의 제 폴더 user://_tool/shot_souvenirs/… 로 돌린다
@@ -23,6 +30,10 @@ const ORDER := ["s1_stone_one_far", "s1_stone_one_close", "s1_stone_three_far", 
 	"s1_take_mid", "s1_stone_evening_far", "s1_stone_evening_close", "s1_altar_far", "s1_altar_close",
 	"s1_shelf_front", "s1_shelf_one", "s1_shelf_four", "s1_shelf_nine", "s1_shelf_pile", "s1_shelf_pile_left", "s1_shelf_note", "s1_shelf_neighbours",
 	"s1_title_front", "s1_title_shelf", "s1_title_note"]
+
+const ORDER2 := ["s2_first_line", "s2_altar_default", "s2_altar_people", "s2_altar_people_close", "s2_glide_mid", "s2_glide_end",
+	"s2_room_twinkle_right", "s2_room_twinkle_rest", "s2_room_twinkle_left", "s2_room_twinkle_both", "s2_shelf_back_right", "s2_shelf_back_left",
+	"s2_sheet_zero", "s2_sheet_four", "s2_sheet_many", "s2_sheet_note", "s2_title_twinkle", "s2_title_glided"]
 
 var scene: Node
 var sm: GameSave
@@ -39,7 +50,7 @@ func _initialize() -> void:
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/souvenirs").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	for a: String in OS.get_cmdline_user_args():
-		if a == "jar" or a == "room":
+		if a == "jar" or a == "room" or a == "q19":
 			mode = a
 	save_dir = UserPaths.of("user://save")
 	if not save_dir.begins_with(UserPaths.TOOL_ROOT + "/"):          # 도구 폴더가 아니면 진짜 저장일 수 있다 — 아무것도 하지 않는다
@@ -189,7 +200,7 @@ func _process(_dt: float) -> bool:
 	if _wait > 0:
 		_wait -= 1
 		return false
-	var done := _jar() if mode == "jar" else _room()
+	var done := _jar() if mode == "jar" else (_q19() if mode == "q19" else _room())
 	if not done:
 		step += 1
 	return done
@@ -412,15 +423,217 @@ func _room() -> bool:
 				step = 9
 				return false
 			_save("s1_title_note")
-			_sheet()
+			_sheet(ORDER, "s1_sheet")
 			return true
 	return false
 
 
-## 모아 보기 (5칸씩 — 0.4배)
-func _sheet() -> void:
+# ───────────────────────── (Q19) 눈에 띄게 ─────────────────────────
+## n개를 선반에 (아직 안 본 것으로) — seen_side(+1 오른쪽 · −1 왼쪽) 쪽은 본 것으로. 선반은 지금 병 앞 (가운데 자리)
+func _unseen_room(n: int, seen_side := 0) -> void:
+	sm.player.souvenirs = _recs(n)
+	sm.player.souvenir_glide = ""
+	var room: GiantRoom = scene.room_zoom.room
+	scene.room_zoom.refresh_notes()
+	if seen_side != 0:
+		sm.player.mark_seen(room.unseen_sides(sm.player.souvenirs)[seen_side])
+	scene.shelf_glide.active = false
+	scene.shelf_glide.release()
+	scene.cam.shelf_pan = 0.0
+	scene.cam._apply()
+	print("선반 %d개 (안 본 쪽 %s) · 멈출 자리 %s" % [n, room.unseen_sides(sm.player.souvenirs), room.souvenir_stops()])
+
+
+func _twinkle_info() -> void:
+	var tw: ShelfTwinkle = scene.get("shelf_twinkle")
+	print("반짝임: 오른쪽 %s %s · 왼쪽 %s %s · 밝기 %.2f · 선반 %.2f" % [tw.shown(1), tw.center_of(1), tw.shown(-1), tw.center_of(-1), tw.glow(), (scene.get("cam") as JarCamera).shelf_pan])
+
+
+func _to_village_view() -> void:
+	var v: Village = scene.village
+	scene.cam.stop_fly()
+	scene.cam.set_ext_zoom(4.0)
+	_look(v.fire, FAR)
+	_settle()
+
+
+func _q19() -> bool:
+	match step:
+		0:
+			if frame < 120 or scene.get("village") == null or bool(scene.get("catching")):
+				step -= 1
+				return false
+			scene.set("_enter_fly", false)
+			scene.call("set_debug_mode", false)
+			scene.cam.stop_fly()
+			if scene.get("return_letter") != null:
+				(scene.get("return_letter") as Control).call("close")
+			var v: Village = scene.village
+			_advance_to(10.5)
+			scene.paused = true
+			v.aware = false
+			v.altar_built = false
+			Souvenirs.make(v, "bread", {"t": v.t}, true)
+			scene.cam.set_ext_zoom(4.0)
+			_look(Souvenirs.stone_spot(v), FAR)
+			_settle()
+			_wait = 20
+		1:
+			var rects: Array = _sv().screen_rects(scene.cam.camera)
+			var hit: bool = scene._take_souvenir((rects[0]["rect"] as Rect2).get_center())
+			print("맨 처음 주움 %s · 알림 '%s' · 미끄러질 것 '%s' · 한 줄 띄움 %s" % [hit, scene.clock.notice, sm.player.souvenir_glide, sm.player.souvenir_hint])
+			_wait = 50
+		2:
+			_save("s2_first_line")
+			scene.clock.notice_t = 0.0                  # (멈춰 둔 병이라 알림 줄이 저절로 걷히지 않는다 — 다음 장면을 위해 걷음)
+			var v: Village = scene.village
+			v.aware = true
+			v.altar_built = true
+			for id: String in ["steps", "grown", "green"]:
+				Souvenirs.make(v, id, {"t": v.t}, true)
+			_look(v.altar_pos, FAR)
+			_settle()
+			_wait = 16
+		3:
+			_save("s2_altar_default")
+			var v: Village = scene.village
+			var tw3: Vector3 = _sv().call("_cam_toward")
+			var tw := Vector2(tw3.x, tw3.z).normalized()            # 보는 쪽 (땅 위)
+			var side := Vector2(-tw.y, tw.x)
+			var offs := [tw * 1.3, tw * 1.9 + side * 0.7, tw * 1.9 - side * 0.7, tw * 2.6, tw * 0.8 + side * 1.6, tw * 0.8 - side * 1.6]
+			for k in offs.size():                       # 제단 앞(보는 쪽)에 새 주민 (앞에 선 주민이 기념품에 가리나)
+				var o: Vector2 = offs[k]
+				v.add_person(NAMES[k], "f" if k % 2 == 0 else "m", 24.0 + float(k), "", v.altar_pos.x + o.x, v.altar_pos.y + o.y, null, null)
+			print("제단 %s · 보는 쪽 %s · 주민 자리 %s" % [v.altar_pos, tw, offs])
+			_settle()
+			_wait = 10
+		4:
+			_save("s2_altar_people")
+			_look(scene.village.altar_pos, CLOSE)
+			_settle()
+			_wait = 12
+			step = 29
+		30:
+			_save("s2_altar_people_close")
+			if "altar" in OS.get_cmdline_user_args():   # 제단 장면까지만 (-- q19 altar)
+				return true
+			step = 4
+			# 방으로 — 방금 주운 것(맨 끝) 쪽으로 선반이 한 번 미끄러진다. 선반에 먼저 본 것 셋
+			var old := _recs(3)
+			for r: Dictionary in old:
+				r["seen"] = true
+			sm.player.souvenirs = old + sm.player.souvenirs
+			scene.cam.set_ext_zoom(scene.cam.ext_min())
+		5:
+			var g: ShelfGlide = scene.get("shelf_glide")
+			if not g.active or g.t / g.secs < 0.45:
+				if frame > 4000:
+					print("미끄러짐이 시작되지 않음")
+					return true
+				step -= 1
+				return false
+			_save("s2_glide_mid")
+			print("미끄러지는 중: %.2f → %.2f (지금 %.2f · %.2f초)" % [g.from, g.to, scene.cam.shelf_pan, g.t])
+		6:
+			if (scene.get("shelf_glide") as ShelfGlide).active:
+				step -= 1
+				return false
+			_wait = 30
+		7:
+			_save("s2_glide_end")
+			print("미끄러진 뒤: 선반 %.2f · 본 것 %s" % [scene.cam.shelf_pan, sm.player.souvenirs.map(func(r: Dictionary) -> bool: return GiantState.is_seen(r))])
+			_unseen_room(4)
+			_wait = 30
+		8:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.5)
+			_wait = 1
+		9:
+			_twinkle_info()
+			_save("s2_room_twinkle_right")
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(1.0)
+			_wait = 6
+		10:
+			_twinkle_info()
+			_save("s2_room_twinkle_rest")
+			_unseen_room(30, 1)
+			_wait = 30
+		11:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.5)
+			_wait = 1
+		12:
+			_twinkle_info()
+			_save("s2_room_twinkle_left")
+			_unseen_room(30)
+			_wait = 30
+		13:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.5)
+			_wait = 1
+		14:
+			_twinkle_info()
+			_save("s2_room_twinkle_both")
+			_pan(scene.room_zoom.room, scene.cam, 0)
+			_wait = 30
+		15:
+			_save("s2_shelf_back_right")
+			_pan(scene.room_zoom.room, scene.cam, 1)
+			_wait = 30
+		16:
+			_save("s2_shelf_back_left")
+			sm.player.souvenirs = []
+			_to_village_view()
+			scene.open_shelf()
+			_wait = 30
+		17:
+			_save("s2_sheet_zero")
+			sm.player.souvenirs = _recs(4)
+			scene.shelf_sheet.close()
+			scene.shelf_sheet.open()
+			_wait = 30
+		18:
+			_save("s2_sheet_four")
+			sm.player.souvenirs = _recs(23)
+			scene.shelf_sheet.close()
+			scene.shelf_sheet.open()
+			_wait = 30
+		19:
+			_save("s2_sheet_many")
+			print("시트 쪽지 열림 %s" % scene.shelf_sheet.open_souvenir(9))
+			_wait = 20
+		20:
+			_save("s2_sheet_note")
+			print("쪽지: ", SouvenirNote.lines(scene.shelf_sheet.souvenir_note.shown))
+			scene.shelf_sheet.close()
+			sm.player.souvenirs = _recs(7)
+			sm.player.souvenir_glide = ""
+			sm.save_all(true)
+			root.remove_child(scene)
+			scene.queue_free()
+			scene = load(StartFlow.TITLE_SCENE).instantiate()
+			root.add_child(scene)
+			_wait = 120
+		21:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.5)
+			_wait = 1
+		22:
+			_twinkle_info()
+			_save("s2_title_twinkle")
+			print("타이틀: 반짝임을 누름 → 미끄러짐 %s" % scene.call("glide_to_side", 1))
+		23:
+			if (scene.get("shelf_glide") as ShelfGlide).active:
+				step -= 1
+				return false
+			_wait = 30
+		24:
+			_save("s2_title_glided")
+			_sheet(ORDER2, "s2_sheet")
+			return true
+	return false
+
+
+## 모아 보기 (6칸씩 — 0.4배)
+func _sheet(order: Array, out_name: String) -> void:
 	var imgs: Array[Image] = []
-	for nm: String in ORDER:
+	for nm: String in order:
 		var p := out_dir.path_join(nm + ".png")
 		if FileAccess.file_exists(p):
 			var img := Image.load_from_file(p)
@@ -435,5 +648,5 @@ func _sheet() -> void:
 	sheet.fill(Color("1e1f2a"))
 	for i in imgs.size():
 		sheet.blit_rect(imgs[i], Rect2i(0, 0, 216, 384), Vector2i(8 + (i % cols) * 224, 8 + (i / cols) * 392))
-	sheet.save_png(out_dir.path_join("s1_sheet.png"))
-	print("saved s1_sheet (%d장)" % imgs.size())
+	sheet.save_png(out_dir.path_join(out_name + ".png"))
+	print("saved %s (%d장)" % [out_name, imgs.size()])

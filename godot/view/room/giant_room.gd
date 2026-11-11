@@ -610,8 +610,11 @@ const SOUV_ROWS := [6.6, 3.4]              # 앞줄 · 뒷줄 (z, cm — 선반 
 const SOUV_PITCH := 3.0
 const SOUV_GAP := 0.15                     # 피할 것과의 틈
 const SOUV_EDGE := 0.6                     # 선반 판 끝에서
+const SOUV_STAND := Color("a8744a")         # (Q19) 뒷줄 받침 나무토막 색 (선반보다 조금 짙게)
 var souvenirs: Array = []                  # [{node, slot, rec}] — 지금 선반에 선 것 (rec = 거인 저장의 기념품 기록; 더미는 {})
+var souvenir_side: Array = []              # (Q19) 기념품마다 선 쪽 (+1 오른쪽 · −1 왼쪽 · 0 못 세움 — 더미에 든 것은 더미 쪽). set_souvenirs가 채움
 var _souv_sig := ""
+var _stand_mat: StandardMaterial3D
 
 
 ## (x, z)에 반너비 hw인 그림을 세울 수 있나 — 병·등불 길·소품·옆 병·선반 끝 (시험 tests/souvenir_tests.gd (h)와 같은 기준 + 틈)
@@ -654,8 +657,9 @@ static func souvenir_spots(xs: Array) -> Array:
 	return out
 
 
-## 기념품 n개의 자리 → [{"x", "z", "w", "h", "pile", "i"}] (cm — 선반 윗면, 병 = 원점). i = 몇 번째 기념품 (오래된 것 0; 더미는 -1).
+## 기념품 n개의 자리 → [{"x", "z", "y", "w", "h", "pile", "i"}] (cm — 선반 윗면, 병 = 원점). i = 몇 번째 기념품 (오래된 것 0; 더미는 -1).
 ## 다 놓을 수 있으면 오래된 것부터 병 가까이. 넘치면 새것부터 (자리 수 − 1)개를 놓고 마지막 자리에 '…' 더미 하나. 순수 함수
+## (Q19) y = 발밑 높이: 뒷줄은 작은 받침 위에 (Balance.SOUVENIR_BACK_LIFT) — 앞줄에 가리지 않게
 static func souvenir_layout(n: int, neighbour_xs: Array) -> Array:
 	var out: Array = []
 	if n <= 0:
@@ -667,11 +671,64 @@ static func souvenir_layout(n: int, neighbour_xs: Array) -> Array:
 	var shown := mini(n, spots.size() - 1) if over else n
 	for k in shown:
 		var at: Vector2 = spots[k]
-		out.append({"x": at.x, "z": at.y, "w": SOUV_W, "h": SOUV_H, "pile": false, "i": (n - shown + k) if over else k})
+		out.append({"x": at.x, "z": at.y, "y": _row_lift(at.y), "w": SOUV_W, "h": SOUV_H, "pile": false, "i": (n - shown + k) if over else k})
 	if over:
 		var last: Vector2 = spots[shown]
-		out.append({"x": last.x, "z": last.y, "w": SOUV_W, "h": SOUV_H, "pile": true, "i": -1})
+		out.append({"x": last.x, "z": last.y, "y": _row_lift(last.y), "w": SOUV_W, "h": SOUV_H, "pile": true, "i": -1})
 	return out
+
+
+static func _row_lift(z: float) -> float:
+	return Balance.SOUVENIR_BACK_LIFT if z < float(SOUV_ROWS[0]) - 0.01 else 0.0
+
+
+## (Q19) 기념품 n개가 저마다 선 쪽 (+1 오른쪽 · −1 왼쪽 · 0 = 세울 자리 없음) — 더미('…')에 든 오래된 것은 더미가 선 쪽. 순수 함수
+static func sides_of(n: int, slots: Array) -> Array:
+	var out: Array = []
+	out.resize(n)
+	out.fill(0)
+	var pile_side := 0
+	for s: Dictionary in slots:
+		var sd := 1 if float(s["x"]) > 0.0 else -1
+		if bool(s["pile"]):
+			pile_side = sd
+		elif int(s["i"]) >= 0 and int(s["i"]) < n:
+			out[int(s["i"])] = sd
+	if pile_side != 0:
+		var first := n
+		for s: Dictionary in slots:
+			if not bool(s["pile"]):
+				first = mini(first, int(s["i"]))
+		for i in mini(first, n):
+			out[i] = pile_side
+	return out
+
+
+## (Q19) 아직 안 본 기념품이 선 쪽마다 그 key들 → {1: [...], -1: [...]} (list = 거인 저장의 기념품 기록, set_souvenirs에 준 것과 같은 것)
+func unseen_sides(list: Array) -> Dictionary:
+	var out := {1: [], -1: []}
+	for i in mini(list.size(), souvenir_side.size()):
+		var sd := int(souvenir_side[i])
+		if sd == 0 or not (list[i] is Dictionary) or GiantState.is_seen(list[i]):
+			continue
+		(out[sd] as Array).append(String((list[i] as Dictionary).get("key", "")))
+	return out
+
+
+## (Q19) 그쪽(+1 오른쪽 · −1 왼쪽) 기념품 무리 앞에 멈출 자리 (cm) — 없으면 0
+func stop_for(side: int) -> float:
+	for x: float in souvenir_stops():
+		if x * float(side) > 0.0:
+			return x
+	return 0.0
+
+
+## (Q19) key의 기념품이 선 쪽 (없으면 0)
+func side_of_key(list: Array, key: String) -> int:
+	for i in mini(list.size(), souvenir_side.size()):
+		if list[i] is Dictionary and String((list[i] as Dictionary).get("key", "")) == key:
+			return int(souvenir_side[i])
+	return 0
 
 
 ## 선반에 기념품을 세운다 (list = 거인 저장의 기념품 기록들, 오래된 것부터). 달라졌을 때만 다시 만든다
@@ -689,17 +746,34 @@ func set_souvenirs(list: Array) -> void:
 	for e: Dictionary in souvenirs:
 		(e["node"] as Node).queue_free()
 	souvenirs.clear()
+	souvenir_side = []
 	if root == null:
 		return
-	for s: Dictionary in souvenir_layout(list.size(), xs):
+	var slots := souvenir_layout(list.size(), xs)
+	souvenir_side = sides_of(list.size(), slots)
+	for s: Dictionary in slots:
 		var pile := bool(s["pile"])
 		var rec: Dictionary = {}
 		if not pile and list[int(s["i"])] is Dictionary:
 			rec = list[int(s["i"])]
 		var n := Node3D.new()
 		n.name = "Souvenir_%s" % ("more" if pile else String(rec.get("id", "")))
-		n.position = Vector3(float(s["x"]), 0.0, float(s["z"]))
+		var lift := float(s.get("y", 0.0))
+		n.position = Vector3(float(s["x"]), lift, float(s["z"]))
 		root.add_child(n)
+		if lift > 0.0:                                           # (Q19) 뒷줄: 작은 나무 받침 위에 (앞줄 위로 올라와 보인다)
+			if _stand_mat == null:
+				_stand_mat = StandardMaterial3D.new()
+				_stand_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+				_stand_mat.albedo_color = SOUV_STAND
+			var st := MeshInstance3D.new()
+			var bm := BoxMesh.new()
+			bm.size = Vector3(float(s["w"]) * 0.86, lift, 1.7)
+			st.mesh = bm
+			st.material_override = _stand_mat
+			st.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			st.position = Vector3(0.0, -lift * 0.5, 0.0)
+			n.add_child(st)
 		var sp := Sprite3D.new()
 		sp.texture = SouvenirView.pic_texture("more" if pile else String(rec.get("id", "")))
 		sp.pixel_size = float(s["h"]) / 192.0
@@ -719,8 +793,8 @@ func set_souvenirs(list: Array) -> void:
 			mi.mesh = pm
 			mi.material_override = blob_mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mi.position = Vector3(0.0, 0.07, 0.0)
-			mi.scale = Vector3(float(s["w"]) * 0.85, 1.0, float(s["w"]) * 0.42)
+			mi.position = Vector3(0.0, 0.07 - lift, 0.0 if lift <= 0.0 else 0.5)
+			mi.scale = Vector3(float(s["w"]) * 0.85, 1.0, float(s["w"]) * (0.42 if lift <= 0.0 else 0.8))
 			n.add_child(mi)
 		_set_layers(n)
 		souvenirs.append({"node": n, "slot": s, "rec": rec})
@@ -734,11 +808,12 @@ func pick_souvenir(cam: Camera3D, sp: Vector2) -> Dictionary:
 	var bd := INF
 	for e: Dictionary in souvenirs:
 		var s: Dictionary = e["slot"]
-		var mid := cm(Vector3(float(s["x"]), float(s["h"]) * 0.5, float(s["z"])))
+		var y0 := float(s.get("y", 0.0))
+		var mid := cm(Vector3(float(s["x"]), y0 + float(s["h"]) * 0.5, float(s["z"])))
 		if cam.is_position_behind(mid):
 			continue
 		var c := cam.unproject_position(mid)
-		var top := cam.unproject_position(cm(Vector3(float(s["x"]), float(s["h"]), float(s["z"]))))
+		var top := cam.unproject_position(cm(Vector3(float(s["x"]), y0 + float(s["h"]), float(s["z"]))))
 		var r := maxf(22.0, c.distance_to(top) * 1.25)
 		var d := c.distance_to(sp)
 		if d < r and d < bd:
@@ -776,4 +851,15 @@ func souvenir_screen_pos(cam: Camera3D, i: int) -> Vector2:
 	if i < 0 or i >= souvenirs.size():
 		return Vector2(-1, -1)
 	var s: Dictionary = souvenirs[i]["slot"]
-	return cam.unproject_position(cm(Vector3(float(s["x"]), float(s["h"]) * 0.5, float(s["z"]))))
+	return cam.unproject_position(cm(Vector3(float(s["x"]), float(s.get("y", 0.0)) + float(s["h"]) * 0.5, float(s["z"]))))
+
+
+## (Q19) 기념품이 선 높이의 화면 y (가장자리 반짝임 자리 — 선반 높이). pan = 지금 선반을 민 만큼 (cm):
+## 선반을 그쪽으로 밀면 기념품 무리가 지금 이 점이 보이는 높이에 온다. 화면 뒤면 -1
+func souvenir_edge_y(cam: Camera3D, pan := 0.0) -> float:
+	if root == null:
+		return -1.0
+	var p := cm(Vector3(pan, SOUV_H * 0.6, float(SOUV_ROWS[0])))
+	if cam.is_position_behind(p):
+		return -1.0
+	return cam.unproject_position(p).y

@@ -22,6 +22,8 @@ const STONE1 := Vector2(0.95, 0.95)
 const STONE_TOP := 0.2                # 돌 윗면 높이 (돌 그림 높이에 견줘) — 기념품이 여기 얹힌다
 const K_STONE := 3.0                  # 멀리서 키우는 상한 (돌 위)
 const K_ALTAR := 2.5                  # 제단 위 (제단보다 커 보이지 않게)
+const K_ALTAR_FAR := 4.0              # (Q19) 멀리서는 여기까지 — 화면에서 Balance.SOUVENIR_ALTAR_MIN_PX는 되게 (기본 확대에서 20px → 30px)
+const ALTAR_HOVER := 1.2              # (Q19) 그렇게 커진 만큼 제단 그림 위로 떠오른다 (칸 — 가장 커졌을 때. 가까이서는 윗돌 위 그대로) → 제단 그림·제물을 덮지 않는다
 const ALTAR_PITCH := 0.38
 const ALTAR_FRONT := 0.3               # 제단 윗돌의 앞쪽 가장자리에 (보는 쪽으로)
 const ALTAR_DEPTH := 2.2               # 제단 그림 판·제물 더미 앞에 그려지게: 보는 쪽으로 이만큼 당기고 그만큼 올림 → 화면 자리는 그대로, 깊이만 앞으로 (altar_view._rebuild_pile과 같은 방법)
@@ -130,8 +132,34 @@ func _cam_toward() -> Vector3:
 
 
 ## 지금 크기 배율 (멀리서도 읽히게 — 고비 장식과 같은 규칙)
+## (Q19) 제단 위: 화면에서 적어도 SOUVENIR_ALTAR_MIN_PX — 기본 확대(한 칸 16px)에서 20px이던 것이 30px
 func k_now() -> float:
-	return MilestoneView.sign_k(_ppu(), ITEM, K_ALTAR if _where == "altar" else K_STONE)
+	if _where != "altar":
+		return MilestoneView.sign_k(_ppu(), ITEM, K_STONE)
+	return altar_k(_ppu())
+
+
+static func altar_k(ppu: float) -> float:
+	var k := MilestoneView.sign_k(ppu, ITEM, K_ALTAR)
+	var need := Balance.SOUVENIR_ALTAR_MIN_PX / (ITEM * maxf(ppu, 1.0))
+	return snappedf(clampf(maxf(k, need), 1.0, K_ALTAR_FAR), 0.05)
+
+
+## (Q19) 제단 위에서 커진 만큼 떠오르는 높이 (칸 — 화면 세로). 가까이(k ≤ K_ALTAR)서는 0
+static func altar_hover(k: float) -> float:
+	return ALTAR_HOVER * clampf((k - K_ALTAR) / (K_ALTAR_FAR - K_ALTAR), 0.0, 1.0)
+
+
+## (Q19) 제단 위에서 나란히 놓는 간격의 배율 — 커진 몫은 덜 벌린다 (제단 폭을 크게 넘지 않게)
+static func altar_spread(k: float) -> float:
+	return minf(k, K_ALTAR) + maxf(0.0, k - K_ALTAR) * 0.4
+
+
+## 발밑을 올리는 높이 (칸 — 화면 세로): 돌 윗면 / 제단 위로 떠오름
+func _lift(k: float) -> float:
+	if _stone != null:
+		return (STONE1 if _slots.size() == 1 else STONE3).y * STONE_TOP * k
+	return altar_hover(k) if _where == "altar" else 0.0
 
 
 func _process(dt: float) -> void:
@@ -200,17 +228,17 @@ func _layout() -> void:
 	var front := Vector3.ZERO
 	if _where == "altar":
 		front = _cam_toward() * (ALTAR_FRONT + ALTAR_DEPTH) + Vector3(0.0, ALTAR_DEPTH * tan(deg_to_rad(JarCamera.PITCH_DEG)), 0.0)
-	var lift := 0.0
+	var lift := _lift(k)
+	var spread := altar_spread(k) if _where == "altar" else k
 	if _stone != null:
 		var sz: Vector2 = STONE1 if _slots.size() == 1 else STONE3
 		_stone.position = _base
 		_stone.set_instance_shader_parameter("geo", Vector4(sz.x, sz.y, 0.0, 0.0))
 		_stone.set_instance_shader_parameter("fx", Vector4(k, k, 0.0, 0.0))
-		lift = sz.y * STONE_TOP * k
 	for s: Dictionary in _slots:
 		var n: MeshInstance3D = s["node"]
 		var sc := k * (MORE_K if String(s["id"]) == "more" else 1.0)
-		n.position = _base + front + right * float(s["dx"]) * k
+		n.position = _base + front + right * float(s["dx"]) * spread
 		n.set_instance_shader_parameter("geo", Vector4(ITEM, ITEM, 0.0, 0.25 if _where == "stone" else 0.6))
 		n.set_instance_shader_parameter("fx", Vector4(sc, sc, 0.0, lift))
 
@@ -222,9 +250,7 @@ func screen_rects(camera: Camera3D) -> Array:
 		return out
 	var k := k_now()
 	var ppu := _ppu()
-	var lift := 0.0
-	if _stone != null:
-		lift = (STONE1 if _slots.size() == 1 else STONE3).y * STONE_TOP * k
+	var lift := _lift(k)
 	for s: Dictionary in _slots:
 		var n: MeshInstance3D = s["node"]
 		if camera.is_position_behind(n.global_position):

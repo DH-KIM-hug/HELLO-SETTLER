@@ -1,5 +1,7 @@
 ## 선반 시트 — docs/UI.md 화면 05 · 기획서 12 · 5.5 · BALANCE v3-4 통합표 (ROADMAP C1). 거인의 방 선반과 같은 곳 (GIANT_ROOM 1).
 ##   병들: 선반의 병마다 카드 (이름 · n일째 · 시대 · 인구 · 기후) + [들어가기] (지금 보는 병은 '지금 보는 병'). 사 둔 빈 병은 [만들기]
+##   기념품 (Q19): 병 목록 바로 아래 — 주워 온 기념품이 작은 그림으로 (주운 차례, 여러 줄). 누르면 선반의 것과 같은 종이 쪽지
+##     (무엇 · 어느 지구 · 병 며칠째 · 누가). 없으면 조용한 한 줄. 개수·진행도·보상 말 없음
 ##   새 병: 다음 병까지 지폐 진행도 → [새 병 사기 6,000] (세 번째 30,000 · 네 번째부터 80,000) · 기후 고르기 (지금은 온대 — "다른 기후는 곧")
 ##   거인의 등불: 비운 동안 흐르는 시간 12 → 16 → 20 → 24시간 (SAVE.md 3 — 2,000 · 6,000 · 15,000)
 ##   키트 업그레이드: 밀밭 1,000 · 목조 주택 6,000 · 가족 하나 더 8,000/12,000 · 암반 컵 하나 더 4,000 — 그 건물을 지어 본 뒤 열림, 산 것은 끄고 켬
@@ -18,6 +20,9 @@ const SHEET_FRAC := 0.72
 var panel: PanelContainer
 var jars_box: VBoxContainer
 var buy_box: VBoxContainer
+var souv_box: VBoxContainer             # [기념품 Q19] 주워 온 기념품 (그림 줄 또는 조용한 한 줄)
+var souv_flow: HFlowContainer           # 지금 그려 둔 그림 줄 (없으면 null)
+var souvenir_note: SouvenirNote         # 그림을 누르면 뜨는 쪽지 (선반의 것과 같은 것 — view/room/souvenir_note.gd)
 var lamp_box: VBoxContainer
 var kit_box: VBoxContainer
 var notes_l: Label
@@ -66,6 +71,18 @@ func _init() -> void:
 	scroll.add_child(body)
 	_section(body, "선반", "선반의 병들")
 	jars_box = _box(body)
+	var sh := HBoxContainer.new()                     # [기념품 Q19] 병 목록 바로 아래
+	body.add_child(sh)
+	var si := TextureRect.new()
+	si.texture = SouvenirView.pic_texture("more")
+	si.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	si.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	si.custom_minimum_size = Vector2(26, 26)
+	si.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	si.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	sh.add_child(si)
+	_label(sh, "기념품", "Section").size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	souv_box = _box(body)
 	buy_box = _box(body)
 	body.add_child(HSeparator.new())
 	_section(body, "등불", "별지기의 등불")
@@ -87,6 +104,8 @@ func _init() -> void:
 	confirm = ConfirmSheet.new()
 	add_child(confirm)
 	confirm.answered.connect(_on_confirm)
+	souvenir_note = SouvenirNote.new()                # 맨 위에 (시트 어디를 눌러도 닫히기만)
+	add_child(souvenir_note)
 
 
 func _ready() -> void:
@@ -193,6 +212,7 @@ func close() -> void:
 		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
 	confirm.visible = false
+	souvenir_note.close()
 	closed.emit()
 
 
@@ -218,11 +238,12 @@ func _refresh() -> void:
 	star_l.text = "별생활 %d일째" % s.star_days() if s != null else ""
 	star_l.visible = star_l.text != ""
 	var shelf: Array = s.shelf_list() if s != null else []
-	var sig := "%d|%d|%s|%s|%s|%s" % [int(Market.notes), Market.lamp_level, str(shelf), str(s.giant if s != null else {}), climate, _cur()]
+	var sig := "%d|%d|%s|%s|%s|%s|%s" % [int(Market.notes), Market.lamp_level, str(shelf), str(s.giant if s != null else {}), climate, _cur(), _souvenir_sig()]
 	if sig == _sig:
 		return
 	_sig = sig
 	_fill_jars(s, shelf)
+	_fill_souvenirs()
 	_fill_buy(s, shelf)
 	_fill_lamp()
 	_fill_kits(s)
@@ -275,6 +296,68 @@ func _fill_jars(s: GameSave, shelf: Array) -> void:
 func _enter(id: int) -> void:
 	GameAudio.ui_click()
 	enter_requested.emit(id)
+
+
+# ───────────────────────── 기념품 (Q19) ─────────────────────────
+const SOUVENIR_EMPTY := "아직 없어요. 마을이 고비를 넘으면 작은 것이 하나씩 놓여요."
+
+
+## 별지기가 주워 온 기념품 (거인 저장 — 주운 차례, 오래된 것부터). 저장 계통이 없으면 빈 것
+func souvenir_list() -> Array:
+	var s := _sm()
+	return s.player.souvenirs if s != null else []
+
+
+func _souvenir_sig() -> String:
+	var out := ""
+	for r: Variant in souvenir_list():
+		if r is Dictionary:
+			out += String((r as Dictionary).get("key", (r as Dictionary).get("id", ""))) + ","
+	return out
+
+
+func _fill_souvenirs() -> void:
+	_clear(souv_box)
+	souv_flow = null
+	var list := souvenir_list()
+	if list.is_empty():
+		var l := _label(souv_box, SOUVENIR_EMPTY, "Small")
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		return
+	souv_flow = HFlowContainer.new()
+	souv_flow.add_theme_constant_override("h_separation", 6)
+	souv_flow.add_theme_constant_override("v_separation", 6)
+	souv_box.add_child(souv_flow)
+	var px := Balance.SOUVENIR_SHEET_PIC
+	for i in list.size():
+		if not (list[i] is Dictionary):
+			continue
+		var rec: Dictionary = list[i]
+		var b := TextureButton.new()
+		b.name = "Souvenir%d" % i
+		b.texture_normal = SouvenirView.pic_texture(String(rec.get("id", "")))
+		b.ignore_texture_size = true
+		b.stretch_mode = TextureButton.STRETCH_KEEP_ASPECT_CENTERED
+		b.custom_minimum_size = Vector2(px, px)
+		b.focus_mode = Control.FOCUS_NONE
+		b.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		b.pressed.connect(open_souvenir.bind(i))
+		souv_flow.add_child(b)
+
+
+## 그림을 누름 → 선반의 것과 같은 작은 쪽지 (무엇 · 어느 지구 · 병 며칠째 · 누가). 열었으면 true
+func open_souvenir(i: int) -> bool:
+	var list := souvenir_list()
+	if i < 0 or i >= list.size() or not (list[i] is Dictionary):
+		return false
+	var at := get_viewport_rect().size * 0.5 if is_inside_tree() else Vector2(180, 320)
+	if souv_flow != null:
+		var b := souv_flow.get_node_or_null("Souvenir%d" % i) as Control
+		if b != null:
+			at = b.global_position + Vector2(b.size.x * 0.5, 28.0)      # 쪽지는 누른 자리 34px 위에 뜬다 → 그림 바로 위에 붙게
+	GameAudio.fx("glass_tap_light", "Room", -12.0)
+	souvenir_note.open(list[i], at)
+	return true
 
 
 # ───────────────────────── 새 병 사기 ─────────────────────────

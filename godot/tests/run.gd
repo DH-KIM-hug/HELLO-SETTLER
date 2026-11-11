@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily", "nest"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily", "nest", "souvenirs"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 

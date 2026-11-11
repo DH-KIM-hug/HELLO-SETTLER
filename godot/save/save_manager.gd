@@ -355,7 +355,8 @@ func giant_payload() -> Dictionary:
 		"lamp_level": Market.lamp_level, "hand": Market.hand.duplicate(true), "hand_serial": Market.hand_serial, "jars": jl, "current": current, "first_jar_done": bool(giant.get("first_jar_done", not jars.is_empty())),
 		"draws": Market.draws_dict(), "upgrades": giant.get("upgrades", []).duplicate(), "upgrades_off": giant.get("upgrades_off", []).duplicate(),
 		"built": giant.get("built", []).duplicate(), "pending_jar": giant.get("pending_jar", {}).duplicate(),
-		"climates": giant.get("climates", []).duplicate(), "firsts": player.firsts.to_dict(), "souvenirs": player.souvenirs.duplicate(true), "last_save_unix": Time.get_unix_time_from_system(),
+		"climates": giant.get("climates", []).duplicate(), "firsts": player.firsts.to_dict(), "souvenirs": player.souvenirs.duplicate(true),
+		"souvenir_glide": player.souvenir_glide, "souvenir_hint": player.souvenir_hint, "last_save_unix": Time.get_unix_time_from_system(),
 		"star_since_unix": star_since()}
 
 
@@ -520,9 +521,54 @@ func take_souvenir(v: Village, id: String) -> Dictionary:
 		"key": "%d:%d:%s" % [jid, int(meta.get("created_unix", 0)), id]}      # 병 자리 + 병을 만든 현실 시각 + 고비
 	if not String(got.get("name", "")).is_empty():
 		rec["maker"] = String(got["name"])
-	player.add_souvenir(rec)
+	player.pick_up(rec)                  # (Q19) 다음에 방이 보이면 선반이 그쪽으로 한 번 · 맨 처음이면 한 줄
 	giant_action(v)
 	return rec
+
+
+## (Q19) 선반을 그쪽으로 밀어 본 기념품을 '본 것'으로 (병 안 — 방 ⑤에서). 거인 묶음만 뒤 스레드로 적는다:
+## 병·경이·두려움·손길 사건은 건드리지 않는다 (giant_action이 아니다)
+func mark_souvenirs_seen(keys: Array) -> bool:
+	if not player.mark_seen(keys):
+		return false
+	if enabled and not order.is_empty():
+		save_giant(false)
+	return true
+
+
+## (Q19) 미끄러지기 시작했다 → 같은 기념품으로 다시 미끄러지지 않게 비우고 거인 묶음에 적는다
+func clear_souvenir_glide() -> void:
+	if player.souvenir_glide.is_empty():
+		return
+	player.souvenir_glide = ""
+	if enabled and not order.is_empty():
+		save_giant(false)
+
+
+## (Q19) 타이틀에서 선반을 밀어 본 기념품 — 병을 불러오지 않은 채라 거인 묶음 파일의 그 칸만 고쳐 적는다
+## (last_save_unix·병 목록·지폐는 그대로 — 자리를 비운 시간 계산이 달라지지 않는다). 옛 형식 파일은 건드리지 않는다. 고쳤으면 true
+func mark_souvenirs_seen_on_disk(keys: Array) -> bool:
+	if not enabled or keys.is_empty() or not jars.is_empty():
+		return false
+	flush()
+	var r := SaveFile.read_best(_base("giant"))
+	if not r["ok"] or not (r["payload"] is Dictionary) or int(r.get("version", -1)) != SaveFile.FORMAT:
+		return false
+	var gp: Dictionary = r["payload"]
+	var list: Variant = gp.get("souvenirs", null)
+	if not (list is Array):
+		return false
+	var changed := false
+	for s: Variant in list:
+		if s is Dictionary and not GiantState.is_seen(s) and String((s as Dictionary).get("key", "")) in keys:
+			(s as Dictionary)["seen"] = true
+			changed = true
+	if not changed:
+		return false
+	player.mark_seen(keys)               # 기억 속 것도 같이 (이미 불러 둔 판이면)
+	_slots["giant"] = {"slot": r["slot"], "seq": r["seq"]}
+	_enqueue("giant", gp, true)
+	return true
 
 
 func _jar_of(v: Village) -> int:

@@ -30,6 +30,9 @@ var gear: Button
 var settings_sheet: SettingsSheet
 var souvenir_note: SouvenirNote
 var _held := false                     # 누르고 있는 중 (선반 밀기)       # [기념품 Q17] 선반의 기념품을 누르면 뜨는 쪽지 (view/room/souvenir_note.gd)
+var shelf_glide := ShelfGlide.new()    # (Q19) 가장자리 반짝임을 누르면 선반이 그쪽으로 미끄러진다 (타이틀은 저절로 미끄러지지 않는다)
+var shelf_twinkle: ShelfTwinkle        # (Q19) 아직 안 본 기념품이 선 쪽 화면 가장자리의 반짝임
+var _glide_stop_at := 0.0
 var info := {}                        # StartFlow.button_info
 var entering := false
 var _idle := 0.0
@@ -144,6 +147,9 @@ func _build_ui() -> void:
 	ui.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	ui.theme = UiTheme.get_theme()
 	add_child(ui)
+	shelf_twinkle = ShelfTwinkle.new()             # (Q19) 가장자리 반짝임 — 버튼·제목 아래 층
+	ui.add_child(shelf_twinkle)
+	shelf_twinkle.tapped.connect(glide_to_side)
 	var night := room.tod == "night"
 	var ink := Color("fbf3e0") if night else UiTheme.INK
 	var shadow := Color(0.08, 0.07, 0.12, 0.55) if night else Color(1, 0.98, 0.92, 0.85)
@@ -287,7 +293,16 @@ func _shelf_step(dt: float) -> void:
 		lo = minf(lo, x)
 		hi = maxf(hi, x)
 	cam.shelf_range = Vector2(lo, hi) if lo < hi else Vector2.ZERO
-	if _held:
+	if shelf_glide.active:                         # (Q19) 반짝임을 눌러 미끄러지는 중 — 누르면 그 자리에 멈춘다
+		if _held:
+			stop_shelf_glide()
+		else:
+			cam.shelf_pan = clampf(shelf_glide.step(dt), lo, hi)
+			cam._apply()
+	elif shelf_glide.held and absf(cam.shelf_pan - _glide_stop_at) > 0.05:
+		shelf_glide.release()                      # 멈춘 뒤 다시 끌었다 → 손을 떼면 평소처럼 가까운 자리로
+	_shelf_seen_step()
+	if _held or shelf_glide.active or shelf_glide.held:
 		return
 	var goal := 0.0
 	for x: float in stops:
@@ -297,6 +312,65 @@ func _shelf_step(dt: float) -> void:
 		var np := lerpf(cam.shelf_pan, goal, 1.0 - exp(-10.0 * dt))
 		cam.shelf_pan = goal if absf(np - goal) < 0.02 else np
 		cam._apply()
+
+
+## (Q19) 그쪽(+1 오른쪽 · −1 왼쪽) 기념품 무리 앞으로 선반이 미끄러진다 (가장자리 반짝임을 눌렀을 때). 시작했으면 true
+func glide_to_side(side: int) -> bool:
+	if entering or side == 0:
+		return false
+	var goal := room.stop_for(side)
+	if goal == 0.0 or (shelf_glide.active and is_equal_approx(shelf_glide.to, goal)):
+		return false
+	_idle = 0.0
+	cam.shelf_pan = shelf_glide.start(cam.shelf_pan, goal, JarCamera.reduce_motion())
+	cam._apply()
+	return true
+
+
+func stop_shelf_glide() -> void:
+	if shelf_glide.active:
+		shelf_glide.stop()
+		_glide_stop_at = cam.shelf_pan
+
+
+## (Q19) 선반이 그쪽 무리 앞에 와 있으면 그쪽 기념품은 '본 것' — 타이틀은 병을 불러오지 않은 채라 거인 묶음 파일의 그 칸만
+## 고쳐 적는다 (GameSave.mark_souvenirs_seen_on_disk — 비운 시간·병·지폐는 그대로). 가운데 자리(병 앞)에서 아직 안 본 쪽이 있으면
+## 그쪽 화면 가장자리, 선반 높이에 작은 반짝임 (제목 아래 · 버튼 위)
+func _shelf_seen_step() -> void:
+	if shelf_twinkle == null:
+		return
+	var list: Array = info.get("souvenirs", [])
+	var un := room.unseen_sides(list)
+	if not shelf_glide.active:
+		for side: int in [1, -1]:
+			var keys: Array = un[side]
+			var stop := room.stop_for(side)
+			if not keys.is_empty() and stop != 0.0 and absf(cam.shelf_pan - stop) < Balance.SOUVENIR_SEEN_NEAR:
+				mark_seen(keys)
+				un[side] = []
+	var right := not (un[1] as Array).is_empty()
+	var left := not (un[-1] as Array).is_empty()
+	if shelf_glide.active or absf(cam.shelf_pan) > 0.05 or not (right or left) or (settings_sheet != null and settings_sheet.visible):
+		shelf_twinkle.hide_all()
+		return
+	var vs := get_viewport().get_visible_rect().size
+	var y := room.souvenir_edge_y(cam.camera, cam.shelf_pan)
+	shelf_twinkle.still = JarCamera.reduce_motion()
+	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, title_box.position.y + title_box.size.y + 34.0, button.position.y - 34.0)
+
+
+## (Q19) 이 key의 기념품을 본 것으로 (타이틀의 목록 + 거인 묶음)
+func mark_seen(keys: Array) -> void:
+	for r: Variant in info.get("souvenirs", []):
+		if r is Dictionary and String((r as Dictionary).get("key", "")) in keys:
+			(r as Dictionary)["seen"] = true
+	var sm := GameSave.get_instance()
+	if sm == null:
+		return
+	if sm.jars.is_empty():
+		sm.mark_souvenirs_seen_on_disk(keys)
+	else:
+		sm.player.mark_seen(keys)                  # (병을 든 채 타이틀에 온 드문 경우 — 다음 거인 저장 때 함께 적힌다)
 
 
 ## 가만히 두면: 병 유리에 반짝임 한 번 (이어하기 — 병 안 마을이 손 흔드는 대신)
@@ -313,6 +387,10 @@ func _gui_input(e: InputEvent) -> void:
 		return
 	if e is InputEventMouseButton and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		_held = (e as InputEventMouseButton).pressed
+		if _held and shelf_glide.active:           # (Q19) 미끄러지는 중에 누르면 그 자리에 멈춤 (톡·쪽지 아님)
+			stop_shelf_glide()
+			_idle = 0.0
+			return
 	elif e is InputEventMouseMotion and _held and ((e as InputEventMouseMotion).button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 		cam.pan_pixels(Vector2((e as InputEventMouseMotion).relative.x, 0.0))        # 선반 밀기 (기념품이 있을 때만 폭이 있다)
 		_idle = 0.0
@@ -353,6 +431,9 @@ func enter() -> void:
 	if entering:
 		return
 	entering = true
+	shelf_glide.active = false
+	if shelf_twinkle != null:
+		shelf_twinkle.hide_all()
 	settings_sheet.close()
 	GameAudio.fx("fly_whoosh", "Room", -6.0)
 	var from := cam.ext_zoom()
