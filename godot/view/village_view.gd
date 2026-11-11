@@ -2847,3 +2847,13 @@ func _animate_fire() -> void:
 	_fire.visible = not hide_fire
 	_fire.position = Vector3(v.fire.x, gy(v.fire.x, v.fire.y), v.fire.y)
 	_fire.tick(get_process_delta_time() if is_inside_tree() else 0.0, v)   # [모닥불] 상태·일렁임·LOD (view/campfire.gd)
+
+
+## (E2-1 2차) 건물을 그린 노드 (없으면 null) — 다른 화면 코드가 _blds를 직접 읽지 않게
+func bld_node(id: int) -> Node3D:
+	return _blds.get(id)
+
+
+## (E2-1 2차) 그 집 앞마당 소품 [[모델, 건물 기준 Transform3D]…] (읽기만) — 다른 화면 코드가 _yard_xf를 직접 읽지 않게
+func yard_props(id: int) -> Array:
+	return _yard_xf.get(id, [])
