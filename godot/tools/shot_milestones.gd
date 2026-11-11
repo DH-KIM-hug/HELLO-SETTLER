@@ -23,6 +23,14 @@
 ##   m4_sheaf_near.png · m4_sheaf_far.png (창고 문 위 햇밀 다발 — 가까이 64 · 마을 20) · m4_green_feast.png (햇밀 잔치 — 작은 잔치) · m4_sheet.png
 ##   푸른 밀 고개는 도구가 '끝났다'고 적는다 (Village.stats lean_green_y · lean_green_end_y) — 알아차리고 다발을 걸고 잔치를 여는 것은 마을이 한다.
 ##   창고가 없으면 모닥불 곁 빈자리에 하나 세운다.
+## 결과 (m5 — Q15 잔치 화면 다듬기, 모두 도구가 차린 장면):
+##   m5_oldsave_post · m5_oldsave_far · m5_oldsave_pinwheel (조용히 넘은 병 — 도구가 조용한 기록을 적는다: 기둥은 모닥불 곁, 바람개비는 집 문 옆) ·
+##   m5_clap_close · m5_clap_near · m5_clap_far · m5_clap_bubble (첫걸음마 손뼉 — '짝' 금 · 두 손 그림 말풍선) ·
+##   m5_pinwheel_near · m5_pinwheel_far20 · m5_pinwheel_far16 · m5_pinwheel_far9 (바람개비 — 64 · 20 · 16 · 9) ·
+##   m5_feast_near · m5_feast_close · m5_feast_far (여느 잔치 — 빵 먹기 · 잔칫상 · 등) ·
+##   m5_evening_near · m5_evening_far20 · m5_evening_far16 · m5_evening_far9 (어두워진 뒤 — 등불 · 큰 불의 불티) ·
+##   m5_post_day (키 재는 기둥 — 낮) · m5_grown_near · m5_grown_close · m5_grown_far (첫 어른 잔치 — 기둥 옆에서 키 재기) ·
+##   m5_grown_vs_feast.png (여느 잔치 | 첫 어른 잔치 나란히) · m5_sheet.png (설명 글이 붙은 모아 보기)
 ## 저장 (2026-11-11 확인): 이 도구는 진짜 저장(user://save)을 읽지도 쓰지도 않는다 — 장면을 직접 띄우므로 저장을 쓰지 않는 병이고
 ##   (test_village.use_save = false), 그래도 틀리지 않게 저장 관리자를 끄고 폴더를 제 것(SAVE_DIR)으로 돌린다. 처음 겪는 일 안내 창의 대기 줄도
 ##   거인 묶음(저장 관리자의 player.firsts) 대신 이 도구만의 Firsts를 쓴다. 연대기 그림 카드(연출이 찍는 화면 — StageDirector)는
@@ -52,6 +60,11 @@ var baby: Resident
 var steps_at := 0.0
 var _tries := 0
 var _near: Array = []                                 # 첫걸음마 장면: 문 가까이에 둔 사람들 (어머니 먼저)
+var _q: Array = []                                    # (m5) 찍을 것들: [자리, 확대, 이름, 설명]
+var _q_phase := 0
+var _q_tries := 0
+var _labels := {}                                     # (m5) 그림 파일 → 모아 보기에 붙일 설명
+var _sheet_vp: SubViewport                            # (m5) 모아 보기를 그리는 그림판
 
 
 func _initialize() -> void:
@@ -59,7 +72,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	var args := OS.get_cmdline_user_args()
 	for a: String in args:
-		if a == "m3" or a == "m4":
+		if a == "m3" or a == "m4" or a == "m5":
 			mode = a
 		else:
 			crop_dir = a
@@ -209,8 +222,8 @@ func _process(_dt: float) -> bool:
 		_wait -= 1
 		return false
 	var v: Village = scene.village
-	if mode == "m3" or mode == "m4":
-		var r := _m3(v) if mode == "m3" else _m4(v)
+	if mode == "m3" or mode == "m4" or mode == "m5":
+		var r := _m3(v) if mode == "m3" else (_m4(v) if mode == "m4" else _m5(v))
 		if r == NEXT:
 			step += 1
 		return r == DONE
@@ -621,5 +634,276 @@ func _m4(v: Village) -> int:
 			_save("m4_strip_seven")
 			Sheet.make(shots, out_dir.path_join("m4_sheet.png"), 0.5)
 			print("sheet ", out_dir.path_join("m4_sheet.png"))
+			return DONE
+	return NEXT
+
+
+# ───────────────────────── m5 (Q15 — 잔치 화면 다듬기: 먹기 · 등·불티 · 첫 어른 잔치 · 바람개비 · 손뼉 · 조용히 넘은 병) ─────────────────────────
+## 찍고 설명 한 줄을 적어 둔다 (모아 보기에 그 글이 붙는다)
+func _cap(name: String, label: String) -> void:
+	_save(name)
+	_labels[out_dir.path_join(name + ".png")] = name + "\n" + label
+	var mv := _mv()
+	print("  m5: 먹는 몸짓 %d · 상 %s · 등 %d · 키 재기 %d (닿음 %s · 끈 %s) · 손뼉 %d · 그림 말풍선 %d · 불티 %s" % [mv.eaters(), mv.feast_table() != null, mv.lamps_lit(),
+		mv.star(), mv.star_there(), mv.ribbon_on(), mv.clappers(), mv.bub.items.size(), scene.view._fire.sparks.visible])
+
+
+## 찍을 것들([자리, 확대, 이름, 설명])을 차례로: 보기 맞춤 → 10화면 → 다시 맞춤 → 14화면 → 저장. 다 찍으면 true
+func _run_q() -> bool:
+	if _q.is_empty():
+		return true
+	var s: Array = _q[0]
+	match _q_phase:
+		0:
+			_look(s[0], float(s[1]))
+			_q_phase = 1
+			_wait = 10
+		1:
+			_settle()
+			_q_phase = 2
+			_wait = 14
+		2:
+			if s.size() > 4 and not _bub_showing(String(s[4])) and _q_tries < 500:     # 그 그림 말풍선이 또렷이 뜬 때를 기다림
+				_q_tries += 1
+				return false
+			_q_tries = 0
+			_cap(String(s[2]), String(s[3]))
+			_q.pop_front()
+			_q_phase = 0
+	return _q.is_empty()
+
+
+## 그 그림의 말풍선이 지금 또렷이 떠 있나 (뜨고 지는 사이의 가운데)
+func _bub_showing(pic: String) -> bool:
+	for it: Array in _mv().bub.items:
+		if String(it[1]) == pic and float(it[2]) > 0.25 and float(it[2]) < 0.6:
+			return true
+	return false
+
+
+## 지금 '짝' 금 그림이 또렷이 보이는 이웃이 있나 (손뼉 캡처의 때를 맞춤)
+func _clap_peak() -> bool:
+	for id: int in _mv()._claps:
+		var n := _mv()._claps[id] as MeshInstance3D
+		if n != null and n.visible and (n.get_instance_shader_parameter("fx") as Vector4).y > 0.8:
+			return true
+	return false
+
+
+## 카메라 쪽에 선 먹는 손님 (가까이 찍을 사람 — 없으면 모닥불)
+func _eater_at(v: Village) -> Vector2:
+	var best := v.fire
+	var score := -1.0e9
+	for p in v.people:
+		if p.action != "festival" or p.anim != "eat" or Vector2(p.x, p.y).distance_to(v.fire) > MilestoneView.DANCE_R:
+			continue
+		var alone := 2.0                              # 곁 사람에게 가려지지 않은 손님을 고른다
+		for o in v.people:
+			if o != p and not o.dead:
+				alone = minf(alone, Vector2(o.x - p.x, o.y - p.y).length())
+		var s := alone + 0.2 * (Vector2(p.x, p.y) - v.fire).dot(MilestoneView._front())
+		if s > score:
+			score = s
+			best = Vector2(p.x, p.y)
+	return best
+
+
+## 그림 여러 장을 설명 글과 함께 한 장으로 (cols 칸 · scale 배) — 따로 둔 그림판(SubViewport)에 놓는다. 몇 화면 뒤 _compose_save가 적는다
+func _compose(paths: PackedStringArray, cols: int, scale: float) -> void:
+	var cell := Vector2(540.0, 960.0) * scale
+	var cap_h := 36.0
+	var gap := 8.0
+	var rows := ceili(float(paths.size()) / float(cols))
+	var vp := SubViewport.new()
+	vp.size = Vector2i(int(float(cols) * (cell.x + gap) + gap), int(float(rows) * (cell.y + cap_h + gap) + gap))
+	vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	vp.disable_3d = true
+	var bg := ColorRect.new()
+	bg.color = Color("1e1f2a")
+	bg.size = Vector2(vp.size)
+	vp.add_child(bg)
+	for i in paths.size():
+		var img := Image.load_from_file(paths[i])
+		img.generate_mipmaps()
+		var tr := TextureRect.new()
+		tr.texture = ImageTexture.create_from_image(img)
+		tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		tr.stretch_mode = TextureRect.STRETCH_SCALE
+		tr.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+		tr.position = Vector2(gap + float(i % cols) * (cell.x + gap), gap + floorf(float(i) / float(cols)) * (cell.y + cap_h + gap) + cap_h)
+		tr.size = cell
+		vp.add_child(tr)
+		var lb := Label.new()
+		lb.text = String(_labels.get(paths[i], paths[i].get_file().get_basename()))
+		lb.position = tr.position - Vector2(0.0, cap_h)
+		lb.size = Vector2(cell.x, cap_h)
+		lb.clip_text = true
+		lb.add_theme_font_size_override("font_size", 12)
+		lb.add_theme_constant_override("line_spacing", 0)
+		lb.add_theme_color_override("font_color", Color("fff3d6"))
+		vp.add_child(lb)
+	root.add_child(vp)
+	_sheet_vp = vp
+
+
+func _compose_save(path: String) -> void:
+	_sheet_vp.get_texture().get_image().save_png(path)
+	print("sheet ", path, " ", _sheet_vp.size)
+	_sheet_vp.queue_free()
+	_sheet_vp = null
+
+
+func _m5(v: Village) -> int:
+	var fire := v.fire + Vector2(0.0, 0.4)
+	match step:
+		0:
+			if frame < 10:
+				root.size = Vector2i(540, 960)
+				return STAY
+			scene.set_debug_mode(false)
+			_advance_to(10.5)
+			scene.paused = true
+			# ⑥ 조용히 넘은 병 (차린 장면): 옛 저장을 처음 볼 때 마을이 적는 것과 같은 기록(Milestones._mark_silent)을 도구가 적는다 — 자리·집은 적히지 않는다
+			Milestones._mark_silent(v, "steps")
+			Milestones._mark_silent(v, "grown")
+			_look(fire, NEAR)
+			_settle()
+			var hm := MilestoneView.quiet_house(v)
+			print("조용히 넘은 병: 기록 ", (v.milestones["passed"] as Dictionary), " · 바람개비 집 ", hm.id if hm != null else -1, " · 장식 ", MilestoneView.wanted(v))
+			_q = [[fire, NEAR, "m5_oldsave_post", "⑥ 조용히 넘은 병 [차림]: 기둥이 모닥불 곁에 (44)"],
+				[(_spot("steps") + _spot("grown")) * 0.5, FAR, "m5_oldsave_far", "⑥ 조용히 넘은 병 [차림]: 기둥 + 바람개비 (20)"],
+				[_spot("steps") + Vector2(-0.3, -0.3), NEAR, "m5_oldsave_pinwheel", "⑥ 조용히 넘은 병 [차림]: 집 문 옆 바람개비 (44)"]]
+		1:
+			if not _run_q():
+				return STAY
+			(v.milestones["passed"] as Dictionary).erase("steps")     # 차린 기록을 도로 지우고 — 아래부터는 마을이 스스로 넘긴다
+			(v.milestones["passed"] as Dictionary).erase("grown")
+			_reach(v)                                 # 첫 빵 + 식구 열둘
+			_baby_scene(v)
+			_wait = 2
+		2:
+			_idle_near(v)
+			scene.world.advance(ChildPlay.CARE_IV)    # 마을이 이웃을 부를 때까지
+			_tries += 1
+			if not v.milestones.has("steps_call") and _tries < 60:
+				return STAY
+			var call: Dictionary = v.milestones.get("steps_call", {})
+			steps_at = float(call.get("at", v.t))
+			print("불렀다 (%d번째 살핌): 걸음마는 병 %.0f초 뒤" % [_tries, steps_at - v.t])
+			scene.world.advance(maxf(steps_at - v.t - 40.0, 1.0))
+			_look(ChildPlay.door(v, baby) + Vector2(0.9, 0.9), CLOSE)
+			_settle()
+			scene.paused = false
+			_tries = 0
+			_wait = 2
+		3:
+			_tries += 1
+			if not Milestones.is_passed(v, "steps") and _tries < 900:
+				return STAY
+			print("고비 기록 (첫걸음마): ", (v.milestones.get("passed", {}) as Dictionary).get("steps", {}), " · 화면 손뼉 ", _mv().clappers())
+			_tries = 0
+			_wait = 40
+		4:
+			_tries += 1
+			if not _clap_peak() and _tries < 240:
+				return STAY
+			_cap("m5_clap_close", "⑤ 첫걸음마 손뼉: 손 높이의 '짝' 금 + 손뼉 그림 (64)")
+			scene.paused = true                       # 손뼉 걸음을 멈춰 두고 (화면 몸짓은 계속) 다른 확대로
+			_q = [[ChildPlay.door(v, baby) + Vector2(0.9, 0.9), NEAR, "m5_clap_near", "⑤ 첫걸음마 손뼉 (44)"],
+				[ChildPlay.door(v, baby) + Vector2(0.9, 0.9), FAR, "m5_clap_far", "⑤ 첫걸음마 손뼉 — 멀리 (20)"]]
+		5:
+			if not _run_q():
+				return STAY
+			scene.paused = false
+			_wait = 260                               # 손뼉이 끝나고 흩어질 때까지
+		6:
+			scene.paused = true
+			var pin := _spot("steps")
+			_q = [[ChildPlay.door(v, baby) + Vector2(0.9, 0.9), CLOSE, "m5_clap_bubble", "⑤ 첫걸음마 손뼉: 두 손 그림 말풍선 (64)", "hands"],
+				[pin + Vector2(-0.3, -0.3), CLOSE, "m5_pinwheel_near", "④ 바람개비 — 가까이 (64 · 제 크기)"],
+				[pin, FAR, "m5_pinwheel_far20", "④ 바람개비 — 멀리 (20)"],
+				[pin, float(JarCamera.ZOOM_PPU[1]), "m5_pinwheel_far16", "④ 바람개비 — 마을 기본 확대 (16)"],
+				[pin, float(JarCamera.ZOOM_PPU[0]), "m5_pinwheel_far9", "④ 바람개비 — 가장 먼 축소 (9)"]]
+		7:
+			if not _run_q():
+				return STAY
+			scene.paused = false
+			_look(fire, NEAR)
+			_settle()
+			_wait = 20
+		8:
+			_advance_to(19.2)                         # 그날 저녁 '식구 열둘' 잔치 (18:30 → 21:00) — 아직 밝을 때
+			_wait = 1
+		9:
+			_wait = 50
+		10:
+			scene.paused = true
+			_q = [[fire, NEAR, "m5_feast_near", "① 여느 잔치: 빵 먹기 · 잔칫상 · 등 (44)"],
+				[_eater_at(v), CLOSE, "m5_feast_close", "① 먹는 손님 — 가까이 (64)"],
+				[fire, FAR, "m5_feast_far", "① 여느 잔치 — 멀리 (20)"]]
+		11:
+			if not _run_q():
+				return STAY
+			scene.paused = false
+			_look(fire, NEAR)
+			_settle()
+			_wait = 10
+		12:
+			_advance_to(20.75)                        # 어두워진 뒤 (잔치는 21:00까지)
+			_wait = 1
+		13:
+			_wait = 50
+		14:
+			scene.paused = true
+			_q = [[fire, NEAR, "m5_evening_near", "② 저녁 잔치: 등불 · 큰 불의 불티 (44)"],
+				[fire, FAR, "m5_evening_far20", "② 저녁 잔치 — 멀리 (20)"],
+				[fire, float(JarCamera.ZOOM_PPU[1]), "m5_evening_far16", "② 저녁 잔치 — 마을 기본 확대 (16)"],
+				[fire, float(JarCamera.ZOOM_PPU[0]), "m5_evening_far9", "② 저녁 잔치 — 가장 먼 축소 (9)"]]
+		15:
+			if not _run_q():
+				return STAY
+			_advance_to(10.0)                         # 이튿날 아침
+			_grow(v)                                  # 마을에서 난 첫 어른 (도구가 넘김)
+			var rec: Dictionary = (v.milestones["passed"] as Dictionary).get("grown", {})
+			print("기둥: 적어 둔 자리 (%.1f, %.1f) 불에서 %.1f칸 → 화면 자리 %s 불에서 %.1f칸" % [float(rec.get("x", 0.0)), float(rec.get("y", 0.0)),
+				Vector2(float(rec.get("x", 0.0)), float(rec.get("y", 0.0))).distance_to(v.fire), _spot("grown"), _spot("grown").distance_to(v.fire)])
+			_q = [[fire, NEAR, "m5_post_day", "③ 키 재는 기둥 — 모닥불 곁 (낮 · 44)"]]
+		16:
+			if not _run_q():
+				return STAY
+			scene.paused = false
+			_look(fire, NEAR)
+			_settle()
+			_wait = 20
+		17:
+			_advance_to(18.9)                         # 작은 잔치 (18:30 → 20:00)
+			_tries = 0
+			_wait = 1
+		18:
+			_tries += 1
+			if _tries % 60 == 1:                      # 그 젊은이가 불 곁에 오기까지 (늦게 오면 키 재기도 늦다)
+				var kid := v.person(int(((v.milestones["passed"] as Dictionary).get("grown", {}) as Dictionary).get("who", -1)))
+				if kid != null:
+					print("  젊은이 %.2f시: %s/%s · 불에서 %.1f칸 · 키 재기 %d" % [v.hour_now(), kid.action, kid.anim, Vector2(kid.x, kid.y).distance_to(v.fire), _mv().star()])
+			if not (_mv().star_there() and _mv().ribbon_on()) and _tries < 900 and Milestones.feast_on(v):
+				return STAY
+			print("첫 어른 잔치: 키 재기 %d (닿음 %s · 끈 %s) · %.2f시 · 기다린 화면 %d" % [_mv().star(), _mv().star_there(), _mv().ribbon_on(), v.hour_now(), _tries])
+			_wait = 70
+		19:
+			scene.paused = true
+			_q = [[fire, NEAR, "m5_grown_near", "③ 첫 어른 잔치: 기둥 옆에서 키 재기 (44)"],
+				[_spot("grown") + Vector2(0.4, 0.4), CLOSE, "m5_grown_close", "③ 키 재기 — 가까이 (64)"],
+				[fire, FAR, "m5_grown_far", "③ 첫 어른 잔치 — 멀리 (20)"]]
+		20:
+			if not _run_q():
+				return STAY
+			_compose(PackedStringArray([out_dir.path_join("m5_feast_near.png"), out_dir.path_join("m5_grown_near.png")]), 2, 1.0)
+			_wait = 4
+		21:
+			_compose_save(out_dir.path_join("m5_grown_vs_feast.png"))
+			_compose(shots, 5, 0.5)
+			_wait = 4
+		22:
+			_compose_save(out_dir.path_join("m5_sheet.png"))
 			return DONE
 	return NEXT

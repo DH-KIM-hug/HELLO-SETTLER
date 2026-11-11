@@ -17,6 +17,46 @@ const SEAT_R := 1.85                  # 통나무 의자 거리 (주민은 불�
 const GLOW_R := 4.2                   # 불빛 반지름 (보통 불)
 const PARTICLE_PPU := 12.0            # 이보다 멀리 축소하면 불티·연기 끔 (기본 확대 16)
 const STEAM_S := 2.6                  # 물에 꺼질 때 김 (현실 초)
+# (Q15) 큰 불의 불티 — 멀리서도 보이게: 사각형 몇 장짜리 메시 하나를 셰이더가 올려 보낸다 (입자 계산 없음 · 그리기 한 번).
+# 화면에서 SPARK_PX 점보다 작아지지 않는다 (가장 먼 축소에서도) — 가까이의 불티 입자(embers)와 따로
+const SPARK_N := 12
+const SPARK_HEAT := 1.08              # 이보다 큰 불(축제·잔치)에서만
+const SPARK_RISE := 2.6               # 올라가는 높이 (칸)
+const SPARK_SIZE := 0.085             # 불티 크기 (칸)
+const SPARK_PX := 3.4                 # 화면에서 적어도 이만큼 (점)
+const SPARK_CODE := """
+shader_type spatial;
+render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, shadows_disabled, fog_disabled, skip_vertex_transform;
+uniform float amount = 1.0;           // 0..1 (fire size above SPARK_HEAT)
+uniform float rise = 2.6;
+uniform float size = 0.085;
+uniform float min_px = 3.4;
+varying float v_life;
+varying vec2 v_q;
+void vertex() {
+	float seed = COLOR.r;
+	float life = fract(TIME * (0.28 + 0.22 * COLOR.g) + seed);
+	float side = COLOR.b * 2.0 - 1.0;
+	vec3 right = normalize(vec3(INV_VIEW_MATRIX[0].x, 0.0, INV_VIEW_MATRIX[0].z));
+	float cu = max(INV_VIEW_MATRIX[1].y, 0.3);
+	float sway = side * (0.12 + 0.5 * life) + 0.14 * sin(life * 9.0 + seed * 40.0);
+	vec3 c = MODEL_MATRIX[3].xyz + vec3(0.0, (0.55 + life * rise * (0.7 + 0.3 * COLOR.g)) / cu, 0.0) + right * sway;
+	float upp = 2.0 / (abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y);     // world units per pixel (orthographic)
+	float s = max(size, min_px * upp) * (1.0 - 0.45 * life);
+	v_q = UV * 2.0 - 1.0;
+	v_life = life;
+	vec3 w = c + (INV_VIEW_MATRIX[0].xyz * v_q.x - INV_VIEW_MATRIX[1].xyz * v_q.y) * s * 0.5;
+	VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
+	POSITION = PROJECTION_MATRIX * vec4(VERTEX, 1.0);
+}
+void fragment() {
+	if (abs(v_q.x) + abs(v_q.y) > 1.0) {
+		discard;
+	}
+	ALBEDO = mix(vec3(1.0, 0.86, 0.36), vec3(0.94, 0.34, 0.12), smoothstep(0.15, 0.9, v_life));
+	ALPHA = amount * smoothstep(0.0, 0.06, v_life) * (1.0 - smoothstep(0.7, 1.0, v_life));
+}
+"""
 
 static var all: Array = []            # 화면의 모닥불들 (불빛 셰이더로 넘김)
 static var night := 0.0               # 지금 화면의 밤 정도 (test_village.update_night → apply_glow가 넣음)
@@ -35,6 +75,8 @@ var flame: MeshInstance3D
 var embers: GPUParticles3D
 var smoke: GPUParticles3D
 var steam: GPUParticles3D
+var sparks: MeshInstance3D            # (Q15) 큰 불의 불티 — 멀리서도 (_make_sparks)
+var lamps: Array = []                 # (Q15) 이 불 곁의 등불빛: [[세계 자리 Vector3, 반지름, 세기] …] — 잔치의 등 (MilestoneView가 넣고 비운다). apply_glow가 불빛 웅덩이에 더함
 var lod_far := false
 var _t := 0.0
 var _mat: ShaderMaterial
@@ -72,6 +114,7 @@ func _ready() -> void:
 	embers = _make_embers()
 	smoke = _make_smoke()
 	steam = _make_steam()
+	sparks = _make_sparks()
 	if Flora2D.enabled():
 		_make_2d()
 	_apply(true)
@@ -279,6 +322,37 @@ func _make_steam() -> GPUParticles3D:
 	return p
 
 
+## (Q15) 큰 불의 불티: 사각형 SPARK_N장 (꼭짓점 색 = 씨앗 · 빠르기 · 옆) — 셰이더가 위로 올리며 흔든다. 화면 점 크기에 하한이 있어 멀리서도 보임
+func _make_sparks() -> MeshInstance3D:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var uvs := [Vector2(0, 1), Vector2(1, 1), Vector2(1, 0), Vector2(0, 0)]
+	for i in SPARK_N:
+		var col := Color(fposmod(float(i) * 0.618, 1.0), fposmod(float(i) * 0.381 + 0.2, 1.0), fposmod(float(i) * 0.755 + 0.1, 1.0), 1.0)
+		for k: int in [0, 1, 2, 0, 2, 3]:
+			st.set_color(col)
+			st.set_uv(uvs[k])
+			st.add_vertex(Vector3.ZERO)
+	var m := st.commit()
+	m.custom_aabb = AABB(Vector3(-1.6, -0.2, -1.6), Vector3(3.2, 6.0, 3.2))
+	var mat := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = SPARK_CODE
+	mat.shader = sh
+	mat.set_shader_parameter("rise", SPARK_RISE)
+	mat.set_shader_parameter("size", SPARK_SIZE)
+	mat.set_shader_parameter("min_px", SPARK_PX)
+	mat.render_priority = 2
+	var mi := MeshInstance3D.new()
+	mi.name = "Sparks"
+	mi.mesh = m
+	mi.material_override = mat
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visible = false
+	add_child(mi)
+	return mi
+
+
 # ───────────────────────── 상태 ─────────────────────────
 ## 마을 상태에서 고르는 불 (VillageView가 매 화면): 사람이 없으면 차가움 · 물을 뿌린 자리면 꺼짐 · 축제·혼례면 큰 불 · 이른 아침엔 작은 불
 static func pick_state(v: Village) -> String:
@@ -334,6 +408,10 @@ func tick(dt: float, v: Village) -> void:
 	var lit := heat > 0.05
 	_emit(embers, lit and not lod_far and state != "smudge", 1.0 if state == "big" else (0.5 if state == "small" else 0.8))
 	_emit(smoke, (lit or _steam_left > 0.0) and not lod_far, 1.0 if state in ["smudge", "big"] else 0.6)
+	var spark_k := clampf((heat - SPARK_HEAT) / (float(HEAT["big"]) - SPARK_HEAT), 0.0, 1.0)     # (Q15) 큰 불의 불티는 멀리서도 (입자가 아니라 LOD 없음)
+	sparks.visible = spark_k > 0.0
+	if sparks.visible:
+		(sparks.material_override as ShaderMaterial).set_shader_parameter("amount", spark_k)
 	var dark := Color(0.86, 0.85, 0.82).lerp(Color(0.27, 0.3, 0.4), night)     # 반투명은 밤 색 조정 뒤에 그려짐 → 직접 어둡게
 	if state == "smudge":
 		dark = Color(0.7, 0.7, 0.68).lerp(Color(0.24, 0.26, 0.34), night)
@@ -409,6 +487,12 @@ static func apply_glow(post: ShaderMaterial, night_amount: float) -> void:
 		var p := f.global_position + Vector3(0, 0.5, 0)
 		pos.append(Vector4(p.x, p.y, p.z, GLOW_R * (0.75 + 0.25 * f.heat)))
 		ks.append(f.glow_k)
+		for l: Array in f.lamps:                    # (Q15) 그 불 곁의 등 (잔치) — 남은 칸에
+			if pos.size() >= 4:
+				break
+			var lp: Vector3 = l[0]
+			pos.append(Vector4(lp.x, lp.y, lp.z, float(l[1])))
+			ks.append(float(l[2]))
 	var n := ks.size()
 	while ks.size() < 4:
 		pos.append(Vector4(0, -1.0e6, 0, 1.0))
