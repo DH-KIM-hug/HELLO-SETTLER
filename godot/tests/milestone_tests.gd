@@ -22,7 +22,8 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== Q9 자람의 보상 (고비 · 별명 · 잔치 · 수첩 도장 · 장식)")
 	run.timed(self, ["test_new_jar", "test_bread", "test_far", "test_population", "test_same_day", "test_winter", "test_late_night", "test_save",
-		"test_old_save", "test_away", "test_unwatched_same", "test_words", "test_notebook", "test_card", "test_decor", "test_no_statics"])
+		"test_old_save", "test_away", "test_unwatched_same", "test_words", "test_notebook", "test_card", "test_decor", "test_sign_siting",
+		"test_feast_skip", "test_balance_consts", "test_tool_isolated", "test_no_statics"])
 
 
 func _world(seed_v := 5) -> JarWorld:
@@ -400,17 +401,29 @@ func test_notebook() -> void:
 	st.queue_free()
 	_bake(v, v.people[0])
 	v.advance(2.0)
+	# 연대기 책: 도장 띠는 제목과 탭 사이 — 어느 탭에서나 보인다 (2026-11-11 사용자 결정, 옛 자리 = '창세 신화' 탭 맨 아래)
 	var sh := ChronicleSheet.new()
 	run.root.add_child(sh)
 	sh.setup(v, null)
-	sh.open(1)
-	var ms := sh.body.find_child("MilestoneStamps", true, false)
-	check(ms != null and passed.call(ms) == 1, "수첩 장에 도장 줄 — 첫 빵 도장 하나")
-	check(ms != null and (ms.get_node("Next") as Label).text == "식구가 열둘이 되면 잔치가 열려요", "수첩의 다음 고비 한 줄")
-	var sig0: String = sh._state_sig()
+	var on_all := true
+	var in_body := false
+	for t in sh.tab_btns.size():
+		sh.open(t)
+		var ms := sh.strip.find_child("MilestoneStamps", true, false)
+		on_all = on_all and sh.strip.visible and ms != null and ms.get_node("Row").get_child_count() == 4 and passed.call(ms) == 1 \
+			and (ms.get_node("Next") as Label).text == "식구가 열둘이 되면 잔치가 열려요"
+		in_body = in_body or sh.body.find_child("MilestoneStamps", true, false) != null
+	check(sh.tab_btns.size() >= 3 and on_all, "도장 띠: 탭 %d개 어디서나 — 자리 넷 · 첫 빵 도장 하나 · 다음 고비 한 줄" % sh.tab_btns.size())
+	check(not in_body, "탭 안(수첩 장 아래)에는 도장 줄이 더 없다")
+	check(sh.strip.get_parent() == sh.tab_btns[0].get_parent().get_parent() and sh.strip.get_index() < sh.tab_btns[0].get_parent().get_index(),
+		"도장 띠는 탭 줄 위에 있다")
+	sh.open(0)
 	_grow_to(v, 12, false)
 	v.advance(2.0)
-	check(sh._state_sig() != sig0, "도장이 늘면 수첩을 다시 그린다")
+	sh._refresh()
+	var ms2 := sh.strip.find_child("MilestoneStamps", true, false)
+	check(ms2 != null and passed.call(ms2) == 2 and sh.strip.get_child_count() == 1, "도장이 늘면 띠를 다시 그린다 (다른 탭을 보고 있어도)")
+	check(ms2 != null and (ms2.get_node("Next") as Label).text == Milestones.next_line(v), "띠의 다음 고비 한 줄도 바뀐다 (%s)" % Milestones.next_line(v))
 	sh.queue_free()
 
 
@@ -443,6 +456,8 @@ func test_decor() -> void:
 	check(a.distance_to(b) > 1.0 and b.distance_to(v.fire) > 2.0, "두 장식이 겹치지 않고, 표지판은 마을 가장자리")
 	check(a.distance_to(Vector2(oven.x, oven.y)) < 3.0 and a.distance_to(Vector2(oven.x, oven.y)) > oven.size(), "빵 간판은 화덕 바로 앞 (%.1f칸)" % a.distance_to(Vector2(oven.x, oven.y)))
 	check(Milestones.spot_free(v, b), "표지판 자리는 물·건물·무덤이 아닌 빈 땅")
+	check(Milestones.spot_clear(v, b) and _tree_gap(v, b) >= Balance.SIGN_CLEAR_FLOWER and v.path_at(b.x, b.y) < Balance.SIGN_PATH_MIN,
+		"표지판 자리는 꽃·길도 피한 깨끗한 땅 (꽃숲 덩이까지 %.1f칸 · 발길 %.1f)" % [_tree_gap(v, b), v.path_at(b.x, b.y)])
 	var rec: Dictionary = (v.milestones["passed"] as Dictionary)["pop12"]
 	check(rec.has("x") and Vector2(float(rec["x"]), float(rec["y"])).is_equal_approx(b), "표지판 자리는 고비를 넘을 때 적어 둔 곳 (다시 불러와도 그 자리)")
 	v.add_building("오두막", b.x, b.y, true)             # 나중에 그 자리에 건물이 서면 옆 빈자리로
@@ -453,6 +468,167 @@ func test_decor() -> void:
 	check(d0 == SaveCodec.digest(v.to_dict()), "장식 자리 셈은 시뮬레이션을 바꾸지 않는다")
 	for id: String in MilestoneView.TEX:
 		check(ResourceLoader.exists(String(MilestoneView.TEX[id])), "장식 그림 있음: %s" % id)
+
+
+func _tree_gap(v: Village, p: Vector2) -> float:
+	var best := 1.0e9
+	for tr: Dictionary in v.trees:
+		best = minf(best, Vector2(float(tr["x"]), float(tr["y"])).distance_to(p))
+	return best
+
+
+## 그 칸에 발길을 남김 (사람들이 지나다닌 것처럼 — Village._path_add가 하는 일)
+func _tread(v: Village, x: float, y: float, amt: float) -> void:
+	var gx := floori((x - v.center.x + v.path_r) / (2.0 * v.path_r) * v.path_n)
+	var gy := floori((y - v.center.y + v.path_r) / (2.0 * v.path_r) * v.path_n)
+	if gx >= 0 and gy >= 0 and gx < v.path_n and gy < v.path_n:
+		v.paths[gy * v.path_n + gx] = maxf(v.paths[gy * v.path_n + gx], amt)
+
+
+## 표지판 자리 (Q9 2차): 꽃·길·건물·무덤을 피하고, 같은 마을이면 늘 같은 자리 (난수 없음), 셈이 시뮬레이션을 바꾸지 않는다
+func test_sign_siting() -> void:
+	var clean := 0
+	var same := 0
+	var seeds := [15, 16, 17, 18, 19, 20]
+	for sd: int in seeds:
+		var a := _fresh(sd)
+		var b := _fresh(sd)
+		var pa := Milestones.edge_spot(a)
+		same += 1 if pa == Milestones.edge_spot(b) and pa == Milestones.edge_spot(a) else 0
+		clean += 1 if Milestones.spot_clear(a, pa) else 0
+	check(same == seeds.size(), "같은 마을이면 늘 같은 자리 (%d / %d)" % [same, seeds.size()])
+	check(clean == seeds.size(), "새 마을의 어귀 자리는 깨끗하다 — 꽃·바위·길·건물·무덤·물이 아님 (%d / %d)" % [clean, seeds.size()])
+	# 어려운 경우: 맨 처음 고를 자리에 꽃숲 덩이 · 그다음 자리에 길 · 그다음 자리에 무덤 → 차례로 비켜 간다
+	var v := _fresh(15)
+	var d0 := SaveCodec.digest(v.to_dict())
+	var p0 := Milestones.edge_spot(v)
+	check(d0 == SaveCodec.digest(v.to_dict()), "자리 셈은 시뮬레이션을 바꾸지 않는다 (난수·상태)")
+	v.trees.append({"x": p0.x + 0.6, "y": p0.y - 0.4, "s": "tree", "g": 0.0, "res": 0})
+	var p1 := Milestones.edge_spot(v)
+	check(p1 != p0 and _tree_gap(v, p1) >= Balance.SIGN_CLEAR_FLOWER and Milestones.spot_clear(v, p1), "그 자리에 꽃이 피어 있으면 비켜 선다 (꽃까지 %.1f칸)" % _tree_gap(v, p1))
+	v.trees[v.trees.size() - 1]["s"] = "stump"
+	check(Milestones.edge_spot(v) == p1, "벤 자리(다시 자랄 꽃)도 꽃 자리로 친다 — 자라도 가리지 않게")
+	for i in 5:                                       # 사람들이 그 자리를 지나다녀 길이 남
+		for j in 5:
+			_tread(v, p1.x - 1.0 + 0.5 * float(i), p1.y - 1.0 + 0.5 * float(j), Balance.PATH_AT)
+	var p2 := Milestones.edge_spot(v)
+	check(p2 != p1 and p2 != p0 and v.path_at(p2.x, p2.y) < Balance.SIGN_PATH_MIN and Milestones.spot_clear(v, p2), "길 위에는 서지 않는다 (발길 %.1f → %.1f)" % [v.path_at(p1.x, p1.y), v.path_at(p2.x, p2.y)])
+	v.graves.append({"id": -1, "name": "옛사람", "x": p2.x + 0.3, "y": p2.y, "t": v.t, "yard": false, "yard_id": -1})
+	var p3 := Milestones.edge_spot(v)
+	check(p3 != p2 and Milestones.spot_clear(v, p3), "무덤 곁에도 서지 않는다")
+	var house := v.add_building("오두막", p3.x, p3.y, true)
+	var p4 := Milestones.edge_spot(v)
+	check(p4.distance_to(Vector2(house.x, house.y)) >= house.size() + Balance.SIGN_CLEAR_BUILDING and Milestones.spot_clear(v, p4), "건물에서도 떨어져 선다")
+	# 고비를 넘을 때 적는 자리 = 그때의 깨끗한 자리, 그 뒤에 꽃이 자라거나 길이 나도 옮기지 않는다 (왔다 갔다 하지 않게 — 화면이 꽃을 낮춘다)
+	_grow_to(v, 12, false)
+	v.advance(2.0)
+	var rec: Dictionary = (v.milestones["passed"] as Dictionary)["pop12"]
+	var at := Vector2(float(rec["x"]), float(rec["y"]))
+	check(Milestones.spot_clear(v, at), "고비를 넘을 때 적는 자리가 깨끗한 자리")
+	v.trees.append({"x": at.x + 0.8, "y": at.y + 0.8, "s": "sapling", "g": 0.0, "res": 0})
+	check((MilestoneView.wanted(v)["pop12"] as Vector2).is_equal_approx(at), "나중에 곁에 꽃이 자라도 표지판은 그 자리 (화면이 꽃 그림을 낮춘다)")
+	# 빈 땅이 전혀 없으면(둘레가 온통 꽃) 그래도 설 수 있는 자리 하나는 고른다
+	var w := _fresh(16)
+	for i in 60:
+		for j in 60:
+			w.trees.append({"x": w.fire.x - 30.0 + float(i), "y": w.fire.y - 30.0 + float(j), "s": "tree", "g": 0.0, "res": 0})
+	var pw := Milestones.edge_spot(w)
+	check(Milestones.spot_free(w, pw) and pw == Milestones.edge_spot(w), "온통 꽃밭이어도 설 수 있는 자리를 고른다 (늘 같은 곳)")
+
+
+## 큰 시간 건너뛰기 바로 뒤 (Q9 2차): 화면을 한 번 맞추면(VillageView.sync force — 돌아왔을 때·빠른 흐름이 끝날 때 장면이 부르는 것)
+## 잔치 몸짓과 표지판 자리가 그 화면부터 맞는다 — 다음 0.5초 점검을 기다리지 않는다. 화면이 하는 일은 시뮬레이션을 바꾸지 않는다.
+func test_feast_skip() -> void:
+	var old_cut := CutoutResident.override
+	CutoutResident.override = 1                       # 종이 인형 주민 (게임의 기본 — 춤 몸짓은 인형에 얹는다)
+	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
+	run.root.add_child(scene)
+	scene.set("paused", true)
+	var v: Village = scene.get("village")
+	var vw: VillageView = scene.get("view")
+	var mv := MilestoneView.of(vw)
+	v.water.offline = true
+	v.chief_off = true
+	v.advance(2.0)
+	_set_date(v, 6, 10, 10.0)
+	_bake(v, v.people[0])
+	_grow_to(v, 12, false)
+	v.stock["빵"] = float(v.stock.get("빵", 0.0)) + 600.0
+	v.advance(2.0)
+	vw.sync(0.0, true)
+	check(Milestones.count(v) == 2 and mv.dancers() == 0 and not Milestones.feast_on(v), "아침: 고비 둘, 아직 잔치가 아니다")
+	check(vw.sign_spot.is_equal_approx(MilestoneView.wanted(v)["pop12"]) and mv.sign_node("pop12") != null, "표지판 자리를 화면이 안다 (둘레 꽃을 낮추는 데 씀)")
+	v.advance(10.3 * H)                               # 아침 → 저녁 잔치 한가운데 (20:18쯤) 한 번에
+	var d0 := SaveCodec.digest(v.to_dict())
+	vw.fast = false
+	vw.sync(0.0, true)                                # 화면 한 번 — MilestoneView._process는 아직 한 번도 돌지 않음
+	var want := 0
+	var placed := 0
+	var guests := 0
+	for p in v.people:
+		if p.action != "festival":
+			continue
+		guests += 1
+		var m := vw.residents.get(p.id) as Node3D
+		if m != null and Vector2(m.position.x, m.position.z).distance_to(Vector2(p.x, p.y)) < 0.3:
+			placed += 1
+		if p.anim == "play" and Vector2(p.x, p.y).distance_to(v.fire) <= MilestoneView.DANCE_R and m != null:
+			want += 1
+	check(Milestones.feast_on(v) and guests >= 8, "건너뛴 뒤: 잔치 중 (병 시각 %.2f · 손님 %d)" % [v.hour_now(), guests])
+	check(placed == guests, "손님 인형이 제자리에 (%d / %d)" % [placed, guests])
+	check(want >= 2 and mv.dancers() == want, "춤 몸짓이 그 화면부터 (춤 %d · 화면 %d)" % [want, mv.dancers()])
+	check(d0 == SaveCodec.digest(v.to_dict()), "화면 맞추기는 시뮬레이션을 바꾸지 않는다")
+	v.advance(1.5 * H)                                # 잔치가 끝난 뒤로 건너뜀
+	vw.sync(0.0, true)
+	check(not Milestones.feast_on(v) and mv.dancers() == 0, "잔치가 끝난 뒤로 건너뛰면 춤 몸짓도 그 화면에서 풀린다 (%d)" % mv.dancers())
+	run.root.remove_child(scene)
+	scene.free()
+	CutoutResident.override = old_cut
+
+
+## 조절 값은 data/balance.gd의 Q9 묶음에 (Q9 2차) — sim/milestones.gd의 이름은 그 값을 가리킬 뿐, 값은 옮기기 전과 같다
+func test_balance_consts() -> void:
+	check(Milestones.POP_SMALL == Balance.MILESTONE_POP_SMALL and Milestones.POP_BIG == Balance.MILESTONE_POP_BIG
+		and Milestones.WINTER_MIN_DAYS == Balance.MILESTONE_WINTER_MIN_DAYS, "고비 기준은 balance.gd의 값")
+	check(Balance.MILESTONE_POP_SMALL == 12 and Balance.MILESTONE_POP_BIG == 20 and Balance.MILESTONE_WINTER_MIN_DAYS == 14, "고비 기준 값은 그대로 (12 · 20 · 14)")
+	check(Milestones.FEAST_HOUR == Balance.FEAST_HOUR and Milestones.FEAST_LATEST == Balance.FEAST_LATEST and Milestones.FEAST_SECS == Balance.FEAST_SECS
+		and Milestones.FEAST_EAT == Balance.FEAST_EAT_SECS and Milestones.FEAST_DANCE == Balance.FEAST_DANCE_SECS and Milestones.FEAST_REACH == Balance.FEAST_REACH,
+		"잔치 값은 balance.gd의 값")
+	check(is_equal_approx(Balance.FEAST_HOUR, 18.5) and is_equal_approx(Balance.FEAST_LATEST, 20.0) and is_equal_approx(Balance.FEAST_SECS, 2.5 * H)
+		and is_equal_approx(Balance.FEAST_WALK_SECS, 600.0) and is_equal_approx(Balance.FEAST_EAT_SECS, 1200.0) and is_equal_approx(Balance.FEAST_DANCE_SECS, 1500.0)
+		and is_equal_approx(Balance.FEAST_REACH, 24.0) and is_equal_approx(Balance.FEAST_RING_R, 1.6) and is_equal_approx(Balance.FEAST_RING_GROW, 0.35)
+		and is_equal_approx(Balance.FEAST_RING_TURN, 2.399), "잔치 값은 그대로")
+	var f := FileAccess.open("res://sim/milestones.gd", FileAccess.READ)
+	var src := f.get_as_text() if f != null else ""
+	var stray: Array = []
+	for lit: String in ["2.399", "600.0", "1200.0", "1500.0", ":= 12", ":= 20", ":= 14", "18.5", "24.0", "0.35", "2.5 *"]:
+		if src.contains(lit):
+			stray.append(lit)
+	check(src != "" and stray.is_empty(), "sim/milestones.gd에 조절 값 숫자가 남아 있지 않다 (%s)" % str(stray))
+	var fb := FileAccess.open("res://data/balance.gd", FileAccess.READ)
+	var bal := fb.get_as_text() if fb != null else ""
+	var at := bal.find("# Q9")
+	check(at > 0 and bal.find("const MILESTONE_POP_SMALL") > at and bal.find("const SIGN_CLEAR_FLOWER") > at and bal.count("const MILESTONE_POP_SMALL") == 1,
+		"balance.gd: '# Q9' 묶음 하나에 모여 있다")
+
+
+## 캡처 도구(tools/shot_milestones.gd)는 진짜 저장·설정·연대기 그림 폴더를 건드리지 않는다 (Q9 2차)
+func test_tool_isolated() -> void:
+	var f := FileAccess.open("res://tools/shot_milestones.gd", FileAccess.READ)
+	var src := f.get_as_text() if f != null else ""
+	var need := ["sm.enabled = false", "sm.dir = SAVE_DIR", "GameSettings.path = SAVE_DIR", "StoreStrip.cfg_path = SAVE_DIR", "Inquiry.id_path = SAVE_DIR",
+		"scene.firsts = Firsts.new()", "scene.director.pic_dir = SAVE_DIR"]
+	var missing: Array = []
+	for n: String in need:
+		if not src.contains(n):
+			missing.append(n)
+	check(src != "" and missing.is_empty(), "캡처 도구가 저장·설정·안내 대기 줄·그림 카드 폴더를 제 것으로 돌린다 (%s)" % str(missing))
+	check(not src.contains("SaveManager.player"), "캡처 도구가 거인 묶음(진짜 저장에 실리는 것)을 건드리지 않는다")
+	check(src.contains("const SAVE_DIR := \"user://shot_milestones_save\""), "제 폴더는 user://shot_milestones_save")
+	var fd := FileAccess.open("res://view/stage_director.gd", FileAccess.READ)
+	var dsrc := fd.get_as_text() if fd != null else ""
+	check(StageDirector.PIC_DIR == "user://chron_pics" and dsrc.contains("var pic_dir := PIC_DIR") and dsrc.count("PIC_DIR") == 2,
+		"연출의 그림 카드 폴더: 기본은 그대로 user://chron_pics, 쓰는 곳은 pic_dir만 (도구가 돌려 쓸 수 있게)")
 
 
 func test_no_statics() -> void:

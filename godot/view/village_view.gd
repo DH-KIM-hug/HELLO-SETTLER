@@ -132,6 +132,7 @@ var fish_pair := {}
 var _pair_w := {}
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 var lerp_max := 3.0             # 걸음 사이 이만큼(칸) 넘게 옮겼으면 순간이동 (보간 안 함) — 10초 걸음이면 화면이 키운다
+var sign_spot := Vector2.INF    # [자람의 보상 Q9] 마을 이름 표지판 자리 (없으면 INF) — MilestoneView.refresh가 적는다. 그 둘레·앞의 키 큰 꽃 그림을 낮추고 잔것을 비움
 var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주민은 멀리 LOD로 FAST_EVERY초마다 제자리에 순간이동 (걷기·몸짓 멈춤),
                                 # 곰팡이·위기·하늘의 것·상점·들짐승 화면도 그 간격으로만 (효과가 쏟아지지 않게)
 var _fast_t := 0.0
@@ -280,6 +281,9 @@ func sync(dt: float, force := false) -> void:
 		_check_t = 0.0
 		if force:
 			_far_t = -1.0e9           # 안개만 바뀐 먼 숲도 바로 다시
+			var mv := MilestoneView.of(self)     # [자람의 보상 Q9] 큰 시간 건너뛰기 바로 뒤: 장식 자리·잔치 몸짓을 이 화면부터 (0.5초 뒤가 아니라)
+			if mv != null:
+				mv.refresh()
 		var t0 := Time.get_ticks_usec()
 		var f0 := far_ms
 		_sync_buildings()
@@ -1146,7 +1150,8 @@ var _n_rebuilt := 0
 ## 장식 노드 목록: [{id(음수), model, pos, yaw, s, key}] — 흙 화분 집 (마을 가장자리, 화면만) + 떨어진 물건 (FoundObjects.shown).
 ## 놓인 자리는 _decor_block에 적어 잔것(_prop_ok)이 그 위에 나지 않게.
 var _decor_block: Array[Vector3] = []     # (x, z, 반지름)
-var _decor_sig := ""                      # 잔것 다시 깔기 키에 (화분 집 자리 · 놓인 물건 수)
+var _decor_sig := ""                      # 잔것 다시 깔기 키에 (화분 집 자리 · 놓인 물건 수 · 표지판 자리)
+const SIGN_CLEAR := 0.9                   # [자람의 보상 Q9] 마을 이름 표지판 발치 비움 (칸 — 화면만)
 var _pot_key := ""
 var _pot_at := Vector2(1.0e9, 1.0e9)
 const POT_CLEAR := 1.7                    # 화분 집 (지름 약 2칸) 둘레
@@ -1179,6 +1184,9 @@ func _decor_items() -> Array:
 			"key": "%s|%s|%.2f|%.2f|%.2f|%.2f" % [kind, o["use"], x, z, yaw, snappedf(float(o["s"]), 0.05)]})
 		_decor_block.append(Vector3(x, z, 0.6))
 	_decor_sig = "%.1f,%.1f|%d" % [pot.x, pot.y, out.size()]
+	if sign_spot.x < 1.0e8:               # [자람의 보상 Q9] 마을 이름 표지판 발치에는 잔것(클로버·풀 포기·꽃 덤불)을 놓지 않는다
+		_decor_block.append(Vector3(sign_spot.x, sign_spot.y, SIGN_CLEAR))
+		_decor_sig += "|s%.1f,%.1f" % [sign_spot.x, sign_spot.y]
 	return out
 
 
@@ -2108,7 +2116,7 @@ const GRAVE_RISE := 0.45          # 띠에서 한 칸 멀어질 때마다 더 �
 
 
 func _grave_scale(key: String, x: float, z: float, s: float) -> float:
-	if not _flora2d_on or v.graves.is_empty():
+	if not _flora2d_on or (v.graves.is_empty() and sign_spot.x > 1.0e8):
 		return s
 	var pic := Flora2D.pic_for(key)
 	if pic == "":
@@ -2127,6 +2135,13 @@ func _grave_scale(key: String, x: float, z: float, s: float) -> float:
 		var along := p.dot(tw)
 		if along > 0.0 and along < GRAVE_FRONT and absf(p.dot(Vector2(tw.y, -tw.x))) < GRAVE_R + 0.8:
 			cap = minf(cap, GRAVE_H + (along - GRAVE_R * 0.5) * GRAVE_RISE)
+	if sign_spot.x < 1.0e8:               # [자람의 보상 Q9] 마을 이름 표지판도 같은 방식 — 꽃이 표지판을 가리거나 기대지 않게
+		var sp := Vector2(x, z) - sign_spot
+		var sa := sp.dot(tw)
+		if sp.length() < GRAVE_R:
+			cap = minf(cap, GRAVE_H)
+		elif sa > 0.0 and sa < GRAVE_FRONT and absf(sp.dot(Vector2(tw.y, -tw.x))) < GRAVE_R + 0.8:
+			cap = minf(cap, GRAVE_H + (sa - GRAVE_R * 0.5) * GRAVE_RISE)
 	return s * maxf(cap, GRAVE_H) / h if cap < h else s
 
 
@@ -2187,6 +2202,8 @@ func _sync_trees() -> void:
 	var key := "%d|%d|%d|%d|%s|%s|%.0f|%d" % [v.trees.size(), n_tree, n_stump, v.water.rot, season, _flora2d_on, v.territory_r() if _flora2d_on else 0.0, v.buildings.size() if _flora2d_on else 0]
 	if _flora2d_on:                       # (E1-5) 무덤이 생기면 그 곁의 키 큰 그림을 낮춰 다시
 		key += "|g%d" % v.graves.size()
+		if sign_spot.x < 1.0e8:           # [자람의 보상 Q9] 표지판이 서거나 옮겨져도
+			key += "|s%.1f,%.1f" % [sign_spot.x, sign_spot.y]
 	if _flora2d_on and econ != null:      # [보이는 살림 Q6] 카메라 방위·더미 앞마당·채집 일꾼 자리가 바뀌면 다시 (낮출 꽃이 달라짐)
 		key += "|" + econ.place_key()
 		if key != _tree_key:

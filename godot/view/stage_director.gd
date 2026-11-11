@@ -47,6 +47,7 @@ const HOLD_T := 2.0 * 3600.0         # (E1-5) 긴 장례 연출 뒤 무덤가에
 const FOLD_T := 6.0 * 3600.0         # 장례 연출 뒤 이만큼(병 초 — 병의 반나절의 반) 안에 또 누가 떠나면 연출 없이 연대기 줄만 (잇달아 떠날 때)
 const VEIL := Color(0.16, 0.11, 0.09)  # 자리를 옮길 때 화면이 잠기는 따뜻한 어둠
 
+var pic_dir := PIC_DIR                # 연대기 그림 카드를 적는 폴더 — 캡처·시험 도구는 제 폴더로 바꾼다 (진짜 user://chron_pics에 섞이지 않게 · Q9 tools/shot_milestones.gd)
 var dark := 0.0                      # (장면이 읽음) 세상이 어두워진 정도 0~1
 var shadow_dir := Vector2(1, 0)      # (장면이 읽음) 그림자가 지나가는 쪽 (세계 xz)
 var _tw: Dictionary = {}             # 값 이름("dark"·"hush"·"light") → [지금, 목표, 1초에 바뀌는 양]
@@ -1790,9 +1791,9 @@ func _save_pic(q: Village, sid: String, find: String) -> void:
 	var y0 := clampi(top + (h - top - bot - ch) / 2, 0, h - ch)
 	var crop := img.get_region(Rect2i(0, y0, w, ch))
 	crop.resize(PIC_W, int(PIC_W * float(ch) / float(w)), Image.INTERPOLATE_LANCZOS)
-	DirAccess.make_dir_recursive_absolute(PIC_DIR)
+	DirAccess.make_dir_recursive_absolute(pic_dir)
 	var jar := int(sc.get("jar_id")) if sc != null and sc.get("jar_id") != null else 0
-	var path := "%s/j%d_%s_%d.png" % [PIC_DIR, jar, sid, int(q.t)]
+	var path := "%s/j%d_%s_%d.png" % [pic_dir, jar, sid, int(q.t)]
 	if crop.save_png(path) == OK:
 		e["pic"] = path
 
