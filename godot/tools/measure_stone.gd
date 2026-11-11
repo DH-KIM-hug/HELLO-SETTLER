@@ -6,6 +6,12 @@
 ##   L  병 10일의 건물 자리 (종류 x y — 앞뒤 견주기: 무덤이 없는 마을의 밭 자리는 그대로여야 한다)
 ##   P  병 10 · 20 · 30 · 36 · 45 · 60 (· 75 · 90 · 105 · 120)일의 식구 · 집 정원 · 돌 · 건물 자리 해시
 ##   S  한 줄 요약
+##   S2 (2026-11-12 Q13 ⑥ — 긴 측정용, S 줄은 그대로) 병 60 · 90 · 120일과 끝의 돌 · 판자 · 식구 · 집 종류 · 터 수 · 지은 수 ·
+##      바위를 다 캔 때(r0)의 같은 값 · 창고의 돌 0 + 돌을 기다리는 터 (ns: 터에 닿은 돌 < 드는 돌 / ns_owed: 나르는 중인 돌까지 쳐도 모자람) ·
+##      rock0 뒤의 시간들 (r0_wait_h 돌을 기다리는 터 · r0_s0_h 돌 0 · r0_hneed_h 집이 필요 · r0_hblock_h 그 시대 집에 들 돌이 없음) ·
+##      마지막으로 지은 날 · 집 자리가 마지막으로 는 날 · 석조주택 첫 · 마지막 날 · 끝의 터(무엇을 기다리나 · 선 지 며칠) · 태어남 · 죽음(까닭) · 배고픈 시간
+##      — 시뮬 상태를 읽기만 한다 (주사위 · 값에 손대지 않음)
+##   B  (Q13 ⑥) 병 60일부터 표시한 날마다 건물 종류별 수 (다 지은 것 · 터는 뒤에 +n)
 ##
 ## 실행:
 ##   godot --headless --path godot -s res://tools/measure_stone.gd -- <첫 씨앗> <끝 씨앗> [끝 날 = 60]
@@ -66,6 +72,19 @@ func _run(s: int, days: float) -> void:
 	var marks := {}
 	var quarries := 0
 	var dead_seen := 0
+	# --- (Q13 ⑥) S2 줄에 쓸 것 — 읽기만 한다 ---
+	var snaps := {}                        # 날 → 그때의 돌 · 판자 · 식구 · 집 종류 …
+	var r0_snap := {}                      # 병의 바위를 다 캔 그때
+	var x := {"ns_first": -1.0, "ns_h": 0, "ns_owed_first": -1.0, "ns_owed_h": 0, "s0_h": 0,
+		"r0_h": 0, "r0_wait_h": 0, "r0_ns_h": 0, "r0_ns_owed_h": 0, "r0_s0_h": 0, "r0_s0_first": -1.0, "r0_hneed_h": 0, "r0_hblock_h": 0,
+		"hneed_h": 0, "hblock_h": 0, "hblock_first": -1.0,
+		"last_built": -1.0, "last_cap": -1.0, "stoneh_first": -1.0, "stoneh_last": -1.0, "stone_last_drop": -1.0, "stone_min_r0": -1.0,
+		"hungry_h": 0, "hunger_max": 0.0, "pop_max": 0, "pop_max_day": 0.0}
+	var built_was := int(v.stats.get("built", 0))
+	var cap_was := -1
+	var stoneh_was := 0
+	var stone_was := float(v.stock["돌"])
+	var site_seen := {}                    # 터 (번호:종류) → 처음 본 날
 	while v.t < days * D - 1.0 and not v.people.is_empty():
 		jw.advance(minf(H, days * D - v.t))
 		for q: Village in jw.settlements:
@@ -112,9 +131,92 @@ func _run(s: int, days: float) -> void:
 		var hc := _houses(v)
 		if int(hc["free"]) == 0:
 			full_h += 1
+		# --- (Q13 ⑥) 시간마다 읽기 ---
+		var stone_now := float(v.stock["돌"])
+		var w := _wait(v)
+		var hn := v.house_need()
+		var era_house: String = Balance.ERA_HOUSE[mini(v.era, 3)]
+		var h_need := bool(hn["short"]) or bool(hn["homeless"]) or bool(hn["crowded"])
+		var h_block := h_need and int(Balance.B[era_house]["stone"]) > 0 and stone_now - float(v._owed("돌")) < float(int(Balance.B[era_house]["stone"]))
+		if h_need:
+			x["hneed_h"] += 1
+		if h_block:
+			x["hblock_h"] += 1
+			if float(x["hblock_first"]) < 0.0:
+				x["hblock_first"] = day
+		if stone_now < 1.0:
+			x["s0_h"] += 1
+			if bool(w["wait"]):
+				x["ns_h"] += 1
+				if float(x["ns_first"]) < 0.0:
+					x["ns_first"] = day
+			if int(w["owed"]) > 0:
+				x["ns_owed_h"] += 1
+				if float(x["ns_owed_first"]) < 0.0:
+					x["ns_owed_first"] = day
+		if first.has("rock0"):
+			if r0_snap.is_empty():
+				r0_snap = _snap(v)
+				x["stone_min_r0"] = stone_now
+			x["r0_h"] += 1
+			x["stone_min_r0"] = minf(float(x["stone_min_r0"]), stone_now)
+			if bool(w["wait"]):
+				x["r0_wait_h"] += 1
+			if stone_now < 1.0:
+				x["r0_s0_h"] += 1
+				if float(x["r0_s0_first"]) < 0.0:
+					x["r0_s0_first"] = day
+				if bool(w["wait"]):
+					x["r0_ns_h"] += 1
+				if int(w["owed"]) > 0:
+					x["r0_ns_owed_h"] += 1
+			if h_need:
+				x["r0_hneed_h"] += 1
+			if h_block:
+				x["r0_hblock_h"] += 1
+		if stone_now < stone_was - 0.5:
+			x["stone_last_drop"] = day
+		stone_was = stone_now
+		if int(v.stats.get("built", 0)) != built_was:
+			built_was = int(v.stats.get("built", 0))
+			x["last_built"] = day
+		if cap_was >= 0 and int(hc["cap"]) > cap_was:
+			x["last_cap"] = day
+		cap_was = int(hc["cap"])
+		var stoneh := 0
+		for b: Building in v.houses():
+			if b.type == "석조주택":
+				stoneh += 1
+		if stoneh > stoneh_was:
+			if float(x["stoneh_first"]) < 0.0:
+				x["stoneh_first"] = day
+			x["stoneh_last"] = day
+		stoneh_was = stoneh
+		var hmax := 0.0
+		for p: Resident in v.people:
+			hmax = maxf(hmax, p.hunger)
+		x["hunger_max"] = maxf(float(x["hunger_max"]), hmax)
+		if hmax >= 3.0:
+			x["hungry_h"] += 1
+		if v.people.size() > int(x["pop_max"]):
+			x["pop_max"] = v.people.size()
+			x["pop_max_day"] = day
+		var live := {}
+		for b: Building in v.buildings:
+			if b.is_site():
+				var key := "%d:%s" % [b.id, b.site_type()]
+				live[key] = true
+				if not site_seen.has(key):
+					site_seen[key] = day
+		for old_key: String in site_seen.keys():
+			if not live.has(old_key):
+				site_seen.erase(old_key)
 		while mark_i < MARKS.size() and day >= float(MARKS[mark_i]) - 1e-6:
 			var m := int(MARKS[mark_i])
 			marks[m] = {"pop": v.people.size(), "cap": int(hc["cap"]), "n": int(hc["n"])}
+			snaps[m] = _snap(v)
+			if m >= 60:
+				print("B %d day %d %s" % [s, m, _kinds(v)])
 			print("P %d day %d pop %d cap %d houses %d (%s) free %d homeless %d | %s | layout %d" % [s, m, v.people.size(), int(hc["cap"]), int(hc["n"]),
 				String(hc["kinds"]), int(hc["free"]), int(hc["homeless"]), _stone_txt(v, st), _layout_hash(v)])
 			if m == 10:
@@ -131,6 +233,123 @@ func _run(s: int, days: float) -> void:
 		_d(first, "stone0"), _d(first, "reach0"), _d(first, "dry"), _d(first, "stall"), _d(first, "out_all"), _d(first, "rock0"), dry_h, stall_h, out_h, full_h,
 		int(st2["quarry"]) + int(st2["quarry_site"]), v.graves.size(), v.count_type("묘지"), v.count_type("농장"),
 		int(v.stats.get("died", 0)), int(v.stats.get("starved", 0)), _stone_txt(v, st2), _hidden(v), _sites(v), (Time.get_ticks_msec() - t0) / 1000.0])
+	# --- (Q13 ⑥) 둘째 요약 줄 — S 줄은 위 그대로 ---
+	var s2 := "S2 %d end %.1f" % [s, v.t / D]
+	for sm: int in [60, 90, 120]:
+		if snaps.has(sm):
+			s2 += " | d%d %s" % [sm, _snap_txt(snaps[sm])]
+	s2 += " | fin %s" % _snap_txt(_snap(v))
+	s2 += " | r0 day %s %s" % [_d(first, "rock0"), _snap_txt(r0_snap) if not r0_snap.is_empty() else "-"]
+	s2 += " | ns_first %s ns_h %d ns_owed_first %s ns_owed_h %d s0_h %d" % [_n(x["ns_first"]), int(x["ns_h"]), _n(x["ns_owed_first"]), int(x["ns_owed_h"]), int(x["s0_h"])]
+	s2 += " | r0_h %d r0_wait_h %d r0_ns_h %d r0_ns_owed_h %d r0_s0_h %d r0_s0_first %s r0_hneed_h %d r0_hblock_h %d stone_min_r0 %s" % [int(x["r0_h"]), int(x["r0_wait_h"]),
+		int(x["r0_ns_h"]), int(x["r0_ns_owed_h"]), int(x["r0_s0_h"]), _n(x["r0_s0_first"]), int(x["r0_hneed_h"]), int(x["r0_hblock_h"]), _n(x["stone_min_r0"])]
+	s2 += " | hneed_h %d hblock_h %d hblock_first %s" % [int(x["hneed_h"]), int(x["hblock_h"]), _n(x["hblock_first"])]
+	s2 += " | last_built %s last_cap %s stoneh_first %s stoneh_last %s stone_last_drop %s" % [_n(x["last_built"]), _n(x["last_cap"]), _n(x["stoneh_first"]), _n(x["stoneh_last"]), _n(x["stone_last_drop"])]
+	s2 += " | %s" % _sites_wait(v, site_seen)
+	var why := {}
+	for dp: Resident in v.dead:
+		why[dp.death_why] = int(why.get(dp.death_why, 0)) + 1
+	var why_txt := ""
+	for wk: String in why:
+		why_txt += "%s%d " % [wk, int(why[wk])]
+	s2 += " | born %d died %d starved %d spared %d why [%s]" % [int(v.stats.get("born", 0)), int(v.stats.get("died", 0)), int(v.stats.get("starved", 0)), int(v.stats.get("spared", 0)), why_txt.strip_edges()]
+	s2 += " | hungry_h %d hunger_max %.2f pop_max %d pop_max_day %.1f era %d" % [int(x["hungry_h"]), float(x["hunger_max"]), int(x["pop_max"]), float(x["pop_max_day"]), v.era]
+	print(s2)
+
+
+## (Q13 ⑥) 지금의 돌 · 판자 · 식구 · 집 (종류마다 — 0채도 적는다) · 터 · 지은 수. 읽기만 한다
+func _snap(v: Village) -> Dictionary:
+	var hut := 0
+	var wood := 0
+	var stoneh := 0
+	var other := 0
+	var cap := 0
+	for b: Building in v.houses():
+		cap += b.cap()
+		match b.type:
+			"오두막":
+				hut += 1
+			"목조주택":
+				wood += 1
+			"석조주택":
+				stoneh += 1
+			_:
+				other += 1
+	var sites := 0
+	var up := 0
+	for b: Building in v.buildings:
+		if b.is_site():
+			sites += 1
+			if b.built:
+				up += 1
+	var st := _stone(v)
+	return {"stone": float(v.stock["돌"]), "plank": float(v.stock["판자"]), "pop": v.people.size(), "cap": cap, "hut": hut, "wood": wood, "stoneh": stoneh, "other": other,
+		"sites": sites, "upsites": up, "bld": v.buildings.size(), "built": int(v.stats.get("built", 0)), "upg": int(v.stats.get("upgrades", 0)),
+		"jar_n": int(st["all_n"]), "jar_amt": float(st["all_amt"]), "quarry": int(st["quarry"]), "era": v.era}
+
+
+func _snap_txt(c: Dictionary) -> String:
+	return "stone %.0f plank %.0f pop %d cap %d hut %d wood %d stoneh %d other %d sites %d upsites %d bld %d built %d upg %d jar %d(%.0f) quarry %d era %d" % [float(c["stone"]), float(c["plank"]),
+		int(c["pop"]), int(c["cap"]), int(c["hut"]), int(c["wood"]), int(c["stoneh"]), int(c["other"]), int(c["sites"]), int(c["upsites"]), int(c["bld"]), int(c["built"]), int(c["upg"]),
+		int(c["jar_n"]), float(c["jar_amt"]), int(c["quarry"]), int(c["era"])]
+
+
+## (Q13 ⑥) 건물 종류별 수 — 다 지은 것 (넓혀 짓는 중이면 옛 종류로), 새 터는 `종류+n`
+func _kinds(v: Village) -> String:
+	var built := {}
+	var site := {}
+	for b: Building in v.buildings:
+		if b.built:
+			built[b.type] = int(built.get(b.type, 0)) + 1
+		else:
+			site[b.type] = int(site.get(b.type, 0)) + 1
+	var names := built.keys()
+	for k: String in site:
+		if not built.has(k):
+			names.append(k)
+	names.sort()
+	var out := ""
+	for k: String in names:
+		out += "%s %d" % [k, int(built.get(k, 0))]
+		if site.has(k):
+			out += "+%d" % int(site[k])
+		out += " · "
+	return out.trim_suffix(" · ")
+
+
+## (Q13 ⑥) 돌을 기다리는 터가 있나 (wait: 터에 닿은 돌 < 드는 돌 — S 줄의 stall과 같은 셈) · 나르는 중인 것까지 쳐도 모자란 돌 (owed)
+func _wait(v: Village) -> Dictionary:
+	var waits := false
+	for b: Building in v.buildings:
+		if b.is_site() and int(b.delivered["돌"]) < b.need("돌"):
+			waits = true
+	return {"wait": waits, "owed": v._owed("돌")}
+
+
+## (Q13 ⑥) 끝에 남은 터 — 종류:무엇을 기다리나 (돌 · 판자 · 짓기) (닿은 판자/드는 판자 · 닿은 돌/드는 돌 · 오는 판자+돌 · 선 지 며칠). ^ = 넓혀 짓는 중
+func _sites_wait(v: Village, seen: Dictionary) -> String:
+	var n := 0
+	var out := ""
+	for b: Building in v.buildings:
+		if not b.is_site():
+			continue
+		n += 1
+		var what := ""
+		if int(b.delivered["돌"]) < b.need("돌"):
+			what += "돌"
+		if int(b.delivered["판자"]) < b.need("판자"):
+			what += "판자"
+		if what == "":
+			what = "짓기"
+		var key := "%d:%s" % [b.id, b.site_type()]
+		var age := (v.t / D - float(seen[key])) if seen.has(key) else -1.0
+		out += "%s%s:%s(p%d/%d s%d/%d in%d+%d age%.1f) " % [b.site_type(), "^" if b.built else "", what, int(b.delivered["판자"]), b.need("판자"), int(b.delivered["돌"]), b.need("돌"),
+			int(b.incoming["판자"]), int(b.incoming["돌"]), age]
+	return "sites_end %d [%s]" % [n, out.strip_edges()]
+
+
+func _n(val: Variant) -> String:
+	return ("%.1f" % float(val)) if float(val) >= 0.0 else "-"
 
 
 func _first(first: Dictionary, s: int, what: String, day: float, st: Dictionary) -> void:
