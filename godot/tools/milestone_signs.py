@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """자람의 보상 장식 그림 (docs/PROGRESSION.md 4.5 — Q9 첫 묶음): 빵 간판 · 마을 이름 표지판.
 Q9 ⑦ (2026-11-11): 문 앞 작은 바람개비 (첫걸음마) · 키 재는 기둥 (마을에서 난 첫 아이가 어른이 됨).
+Q9 ⑭ (2026-11-11): 곳간 문 위 햇밀 다발 (첫 푸른 밀 고개를 넘김).
 
 임시 그림 — 그림 서브에이전트(codex exec)의 정식 그림이 오기 전까지 쓰는, 같은 팔레트·같은 굵은 갈색 테두리의 손그림.
 외부 그림을 쓰지 않는다 (도형만). 1칸 = 150점 (art/bld2d와 같은 촘촘함).
 
-    python3 godot/tools/milestone_signs.py        →  godot/art/milestones/bread_sign.png · village_sign.png · pinwheel.png · height_post.png
+    python3 godot/tools/milestone_signs.py        →  godot/art/milestones/bread_sign.png · village_sign.png · pinwheel.png · height_post.png · wheat_sheaf.png
 """
 import math
 import os
@@ -30,6 +31,9 @@ STONE = "#cea579"
 ROOF = "#e4704a"
 PETAL = "#fff6ea"
 HEART = "#f0b33c"
+WHEAT = "#efc04f"                       # 햇밀 이삭 (빵 속살 LOAF_L보다 노랗게)
+WHEAT_L = "#fae08c"
+STRAW = "#dba648"                       # 밀짚 줄기
 OW = 5                                  # 테두리 굵기 (줄인 뒤 점)
 
 
@@ -212,6 +216,59 @@ def height_post(path):
     finish(im, w, h, path)
 
 
+def _ear(d, x, y, ang, ln=27.0, wd=7.5):
+    """이삭 하나: (x, y)에서 ang 쪽(라디안, 위 = -pi/2)으로 뻗은 길쭉한 알 + 끝의 수염 + 낟알 금"""
+    ux, uy = math.cos(ang), math.sin(ang)
+    vx, vy = -uy, ux
+    pts = []
+    for i in range(14):
+        t = i * math.tau / 14
+        a, b = math.cos(t) * ln / 2.0 + ln / 2.0, math.sin(t) * wd
+        pts.append((x + ux * a + vx * b, y + uy * a + vy * b))
+    tip = (x + ux * ln, y + uy * ln)
+    for k in (-0.32, 0.0, 0.32):
+        line(d, [tip, (tip[0] + math.cos(ang + k) * 10, tip[1] + math.sin(ang + k) * 10)], LINE, 2)
+    poly(d, pts, WHEAT, 4)
+    for f in (0.3, 0.52, 0.74):
+        cx, cy = x + ux * ln * f, y + uy * ln * f
+        line(d, [(cx - vx * wd * 0.55, cy - vy * wd * 0.55), (cx + ux * 3.5, cy + uy * 3.5), (cx + vx * wd * 0.55, cy + vy * wd * 0.55)], STRAW, 2)
+    line(d, [(x + ux * ln * 0.2 - vx * wd * 0.35, y + uy * ln * 0.2 - vy * wd * 0.35), (x + ux * ln * 0.75 - vx * wd * 0.35, y + uy * ln * 0.75 - vy * wd * 0.35)], WHEAT_L, 2)
+
+
+def wheat_sheaf(path):
+    """갓 거둔 햇밀 한 다발 — 가운데를 붉은 끈으로 묶고 이삭을 부채처럼 펴서 곳간 문 위에 건다. 걸이 끈 + 작은 나무못.
+    발치 풀 없음 (땅에 서는 것이 아니라 벽에 걸린다)"""
+    w, h = 108, 120
+    im, d = canvas(w, h)
+    cx, ty = 54, 74                     # 묶은 자리
+    # 나무못 + 걸이 끈
+    line(d, [(cx, 9), (cx, ty - 6)], LINE, 5)
+    line(d, [(cx, 10), (cx, ty - 6)], ROPE, 2)
+    oval(d, cx - 6, 3, cx + 6, 15, WOOD, 3)
+    # 밑동 (잘린 짚 — 아래로 벌어짐)
+    poly(d, [(cx - 9, ty), (cx + 9, ty), (cx + 24, h - 6), (cx + 8, h - 3), (cx - 8, h - 3), (cx - 24, h - 6)], STRAW, 4)
+    for dx in (-13, -5, 4, 12):
+        line(d, [(cx + dx * 0.4, ty + 8), (cx + dx, h - 8)], WHEAT_L if dx in (-5, 12) else WOOD_D, 2)
+    # 줄기 + 이삭 (부채꼴 일곱 — 바깥 것부터 그려 가운데가 위에)
+    fan = [-1.02, 1.02, -0.68, 0.68, -0.34, 0.34, 0.0]
+    for a in fan:
+        ang = -math.pi / 2 + a
+        ln = 26 + (1.0 - abs(a)) * 6
+        ex, ey = cx + math.cos(ang) * ln, ty - 4 + math.sin(ang) * ln
+        line(d, [(cx + a * 5, ty - 2), (ex, ey)], LINE, 6)
+        line(d, [(cx + a * 5, ty - 2), (ex, ey)], STRAW, 3)
+    for a in fan:
+        ang = -math.pi / 2 + a
+        ln = 26 + (1.0 - abs(a)) * 6
+        _ear(d, cx + math.cos(ang) * ln, ty - 4 + math.sin(ang) * ln, ang + a * 0.25, 27 - abs(a) * 3)
+    # 묶은 끈 (붉은 띠 + 매듭 꼬리)
+    poly(d, [(cx + 6, ty + 3), (cx + 22, ty + 16), (cx + 12, ty + 19)], ROOF, 3)
+    poly(d, [(cx - 6, ty + 3), (cx - 20, ty + 17), (cx - 10, ty + 19)], ROOF, 3)
+    box(d, cx - 13, ty - 7, cx + 13, ty + 7, ROOF, 5, 4)
+    plain(d, cx - 8, ty - 3, cx + 4, ty - 1, PETAL)
+    finish(im, w, h, path)
+
+
 if __name__ == "__main__":
     here = os.path.dirname(os.path.abspath(__file__))
     out = sys.argv[1] if len(sys.argv) > 1 else os.path.join(here, "..", "art", "milestones")
@@ -220,3 +277,4 @@ if __name__ == "__main__":
     village_sign(os.path.join(out, "village_sign.png"))
     pinwheel(os.path.join(out, "pinwheel.png"))
     height_post(os.path.join(out, "height_post.png"))
+    wheat_sheaf(os.path.join(out, "wheat_sheaf.png"))

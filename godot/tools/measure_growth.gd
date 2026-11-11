@@ -252,7 +252,8 @@ func _line(v: Village, days: int, secs: float) -> void:
 		ms[id] = snappedf(float((passed[id] as Dictionary)["t"]) / D, 0.01) if passed.has(id) else -1.0
 	var out := {"mode": mode, "seed": seed_v, "days": days, "pop": pop_at, "end_pop": v.people.size(), "ms": ms, "births": births, "deaths": deaths, "splits": splits,
 		"starved": starved, "spared": spared, "hunger_max": snappedf(hunger_max, 0.01), "hungry_first": snappedf(hungry_first, 0.01), "win": win,
-		"built": built, "era": v.era, "aware": v.aware, "settlements": jw.settlements.size(), "bad": bad, "secs": int(secs)}
+		"built": built, "era": v.era, "aware": v.aware, "settlements": jw.settlements.size(), "bad": bad, "secs": int(secs),
+		"steps_n": int((passed["steps"] as Dictionary).get("n", -1)) if passed.has("steps") else -1}     # 첫걸음마에 와 선 이웃 수 (Q9 ⑮)
 	print("GROW " + JSON.stringify(out))
 
 

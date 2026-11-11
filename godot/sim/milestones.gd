@@ -1,24 +1,31 @@
 ## 자람의 보상 — 고비 (docs/PROGRESSION.md 4.5 · ROADMAP Q9 첫 묶음).
-## 병마다 한 번씩: 첫 빵 · 첫걸음마 · 식구 열둘 · 마을에서 난 첫 아이가 어른이 됨 · 식구 스물 · 첫 겨울을 넘김. 고비를 넘으면 이끈 주민에게 별명이 붙고(연대기 한 줄),
+## 병마다 한 번씩: 첫 빵 · 첫걸음마 · 식구 열둘 · 마을에서 난 첫 아이가 어른이 됨 · 첫 푸른 밀 고개를 넘김 · 식구 스물 · 첫 겨울을 넘김. 고비를 넘으면 이끈 주민에게 별명이 붙고(연대기 한 줄),
 ## 그날 저녁 모닥불 둘레에서 잔치가 열린다(연대기 한 줄). 수첩의 도장·다음 고비 한 줄과 영구 장식(빵 간판·마을 표지판)은 이 기록을 읽기만 한다.
 ## 화면과 분리된 순수 로직 (ADR-0001) — 지켜보는지 여부를 읽지 않는다: 잔치는 비운 동안에도 병 시계로 열리고 지나간다 (돌아와서 다시 틀지 않음).
 ## 상태는 Village.milestones (저장됨, 병의 첫 정착지 것 하나):
-##   {"v": 2, "passed": {id → {"t", "who", "name", "nick", "silent"}}, "winter": 지낸 겨울 날 수, "day": 마지막으로 센 병의 날,
+##   {"v": 3, "passed": {id → {"t", "who", "name", "nick", "silent"}}, "winter": 지낸 겨울 날 수, "day": 마지막으로 센 병의 날,
 ##    "feasts": [{"id", "day"}] 기다리는 잔치, "feast": {"id", "t0", "until", "day"} 마지막(지금) 잔치,
-##    "born_n": 센 출생 수, "kids": [이 마을에서 난 아이 id — 아직 어른이 아닌], "steps_call": {"baby", "at"} 첫걸음마를 보러 이웃을 부른 것}
-## 옛 저장: "v"가 없으면 첫 걸음에 이미 넘은 고비를 조용히 넘은 것으로 적는다 (사건·별명·잔치 없음). "v" 1(고비 넷이던 때)이면 새 고비 둘만 같은 규칙으로.
+##    "born_n": 센 출생 수, "kids": [이 마을에서 난 아이 id — 아직 어른이 아닌], "steps_call": {"baby", "at" 어림한 때, "last" 마감, "used"} 첫걸음마를 보러 이웃을 부른 것}
+## 옛 저장: "v"가 없으면 첫 걸음에 이미 넘은 고비를 조용히 넘은 것으로 적는다 (사건·별명·잔치 없음). "v" 1(고비 넷이던 때)이면 새 고비 둘만,
+##   "v" 2(고비 여섯이던 때)이면 '첫 푸른 밀 고개'만 같은 규칙으로.
 ## 첫걸음마 (Q9 ⑦): 잔치 없음 — 병의 첫 걸음마 때는 이웃을 먼저 부르고(steps_hold) STEPS_GATHER_SECS 뒤 아기가 걸음을 뗀다 (ChildPlay._care_tick → on_first_steps).
-##   부르는 이웃: 문 가까이(STEPS_CLAP_R)에서 쉬던 사람 먼저, 모자라면 일하던 어른이 하던 일을 잠깐 내려놓고 (병마다 한 번뿐인 일 — 잔치에 부를 때처럼).
+##   부르는 이웃 (Q9 ⑮ 2026-11-11 넓힘): 어른만, 문에서 가까운 차례로 STEPS_CLAP_R 안에서 — 쉬던 사람은 모두(STEPS_CLAP_MAX까지), 모자라면 손이 빈 채
+##   일하거나 걷던 어른이 하던 일을 잠깐 내려놓고 (STEPS_CLAP_WANT까지 — 병마다 한 번뿐인 일, 잔치에 부를 때처럼). 자는 사람·밥 먹는 사람·짐 든 사람·
+##   아이·앓는 사람은 부르지 않는다. 가장 먼 사람이 걸어올 만큼 기다린다 (STEPS_GATHER_SECS ~ STEPS_GATHER_MAX). 불린 사람은 그동안 기도 종에 가지 않는다.
+##   둘을 기다림: 어림한 때가 되어도 문 앞에 선 이웃이 STEPS_CLAP_MIN보다 적으면 아기는 마감(STEPS_GATHER_MAX)까지 기다리고, 살핌마다 오는 이가
+##   모자라면 그때 손이 난 어른을 더 부른다 (난수 없음). 마감이 되면 온 사람만으로 걸음을 뗀다.
 ##   모인 이웃은 손뼉을 치고 (걸음에 "ms" 표시 — 화면이 손뼉 몸짓으로), 부모가 문 앞에 바람개비를 단다 (기록의 "b" 집 · "x","y").
 ## 마을에서 난 첫 아이가 어른이 됨: 태어난 아이를 적어 두었다가("kids") 나이가 AGE_ADULT를 넘으면. 키 재는 기둥 자리("x","y")를 적는다.
+## 첫 푸른 밀 고개를 넘김 (Q9 ⑭ "green"): 푸른 밀 고개가 처음 끝난 때 (LeanSeasons.hourly가 적는 Village.stats "lean_green_end_y") — 작은 잔치(햇밀 잔치),
+##   밭에서 일하는 사람에게 별명, 창고 문 위에 햇밀 다발 (기록의 "b" 창고 — 창고가 없으면 첫 밭 "f", 그것도 없으면 모닥불 곁 · "x","y" 그때의 자리).
 ## 값은 data/balance.gd 맨 끝 'Q9 자람의 보상' 묶음에 있다 (2026-11-11 옮김) — 아래 이름들은 그 값을 가리킨다 (시험·도구가 Milestones.POP_SMALL로 읽음).
 class_name Milestones
 extends RefCounted
 
-const VERSION := 2
-const ORDER := ["bread", "steps", "pop12", "grown", "pop20", "winter"]     # 보통 넘는 차례 (2026-11-11 측정 — 도장 띠·다음 고비 한 줄의 차례)
-const FEAST_RANK := ["bread", "pop12", "grown", "winter", "pop20"]         # 잔치가 있는 고비 — 뒤로 갈수록 큰 잔치 (같은 날 겹치면 뒤쪽이 먼저). 첫걸음마는 잔치가 없다
-const FEAST_SMALL := ["grown"]                                # 작은 잔치 (Balance.FEAST_SMALL_SECS — 저녁 한때)
+const VERSION := 3
+const ORDER := ["bread", "steps", "pop12", "grown", "green", "pop20", "winter"]     # 보통 넘는 차례 (2026-11-11 측정 — 도장 띠·다음 고비 한 줄의 차례)
+const FEAST_RANK := ["bread", "pop12", "grown", "green", "winter", "pop20"]         # 잔치가 있는 고비 — 뒤로 갈수록 큰 잔치 (같은 날 겹치면 뒤쪽이 먼저). 첫걸음마는 잔치가 없다
+const FEAST_SMALL := ["grown", "green"]                       # 작은 잔치 (Balance.FEAST_SMALL_SECS — 저녁 한때)
 const POP_SMALL := Balance.MILESTONE_POP_SMALL                # 식구 열둘
 const POP_BIG := Balance.MILESTONE_POP_BIG                    # 식구 스물
 const WINTER_MIN_DAYS := Balance.MILESTONE_WINTER_MIN_DAYS    # 이만큼은 겨울을 지내야 '겨울을 넘겼다'
@@ -30,37 +37,44 @@ const FEAST_DANCE := Balance.FEAST_DANCE_SECS                 # 한 번 춤추�
 const FEAST_REACH := Balance.FEAST_REACH                      # 모닥불에서 이보다 먼 사람은 부르지 않는다
 const FEAST_DOING := "잔치를 즐기는 중"
 const CLAP_DOING := "첫걸음마를 보러 온 중"
-const PULL_ACTS := ["work", "build", "forage", "chores", "rest", "social", "play", "idle", ""]     # 첫걸음마를 보러 잠깐 내려놓아도 되는 일 (밥·잠·짐 나르기·기도·위기 대응은 그대로)
+const PARENT_DOING := "아기와 문 앞에 나온 중"
+const PULL_ACTS := ["work", "build", "forage", "haul", "chores", "rest", "social", "play", "idle", ""]     # 첫걸음마를 보러 잠깐 내려놓아도 되는 일 — 손이 비었을 때만 (밥·잠·짐 든 사람·기도·위기 대응은 그대로)
 
 ## 수첩 도장 이름 (거인 UI)
-const LABEL := {"bread": "첫 빵", "steps": "첫걸음마", "pop12": "식구 열둘", "grown": "첫 어른", "pop20": "식구 스물", "winter": "첫 겨울"}
+const LABEL := {"bread": "첫 빵", "steps": "첫걸음마", "pop12": "식구 열둘", "grown": "첫 어른", "green": "첫 고개", "pop20": "식구 스물", "winter": "첫 겨울"}
 ## 다음 고비 한 줄 (거인 UI — 숫자를 써도 된다)
 const NEXT := {
 	"bread": "첫 빵을 구우면 잔치가 열려요",
 	"steps": "아기가 첫걸음마를 떼면 이웃들이 모여 손뼉을 쳐요",
 	"pop12": "식구가 열둘이 되면 잔치가 열려요",
 	"grown": "마을에서 난 아이가 어른이 되면 잔치가 열려요",
+	"green": "첫 푸른 밀 고개를 넘기면 햇밀 잔치가 열려요",
 	"winter": "첫 겨울을 넘기면 봄맞이 잔치가 열려요",
 	"pop20": "식구가 스물이 되면 큰 잔치가 열려요",
 }
 const NEXT_DONE := "여기까지의 고비를 모두 넘었어요"
 ## 별명 (이름 앞에 붙는 말 — 주민 쪽 글이라 숫자 없음)
-const NICK := {"bread": "첫 빵을 구운", "steps": "바람개비를 단", "pop12": "표지판을 세운", "grown": "마을이 키운 첫 어른", "winter": "첫 겨울을 지켜 낸", "pop20": "마을을 북적이게 한"}
+const NICK := {"bread": "첫 빵을 구운", "steps": "바람개비를 단", "pop12": "표지판을 세운", "grown": "마을이 키운 첫 어른", "green": "햇밀을 거둔", "winter": "첫 겨울을 지켜 낸", "pop20": "마을을 북적이게 한"}
 ## 고비 연대기 줄: [이끈 주민이 있을 때 ({n} = 이름, {ga} = 이/가), 없을 때]
 const LINE := {
 	"bread": ["{n}{ga} 화덕 앞에 빵 간판을 걸었다.", "화덕 앞에 빵 간판이 걸렸다."],
 	"steps": ["이웃들이 모여 손뼉을 쳤다. {n}{ga} 문 앞에 작은 바람개비를 달았다.", "이웃들이 모여 손뼉을 쳤다. 문 앞에 작은 바람개비가 달렸다."],
 	"grown": ["이 마을에서 나고 자란 {n}{ga} 어른이 되었다. 모닥불 곁에 아이들 키를 새긴 기둥이 섰다.", "이 마을에서 나고 자란 아이가 어른이 되었다. 모닥불 곁에 아이들 키를 새긴 기둥이 섰다."],
+	"green": ["{n}{ga} 갓 거둔 햇밀 다발을 곳간 문 위에 걸었다.", "곳간 문 위에 갓 거둔 햇밀 다발이 걸렸다."],
 	"pop12": ["식구가 늘어 마을이 북적인다. {n}{ga} 어귀에 마을 이름 표지판을 세웠다.", "식구가 늘어 마을이 북적인다. 어귀에 마을 이름 표지판이 섰다."],
 	"winter": ["긴 겨울이 가고 봄볕이 들었다. 마을은 첫 겨울을 넘겼다.", "긴 겨울이 가고 봄볕이 들었다. 마을은 첫 겨울을 넘겼다."],
 	"pop20": ["마을이 사람 소리로 가득하다. 골목마다 웃음이 들린다.", "마을이 사람 소리로 가득하다. 골목마다 웃음이 들린다."],
 }
+## 첫 푸른 밀 고개 — 창고가 없는 마을 (햇밀 다발을 첫 밭 울타리에 · 밭도 없으면 모닥불 곁에)
+const GREEN_LINE_FIELD := ["{n}{ga} 갓 거둔 햇밀 다발을 밭 울타리에 걸었다.", "밭 울타리에 갓 거둔 햇밀 다발이 걸렸다."]
+const GREEN_LINE_FIRE := ["{n}{ga} 갓 거둔 햇밀 다발을 모닥불 곁에 세웠다.", "모닥불 곁에 갓 거둔 햇밀 다발이 섰다."]
 ## 잔치 연대기 줄
 const STEPS_ALONE_LINE := ["{n}{ga} 문 앞에 작은 바람개비를 달았다.", "문 앞에 작은 바람개비가 달렸다."]     # 첫걸음마 — 이웃이 아무도 못 왔을 때 (모두 일하는 중)
 const FEAST_LINE := {
 	"bread": "저녁에 작은 잔치가 열렸다. 모닥불 둘레에서 갓 구운 빵을 나누어 먹고 춤을 추었다.",
 	"pop12": "저녁에 작은 잔치가 열렸다. 새 표지판 이야기로 모닥불 둘레가 밤늦도록 떠들썩했다.",
 	"grown": "저녁에 작은 잔치가 열렸다. 모닥불 둘레에서 다 자란 아이의 어릴 적 이야기를 나누며 먹고 춤을 추었다.",
+	"green": "저녁에 햇밀 잔치가 열렸다. 모닥불 둘레에서 햇밀로 구운 빵을 나누어 먹고 춤을 추었다.",
 	"winter": "봄맞이 잔치가 열렸다. 모닥불 둘레에서 겨울 이야기를 나누며 먹고 춤을 추었다.",
 	"pop20": "큰 잔치가 열렸다. 온 마을이 모닥불 둘레에 모여 먹고 노래하고 춤을 추었다.",
 }
@@ -90,6 +104,8 @@ static func step(v: Village, _dt: float) -> void:
 		_pass(v, "pop20")
 	if not is_passed(v, "grown"):
 		_grown_tick(v)
+	if not is_passed(v, "green") and green_over(v) and v.hour_now() >= Balance.GREEN_PASS_HOUR:
+		_pass(v, "green")                             # 고개는 자정에 끝난다 — 햇밀 다발은 그날 아침에 건다 (잔치는 그 저녁)
 	if not (m.get("feasts", []) as Array).is_empty():
 		_try_feast(v, day)
 	var f: Dictionary = m.get("feast", {})
@@ -120,12 +136,24 @@ static func _baseline(v: Village) -> void:
 	if v.t >= 365.0 * Balance.DAY or (winter >= WINTER_MIN_DAYS and _season_at(v, v.t) != "겨울"):
 		_mark_silent(v, "winter")
 	_baseline_born(v)
+	if green_over(v):
+		_mark_silent(v, "green")
 
 
-## 고비 넷이던 때의 저장 ("v" 1): 새 고비 둘(첫걸음마 · 마을에서 난 첫 어른)만 같은 규칙으로 — 이미 넘었으면 조용히
+## 옛 저장: 그 뒤에 생긴 고비만 같은 규칙으로 — 이미 넘었으면 조용히.
+## "v" 1 (고비 넷이던 때): 첫걸음마 · 마을에서 난 첫 어른. "v" 2 (고비 여섯이던 때)까지: 첫 푸른 밀 고개
 static func _upgrade(v: Village) -> void:
+	var was := int(v.milestones["v"])
 	v.milestones["v"] = VERSION
-	_baseline_born(v)
+	if was < 2:
+		_baseline_born(v)
+	if was < 3 and green_over(v) and not is_passed(v, "green"):
+		_mark_silent(v, "green")
+
+
+## 이 병이 푸른 밀 고개를 한 번이라도 넘었나 (LeanSeasons.hourly가 고개가 끝난 해를 적어 둔다 — 저장됨)
+static func green_over(v: Village) -> bool:
+	return int(v.stats.get("lean_green_end_y", -1)) > 0
 
 
 ## 이 마을에서 난 사람을 살펴 (옛 저장 — 태어난 때와 나이로 가려냄): 이미 걷는 아이·이미 어른이 된 사람이 있으면 그 고비는 조용히 넘은 것으로,
@@ -199,8 +227,10 @@ static func _grown_tick(v: Village) -> void:
 
 
 # ───────────────────────── 첫걸음마 (ChildPlay._care_tick이 부른다) ─────────────────────────
-## 병의 첫 걸음마를 잠깐 미룰까 — 이웃을 먼저 부르고 STEPS_GATHER_SECS 뒤에 아기가 걸음을 뗀다. true = 아직 (아기는 기다린다).
-## 고비를 이미 넘었거나, 첫 무리가 아니거나, 기록이 아직 없는 마을(첫 걸음 전)은 미루지 않는다. 지켜봄과 무관.
+## 병의 첫 걸음마를 잠깐 미룰까 — 이웃을 먼저 부르고, 이웃이 문 앞에 와 설 때까지 아기가 기다린다. true = 아직.
+##  · 부른 때 어림한 시각("at" = 가장 먼 사람이 걸어올 만큼, STEPS_GATHER_SECS 이상)이 되고 이웃 STEPS_CLAP_MIN명이 와 섰으면 걸음을 뗀다.
+##  · 모자라면 더 기다리며 그사이 손이 난 사람(짐을 내려놓은 사람·밥을 다 먹은 사람)을 더 부른다 — 길어도 부른 뒤 STEPS_GATHER_MAX("last")까지 (Q9 ⑮).
+## 고비를 이미 넘었거나, 첫 무리가 아니거나, 기록이 아직 없는 마을(첫 걸음 전)은 미루지 않는다. 지켜봄과 무관. 난수 없음.
 static func steps_hold(v: Village, b: Resident) -> bool:
 	var m: Dictionary = v.milestones
 	if not v.owns_water or not m.has("v") or is_passed(v, "steps"):
@@ -209,27 +239,52 @@ static func steps_hold(v: Village, b: Resident) -> bool:
 	if not call.is_empty():
 		var cb := v.person(int(call.get("baby", -1)))
 		var at := float(call.get("at", 0.0))
-		if cb != null and not cb.dead and cb.is_baby() and v.t <= at + Balance.STEPS_GATHER_LATE:
+		var last := maxf(at, float(call.get("last", at)))     # 마감 (옛 부름 기록에는 없다 — 어림한 때가 곧 마감)
+		if cb != null and not cb.dead and cb.is_baby() and v.t <= last + Balance.STEPS_GATHER_LATE:
 			if cb.id != b.id:
 				return true                           # 다른 아기의 첫걸음마를 기다리는 중 — 이 아기는 그 뒤에
-			return v.t < at
+			if v.t >= at and (clappers(v, b.id) >= Balance.STEPS_CLAP_MIN or v.t >= last):
+				return false
+			if not v.staged() and _coming(v, b.id) < Balance.STEPS_CLAP_MIN:
+				var far := _call(v, b, call, Balance.STEPS_CLAP_MIN, Balance.STEPS_CLAP_MIN)
+				if far > 0.0:                         # 더 불렀다 — 걸어올 만큼 (마감을 넘기지는 않는다)
+					call["at"] = clampf(v.t + far * Balance.STEPS_WALK_SLACK, at, last)
+			return true
 	if v.staged() or v.in_opening():
 		return true                                   # 깨달음·제단 장면이 끝난 뒤에 부른다 (그 사이 아기는 기다린다)
 	var minder := ChildPlay.minder(v, b, v.people)
 	if minder != null and not _free(v, minder) and b.age < ChildPlay.TODDLE_AGE + Balance.STEPS_PARENT_WAIT:
 		return true                                   # 아기를 보는 사람이 밥을 먹거나 이야기 중 — 손이 날 때까지 조금 기다린다
-	m["steps_call"] = {"baby": b.id, "at": v.t + Balance.STEPS_GATHER_SECS}
-	_gather(v, b, minder, v.t + Balance.STEPS_GATHER_SECS)
+	_gather(v, b, minder)
 	return true
 
 
-## 아기가 걸음마를 뗐다 (ChildPlay._first_steps 바로 뒤) — 병에서 처음이면 고비
+## 아기가 걸음마를 뗐다 (ChildPlay._first_steps 바로 뒤) — 병에서 처음이면 고비. 기다리며 서 있던 이웃은 이제 손뼉을 친다
 static func on_first_steps(v: Village, b: Resident) -> void:
 	var m: Dictionary = v.milestones
 	if not v.owns_water or not m.has("v") or is_passed(v, "steps"):
 		return
 	m.erase("steps_call")
+	_release(v, b.id)
 	_pass(v, "steps", b)
+
+
+## 기다리던 걸음을 끝낸다: 이웃의 '서서 기다림'은 곧바로 손뼉으로, 아기를 보는 사람은 손뼉 길이만큼만 더 선다
+static func _release(v: Village, baby_id: int) -> void:
+	var busy: Dictionary = v.social.get("busy", {})
+	for q in v.people:
+		var hit := false
+		for s: Dictionary in q.steps:
+			if String(s.get("k", "")) != "do" or int(s.get("ms", -1)) != baby_id:
+				continue
+			if bool(s.get("par", false)):
+				s["left"] = minf(float(s["left"]), Balance.STEPS_CLAP_SECS)
+				hit = true
+			elif String(s.get("anim", "")) == "idle":
+				s["left"] = 0.0
+				hit = true
+		if hit and busy.has(str(q.id)):
+			busy[str(q.id)] = minf(float(busy[str(q.id)]), v.t + Balance.STEPS_CLAP_SECS + Balance.STEPS_GATHER_SECS)
 
 
 ## 지금 그 아기의 첫걸음마를 보러 문 앞에 와 선 이웃 수 (걸어오는 중인 사람은 세지 않는다)
@@ -259,7 +314,7 @@ static func _free(v: Village, q: Resident) -> bool:
 
 
 ## 하던 일을 잠깐 내려놓고 올 수 있는 어른인가 — 잔치에 부를 때의 규칙(can_join)에 더해: 자는 사람·밥 먹는 사람·짐 든 사람·
-## 이야기 장면·놀이 속·이미 불린 사람은 그대로 둔다
+## 이야기 장면·놀이 속·이미 불린 사람은 그대로 둔다. 손이 빈 채 걷는 사람(가지러 가는 길)은 부른다 (Q9 ⑮)
 static func _pullable(v: Village, q: Resident) -> bool:
 	if q.is_child() or q.dead or q.sleeping or q.anim == "sleep" or q.carry != "" or not can_join(q) or not PULL_ACTS.has(q.action):
 		return false
@@ -269,58 +324,113 @@ static func _pullable(v: Village, q: Resident) -> bool:
 	return q.steps.is_empty() or not ((q.steps[0] as Dictionary).has("ms") or (q.steps[0] as Dictionary).has("g"))
 
 
-## 첫걸음마 자리를 차린다: 아기를 보는 사람(minder — 있고 손이 비었으면)은 아기를 데리고 문 앞으로, 문 가까이의 이웃은 문 앞 양옆으로 —
-## 쉬던 사람 먼저, 모자라면 일하던 어른(하던 일은 내려놓는다 — 짐·예약은 되돌림). 걸어와 기다리다(when까지) 손뼉.
-## 걸음에 "ms"(아기 id) 표시 — 화면이 아기 쪽을 보고 손뼉 몸짓으로 (view/milestone_view.gd).
-static func _gather(v: Village, b: Resident, minder: Resident, when: float) -> void:
+## 첫걸음마를 보러 불려 가는(와 선) 사람인가 — 그동안은 기도 종이 울려도 그대로 있는다 (Awakening.gather_ring)
+static func at_steps(q: Resident) -> bool:
+	for s: Dictionary in q.steps:
+		if s.has("ms"):
+			return true
+	return false
+
+
+## 그 아기의 첫걸음마에 불려 오는 중이거나 와 선 이웃 수 (아기를 보는 사람은 빼고)
+static func _coming(v: Village, baby_id: int) -> int:
+	var n := 0
+	for q in v.people:
+		for s: Dictionary in q.steps:
+			if int(s.get("ms", -1)) == baby_id and not bool(s.get("par", false)):
+				n += 1
+				break
+	return n
+
+
+## 첫걸음마 자리를 차린다: 아기를 보는 사람(minder — 있고 손이 비었으면)은 아기를 데리고 문 앞으로, 이웃 어른은 문 앞 양옆으로
+## (_call). 돌려주는 값 = 아기가 걸음을 떼는 어림 시각 (가장 먼 사람이 걸어올 만큼 뒤, STEPS_GATHER_SECS ~ STEPS_GATHER_MAX).
+## 부름 기록(Village.milestones["steps_call"]): baby · at(어림 시각) · last(마감 = 부른 때 + STEPS_GATHER_MAX) · used(내준 자리 번호).
+static func _gather(v: Village, b: Resident, minder: Resident) -> float:
 	var d := ChildPlay.door(v, b)
 	if not v.social.has("busy"):
 		v.social["busy"] = {}
+	var last := v.t + Balance.STEPS_GATHER_MAX
+	var call := {"baby": b.id, "at": v.t + Balance.STEPS_GATHER_SECS, "last": last, "used": []}
+	v.milestones["steps_call"] = call
+	var far := _call(v, b, call, Balance.STEPS_CLAP_MAX, Balance.STEPS_CLAP_WANT, minder)
+	var when := v.t + clampf(far * Balance.STEPS_WALK_SLACK, Balance.STEPS_GATHER_SECS, Balance.STEPS_GATHER_MAX)
+	call["at"] = when
 	if minder != null and _free(v, minder):
 		var to := d + Balance.STEPS_PARENT_SPOT
 		if spot_free(v, to):
-			var stay := ResidentAI.act(maxf(when - v.t, 1.0) + Balance.STEPS_CLAP_SECS, "idle", ResidentAI.op("social_done", {"was": minder.doing}), false,
+			var stay := ResidentAI.act(maxf(last - v.t, 1.0) + Balance.STEPS_CLAP_SECS, "idle", ResidentAI.op("social_done", {"was": minder.doing}), false,
 				ResidentAI.op("social_done", {"was": minder.doing}))
 			stay["ms"] = b.id
 			stay["par"] = true
-			_front(minder, [ResidentAI.walk(to.x, to.y), stay], "아기와 문 앞에 나온 중")
-			v.social["busy"][str(minder.id)] = when + Balance.STEPS_CLAP_SECS
-	var found: Array = []                             # [쉬던 사람 0 · 일하던 사람 1, 거리, id]
+			_front(minder, [ResidentAI.walk(to.x, to.y), stay], PARENT_DOING)
+			v.social["busy"][str(minder.id)] = last + Balance.STEPS_CLAP_SECS
+	return when
+
+
+## 이웃 어른을 부른다 — 문에서 가까운 차례로 (STEPS_CLAP_R 안): 쉬던 사람은 온 사람·오는 사람이 max_free명이 될 때까지,
+## 손 빈 일꾼은 max_work명이 될 때까지만 (일하던 사람은 STEPS_WORK_FAR칸 더 먼 것으로 쳐서 쉬던 사람 뒤에 — 하던 일은 내려놓는다:
+## 예약은 되돌림). 자는 사람·밥 먹는 사람·짐 든 사람·아이·앓는 사람은 부르지 않는다. 가까운 차례는 걸어올 시간으로 잰다 (걸음이
+## 느린 사람은 그만큼 뒤). 곧장 걸어와 서서 기다리다 (아기가 걸음을 떼면) 손뼉.
+## 걸음에 "ms"(아기 id) 표시 — 화면이 아기 쪽을 보고 손뼉 몸짓으로 (view/milestone_view.gd).
+## 돌려주는 값 = 이번에 부른 사람 중 가장 먼 사람이 걸어올 시간 (곧은 길 어림, 아무도 못 불렀으면 0). 난수 없음.
+static func _call(v: Village, b: Resident, call: Dictionary, max_free: int, max_work: int, minder: Resident = null) -> float:
+	var d := ChildPlay.door(v, b)
+	if not v.social.has("busy"):
+		v.social["busy"] = {}
+	var found: Array = []                             # [차례를 정하는 걸음 시간, id, 쉬던 사람 0 · 일하던 사람 1]
 	for q in v.people:
-		if q == minder or q.id == b.id:
+		if q == minder or q.id == b.id or q.is_child() or q.sick_left > 0.0:
 			continue
 		var rank := 0 if _free(v, q) else (1 if _pullable(v, q) else -1)
 		if rank < 0:
 			continue
 		var dd := Vector2(q.x - d.x, q.y - d.y).length()
-		if dd <= Balance.STEPS_CLAP_R:
-			found.append([rank, dd, q.id])
-	found.sort_custom(func(a: Array, c: Array) -> bool: return int(a[0]) < int(c[0]) if int(a[0]) != int(c[0]) else (
-		float(a[1]) < float(c[1]) if float(a[1]) != float(c[1]) else int(a[2]) < int(c[2])))
-	var spots: Array = []
-	for off: Vector2 in Balance.STEPS_CLAP_SPOTS:
-		if spot_free(v, d + off):
-			spots.append(d + off)
-	for i in mini(mini(found.size(), spots.size()), Balance.STEPS_CLAP_MAX):
-		var q := v.person(int((found[i] as Array)[2]))
-		if int((found[i] as Array)[0]) == 1:              # 일하던 사람: 하던 일을 내려놓고 온다 (손뼉이 끝나면 다시 할 일을 고른다)
+		if dd <= Balance.STEPS_CLAP_R:                # 걸음이 느린 사람(어르신·다친 사람)은 그만큼 먼 것으로 친다
+			found.append([(dd + float(rank) * Balance.STEPS_WORK_FAR) / maxf(q.walk_speed(), 1.0e-6), q.id, rank])
+	found.sort_custom(func(a: Array, c: Array) -> bool: return float(a[0]) < float(c[0]) if float(a[0]) != float(c[0]) else int(a[1]) < int(c[1]))
+	var used: Array = call.get("used", [])
+	call["used"] = used
+	var have := _coming(v, b.id)
+	var last := float(call.get("last", v.t + Balance.STEPS_GATHER_MAX))
+	var far := 0.0
+	for f: Array in found:
+		if have >= max_free:
+			break
+		if int(f[2]) == 1 and have >= max_work:
+			continue                                  # 일하던 사람은 모자랄 때만
+		var si := -1
+		for i in Balance.STEPS_CLAP_SPOTS.size():
+			var taken := false
+			for u: Variant in used:
+				taken = taken or int(u) == i
+			if not taken and spot_free(v, d + (Balance.STEPS_CLAP_SPOTS[i] as Vector2)):
+				si = i
+				break
+		if si < 0:
+			break                                     # 설 자리가 없다
+		var q := v.person(int(f[1]))
+		var to: Vector2 = d + (Balance.STEPS_CLAP_SPOTS[si] as Vector2)
+		var walk_secs := Vector2(q.x - to.x, q.y - to.y).length() / maxf(q.walk_speed(), 1.0e-6)
+		if walk_secs * Balance.STEPS_WALK_SLACK > last - v.t:
+			continue                                  # 마감까지 걸어올 수 없는 사람은 부르지 않는다
+		used.append(si)
+		far = maxf(far, walk_secs)
+		if int(f[2]) == 1:                            # 일하던 사람: 하던 일을 내려놓고 온다 (손뼉이 끝나면 다시 할 일을 고른다)
 			ResidentAI.cancel(v, q)
 			q.action = "idle"
 			q.doing = "쉬는 중"
-		var to: Vector2 = spots[i]
-		var walk_secs := Vector2(q.x - to.x, q.y - to.y).length() / maxf(q.walk_speed(), 1.0e-6)
 		var done := ResidentAI.op("social_done", {"was": q.doing})
-		var front: Array = [ResidentAI.walk(to.x, to.y)]
-		var wait := when - (v.t + walk_secs)
-		if wait > 1.0:
-			var stand := ResidentAI.act(wait, "idle", null, false, done)
-			stand["ms"] = b.id
-			front.append(stand)
+		var stand := ResidentAI.act(maxf(last - v.t, 1.0), "idle", null, false, done)     # 아기가 걸음을 뗄 때까지 (_release가 끝낸다)
+		stand["ms"] = b.id
 		var clap := ResidentAI.act(Balance.STEPS_CLAP_SECS, "play", done, false, done)
 		clap["ms"] = b.id
-		front.append(clap)
-		_front(q, front, CLAP_DOING)
-		v.social["busy"][str(q.id)] = maxf(when, v.t + walk_secs) + Balance.STEPS_CLAP_SECS
+		var go := ResidentAI.walk(to.x, to.y)
+		go["rt"] = true                               # 길을 따라 돌지 않고 곧장 온다 (걸어올 시간을 어림한 그대로 — ResidentAI.update는 "rt"가 있으면 길을 다시 찾지 않는다)
+		_front(q, [go, stand, clap], CLAP_DOING)
+		v.social["busy"][str(q.id)] = last + walk_secs + Balance.STEPS_CLAP_SECS
+		have += 1
+	return far
 
 
 ## 그 사람의 할 일 앞에 걸음을 끼워 넣는다 (하던 일은 그 뒤에 이어서)
@@ -392,6 +502,12 @@ static func _pass(v: Village, id: String, lead: Resident = null) -> void:
 		rec["baby"] = lead.id
 		rec["x"] = hm.x if hm != null else v.fire.x
 		rec["y"] = (hm.y + hm.size() * 0.5) if hm != null else v.fire.y + 0.6
+	elif id == "green":                               # 햇밀 다발: 창고 문 위 (없으면 첫 밭 울타리, 그것도 없으면 모닥불 곁) — 건물 번호와 그때의 자리
+		var st := sheaf_house(v)
+		rec["b"] = st.id if st != null else -1
+		rec["f"] = st != null and st.type == "농장"
+		rec["x"] = st.x if st != null else v.fire.x + 0.9
+		rec["y"] = st.y if st != null else v.fire.y + 0.9
 	if feast_day >= 0:
 		(m["feasts"] as Array).append({"id": id, "day": feast_day})
 	var pair: Array = LINE[id]
@@ -399,6 +515,8 @@ static func _pass(v: Village, id: String, lead: Resident = null) -> void:
 		rec["n"] = clappers(v, lead.id) if lead != null else 0     # 보러 온 이웃 수 — 아무도 못 왔으면 손뼉 이야기는 뺀다
 		if int(rec["n"]) == 0:
 			pair = STEPS_ALONE_LINE
+	elif id == "green" and (int(rec.get("b", -1)) < 0 or bool(rec.get("f", false))):
+		pair = GREEN_LINE_FIELD if bool(rec.get("f", false)) else GREEN_LINE_FIRE
 	var text := String(pair[1])
 	if who != null:
 		text = String(pair[0]).replace("{n}", who.name).replace("{ga}", Village.josa(who.name, "이", "가"))
@@ -453,6 +571,16 @@ static func _leaders(v: Village, id: String, lead: Resident = null) -> Array:
 					_add(out, p)
 					break
 			_add(out, v.chief())
+		"green":                                          # 밭에서 일하는 사람 — 번호가 작은(먼저 온) 사람부터, 없으면 촌장 (난수 없음)
+			var hands: Array = []
+			for p in v.people:
+				var fb := v.bld(p.job) if p.job >= 0 else null
+				if fb != null and fb.type == "농장" and not p.is_child():
+					hands.append(p)
+			hands.sort_custom(func(a: Resident, b: Resident) -> bool: return a.id < b.id)
+			for p: Resident in hands:
+				_add(out, p)
+			_add(out, v.chief())
 		"winter":
 			var adults: Array = []
 			for p in v.people:
@@ -469,8 +597,12 @@ static func _add(out: Array, r: Resident) -> void:
 		out.append(r)
 
 
-## 사건 자리: 첫 빵 = 화덕, 첫걸음마 = 그 집 문 앞, 나머지 = 모닥불
+## 사건 자리: 첫 빵 = 화덕, 첫걸음마 = 그 집 문 앞, 첫 푸른 밀 고개 = 햇밀 다발을 건 창고(밭), 나머지 = 모닥불
 static func _spot(v: Village, id: String, lead: Resident = null) -> Vector2:
+	if id == "green":
+		var st := sheaf_house(v)
+		if st != null:
+			return Vector2(st.x, st.y)
 	if id == "bread":
 		var b := oven(v)
 		if b != null:
@@ -499,6 +631,20 @@ static func post_ok(v: Village, p: Vector2) -> bool:
 	if SkyDrops.blocks(v, p.x, p.y, 0.5) or (v.flora != null and v.flora.blocks(p.x, p.y, 0.5)):
 		return false
 	return not (GreatTrees.blocks(v.water, p.x, p.y, 0.5) or GiantPlants.blocks(v.water, p.x, p.y, 0.5))
+
+
+## 햇밀 다발을 걸 건물: 다 지은 창고 (번호가 가장 작은 것), 없으면 다 지은 첫 밭, 그것도 없으면 null (모닥불 곁)
+static func sheaf_house(v: Village) -> Building:
+	var store: Building = null
+	var field: Building = null
+	for b in v.buildings:
+		if not b.built:
+			continue
+		if b.type == "창고" and (store == null or b.id < store.id):
+			store = b
+		elif b.type == "농장" and (field == null or b.id < field.id):
+			field = b
+	return store if store != null else field
 
 
 ## 다 지은 화덕 (없으면 빵집) — 빵 간판 자리
