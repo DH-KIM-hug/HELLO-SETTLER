@@ -61,6 +61,7 @@ var root: Node3D                           # cm 공간 (scale_s배)
 var light: DirectionalLight3D              # 창빛 (층 2만)
 var curtain: Node3D
 var lamp: Node3D
+var prop_nodes: Array = []                 # (Q20) 선반 소품 노드 (PROP_NAMES 차례) — 화면 네모(prop_screen_rects)가 씀
 var lamp_flame: Node3D
 var lamp_glow: MeshInstance3D
 var lamp_lit := true
@@ -108,7 +109,7 @@ func setup(s: float, time_of_day: String, with_soil := true) -> void:
 	var ps := props(false)
 	for i in PROP_NAMES.size():
 		var at: Vector2 = ps[i][0]
-		Art.instance(root, ROOM + String(PROP_NAMES[i]), Transform3D(Basis(Vector3.UP, float(PROP_YAW[i])).scaled(Vector3.ONE * ODD_BIG), Vector3(at.x, 0, at.y)))
+		prop_nodes.append(Art.instance(root, ROOM + String(PROP_NAMES[i]), Transform3D(Basis(Vector3.UP, float(PROP_YAW[i])).scaled(Vector3.ONE * ODD_BIG), Vector3(at.x, 0, at.y))))
 	# 등불 (+ 불꽃 · 둥근 빛 · 유리)
 	lamp = Node3D.new()
 	root.add_child(lamp)
@@ -863,3 +864,120 @@ func souvenir_edge_y(cam: Camera3D, pan := 0.0) -> float:
 	if cam.is_position_behind(p):
 		return -1.0
 	return cam.unproject_position(p).y
+
+
+## (Q20 ㉟) 화면 양 끝 띠(폭 strip px)에서 선반 소품이 차지한 네모들 [{name, side(+1 오른쪽 · −1 왼쪽), rect}] —
+## 화분 · 물뿌리개 · 핀셋 · 설탕 그릇 · 등불(불꽃 · 유리 굴뚝까지). 가장자리 꼬리표(view/room/shelf_twinkle.gd)가 소품 위에 겹쳐
+## 그 소품의 반짝임으로 읽히지 않게 비켜 설 때 쓴다.
+## 소품의 세모를 화면에 비춰 띠 안에서 줄(EDGE_ROW px)마다 덮은 화소 칸을 세고, EDGE_MIN_W px 넘게 덮은 줄만 '차지했다'고 본다
+## (화분의 가는 꽃대 같은 실오라기는 뺀다 — 몸통 · 잎 · 꽃 · 그릇만). 이어진 줄은 네모 하나(띠 폭 그대로)로 묶는다.
+## 카메라 · 화면 크기가 그대로면 지난 값을 돌려준다 (세모를 다 비추는 일이라 매 화면 하지 않는다).
+## wait_still = true (장면이 매 화면 부를 때): 카메라가 움직이는 동안에는 재지 않고 edge_pending = true로 알린다 —
+## 한 화면 가만히 있으면 그때 잰다 (그동안 장면은 꼬리표를 감춘다)
+const EDGE_ROW := 2.0
+const EDGE_MIN_W := 16
+var edge_pending := false
+var _prop_faces := {}                      # 메시 → 세모 꼭짓점 (한 번만 뽑아 둠)
+var _edge_key := ""
+var _edge_seen := ""
+var _edge_rects: Array = []
+
+
+func prop_edge_rects(cam: Camera3D, strip: float, wait_still := false) -> Array:
+	edge_pending = false
+	if root == null or cam == null or not cam.is_inside_tree():
+		return []
+	var vs := cam.get_viewport().get_visible_rect().size
+	var key := "%s|%s|%s|%.3f|%.3f|%.1f|%s" % [cam.global_transform, root.global_transform, vs, cam.fov, cam.size, strip,
+		lamp.position if lamp != null else Vector3.ZERO]
+	if key == _edge_key:
+		return _edge_rects
+	if wait_still and key != _edge_seen:
+		_edge_seen = key
+		edge_pending = true
+		return []
+	_edge_seen = key
+	var out: Array = []
+	var items: Array = []
+	for i in mini(prop_nodes.size(), PROP_NAMES.size()):
+		items.append([String(PROP_NAMES[i]), prop_nodes[i]])
+	if lamp != null:
+		items.append(["oil_lamp", lamp])
+	var rows := int(ceil(vs.y / EDGE_ROW))
+	var cols := mini(62, int(ceil(strip)))
+	var bands := [[-1, 0.0, strip], [1, vs.x - strip, vs.x]]
+	for it: Array in items:
+		var mask := [PackedInt64Array(), PackedInt64Array()]      # 쪽마다 · 줄마다 덮인 화소 칸 (비트)
+		for k in 2:
+			mask[k].resize(rows)
+			mask[k].fill(0)
+		for mi: MeshInstance3D in (it[1] as Node3D).find_children("*", "MeshInstance3D", true, false):
+			if mi.mesh == null or not mi.visible or mi == lamp_glow:
+				continue
+			var id := mi.mesh.get_instance_id()
+			if not _prop_faces.has(id):
+				_prop_faces[id] = mi.mesh.get_faces()
+			var faces: PackedVector3Array = _prop_faces[id]
+			var xf := mi.global_transform
+			for f in range(0, faces.size() - 2, 3):
+				var wa := xf * faces[f]
+				var wb := xf * faces[f + 1]
+				var wc := xf * faces[f + 2]
+				if cam.is_position_behind(wa) or cam.is_position_behind(wb) or cam.is_position_behind(wc):
+					continue
+				var a := cam.unproject_position(wa)
+				var b := cam.unproject_position(wb)
+				var c := cam.unproject_position(wc)
+				var x0 := minf(a.x, minf(b.x, c.x))
+				var x1 := maxf(a.x, maxf(b.x, c.x))
+				var y0 := minf(a.y, minf(b.y, c.y))
+				var y1 := maxf(a.y, maxf(b.y, c.y))
+				if y1 < 0.0 or y0 > vs.y:
+					continue
+				for k in 2:
+					var xa: float = bands[k][1]
+					var xb: float = bands[k][2]
+					if x1 < xa or x0 > xb:
+						continue
+					for r in range(maxi(0, int(ceil(y0 / EDGE_ROW))), mini(rows - 1, int(floor(y1 / EDGE_ROW))) + 1):
+						var y := float(r) * EDGE_ROW
+						var sx0 := INF                             # 이 줄이 세모를 가로지르는 x 범위
+						var sx1 := -INF
+						for e: Array in [[a, b], [b, c], [c, a]]:
+							var p: Vector2 = e[0]
+							var q: Vector2 = e[1]
+							if (p.y <= y and q.y >= y) or (q.y <= y and p.y >= y):
+								if is_equal_approx(p.y, q.y):
+									sx0 = minf(sx0, minf(p.x, q.x))
+									sx1 = maxf(sx1, maxf(p.x, q.x))
+								else:
+									var x := p.x + (q.x - p.x) * (y - p.y) / (q.y - p.y)
+									sx0 = minf(sx0, x)
+									sx1 = maxf(sx1, x)
+						sx0 = maxf(sx0, xa)
+						sx1 = minf(sx1, xb)
+						if sx0 <= sx1:
+							var b0 := clampi(int(floor(sx0 - xa)), 0, cols - 1)
+							var b1 := clampi(int(floor(sx1 - xa)), 0, cols - 1)
+							mask[k][r] |= ((1 << (b1 + 1)) - 1) & ~((1 << b0) - 1)
+		for k in 2:
+			var start := -1
+			for r in rows + 1:
+				var on := false
+				if r < rows and mask[k][r] != 0:
+					var m: int = mask[k][r]
+					var n := 0
+					while m != 0 and n < EDGE_MIN_W:
+						m &= m - 1
+						n += 1
+					on = n >= EDGE_MIN_W
+				if on:
+					if start < 0:
+						start = r
+				elif start >= 0:
+					out.append({"name": it[0], "side": int(bands[k][0]),
+						"rect": Rect2(float(bands[k][1]), float(start) * EDGE_ROW - EDGE_ROW * 0.5, strip, float(r - start) * EDGE_ROW)})
+					start = -1
+	_edge_key = key
+	_edge_rects = out
+	return out

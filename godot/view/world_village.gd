@@ -815,7 +815,12 @@ func _shelf_seen_process(in_room: bool) -> void:
 	var vs := get_viewport().get_visible_rect().size
 	var y := room.souvenir_edge_y(cam.camera, cam.shelf_pan)
 	shelf_twinkle.still = JarCamera.reduce_motion()
-	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, top_h + 34.0, vs.y - bottom_h - 34.0)
+	# (Q20 ㉟) 방 소품(등불·설탕 그릇…)과 띠·단추를 비켜 선다 — 소품의 반짝임으로 읽히지 않게
+	var props := room.prop_edge_rects(cam.camera, ShelfTwinkle.strip_w(), true)
+	if room.edge_pending:                               # 카메라가 아직 움직이는 중 — 멈추면 소품 자리를 재고 그때 보인다
+		shelf_twinkle.hide_all()
+		return
+	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, top_h + 34.0, vs.y - bottom_h - 34.0, props + shelf_twinkle.hud_rects())
 
 
 func _enter_focused() -> void:

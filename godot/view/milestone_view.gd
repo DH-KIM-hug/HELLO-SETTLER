@@ -82,6 +82,7 @@ const SHOO_FRONT := 0.5               # (Q18 ⑩) 날것이 비켜 나는 자리
 const SHOO_TABLE_R := 1.6             # 상 둘레 (칸)
 const SHOO_POLE_R := 0.9              # 등 · 기둥 둘레
 const PIN_KEEP := 2.0                 # (Q18 ⑪) 그림 말풍선이 바람개비에서 띄우는 틈 (화소)
+const SAY_KEEP := 2.0                 # (Q20 ㉜) 글 말풍선이 잔칫상·등·키 재는 기둥에서 띄우는 틈 (화소)
 const TABLE_HALF := 0.86              # 상 너비의 반 (칸)
 const TABLE_POST_GAP := 1.5           # 기둥과 이만큼은 떨어져
 const LAMP_GAP := 0.34                # 상 끝에서 등 막대까지 (칸)
@@ -1296,6 +1297,37 @@ func pin_rect() -> Rect2:
 	var ppu := _ppu()
 	var sz: Vector2 = (SIZE["steps"] as Vector2) * _k_of("steps", ppu) * ppu
 	var base := cam.unproject_position(mi.global_position)
+	return Rect2(base.x - sz.x * 0.5, base.y - sz.y, sz.x, sz.y)
+
+
+## (Q20 ㉜ · 화면 · 시험) 잔치 동안 글 말풍선이 덮으면 안 되는 화면 네모들 (화소 — 틈 SAY_KEEP 포함): 잔칫상 · 등(막대와 등불 그림 — 둥근 빛은 빼고) ·
+## 키 재는 기둥. 잔치 소품이 차려져 있지 않으면 빈 배열 (평소의 말풍선은 그대로). 화면이 읽기만 한다 — view/test_village.gd bubble_free
+func say_keep_out() -> Array:
+	var out: Array = []
+	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null or _feast_w <= 0.0:
+		return out
+	var ppu := _ppu()
+	if _table != null and _table.visible:
+		out.append(_seen_rect(cam, _table, fx_size("spread") * ppu))
+	for l: Array in _lamps:
+		if (l[0] as Node3D).visible:
+			out.append(_seen_rect(cam, l[0], fx_size("lantern") * ppu))
+	var pm: MeshInstance3D = _signs.get("grown")
+	if pm != null and pm.visible:
+		out.append(_seen_rect(cam, pm, (SIZE["grown"] as Vector2) * _k_of("grown", ppu) * ppu))
+	var kept: Array = []
+	for rc: Rect2 in out:
+		if rc.size.x > 0.0:
+			kept.append(rc.grow(SAY_KEEP))
+	return kept
+
+
+## 밑 가운데가 n의 자리에 선 그림(크기 sz — 화소)이 화면에서 차지하는 네모. 카메라 뒤면 빈 네모
+func _seen_rect(cam: Camera3D, n: Node3D, sz: Vector2) -> Rect2:
+	if cam.is_position_behind(n.global_position):
+		return Rect2()
+	var base := cam.unproject_position(n.global_position)
 	return Rect2(base.x - sz.x * 0.5, base.y - sz.y, sz.x, sz.y)
 
 

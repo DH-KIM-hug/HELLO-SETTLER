@@ -16,6 +16,12 @@
 ##   s2_room_twinkle_right · _rest · _left · _both (방 가운데 자리의 가장자리 반짝임 — 밝을 때 · 쉴 때 · 왼쪽 · 양쪽) ·
 ##   s2_shelf_back_right · s2_shelf_back_left (가득 찬 선반 — 뒷줄) ·
 ##   s2_sheet_zero · _four · _many · _note (선반 시트의 '기념품' 칸) · s2_title_twinkle · s2_title_glided (타이틀)
+## (Q20) 뒷손질 — 네 번째:
+##   godot --path godot -s res://tools/shot_souvenirs.gd -- q20     (godot_shots/souvenirs/s3_*.png + 모아 보기 s3_sheet.png)
+##   s3_room_tab_right · _left · _both · _rest · _still (방 가운데 자리의 가장자리 종이 꼬리표 — 밀린 때 · 쉴 때 · 움직임 줄이기) ·
+##   s3_title_tab_right · _left (타이틀) · s3_sheet_note_first · _mid · _last (선반 시트의 쪽지 — 첫 줄 · 가운데 줄 · 마지막 줄 그림을 누름) ·
+##   s3_sheet_note_few (넷뿐일 때)
+##   꼬리표가 비킨 네모(방 소품 · 띠·단추)와 쪽지·그림 네모를 함께 찍어 낸다 (겹침 0이어야 한다)
 ## 병 안 장면은 도구가 차린다: 고비 기록(첫 빵 · 식구 열둘)은 시험과 같은 길로 마을이 스스로 넘고, 그 밖의 기념품은 조용히 놓는다 (Souvenirs.make).
 ## 줍기는 진짜 누르기 길로 (test_village._take_souvenir — 화면 네모 가운데를 누름).
 ## 저장: 진짜 저장(user://save)을 읽지도 쓰지도 않는다 — 모든 길을 도구 지킴이(save/user_paths.gd)의 제 폴더 user://_tool/shot_souvenirs/… 로 돌린다
@@ -50,7 +56,7 @@ func _initialize() -> void:
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/souvenirs").simplify_path()
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	for a: String in OS.get_cmdline_user_args():
-		if a == "jar" or a == "room" or a == "q19":
+		if a == "jar" or a == "room" or a == "q19" or a == "q20":
 			mode = a
 	save_dir = UserPaths.of("user://save")
 	if not save_dir.begins_with(UserPaths.TOOL_ROOT + "/"):          # 도구 폴더가 아니면 진짜 저장일 수 있다 — 아무것도 하지 않는다
@@ -200,7 +206,7 @@ func _process(_dt: float) -> bool:
 	if _wait > 0:
 		_wait -= 1
 		return false
-	var done := _jar() if mode == "jar" else (_q19() if mode == "q19" else _room())
+	var done := _jar() if mode == "jar" else (_q19() if mode == "q19" else (_q20() if mode == "q20" else _room()))
 	if not done:
 		step += 1
 	return done
@@ -626,6 +632,170 @@ func _q19() -> bool:
 		24:
 			_save("s2_title_glided")
 			_sheet(ORDER2, "s2_sheet")
+			return true
+	return false
+
+
+# ───────────────────────── (Q20) 뒷손질 ─────────────────────────
+const ORDER3 := ["s3_room_tab_right", "s3_room_tab_left", "s3_room_tab_both", "s3_room_tab_rest", "s3_room_tab_still",
+	"s3_title_tab_right", "s3_title_tab_left", "s3_sheet_note_first", "s3_sheet_note_mid", "s3_sheet_note_last", "s3_sheet_note_few"]
+
+
+## 꼬리표와 방 소품·띠가 겹치나 (겹친 것의 이름들 — 비어야 한다)
+func _tab_info(avoid_hud := true) -> void:
+	var tw: ShelfTwinkle = scene.get("shelf_twinkle")
+	var room: GiantRoom = scene.room_zoom.room if scene.get("room_zoom") != null else scene.get("room")
+	var cam: JarCamera = scene.get("cam")
+	var hits: Array = []
+	var t0 := Time.get_ticks_usec()
+	room._edge_key = ""
+	var rects: Array = room.prop_edge_rects(cam.camera, ShelfTwinkle.strip_w()).duplicate()
+	print("소품 네모 (%d개 · %.1f ms): %s" % [rects.size(), float(Time.get_ticks_usec() - t0) / 1000.0, rects.map(func(e: Dictionary) -> String: return "%s%s y %.0f~%.0f" % [e["name"], "R" if int(e["side"]) > 0 else "L", (e["rect"] as Rect2).position.y, (e["rect"] as Rect2).end.y])])
+	if avoid_hud:
+		for r: Rect2 in tw.hud_rects():
+			rects.append({"name": "hud", "rect": r})
+	for side: int in [1, -1]:
+		if not tw.shown(side):
+			continue
+		for e: Dictionary in rects:
+			if tw.mark_rect(side).intersects(e["rect"]):
+				hits.append("%s쪽 %s %s" % ["오른" if side > 0 else "왼", e["name"], e["rect"]])
+	print("꼬리표: 오른쪽 %s %s · 왼쪽 %s %s · 밝기 %.2f · 밀림 %.1f · 빈 자리 %s · 선반 높이 %.0f · 겹친 것 %s" % [tw.shown(1), tw.mark_rect(1), tw.shown(-1), tw.mark_rect(-1),
+		tw.glow(), tw.nudge(), tw.clear, room.souvenir_edge_y(cam.camera, 0.0), hits])
+
+
+func _note_info() -> void:
+	var sh: ShelfSheet = scene.shelf_sheet
+	var nr := sh.souvenir_note.panel.get_global_rect()
+	var hits: Array = []
+	for c: Node in sh.souv_flow.get_children():
+		if c is Control and (c as Control).get_global_rect().intersects(nr):
+			hits.append(String(c.name))
+	print("시트 쪽지: 그림 %d · 쪽지 네모 %s · 띠 %s · 시트 밀림 %d · 가린 그림 %s · 줄 %s" % [sh.souv_open, nr, sh.souv_gap.get_global_rect(), sh.scroll.scroll_vertical,
+		hits, SouvenirNote.lines(sh.souvenir_note.shown)])
+
+
+func _sheet_with(n: int, pick: int) -> void:
+	sm.player.souvenirs = _recs(n)
+	scene.shelf_sheet.close()
+	scene.shelf_sheet.open()
+	scene.shelf_sheet.open_souvenir(pick)
+
+
+func _q20() -> bool:
+	match step:
+		0:
+			if frame < 120 or scene.get("village") == null or bool(scene.get("catching")):
+				step -= 1
+				return false
+			scene.set("_enter_fly", false)
+			scene.call("set_debug_mode", false)
+			var c: JarCamera = scene.get("cam")
+			c.stop_fly()
+			c.set_ext_zoom(c.ext_min())
+			if scene.get("return_letter") != null:
+				(scene.get("return_letter") as Control).call("close")
+			scene.paused = true
+			sm.player.souvenir_hint = true
+			_wait = 70
+		1:
+			_unseen_room(4)
+			_wait = 30
+		2:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.25)
+			_wait = 1
+		3:
+			_tab_info()
+			_save("s3_room_tab_right")
+			_unseen_room(30, 1)
+			_wait = 30
+		4:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.25)
+			_wait = 1
+		5:
+			_tab_info()
+			_save("s3_room_tab_left")
+			_unseen_room(30)
+			_wait = 30
+		6:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.25)
+			_wait = 1
+		7:
+			_tab_info()
+			_save("s3_room_tab_both")
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(1.0)
+			_wait = 2
+		8:
+			_tab_info()
+			_save("s3_room_tab_rest")
+			GameSettings.get_current().set_meta("reduce_motion", true)     # 움직임 줄이기 (JarCamera.reduce_motion이 이 표시를 읽는다)
+			_wait = 20
+		9:
+			print("움직임 줄이기: %s" % JarCamera.reduce_motion())
+			_tab_info()
+			_save("s3_room_tab_still")
+			GameSettings.get_current().remove_meta("reduce_motion")
+			sm.player.souvenirs = _recs(23)
+			_to_village_view()
+			scene.open_shelf()
+			_wait = 30
+		10:
+			_sheet_with(23, 2)
+			_wait = 20
+		11:
+			_note_info()
+			_save("s3_sheet_note_first")
+			_sheet_with(23, 9)
+			_wait = 20
+		12:
+			_note_info()
+			_save("s3_sheet_note_mid")
+			_sheet_with(23, 21)
+			_wait = 20
+		13:
+			_note_info()
+			_save("s3_sheet_note_last")
+			_sheet_with(4, 1)
+			_wait = 20
+		14:
+			_note_info()
+			_save("s3_sheet_note_few")
+			scene.shelf_sheet.close()
+			sm.player.souvenirs = _recs(7)                 # 타이틀: 오른쪽에만 (안 본 것)
+			sm.player.souvenir_glide = ""
+			sm.save_all(true)
+			root.remove_child(scene)
+			scene.queue_free()
+			scene = load(StartFlow.TITLE_SCENE).instantiate()
+			root.add_child(scene)
+			_wait = 120
+		15:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.25)
+			_wait = 1
+		16:
+			_tab_info(false)
+			_save("s3_title_tab_right")
+			var recs := _recs(30)                          # 타이틀: 양쪽에 놓이고 오른쪽은 본 것 → 왼쪽에만
+			var room: GiantRoom = scene.get("room")
+			room.set_souvenirs(recs)
+			var keys: Array = room.unseen_sides(recs)[1]
+			for r: Dictionary in recs:
+				if String(r["key"]) in keys:
+					r["seen"] = true
+			sm.player.souvenirs = recs
+			sm.save_all(true)
+			root.remove_child(scene)
+			scene.queue_free()
+			scene = load(StartFlow.TITLE_SCENE).instantiate()
+			root.add_child(scene)
+			_wait = 120
+		17:
+			(scene.get("shelf_twinkle") as ShelfTwinkle).seek(0.25)
+			_wait = 1
+		18:
+			_tab_info(false)
+			_save("s3_title_tab_left")
+			_sheet(ORDER3, "s3_sheet")
 			return true
 	return false
 

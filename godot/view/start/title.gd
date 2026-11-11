@@ -356,7 +356,12 @@ func _shelf_seen_step() -> void:
 	var vs := get_viewport().get_visible_rect().size
 	var y := room.souvenir_edge_y(cam.camera, cam.shelf_pan)
 	shelf_twinkle.still = JarCamera.reduce_motion()
-	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, title_box.position.y + title_box.size.y + 34.0, button.position.y - 34.0)
+	# (Q20 ㉟) 방 소품(등불·설탕 그릇…)을 비켜 선다 — 제목 아래 · 버튼 위
+	var props := room.prop_edge_rects(cam.camera, ShelfTwinkle.strip_w(), true)
+	if room.edge_pending:                               # 카메라가 아직 움직이는 중 — 멈추면 소품 자리를 재고 그때 보인다
+		shelf_twinkle.hide_all()
+		return
+	shelf_twinkle.place(right, left, y if y >= 0.0 else vs.y * 0.72, title_box.position.y + title_box.size.y + ShelfTwinkle.TAB_H * 0.5 + 4.0, button.position.y - 34.0, props)
 
 
 ## (Q19) 이 key의 기념품을 본 것으로 (타이틀의 목록 + 거인 묶음)

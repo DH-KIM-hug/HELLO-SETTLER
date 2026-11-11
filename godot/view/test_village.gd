@@ -1662,6 +1662,7 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 	var close_enough := cam.ppu >= BUBBLE_SCENE_PPU
 	var said := {}                                    # (Q2-d) 이번 화면에 이미 뜬 말 — 같은 말이 두 사람 머리 위에 나란히 뜨지 않게
 	var placed: Array = []                            # (Q2-d) 이번에 놓은 말풍선 네모 — 가까이 선 두 사람의 말이 포개지지 않게
+	var keep: Array = vw.milestone_view.say_keep_out() if vw.milestone_view != null and is_instance_valid(vw.milestone_view) else []     # (Q20 ㉜) 잔치: 상·등·기둥의 화면 네모
 	for r in vil.people:
 		if shown >= 5:
 			break
@@ -1713,6 +1714,12 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 		var ms := l.get_minimum_size()
 		l.position = bubble_clear(bubble_pos(bubble_anchor(p, ms, mood in SocialEmote.KINDS, vs, TapReact.px_per_unit(cam.camera, m.global_position)), ms, mood in SocialEmote.KINDS, vs),
 			ms, placed, vs, mood in SocialEmote.KINDS)
+		if bubble_hits(l.position, ms, keep, mood in SocialEmote.KINDS):     # (Q20 ㉜) 잔칫상·등·키 재는 기둥을 덮는 자리면 가장 가까운 빈자리로
+			l.position = bubble_free(l.position, ms, keep, placed, vs, mood in SocialEmote.KINDS)
+			if l.position == Vector2.INF:              # 빈자리가 없다 (아주 가까이 본 화면) — 이번 화면에서는 띄우지 않음 (말은 그대로 남아 자리가 나면 보임)
+				said.erase(text)
+				l.queue_free()
+				continue
 		placed.append(Rect2(l.position, ms))
 		if mood in SocialEmote.KINDS:              # 말풍선 오른쪽 위 작은 그림
 			var em := SocialEmote.new()
@@ -1737,6 +1744,51 @@ func bubble_clear(pos: Vector2, ms: Vector2, placed: Array, vs: Vector2, emote: 
 		if not hit:
 			break
 	return pos
+
+
+## (Q20 ㉜) 그 자리의 말풍선(기분 그림 포함)이 keep(화면 네모들)에 닿는가
+func bubble_hits(pos: Vector2, ms: Vector2, keep: Array, emote: bool) -> bool:
+	var ext := BUBBLE_EMOTE_EXT if emote else Vector2.ZERO
+	var rc := Rect2(pos - Vector2(0.0, ext.y), ms + ext)
+	for k: Rect2 in keep:
+		if rc.intersects(k):
+			return true
+	return false
+
+
+## (Q20 ㉜) 잔치 동안 글 말풍선이 잔칫상·등·키 재는 기둥(keep — MilestoneView.say_keep_out)을 덮지 않게: 가장 조금 옮긴 빈자리 — 옆이나 위로만
+## (아래는 말하는 사람의 얼굴). 먼저 놓인 말풍선(placed)과도 겹치지 않고 화면 네모(bubble_rect) 안인 자리만. 그런 자리가 없으면 INF
+func bubble_free(pos: Vector2, ms: Vector2, keep: Array, placed: Array, vs: Vector2, emote: bool) -> Vector2:
+	var ext := BUBBLE_EMOTE_EXT if emote else Vector2.ZERO
+	var inside := bubble_rect(vs)
+	var best := Vector2.INF
+	var best_c := INF
+	for iy in BUBBLE_FREE_UP + 1:
+		var dy := -float(iy) * BUBBLE_FREE_STEP
+		for ix in range(-BUBBLE_FREE_SIDE, BUBBLE_FREE_SIDE + 1):
+			var dx := float(ix) * BUBBLE_FREE_STEP
+			var c := absf(dx) + absf(dy) * BUBBLE_FREE_UP_W
+			if c >= best_c:
+				continue
+			var at := pos + Vector2(dx, dy)
+			if not inside.encloses(Rect2(at - Vector2(0.0, ext.y), ms + ext)) or bubble_hits(at, ms, keep, emote):
+				continue
+			var hit := false
+			for o: Rect2 in placed:
+				if Rect2(at, ms).grow(1.0).intersects(o):
+					hit = true
+					break
+			if hit:
+				continue
+			best = at
+			best_c = c
+	return best
+
+
+const BUBBLE_FREE_STEP := 4.0                      # (Q20 ㉜) 빈자리를 찾는 걸음 (px)
+const BUBBLE_FREE_SIDE := 26                       # 옆으로 이 걸음까지 (104px)
+const BUBBLE_FREE_UP := 20                         # 위로 이 걸음까지 (80px)
+const BUBBLE_FREE_UP_W := 0.8                      # 위로 옮기는 값 (옆으로 1) — 같은 거리면 위로 (말하는 사람 머리 위에 남게)
 
 
 ## (Q2-d) 다른 주민이 지금 연출·장면의 말로 같은 글을 하고 있는가 (화면 쪽 말만 봄)
