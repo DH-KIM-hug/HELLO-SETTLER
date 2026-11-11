@@ -1546,6 +1546,7 @@ func on_built(b: Building) -> void:
 ## 일자리 배정 (20초마다). 바꿀 것이 없으면 (일하는 아이 없음 · 빈 일터에 들어갈 사람이나 도구 없음 · 떠난 일꾼 없음) 바로 돌아간다 — 같은 결과
 func assign_jobs() -> void:
 	var free_adult := false
+	var free_well := false                # (Q7-c) … 그 가운데 앓지 않는 사람이 있는가 — 앓는 밭지기·맷돌지기·화덕지기의 자리를 맡을 사람
 	var baby_homes := {}                  # v5: 걸음마 전 아기가 있는 집 (돌보는 부모는 일터를 내놓는다)
 	for q in people:
 		if q.age < Balance.CARE_DAYS and q.home >= 0:
@@ -1558,19 +1559,25 @@ func assign_jobs() -> void:
 			if baby_homes.has(p.home) and Production.caring_for(self, p) != null:
 				_assign_jobs()
 				return
-		elif not free_adult and p.is_adult() and (not baby_homes.has(p.home) or Production.caring_for(self, p) == null):
+		elif p.is_adult() and (not free_adult or (not free_well and p.sick_left <= 0.0)) and (not baby_homes.has(p.home) or Production.caring_for(self, p) == null):
 			free_adult = true             # 일터에 넣을 수 있는 사람 (_assign_jobs의 후보 — 아기를 돌보는 사람은 빼고)
+			if p.sick_left <= 0.0:
+				free_well = true
 	var tools := float(stock["도구"]) >= 1.0     # 도구가 없으면 빈 일터에 아무도 넣지 못한다 (_assign_jobs가 건너뜀) — 헛돌지 않게 (따라잡기 속도)
 	var swap := -1                         # 옮겨 올 일꾼이 있는가 (_job_swap — 한 번만 셈): -1 모름 · 0 없음 · 1 있음
 	for b in buildings:
 		if not b.built:
 			continue
 		if b.worker >= 0:
-			if person(b.worker) == null and b.def().get("job", false):
+			var bw := person(b.worker)
+			if bw == null and b.def().get("job", false):
+				_assign_jobs()
+				return
+			if Balance.JOB_STAND_IN and free_well and bw != null and bw.sick_left > 0.0 and int(Balance.JOB_FIRST.get(b.type, 50)) < 10:     # (Q7-c) 먹을 것 일터의 일꾼이 앓아누웠고 맡을 사람이 있다
 				_assign_jobs()
 				return
 		elif tools and b.def().get("job", false):
-			if free_adult:
+			if free_well if (Balance.JOB_STAND_IN and int(Balance.JOB_FIRST.get(b.type, 50)) < 10) else free_adult:     # (Q7-c) 먹을 것 일터에는 앓는 사람을 넣지 않는다
 				_assign_jobs()
 				return
 			if int(Balance.JOB_FIRST.get(b.type, 50)) < 10:     # v5: 먹을 것 일터가 비면 사람을 옮겨서라도 (_job_swap) — 옮겨 올 사람이 있을 때만
@@ -1598,6 +1605,8 @@ func _assign_jobs() -> void:
 			stock["도구"] = float(stock["도구"]) + 1.0     # 일을 내려놓으면 도구는 창고로 (정함 — 도구 닳음은 아직 없음)
 			if p.is_elder():
 				log_line("%s%s 늙어서 일을 내려놓았다." % [p.name, josa(p.name, "은", "는")])
+	if Balance.JOB_STAND_IN:
+		_hand_over_sick()
 	var order := buildings.duplicate()      # v5: 먹을 것 일터부터 사람을 넣는다 (밭 → 화덕 → 맷돌 → …) — 일손이 모자라면 빵 사슬이 비지 않게
 	order.sort_custom(func(a: Building, c: Building) -> bool:
 		var pa := int(Balance.JOB_FIRST.get(a.type, 50))
@@ -1615,8 +1624,11 @@ func _assign_jobs() -> void:
 		# 후보 점수 = 해당 숙련 × 2 − 거리 (RESIDENT_AI 5.1, 특징·현재 직업 숙련은 아직 없음)
 		var best: Resident = null
 		var bs := -1.0e9
+		var food_job := Balance.JOB_STAND_IN and int(Balance.JOB_FIRST.get(b.type, 50)) < 10
 		for p in people:
 			if not p.is_adult() or p.job >= 0 or Production.caring_for(self, p) != null:
+				continue
+			if food_job and p.sick_left > 0.0:     # (Q7-c) 먹을 것 일터에는 앓는 사람을 넣지 않는다 (일꾼이 앓으면 일터가 쉰다 — _update_building)
 				continue
 			var hm := bld(p.home)                  # v5: 걸음이 느려 집 가까운 일터를 고른다 (집이 없으면 지금 자리)
 			var from := Vector2(hm.x, hm.y) if hm != null else Vector2(p.x, p.y)
@@ -1633,6 +1645,31 @@ func _assign_jobs() -> void:
 		b.worker = best.id
 		stock["도구"] = float(stock["도구"]) - 1.0
 		speak(best, "오늘부터 %s에서 일해요" % b.label(), 5)
+
+
+## (2026-11-11 Q7-c · docs/measure/growth_2026-11-11.md) 먹을 것 일터(밭·화덕·맷돌간 — JOB_FIRST < 10)의 일꾼이 앓아누우면, 일터 없는 성한 어른이 있을 때
+## 앓는 사람은 일을 내려놓는다 (연장은 창고로) — 바로 아래 배정이 성한 사람을 그 자리에 세운다. 나은 사람은 일터 없는 어른으로 돌아가 다음 빈 일터를 맡는다.
+## 맡을 사람이 없으면 그대로 둔다 (일터가 쉰다 — 예전과 같음). 난수를 쓰지 않는다
+func _hand_over_sick() -> void:
+	var well := 0
+	for p in people:
+		if p.is_adult() and p.job < 0 and p.sick_left <= 0.0 and Production.caring_for(self, p) == null:
+			well += 1
+	if well <= 0:
+		return
+	for b in buildings:
+		if well <= 0:
+			break
+		if not b.built or b.worker < 0 or int(Balance.JOB_FIRST.get(b.type, 50)) >= 10:
+			continue
+		var w := person(b.worker)
+		if w == null or w.sick_left <= 0.0:
+			continue
+		b.worker = -1
+		w.job = -1
+		stock["도구"] = float(stock["도구"]) + 1.0
+		stats["stand_in"] = int(stats.get("stand_in", 0)) + 1
+		well -= 1
 
 
 ## 먹을 것 일터(JOB_FIRST < 10)가 비었는데 놀고 있는 어른이 없으면 가장 덜 급한 일터(10 이상)의 일꾼을 빼 온다 — 그 사람 (없으면 null)
@@ -3748,7 +3785,15 @@ func can_explore(r: Resident = null) -> bool:
 	var every := WorldCfg.EXPLORE_EVERY
 	if r != null:
 		every /= r.f("explore")          # 혈통 '탐험가'는 더 자주 나선다
-	return explore_on and explorer < 0 and t - last_explore_t >= every
+	return explore_on and explorer < 0 and t - last_explore_t >= every and not explore_held()
+
+
+## (2026-11-11 Q7-c) 첫 며칠 먹을 것이 바닥나 가면 안개 너머를 살피러 새로 떠나지 않는다 — 그 어른은 나르고 짓는다 (이미 떠난 사람은 다녀온다).
+## 도착하고 FORAGE_FIRST_DAYS 날 안 · 먹을 것(창고·밭 앞 + 창고로 오는 길)이 EXPLORE_HOLD_FOOD_DAYS 날치 아래일 때. 지켜보는지와 상관없다
+func explore_held() -> bool:
+	if Balance.EXPLORE_HOLD_FOOD_DAYS <= 0.0 or t >= Balance.FORAGE_FIRST_DAYS * DAY:
+		return false
+	return Production.food_total(self) + Production.food_on_way(self) < Balance.EXPLORE_HOLD_FOOD_DAYS * Production.day_need(self)
 
 
 ## 건물이 다 지어지면 둘레 안개도 걷힌다

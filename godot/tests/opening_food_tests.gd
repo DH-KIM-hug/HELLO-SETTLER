@@ -2,6 +2,7 @@
 ## 재 보니 첫 사흘의 빈 창고는 시작 식량·밭 순서·채집 문으로는 풀리지 않았다 (일손이 모자람 — 문서 3장). 그래서 값은 그대로 두고, 지금 지켜지는 것만 묶어 둔다:
 ## 시작 건량은 하루치 남짓 (첫날이 빠듯함) · 진짜 시작(넓은 세상 + 기본 키트, 거인이 지켜보기만)에서 첫 닷새에 굶어 떠나는 사람이 없고 첫 빵을 마을이 스스로 굽는다.
 ## Q7-b (docs/measure/opening_food_b_2026-11-11.md): 배고픈 사람이 빈 창고 앞에서 기다리지 않는다 · 창고로 오는 길의 먹을 것도 먹는다 · 첫 며칠의 맨손 채집 · 다음 건물이 기다리는 짐 먼저.
+## Q7-c (docs/measure/growth_2026-11-11.md): 앓는 밭지기·맷돌지기·화덕지기의 자리를 성한 어른이 맡는다 · 첫 며칠 먹을 것이 바닥나 가면 살피러 새로 떠나지 않는다.
 extends RefCounted
 
 var run: SceneTree
@@ -22,7 +23,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 첫날 먹을 것 (Q7)")
-	run.timed(self, ["test_start_stock", "test_hungry_keeps_working", "test_food_on_way", "test_first_days_forage", "test_waiting_load_first", "test_opening_days"])
+	run.timed(self, ["test_start_stock", "test_hungry_keeps_working", "test_food_on_way", "test_first_days_forage", "test_waiting_load_first", "test_sick_stand_in", "test_first_days_explore_hold", "test_opening_days"])
 
 
 ## 시작 건량 (Balance.START_STOCK): 하루치를 조금 넘고 촌장이 '먹을 것이 모자라다'고 보는 선(BIRTH_FOOD_DAYS)에는 못 미친다 — 첫날이 빠듯해야 둘째 밭을 서두른다
@@ -248,9 +249,88 @@ func test_waiting_load_first() -> void:
 	check(ResidentAI._haul_out(v, r2, v.store(), r2.carry_cap()) and float(farm.out[Balance.PORRIDGE]) < 300.0, "기다리는 건물이 없으면 예전처럼 밭의 밀을 창고로 (밭 앞 %.0f)" % float(farm.out[Balance.PORRIDGE]))
 
 
+# ───────────────────────── Q7-c (2026-11-11 — docs/measure/growth_2026-11-11.md) ─────────────────────────
+func _of_type(v: Village, type: String) -> Building:
+	for b in v.buildings:
+		if b.built and b.type == type:
+			return b
+	return null
+
+
+## ⑤ 밭지기(맷돌지기·화덕지기)가 앓아누우면 일터 없는 성한 어른이 그 자리를 맡는다 — 앓는 사람은 일을 내려놓고, 나아도 자리를 도로 빼앗지 않는다.
+## 맡을 성한 사람이 없으면 예전처럼 그대로 (일터가 쉰다) · 먹을 것 일터가 아니면 넘기지 않는다 · 새로 생긴 말·연대기 줄 없음
+func test_sick_stand_in() -> void:
+	check(Balance.JOB_STAND_IN, "대신 서기가 켜져 있다 (Balance.JOB_STAND_IN)")
+	var v := _chain(_bare(2.0))
+	v.assign_jobs()
+	var farm := _of_type(v, "농장")
+	var farmer := v.person(farm.worker)
+	check(farmer != null and farmer.job == farm.id and _loose(v).size() >= 1, "밭에 일꾼이 섰고 일터 없는 어른이 남았다 (%d명)" % _loose(v).size())
+	var tools0 := float(v.stock["도구"])
+	var lines0 := v.events.since(0).size()
+	farmer.sick_left = 2.0 * D
+	v.assign_jobs()
+	var sub := v.person(farm.worker)
+	check(sub != null and sub.id != farmer.id and sub.sick_left <= 0.0 and sub.job == farm.id, "밭지기가 앓아누우면 성한 어른이 밭을 맡는다")
+	check(farmer.job < 0 and int(v.stats.get("stand_in", 0)) == 1, "앓는 사람은 일을 내려놓는다")
+	check(is_equal_approx(float(v.stock["도구"]), tools0), "연장 수는 그대로 (하나 돌아오고 하나 나간다 — %.0f)" % float(v.stock["도구"]))
+	var chron := 0
+	for i in range(lines0, v.events.since(0).size()):
+		if String(v.events.since(0)[i]["kind"]) == "chronicle":
+			chron += 1
+	check(sub != null and sub.say != "" and _clean(sub.say) and chron == 0, "맡은 사람의 말에 쓰지 않는 말·숫자가 없고 연대기 줄은 늘지 않는다 (%s)" % (sub.say if sub != null else ""))
+	v.assign_jobs()
+	check(farm.worker == sub.id and farmer.job < 0, "앓는 동안 다시 배정해도 그대로 — 앓는 사람은 먹을 것 일터에 서지 않는다")
+	farmer.sick_left = 0.0
+	v.assign_jobs()
+	check(farm.worker == sub.id, "나은 사람이 자리를 도로 빼앗지 않는다 (일터 없는 어른으로 돌아가 다음 빈 일터를 맡는다)")
+	# 맡을 성한 사람이 없으면 그대로
+	var w := _chain(_bare(2.0))
+	w.assign_jobs()
+	var farm2 := _of_type(w, "농장")
+	var f2 := w.person(farm2.worker)
+	for q: Resident in _loose(w):
+		q.sick_left = D
+	f2.sick_left = D
+	w.assign_jobs()
+	check(farm2.worker == f2.id and f2.job == farm2.id and int(w.stats.get("stand_in", 0)) == 0, "일터 없는 어른이 모두 앓으면 그대로 둔다 (밭이 쉰다)")
+	# 먹을 것 일터가 아니면 넘기지 않는다
+	var x := _chain(_bare(2.0))
+	var cut := x.add_building("나무꾼", 3.0, 8.0, true)
+	x.assign_jobs()
+	var c := x.person(cut.worker)
+	check(c != null and _loose(x).size() >= 1, "벌목장에도 일꾼이 섰다")
+	if c != null:
+		c.sick_left = D
+		x.assign_jobs()
+		check(cut.worker == c.id and int(x.stats.get("stand_in", 0)) == 0, "벌목장 일꾼이 앓아도 자리를 넘기지 않는다 (먹을 것 일터만)")
+
+
+## ⑥ 첫 며칠(FORAGE_FIRST_DAYS) 먹을 것이 EXPLORE_HOLD_FOOD_DAYS 날치 아래면 안개 너머를 살피러 새로 떠나지 않는다 (그 어른은 나르고 짓는다).
+## 먹을 것이 넉넉하거나 첫 며칠이 지나면 예전처럼 나선다
+func test_first_days_explore_hold() -> void:
+	check(Balance.EXPLORE_HOLD_FOOD_DAYS > 0.0, "살피기 미루기가 켜져 있다 (Balance.EXPLORE_HOLD_FOOD_DAYS)")
+	var v := _bare(2.0)
+	v.explore_on = true
+	check(v.explore_held() and not v.can_explore(), "둘째 날, 먹을 것이 없다: 살피러 새로 떠나지 않는다")
+	v.stock[Balance.FOODS[0]] = Production.day_need(v) * (Balance.EXPLORE_HOLD_FOOD_DAYS + 0.1)
+	check(not v.explore_held() and v.can_explore(), "먹을 것이 넉넉하면 예전처럼 나선다")
+	v.stock[Balance.FOODS[0]] = 0.0
+	var f: Resident = _loose(v)[0]
+	f.steps.clear()
+	check(ResidentAI._forage(v, f) and v.explore_held(), "바구니를 들고 나간 사람이 있어도 거두기 전에는 그대로")
+	f.steps = f.steps.slice(2)                            # 거둔 바구니를 들고 창고로 오는 길 (test_food_on_way와 같은 꾸밈)
+	f.carry = Balance.FORAGE_ITEM
+	f.carry_amt = Production.day_need(v) * (Balance.EXPLORE_HOLD_FOOD_DAYS + 0.1)
+	check(Production.food_on_way(v) > 0.0 and not v.explore_held(), "창고로 오는 길의 먹을 것도 센다 (%.0f)" % Production.food_on_way(v))
+	var late := _bare(Balance.FORAGE_FIRST_DAYS + 1.0)
+	late.explore_on = true
+	check(not late.explore_held() and late.can_explore(), "첫 며칠이 지나면 먹을 것이 없어도 예전처럼 나선다")
+
+
 ## 진짜 시작 (넓은 세상 + 기본 키트 · 하늘 낟알 없음 · 거인은 지켜보기만) 병 닷새: 굶어 떠나는 사람이 없고, 첫 빵은 마을이 스스로 굽는다.
 ## Q7-b: 창고가 비는 시간은 얕고 짧다 — 닷새에 OPENING_SHORT_MAX 시간 아래, 아무도 '배고프다'(HUNGRY_AT)까지 가지 않는다 ('빈 창고 → 아무도 일 안 함' 고리가 없다).
-## 이 시험의 시작(run.gd의 고정 날짜 · 깨달은 채 시작)은 재는 도구와 달라 숫자도 다르다 — 지금 씨앗 19: 14시간 · 0.03, 씨앗 26: 0시간 · 0.00
+## 이 시험의 시작(run.gd의 고정 날짜 · 깨달은 채 시작)은 재는 도구와 달라 숫자도 다르다 — Q7-b 때 씨앗 19: 14시간 · 0.03, 씨앗 26: 0시간 · 0.00 → Q7-c(대신 서기 · 살피기 미루기) 뒤 씨앗 19: 5시간 · 0.03, 씨앗 26: 0시간 · 0.00
 const OPENING_SHORT_MAX := 20
 func test_opening_days() -> void:
 	for seed_v: int in [19, 26]:               # 재는 도구에서 가장 나빴던 두 씨앗 (고치기 전 창고가 42 · 25시간 비고 배고픔이 끝까지 참)

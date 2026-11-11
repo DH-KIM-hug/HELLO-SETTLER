@@ -285,6 +285,8 @@ const FORAGE_FIRST_DAYS := 6.0          # (2026-11-11 Q7-b) 마을의 첫 며칠
 const FORAGE_FIRST_FOOD_DAYS := 0.5     # … 먹을 것(창고·밭 앞 + 창고로 오는 길)이 이만큼 날치 아래일 때 (반나절치 — 밭 하나가 아직 마을을 다 먹이지 못하는 동안)
 const FORAGE_FIRST_SCORE := 8.0         # … 그때 앞세운 사람의 할 일 점수 (× W_DAY_WORK = 12 — 나르기 7.5~11.25 · 짓기 9보다 앞선다. 평소 FORAGE_SCORE 5는 나르기와 같아 배고파진 뒤에야 나갔다)
 const FORAGE_FIRST_HANDS := 1           # … 그렇게 앞세워 나가는 사람 수 (한 번에) — 나머지 일손은 맷돌간·화덕·둘째 밭을 마저 짓고 나른다 (다 나가면 첫 빵이 하루 늦어진다 — 재 봄)
+const EXPLORE_HOLD_FOOD_DAYS := 0.5     # (2026-11-11 Q7-c) 첫 며칠(FORAGE_FIRST_DAYS) 동안 먹을 것(오는 길 포함)이 이만큼 날치 아래면 안개 너머를 살피러 새로 떠나지 않는다 — 늘 한 사람이 나가 있어 나르고 지을 손이 모자랐다 (0이면 끔 · Village.explore_held)
+const JOB_STAND_IN := true              # (2026-11-11 Q7-c) 밭·화덕·맷돌간의 일꾼이 앓아누우면 일터 없는 성한 어른이 그 자리를 맡는다 · 먹을 것 일터에는 앓는 사람을 넣지 않는다 (Village._hand_over_sick)
 const FORAGE_HUNGRY_MULT := 1.5         # 배가 고픈데 나갈 수 있으면: 빈 창고 앞에서 기다리는 것(먹기 점수)보다 이만큼 앞선다
 const FORAGE_SCORE := 5.0               # 할 일 점수 (나르기와 같음 — 짓기·나르기가 먼저)
 const FORAGE_NOTE_DAYS := 30.0          # (정함) 연대기 '바구니를 들고 나갔다' 줄은 이만큼에 한 번
