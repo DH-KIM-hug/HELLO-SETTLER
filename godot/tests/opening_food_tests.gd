@@ -23,7 +23,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 첫날 먹을 것 (Q7)")
-	run.timed(self, ["test_start_stock", "test_hungry_keeps_working", "test_food_on_way", "test_first_days_forage", "test_waiting_load_first", "test_sick_stand_in", "test_first_days_explore_hold", "test_opening_days"])
+	run.timed(self, ["test_start_stock", "test_hungry_keeps_working", "test_food_on_way", "test_first_days_forage", "test_waiting_load_first", "test_own_heap_carried", "test_biggest_heap_first", "test_sick_stand_in", "test_first_days_explore_hold", "test_opening_days"])
 
 
 ## 시작 건량 (Balance.START_STOCK): 하루치를 조금 넘고 촌장이 '먹을 것이 모자라다'고 보는 선(BIRTH_FOOD_DAYS)에는 못 미친다 — 첫날이 빠듯해야 둘째 밭을 서두른다
@@ -247,6 +247,68 @@ func test_waiting_load_first() -> void:
 	r2.steps.clear()
 	mill.out["밀가루"] = 0.0
 	check(ResidentAI._haul_out(v, r2, v.store(), r2.carry_cap()) and float(farm.out[Balance.PORRIDGE]) < 300.0, "기다리는 건물이 없으면 예전처럼 밭의 밀을 창고로 (밭 앞 %.0f)" % float(farm.out[Balance.PORRIDGE]))
+
+
+# ───────────────────────── Q11-b (2026-11-11 — docs/measure/growth_2026-11-11.md 라) ─────────────────────────
+## 넉넉해서 밭이 쉬어도 밭지기는 자기 밭 앞에 쌓인 밀을 마저 나른다 (기획서 9장 '일꾼은 자기 건물 앞에 쌓인 산출물을 직접 창고로') —
+## 예전엔 '넉넉함'이 밭 앞 더미까지 세는 바람에, 마을 비축이 통째로 밭 앞에 있으면 밭지기가 그 곁에서 쉬었다. 쌓인 것이 없으면 예전처럼 쉰다
+func test_own_heap_carried() -> void:
+	var v := _chain(_bare(2.0))
+	v.assign_jobs()
+	var farm := _of_type(v, "농장")
+	var mill := _of_type(v, "맷돌간")
+	var farmer := v.person(farm.worker)
+	var k: String = Balance.PORRIDGE
+	mill.in_buf[k] = Production.in_cap(k)             # 맷돌간 입구는 가득 — 밭의 밀은 창고로 갈 짐
+	var en := v.enough(k)
+	farm.out[k] = en + 300.0
+	check(farmer != null and float(v.stock.get(k, 0.0)) == 0.0 and ResidentAI._full(v, k), "창고는 비었지만 밭 앞 더미만으로 '넉넉함' (넉넉함 %.0f · 밭 앞 %.0f)" % [en, float(farm.out[k])])
+	check(ResidentAI.own_heap(farm) and ResidentAI.work_task(v, farmer, true), "넉넉해도 자기 밭 앞에 쌓인 밀이 있으면 밭지기의 일감이다")
+	farmer.steps.clear()
+	var did := ResidentAI.work_task(v, farmer, false)
+	check(did and is_equal_approx(float(farm.out[k]), en + 300.0 - float(Balance.BULK[k])) and farmer.doing.contains("나르는"),
+		"한 수레를 싣고 창고로 나선다 (밭 앞 %.0f · %s)" % [float(farm.out[k]), farmer.doing])
+	# 쌓인 것이 4분의 1 수레가 안 되면 예전처럼 쉰다 (넉넉한 밀을 더 기르지도, 빈손으로 오가지도 않는다)
+	farmer.steps.clear()
+	farm.out[k] = ResidentAI.haul_min(k) - 1.0
+	v.stock[k] = en
+	check(ResidentAI._full(v, k) and not ResidentAI.own_heap(farm) and not ResidentAI.work_task(v, farmer, true), "넉넉하고 밭 앞에 쌓인 것도 없으면 쉰다")
+	# 넉넉하지 않을 때는 그대로 (밭일)
+	v.stock[k] = 0.0
+	check(not ResidentAI._full(v, k) and ResidentAI.work_task(v, farmer, true), "모자랄 때는 예전처럼 밭일")
+
+
+## 짐꾼은 가장 여러 짐이 쌓인 더미부터 싣는다 — 지은 차례대로 고르면 먼저 지은 밭의 작은 더미만 반 수레씩 실어 가고 나중 지은 밭 앞에 마을 비축이 남는다.
+## 같은 양이면 먼저 지은 건물 · 종류가 다르면 짐 수(수레 물건은 수레, 나머지는 사람 짐)로 견준다
+func test_biggest_heap_first() -> void:
+	var v := _bare(2.0)
+	var k: String = Balance.PORRIDGE
+	var f1 := v.add_building("농장", 6.0, 2.0, true)
+	var f2 := v.add_building("농장", -6.0, 3.0, true)
+	f1.out[k] = ResidentAI.haul_min(k) + 8.0        # 먼저 지은 밭: 4분의 1 수레 남짓
+	f2.out[k] = 900.0                                # 나중 지은 밭: 여러 수레
+	var small := float(f1.out[k])
+	var ls := _loose(v)
+	var r: Resident = ls[0]
+	r.steps.clear()
+	check(ResidentAI._haul_out(v, r, v.store(), r.carry_cap()), "나를 것이 있다")
+	check(is_equal_approx(float(f1.out[k]), small) and is_equal_approx(float(f2.out[k]), 900.0 - float(Balance.BULK[k])),
+		"많이 쌓인 밭에서 한 수레 가득 (먼저 지은 밭 %.0f · 나중 지은 밭 %.0f)" % [float(f1.out[k]), float(f2.out[k])])
+	f1.out[k] = 300.0
+	f2.out[k] = 300.0
+	var r2: Resident = ls[1]
+	r2.steps.clear()
+	check(ResidentAI._haul_out(v, r2, v.store(), r2.carry_cap()) and float(f1.out[k]) < 300.0 and is_equal_approx(float(f2.out[k]), 300.0), "같은 양이면 먼저 지은 밭부터")
+	# 종류가 다르면 짐 수로: 판자 네 짐 > 밀 한 수레 남짓
+	var saw := v.add_building("제재소", 4.0, -6.0, true)
+	var r3: Resident = ls[2]
+	r3.steps.clear()
+	saw.out["판자"] = 4.0 * r3.carry_cap()
+	f1.out[k] = 0.0
+	var planks := float(saw.out["판자"])
+	check(ResidentAI._haul_out(v, r3, v.store(), r3.carry_cap()) and float(saw.out["판자"]) < planks and is_equal_approx(float(f2.out[k]), 300.0),
+		"밀 한 수레 남짓보다 판자 네 짐이 먼저 (판자 %.0f → %.0f)" % [planks, float(saw.out["판자"])])
+	check(ResidentAI.waiting_heaps(v, r3).size() == 2, "기다리는 더미 목록: 남은 판자 · 밀")
 
 
 # ───────────────────────── Q7-c (2026-11-11 — docs/measure/growth_2026-11-11.md) ─────────────────────────
