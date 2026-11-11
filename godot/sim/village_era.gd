@@ -577,6 +577,11 @@ static func on_death(v: Village, p: Resident) -> void:
 ## GRAVE_FIELD_FAR 안, 그 옆으로 GRAVE_FIELD_SIDE 안 (십자 꼴)이 그 자리. 주사위를 쓰지 않는다 (자리만 — 같은 마을이면 늘 같은 자리).
 const GRAVE_VIEW_YAW := 45.0         # 거인이 보는 방위 (도 — 화면의 JarCamera.BASE_YAW_DEG + 90° × 걸음과 같은 값: 시험이 지킴)
 const GRAVE_FIELD_FAR := 3.6         # 밭 가운데에서 보는 축을 따라 이 안 = 밀 줄에 가리는 거리 (맨 뒷줄 + 밀 키 / sin 48° + 돌 발치)
+## ↑ 3.6이 맞는지 따져 봄 (2026-11-11 Q8 ⑧⑨ — docs/measure/growth_2026-11-11.md 바-4). 화면은 평행 투영 · 서 있는 눈높이 48° (JarCamera.PITCH_DEG,
+## 멀어지면 더 가팔라질 뿐) · 그림 카드는 화면에 제 키 그대로 서므로, 키 h인 밀 줄은 그 뒤 땅을 h / sin 48° 만큼 가린다. 익은 밀 맨 뒷줄은
+## 밭 가운데에서 0.79 뒤, 이삭 끝까지 1.52 (평균 키 1.25) → 가리는 끝 = 0.79 + 1.52 / 0.743 = 2.84, 돌 발치의 꽃(0.5)까지 3.34
+## (평균 키로는 2.98). 네 방위가 모두 같은 셈(십자 꼴)이라 3.6이면 어느 걸음에서든 돌과 발치가 보인다 (여유 0.26) — 그대로 둔다.
+## 모자란 곳 (값은 그대로 · 메인이 고를 것): 첫 죽음 연출의 눈높이 34°(Stagings first_death)에서는 3.52부터 돌이, 4.02부터 발치 꽃까지 보인다.
 const GRAVE_FIELD_SIDE := 2.8        # ... 옆으로 이 안 (밭 반 폭 + 돌·꽃 반 폭)
 const GRAVE_TRIES := 72              # 밭을 피해 찾는 걸음 수 (옛 규칙은 40걸음 — 그 안에서 밭과 상관없는 자리는 예전과 같은 자리)
 
@@ -608,16 +613,45 @@ static func _lone_grave(v: Village, p: Resident) -> Vector2:
 
 ## q가 어느 밭(짓는 중인 밭 터도)의 안이나 바로 곁(네 방위 어디서 보든 밀 줄 뒤·앞)인지 — 자리만 읽는 순수 함수
 static func grave_by_field(v: Village, q: Vector2) -> bool:
-	var yaw := deg_to_rad(GRAVE_VIEW_YAW)
-	var tw := Vector2(sin(yaw), cos(yaw))
-	var rt := Vector2(cos(yaw), -sin(yaw))
 	for b in v.buildings:
-		if b.type != "농장":
-			continue
-		var d := q - Vector2(b.x, b.y)
-		var u := absf(d.dot(tw))
-		var w := absf(d.dot(rt))
-		if minf(u, w) < GRAVE_FIELD_SIDE and maxf(u, w) < GRAVE_FIELD_FAR:
+		if b.type == "농장" and field_covers(Vector2(b.x, b.y), q, 0.0):
+			return true
+	return false
+
+
+## 밭 가운데 f의 밀이 q에 선 것을 가리는가 — 네 방위의 보는 축을 따라 GRAVE_FIELD_FAR 안, 그 옆으로 GRAVE_FIELD_SIDE 안 (십자 꼴).
+## pad = q에 선 것의 반 폭 (돌 하나는 0, 묘지는 그 크기). 밭은 모두 같은 크기라 '밭이 무덤을'과 '무덤이 밭 곁에'가 같은 셈이다.
+static func field_covers(f: Vector2, q: Vector2, pad: float) -> bool:
+	var yaw := deg_to_rad(GRAVE_VIEW_YAW)
+	var d := q - f
+	var u := absf(d.dot(Vector2(sin(yaw), cos(yaw))))
+	var w := absf(d.dot(Vector2(cos(yaw), -sin(yaw))))
+	return minf(u, w) < GRAVE_FIELD_SIDE + pad and maxf(u, w) < GRAVE_FIELD_FAR + pad
+
+
+## 가릴 무덤이 있나 (돌 하나라도 · 묘지나 묘지 터) — 없으면 밭 자리는 예전과 한 치도 다르지 않다
+static func has_graves(v: Village) -> bool:
+	return not v.graves.is_empty() or v.count_type("묘지") > 0
+
+
+## (Q8 ⑧) p에 새 밭을 일구면 이미 있는 무덤(홀로 선 돌 · 묘지 안의 돌 · 묘지 터)을 가리는가 — grave_by_field를 뒤집은 것.
+## 촌장은 이런 자리를 피해 밭을 잡고, 다른 자리가 없을 때만 예전 규칙대로 잡는다 (VillagePlan._farm_spot · Village._find_spot).
+static func field_by_grave(v: Village, p: Vector2) -> bool:
+	for g: Dictionary in v.graves:
+		if field_covers(p, Vector2(float(g["x"]), float(g["y"])), 0.0):
+			return true
+	for b in v.buildings:
+		if b.type == "묘지" and field_covers(p, Vector2(b.x, b.y), b.size()):
+			return true
+	return false
+
+
+## (Q8 ⑨) q에 묘지를 두면 어느 밭(짓는 중인 밭 터도)의 안이나 바로 뒤·앞인가 — 묘지 터 크기만큼 넓혀서 본다.
+## 촌장은 이런 자리를 피해 묘지를 잡고, 다른 자리가 없을 때만 예전 규칙대로 잡는다 (Village._find_spot).
+static func yard_by_field(v: Village, q: Vector2) -> bool:
+	var pad: float = Balance.B["묘지"]["size"]
+	for b in v.buildings:
+		if b.type == "농장" and field_covers(Vector2(b.x, b.y), q, pad):
 			return true
 	return false
 

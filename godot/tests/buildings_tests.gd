@@ -18,7 +18,8 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	print("== 건물 (buildings GDD)")
-	run.timed(self, ["test_upgrade_pick_second", "test_upgrade_pick_first", "test_upgrade_none", "test_wheat_stage", "test_wheat_reaped", "test_grave_siting", "test_grave_old_save"])
+	run.timed(self, ["test_upgrade_pick_second", "test_upgrade_pick_first", "test_upgrade_none", "test_wheat_stage", "test_wheat_reaped", "test_grave_siting", "test_grave_old_save",
+		"test_second_quarry", "test_stone_stuck", "test_opening_stone_rules_off", "test_field_grave", "test_yard_field"])
 
 
 ## 작은 옛 집 둘만 있는 마을 (오두막 cap 4 → 목조주택 cap 6 순서)
@@ -215,3 +216,289 @@ func test_grave_old_save() -> void:
 	for c: Array in BldEcon.grave_cuts(v2, f2, 2, 2):
 		opp += 0 if c.is_empty() else 1
 	check(n >= 1 and notch and opp == 0, "그 무덤 앞 밀 줄 %d장에 좁은 홈만 (줄 양 끝은 제 키) · 반대편에서 보면 벤 곳 없음 (%d)" % [n, opp])
+
+
+# ───────────────────────── 돌이 떨어지는 날 (GD 9장 · docs/measure/growth_2026-11-11.md 바) ─────────────────────────
+const STONE_Q := Vector2(-5.0, -15.0)          # 시험 마을의 채석장 자리 — 둘레(GATHER_RANGE)에 바위 둘, 나머지 넷은 닿지 않는다
+
+## 돌이 떨어진 마을: 오두막 하나 · 밭 · 나무꾼 · 채석장 (다 지음), 판자는 넉넉하고 돌은 0, 집 없는 어른이 있다.
+## near = 채석장 둘레 바위마다 남긴 양 · far = 닿지 않는 바위마다 남긴 양 · quarry = 채석장을 두나
+func _stone_village(near: int, far: int, quarry := true) -> Village:
+	var v := Village.new_prototype(20261111)
+	v.water.offline = true
+	v.chief_off = true
+	v.add_building("오두막", 4.0, -3.0, true)
+	v.add_building("농장", 9.0, 9.0, true)
+	v.add_building("나무꾼", -9.0, 7.0, true)
+	if quarry:
+		v.add_building("채석장", STONE_Q.x, STONE_Q.y, true)
+	for rk: Dictionary in v.rocks:
+		rk["amt"] = near if Vector2(float(rk["x"]), float(rk["y"])).distance_to(STONE_Q) <= Balance.GATHER_RANGE else far
+	v.stock["돌"] = 0.0
+	v.stock["판자"] = 20.0
+	return v
+
+
+func _site_types(v: Village) -> Array:
+	var out: Array = []
+	for b in v.buildings:
+		if b.is_site():
+			out.append(b.site_type())
+	return out
+
+
+func _drop(v: Village, b: Building) -> void:
+	v.buildings.erase(b)
+	v._bld_by_id.erase(b.id)
+
+
+func _fake_grave(v: Village, q: Vector2) -> void:
+	v.graves.append({"id": 99901, "name": "시험", "x": q.x, "y": q.y, "t": v.t, "yard": false, "yard_id": -1})
+
+
+## (가) 있는 채석장 둘레를 다 캤고 병 안에 바위가 남았으면 촌장이 남은 바위 곁에 채석장을 하나 더 — 둘레에 바위가 남았으면 짓지 않는다
+func test_second_quarry() -> void:
+	var v := _stone_village(0, 20)
+	v.stats["died"] = 1                    # 맨 위 바람 = 묘지 (돌 1) — 씨앗 15가 멈춘 그 모양
+	var s0 := v.rng.state
+	check(v.quarry_spent() and v.stone_rocks_left() and not v.stone_in_reach(STONE_Q.x, STONE_Q.y), "시험 마을: 채석장 둘레는 다 캤고 먼 바위 넷이 남았다")
+	v.chief_build()
+	var q2: Building = null
+	for b in v.buildings:
+		if b.type == "채석장" and not b.built:
+			q2 = b
+	check(q2 != null and v.count_type("채석장") == 2 and v.stone_in_reach(q2.x, q2.y) and not v.quarry_spent(),
+		"둘레를 다 캤고 바위가 남음 → 남은 바위 곁에 채석장 터 하나 더 (%s · 그 둘레에 캘 바위 있음)" % [_site_types(v)])
+	check(v.rng.state == s0, "채석장을 하나 더 정하는 데 주사위를 쓰지 않는다")
+	v.chief_build()
+	v.chief_build()
+	check(v.count_type("채석장") == 2, "새 터가 선 뒤로는 또 짓지 않는다 (채석장 %d)" % v.count_type("채석장"))
+	# 둘레에 바위가 남아 있으면 (돌이 아직 안 온 것뿐) 하나 더 짓지 않는다 — 예전처럼 기다린다
+	var w := _stone_village(6, 20)
+	w.stats["died"] = 1
+	w.chief_build()
+	check(not w.quarry_spent() and w.count_type("채석장") == 1 and _site_types(w).is_empty(), "둘레에 캘 바위가 남음 → 채석장도 다른 것도 새로 짓지 않고 기다린다 (%s)" % [_site_types(w)])
+	# 채석장이 하나도 없을 때는 예전 규칙 그대로 (첫 채석장)
+	var n := _stone_village(20, 20, false)
+	n.stats["died"] = 1
+	n.chief_build()
+	check(not n.quarry_spent() and _site_types(n) == ["채석장"], "채석장이 없고 돌이 모자람 → 예전처럼 첫 채석장부터 (%s)" % [_site_types(n)])
+	# 옛 저장: 저장하는 값이 없어 불러온 마을에서도 그대로 돈다
+	var o := _stone_village(0, 20)
+	o.stats["died"] = 1
+	var o2 := Village.from_dict(bytes_to_var(var_to_bytes(o.to_dict())))
+	o2.chief_off = true
+	o2.chief_build()
+	check(o2.count_type("채석장") == 2 and _site_types(o2) == ["채석장"], "불러온 마을 (둘레를 다 캔 채석장)에서도 하나 더 짓는다 (%s)" % [_site_types(o2)])
+	# 병 안의 바위를 다 캤으면 채석장을 더 짓지 않는다
+	var e := _stone_village(0, 0)
+	e.chief_build()
+	check(e.quarry_spent() and not e.stone_rocks_left() and e.count_type("채석장") == 1, "병 안에 바위가 없음 → 채석장을 더 짓지 않는다 (%s)" % [_site_types(e)])
+
+
+## (나) 돌이 들어올 길이 없어 못 짓는 바람(묘지)이 그 아래 바람(오두막)을 막지 않는다 — '아직 안 온' 돌이면 예전처럼 기다린다
+func test_stone_stuck() -> void:
+	var v := _stone_village(0, 0)
+	v.stats["died"] = 1
+	check(not v._affordable("묘지") and v._affordable("오두막"), "시험 마을: 묘지(돌 1)는 못 짓고 오두막(판자)은 지을 수 있다")
+	v.chief_build()
+	check(_site_types(v) == ["오두막"], "바위를 다 캔 마을: 못 짓는 묘지를 두고 그 아래 바람인 집을 짓는다 (%s)" % [_site_types(v)])
+	check(v.count_type("묘지") == 0 and v.count_type("채석장") == 1, "묘지 터도 채석장 터도 서지 않는다")
+	# 채석장 둘레에 바위가 남았으면 (아직 나르지 않은 돌) 건너뛰지 않는다 — 평소 차례 그대로
+	var w := _stone_village(6, 0)
+	w.stats["died"] = 1
+	w.chief_build()
+	check(_site_types(w).is_empty(), "둘레에 캘 바위가 남음 → 묘지를 기다린다 (아래 바람으로 넘어가지 않음 %s)" % [_site_types(w)])
+	# 돌이 있으면 예전처럼 묘지부터
+	var y := _stone_village(0, 0)
+	y.stats["died"] = 1
+	y.stock["돌"] = 3.0
+	y.chief_build()
+	check(_site_types(y) == ["묘지"], "돌이 있으면 묘지부터 (%s)" % [_site_types(y)])
+	# 바위는 남았지만 새 채석장에 보낼 일손이 없다 (새 일터 규칙) → 채석장 대신 집
+	var h := _stone_village(0, 20)
+	h.stats["died"] = 1
+	var free_hand := false
+	for p in h.people:
+		if p.is_adult():
+			if not free_hand:
+				free_hand = true          # 한 사람만 손이 비었다 (IDLE_FOR_NEW_JOB 2)
+			else:
+				p.job = h.buildings[0].id
+	h.chief_build()
+	check(_site_types(h) == ["오두막"], "남은 바위는 있으나 일손이 없음 → 새 채석장은 미루고 집을 짓는다 (%s)" % [_site_types(h)])
+	# 남은 바위가 영역 밖 멀리 있어 그 곁에 채석장 자리를 못 잡는다 → 쓸모없는 채석장을 세우지 않고 집을 짓는다 (나무도 그대로)
+	var u := _stone_village(0, 0)
+	u.stats["died"] = 1
+	u.rocks[0]["x"] = 400.0
+	u.rocks[0]["y"] = 400.0
+	u.rocks[0]["amt"] = 20
+	u.chief_build()
+	check(u.stone_rocks_left() and u.count_type("채석장") == 1 and _site_types(u) == ["오두막"], "남은 바위가 닿지 않는 먼 곳 → 채석장을 더 세우지 않고 집을 짓는다 (%s)" % [_site_types(u)])
+	check(u.trees.size() == v.trees.size(), "버린 채석장 자리의 나무는 베지 않는다 (나무 %d · 바위가 없는 같은 마을 %d)" % [u.trees.size(), v.trees.size()])
+	# 들어준 소원이 못 짓는 것이어도 (제재소 = 돌 2) 그 아래를 본다 — 소원은 남는다
+	var k := _stone_village(0, 0)
+	k.wishes = ["제재소"]
+	k.chief_build()
+	check(_site_types(k) == ["오두막"] and k.wishes == ["제재소"], "못 짓는 소원(제재소)은 남겨 두고 집을 짓는다 (%s)" % [_site_types(k)])
+
+
+## 평소의 첫 며칠에는 새 규칙이 켜지지 않는다: 채석장 둘레를 다 캔 적이 없으면 촌장의 차례는 예전과 한 줄도 다르지 않다
+## (새 갈래는 모두 quarry_spent()가 참일 때만 열린다 — 서른두 씨앗의 병 10일 건물 자리가 앞뒤 같음은 growth 바-3)
+func test_opening_stone_rules_off() -> void:
+	var v := Village.new_prototype(1)
+	v.auto_reveal = true
+	var hours := 24 if quick else 72
+	var spent := 0
+	var order: Array = []
+	var seen := v.buildings.size()
+	for hr in hours:
+		v.advance(Balance.HOUR)
+		if v.quarry_spent():
+			spent += 1
+		while seen < v.buildings.size():
+			order.append(v.buildings[seen].type)
+			seen += 1
+	check(spent == 0, "첫 %d시간: 채석장 둘레를 다 캔 때 %d번 (새 규칙이 켜지지 않음) · 지은 차례 %s" % [hours, spent, order])
+	check(order.size() >= 2 and "농장" in order, "첫날의 차례는 그대로 — 집과 밭부터 (%s)" % [order])
+
+
+# ───────────────────────── 밭과 무덤 자리 (Q8 ⑧ ⑨) ─────────────────────────
+func _view_axis() -> Vector2:
+	var yaw := deg_to_rad(VillageEra.GRAVE_VIEW_YAW)
+	return Vector2(sin(yaw), cos(yaw))
+
+
+## (Q8 ⑧) 나중에 일구는 밭은 이미 있는 무덤·묘지를 가리는 자리를 피한다 — 다른 자리가 없을 때만 옛 규칙. 무덤이 없으면 예전과 같은 자리
+func test_field_grave() -> void:
+	var tw := _view_axis()
+	var seen := 0
+	var moved := 0
+	var covers := 0
+	var old_covers := 0
+	var yard_covers := 0
+	var fallback_same := 0
+	var same_without := 0
+	var rolled := false
+	for sd in 12:
+		var v := Village.new_prototype(20261100 + sd)
+		v.water.offline = true
+		v.chief_off = true
+		v.add_building("오두막", 4.0, -3.0, true)
+		var s0 := v.rng.state
+		var p0: Variant = v.find_spot("농장")
+		if p0 == null:
+			continue
+		seen += 1
+		var f0: Vector2 = p0
+		if (v.find_spot("농장") as Vector2).is_equal_approx(f0) and not VillageEra.has_graves(v):
+			same_without += 1
+		# 그 밭 자리 바로 뒤(보는 축으로 2칸)에 돌 하나
+		_fake_grave(v, f0 + tw * 2.0)
+		if VillageEra.field_by_grave(v, f0):
+			old_covers += 1
+		var p1: Variant = v.find_spot("농장")
+		if p1 != null and not (p1 as Vector2).is_equal_approx(f0):
+			moved += 1
+		if p1 == null or VillageEra.field_by_grave(v, p1):
+			covers += 1
+		v.graves.clear()
+		# 묘지 (밭 자리에서 4.2칸 뒤 — 밭과 겹치지는 않지만 밀 뒤)
+		var yp := f0 + tw * 4.2
+		var yard := v.add_building("묘지", yp.x, yp.y, true)
+		var p2: Variant = v.find_spot("농장")
+		if p2 == null or VillageEra.field_by_grave(v, p2):
+			yard_covers += 1
+		_drop(v, yard)
+		# 어디에 일궈도 무덤을 가린다 (온 마을에 돌) → 옛 규칙의 자리 그대로
+		for gx in range(-40, 41, 2):
+			for gy in range(-40, 41, 2):
+				_fake_grave(v, v.center + Vector2(gx, gy))
+		var p3: Variant = v.find_spot("농장")
+		if p3 != null and (p3 as Vector2).is_equal_approx(f0):
+			fallback_same += 1
+		rolled = rolled or v.rng.state != s0
+	check(seen >= 8 and same_without == seen, "무덤이 없는 마을 %d곳: 밭 자리는 예전 그대로 (같은 답 %d)" % [seen, same_without])
+	check(old_covers == seen and moved == seen and covers == 0, "밭 자리 뒤에 돌이 서 있으면 (옛 자리는 가림 %d): 다른 자리로 옮긴 마을 %d / %d · 그래도 돌을 가리는 자리 %d" % [old_covers, moved, seen, covers])
+	check(yard_covers == 0, "밭 자리 뒤에 묘지가 있으면: 묘지를 가리는 자리 %d" % yard_covers)
+	check(fallback_same == seen and not rolled, "가리지 않는 자리가 없으면 옛 규칙의 자리 (%d / %d) · 주사위를 쓰지 않음" % [fallback_same, seen])
+	# 계획 밖 옛 방식 (Village._find_spot의 밭 갈래): 주사위 수가 같고, 가리지 않는 자리를 고른다
+	var was := VillagePlan.enabled
+	VillagePlan.enabled = false
+	var a := Village.new_prototype(20261108)
+	a.water.offline = true
+	var b := Village.new_prototype(20261108)
+	b.water.offline = true
+	var pa: Variant = a.find_spot("농장")
+	if pa != null:
+		_fake_grave(b, (pa as Vector2) + tw * 2.0)
+	var pb: Variant = b.find_spot("농장")
+	VillagePlan.enabled = was
+	check(pa != null and pb != null and a.rng.state == b.rng.state and not VillageEra.field_by_grave(b, pb) and VillageEra.field_by_grave(b, pa),
+		"옛 방식의 밭 자리도 돌을 가리지 않는 곳으로 · 굴린 주사위 수는 같다 (%s → %s)" % [pa, pb])
+
+
+## (Q8 ⑨) 묘지 자리도 밭 안·밭 바로 뒤를 피한다 — 다른 자리가 없을 때만 옛 규칙. 밭이 곁에 없으면 예전과 같은 자리
+func test_yard_field() -> void:
+	var tw := _view_axis()
+	var rt := Vector2(tw.y, -tw.x)
+	var size: float = Balance.B["묘지"]["size"]
+	var seen := 0
+	var same := 0
+	var moved := 0
+	var by_field := 0
+	var fallback_same := 0
+	var rolled := false
+	for sd in 12:
+		var v := Village.new_prototype(20261100 + sd)
+		v.water.offline = true
+		v.chief_off = true
+		var s0 := v.rng.state
+		var p0: Variant = v.find_spot("묘지")
+		if p0 == null:
+			continue
+		seen += 1
+		var y0: Vector2 = p0
+		var want0: Variant = _first_free(v, VillageEra.spot_center(v, "묘지"), size)
+		if want0 != null and (want0 as Vector2).is_equal_approx(y0) and not VillageEra.yard_by_field(v, y0):
+			same += 1
+		# 옛 묘지 자리가 밭 바로 뒤가 되게 밭을 둔다 (4칸 — 겹치지는 않음)
+		var fp := y0 - tw * 4.0
+		var farm := v.add_building("농장", fp.x, fp.y, true)
+		var p1: Variant = v.find_spot("묘지")
+		if v.is_free(y0.x, y0.y, size) and VillageEra.yard_by_field(v, y0) and p1 != null and not (p1 as Vector2).is_equal_approx(y0):
+			moved += 1
+		if p1 == null or VillageEra.yard_by_field(v, p1):
+			by_field += 1
+		_drop(v, farm)
+		# 빈 땅이 모두 밭 곁 (보는 축을 따라 7칸마다 밭) → 옛 규칙의 첫 빈 자리
+		var farms: Array = []
+		for i in range(-7, 8):
+			for j in range(-7, 8):
+				var q := y0 + tw * (3.5 + 7.0 * i) + rt * (3.5 + 7.0 * j)
+				farms.append(v.add_building("농장", q.x, q.y, true))
+		var want: Variant = _first_free(v, VillageEra.spot_center(v, "묘지"), size)
+		var p2: Variant = v.find_spot("묘지")
+		if want != null and p2 != null and (p2 as Vector2).is_equal_approx(want) and VillageEra.yard_by_field(v, p2):
+			fallback_same += 1
+		for f: Building in farms:
+			_drop(v, f)
+		rolled = rolled or v.rng.state != s0
+	check(seen >= 8 and same == seen, "밭이 곁에 없는 마을 %d곳: 묘지 자리는 예전 그대로 (%d)" % [seen, same])
+	check(moved == seen and by_field == 0, "옛 자리가 밭 바로 뒤가 되면: 옮긴 마을 %d / %d · 그래도 밭 곁인 자리 %d" % [moved, seen, by_field])
+	check(fallback_same == seen and not rolled, "밭 곁이 아닌 빈 땅이 없으면 옛 규칙의 자리 (%d / %d) · 주사위를 쓰지 않음" % [fallback_same, seen])
+
+
+## 옛 규칙의 자리 (Village._find_spot의 나선 — 첫 빈 자리)
+func _first_free(v: Village, c: Vector2, size: float) -> Variant:
+	var rad := 2.0
+	var tr_r := v.territory_r()
+	while rad < tr_r:
+		for k in 24:
+			var a := k / 24.0 * TAU + rad
+			var p := c + Vector2(cos(a), sin(a)) * rad
+			if v.is_free(p.x, p.y, size):
+				return p
+		rad += 0.8
+	return null
+

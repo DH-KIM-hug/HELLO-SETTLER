@@ -289,7 +289,7 @@ static func find_spot(v: Village, type: String) -> Variant:
 	if type in STREET_TYPES:
 		p = _street_spot(v, size, type)
 	elif type in FARM_TYPES:
-		p = _farm_spot(v, size)
+		p = _farm_spot(v, size, type == "농장")
 	elif type in MILL_TYPES:
 		p = _mill_spot(v, size)
 		if p == null:
@@ -369,13 +369,18 @@ static func _side_pt(pl: Dictionary, k: int, d: float, o: float) -> Vector2:
 
 
 ## 밭: 집들 너머 큰길가 — 볕·물기 좋은 곳 + 이미 있는 밭 곁 (가지런한 줄)
-static func _farm_spot(v: Village, size: float) -> Variant:
+## tall = 밀밭 (목장이 아님): 익은 밀은 주민보다 커서, 이미 있는 무덤·묘지를 가리는 자리는 피한다 (Q8 ⑧ — VillageEra.field_by_grave).
+## 그런 자리뿐이면 예전 규칙대로. 무덤이 하나도 없는 마을은 예전과 같은 자리 (주사위 없음).
+static func _farm_spot(v: Village, size: float, tall := true) -> Variant:
 	var pl := plan(v)
 	var on := Siting.active(v)
 	var tf: Dictionary = Siting.resource_field(v, Siting.fields(v), "tree") if on else {}
 	var off := HALF_W + 0.4 + size
 	var best: Variant = null
 	var bv := -INF
+	var graves := tall and VillageEra.has_graves(v)
+	var clear: Variant = null          # 무덤을 가리지 않는 자리 가운데 가장 좋은 곳
+	var cv := -INF
 	var rp: float = pl["rp"]
 	for k in int(pl["n"]):
 		for side: float in [1.0, -1.0]:
@@ -393,8 +398,11 @@ static func _farm_spot(v: Village, size: float) -> Variant:
 					if val > bv:
 						bv = val
 						best = p
+					if graves and val > cv and not VillageEra.field_by_grave(v, p):
+						cv = val
+						clear = p
 				d += SCAN
-	return best
+	return clear if clear != null else best
 
 
 ## 밭이 집 마당을 파고들지 않게 (집과 벽 사이 GAP)
