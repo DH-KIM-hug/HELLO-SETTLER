@@ -26,7 +26,7 @@ func all() -> void:
 		"test_feast_skip", "test_balance_consts", "test_tool_isolated", "test_no_statics",
 		"test_steps", "test_steps_gather", "test_steps_wait", "test_grown", "test_old_save_born", "test_strip_seven", "test_sign_near", "test_clap_view",
 		"test_green", "test_green_old_save", "test_green_nick", "test_sheaf",
-		"test_quiet_decor", "test_pinwheel_far", "test_feast_view", "test_grown_feast"])
+		"test_quiet_decor", "test_pinwheel_far", "test_feast_view", "test_grown_feast", "test_grown_far", "test_clap_sound", "test_bubble_keep_out"])
 
 
 func _world(seed_v := 5) -> JarWorld:
@@ -636,7 +636,7 @@ func test_tool_isolated() -> void:
 			missing.append(n)
 	check(src != "" and missing.is_empty(), "캡처 도구가 저장·설정·안내 대기 줄·그림 카드 폴더를 제 것으로 돌린다 (%s)" % str(missing))
 	check(not src.contains("SaveManager.player"), "캡처 도구가 거인 묶음(진짜 저장에 실리는 것)을 건드리지 않는다")
-	check(src.contains("const SAVE_DIR := \"user://shot_milestones_save\""), "제 폴더는 user://shot_milestones_save")
+	check(src.contains("const SAVE_DIR := \"user://_tool/shot_milestones/save\""), "제 폴더는 user://_tool/shot_milestones/save (도구 폴더 안)")
 	var fd := FileAccess.open("res://view/stage_director.gd", FileAccess.READ)
 	var dsrc := fd.get_as_text() if fd != null else ""
 	check(StageDirector.PIC_DIR == "user://chron_pics" and dsrc.contains("var pic_dir := PIC_DIR") and dsrc.count("PIC_DIR") == 2,
@@ -911,14 +911,12 @@ func test_grown() -> void:
 	check(rec.has("x") and Milestones.post_ok(v, at) and at.distance_to(v.fire) <= float(Balance.POST_RINGS[Balance.POST_RINGS.size() - 1]) + 0.01 and at.distance_to(v.fire) >= float(Balance.POST_RINGS[0]) - 0.01,
 		"기둥 자리 = 모닥불 곁 빈자리 (%.1f칸)" % at.distance_to(v.fire))
 	check(at == Milestones.post_spot(v), "적어 둔 자리는 늘 같은 자리 (시뮬레이션의 셈은 그대로)")
-	# (Q15) 화면의 기둥은 모닥불 바로 곁 — 적어 둔 자리(창고 장작더미 쪽으로 밀려나곤 한다)가 아니라 화면이 불 곁 빈자리를 찾는다
+	# (Q18 ⑫) 화면의 기둥 = 시뮬레이션이 적어 둔 바로 그 자리 (화면이 따로 자리를 찾지 않는다)
 	var w := MilestoneView.wanted(v)
 	var wp: Vector2 = w.get("grown", Vector2.INF)
-	var ring0 := float(MilestoneView.POST_FIRE_RINGS[0])
-	var ring1 := float(MilestoneView.POST_FIRE_RINGS[MilestoneView.POST_FIRE_RINGS.size() - 1])
-	check(w.has("grown") and Milestones.post_ok(v, wp) and wp.distance_to(v.fire) >= ring0 - 0.01 and wp.distance_to(v.fire) <= ring1 + 0.01,
-		"(Q15) 화면의 기둥 = 모닥불 바로 곁 빈자리 (불에서 %.1f칸 — 적어 둔 자리는 %.1f칸)" % [wp.distance_to(v.fire), at.distance_to(v.fire)])
-	check((wp - v.fire).dot(MilestoneView._right()) < 0.0 and wp.distance_to(v.fire) > Campfire.SEAT_R + 0.5, "기본 보기에서 불의 왼쪽 · 걸상 밖")
+	check(w.has("grown") and Milestones.post_ok(v, wp) and wp == at,
+		"(Q18) 화면의 기둥 = 적어 둔 자리 (불에서 %.2f칸 — 적어 둔 자리는 %.2f칸)" % [wp.distance_to(v.fire), at.distance_to(v.fire)])
+	check(wp.distance_to(v.fire) > Campfire.SEAT_R + 0.5, "걸상 밖")
 	check(wp == MilestoneView.post_at(v) and wp == MilestoneView.wanted(v)["grown"] and MilestoneView.post_at(v, wp) == wp, "같은 마을이면 늘 같은 자리 (난수 없음)")
 	var d0 := SaveCodec.digest(v.to_dict())
 	MilestoneView.wanted(v)
@@ -928,6 +926,16 @@ func test_grown() -> void:
 	Milestones.post_spot(v)
 	check(d0 == SaveCodec.digest(v.to_dict()) and is_equal_approx(float(_rec(v, "grown")["x"]), at.x) and is_equal_approx(float(_rec(v, "grown")["y"]), at.y),
 		"장식 자리 셈은 시뮬레이션을 바꾸지 않는다 (적어 둔 자리도 그대로)")
+	# (Q18 ⑫) 자리가 적혀 있지 않은 옛 기록이면 시뮬레이션의 자리 셈(Milestones.post_spot)을 그대로 쓴다
+	var grec := _rec(v, "grown")
+	var gx: Variant = grec["x"]
+	var gy: Variant = grec["y"]
+	grec.erase("x")
+	grec.erase("y")
+	check(MilestoneView.post_at(v) == Milestones.post_spot(v), "자리가 적혀 있지 않으면 시뮬레이션의 자리 셈 그대로")
+	grec["x"] = gx
+	grec["y"] = gy
+	check(MilestoneView.post_at(v) == at, "되돌리면 다시 적어 둔 자리")
 	v.add_building("오두막", wp.x, wp.y, true)
 	var at2: Vector2 = MilestoneView.wanted(v, {"post": wp})["grown"]
 	check(at2.distance_to(wp) > 0.5 and Milestones.post_ok(v, at2), "그 자리에 건물이 서면 기둥은 옆 빈자리로 (세워 둔 자리를 기억하고 있어도)")
@@ -1617,10 +1625,10 @@ func test_quiet_decor() -> void:
 	var door2 := Vector2(h2.x, h2.y + h2.size() * 0.5) + MilestoneView.PIN_OFF
 	check(MilestoneView.quiet_house(v) == h2 and w.has("steps") and (w["steps"] as Vector2).is_equal_approx(door2), "바람개비 = 마을에서 난 사람의 집 문 옆 (먼저 지은 집이 아니라)")
 	var wp: Vector2 = w.get("grown", Vector2.INF)
-	var ring0 := float(MilestoneView.POST_FIRE_RINGS[0])
-	var ring1 := float(MilestoneView.POST_FIRE_RINGS[MilestoneView.POST_FIRE_RINGS.size() - 1])
-	check(w.has("grown") and Milestones.post_ok(v, wp) and wp.distance_to(v.fire) >= ring0 - 0.01 and wp.distance_to(v.fire) <= ring1 + 0.01,
-		"기둥 = 모닥불 바로 곁 빈자리 (불에서 %.1f칸)" % wp.distance_to(v.fire))
+	var qrec := _rec(v, "grown")
+	var qat := Vector2(float(qrec["x"]), float(qrec["y"])) if qrec.has("x") else Milestones.post_spot(v)
+	check(w.has("grown") and Milestones.post_ok(v, wp) and wp == qat,
+		"(Q18) 기둥 = 시뮬레이션의 자리 (적어 둔 자리, 없으면 같은 셈 — 불에서 %.1f칸)" % wp.distance_to(v.fire))
 	g.home = -1
 	check(MilestoneView.quiet_house(v) == h1 and (MilestoneView.wanted(v)["steps"] as Vector2).is_equal_approx(door1), "그 사람에게 집이 없으면 사람이 사는 집 가운데 가장 먼저 지은 집")
 	check(MilestoneView.quiet_house(v, h2.id) == h2 and (MilestoneView.wanted(v, {"house": h2.id})["steps"] as Vector2).is_equal_approx(door2), "한 번 단 집은 서 있는 동안 그대로")
@@ -1655,7 +1663,7 @@ func test_quiet_decor() -> void:
 	var pg: Vector2 = wq.get("grown", Vector2.INF)
 	check(ns != null and ng != null and Vector2(ns.position.x, ns.position.z).is_equal_approx(ps) and Vector2(ng.position.x, ng.position.z).is_equal_approx(pg),
 		"화면: 조용히 넘은 병에도 바람개비·기둥 노드가 제자리에")
-	check(pg.distance_to(q.fire) <= ring1 + 0.01 and Milestones.post_ok(q, pg), "화면: 기둥은 모닥불 곁 (불에서 %.1f칸)" % pg.distance_to(q.fire))
+	check(pg == MilestoneView.post_at(q) and Milestones.post_ok(q, pg) and pg.distance_to(q.fire) <= float(Balance.POST_RINGS[Balance.POST_RINGS.size() - 1]) + 0.01, "화면: 기둥은 시뮬레이션의 자리 — 모닥불 곁 (불에서 %.1f칸)" % pg.distance_to(q.fire))
 	for i in 3:
 		mv._process(0.6)
 	check(mv.sign_node("grown") == ng and Vector2(ng.position.x, ng.position.z).is_equal_approx(pg) and Vector2(ns.position.x, ns.position.z).is_equal_approx(ps), "다시 세어도 같은 자리 (왔다 갔다 하지 않는다)")
@@ -1752,11 +1760,21 @@ func test_feast_view() -> void:
 		loaves += 1 if n.visible else 0
 		near += 1 if m != null and _flat(n.position, m.position) < 0.4 else 0
 		both += 1 if mv._dancing.has(id) else 0
-	check(loaves == eat and near == eat and both == 0, "먹는 사람마다 손에 빵 그림 한 장 (%d · 곁 %d) — 춤추는 사람과 겹치지 않는다" % [loaves, near])
+	var one := 0
+	for p in v.people:
+		if p.action == "festival" and p.anim == "eat" and Vector2(p.x, p.y).distance_to(v.fire) <= MilestoneView.DANCE_R and vw.residents.get(p.id) != null:
+			one += 1 if mv.breads_of(p.id) == 1 else 0
+	check(one == eat and loaves <= eat and near == loaves and both == 0, "(Q18 ⑧) 먹는 사람마다 빵은 꼭 하나 (%d / %d · 빵 그림 %d · 곁 %d) — 춤추는 사람과 겹치지 않는다" % [one, eat, loaves, near])
 	var tb := mv.feast_table()
 	var tp := Vector2(tb.position.x, tb.position.z) if tb != null else Vector2.INF
 	check(tb != null and tp.distance_to(v.fire) >= float(MilestoneView.TABLE_RINGS[0]) - 0.01 and tp.distance_to(v.fire) <= float(MilestoneView.TABLE_RINGS[MilestoneView.TABLE_RINGS.size() - 1]) + 0.01
-		and Milestones.spot_free(v, tp), "잔칫상이 잔치 둘레 바로 밖 빈자리에 (불에서 %.1f칸)" % tp.distance_to(v.fire))
+		and MilestoneView.table_ok(v, tp, MilestoneView._right()), "잔칫상이 잔치 둘레 바로 밖 빈자리에 (불에서 %.1f칸)" % tp.distance_to(v.fire))
+	var sp1 := MilestoneView.feast_spots(v)
+	var sp2 := MilestoneView.feast_spots(v)
+	check(sp1["table"] == sp2["table"] and str(sp1["lamps"]) == str(sp2["lamps"]), "(Q18 ⑩) 상·등 자리는 같은 마을이면 늘 같다 (난수 없음)")
+	for lp: Array in MilestoneView.feast_lamps(v, tp, Vector2.INF, MilestoneView._front()):
+		check(absf(((lp[0] as Vector2) - tp).dot(MilestoneView._front())) > MilestoneView.TABLE_HALF, "(Q18 ⑩) 카메라가 돌면 등은 그 보기의 상 양 끝으로")
+	check(vw.fauna_view != null and not vw.fauna_view.shoo.is_empty(), "(Q18 ⑩) 잔치 동안 나비·꿀벌이 상·등 앞을 비켜 난다 (%d곳)" % vw.fauna_view.shoo.size())
 	check(mv.lamps_lit() >= 1 and mv.lamps_lit() <= 2 and fire.lamps.size() == mv.lamps_lit(), "등이 켜지고 (%d) 그 불빛을 모닥불이 안다" % mv.lamps_lit())
 	Campfire.apply_glow(post, 1.0)
 	var glow1 := int(post.get_shader_parameter("fire_count"))
@@ -1768,6 +1786,33 @@ func test_feast_view() -> void:
 	check(pics_ok, "먹는 사람 머리 위에 빵 그림 말풍선 (%d — 많아야 %d)" % [mv.bub.items.size(), MilestoneView.BUB_EAT])
 	check(mv.star() == -1 and not mv.ribbon_on(), "여느 잔치에는 키 재기가 없다")
 	check(d0 == SaveCodec.digest(v.to_dict()), "잔치 화면은 시뮬레이션을 바꾸지 않는다")
+	# (Q18 ⑧) 그린 인형(방식 C)의 먹는 그림에는 빵이 이미 있다 → 빵 그림을 따로 들리지 않는다 (시험이 어른 손님 하나를 먹는 몸짓으로 세운다)
+	var fr_id := -1
+	for p in v.people:
+		var c0 := vw.residents.get(p.id) as CutoutResident
+		if p.action == "festival" and c0 != null and String(c0.dlook.get("body", "")) == "adult" and not c0.carry_baby and p.id != mv.star() \
+				and Vector2(p.x, p.y).distance_to(v.fire) <= MilestoneView.DANCE_R:
+			p.anim = "eat"
+			fr_id = p.id
+			break
+	var fc := vw.residents.get(fr_id) as CutoutResident
+	if fc != null:
+		var old_personal: Variant = fc.dlook.get("personal", -1)
+		vw.sync(0.0, true)
+		mv._process(0.2)
+		check(not fc._f_on and mv.breads_of(fr_id) == 1 and mv._loaves.has(fr_id), "관절 인형: 손에 든 빵 그림 하나")
+		fc.frames_force = 1
+		fc.dlook["personal"] = 0
+		fc._refresh_doll()
+		mv._process(0.2)
+		check(fc._f_on and fc._f_clip == "eat" and mv.breads_of(fr_id) == 1 and not mv._loaves.has(fr_id), "그린 인형: 그림 속 빵 하나뿐 (빵 그림을 따로 들리지 않는다 — %d)" % mv.breads_of(fr_id))
+		fc.frames_force = 0
+		fc.dlook["personal"] = old_personal
+		fc._refresh_doll()
+		mv._process(0.2)
+		check(not fc._f_on and mv.breads_of(fr_id) == 1, "관절 인형으로 돌아오면 다시 손에 든 빵 하나")
+		fc.frames_force = -1
+	check(fc != null, "먹는 몸짓으로 세울 어른 손님이 있다")
 	v.advance(1.5 * H)                                # 잔치가 끝난 뒤로
 	vw.sync(0.0, true)
 	mv._process(0.2)
@@ -1775,6 +1820,7 @@ func test_feast_view() -> void:
 	Campfire.apply_glow(post, 1.0)
 	check(not Milestones.feast_on(v) and mv.eaters() == 0 and mv._loaves.is_empty() and mv.feast_table() == null and mv.lamps_lit() == 0 and fire.lamps.is_empty()
 		and not fire.sparks.visible and mv.bub.items.is_empty() and int(post.get_shader_parameter("fire_count")) == glow0, "잔치가 끝나면 상·등·빵·불티·말풍선이 걷힌다")
+	check(vw.fauna_view.shoo.is_empty(), "(Q18 ⑩) 잔치가 끝나면 나비·꿀벌이 비켜 날 자리도 걷힌다")
 	run.root.remove_child(scene)
 	scene.free()
 	CutoutResident.override = old_cut
@@ -1806,8 +1852,10 @@ func test_grown_feast() -> void:
 	vw.sync(0.0, true)
 	var post := mv.sign_node("grown")
 	var k_far := float(post.get_instance_shader_parameter("k")) if post != null else 0.0
-	check(post != null and mv.star() == -1 and not mv.ribbon_on() and Vector2(post.position.x, post.position.z).distance_to(v.fire) <= float(MilestoneView.POST_FIRE_RINGS[MilestoneView.POST_FIRE_RINGS.size() - 1]) + 0.01,
-		"낮: 모닥불 곁에 기둥만 서 있다")
+	var prec := _rec(v, "grown")
+	check(post != null and mv.star() == -1 and not mv.ribbon_on() and prec.has("x")
+		and Vector2(post.position.x, post.position.z).distance_to(Vector2(float(prec.get("x", 0.0)), float(prec.get("y", 0.0)))) < 0.01,
+		"낮: 적어 둔 자리에 기둥만 서 있다 (Q18 ⑫ — 시뮬레이션의 자리 그대로)")
 	v.advance(10.1 * H)                               # 아침 → 저녁 작은 잔치 한가운데 (19시쯤)
 	var d0 := SaveCodec.digest(v.to_dict())
 	var sim_at := Vector2(kid.x, kid.y)
@@ -1853,6 +1901,103 @@ func test_grown_feast() -> void:
 	run.root.remove_child(scene)
 	scene.free()
 	CutoutResident.override = old_cut
+
+
+## (Q18 ⑦) 새 어른이 잔치 자리에서 멀리 있어도 키 재기는 바로 시작한다 — 화면 인형만 기둥 옆으로 달려가고 걸음 자리는 그대로
+func test_grown_far() -> void:
+	var old_cut := CutoutResident.override
+	CutoutResident.override = 1
+	var sc := _view_scene()
+	var scene: Node = sc[0]
+	var v: Village = sc[1]
+	var vw: VillageView = sc[2]
+	var mv: MilestoneView = sc[3]
+	v.advance(2.0)
+	_set_date(v, 6, 10, 9.0)
+	v.stock["빵"] = float(v.stock.get("빵", 0.0)) + 900.0
+	var kid := _born(v, "보리", 0.0, true)
+	v.advance(2.0)
+	kid.age = Balance.AGE_ADULT + 0.001
+	v.advance(2.0)
+	vw.fast = false
+	vw.sync(0.0, true)
+	var post := mv.sign_node("grown")
+	v.advance(10.1 * H)
+	var out := Vector2(kid.x, kid.y) - v.fire
+	var far := v.fire + (out.normalized() if out.length() > 0.01 else Vector2.RIGHT) * 14.0      # 시험이 세워 둠: 잔치 자리에서 14칸 밖
+	kid.x = far.x
+	kid.y = far.y
+	var d0 := SaveCodec.digest(v.to_dict())
+	check(Milestones.feast_id(v) == "grown" and kid.action == "festival" and post != null and far.distance_to(v.fire) > MilestoneView.DANCE_R, "첫 어른 잔치 — 그 젊은이는 멀리 (불에서 %.1f칸)" % far.distance_to(v.fire))
+	vw.sync(0.0, true)
+	mv._process(0.1)
+	vw.sync(0.0, true)
+	check(mv.star() == kid.id, "멀리 있어도 바로 키 재기의 주인공 (%d)" % mv.star())
+	var secs := 0.1
+	while secs < MilestoneView.STAR_RUN_SECS + 4.0 and not mv.star_there():
+		mv._process(0.1)
+		vw.sync(0.0, true)
+		secs += 0.1
+	check(mv.star_there() and secs <= MilestoneView.STAR_RUN_SECS + 0.6, "기둥 옆에 금방 닿는다 (현실 %.1f초 — 많아야 %.1f초 남짓)" % [secs, MilestoneView.STAR_RUN_SECS])
+	for i in 15:
+		mv._process(0.2)
+		vw.sync(0.0, true)
+	var km := vw.residents.get(kid.id) as Node3D
+	check(mv.ribbon_on() and km != null and post != null and _flat(km.position, post.position) < 0.5, "기둥 옆에 서서 키를 재고 새 끈이 달린다")
+	check(d0 == SaveCodec.digest(v.to_dict()) and Vector2(kid.x, kid.y) == far and kid.action == "festival", "화면만 — 걸음 자리·하던 일은 그대로")
+	run.root.remove_child(scene)
+	scene.free()
+	CutoutResident.override = old_cut
+
+
+## (Q18 ⑨) 손뼉 소리는 한 번의 손뼉 터짐에 한 번: 현실 시간으로도, 병의 시간으로도 잇달아 나지 않는다
+func test_clap_sound() -> void:
+	var sc := _view_scene()
+	var scene: Node = sc[0]
+	var v: Village = sc[1]
+	var mv: MilestoneView = sc[3]
+	v.advance(2.0)
+	check(ResourceLoader.exists("res://audio/sfx/%s.mp3" % MilestoneView.CLAP_SND), "손뼉 소리 파일이 있다 (%s)" % MilestoneView.CLAP_SND)
+	var n0 := mv.clap_sounds
+	var d0 := SaveCodec.digest(v.to_dict())
+	var a := mv._clap_sound(v, v.fire)
+	var b := mv._clap_sound(v, v.fire)
+	mv._t += MilestoneView.CLAP_SND_GAP * 0.5
+	var c := mv._clap_sound(v, v.fire)
+	mv._t += MilestoneView.CLAP_SND_GAP
+	var e := mv._clap_sound(v, v.fire)                # 현실 시간은 흘렀어도 병의 시간이 멈춰 있으면 (멈춤) 다시 내지 않는다
+	check(a and not b and not c and not e and mv.clap_sounds == n0 + 1, "첫 손뼉에 한 번 — 잇달아서도, 멈춘 동안에도 다시 나지 않는다 (%d)" % (mv.clap_sounds - n0))
+	check(d0 == SaveCodec.digest(v.to_dict()), "소리는 시뮬레이션을 바꾸지 않는다")
+	v.advance(1.0)
+	var f := mv._clap_sound(v, v.fire)
+	var g := mv._clap_sound(v, v.fire)
+	check(f and not g and mv.clap_sounds == n0 + 2, "병의 시간이 흐르고 틈이 지나면 다시 한 번")
+	check(MilestoneView.CLAP_SND_DB <= -10.0 and MilestoneView.CLAP_SND_GAP >= 1.0, "작은 소리 · 틈은 한 소리 길이보다 길게")
+	run.root.remove_child(scene)
+	scene.free()
+
+
+## (Q18 ⑪) 그림 말풍선은 바람개비(비켜 갈 네모)와 다른 말풍선 위에 겹쳐 그려지지 않는다 — 옆으로 비키고, 화면 밖으로 밀리면 반대쪽으로
+func test_bubble_keep_out() -> void:
+	var vs := Vector2(540.0, 960.0)
+	var screen := Rect2(Vector2.ZERO, vs)
+	var pin := Rect2(205.0, 300.0, 16.0, 26.0).grow(MilestoneView.PIN_KEEP)
+	var rc := Rect2(198.0, 296.0, 31.0, 26.0)
+	check(MilestoneView.PicBubbles.placed(rc, [], vs) == rc, "비킬 것이 없으면 제자리")
+	var p1 := MilestoneView.PicBubbles.placed(rc, [pin], vs)
+	check(not p1.intersects(pin) and screen.encloses(p1) and is_equal_approx(p1.position.y, rc.position.y), "바람개비와 겹치면 옆으로 비킨다 (%s → %s)" % [rc.position, p1.position])
+	var p2 := MilestoneView.PicBubbles.placed(rc, [pin, p1], vs)
+	check(not p2.intersects(pin) and not p2.intersects(p1) and screen.encloses(p2), "둘째 말풍선은 바람개비도 첫 말풍선도 비킨다 (%s)" % p2.position)
+	var edge_pin := Rect2(6.0, 300.0, 16.0, 26.0).grow(MilestoneView.PIN_KEEP)
+	var p3 := MilestoneView.PicBubbles.placed(Rect2(4.0, 296.0, 31.0, 26.0), [edge_pin], vs)
+	check(not p3.intersects(edge_pin) and screen.encloses(p3), "화면 가장자리에서는 반대쪽으로 (%s)" % p3.position)
+	var sc := _view_scene()
+	var scene: Node = sc[0]
+	var mv: MilestoneView = sc[3]
+	mv._process(0.1)
+	check(mv.bub.keep_out.is_empty() and mv.pin_rect().size == Vector2.ZERO, "손뼉이 없고 바람개비가 없으면 비켜 갈 네모도 없다")
+	run.root.remove_child(scene)
+	scene.free()
 
 
 func _id_of(vw: VillageView, m: Variant) -> int:

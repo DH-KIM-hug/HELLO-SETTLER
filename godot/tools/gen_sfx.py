@@ -90,6 +90,7 @@ SFX = {
     # 작은 순간 (view/stagings.gd 첫 아기 · 첫 기적과 그 짧은 판 — 2026-11-10 다듬기): 조용하고 짧게 (1초 안), 말(단어)은 없음
     "crowd_aww":       (1.0, -27, False, "three or four small gentle people softly saying aww together, one short tender wordless group aww, warm, quiet and adorable"),
     "small_cheer":     (1.0, -26, False, "three or four small happy people giving one short soft wordless cheer together, a gentle little yay, quiet, cute and warm"),
+    "feast_clap":      (1.0, -27, False, "three or four small children softly clapping their little hands together a few times, light gentle patter of tiny hand claps, quiet, cute and warm"),   # Q18 first-steps clap burst (view/milestone_view.gd)
     "gift_twinkle":    (1.0, -25, False, "a tiny soft magical shimmer, a few delicate high glassy twinkles descending gently, quiet and sweet"),
     "door_creak":      (0.9, -27, False, "a small wooden cottage door opening slowly, one short soft gentle creak, cozy and quiet"),
     # 아이 놀이 (view/kids_view.gd 사방치기 · 물수제비 — 2026-11-11): 빌려 쓰던 finger_place · drip 대신. 작고 마른 소리, 닿을 때마다 한 번
@@ -108,7 +109,7 @@ TAP = {"dog_yip_0", "dog_yip_1", "dog_whine", "dog_arf", "sneeze_0", "sneeze_1",
        "baby_giggle_0", "baby_giggle_1", "baby_coo_0", "baby_coo_1", "sleep_mumble_0", "sleep_mumble_1",
        "dizzy_whoa_0", "dizzy_whoa_1", "pout_hmph"}
 # 작은 순간 소리 — 톡 반응처럼 짧게 끊음 (1초 안). 여럿이 내는 입소리(GROUP)는 작은 사람 처리 + 여럿 꼬리말
-MOMENT = {"crowd_aww", "small_cheer", "gift_twinkle", "door_creak"}
+MOMENT = {"crowd_aww", "small_cheer", "gift_twinkle", "door_creak", "feast_clap"}
 GROUP = {"crowd_aww", "small_cheer"}
 STYLE_GROUP = "clean close-up recording, a few small soft voices together, one short wordless vocal sound, no speech, no words, no music, no background noise"
 TAP_MAX = 0.95       # mp3 채움(약 0.05초)까지 1초 안
