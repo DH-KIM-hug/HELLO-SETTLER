@@ -33,6 +33,8 @@ var scroll: ScrollContainer
 var _last_day: Control                 # 최근 탭: 가장 최근 날 머리줄 (열 때 여기부터 아래로 읽게)
 var body: VBoxContainer
 var close_btn: Button
+var strip: PanelContainer              # [자람의 보상 Q9] 고비 도장 띠 — 제목과 탭 사이, 어느 탭에서나 보인다 (view/ui/milestone_stamps.gd)
+var _strip_sig := ""
 
 
 func _init() -> void:
@@ -97,6 +99,21 @@ func _build() -> void:
 	where_l = _label(head, "", "Small")
 	where_l.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	where_l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.25))
+	strip = PanelContainer.new()                     # [자람의 보상 Q9] 고비 도장 띠 (수첩 종이 한 줄 — _refresh_strip이 채움)
+	strip.name = "StampStrip"
+	strip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var ssb := StyleBoxFlat.new()
+	ssb.bg_color = Color("fdf6dc")
+	ssb.border_color = UiTheme.PARCHMENT_EDGE
+	ssb.set_border_width_all(1)
+	ssb.set_corner_radius_all(4)
+	ssb.content_margin_left = 6
+	ssb.content_margin_right = 6
+	ssb.content_margin_top = 4
+	ssb.content_margin_bottom = 3
+	strip.add_theme_stylebox_override("panel", ssb)
+	strip.visible = false
+	outer.add_child(strip)
 	var tabs := HBoxContainer.new()
 	tabs.add_theme_constant_override("separation", 4)
 	outer.add_child(tabs)
@@ -280,8 +297,7 @@ func _state_sig() -> String:
 		0:
 			return "0|%d|%d" % [Chronicle.line_count(vs), limit]
 		1:
-			var mv := Milestones.owner(vs)              # [자람의 보상] 도장이 늘면 다시 그린다
-			return "1|%d|%d|%d" % [village.myth.size() + mini(village.book.size(), 12), jar_notes().size(), Milestones.count(mv) if mv != null else 0]
+			return "1|%d|%d" % [village.myth.size() + mini(village.book.size(), 12), jar_notes().size()]
 		2:
 			return "2|%d|%d|%d|%d" % [village.people.size(), village.dead.size(), village.departed.size(), int(village.t / Balance.DAY * 10.0)]
 		3:
@@ -294,6 +310,7 @@ func _refresh() -> void:
 		return
 	var vs := villages()
 	where_l.text = village.settlement_name if vs.size() > 1 and tab >= 1 else ("%d줄" % Chronicle.line_count(vs))
+	_refresh_strip()
 	var sig := _state_sig()
 	if sig == _sig:
 		return
@@ -308,6 +325,22 @@ func _refresh() -> void:
 		2: _fill_people()
 		3: _fill_codex()
 	scroll.scroll_vertical = keep
+
+
+## [자람의 보상 Q9] 고비 도장 띠: 넘은 고비 = 잉크 도장, 아직 = 흐린 동그라미, 다음 고비 한 줄 (PROGRESSION 4.5). 도장이 늘 때만 다시 그린다
+func _refresh_strip() -> void:
+	var mv := Milestones.owner(villages())
+	strip.visible = mv != null
+	if mv == null:
+		return
+	var sig := "%d|%d" % [mv.get_instance_id(), Milestones.count(mv)]
+	if sig == _strip_sig and strip.get_child_count() > 0:
+		return
+	_strip_sig = sig
+	for c in strip.get_children():
+		strip.remove_child(c)
+		c.queue_free()
+	strip.add_child(MilestoneStamps.make(mv, true))
 
 
 # ───────────────────────── 최근 ─────────────────────────
@@ -513,9 +546,6 @@ func _fill_jar() -> void:
 	var head := _label(col, "별지기의 수첩", "Small")
 	head.add_theme_font_override("font", UiTheme.font(true))
 	head.add_theme_color_override("font_color", UiTheme.INK_BROWN)
-	var mv := Milestones.owner(villages())          # [자람의 보상] 고비 도장 줄 + 다음 고비 한 줄 (PROGRESSION 4.5)
-	if mv != null:
-		col.add_child(MilestoneStamps.make(mv))
 	if notes.is_empty():
 		var l := _hand(col, "아직 이 병만의 버릇은 모르겠다. 지켜보다 보면 알게 되겠지.")
 		l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))

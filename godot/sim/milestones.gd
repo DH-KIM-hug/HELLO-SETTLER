@@ -6,20 +6,20 @@
 ##   {"v": 1, "passed": {id → {"t", "who", "name", "nick", "silent"}}, "winter": 지낸 겨울 날 수, "day": 마지막으로 센 병의 날,
 ##    "feasts": [{"id", "day"}] 기다리는 잔치, "feast": {"id", "t0", "until", "day"} 마지막(지금) 잔치}
 ## 옛 저장: "v"가 없으면 첫 걸음에 이미 넘은 고비를 조용히 넘은 것으로 적는다 (사건·별명·잔치 없음).
-## 값은 BALANCE 표에 옮길 후보 (다른 작업이 data/balance.gd를 고치는 중이라 여기에 둠).
+## 값은 data/balance.gd 맨 끝 'Q9 자람의 보상' 묶음에 있다 (2026-11-11 옮김) — 아래 이름들은 그 값을 가리킨다 (시험·도구가 Milestones.POP_SMALL로 읽음).
 class_name Milestones
 extends RefCounted
 
 const ORDER := ["bread", "pop12", "winter", "pop20"]     # 뒤로 갈수록 큰 고비 (같은 날 겹치면 뒤쪽 잔치가 먼저)
-const POP_SMALL := 12                 # 식구 열둘
-const POP_BIG := 20                   # 식구 스물
-const WINTER_MIN_DAYS := 14           # 이만큼은 겨울을 지내야 '겨울을 넘겼다' (늦겨울에 시작한 병은 다음 겨울에)
-const FEAST_HOUR := 18.5              # 잔치가 시작되는 병 시각 (저녁 종 뒤)
-const FEAST_LATEST := 20.0            # 이 뒤에 넘은 고비·못 연 잔치는 다음 날 저녁으로
-const FEAST_SECS := 2.5 * 3600.0      # 병의 한 저녁 (18:30 → 21:00)
-const FEAST_EAT := 1200.0             # 한 번 먹는 길이
-const FEAST_DANCE := 1500.0           # 한 번 춤추는 길이
-const FEAST_REACH := 24.0             # 모닥불에서 이보다 먼 사람(안개 너머를 살피는 중 등)은 부르지 않는다 — 저녁 안에 못 온다
+const POP_SMALL := Balance.MILESTONE_POP_SMALL                # 식구 열둘
+const POP_BIG := Balance.MILESTONE_POP_BIG                    # 식구 스물
+const WINTER_MIN_DAYS := Balance.MILESTONE_WINTER_MIN_DAYS    # 이만큼은 겨울을 지내야 '겨울을 넘겼다'
+const FEAST_HOUR := Balance.FEAST_HOUR                        # 잔치가 시작되는 병 시각 (저녁 종 뒤)
+const FEAST_LATEST := Balance.FEAST_LATEST                    # 이 뒤에 넘은 고비·못 연 잔치는 다음 날 저녁으로
+const FEAST_SECS := Balance.FEAST_SECS                        # 병의 한 저녁 (18:30 → 21:00)
+const FEAST_EAT := Balance.FEAST_EAT_SECS                     # 한 번 먹는 길이
+const FEAST_DANCE := Balance.FEAST_DANCE_SECS                 # 한 번 춤추는 길이
+const FEAST_REACH := Balance.FEAST_REACH                      # 모닥불에서 이보다 먼 사람은 부르지 않는다
 const FEAST_DOING := "잔치를 즐기는 중"
 
 ## 수첩 도장 이름 (거인 UI)
@@ -237,20 +237,39 @@ static func oven(v: Village) -> Building:
 	return bakery
 
 
-## 마을 어귀: 모닥불에서 가장 먼 건물 바로 바깥 둘레에서, 아래쪽(+y)부터 좌우로 벌려 가며 찾은 첫 빈자리 (난수 없음)
+## 마을 어귀: 모닥불에서 가장 먼 건물 바로 바깥 둘레에서, 아래쪽(+y)부터 좌우로 벌려 가며 찾은 첫 깨끗한 자리 (난수 없음 — 같은 병이면 늘 같은 자리).
+## 깨끗한 자리(spot_clear: 꽃·바위·길·광장·건물·무덤·물이 아님)가 없으면 꽃만 피한 자리(spot_open), 그것도 없으면 설 수만 있는 자리(spot_free).
 static func edge_spot(v: Village) -> Vector2:
 	var rad := 4.0
 	for b in v.buildings:
 		rad = maxf(rad, Vector2(b.x, b.y).distance_to(v.fire) + b.size() + 1.0)
-	for ring in 4:
-		var rr := rad + float(ring)
-		for i in 15:
+	var reach := rad + float(Balance.SIGN_RINGS) * Balance.SIGN_RING_STEP + Balance.SIGN_CLEAR_FLOWER
+	var near: Array = []                              # 둘레의 꽃숲 덩이만 미리 추림 (넓은 세상은 나무가 수백 그루)
+	for tr: Dictionary in v.trees:
+		var q := Vector2(float(tr["x"]), float(tr["y"]))
+		if q.distance_to(v.fire) < reach:
+			near.append(q)
+	var open := Vector2.INF
+	var bare := Vector2.INF
+	for ring in Balance.SIGN_RINGS:
+		var rr := rad + float(ring) * Balance.SIGN_RING_STEP
+		for i in Balance.SIGN_TURNS:
 			var side := 1.0 if i % 2 == 1 else -1.0
-			var a := PI * 0.5 + side * float((i + 1) / 2) * deg_to_rad(24.0)
+			var a := PI * 0.5 + side * float((i + 1) / 2) * deg_to_rad(Balance.SIGN_TURN_DEG)
 			var p := v.fire + Vector2(cos(a), sin(a)) * rr
-			if spot_free(v, p):
+			if not spot_free(v, p):
+				continue
+			if bare.x > 1.0e8:
+				bare = p
+			if not spot_open(v, p, near):
+				continue
+			if open.x > 1.0e8:
+				open = p
+			if spot_clear(v, p, near):
 				return p
-	return v.fire + Vector2(0.0, rad)
+	if open.x < 1.0e8:
+		return open
+	return bare if bare.x < 1.0e8 else v.fire + Vector2(0.0, rad)
 
 
 ## 그 자리에 장식이 설 수 있나 (물·세상 끝·건물·무덤이 아님)
@@ -258,11 +277,48 @@ static func spot_free(v: Village, p: Vector2) -> bool:
 	if v.water == null or not v.water.inside(p.x, p.y, 1.5) or v.water_at(p.x, p.y):
 		return false
 	for b in v.buildings:
-		if Vector2(b.x, b.y).distance_to(p) < b.size() + 0.9:
+		if Vector2(b.x, b.y).distance_to(p) < b.size() + Balance.SIGN_CLEAR_BUILDING:
 			return false
 	for g: Dictionary in v.graves:
-		if Vector2(float(g["x"]), float(g["y"])).distance_to(p) < 1.0:
+		if Vector2(float(g["x"]), float(g["y"])).distance_to(p) < Balance.SIGN_CLEAR_GRAVE:
 			return false
+	return true
+
+
+## 꽃 속이 아닌가 — 꽃숲 덩이(시뮬레이션 나무: 선 것·벤 자리·싹)와 바위에서 떨어진 자리.
+## flowers = 미리 추린 나무 자리 (없으면 마을의 나무 전부를 본다)
+static func spot_open(v: Village, p: Vector2, flowers: Variant = null) -> bool:
+	if flowers == null:
+		for tr: Dictionary in v.trees:
+			if Vector2(float(tr["x"]), float(tr["y"])).distance_to(p) < Balance.SIGN_CLEAR_FLOWER:
+				return false
+	else:
+		for q: Vector2 in flowers:
+			if q.distance_to(p) < Balance.SIGN_CLEAR_FLOWER:
+				return false
+	for r: Dictionary in v.rocks:
+		if Vector2(float(r["x"]), float(r["y"])).distance_to(p) < Balance.SIGN_CLEAR_ROCK:
+			return false
+	return true
+
+
+## 깨끗한 자리인가 — 설 수 있고(spot_free) 꽃 속이 아니며(spot_open), 발길 난 칸(오솔길·흙길)·광장과 큰길·모닥불·제단 자리·
+## 하늘의 것(큰 버섯·하늘에서 온 물건)·큰 나무와 해바라기 줄기 둘레도 아님. 읽기만 한다 (난수·상태 변화 없음)
+static func spot_clear(v: Village, p: Vector2, flowers: Variant = null) -> bool:
+	if not spot_free(v, p) or not spot_open(v, p, flowers):
+		return false
+	var c := Balance.SIGN_CLEAR_PATH
+	for d: Vector2 in [Vector2.ZERO, Vector2(c, 0.0), Vector2(-c, 0.0), Vector2(0.0, c), Vector2(0.0, -c)]:
+		if v.path_at(p.x + d.x, p.y + d.y) >= Balance.SIGN_PATH_MIN or v.water_at(p.x + d.x, p.y + d.y):
+			return false
+	if p.distance_to(v.fire) < 2.0 or p.distance_to(v.altar_pos) < Village.ALTAR_CLEAR + 0.5:
+		return false
+	if VillagePlan.blocks(v, p.x, p.y, 0.5) or SkyDrops.blocks(v, p.x, p.y, 0.5):
+		return false
+	if v.flora != null and v.flora.blocks(p.x, p.y, 0.5):
+		return false
+	if GreatTrees.blocks(v.water, p.x, p.y, 0.5) or GiantPlants.blocks(v.water, p.x, p.y, 0.5):
+		return false
 	return true
 
 
@@ -307,10 +363,10 @@ static func _feast(v: Village, id: String, day: int) -> void:
 		p.action = "festival"
 		p.last_action = "festival"
 		p.doing = FEAST_DOING
-		var a := float(i) * 2.399
-		var spot := v.fire + Vector2(cos(a), sin(a)) * (1.6 + 0.35 * sqrt(float(i)))
+		var a := float(i) * Balance.FEAST_RING_TURN
+		var spot := v.fire + Vector2(cos(a), sin(a)) * (Balance.FEAST_RING_R + Balance.FEAST_RING_GROW * sqrt(float(i)))
 		p.steps.append(ResidentAI.walk(spot.x, spot.y))
-		var left := FEAST_SECS - 600.0                 # 걸어오는 몫을 빼고, 먹고 춤추기를 번갈아
+		var left := FEAST_SECS - Balance.FEAST_WALK_SECS     # 걸어오는 몫을 빼고, 먹고 춤추기를 번갈아
 		var eat := (i % 2 == 0) and not p.is_child()
 		while left > 0.0:
 			var secs := minf(left, FEAST_EAT if eat else FEAST_DANCE)

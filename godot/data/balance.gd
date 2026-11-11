@@ -1126,3 +1126,31 @@ const BINDER_BONUS := 0.05               # 씨앗 반죽을 섞으면 그 판 �
 const SWEET_PER_BAKE := 2.0              # 단물·씨앗 우유는 반죽에 들어가 그만큼 빵이 됨 (먹을 것 그대로)
 const OIL_PER_BAKE := 0.25
 const HAPPY_FINE_BREAD := 0.02           # 지난 하루 단물 빵·우유 빵·기름 빵을 먹었으면 행복 + (빵 행복에 더함)
+
+
+# ───────────────────────── Q9 자람의 보상 — 고비 · 저녁 잔치 · 표지판 자리 (docs/PROGRESSION.md 4.5 · sim/milestones.gd) ─────────────────────────
+# Q9 (2026-11-11): sim/milestones.gd에 있던 값을 그대로 옮김 (값 바뀐 것 없음 — Milestones.POP_SMALL 등은 이 값을 가리키는 이름으로 남음).
+const MILESTONE_POP_SMALL := 12          # 고비 '식구 열둘'
+const MILESTONE_POP_BIG := 20            # 고비 '식구 스물'
+const MILESTONE_WINTER_MIN_DAYS := 14    # 이만큼은 겨울을 지내야 '첫 겨울을 넘겼다' (늦겨울에 시작한 병은 다음 겨울에)
+const FEAST_HOUR := 18.5                 # 잔치가 시작되는 병 시각 (저녁 종 뒤)
+const FEAST_LATEST := 20.0               # 이 뒤에 넘은 고비·못 연 잔치는 다음 날 저녁으로
+const FEAST_SECS := 2.5 * HOUR           # 잔치 길이 = 병의 한 저녁 (18:30 → 21:00)
+const FEAST_WALK_SECS := 600.0           # 그중 모닥불까지 걸어오는 몫 (나머지를 먹기·춤으로 번갈아)
+const FEAST_EAT_SECS := 1200.0           # 한 번 먹는 길이
+const FEAST_DANCE_SECS := 1500.0         # 한 번 춤추는 길이
+const FEAST_REACH := 24.0                # 모닥불에서 이보다 먼 사람(안개 너머를 살피는 중 등)은 부르지 않는다 — 저녁 안에 못 온다 (칸)
+const FEAST_RING_R := 1.6                # 잔치 자리: 모닥불 둘레 첫 사람의 거리 (칸)
+const FEAST_RING_GROW := 0.35            # 사람이 늘수록 둘레가 넓어지는 몫 (× √순번)
+const FEAST_RING_TURN := 2.399           # 다음 사람 자리까지 도는 각 (라디안 — 황금각, 겹치지 않게)
+# 마을 이름 표지판 자리 (어귀) — 꽃·바위·길·건물·무덤을 피한다 (난수 없음: 아래쪽부터 좌우로 벌려 가며 첫 빈자리)
+const SIGN_RINGS := 8                    # 가장 먼 건물 바깥으로 몇 겹까지 찾나 (한 겹 = SIGN_RING_STEP칸)
+const SIGN_RING_STEP := 1.0
+const SIGN_TURN_DEG := 12.0              # 한 겹에서 옆으로 벌리는 각 걸음
+const SIGN_TURNS := 29                   # 한 겹에서 보는 자리 수 (가운데 + 좌우 14)
+const SIGN_CLEAR_BUILDING := 0.9         # 건물 가장자리에서 (칸)
+const SIGN_CLEAR_GRAVE := 1.0            # 무덤에서
+const SIGN_CLEAR_FLOWER := 2.0           # 꽃숲 덩이(나무)·벤 자리·싹에서 — 꽃 그림이 표지판에 기대지 않게
+const SIGN_CLEAR_ROCK := 1.0             # 바위에서
+const SIGN_CLEAR_PATH := 0.6             # 발길이 난 칸(오솔길·흙길)에서
+const SIGN_PATH_MIN := 2.0               # 이만큼 밟힌 칸부터 길로 본다 (화면에서 오솔길이 보이기 시작하는 값 — GroundLook.PATH_LO와 같게)
