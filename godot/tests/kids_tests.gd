@@ -20,6 +20,8 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	run.timed(self, ["test_source_and_words", "test_play_rng_order", "test_when_and_who", "test_tag", "test_stack", "test_butterfly", "test_leave_and_end", "test_hop", "test_skip", "test_story", "test_story_arc", "test_story_no_stop", "test_story_no_kids",
 		"test_minder", "test_peek", "test_first_steps", "test_save", "test_village_day", "test_watch_determinism", "test_view"])
+	# 유모차 산책 · 첫 심부름 · 첫 낚시 (E2-2 · E2-3) — 같은 묶음에서 함께 돈다
+	(load("res://tests/outing_tests.gd") as GDScript).new(run, quick).all()
 
 
 # ───────────────────────── 도우미 ─────────────────────────

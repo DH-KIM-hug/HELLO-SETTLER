@@ -98,6 +98,20 @@
 | `&"souvenir_taken"` | `Souvenirs.take` (기념품 Q17 — 거인이 기다리는 기념품을 주움: `GameSave.take_souvenir` → 거인 묶음 `souvenirs`에 더하고 병과 함께 저장. 기적이 아니다 — `wonder` · `Awakening.witness` · 그날 톡·등불 횟수를 건드리지 않고 `giant_acted`도 내지 않는다) | `{"id": 고비}` | `who` 없음 · `at` = 놓여 있던 자리 | 아니오 | 아니오 (연대기 줄 없음) | `tests/souvenir_tests.gd` (화면: 줍는 반짝임은 사건이 아니라 누른 장면이 직접 — `view/test_village.gd _take_souvenir` → `SouvenirView.take_fx`) |
 | `&"feast"` | `Milestones._feast` — 고비를 넘긴 날 저녁(18:30~20:00 사이, 연출 중이면 미룸) 잔치가 시작됨. 하루에 한 번 (같은 날 고비 둘이면 뒤의 것 먼저, 나머지는 다음 저녁). 지켜봄과 무관 | `{"id": 고비 (첫걸음마 `steps`는 잔치가 없다 · 첫 어른 `grown`과 첫 고개 `green`은 작은 잔치 — `Balance.FEAST_SMALL_SECS`), "until": 끝나는 병 시각, "n": 모인 사람 수}` | `who` = 그 고비를 이끈 사람 (없으면 −1) · `at` = 모닥불 | 아니오 | 아니오 (연대기는 `log_line` 한 줄) | `tests/milestone_tests.gd` (화면: `view/campfire.gd` 큰 불 · `view/milestone_view.gd` 춤 — 둘 다 `Milestones.feast_on`을 읽는다) |
 
+- 2026-11-12 (E2-2 · E2-3 유모차 산책 · 아이의 첫 심부름 · 아이의 첫 낚시 — docs/ROADMAP.md E2-2 · E2-3, `sim/child_outings.gd`): 아래 kind를 냄. 모두 저장 순번 아니오 · 연대기는 병의 첫 유모차 산책 한 줄, 아이마다 첫 심부름 한 줄 · 첫 낚시 한 줄 (`log_line`). 굴림(유모차로 나갈지·언제 누가 나설지·어느 줄)은 마을 씨앗·나들이 번호의 해시(`ChildPlay._roll`)로 정하고 마을 난수 흐름을 쓰지 않는다. 지켜보는지 읽지 않는다. 나들이는 얹은 그림이다 — 주민의 자리·걸음·할 일·든 것·행복·배고픔, 창고·먹을 것·물고기 떼를 바꾸지 않는다 (유모차 산책만 시뮬의 기존 돌봄 산책 `ResidentAI._care`에 표시를 얹고 `doing` 글을 바꾼다). 상태는 `Village.kids["out"]` (저장됨).
+
+| kind | 내는 곳 | v | at / who | 읽는 곳 |
+|---|---|---|---|---|
+| `&"stroller_walk_started"` | `ChildOutings._pram_start` — 아기를 돌보던 부모의 산책(`ResidentAI._care`)이 유모차 산책으로 뽑힘 (맑은 낮 `PRAM_FROM`~`PRAM_TO`, 걸음마 전 아기, 아기마다 하루 `PRAM_PER_DAY`번까지) | `int` (아기 id) | `who` = 미는 부모 · `at` = 나서는 자리 | `tests/outing_tests.gd` (화면은 `Village.kids["out"]["pram"]`을 읽어 그림 — `view/outing_view.gd`) |
+| `&"stroller_walk_ended"` | `ChildOutings._pram_tick` — 부모가 유모차를 놓음 (시뮬의 산책이 끝나거나 끊김, 또는 산책이 길어져 날이 저묾 — 그 뒤 남은 길은 아기를 품에 안고) | `int` (아기 id) | `who` = 밀던 부모 | `tests/outing_tests.gd` |
+| `&"stroller_met"` | `ChildOutings._pram_tick` — 산책길 가까이(`PRAM_MEET_R`)에 빈손으로 한가한 이웃이 있음 (산책마다 `PRAM_MEET_MAX`번까지, 사이 `PRAM_MEET_GAP`). 이웃의 걸음·하는 일은 그대로 | `int` (미는 부모 id) | `who` = 그 이웃 · `at` = 부모 자리 | `view/outing_view.gd` (이웃이 다가와 숙여 봄 · 아기가 손을 뻗음 · 하트 그림 말풍선) · `tests/outing_tests.gd` |
+| `&"errand_started"` | `ChildOutings.try_errand` — 아이가 첫 심부름을 나섬 (아이마다 한 번, 한 번에 한 아이) | `int` (가는 집 id) | `who` = 아이 · `at` = 나서는 자리 | `tests/outing_tests.gd` (화면은 `Village.kids["out"]["err"]`을 읽음) |
+| `&"errand_given"` | `ChildOutings._errand_given` — 보퉁이를 건넴 (이때 '다녀온 아이'로 적힘 · 연대기 한 줄) | `int` (받은 사람 id) | `who` = 아이 · `at` = 받은 사람 자리 | `tests/outing_tests.gd` (화면의 말풍선·쓰다듬기는 저장된 단계 `ph`를 읽음) |
+| `&"errand_ended"` | `ChildOutings._errand_step` — 집에 돌아옴, 또는 받을 사람이 없어 그만둠 | `int` (1 건넴 · 0 못 건넴) | `who` = 아이 | `tests/outing_tests.gd` |
+| `&"first_fishing_started"` | `ChildOutings.try_fishing` — 아이가 쉬는 어른과 함께 첫 낚시를 하러 나섬 (물고기 떼가 사는 물가가 제 집 문에서 `FISH1_R` 안일 때만, 저녁 끼니 전에 돌아올 수 있을 때만, 아이마다 한 번) | `int` (곁의 어른 id) | `who` = 아이 · `at` = 물가의 앉을 자리 | `tests/outing_tests.gd` (화면은 `Village.kids["out"]["fish"]`를 읽음) |
+| `&"first_fishing_caught"` | `ChildOutings._fish_caught` — 작은 것을 건져 올림 (그림뿐 — 먹을 것은 늘지 않음 · 연대기 한 줄) | `int` (곁의 어른 id) | `who` = 아이 · `at` = 앉은 자리 | `tests/outing_tests.gd` (화면의 말풍선·반짝임은 저장된 단계 `ph`를 읽음) |
+| `&"first_fishing_ended"` | `ChildOutings._fish_end` — 집에 돌아옴, 또는 드리우기 전에 어른이 일하러 가 그만둠 | `int` (1 낚음 · 0 못 낚음) | `who` = 아이 | `tests/outing_tests.gd` |
+
 - 2026-11-11 (Q10 1걸음·1.5걸음 개미굴 원정 시험판 — docs/ROADMAP.md Q10 · docs/measure/nest_proto_2026-11-11.md · nest_proto2_2026-11-11.md, `sim/nest_expedition.gd`): 아래 kind를 냄. **마을과 따로 도는 한 판** — 사건은 그 판의 `EventStream`(`setup`에 넘긴 것, 없으면 제 것)에 내고 `village` 칸은 비어 있다. 저장 순번 아니오 · 연대기 줄 없음 (마을에 잇는 것은 다음 걸음). 굴림은 그 판의 씨앗에서 난 난수 흐름 하나만 쓰고 `emit` 앞뒤로 난수 없음 (사건을 읽든 말든 판이 같다 — `tests/nest_tests.gd`). 지켜보는지 읽지 않는다. `at` = `Vector2(굴 길 0 큰길 · 1~ 옆 굴(= 그 옆 굴이 붙은 굴 번호 — 1.5걸음부터 생김새마다 다르다), 그 길 위의 자리 s)` — 화면 자리가 아니다.
 
 | kind | 내는 곳 | v | at / who | 읽는 곳 |

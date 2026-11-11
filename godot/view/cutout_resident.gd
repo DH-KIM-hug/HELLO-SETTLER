@@ -95,6 +95,7 @@ var carry_baby := false          # 이 사람이 아기를 안고 있음 (안기
 var baby_held := false           # 품에 정말 아기가 있음 (place_babies) — carry_baby만 켜진 것은 안아 주는 몸짓 (연출 hold)이라 아기 그림을 그리지 않음
 var baby_dye := Vector2i(-1, -1)  # 안긴 아기의 피부 · 머리카락 물감 (place_babies가 넣음 — 방식 C 인형의 아기 그림에 입힘, 화면만)
 var cradle: MeshInstance3D
+var arms_out := false            # (E2-3) 두 손을 앞으로 내민 몸짓 (유모차 손잡이·보퉁이 — OutingView가 켜고 끔, 화면만)
 var minder_id := -1              # (Q2-b) 이 아기를 지금 보는 사람 (place_babies가 적음 — 없으면 -1: 문 옆)
 var _warp := Vector3(1, 1, 0)    # (Q2-b) 화면 몸짓: (키 배율, 폭 배율, 기울임) — set_body_warp
 var _lift := 0.0                 # (Q2-b) 화면 몸짓: 인형만 들어 올림 (폴짝·요람 높이, 인형 좌표) — set_body_lift
@@ -378,8 +379,8 @@ func tick(dt: float) -> void:
 ## 지금 틀 인형 동작 + 소품 + 일 옷 차림인지 (데이터만 — 바뀔 때만 GPU에 보내는 건 _refresh_doll)
 func doll_state() -> Dictionary:
 	var a := anim
-	var carrying := _item_kind != "" and _item_kind != "해바라기씨"     # (F-2) 굴리는 씨앗은 땅 위에 따로
-	var arms := carrying or carry_baby
+	var carrying := _item_kind != "" and _item_kind != "해바라기씨" and _item_kind != "유모차"     # (F-2) 굴리는 씨앗은 땅 위에 따로 · (E2-3) 유모차는 따로 그린 그림 (OutingView), 산책하는 부모는 바구니를 들지 않는다
+	var arms := carrying or carry_baby or arms_out
 	var clip := "idle"
 	var prop := -1
 	var work := false
@@ -519,6 +520,8 @@ func _frames_ok() -> bool:
 ## 지금 동작의 장면 그림 이름. 아기를 안으면 (v13) 나르기 → 안고 걷기(cradle), 안고 서기 → 안고 서기(rock) — 그 밖의 동작은 아기 장면이 없어 컷아웃 인형
 func _frame_clip() -> String:
 	var fc: String = FRAME_CLIPS[_d_clip]
+	if arms_out and not carry_baby:
+		return ""                     # (E2-3) 빈손으로 내민 팔: 그 장면 그림이 없어 컷아웃 인형 그대로
 	if carry_baby:
 		if not baby_held:
 			return ""                 # 안아 주는 몸짓 (연출): 아기 없는 안기 팔 → 컷아웃 인형 그대로
@@ -553,7 +556,7 @@ func _refresh_frames() -> void:
 		fdoll.set_baby(baby_dye.x, baby_dye.y)
 		fdoll.set_prop(_d_prop, FrameLib.BABY_LOAD)      # v13: 품의 아기도 따로 그린 그림 (짐과 같은 식)
 	else:
-		fdoll.set_prop(_d_prop, _item_kind if fc == "carry" or fc == "hold" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
+		fdoll.set_prop(_d_prop, _item_kind if (fc == "carry" or fc == "hold") and _item_kind != "유모차" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
 	var rate: float = 0.0 if walking else Lib.CLIP_RATE["hold" if fc == "rock" else fc]
 	if walking:
 		var g := _ground
@@ -579,7 +582,7 @@ func _refresh_frames() -> void:
 
 ## 방식 C 인형이 지금 어깨에 그리고 있는 짐 그림 ("" = 컷아웃 인형이거나 빈손) — 짐을 따로 그리는 곳(제단 돌)이 겹쳐 그리지 않게
 func frame_load() -> String:
-	return FrameLib.load_name(_item_kind) if _f_on and (_f_clip == "carry" or _f_clip == "hold") else ""
+	return FrameLib.load_name(_item_kind) if _f_on and (_f_clip == "carry" or _f_clip == "hold") and _item_kind != "유모차" else ""
 
 
 ## 방식 C 발 붙이기 (frame_doll.gdshader lockv): 걸음 한 주기에 땅에서 가는 길 (세계) — 걷지 않거나 멈춘 보폭이면 0
@@ -675,6 +678,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 			(m as CutoutResident).carry_baby = false
 			(m as CutoutResident).baby_held = false
 	var cam: Camera3D = null
+	var pr := ChildOutings.pram(v)             # (E2-3) 유모차 산책 중인 아기는 유모차에 (그림은 OutingView)
 	for r: Resident in people:
 		if not r.is_baby() or r.dead:
 			continue
@@ -682,6 +686,16 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 		if bm == null:
 			continue
 		var infant := r.age < INFANT_AGE
+		if infant and not pr.is_empty() and int(pr.get("b", -1)) == r.id:
+			var pc := models.get(int(pr.get("cr", -1))) as CutoutResident
+			if pc != null and pc.visible:
+				taken[int(pr["cr"])] = true
+				bm.minder_id = int(pr["cr"])
+				bm.set_baby_mode("pram", pc.position, pc.rotation.y, cam)
+				if bm.doll != null and not bm.doll.visible:
+					bm.doll.visible = true
+				out[r.id] = {"mode": "pram", "pos": pc.position, "carrier": int(pr["cr"])}
+				continue
 		# (Q2-b) 누가 아기를 보는가는 시뮬 규칙 (ChildPlay.minder): 깨어서 집 가까이 돌보거나 쉬는 부모 (엄마 먼저) · 한집 노인.
 		# 일하러·멀리 나간 부모는 아기를 데려가지 않는다 → 문 옆 요람 (정보 창의 '하는 일'과 화면이 같음)
 		var best: Resident = ChildPlay.minder(v, r, people)
@@ -697,7 +711,7 @@ static func place_babies(v: Village, people: Array, models: Dictionary) -> Dicti
 			var pm: CutoutResident = models[best.id]
 			if cam == null and pm.is_inside_tree():
 				cam = pm.get_viewport().get_camera_3d()
-			var light := best.carry == "" and (best.anim == "walk" or best.anim == "idle" or best.anim == "carry")
+			var light := (best.carry == "" or best.carry == "유모차") and (best.anim == "walk" or best.anim == "idle" or best.anim == "carry")     # (E2-3) 유모차 없이 나선 산책: 젖먹이는 품에
 			var f := Vector3(sin(pm.rotation.y), 0, cos(pm.rotation.y))
 			var side := Vector3(f.z, 0, -f.x)
 			if infant and light and not taken.has(best.id):
@@ -771,6 +785,8 @@ func set_baby_mode(mode: String, pos: Vector3, yaw: float, cam: Camera3D = null)
 		position = pos + Vector3(0, lift, 0) + back * 0.06
 	elif mode == "cradle":
 		position = pos + Vector3(0, 0.03, 0)
+	elif mode == "pram":
+		position = pos                         # 유모차 속 자리·높이는 OutingView가 (이 뒤에)
 	else:
 		move_to(pos, get_process_delta_time())
 	if mode == "cradle":
