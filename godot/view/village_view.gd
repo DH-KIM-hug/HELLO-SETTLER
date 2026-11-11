@@ -132,6 +132,7 @@ var fish_pair := {}
 var _pair_w := {}
 var alpha := 1.0                # 걸음 사이 어디쯤인가 (0 = 직전 걸음, 1 = 지금) — JarClock이 병 시계 1초씩 걸으므로 그 사이를 보간
 var lerp_max := 3.0             # 걸음 사이 이만큼(칸) 넘게 옮겼으면 순간이동 (보간 안 함) — 10초 걸음이면 화면이 키운다
+var milestone_view: MilestoneView     # [자람의 보상 Q9] 장식 · 잔치 춤 · 첫걸음마 손뼉 (view/milestone_view.gd)
 var sign_spot := Vector2.INF    # [자람의 보상 Q9] 마을 이름 표지판 자리 (없으면 INF) — MilestoneView.refresh가 적는다. 그 둘레·앞의 키 큰 꽃 그림을 낮추고 잔것을 비움
 var fast := false               # 빠른 흐름 (1초=5분~, JarClock.fast): 주민은 멀리 LOD로 FAST_EVERY초마다 제자리에 순간이동 (걷기·몸짓 멈춤),
                                 # 곰팡이·위기·하늘의 것·상점·들짐승 화면도 그 간격으로만 (효과가 쏟아지지 않게)
@@ -244,7 +245,7 @@ func _ready() -> void:
 	add_child(social)
 	kids_view = KidsView.new(v, self)   # [아이·아기]
 	add_child(kids_view)
-	MilestoneView.of(self)              # [자람의 보상] 빵 간판 · 마을 이름 표지판 · 잔치 춤 (view/milestone_view.gd — Q9)
+	milestone_view = MilestoneView.of(self)              # [자람의 보상] 빵 간판 · 마을 이름 표지판 · 잔치 춤 (view/milestone_view.gd — Q9)
 	dog_pals = DogPals.new(v, self)     # [강아지와 사람]
 	econ = BldEcon.new(v, self)         # [보이는 살림 Q6]
 	add_child(econ)
@@ -570,6 +571,8 @@ func _sync_residents(dt: float) -> void:
 			social.pose(r, m)           # [마을의 삶] 장면 속 사람: 마주 봄·몸짓·표정
 		if kids_view != null and not fast:
 			kids_view.pose(r, m, dt)    # [아이·아기] 놀이 속 아이: 화면 자리·폴짝 · 요람을 들여다보는 이웃
+		if milestone_view != null and not fast:
+			milestone_view.pose(r, m)   # [자람의 보상 Q9 ⑦] 첫걸음마를 보러 온 이웃: 아기 쪽을 본다
 		if dog_pals != null and not fast:
 			dog_pals.pose(r, m)         # [강아지와 사람] 강아지를 쓰다듬는 아이: 그쪽을 보고 몸을 숙임
 		var po: Dictionary = pose_over.get(r.id, {}) if not pose_over.is_empty() else hint_pose.get(r.id, {})
