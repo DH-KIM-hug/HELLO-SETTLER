@@ -715,7 +715,9 @@ func _wheat_stop(v: Village) -> Dictionary:
 	for b in v.buildings:
 		if b.type == "농장" and b.worker >= 0 and v.person(b.worker) != null:
 			farmer = true
-			rested = rested or not ResidentAI.work_task(v, v.person(b.worker), true)
+			# 넉넉해서 기르기를 쉬어도 제 밭 앞에 쌓인 밀은 마저 나른다 (2026-11-11 Q11-b, 기획서 9장) — 그것은 쉬는 것으로 센다
+			# (밭마다 밀 더미가 남아 있는 씨앗 길에서는 work_task가 참이라 '안 쉼'으로 잘못 읽혔다)
+			rested = rested or not ResidentAI.work_task(v, v.person(b.worker), true) or ResidentAI.own_heap(b)
 	var short_hours := 0
 	var lowest := 1.0e9
 	var resumed := -1
