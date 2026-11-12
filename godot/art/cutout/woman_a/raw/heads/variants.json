@@ -1,0 +1,616 @@
+{
+ "a_curly": {
+  "kind": "head",
+  "pad": 56,
+  "set": "a",
+  "take": "",
+  "var": "curly",
+  "views": {
+   "back": {
+    "dx": 51.82,
+    "dy": 334.8,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.935,
+    "scale": 1.1525,
+    "score": 0.705
+   },
+   "front": {
+    "dx": 33.2,
+    "dy": 341.36,
+    "face_maxdiff": 0,
+    "face_px": 24735,
+    "hair_k": 1.038,
+    "scale": 1.15,
+    "score": 0.723
+   },
+   "q_back": {
+    "dx": 40.72,
+    "dy": 348.08,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.024,
+    "scale": 1.15,
+    "score": 0.802
+   },
+   "q_front": {
+    "dx": 29.27,
+    "dy": 351.52,
+    "face_maxdiff": 0,
+    "face_px": 25555,
+    "hair_k": 1.002,
+    "scale": 1.1512,
+    "score": 0.73
+   }
+  }
+ },
+ "a_wavy": {
+  "kind": "head",
+  "pad": 56,
+  "set": "a",
+  "take": "",
+  "var": "wavy",
+  "views": {
+   "back": {
+    "dx": 51.82,
+    "dy": 334.95,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.96,
+    "scale": 1.1538,
+    "score": 0.858
+   },
+   "front": {
+    "dx": 34.35,
+    "dy": 342.36,
+    "face_maxdiff": 0,
+    "face_px": 24735,
+    "hair_k": 1.055,
+    "scale": 1.145,
+    "score": 0.653
+   },
+   "q_back": {
+    "dx": 41.22,
+    "dy": 349.22,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.035,
+    "scale": 1.1462,
+    "score": 0.709
+   },
+   "q_front": {
+    "dx": 28.88,
+    "dy": 351.12,
+    "face_maxdiff": 0,
+    "face_px": 25555,
+    "hair_k": 1.013,
+    "scale": 1.155,
+    "score": 0.683
+   }
+  }
+ },
+ "b_curly": {
+  "kind": "head",
+  "pad": 56,
+  "set": "b",
+  "take": "",
+  "var": "curly",
+  "views": {
+   "back": {
+    "dx": 40.48,
+    "dy": 348.88,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.905,
+    "scale": 1.2663,
+    "score": 0.889
+   },
+   "front": {
+    "dx": 39.77,
+    "dy": 358.7,
+    "face_maxdiff": 0,
+    "face_px": 25881,
+    "hair_k": 1.006,
+    "scale": 1.1575,
+    "score": 0.73
+   },
+   "q_back": {
+    "dx": 43.72,
+    "dy": 325.04,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.932,
+    "scale": 1.1988,
+    "score": 0.898
+   },
+   "q_front": {
+    "dx": 35.36,
+    "dy": 351.26,
+    "face_maxdiff": 0,
+    "face_px": 23293,
+    "hair_k": 0.877,
+    "scale": 1.185,
+    "score": 0.9
+   }
+  }
+ },
+ "b_thin": {
+  "kind": "head",
+  "pad": 56,
+  "set": "b",
+  "take": "",
+  "var": "thin",
+  "views": {
+   "back": {
+    "dx": 64.56,
+    "dy": 360.3,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.945,
+    "scale": 1.1325,
+    "score": 0.963
+   },
+   "front": {
+    "dx": 43.88,
+    "dy": 364.5,
+    "face_maxdiff": 0,
+    "face_px": 20228,
+    "hair_k": 1.027,
+    "scale": 1.125,
+    "score": 0.738
+   },
+   "q_back": {
+    "dx": 56.86,
+    "dy": 337.34,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.957,
+    "scale": 1.1175,
+    "score": 0.952
+   },
+   "q_front": {
+    "dx": 44.26,
+    "dy": 359.8,
+    "face_maxdiff": 0,
+    "face_px": 17553,
+    "hair_k": 0.893,
+    "scale": 1.1338,
+    "score": 0.889
+   }
+  }
+ },
+ "b_wavy": {
+  "kind": "head",
+  "pad": 56,
+  "set": "b",
+  "take": "",
+  "var": "wavy",
+  "views": {
+   "back": {
+    "dx": 62.98,
+    "dy": 357.24,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.912,
+    "scale": 1.145,
+    "score": 0.976
+   },
+   "front": {
+    "dx": 41.22,
+    "dy": 361.68,
+    "face_maxdiff": 0,
+    "face_px": 25881,
+    "hair_k": 0.978,
+    "scale": 1.1425,
+    "score": 0.816
+   },
+   "q_back": {
+    "dx": 53.82,
+    "dy": 329.76,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.915,
+    "scale": 1.145,
+    "score": 0.891
+   },
+   "q_front": {
+    "dx": 40.43,
+    "dy": 355.74,
+    "face_maxdiff": 0,
+    "face_px": 23293,
+    "hair_k": 0.86,
+    "scale": 1.1575,
+    "score": 0.868
+   }
+  }
+ },
+ "d_beard_f": {
+  "kind": "beard",
+  "pad": 56,
+  "set": "d",
+  "take": "",
+  "var": "full",
+  "views": {
+   "back": {
+    "beard_px": 5137,
+    "dx": 61.33,
+    "dy": 365.26,
+    "scale": 1.145,
+    "score": 0.806
+   },
+   "front": {
+    "beard_px": 9254,
+    "dx": 68.56,
+    "dy": 375.56,
+    "scale": 1.1438,
+    "score": 0.702
+   },
+   "q_back": {
+    "beard_px": 6759,
+    "dx": 67.56,
+    "dy": 369.84,
+    "scale": 1.1488,
+    "score": 0.733
+   },
+   "q_front": {
+    "beard_px": 9629,
+    "dx": 51.52,
+    "dy": 362.96,
+    "scale": 1.145,
+    "score": 0.685
+   }
+  }
+ },
+ "d_beard_s": {
+  "kind": "beard",
+  "pad": 56,
+  "set": "d",
+  "take": "",
+  "var": "short",
+  "views": {
+   "back": {
+    "beard_px": 0,
+    "dx": 61.83,
+    "dy": 365.76,
+    "scale": 1.1438,
+    "score": 0.988
+   },
+   "front": {
+    "beard_px": 3485,
+    "dx": 68.2,
+    "dy": 376.2,
+    "scale": 1.15,
+    "score": 0.85
+   },
+   "q_back": {
+    "beard_px": 1572,
+    "dx": 68.06,
+    "dy": 369.84,
+    "scale": 1.1462,
+    "score": 0.973
+   },
+   "q_front": {
+    "beard_px": 4275,
+    "dx": 51.52,
+    "dy": 362.96,
+    "scale": 1.15,
+    "score": 0.846
+   }
+  }
+ },
+ "d_curly": {
+  "kind": "head",
+  "pad": 56,
+  "set": "d",
+  "take": "",
+  "var": "curly",
+  "views": {
+   "back": {
+    "dx": 59.92,
+    "dy": 359.98,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.019,
+    "scale": 1.1688,
+    "score": 0.646
+   },
+   "front": {
+    "dx": 65.9,
+    "dy": 372.14,
+    "face_maxdiff": 0,
+    "face_px": 22184,
+    "hair_k": 1.107,
+    "scale": 1.17,
+    "score": 0.662
+   },
+   "q_back": {
+    "dx": 62.28,
+    "dy": 362.4,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.008,
+    "scale": 1.1762,
+    "score": 0.687
+   },
+   "q_front": {
+    "dx": 47.76,
+    "dy": 357.66,
+    "face_maxdiff": 0,
+    "face_px": 23519,
+    "hair_k": 1.025,
+    "scale": 1.1712,
+    "score": 0.621
+   }
+  }
+ },
+ "d_thin": {
+  "kind": "head",
+  "pad": 56,
+  "set": "d",
+  "take": "",
+  "var": "thin",
+  "views": {
+   "back": {
+    "dx": 67.8,
+    "dy": 376.68,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.982,
+    "scale": 1.0962,
+    "score": 0.609
+   },
+   "front": {
+    "dx": 68.06,
+    "dy": 375.56,
+    "face_maxdiff": 0,
+    "face_px": 15814,
+    "hair_k": 1.086,
+    "scale": 1.1462,
+    "score": 0.718
+   },
+   "q_back": {
+    "dx": 67.06,
+    "dy": 369.19,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.977,
+    "scale": 1.1462,
+    "score": 0.613
+   },
+   "q_front": {
+    "dx": 51.52,
+    "dy": 361.82,
+    "face_maxdiff": 0,
+    "face_px": 17363,
+    "hair_k": 0.994,
+    "scale": 1.1475,
+    "score": 0.621
+   }
+  }
+ },
+ "d_wavy": {
+  "kind": "head",
+  "pad": 56,
+  "set": "d",
+  "take": "",
+  "var": "wavy",
+  "views": {
+   "back": {
+    "dx": 62.42,
+    "dy": 367.74,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.994,
+    "scale": 1.135,
+    "score": 0.704
+   },
+   "front": {
+    "dx": 66.99,
+    "dy": 374.22,
+    "face_maxdiff": 0,
+    "face_px": 22184,
+    "hair_k": 1.048,
+    "scale": 1.1562,
+    "score": 0.752
+   },
+   "q_back": {
+    "dx": 67.06,
+    "dy": 369.19,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.002,
+    "scale": 1.1462,
+    "score": 0.749
+   },
+   "q_front": {
+    "dx": 51.52,
+    "dy": 362.32,
+    "face_maxdiff": 0,
+    "face_px": 23519,
+    "hair_k": 0.989,
+    "scale": 1.1462,
+    "score": 0.732
+   }
+  }
+ },
+ "f_curly": {
+  "kind": "head",
+  "pad": 56,
+  "set": "f",
+  "take": "",
+  "var": "curly",
+  "views": {
+   "back": {
+    "dx": 9.24,
+    "dy": 340.07,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.997,
+    "scale": 1.1562,
+    "score": 0.604
+   },
+   "front": {
+    "dx": 25.04,
+    "dy": 351.52,
+    "face_maxdiff": 0,
+    "face_px": 35932,
+    "hair_k": 1.02,
+    "scale": 1.145,
+    "score": 0.674
+   },
+   "q_back": {
+    "dx": 15.59,
+    "dy": 340.1,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.019,
+    "scale": 1.1888,
+    "score": 0.523
+   },
+   "q_front": {
+    "dx": 13.74,
+    "dy": 335.48,
+    "face_maxdiff": 0,
+    "face_px": 36035,
+    "hair_k": 0.994,
+    "scale": 1.145,
+    "score": 0.653
+   }
+  }
+ },
+ "f_wavy": {
+  "kind": "head",
+  "pad": 56,
+  "set": "f",
+  "take": "",
+  "var": "wavy",
+  "views": {
+   "back": {
+    "dx": 12.48,
+    "dy": 342.77,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.965,
+    "scale": 1.1362,
+    "score": 0.761
+   },
+   "front": {
+    "dx": 24.04,
+    "dy": 350.87,
+    "face_maxdiff": 0,
+    "face_px": 35932,
+    "hair_k": 0.98,
+    "scale": 1.1438,
+    "score": 0.749
+   },
+   "q_back": {
+    "dx": 27.98,
+    "dy": 347.44,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 0.978,
+    "scale": 1.1425,
+    "score": 0.669
+   },
+   "q_front": {
+    "dx": 14.24,
+    "dy": 334.34,
+    "face_maxdiff": 0,
+    "face_px": 36035,
+    "hair_k": 0.959,
+    "scale": 1.145,
+    "score": 0.696
+   }
+  }
+ },
+ "g_straight": {
+  "kind": "head",
+  "pad": 56,
+  "set": "g",
+  "take": "",
+  "var": "straight",
+  "views": {
+   "back": {
+    "dx": 38.09,
+    "dy": 354.76,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.029,
+    "scale": 1.1362,
+    "score": 0.74
+   },
+   "front": {
+    "dx": 20.61,
+    "dy": 372.12,
+    "face_maxdiff": 0,
+    "face_px": 34912,
+    "hair_k": 1.018,
+    "scale": 1.145,
+    "score": 0.732
+   },
+   "q_back": {
+    "dx": 36.64,
+    "dy": 371.48,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.036,
+    "scale": 1.145,
+    "score": 0.755
+   },
+   "q_front": {
+    "dx": 26.34,
+    "dy": 372.12,
+    "face_maxdiff": 0,
+    "face_px": 33019,
+    "hair_k": 1.031,
+    "scale": 1.1475,
+    "score": 0.759
+   }
+  }
+ },
+ "g_wavy": {
+  "kind": "head",
+  "pad": 56,
+  "set": "g",
+  "take": "",
+  "var": "wavy",
+  "views": {
+   "back": {
+    "dx": 36.96,
+    "dy": 354.12,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.047,
+    "scale": 1.14,
+    "score": 0.826
+   },
+   "front": {
+    "dx": 20.61,
+    "dy": 370.98,
+    "face_maxdiff": 0,
+    "face_px": 34912,
+    "hair_k": 1.049,
+    "scale": 1.1462,
+    "score": 0.806
+   },
+   "q_back": {
+    "dx": 38.59,
+    "dy": 372.28,
+    "face_maxdiff": 0,
+    "face_px": 0,
+    "hair_k": 1.063,
+    "scale": 1.1388,
+    "score": 0.851
+   },
+   "q_front": {
+    "dx": 26.34,
+    "dy": 372.62,
+    "face_maxdiff": 0,
+    "face_px": 33019,
+    "hair_k": 1.053,
+    "scale": 1.1438,
+    "score": 0.865
+   }
+  }
+ }
+}

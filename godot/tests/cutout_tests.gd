@@ -23,7 +23,8 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man"])
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man",
+		"test_gene_look", "test_gene_look_family", "test_head_variants_lib", "test_head_faces_kept", "test_head_mask_packed", "test_look_save_free"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -1281,3 +1282,219 @@ func test_frames_c_memory() -> void:
 			stray += 1
 	check(stray == 0, "방식 C 아틀라스: 그림이 있는 텍셀 표본 %d개 모두 어떤 장면·짐 그림의 사각형 안 (밖 %d)" % [seen, stray])
 
+
+
+
+# ───────────── Q22 ④ (2026-11-12) 머리 조각 + 유전 → 겉모습 ─────────────
+## 유전자 하나만 바꾼 사람 (나머지는 '없음' — 형질마다 따로 봄)
+static func _g(over: Dictionary) -> PackedByteArray:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77
+	var g := Genetics.random_genes(rng, false)
+	for at: int in [Genetics.CURL, Genetics.FRECK, Genetics.BALD, Genetics.RED]:
+		g[at] = 0
+		g[at + 1] = 0
+	g[Genetics.RARE] = 0
+	g[Genetics.PIEBALD] = 0
+	g[Genetics.HEIGHT] = 128
+	g[Genetics.BUILD] = 128
+	g[Genetics.BROW] = 40
+	g[Genetics.STYLE] = 200
+	for k: int in over:
+		g[k] = int(over[k])
+	return g
+
+
+static func _dl(sex: String, age: float, g: PackedByteArray, head := 1) -> Dictionary:
+	return CutoutResident.doll_look({"sex": sex, "age": age, "genes": g, "head": head, "hat": 0}, 7, 7)
+
+
+func test_gene_look() -> void:
+	var CV: Dictionary = CutoutResident.CURL_VAR
+	# 머리결: 직모 · 웨이브 · 곱슬 → 그 머리 묶음의 변형 (여자 b · 남자 d · 여자아이 f · 남자아이 d)
+	var ok := true
+	for curl in 3:
+		var g := _g({Genetics.CURL: 1 if curl >= 1 else 0, Genetics.CURL + 1: 1 if curl >= 2 else 0})
+		for c: Array in [["f", 10.0, 1], ["m", 9.0, 3], ["f", 3.0, 5], ["m", 3.0, 3]]:
+			var d := _dl(c[0], c[1], g)
+			ok = ok and int(d["head"]) == int(c[2]) and int(d["hv"]) == int(CV[int(c[2])][curl]) and (d["look2"] as Vector4).x == float(d["hv"])
+	check(ok, "머리결 유전자 → 머리 조각 변형 (직모 0 · 웨이브 1 · 곱슬 2, 여자 b · 남자 d · 아이 f/d)")
+	# 대머리: 남자 하나면 12일부터 숱 적음(d 변형 3), 노년 대머리(g, 둘레 머리결 = 머리결 유전자) · 여자는 두 벌 + 노년에만 숱 적음
+	var gb := _g({Genetics.BALD: 1})
+	var m11 := _dl("m", 11.0, gb)
+	var m13 := _dl("m", 13.0, gb)
+	var m21 := _dl("m", 21.0, gb)
+	check(int(m11["hv"]) != CutoutResident.HV_THIN and int(m13["head"]) == 3 and int(m13["hv"]) == CutoutResident.HV_THIN and int(m21["head"]) == 6,
+		"대머리 유전자 (남자 한 벌): 11일 그대로 → 13일 숱 적음 (d·3) → 21일 대머리 (g)")
+	var gw := _g({Genetics.BALD: 1, Genetics.CURL: 1})
+	check(int(_dl("m", 21.0, gw)["hv"]) == 1 and int(_dl("m", 21.0, gb)["hv"]) == 4, "대머리 노인의 둘레 머리도 머리결대로 (웨이브 1 · 직모 4)")
+	var gbb := _g({Genetics.BALD: 1, Genetics.BALD + 1: 1})
+	check(int(_dl("f", 15.0, gbb, 1)["hv"]) == 0 and int(_dl("f", 21.0, gbb, 1)["hv"]) == CutoutResident.HV_THIN and int(_dl("f", 21.0, gb, 1)["hv"]) == 0,
+		"여자는 대머리 두 벌 + 노년에만 숱 적음 (한 벌 · 어른은 그대로)")
+	# 수염: 어른 남자만, 눈썹 숱(BROW)에서 짙기, 차림 취향에서 면도
+	var bs := []
+	for b: int in [30, 120, 230]:
+		bs.append(int(_dl("m", 9.0, _g({Genetics.BROW: b}))["beard"]))
+	check(bs == [0, 1, 2], "수염: 눈썹 숱 유전 칸 → 없음 · 짧은 · 덥수룩 (%s)" % [bs])
+	check(int(_dl("m", 9.0, _g({Genetics.BROW: 230, Genetics.STYLE: 10}))["beard"]) == 0, "면도하는 사람 (차림 취향 씨앗) → 수염 없음")
+	check(int(_dl("m", 3.0, _g({Genetics.BROW: 230}))["beard"]) == 0 and int(_dl("f", 9.0, _g({Genetics.BROW: 230}))["beard"]) == 0, "아이 · 여자는 수염 없음")
+	var cf := _dl("m", 9.0, _g({Genetics.BROW: 230, Genetics.CURL: 1, Genetics.CURL + 1: 1}), 0)
+	check((int(cf["head"]) == 2 or int(cf["head"]) == 4) and int(cf["beard"]) == 0, "곱슬 + 덥수룩한 수염 → 수염이 그려진 곱슬 얼굴 (c · e)")
+	# 표시: 주근깨 진하기 · 흰 앞머리 · 눈송이 무늬 (6종 × 자리)
+	var fr := _dl("f", 9.0, _g({Genetics.FRECK: 1, Genetics.SKIN: 10}))
+	var fr_d := _dl("f", 9.0, _g({Genetics.FRECK: 1, Genetics.SKIN: 240}))
+	var nf := _dl("f", 9.0, _g({}))
+	check((fr["look2"] as Vector4).z > (fr_d["look2"] as Vector4).z and (fr_d["look2"] as Vector4).z > 0.0 and (nf["look2"] as Vector4).z == 0.0,
+		"주근깨: 유전자가 있을 때만, 밝은 피부에서 더 진하게")
+	check(int((_dl("f", 9.0, _g({Genetics.RARE: 2}))["look2"] as Vector4).w) == 1, "흰 앞머리 (드문 변이 2) → 표시 코드 1")
+	var pats := {}
+	for pt in 48:
+		var c := int((_dl("m", 9.0, _g({Genetics.PIEBALD: 1, Genetics.PATTERN: pt * 5}))["look2"] as Vector4).w)
+		pats[c] = true
+		ok = ok and (c >> 1) & 7 >= 1 and (c >> 1) & 7 <= 6
+	check(ok and pats.size() >= 24, "눈송이 무늬: 무늬 6종 × 자리 (무늬 시드에서, %d가지)" % pats.size())
+	# 키 · 체격: 인형 전체 ±6%
+	var lo := _dl("f", 9.0, _g({Genetics.HEIGHT: 0, Genetics.BUILD: 0}))["stretch"] as Vector2
+	var hi := _dl("f", 9.0, _g({Genetics.HEIGHT: 255, Genetics.BUILD: 255}))["stretch"] as Vector2
+	check(absf(lo.x - 0.94) < 0.002 and absf(hi.x - 1.06) < 0.002 and absf(lo.y - 0.94) < 0.002 and absf(hi.y - 1.06) < 0.002,
+		"키·체격 → 인형 늘이기 ±6% (%s · %s)" % [lo, hi])
+	# 유전자가 없으면 (옛 겉모습 사전) 변형 · 표시 없음
+	var old := CutoutResident.doll_look({"sex": "m", "age": 9.0, "hair_i": 1, "skin_i": 2}, 7, 7)
+	check(int(old["hv"]) == 0 and int(old["beard"]) == 0 and old["look2"] == Vector4.ZERO and old["stretch"] == Vector2.ONE, "유전자 없는 겉모습 → 그린 그대로")
+	# 인형에 들어감: look2 instance uniform · 키 배율
+	var r := Resident.new()
+	r.id = 9
+	r.sex = "m"
+	r.age = 9.0
+	r.genes = _g({Genetics.BROW: 230, Genetics.CURL: 1, Genetics.HEIGHT: 255})
+	var mdl := _model(r)
+	var l2: Vector4 = mdl.doll.get_instance_shader_parameter("look2")
+	check(l2 == mdl.dlook["look2"] and int(l2.y) == 2 and int(l2.x) == 1, "인형의 look2 = 겉모습 기록 (웨이브 d + 덥수룩한 수염)")
+	mdl.free()
+
+
+## 형제는 부모를 닮되 서로 조금씩 다르다 (머리결 · 머리 묶음 · 수염 짙기는 유전 · look_head는 부모 하나에서) — 시뮬의 Village가 아이를 만드는 그대로
+func test_gene_look_family() -> void:
+	var v := Village.new_prototype(31)
+	v.water.offline = true
+	var mom := v.add_person("엄마", "f", 10.0, "", v.center.x, v.center.y, null, null)
+	var dad := v.add_person("아빠", "m", 11.0, "", v.center.x, v.center.y, null, null)
+	mom.genes = _g({Genetics.CURL: 1, Genetics.CURL + 1: 1, Genetics.FRECK: 1, Genetics.FRECK + 1: 1})
+	dad.genes = _g({Genetics.CURL: 1, Genetics.CURL + 1: 1, Genetics.BROW: 220})
+	var curly := 0
+	var freck := 0
+	var looks := {}
+	for i in 12:
+		var k := v.add_person("아이%d" % i, "m" if i % 2 else "f", 3.0, "", v.center.x, v.center.y, mom, dad)
+		var d := CutoutResident.doll_look(ResidentModel.look_of(k), k.id, CutoutResident.household_of(k))
+		curly += 1 if int(d["hv"]) == 2 else 0
+		freck += 1 if (d["look2"] as Vector4).z > 0.0 else 0
+		looks["%d/%d/%s" % [d["head"], d["hv"], str(d["dye"][1])]] = true
+	check(curly == 12, "곱슬 × 곱슬 부모 → 아이 모두 곱슬 (%d/12)" % curly)
+	check(freck == 12, "주근깨 두 벌 엄마 → 아이 모두 주근깨 (%d/12)" % freck)
+	check(looks.size() >= 2, "형제끼리도 조금씩 다름 (%d가지)" % looks.size())
+
+
+## 머리 조각 표: 변형 · 수염 조각 · 얼굴 자리 · 아틀라스 크기
+func test_head_variants_lib() -> void:
+	var L := Lib.lib()
+	var have := {}
+	var beards := {}
+	for q: Dictionary in L["quads"]:
+		if int(q["group"]) == 1 and String(q["part"]) == "head":
+			have["%s%d/%d" % [q["set"], int(q["view"]), int(q.get("hv", 0))]] = true
+		if int(q["group"]) == 7:
+			beards["%s%d/%d" % [q["set"], int(q["view"]), int(q["hv"])]] = true
+	var need := {"a": [1, 2], "b": [1, 2, 3], "d": [1, 2, 3], "f": [1, 2], "g": [1, 4]}
+	var ok := true
+	var miss := []
+	for s: String in need:
+		for v in 4:
+			for hv: int in need[s] + [0]:
+				if not have.has("%s%d/%d" % [s, v, hv]):
+					ok = false
+					miss.append("%s%d/%d" % [s, v, hv])
+	check(ok, "머리 변형 조각: a 웨이브·곱슬 · b 웨이브·곱슬·숱 적음 · d 웨이브·곱슬·숱 적음 · f 웨이브·곱슬 · g 웨이브·직모 × 4 보기 %s" % [miss])
+	check(beards.has("d0/1") and beards.has("d0/2") and beards.has("d1/1") and beards.has("d1/2"), "수염 조각: d 앞 · 비스듬한 앞 × 짧은 · 덥수룩")
+	var fa := Lib.face_arrays()
+	var eyes_ok := true
+	for s in 7:
+		for v in 2:
+			var e: Vector4 = (fa[0] as PackedVector4Array)[s * 4 + v]
+			eyes_ok = eyes_ok and e.x != e.z and e.y > 40.0 and e.y < 140.0
+	check(eyes_ok, "얼굴 자리 (두 눈) — 머리 묶음 7 × 앞·비스듬한 앞")
+	var at: Array = L["atlas"]
+	check(int(at[0]) == 2048 and int(at[1]) <= 2304, "머리·몸 아틀라스 %d×%d (2048×2048에서 아래로만 조금)" % [at[0], at[1]])
+
+
+## 얼굴은 그대로 (2026-11-12 사용자 "얼굴 … 완전 별로" 이후 — 머리결 · 수염만 바꿈): 변형 조각의 두 눈 자리 화소가 원래 머리 조각과 같다
+func test_head_faces_kept() -> void:
+	var L := Lib.lib()
+	var img: Image = (Lib.material().get_shader_parameter("atlas") as Texture2D).get_image()
+	if img.is_compressed():
+		img.decompress()
+	var W := img.get_width()
+	var H := img.get_height()
+	var base := {}
+	for q: Dictionary in L["quads"]:
+		if int(q["group"]) == 1 and String(q["part"]) == "head" and int(q.get("hv", 0)) == 0:
+			base["%s%d" % [q["set"], int(q["view"])]] = q
+	var n := 0
+	var bad := []
+	for q: Dictionary in L["quads"]:
+		if int(q["group"]) != 1 or String(q["part"]) != "head" or int(q.get("hv", 0)) == 0 or int(q["view"]) > 1:
+			continue
+		var b: Dictionary = base["%s%d" % [q["set"], int(q["view"])]]
+		var e: Array = L["head_eye"]["%s_%s" % [q["set"], L["views"][int(q["view"])]]]
+		for k in 2:
+			var p := Vector2(float(e[k * 2]), float(e[k * 2 + 1]))
+			for o: Vector2 in [Vector2.ZERO, Vector2(6, 0), Vector2(-6, 0), Vector2(0, 6), Vector2(0, -6)]:
+				var cb := _px(img, W, H, b, p + o)
+				var cv := _px(img, W, H, q, p + o)
+				n += 1
+				if absf(cb.r - cv.r) + absf(cb.g - cv.g) + absf(cb.b - cv.b) + absf(cb.a - cv.a) > 0.09:
+					bad.append("%s%d/%d" % [q["set"], int(q["view"]), int(q["hv"])])
+	check(bad.is_empty() and n > 100, "변형 머리의 눈 자리 화소 = 원래 머리 (%d곳, 다름 %s)" % [n, bad])
+
+
+static func _px(img: Image, W: int, H: int, q: Dictionary, p: Vector2) -> Color:
+	var r: Array = q["rect"]
+	var uv: Array = q["uv"]
+	var u := lerpf(float(uv[0]), float(uv[2]), (p.x - float(r[0])) / (float(r[2]) - float(r[0])))
+	var v := lerpf(float(uv[1]), float(uv[3]), (float(r[3]) - p.y) / (float(r[3]) - float(r[1])))
+	return img.get_pixel(clampi(int(u * W), 0, W - 1), clampi(int(v * H), 0, H - 1))
+
+
+## 물감 마스크 묶음 (코드 + 코드표 + 4분의 1): 가져온 텍스처 · 크기 · 밉맵 · 셰이더가 읽음
+func test_head_mask_packed() -> void:
+	var mat := Lib.material()
+	var code: Variant = mat.get_shader_parameter("dye_code")
+	var lut: Variant = mat.get_shader_parameter("head_data")
+	var mq: Variant = mat.get_shader_parameter("dye_mask")
+	var at: Texture2D = mat.get_shader_parameter("atlas")
+	check(code is CompressedTexture2D and mq is CompressedTexture2D and lut is Texture2D and (lut as Texture2D).get_width() == 128
+		and (lut as Texture2D).get_image().get_pixel(0, 0) == Color(0, 0, 0, 1), "마스크 코드 · 4분의 1 마스크 = 가져온 텍스처, 코드표 · 얼굴 자리 = 머리 자료 텍스처 (코드 0 = 물감 없음)")
+	check((code as Texture2D).get_width() == at.get_width() and (code as Texture2D).get_height() == at.get_height()
+		and (mq as Texture2D).get_width() * 4 == at.get_width() and (mq as Texture2D).get_height() * 4 == at.get_height(), "코드 = 아틀라스 크기, 4분의 1 마스크")
+	check(not (code as Texture2D).get_image().has_mipmaps() and (mq as Texture2D).get_image().has_mipmaps(), "코드는 밉맵 없음 (가장 가까운 값) · 4분의 1 마스크는 밉맵")
+	var src := FileAccess.get_file_as_string("res://proto/cutout_a/cut_doll.gdshader") + FileAccess.get_file_as_string("res://proto/cutout_c/frame_doll.gdshader")
+	check(src.count("vec3 m = head_mask(UV,") == 2 and src.find("texture(dye_mask, UV)") < 0, "두 인형 셰이더 모두 묶은 마스크를 읽음")
+	# 2026-11-12: 알파 자르기를 discard 대신 ALPHA_SCISSOR로 — 직접 discard하면 (방식 C · 그림자 없는 해) 버린 자리가 검은 네모로 남았다
+	check(src.count("ALPHA_SCISSOR_THRESHOLD = alpha_cut;") == 3 and src.find("t.a < alpha_cut") < 0, "두 셰이더의 알파 자르기 = ALPHA_SCISSOR (검은 네모 없음)")
+	check(not FileAccess.file_exists("res://art/cutout/woman_a/doll_mask.png"), "옛 RGBA 마스크 (doll_mask.png) 없음")
+
+
+## 겉모습은 화면만: 저장 형식(SaveFile.FORMAT)과 주민 저장 칸이 그대로 · 겉모습 기록은 주민 데이터에 쓰지 않음
+func test_look_save_free() -> void:
+	check(SaveFile.FORMAT == 3, "저장 형식 3 그대로 (겉모습은 유전자에서 화면이 계산)")
+	var src := FileAccess.get_file_as_string("res://view/cutout_resident.gd")
+	check(src.find("r.genes =") < 0 and src.find("r.look_head =") < 0, "인형 코드는 유전자 · look_*를 쓰지 않음 (읽기만)")
+	var r := Resident.new()
+	r.id = 3
+	r.sex = "f"
+	r.age = 9.0
+	r.genes = _g({Genetics.CURL: 1, Genetics.RARE: 2})
+	var before := r.genes.duplicate()
+	var m := _model(r)
+	check(r.genes == before and r.look_head == 0, "인형을 만들어도 주민의 유전자 · 겉모습 칸 그대로")
+	m.free()

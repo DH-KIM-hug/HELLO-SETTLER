@@ -184,7 +184,89 @@ static func doll_look(lk: Dictionary, seed: int, household: int) -> Dictionary:
 		if Vector3(g.r - hc.r, g.g - hc.g, g.b - hc.b).length() < bd:
 			best = 54
 		d[1] = best
+	gene_look(lk, dl, seed)
 	return dl
+
+
+## ───────── (Q22 ④, 2026-11-12) 유전 → 겉모습 (BLOODLINES 7장 — 화면만, 능력 값은 읽지 않음) ─────────
+## 머리 묶음 (lib의 sets 번호): 0 a 머릿수건 여자 · 1 b 맨머리 여자 · 2 c 곱슬·수염 남자 · 3 d 짧은 머리 (남자·남자아이) · 4 e 곱슬·수염 남자 ·
+## 5 f 단발 여자아이 · 6 g 대머리 노인 (흰 머리 둘레). 머리결 변형 (doll_lib "head_var"): 0 그린 그대로 · 1 웨이브 · 2 곱슬 · 3 숱 적음 · 4 직모.
+## 머리결 유전자 (Genetics.curl: 0 직모 · 1 웨이브 · 2 곱슬) → 그 머리 묶음의 변형 (g는 그린 그림이 곱슬 둘레라 직모 = 4, 곱슬 = 0)
+const CURL_VAR := {0: [0, 1, 2], 1: [0, 1, 2], 3: [0, 1, 2], 5: [0, 1, 2], 6: [4, 1, 0]}
+const HV_THIN := 3
+## 수염 (어른 남자, 머리 묶음 d 위에 얹는 조각): 0 없음 · 1 짧은 · 2 덥수룩. 짙기는 눈썹 숱 유전 칸(Genetics.BROW, 부모 평균 ± — 닮음)에서,
+## 면도는 차림 취향 씨앗(Genetics.STYLE — 유전 안 됨)에서 4명 중 1명. c · e 머리는 덥수룩한 수염이 그려져 있어 곱슬 + 덥수룩일 때만
+const BEARD_SHORT_FROM := 0.28
+const BEARD_FULL_FROM := 0.62
+## 키 · 체격: 인형 전체를 ±6% 늘이고 줄임 (몸 그림은 그대로 — 2026-11-12 사용자 결정)
+const STRETCH := 0.12
+## 낮 모자 표 (몸마다) — 머리 묶음 a(머릿수건)는 모자 없음. 대머리 노인은 반쯤 모자 없이 (벗은 머리가 보이게)
+const HAT_TABLE := {"adult": [-1, 1, 2, 3, 4, 6], "child": [-1, 5, 5, 2], "elder": [-1, 6, 6, 1]}
+
+
+## 수염 0 없음 · 1 짧은 · 2 덥수룩 (어른 남자만 — 아이·여자는 0)
+static func beard_of(g: PackedByteArray, sex: String, age: float) -> int:
+	if sex != "m" or age < Balance.AGE_ADULT or g.size() < Genetics.MIN_BYTES:
+		return 0
+	if (Genetics.style(g) >> 5) & 3 == 0:
+		return 0                                    # 깎음 (차림 취향)
+	var b := float(Genetics.byte_of(g, Genetics.BROW)) / 255.0
+	return 0 if b < BEARD_SHORT_FROM else (1 if b < BEARD_FULL_FROM else 2)
+
+
+## 겉모습 기록(dl)에 유전 겉모습을 더함: head(머리 묶음) · hv(머리결 변형) · beard · hat · look2(셰이더 표시) · stretch(키·폭 배율).
+## lk["head"] (시뮬의 look_head — 부모에게서 70% 물려받음)로 같은 성별 안의 얼굴 묶음을 고른다 → 형제끼리 닮고 부모를 닮음.
+## 유전자가 없으면 (옛 저장·시험의 겉모습 사전) 고른 머리 그대로 · 변형 없음 · 표시 없음.
+static func gene_look(lk: Dictionary, dl: Dictionary, seed: int) -> void:
+	dl["hv"] = 0
+	dl["beard"] = 0
+	dl["look2"] = Vector4.ZERO
+	dl["stretch"] = Vector2.ONE
+	var g: PackedByteArray = lk.get("genes", PackedByteArray())
+	if g.size() < Genetics.MIN_BYTES:
+		return
+	var sex := String(lk.get("sex", "m"))
+	var age: float = lk.get("age", 10.0)
+	var body := String(dl.get("body", "adult"))
+	var lh := int(lk.get("head", 0))
+	var curl := Genetics.curl(g)
+	var bald := Genetics.bald_stage(g, sex, age)
+	var beard := beard_of(g, sex, age)
+	var head := 3
+	var hv := 0
+	if body == "child":
+		head = 5 if sex == "f" else 3
+	elif sex == "f":
+		head = [0, 1][posmod(lh, 2)]
+	elif bald == 2:
+		head = 6                                    # 노년의 대머리 (둘레 머리 — 콧수염이 그려져 있어 수염 조각 없음)
+		beard = 0
+	elif bald == 0 and curl == 2 and beard == 2:
+		head = [2, 4][posmod(lh, 2)]                # 곱슬 + 덥수룩한 수염이 그려진 얼굴
+		beard = 0
+	else:
+		head = 3
+	if CURL_VAR.has(head):
+		hv = int(CURL_VAR[head][curl])
+	if bald == 1 and (head == 3 or head == 1):
+		hv = HV_THIN                                # 남자 성인 중반 · 여자(두 벌) 노년: 숱이 줄어듦 (머릿수건 a 밑은 안 보임)
+	dl["head"] = head
+	dl["hv"] = hv
+	dl["beard"] = beard if head == 3 else 0
+	# 낮 모자: 머릿수건 머리는 없음, 그 밖은 사람마다 (주민 번호 + 시뮬의 look_hat), 대머리 노인은 반쯤 모자 없이
+	var tab: Array = HAT_TABLE.get(body, HAT_TABLE["adult"])
+	var hh := hash([seed, int(lk.get("hat", 0)), 41])
+	var hat := -1 if head == 0 else int(tab[posmod(hh, tab.size())])
+	if head == 6 and posmod(hh >> 7, 2) == 0:
+		hat = -1
+	dl["hat"] = hat
+	# 셰이더 표시: 주근깨 진하기 · 흰 앞머리 · 눈송이 무늬 (6종 × 자리 8 — 무늬 시드)
+	var code := 1 if Genetics.forelock(g) else 0
+	if Genetics.piebald(g):
+		var pat := int(g[Genetics.PATTERN])
+		code += 2 * (1 + pat % 6) + 16 * ((pat / 6) % 8)
+	dl["look2"] = Vector4(hv, dl["beard"], Genetics.freckle_amount(g), code)
+	dl["stretch"] = Vector2(1.0 + STRETCH * (Genetics.height(g) - 0.5), 1.0 + STRETCH * (Genetics.build_v(g) - 0.5))
 
 
 ## 몸 종류 (2026-11-08 시안 A 넷): 아이(아기 제외) = 아이 몸 f, 노인 = 노인 몸 g, 그 밖 = 어른 몸
@@ -259,6 +341,7 @@ func build_look(lk: Dictionary) -> void:
 	doll.material_override = game_material()
 	add_child(doll)
 	doll.set_look(dlook)
+	doll.set_instance_shader_parameter("look2", dlook.get("look2", Vector4.ZERO))
 	_doll_h = INFANT_H if _infant else DOLL_H * _base_scale
 	doll.screen_h = _doll_h
 	if _infant:                 # 젖먹이: 크림 강보 (옷 물감을 크림으로)
@@ -340,8 +423,9 @@ func _push_misc() -> void:
 	var c := cos(react_turn * TAU)
 	if absf(c) < 0.16:                              # 종이 인형이 돌 때 선으로 사라지지 않게 (옆모습 두께)
 		c = 0.16 if c >= 0.0 else -0.16
-	var w := react_sq.x * c * _warp.y                               # (Q2-b) 화면 몸짓(set_body_warp)과 곱해서
-	var sy := maxf(react_sq.y, 0.05) * _warp.x
+	var gk: Vector2 = dlook.get("stretch", Vector2.ONE)              # (Q22 ④) 키 · 체격 (±6%, 화면만)
+	var w := react_sq.x * c * _warp.y * gk.y                        # (Q2-b) 화면 몸짓(set_body_warp)과 곱해서
+	var sy := maxf(react_sq.y, 0.05) * _warp.x * gk.x
 	var face := float(doll.mirror) * (-1.0 if w < 0.0 else 1.0)      # 화면에서 바라보는 쪽 (오른쪽 +1)
 	var roll := react_roll + _warp.z * face                         # 몸짓 기울임은 화면 오른쪽이 + → 바라보는 쪽 기준으로 바꿔 더함
 	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -roll * face))

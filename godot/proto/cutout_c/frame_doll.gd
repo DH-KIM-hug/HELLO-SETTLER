@@ -43,6 +43,7 @@ func setup(mat: ShaderMaterial, dir := FLib.DIR) -> void:
 func set_look(l: Dictionary, hat: int) -> void:
 	_sel = Vector4(_sel.x, int(l["head"]), hat, _sel.w)
 	set_instance_shader_parameter("sel", _sel)
+	set_instance_shader_parameter("look2", l.get("look2", Vector4.ZERO))     # (Q22 ④) 머리결 변형 · 수염 · 주근깨 · 표시
 	var d: Array = l["dye"]
 	set_instance_shader_parameter("dyes0", Vector4(d[0], d[1], d[2], d[3]))
 	set_instance_shader_parameter("dyes1", Vector4(d[4], d[5], FLib.leg_dye(int(d[6])), FLib.shoe_dye(int(d[7]))))

@@ -308,8 +308,9 @@ func test_ends_in_place() -> void:
 	check(root_ok, "주민 노드(시뮬 자리)는 반응이 건드리지 않음")
 	check(not tr.busy() and steps < 400, "반응이 끝남 (%.2f초)" % (steps / 60.0))
 	var misc: Vector4 = m.doll.get_instance_shader_parameter("misc")
+	var gk: Vector2 = m.dlook.get("stretch", Vector2.ONE)       # (Q22 ④) 키 · 체격 늘이기 (±6%, 유전자에서) — 반응과 무관하게 늘 곱함
 	check(m.react_off == Vector3.ZERO and m.react_sq == Vector2.ONE and m.react_roll == 0.0 and m.react_turn == 0.0 and m.react_hint == ""
-		and m.doll.position == Vector3.ZERO and absf(misc.x - m._doll_h) < 0.0001 and absf(misc.y - 1.0) < 0.0001 and misc.w == 0.0,
+		and m.doll.position == Vector3.ZERO and absf(misc.x - m._doll_h * gk.x) < 0.0001 and absf(misc.y - gk.y / gk.x) < 0.0001 and misc.w == 0.0,
 		"끝나면 인형은 정확히 주민 자리 (옮김 0 · 배율 1 · 기울기 0)")
 	# 붙들기: 반응 초반엔 누른 자리에 서 있음
 	m.position = root0

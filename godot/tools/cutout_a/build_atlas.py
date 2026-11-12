@@ -4,7 +4,8 @@ rig library the Godot doll reads.  (2026-11-08)
 usage: python3 build_atlas.py
 in : art/cutout/woman_a/parts/<set>/<view>/<part>.png + place.json (cut_sheets.py), parts/props/*.png
 out: art/cutout/woman_a/doll_atlas.png  — the art as drawn (RGBA)
-     art/cutout/woman_a/doll_mask.png   — dye weights: R/G/B = how much the pixel belongs to the part's dye channel 0/1/2
+     art/cutout/woman_a/doll_mcode.png + doll_mlut.png + doll_mq.png — dye weights (R/G/B = how much the pixel belongs to the
+                                          part's dye channel 0/1/2), packed (pack_mask; was doll_mask.png until Q22 step 4)
      art/cutout/woman_a/doll_lib.json   — quads (rect, pivot, uv, layer, group, dye slots + the drawn base colour per channel)
 
 Colour by shader: the shader multiplies the drawn pixel by (dye / drawn base colour) per channel weight, so the default
@@ -72,6 +73,8 @@ def auto_base(s):
         for v in VIEWS:
             d = os.path.join(PARTS, s, v)
             for f in os.listdir(d):
+                if f.startswith("head_") or f.startswith("beard_"):
+                    continue          # Q22 step 4 variants: measured on the original drawings only
                 if f.endswith(".png") and f.split("_")[0].split(".")[0] in MEASURE[slot]:
                     a = np.asarray(Image.open(os.path.join(d, f)).convert("RGBA")).reshape(-1, 4)
                     px.append(a[a[:, 3] > 200][:, :3].astype(np.float32) / 255.0)
@@ -329,6 +332,261 @@ def hexrgb(h):
     return np.array([int(h[i:i + 2], 16) for i in (0, 2, 4)], np.float32) / 255.0
 
 
+
+# ───────────── Q22 step 4 (2026-11-12): head VARIANTS, beard overlays, freckles out of the drawing, face anchors for marks ─────────────
+# heads.py made parts/<set>/<view>/head_<var>.png (same face, other hair; a canvas padded by heads.PAD piece px around the original)
+# and parts/d/<view>/beard_<var>.png (overlay on the same padded canvas). Every one becomes a quad of its head set:
+#   head variants: group 1, part "head", "hv" = HEAD_VAR id (0 = the original drawing) — the shader shows the one the resident wears
+#   beards       : group 7, part "beard", "hv" = BEARD id, over the head (layer + 0.5), dyed with the hair channel
+# The NEW quads are packed into the free space of the atlas (the old quads keep their place — the atlas stays 2048 x 2048).
+# Freckles drawn on heads d and f are erased (they follow the freckle gene now — a shader mark, like the white forelock and the
+# speckle pattern); head_eye / head_mark (per head set x view, head frame rig units) give the shader the eyes and the hairline.
+HEAD_VAR = {"wavy": 1, "curly": 2, "thin": 3, "straight": 4}
+BEARD = {"short": 1, "full": 2}
+VAR_PAD = 56                 # = heads.PAD
+FRECKLED = ("d", "f")
+
+
+def _hn():
+    import heads
+    return heads.ndimage, heads.largest_blob
+
+
+def head_variants(extra, s, v, d, q, rig_rect, hp, f_head, ch, layer, slot, chans, base_rr, wb, hb):
+    """the head variants / beards of head set s, view v (heads.py output) -> quads in `extra` (same frame as the original head)"""
+    P = VAR_PAD
+    for f in sorted(os.listdir(d)):
+        if not (f.startswith("head_") or f.startswith("beard_")) or not f.endswith(".png"):
+            continue
+        beard = f.startswith("beard_")
+        var = f[:-4].split("_", 1)[1]
+        a = np.asarray(Image.open(os.path.join(d, f)).convert("RGBA")).copy()
+        if not (a[..., 3] > 128).any():
+            continue
+        if not beard and s in FRECKLED and v in ("front", "q_front"):
+            a, _n = erase_freckles(a, hexrgb(BASE[s]["skin"]))
+        if not beard:
+            # the drawn neck stub (same rows / columns as the original's, + the padding) — like the original head
+            sw = ch["x1"] - ch["x0"] + 1
+            x0, x1, cy, yb = ch["x0"] + P, ch["x1"] + P, ch["y"] + P, ch["yb"] + P
+            lo = max(0, x0 - 18)
+            for yy in range(cy + 3, min(a.shape[0], yb + 6)):
+                row = a[yy, lo: x1 + 19, 3] > 128
+                xs_ = np.nonzero(row)[0]
+                if len(xs_) and (xs_.max() - xs_.min() + 1) <= sw + 10:
+                    a[yy, max(0, x0 - 4): x1 + 5, 3] = 0
+        # resample EXACTLY like the original head (same scale and pixel phase — PIL resize with a box shifted by whole atlas
+        # pixels), so the face pixels in the atlas are the original's to the last bit; then crop to what is drawn (whole pixels)
+        w0, h0 = Image.open(os.path.join(d, "head.png")).size
+        sx, sy = wb / float(w0), hb / float(h0)
+        ax, ay = int(P * sx), int(P * sy)
+        box = (P - ax / sx, P - ay / sy, P + w0 + ax / sx, P + h0 + ay / sy)
+        big = np.asarray(Image.fromarray(a).resize((wb + 2 * ax, hb + 2 * ay), Image.LANCZOS, box=box))
+        ys_, xs_ = np.nonzero(big[..., 3] > 0)
+        cx0, cy0 = max(0, xs_.min() - 1), max(0, ys_.min() - 1)
+        cx1, cy1 = min(big.shape[1], xs_.max() + 2), min(big.shape[0], ys_.max() + 2)
+        img = np.ascontiguousarray(big[cy0:cy1, cx0:cx1])
+        kx = wb / (base_rr[2] - base_rr[0])
+        ky = hb / (base_rr[3] - base_rr[1])
+        rr = [base_rr[0] + (cx0 - ax) / kx, base_rr[3] - (cy1 - ay) / ky, base_rr[0] + (cx1 - ax) / kx, base_rr[3] - (cy0 - ay) / ky]
+        ch_ = ["hair"] if beard else list(chans)
+        bases = [hexrgb(BASE[s][c]) for c in ch_]
+        mask = fill_mask(img, dye_mask(img, bases))
+        img = neutral_ink(img, mask, ch_)
+        extra.append((img, mask, {
+            "set": s, "view": VIEWS.index(v), "part": "beard" if beard else "head", "group": 7 if beard else 1, "slot": slot,
+            "rect": [round(x, 2) for x in rr], "pivot": [0.0, 0.0], "parent_pivot": [0.0, 0.0], "grip": [0.0, 0.0, 0.0, 0.0],
+            "layer": layer + (0.5 if beard else 0.0),
+            "dye": [SLOTS[c] for c in ch_] + [-1] * (3 - len(ch_)),
+            "base": [list(map(float, hexrgb(BASE[s][c]))) for c in ch_] + [[1, 1, 1]] * (3 - len(ch_)),
+            "hv": (BEARD if beard else HEAD_VAR)[var]}))
+
+
+# Q22 step 4 (2026-11-12): the dye mask is PACKED like the method C body masks (tools/cutout_c/pack_masks.py) — it has only a few
+# distinct texel values (one-hot dye channel weights, the neck's ink edge and the bleed into the padding: ~100), so
+#   doll_mcode.png  L8, atlas size, nearest, no mipmaps: one byte per texel = a row of the code table (EXACT at level 0)
+#   doll_mlut.png   256 x 1 RGBA8: code -> mask RGB (the old doll_mask.png values) — cut_lib.mask_lut() hands the first 128 to the
+#                   shaders as a uniform array (a texture more made the method C shader leave discarded texels black)
+#   doll_mq.png     the old mask at a quarter of the size (= its mip level 2, box filtered like Godot's own mipmaps), mipmapped
+# The shaders (cut_doll / frame_doll head_mask()) filter level 0 / 1 themselves from the codes and let the GPU filter the quarter mask
+# further away — the same numbers the old mipmapped RGBA mask gave, at about a quarter of its graphics memory.
+GROW = 128
+
+
+def _box(x):
+    x = x.astype(np.int32)
+    return ((x[0::2, 0::2] + x[1::2, 0::2] + x[0::2, 1::2] + x[1::2, 1::2] + 2) >> 2).astype(np.uint8)
+
+
+def pack_mask(rgb):
+    h, w = rgb.shape[:2]
+    assert h % 4 == 0 and w % 4 == 0
+    t = rgb.reshape(-1, 3)
+    u, inv, cnt = np.unique(t, axis=0, return_inverse=True, return_counts=True)
+    if len(u) > 128:
+        raise SystemExit("build_atlas: %d distinct mask texels > 128 (the shaders read the code table as a vec3[128])" % len(u))
+    # code 0 = no dye (the most common value) — keep the order stable: by count, then value
+    order = np.lexsort((u[:, 2], u[:, 1], u[:, 0], -cnt))
+    rank = np.empty(len(u), np.int32)
+    rank[order] = np.arange(len(u))
+    codes = rank[inv.reshape(-1)].astype(np.uint8).reshape(h, w)
+    lut = np.zeros((1, 256, 4), np.uint8)
+    lut[0, :len(u), :3] = u[order]
+    lut[0, :, 3] = 255
+    Image.fromarray(codes, "L").save(os.path.join(ART, "doll_mcode.png"), optimize=True)
+    Image.fromarray(lut, "RGBA").save(os.path.join(ART, "doll_mlut.png"), optimize=True)
+    q = np.dstack([rgb, np.full((h, w), 255, np.uint8)])
+    Image.fromarray(_box(_box(q)), "RGBA").save(os.path.join(ART, "doll_mq.png"), optimize=True)
+    print("mask packed: %d codes, quarter %dx%d" % (len(u), w // 4, h // 4))
+
+
+def fill_mask(img, w, steps=3, ink_l=0.2):
+    """(Q22 ④, 2026-11-12) head pieces: opaque pixels that no dye channel claimed (hair highlights / shade grains and the anti-aliased
+    rim between hair and skin whose colour is neither base) kept their drawn colour, so a dyed head showed a fringe of drawn-brown /
+    orange specks along hair edges and beard bottoms. Every such pixel that is not ink (luma >= ink_l) takes the channel of its
+    nearest claimed neighbour (up to `steps` px away). Ink lines stay undyed."""
+    a = img[..., 3] > 128
+    rgb = img[..., :3].astype(np.float32) / 255.0
+    l = lum(rgb)
+    w = w.copy()
+    free = a & (w.sum(-1) < 0.5) & (l >= ink_l)
+    for _ in range(steps):
+        if not free.any():
+            break
+        claimed = w.sum(-1) > 0.5
+        acc = np.zeros_like(w)
+        for dy, dx in ((1, 0), (-1, 0), (0, 1), (0, -1), (1, 1), (-1, -1), (1, -1), (-1, 1)):
+            acc += np.roll(np.roll(w * claimed[..., None], dy, 0), dx, 1)
+        take = free & (acc.sum(-1) > 0)
+        if not take.any():
+            break
+        idx = acc.argmax(-1)
+        nw = np.zeros_like(w)
+        for c in range(w.shape[-1]):
+            nw[..., c] = (idx == c)
+        w[take] = nw[take]
+        free &= ~take
+    return w
+
+
+INK_RGB = np.array([0x3A, 0x2A, 0x22], np.float32) / 255.0     # the concept's ink
+
+
+def neutral_ink(img, w, chans, near=2):
+    """(Q22 ④, 2026-11-12) the ink of the red-haired heads (d, f and their variants) was drawn red-brown (~#38190B); with any other hair
+    dye the hair outline / beard rim then read as an orange fringe. Ink pixels (undyed, dark) that touch hair and do NOT touch skin are
+    set to the concept ink hue at their own brightness — hair outlines only; face lines (eyes, brows, mouth, jaw) touch skin and stay."""
+    if "hair" not in chans:
+        return img
+    hi = chans.index("hair")
+    si = chans.index("skin") if "skin" in chans else -1
+    nd, _lb = _hn()
+    a = img[..., 3] > 0
+    rgb = img[..., :3].astype(np.float32) / 255.0
+    l = lum(rgb)
+    ink = a & (w.sum(-1) < 0.5) & (l < 0.2)
+    hair = nd.binary_dilation(w[..., hi] > 0.5, iterations=near)
+    skin = nd.binary_dilation(w[..., si] > 0.5, iterations=near) if si >= 0 else np.zeros_like(hair)
+    sel = ink & hair & ~skin
+    if not sel.any():
+        return img
+    out = img.copy()
+    lt = float(lum(INK_RGB))
+    out[..., :3][sel] = np.clip(INK_RGB[None, :] * (l[sel] / lt)[:, None] * 255.0, 0, 255).astype(np.uint8)
+    return out
+
+
+def face_skin(p, skin):
+    nd, lb = _hn()
+    a = p[..., 3] > 128
+    rgb = p[..., :3].astype(np.float32) / 255.0
+    l = np.maximum(lum(rgb), 1e-3)
+    ls = float(lum(skin))
+    d = np.abs(rgb / l[..., None] - skin / ls).sum(-1)
+    sk = a & (d < 0.42) & (l / ls > 0.6) & (l / ls < 1.25)
+    sk = nd.binary_opening(sk, iterations=1)
+    sk = lb(sk) if sk.any() else sk
+    return sk, nd.binary_fill_holes(nd.binary_closing(sk, iterations=3)) & a, l, ls
+
+
+def freckle_mask(p, skin):
+    """drawn freckles: small spots inside the face that are darker / more saturated than the skin but not ink (eyes, brows, lines)"""
+    nd, _lb = _hn()
+    sk, filled, l, ls = face_skin(p, skin)
+    inner = nd.binary_erosion(filled, iterations=4)
+    rgb = p[..., :3].astype(np.float32) / 255.0
+    sat = rgb.max(-1) - rgb.min(-1)
+    ssat = float(skin.max() - skin.min())
+    # a freckle = a small spot a little darker / more saturated than the skin, not an ink line (eyes, brows, nose, mouth are darker)
+    spot = inner & ~sk & (l > 0.42 * ls) & (l < 0.985 * ls) & (sat > ssat * 0.9)
+    lab, n = nd.label(spot)
+    out = np.zeros_like(spot)
+    for i in range(1, n + 1):
+        r = lab == i
+        if r.sum() <= 40:
+            out |= r
+    return nd.binary_dilation(out, iterations=2) & inner
+
+
+def erase_freckles(arr, skin):
+    """paint the drawn freckles with the surrounding skin (median of the skin ring around each)"""
+    nd, _lb = _hn()
+    fm = freckle_mask(arr, skin)
+    if not fm.any():
+        return arr, 0
+    sk, _f, _l, _ls = face_skin(arr, skin)
+    out = arr.copy()
+    ring = nd.binary_dilation(fm, iterations=3) & sk & ~fm
+    src = arr[..., :3].astype(np.float32) * ring[..., None]
+    acc = nd.gaussian_filter(src[..., 0], 2.5), nd.gaussian_filter(src[..., 1], 2.5), nd.gaussian_filter(src[..., 2], 2.5)
+    wgt = nd.gaussian_filter(ring.astype(np.float32), 2.5)
+    fill = np.stack(acc, -1) / np.maximum(wgt, 1e-4)[..., None]
+    out[..., :3][fm] = np.clip(fill[fm], 0, 255).astype(np.uint8)
+    return out, int(fm.sum())
+
+
+def face_anchors(p, skin):
+    """eyes (the best pair of solid, upright dark dots inside the face, at about the same height) + the hairline point above them
+    (piece px). None when no pair is found (back views)."""
+    nd, _lb = _hn()
+    sk, filled, l, ls = face_skin(p, skin)
+    if filled.sum() < 200:
+        return None
+    edge = filled & ~nd.binary_erosion(filled, iterations=2)
+    dark = filled & (l < min(0.33, 0.55 * ls))
+    lab, n = nd.label(dark)
+    ys_f = np.nonzero(filled.any(1))[0]
+    fh = float(ys_f.max() - ys_f.min() + 1)
+    blobs = []
+    for i in range(1, n + 1):
+        r = lab == i
+        a_ = int(r.sum())
+        if a_ < 40 or (r & edge).sum() > 0.2 * a_:
+            continue
+        ys, xs = np.nonzero(r)
+        hh, ww = ys.max() - ys.min() + 1, xs.max() - xs.min() + 1
+        if a_ / float(hh * ww) >= 0.6 and hh >= 0.8 * ww and hh <= 3.0 * ww:
+            blobs.append((a_, xs.mean(), ys.mean(), 0.5 * max(hh, ww)))
+    best, bs = None, 1e9
+    for i in range(len(blobs)):
+        for j in range(i + 1, len(blobs)):
+            A, B_ = blobs[i], blobs[j]
+            dx, dy = abs(A[1] - B_[1]), abs(A[2] - B_[2])
+            if dx < 3.0 * max(A[3], B_[3]) or dy > 0.12 * fh:
+                continue
+            sc = dy / fh + abs(A[0] - B_[0]) / max(A[0], B_[0]) + abs((A[2] + B_[2]) / 2 - ys_f.min() - 0.5 * fh) / fh
+            if sc < bs:
+                best, bs = (A, B_), sc
+    if best is None:
+        return None
+    eyes = sorted(best, key=lambda e: e[1])
+    mx = 0.5 * (eyes[0][1] + eyes[1][1])
+    col = np.nonzero(filled[:, int(round(mx))])[0]
+    top = int(col.min()) if len(col) else int(min(eyes[0][2], eyes[1][2]) - 40)
+    fx = np.nonzero(filled.any(0))[0]
+    return {"eyes": [(e[1], e[2], e[3]) for e in eyes], "hair": (mx, float(top)), "half_w": 0.5 * float(fx.max() - fx.min())}
+
+
 def lum(c):
     return c[..., 0] * 0.299 + c[..., 1] * 0.587 + c[..., 2] * 0.114
 
@@ -375,6 +633,9 @@ def dilate_rgb(rgba):
 
 def main():
     items = []     # (img, mask, meta)
+    extra = []     # Q22 step 4: head variants + beards, packed into the free space after the old quads
+    head_eye = {}
+    head_mark = {}
     head_socket = {}
     head_top = {}
     head_scale = {}
@@ -501,6 +762,10 @@ def main():
                         rr, info = sink_hat(img, rr, HAT_KIND[s], v)
                         piv = [(rr[0] + rr[2]) / 2, rr[3]]
                         print("sink hat", s, v, info)
+                if kind == "head" and s in FRECKLED and v in ("front", "q_front"):
+                    a0, nf = erase_freckles(np.asarray(img).copy(), hexrgb(BASE[s]["skin"]))
+                    img = Image.fromarray(a0)
+                    print("freckles erased", s, v, nf)
                 if kind == "head":
                     a = np.asarray(img).copy()
                     # erase the drawn neck stub only: rows below the chin whose opaque run is stub-narrow (3/4 views: the
@@ -523,6 +788,9 @@ def main():
                     chans = LEGS.get(s, ["legwear", "shoe", LEG3.get(s, "skin")])
                 bases = [hexrgb(BASE[s][c]) for c in chans]
                 mask = dye_mask(img, bases) if chans else np.zeros(img.shape[:2] + (3,), np.float32)
+                if kind in ("head", "tail") and chans:
+                    mask = fill_mask(img, mask)     # (Q22 ④) 물감이 안 묻은 머리 · 피부 화소 (붉은 가장자리 점)를 이웃 칸으로
+                    img = neutral_ink(img, mask, chans)
                 layer = ORDER[v].index(pname if pname in ORDER[v] else "knot")
                 slot = SLOT_OF.get(pname, 1)
                 gp = [0.0, 0.0, 0.0, 0.0]
@@ -546,7 +814,38 @@ def main():
                     "dye": [SLOTS[c] for c in chans] + [-1] * (3 - len(chans)),
                     "base": [list(map(float, hexrgb(BASE[s][c]))) for c in chans] + [[1, 1, 1]] * (3 - len(chans)),
                 }))
+                if kind == "head":
+                    head_variants(extra, s, v, d, q, rig_rect, hp, f_head, ch, layer, slot, chans, rr, w, h)
+                    # face anchors for the shader marks (freckles, forelock, speckle) — head frame rig units, like the quads
+                    def px2rig(px, py):
+                        return [((q["x"] + px * q["sx"] - cx) * k - hp[0]) * f_head, ((fy - (q["y"] + py * q["sy"])) * k - hp[1]) * f_head]
+                    fa = face_anchors(np.asarray(Image.open(os.path.join(d, "head.png")).convert("RGBA")), hexrgb(BASE[s]["skin"])) \
+                        if v in ("front", "q_front") else None
+                    key = "%s_%s" % (s, v)
+                    if fa:
+                        e0 = px2rig(*fa["eyes"][0][:2])
+                        e1 = px2rig(*fa["eyes"][1][:2])
+                        hr_ = px2rig(*fa["hair"])
+                        er = max(fa["eyes"][0][2], fa["eyes"][1][2]) * q["sx"] * k * f_head
+                        head_eye[key] = [round(x, 2) for x in e0 + e1]
+                        head_mark[key] = [round(er, 2), round(hr_[0], 2), round(hr_[1], 2), round(fa["half_w"] * q["sx"] * k * f_head, 2)]
+                    else:
+                        top = [((rr[0] + rr[2]) / 2), rr[3]]
+                        head_eye[key] = [0.0, 0.0, 0.0, 0.0]
+                        head_mark[key] = [0.0, round(top[0], 2), round(top[1] - 40.0, 2), round((rr[2] - rr[0]) * 0.4, 2)]
     spread_stacked_legs(items)
+    # face anchors that did not read (e: beard merges with the dark skin; g 3/4: the far eye hides in the ear line) or read implausibly
+    # (3/4 eyes must sit on the image-right half, front eyes about the middle) take head d's (all heads share HEAD_H and the chin origin)
+    for s in SETS:
+        for v in ("front", "q_front"):
+            key = "%s_%s" % (s, v)
+            e = head_eye[key]
+            mx = 0.5 * (e[0] + e[2])
+            ok = e != [0.0, 0.0, 0.0, 0.0] and (mx > 5.0 if v == "q_front" else abs(mx) < 25.0)
+            if not ok:
+                head_eye[key] = list(head_eye["d_" + v])
+                head_mark[key] = list(head_mark["d_" + v])
+                print("face anchors", key, "-> from d")
     # props: drawn at ~sheet scale; rig size = 0.55 of drawn px (a loaf ~ 1/4 of her width)
     pd = os.path.join(PARTS, "props")
     for p in PROPS:
@@ -577,6 +876,33 @@ def main():
         x += w + 2 * PAD
         shelf = max(shelf, h + 2 * PAD)
     H = 1 << int(np.ceil(np.log2(y + shelf)))
+    # Q22 step 4: the new quads go into the free space left by the shelves (first fit, tallest first) — old quads keep their place
+    occ = np.zeros((H, ATLAS_W), bool)
+    for i, (img_, _m, _meta) in enumerate(items):
+        px, py = pos[i]
+        hh, ww = img_.shape[:2]
+        occ[max(0, py - PAD): py + hh + PAD, max(0, px - PAD): px + ww + PAD] = True
+    base_n = len(items)
+    for j in sorted(range(len(extra)), key=lambda j: -extra[j][0].shape[0]):
+        img_, m_, meta_ = extra[j]
+        hh, ww = img_.shape[0] + 2 * PAD, img_.shape[1] + 2 * PAD
+        ii = np.zeros((H + 1, ATLAS_W + 1), np.int32)
+        ii[1:, 1:] = occ.cumsum(0).cumsum(1)
+        win = ii[hh:, ww:] - ii[:-hh, ww:] - ii[hh:, :-ww] + ii[:-hh, :-ww]
+        free = np.argwhere(win == 0)
+        while len(free) == 0:
+            # no gap big enough: the atlas grows by GROW rows at the bottom (old quads keep their pixels; uv are renormalised)
+            H += GROW
+            occ = np.vstack([occ, np.zeros((GROW, ATLAS_W), bool)])
+            ii = np.zeros((H + 1, ATLAS_W + 1), np.int32)
+            ii[1:, 1:] = occ.cumsum(0).cumsum(1)
+            win = ii[hh:, ww:] - ii[:-hh, ww:] - ii[hh:, :-ww] + ii[:-hh, :-ww]
+            free = np.argwhere(win == 0)
+        fy0, fx0 = free[0]
+        items.append((img_, m_, meta_))
+        pos[len(items) - 1] = (int(fx0) + PAD, int(fy0) + PAD)
+        occ[fy0:fy0 + hh, fx0:fx0 + ww] = True
+    print("extra quads", len(extra), "free rows left", int((~occ).all(1).sum()))
     atlas = np.zeros((H, ATLAS_W, 4), np.uint8)
     mask = np.zeros((H, ATLAS_W, 4), np.uint8)
     quads = []
@@ -595,9 +921,10 @@ def main():
     mask[..., :3] = mk2[..., :3]
     mask[..., 3] = 255
     Image.fromarray(atlas).save(os.path.join(ART, "doll_atlas.png"))
-    Image.fromarray(mask).save(os.path.join(ART, "doll_mask.png"))
+    pack_mask(mask[..., :3])
     json.dump({"fig": FIG, "atlas": [ATLAS_W, H], "sets": SETS, "views": VIEWS, "props": PROPS,
-               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "body_types": {s: BODY[s] for s in SETS}, "head_k": [BODY[s]["head_k"] for s in SETS], "head_socket": head_socket, "head_top": head_top, "head_brow": head_brow, "hat_kind": HAT_KIND, "hat_sink": HAT_SINK, "head_scale": head_scale, "base": BASE, "quads": quads},
+               "prop_layer": [ORDER[v].index("prop") for v in VIEWS], "slots": SLOTS, "body_types": {s: BODY[s] for s in SETS}, "head_k": [BODY[s]["head_k"] for s in SETS], "head_socket": head_socket, "head_top": head_top, "head_brow": head_brow, "hat_kind": HAT_KIND, "hat_sink": HAT_SINK, "head_scale": head_scale, "base": BASE,
+               "head_var": HEAD_VAR, "beard": BEARD, "head_eye": head_eye, "head_mark": head_mark, "quads": quads},
               open(os.path.join(ART, "doll_lib.json"), "w"), indent=0)
     print("atlas", ATLAS_W, "x", H, "quads", len(quads))
 

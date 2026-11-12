@@ -125,7 +125,8 @@ static func mesh() -> ArrayMesh:
 		var gp: Array = q.get("grip", [0.0, 0.0, 0.0, 0.0])
 		var r: Array = q["rect"]
 		var uv: Array = q["uv"]
-		var s_i: float = float(SETS.find(q["set"])) if q["group"] < 3 else float(PROPS.find(q["set"]))
+		var s_i: float = float(SETS.find(q["set"])) if int(q["group"]) != 3 else float(PROPS.find(q["set"]))
+		var hv := head_var_of(q)
 		var b := verts.size()
 		# 네 귀퉁이: 그림의 위(y 큼) = uv 위(v 작음)
 		var corners := [[r[0], r[3], uv[0], uv[1]], [r[2], r[3], uv[2], uv[1]], [r[2], r[1], uv[2], uv[3]], [r[0], r[1], uv[0], uv[3]]]
@@ -134,7 +135,7 @@ static func mesh() -> ArrayMesh:
 			uvs.append(Vector2(cr[2], cr[3]))
 			c0.append_array([q["pivot"][0], q["pivot"][1], float(q["slot"]), float(q["group"])])
 			c1.append_array([s_i, float(q["view"]), float(q["dye"][0]), float(q["dye"][1])])
-			c2.append_array([float(q["dye"][2]), q["parent_pivot"][0], q["parent_pivot"][1], 0.0])
+			c2.append_array([float(q["dye"][2]), q["parent_pivot"][0], q["parent_pivot"][1], hv])
 			c3.append_array([float(gp[0]), float(gp[1]), float(gp[2]), float(gp[3])])     # 지팡이: 손 자리 + 표시
 		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	var arr := []
@@ -158,6 +159,60 @@ static func mesh() -> ArrayMesh:
 	return _mesh
 
 
+## (Q22 ④) 머리 자료 텍스처 (RGBAF 128 × 3, 가장 가까운 값): 줄 0 = 마스크 코드표 (doll_mlut.png — 코드 128개까지, build_atlas.pack_mask가
+## 쓰는 코드는 100개 남짓), 줄 1 = head_eye, 줄 2 = head_mark (face_arrays). 셰이더 두 개 (cut_doll · frame_doll)가 같이 씀
+static var _head_data: ImageTexture
+
+
+static func head_data() -> ImageTexture:
+	if _head_data != null:
+		return _head_data
+	var lut: Image = _tex("doll_mlut.png").get_image()
+	if lut.is_compressed():
+		lut.decompress()
+	var img := Image.create(128, 3, false, Image.FORMAT_RGBAF)
+	for i in 128:
+		var c := lut.get_pixel(i, 0)
+		img.set_pixel(i, 0, Color(c.r, c.g, c.b, 1.0))
+	var fa := face_arrays()
+	for i in 32:
+		var e: Vector4 = (fa[0] as PackedVector4Array)[i]
+		var m: Vector4 = (fa[1] as PackedVector4Array)[i]
+		img.set_pixel(i, 1, Color(e.x, e.y, e.z, e.w))
+		img.set_pixel(i, 2, Color(m.x, m.y, m.z, m.w))
+	_head_data = ImageTexture.create_from_image(img)
+	return _head_data
+
+
+## (Q22 ④) 머리 조각의 머리결 변형 번호 (CUSTOM2.w): 머리 그림 = 그 변형 번호 (원래 그림 0 · 웨이브 1 · 곱슬 2 · 숱 적음 3 · 직모 4 —
+## doll_lib "head_var"), 수염 = 수염 번호 (짧은 1 · 덥수룩한 2), 그 밖의 머리 묶음 조각 (머리꼬리 · 매듭 · 목) = -1 (어느 변형에나)
+static func head_var_of(q: Dictionary) -> float:
+	var grp := int(q["group"])
+	if grp == 7:
+		return float(q.get("hv", 0))
+	if grp == 1:
+		return float(q.get("hv", 0)) if String(q["part"]) == "head" else -1.0
+	return 0.0
+
+
+## (Q22 ④) 머리 묶음 T · 보기의 얼굴 자리 (머리 틀 rig, 턱 = 원점): head_eye = (두 눈 x, y, x, y), head_mark = (눈 반지름, 이마 머리선 x, y, 얼굴 반폭).
+## 뒤쪽 보기는 눈 0 — 표시(주근깨 · 눈송이 무늬 · 흰 앞머리)는 셰이더 marks()가 이 자리에서 그린다
+static func face_arrays() -> Array:
+	var L := lib()
+	var he := PackedVector4Array()
+	var hm := PackedVector4Array()
+	for s: String in SETS:
+		for v: String in L["views"]:
+			var k := "%s_%s" % [s, v]
+			var e: Array = L.get("head_eye", {}).get(k, [0, 0, 0, 0])
+			var m: Array = L.get("head_mark", {}).get(k, [0, 0, 0, 0])
+			he.append(Vector4(e[0], e[1], e[2], e[3]))
+			hm.append(Vector4(m[0], m[1], m[2], m[3]))
+	he.resize(32)
+	hm.resize(32)
+	return [he, hm]
+
+
 static func material() -> ShaderMaterial:
 	if _mat != null:
 		return _mat
@@ -165,7 +220,10 @@ static func material() -> ShaderMaterial:
 	_mat = ShaderMaterial.new()
 	_mat.shader = load("res://proto/cutout_a/cut_doll.gdshader")
 	_mat.set_shader_parameter("atlas", _tex("doll_atlas.png"))
-	_mat.set_shader_parameter("dye_mask", _tex("doll_mask.png"))
+	# 물감 마스크 (Q22 ④): 코드 텍스처 + 코드표 + 4분의 1 크기 마스크 (tools/cutout_a/build_atlas.py pack_mask, 셰이더 head_mask())
+	_mat.set_shader_parameter("dye_mask", _tex("doll_mq.png"))
+	_mat.set_shader_parameter("dye_code", _tex("doll_mcode.png"))
+	_mat.set_shader_parameter("head_data", head_data())
 	_mat.set_shader_parameter("anim_tex", bake_anim())
 	_mat.set_shader_parameter("frames", FRAMES)
 	_mat.set_shader_parameter("palette", palette())

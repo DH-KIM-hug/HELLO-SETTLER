@@ -149,7 +149,7 @@ static func mesh(dir := DIR) -> ArrayMesh:
 	# 컷아웃 인형과 같은 그림, 묶음 번호 = PROPS 번호 — 2026-11-10 먹기·괭이질)
 	for q: Dictionary in Cut.lib()["quads"]:
 		var grp := int(q["group"])
-		if grp != 1 and grp != 2 and grp != 3:
+		if grp != 1 and grp != 2 and grp != 3 and grp != 7:      # (Q22 ④) 7 = 수염
 			continue
 		if String(q["part"]) == "neck":
 			continue
@@ -163,7 +163,7 @@ static func mesh(dir := DIR) -> ArrayMesh:
 			uvs.append(Vector2(cr[2], cr[3]))
 			c0.append_array([q["pivot"][0], q["pivot"][1], float(q["slot"]), float(grp)])
 			c1.append_array([s_i, float(q["view"]), float(q["dye"][0]), float(q["dye"][1])])
-			c2.append_array([float(q["dye"][2]), 0, 0, 0])
+			c2.append_array([float(q["dye"][2]), 0, 0, Cut.head_var_of(q)])     # (Q22 ④) 머리결 변형 · 수염 번호
 		idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 감은 눈 (group 6, v13 — 자는 장면): 머리 묶음마다 앞 얼굴 위에 얹는 작은 그림. 사각형은 그 머리 조각과 똑같은 네 귀퉁이로 만들고
 	# (겹만 반 겹 위) 그림은 UV를 늘여 제자리에 오게 한다 — 셰이더가 눈꺼풀 그림 창(c0.xy · c1.zw) 밖은 버림. 작은 사각형을 따로 얹으면
@@ -175,7 +175,7 @@ static func mesh(dir := DIR) -> ArrayMesh:
 		var host_layer := -1.0
 		for q: Dictionary in Cut.lib()["quads"]:
 			var qr: Array = q["rect"]
-			if int(q["group"]) == 1 and q["set"] == e["set"] and int(q["view"]) == int(e["view"]) and float(q["layer"]) <= float(e["layer"]) \
+			if int(q["group"]) == 1 and int(q.get("hv", 0)) == 0 and q["set"] == e["set"] and int(q["view"]) == int(e["view"]) and float(q["layer"]) <= float(e["layer"]) \
 					and float(q["layer"]) > host_layer and qr[0] <= r[0] and qr[1] <= r[1] and qr[2] >= r[2] and qr[3] >= r[3]:
 				host = qr
 				host_layer = float(q["layer"])
@@ -227,7 +227,7 @@ static func material(palette: PackedVector3Array, dir := DIR) -> ShaderMaterial:
 	var cut: ShaderMaterial = Cut.material()
 	_mat = ShaderMaterial.new()
 	_mat.shader = load("res://proto/cutout_c/frame_doll.gdshader")
-	for n in ["atlas", "dye_mask", "base_col", "head_top", "fig", "lit_tint", "shade_tint"]:
+	for n in ["atlas", "dye_mask", "dye_code", "head_data", "base_col", "head_top", "fig", "lit_tint", "shade_tint"]:
 		_mat.set_shader_parameter(n, cut.get_shader_parameter(n))
 	_mat.set_shader_parameter("palette", palette)
 	_mat.set_shader_parameter("frames_atlas", load(dir + "frames_atlas.png"))
