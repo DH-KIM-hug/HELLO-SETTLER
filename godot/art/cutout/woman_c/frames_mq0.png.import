@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://blar3cvq47l55"
-path="res://.godot/imported/frames_mask0.png-89465479630939329a07730b55b9a37b.ctex"
+uid="uid://2kbjmtmuk1gf"
+path="res://.godot/imported/frames_mq0.png-657c0ad22fad6273757ca63872f367cf.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/cutout/woman_c/frames_mask0.png"
-dest_files=["res://.godot/imported/frames_mask0.png-89465479630939329a07730b55b9a37b.ctex"]
+source_file="res://art/cutout/woman_c/frames_mq0.png"
+dest_files=["res://.godot/imported/frames_mq0.png-657c0ad22fad6273757ca63872f367cf.ctex"]
 
 [params]
 

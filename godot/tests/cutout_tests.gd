@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c"])
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -1053,3 +1053,80 @@ func test_frames_c() -> void:
 	m.tick(0.0)
 	check(not m._f_on and m.doll.visible and not m.fdoll.visible, "끄면 컷아웃 인형으로 돌아옴")
 	m.free()
+
+
+## 방식 C 옷 한 벌의 그래픽 메모리 (Q22 ③-0, 2026-11-12): 몸 그림은 VRAM 압축 (데스크톱 BPTC · 폰 ASTC 4×4, 밉맵),
+## 물감 마스크 두 장은 코드 텍스처(한 바이트, 밉맵 없음) + 코드표 + 4분의 1 크기 마스크 둘 (= 옛 마스크의 밉맵 2단) — tools/cutout_c/pack_masks.py.
+## 코드가 옛 마스크 값을 그대로 돌려주는지 (텍셀 표본), 4분의 1 마스크가 엔진이 만드는 밉맵 2단과 바이트까지 같은지.
+func test_frames_c_memory() -> void:
+	var FL := CutoutResident.FrameLib
+	var dir: String = FL.DIR
+	var imp := ConfigFile.new()
+	imp.load(dir + "frames_atlas.png.import")
+	check(int(imp.get_value("params", "compress/mode", 0)) == 2 and bool(imp.get_value("params", "compress/high_quality", false))
+		and bool(imp.get_value("params", "mipmaps/generate", false)), "방식 C 몸 그림: VRAM 압축 · 높은 품질 (BPTC / ASTC 4×4) · 밉맵")
+	var imp_ok := true
+	for n: String in FL.MASK_TEX:
+		var c := ConfigFile.new()
+		imp_ok = imp_ok and c.load(dir + String(FL.MASK_TEX[n]) + ".import") == OK and int(c.get_value("params", "compress/mode", -1)) == 0 \
+			and bool(c.get_value("params", "mipmaps/generate", false)) == String(n).begins_with("fmq") \
+			and not bool(c.get_value("params", "process/fix_alpha_border", true)) and int(c.get_value("params", "detect_3d/compress_to", 1)) == 0
+	check(imp_ok, "방식 C 마스크: 손실 없음 · 코드·코드표는 밉맵 없음 · 4분의 1 마스크만 밉맵 · 알파 가장자리 고침 끔")
+	check(not ResourceLoader.exists(dir + "frames_mask0.png") and not ResourceLoader.exists(dir + "frames_mask1.png"),
+		"옛 마스크 두 장은 게임에 없음 (raw/의 빌드 재료)")
+	var mat: ShaderMaterial = FL.material(CutoutResident.game_material().get_shader_parameter("palette"))
+	var fa: Texture2D = mat.get_shader_parameter("frames_atlas")
+	var fc: Variant = mat.get_shader_parameter("fcode")
+	var fl: Variant = mat.get_shader_parameter("flut")
+	var q0: Variant = mat.get_shader_parameter("fmq0")
+	var q1: Variant = mat.get_shader_parameter("fmq1")
+	check(fc is Texture2D and fl is Texture2D and q0 is Texture2D and q1 is Texture2D
+		and (fc as Texture2D).get_size() == fa.get_size() and (fl as Texture2D).get_size() == Vector2(256, 2)
+		and (q0 as Texture2D).get_size() * 4.0 == fa.get_size() and (q1 as Texture2D).get_size() * 4.0 == fa.get_size(),
+		"방식 C 재질: 코드 = 몸 그림 크기 · 코드표 256×2 · 4분의 1 마스크 둘")
+	var raw := ProjectSettings.globalize_path(dir + "raw/")
+	var art := ProjectSettings.globalize_path(dir)
+	var m0 := Image.load_from_file(raw + "frames_mask0.png")
+	var m1 := Image.load_from_file(raw + "frames_mask1.png")
+	var code := Image.load_from_file(art + "frames_mcode.png")
+	var lut := Image.load_from_file(art + "frames_mlut.png")
+	if m0 == null or m1 == null or code == null or lut == null:
+		check(false, "방식 C 마스크 원본·코드 그림을 읽음")
+		return
+	for im: Image in [m0, m1, lut]:
+		im.convert(Image.FORMAT_RGBA8)
+	code.convert(Image.FORMAT_L8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 312
+	var n := 0
+	var same := 0
+	var dyed := 0
+	var zero_ok := true
+	while n < 20000:
+		var x := rng.randi() % code.get_width()
+		var y := rng.randi() % code.get_height()
+		var a := m0.get_pixel(x, y)
+		var b := m1.get_pixel(x, y)
+		if a == Color(0, 0, 0, 0) and b == Color(0, 0, 0, 0) and rng.randf() < 0.9:
+			continue                                   # 빈 텍셀은 조금만 (그림 쪽을 더 봄)
+		n += 1
+		var ci := code.get_pixel(x, y).r8
+		var da := lut.get_pixel(ci, 0)
+		var db := lut.get_pixel(ci, 1)
+		if da == a and db == b:
+			same += 1
+		if a.r + a.g + a.b + a.a + b.r + b.g > 0.0:
+			dyed += 1
+		if a == Color(0, 0, 0, 0) and b == Color(0, 0, 0, 0):
+			zero_ok = zero_ok and da == Color(0, 0, 0, 0) and db == Color(0, 0, 0, 0)
+	check(zero_ok and same >= int(n * 0.995), "방식 C 마스크 코드: 텍셀 표본 %d개 (물든 텍셀 %d) 가운데 %d개가 옛 값 그대로 (≥ 99.5%%), 빈 텍셀은 늘 빈 값" % [n, dyed, same])
+	var mips_ok := true
+	for i in 2:
+		var full: Image = [m0, m1][i]
+		full.generate_mipmaps()
+		var q := Image.load_from_file(art + "frames_mq%d.png" % i)
+		q.convert(Image.FORMAT_RGBA8)
+		var ofs := full.get_mipmap_offset(2)
+		mips_ok = mips_ok and q.get_size() == full.get_size() / 4 and full.get_data().slice(ofs, ofs + q.get_data().size()) == q.get_data()
+	check(mips_ok, "방식 C 4분의 1 마스크 = 옛 마스크의 밉맵 2단 (바이트까지 같음 — 멀리서는 옛 마스크와 똑같이 걸러짐)")
+
