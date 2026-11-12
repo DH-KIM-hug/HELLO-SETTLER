@@ -303,11 +303,11 @@ func _build() -> void:
 	search.placeholder_text = "이름 찾기"
 	search.clear_button_enabled = true
 	search.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	search.custom_minimum_size = Vector2(0, 36)
 	search.text_changed.connect(func(s: String) -> void:
 		query = s.strip_edges()
 		_rebuild(true))
 	head.add_child(search)
+	UiTheme.hit_pad(search, 36.0)                    # (Q23 ㊾) 보이는 칸 36 그대로, 누르는 높이 44
 	_chip_line(outer, SORTS, sort_btns, func(k: String) -> void:
 		sort_key = k
 		_rebuild(true))
@@ -406,11 +406,14 @@ func _layout() -> void:
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
 func open() -> void:
+	var was := visible
 	if not visible:
 		GameAudio.fx("paper", "Room", -2.0)
 	visible = true
 	_t = 0.0
 	_rebuild(true)
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
 
 
 func close() -> void:

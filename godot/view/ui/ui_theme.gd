@@ -45,6 +45,14 @@ const PARCHMENT_DEEP := Color("e6d2a3")
 const PARCHMENT_EDGE := Color("b8975e")
 const INK_BROWN := Color("4a3424")       # 양피지 위 글자 (먹 대신 갈색 잉크)
 const GLOW := Color("f4c25a")            # [계시] · 제단 버튼의 부드러운 빛 (빨간 점 대신)
+## (Q23 ㊿) 대비 — 흐린 것도 3:1, 글은 4.5:1 (종이 fbf6e6 · 칸 efe6cd · 양피지 f2e3bf 위에서 잼: tools/shot_u1.gd · tests ui_tests)
+const INK_BROWN_SOFT := Color("6e5d50")  # 양피지 위 작은 글 (연대기 시각 · 탭 · 머리말) — 양피지 4.9:1 (예전 INK_BROWN.lightened(0.35) 3.2:1)
+const INK_BROWN_FAINT := Color("807166")  # 양피지 위 흐린 것 (아직 못 넘은 도장 이름 · 모르는 것) — 양피지 3.7:1 (예전 lightened(0.45) 2.5:1)
+const INK_DISABLED := Color("7d776e")    # 비활성 단추 글자 · 잠듦 — 칸 바탕 3.6:1 · 종이 4.1:1 (예전 a19c94 2.2:1 · 8b857c 2.9:1)
+## (Q23 ㊼) 되돌릴 수 없는 '예' — 테두리 + 밤색 글자 (주요 동작의 이끼 초록과 다른 모양). 종이 위 7:1
+const DANGER := Color("7a3a26")
+## (Q23 52) 시트가 밀려 올라오는 시간 (초) — 움직임 줄이기면 0
+const SHEET_SLIDE := 0.18
 
 ## 혈통 칩: 좋은 = 초록, 나쁜 = 갈색, 서로 상쇄 = 회색
 const CHIP_GOOD := Color("4e9a5b")
@@ -163,7 +171,7 @@ static func get_theme() -> Theme:
 	t.set_type_variation("Dead", "Label")
 	t.set_font("font", "Dead", font())
 	t.set_font_size("font_size", "Dead", SIZE_SMALL)
-	t.set_color("font_color", "Dead", Color("8b857c"))
+	t.set_color("font_color", "Dead", INK_DISABLED)
 	# 패널: 세로 = 아래 시트(위 모서리만 둥글게), 가로 = 오른쪽 패널(왼쪽 모서리만)
 	var sheet := _box(PAPER, INK, 0, 0, PAD)
 	sheet.border_width_top = 1
@@ -193,7 +201,7 @@ static func get_theme() -> Theme:
 	t.set_stylebox("focus", "Button", StyleBoxEmpty.new())
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "Button", INK)
-	t.set_color("font_disabled_color", "Button", CHIP_OFF)
+	t.set_color("font_disabled_color", "Button", INK_DISABLED)
 	t.set_type_variation("FollowOn", "Button")
 	for st in ["normal", "hover", "pressed"]:
 		t.set_stylebox(st, "FollowOn", _box(ACCENT, INK, 1, 6, 6))
@@ -205,6 +213,22 @@ static func get_theme() -> Theme:
 		t.set_stylebox(st, "Primary", _box(PRIMARY.lightened(0.08) if st == "hover" else (PRIMARY.darkened(0.15) if st == "pressed" else PRIMARY), INK, 1, 6, 6))
 	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
 		t.set_color(c, "Primary", CHIP_TEXT)
+	# (Q23 ㊿) 글 넣는 칸 (사람들 검색 등) — 엔진 기본의 어두운 회색 칸 대신 종이 칸 + 먹 테두리 (안내 글 대비 4.5:1 넘게)
+	t.set_stylebox("normal", "LineEdit", _box(BUTTON_HOVER, INK, 1, 6, 8))
+	t.set_stylebox("focus", "LineEdit", _box(BUTTON_HOVER, ACCENT, 2, 6, 8))
+	t.set_stylebox("read_only", "LineEdit", _box(PAPER_DEEP, PAPER_LINE, 1, 6, 8))
+	t.set_color("font_color", "LineEdit", INK)
+	t.set_color("font_placeholder_color", "LineEdit", INK_SOFT)
+	t.set_color("caret_color", "LineEdit", INK)
+	t.set_color("clear_button_color", "LineEdit", INK_SOFT)
+	t.set_color("clear_button_color_pressed", "LineEdit", INK)
+	t.set_color("selection_color", "LineEdit", Color(ACCENT, 0.35))
+	# (Q23 ㊼) 위험한 '예' — 바탕은 종이, 밤색 테두리 2 + 밤색 글자 (초록 주요 동작과 모양이 다름)
+	t.set_type_variation("Danger", "Button")
+	for st in ["normal", "hover", "pressed"]:
+		t.set_stylebox(st, "Danger", _box(PAPER if st != "pressed" else BUTTON_PRESSED, DANGER, 2, 6, 6))
+	for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
+		t.set_color(c, "Danger", DANGER)
 	# 위 띠·아래 띠 (화면 가장자리 — 병이 주인공이라 얇게)
 	var barbox := _box(BAR_PAPER, INK, 0, 0, 6)
 	t.set_type_variation("TopBar", "PanelContainer")
@@ -264,3 +288,75 @@ static func get_theme() -> Theme:
 	t.set_constant("v_separation", "HFlowContainer", GAP)
 	_theme = t
 	return t
+
+
+# ───────────── (Q23 ㊾) 누르는 영역만 넓히기 ─────────────
+## ctl을 누르는 높이 hit_h (기본 TOUCH)로 키우되 보이는 바탕은 visual_h 그대로 — 바탕(StyleBoxFlat)의 위아래 expand_margin을 음수로.
+## 부모에 붙인 뒤에 부른다 (지금 테마의 바탕을 복사). 글자·아이콘은 가운데 그대로. 돌려주는 것: 위아래로 늘어난 한쪽 폭 (px)
+static func hit_pad(ctl: Control, visual_h: float, hit_h := float(TOUCH)) -> float:
+	var pad := maxf(0.0, (hit_h - visual_h) * 0.5)
+	ctl.custom_minimum_size.y = maxf(ctl.custom_minimum_size.y, hit_h)
+	if pad <= 0.0:
+		return 0.0
+	var names: Array = ["normal", "focus", "read_only"] if ctl is LineEdit else ["normal", "hover", "pressed", "disabled", "hover_pressed", "focus"]
+	for nm: String in names:
+		var sb: StyleBox = null
+		if ctl.has_theme_stylebox_override(nm):
+			sb = ctl.get_theme_stylebox(nm)
+		else:                                     # 트리 밖이면 테마가 아직 안 내려와 있다 — 이 테마에서 먼저 찾음
+			var th := get_theme()
+			for ty: String in [String(ctl.theme_type_variation), ctl.get_class()]:
+				if ty != "" and th.has_stylebox(nm, ty):
+					sb = th.get_stylebox(nm, ty)
+					break
+			if sb == null:
+				sb = ctl.get_theme_stylebox(nm)
+		if sb == null or sb is StyleBoxEmpty:
+			continue
+		var d := sb.duplicate() as StyleBox
+		if d is StyleBoxFlat:
+			(d as StyleBoxFlat).expand_margin_top -= pad
+			(d as StyleBoxFlat).expand_margin_bottom -= pad
+		ctl.add_theme_stylebox_override(nm, d)
+	ctl.set_meta("hit_pad", pad)
+	return pad
+
+
+## 보이는 바탕의 높이 (hit_pad를 쓴 것은 그만큼 작게) — 시험용
+static func visual_h(ctl: Control) -> float:
+	return ctl.size.y - 2.0 * float(ctl.get_meta("hit_pad", 0.0))
+
+
+# ───────────── (Q23 52) 시트가 아래에서 밀려 올라옴 ─────────────
+## 도구 스크립트(캡처·시험)로 띄운 판은 기본으로 움직이지 않는다 (몇 화면 뒤에 찍는 캡처가 움직이는 중간을 찍지 않게). 시험은 true로
+static var slide_in_tools := false
+
+
+## 지금 시트를 밀어 올릴까 — 움직임 줄이기(설정)면 아니요
+static func slide_ok() -> bool:
+	if JarCamera.reduce_motion():
+		return false
+	return slide_in_tools or UserPaths.tool_script(OS.get_cmdline_args()) == ""
+
+
+## 패널을 제자리보다 아래(가로 창은 오른쪽)에서 SHEET_SLIDE초 동안 밀어 올린다. 움직였으면 true
+static func slide_in(panel: Control) -> bool:
+	if panel == null or not panel.is_inside_tree() or not slide_ok():
+		return false
+	var old: Variant = panel.get_meta("slide_tw") if panel.has_meta("slide_tw") else null
+	if old is Tween and (old as Tween).is_valid():
+		(old as Tween).kill()
+	var vs := panel.get_viewport_rect().size
+	var side := vs.x > vs.y
+	var to := panel.position
+	var dist := (panel.size.x if panel.size.x > 1.0 else vs.x * 0.5) if side else (panel.size.y if panel.size.y > 1.0 else vs.y * 0.6)
+	var prop := "position:x" if side else "position:y"
+	if side:
+		panel.position.x = to.x + dist
+	else:
+		panel.position.y = to.y + dist
+	var tw := panel.create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, prop, to.x if side else to.y, SHEET_SLIDE)
+	panel.set_meta("slide_tw", tw)
+	return true

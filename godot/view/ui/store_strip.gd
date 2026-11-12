@@ -1,6 +1,9 @@
 ## 창고 띠 — 위 띠 아래 왼쪽, 시각·배속 칩 밑의 작은 알약 (사용자 요청 "게임 화면에서 자원 현황").
 ##   펼침: [식량 · 통나무 · 판자 · 돌 (+ 시대에 따라 소금·양털·철…)] 아이콘 + 짧은 숫자 + 지난 하루 ▲▼ · 끝의 ◂ = 접기
 ##   접힘: [창고 ▸] 하나 (식량이 모자라면 그 글자만 주의 색). 접힘/펼침은 user://hud.cfg에 기억
+##   (Q23 54) 별지기가 접거나 편 적이 없으면(hud.cfg에 뜻이 없음) 장면이 첫 며칠 동안 접어 둔다 (set_auto_fold)
+##   (Q23 ㊾) 누르는 칸은 보이는 알약(28)보다 높게 44 — 위로는 배속 칩과 사이 틈만큼, 나머지는 아래로 (_has_point). 접기 꺾쇠 = 오른쪽 끝 44
+##   (Q23 ㊿) 접힌 띠의 식량 주의 = 색만이 아니라 호박빛 바탕 알약 + 작은 느낌표 동그라미 (WarnMark)
 ##   누르면 창고 시트 (pressed) · 보여 주는 무리 = 장면의 focus_village() · 1초에 두 번만 새로 씀 (화면마다 만들지 않음)
 ## 쓰는 법: var s := StoreStrip.new() → s.setup(scene) (scene: focus_village() · village_views()) → root.add_child(s) → s.max_width = …
 class_name StoreStrip
@@ -11,16 +14,23 @@ signal pressed
 const MAX_SLOTS := 8
 const ICON := 16
 const EVERY := 0.5                       # 초 — 1초에 두 번
-const WARM := Color("b06a1f")            # 식량 주의 (부드러운 호박색 — 빨강 금지)
+const WARM := Color("8f5410")            # 식량 주의 (부드러운 호박색 — 빨강 금지). (Q23 ㊿) 글 대비 4.5:1 넘게 짙게 (예전 b06a1f 3.9:1)
 const WARM_BG := Color(0.98, 0.86, 0.6, 0.95)
 const UP := Color("4e9a5b")
 const DOWN := Color("98663f")
+const HIT_H := 44.0                      # (Q23 ㊾) 누르는 높이 (보이는 알약은 그대로)
+const HIT_UP := 6.0                      # 위로 넓히는 한도 (배속 칩과의 틈 — 그 위는 칩의 누르는 칸)
+const CARET_HIT := 44.0                  # 펼친 띠 오른쪽 끝의 접는 칸 폭
 
 static var cfg_path := UserPaths.of("user://hud.cfg")   # 시험은 다른 파일로 · 도구 스크립트(-s)로 뜬 판은 기본이 user://_tool/… (save/user_paths.gd)
 
 var scene: Object
 var book := StoreBook.new()
 var collapsed := false
+var chosen := false                      # 별지기가 직접 접거나 편 적이 있나 (hud.cfg에 뜻이 있음)
+var auto_fold := false                   # 장면이 접어 두라고 함 (첫 며칠 — chosen이면 무시)
+var warn_mark: Control
+var _panel_sb: StyleBoxFlat
 var max_width := 1000.0
 var slots: Array = []                    # [{box, icon, label, mark, key}]
 var row: HBoxContainer
@@ -45,6 +55,7 @@ func _init() -> void:
 	sb.content_margin_right = 4
 	sb.content_margin_top = 3
 	sb.content_margin_bottom = 3
+	_panel_sb = sb
 	add_theme_stylebox_override("panel", sb)
 	_warm_box = StyleBoxFlat.new()
 	_warm_box.bg_color = WARM_BG
@@ -55,6 +66,9 @@ func _init() -> void:
 	row.add_theme_constant_override("separation", 5)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(row)
+	warn_mark = WarnMark.new()
+	warn_mark.visible = false
+	row.add_child(warn_mark)
 	title_l = _label("창고")
 	row.add_child(title_l)
 	for i in MAX_SLOTS:
@@ -77,6 +91,7 @@ func _init() -> void:
 		slots.append({"box": box, "icon": ic, "label": l, "mark": m, "key": ""})
 	caret = Caret.new()
 	row.add_child(caret)
+	chosen = has_choice()
 	collapsed = load_collapsed()
 
 
@@ -122,6 +137,11 @@ func refresh() -> void:
 	caret.queue_redraw()
 	title_l.visible = collapsed
 	title_l.add_theme_color_override("font_color", WARM if warn and collapsed else UiTheme.INK)
+	warn_mark.visible = warn and collapsed            # 색만이 아니라 모양도 (느낌표 동그라미 + 호박빛 바탕)
+	var want_bg: Color = WARM_BG if warn and collapsed else UiTheme.BAR_PAPER
+	if _panel_sb.bg_color != want_bg:
+		_panel_sb.bg_color = want_bg
+		queue_redraw()
 	var keys: Array = [] if collapsed else StoreBook.strip_keys(v)
 	for i in MAX_SLOTS:
 		var s: Dictionary = slots[i]
@@ -163,8 +183,49 @@ func shown() -> Dictionary:
 
 func set_collapsed(on: bool) -> void:
 	collapsed = on
+	chosen = true
 	save_collapsed(on)
 	refresh()
+
+
+## (Q23 54) 장면이 첫 며칠 접어 둠 — 별지기가 뜻을 정한 적이 있으면 그대로
+func set_auto_fold(on: bool) -> void:
+	auto_fold = on
+	if chosen or collapsed == on:
+		return
+	collapsed = on
+	refresh()
+
+
+static func has_choice() -> bool:
+	var cf := ConfigFile.new()
+	return cf.load(cfg_path) == OK and cf.has_section_key("store_strip", "collapsed")
+
+
+## (Q23 ㊾) 누르는 칸 (이 띠 기준) — 보이는 알약보다 높게 HIT_H
+func _hit_local() -> Rect2:
+	var extra := maxf(0.0, HIT_H - size.y)
+	var up := minf(extra * 0.5, HIT_UP)
+	return Rect2(0.0, -up, size.x, size.y + extra)
+
+
+func _has_point(p: Vector2) -> bool:
+	return _hit_local().has_point(p)
+
+
+## 누르는 칸 (화면) — 시험·캡처용
+func hit_rect() -> Rect2:
+	var r := _hit_local()
+	return Rect2(get_global_rect().position + r.position, r.size)
+
+
+## 접는 칸 (화면, 펼쳤을 때만 — 접혀 있으면 빈 네모)
+func caret_rect() -> Rect2:
+	if collapsed:
+		return Rect2()
+	var h := hit_rect()
+	var w := minf(CARET_HIT, h.size.x)
+	return Rect2(h.end.x - w, h.position.y, w, h.size.y)
 
 
 static func load_collapsed() -> bool:
@@ -197,7 +258,7 @@ func tap(local: Vector2) -> void:
 	GameAudio.ui_click()
 	if collapsed:
 		set_collapsed(false)
-	elif local.x >= caret.position.x + row.position.x - 6.0:
+	elif local.x >= size.x - minf(CARET_HIT, size.x):      # (Q23 ㊾) 오른쪽 끝 44 = 접기
 		set_collapsed(true)
 	else:
 		pressed.emit()
@@ -229,6 +290,27 @@ class TrendMark extends Control:
 			hb.put_shapes(self, g)
 		elif not pts.is_empty():
 			draw_colored_polygon(pts, col)
+
+
+## (Q23 ㊿) 식량 주의 — 호박빛 동그라미 안에 느낌표 (색을 못 가려도 모양으로)
+class WarnMark extends Control:
+	func _init() -> void:
+		custom_minimum_size = Vector2(14, 22)
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var c := size * 0.5
+		var g: HudBatch.Geo = HudBatch.Geo.new()
+		g.circle(c, 6.5, WARM)
+		g.polygon(PackedVector2Array([c + Vector2(-1.1, -4.0), c + Vector2(1.1, -4.0), c + Vector2(0.8, 1.0), c + Vector2(-0.8, 1.0)]), UiTheme.PAPER)
+		g.circle(c + Vector2(0, 3.0), 1.1, UiTheme.PAPER)
+		var hb := HudBatch.of(self)
+		if hb != null:
+			hb.put_shapes(self, g)
+			return
+		draw_circle(c, 6.5, WARM)
+		draw_colored_polygon(PackedVector2Array([c + Vector2(-1.1, -4.0), c + Vector2(1.1, -4.0), c + Vector2(0.8, 1.0), c + Vector2(-0.8, 1.0)]), UiTheme.PAPER)
+		draw_circle(c + Vector2(0, 3.0), 1.1, UiTheme.PAPER)
 
 
 ## 접기 ◂ / 펼치기 ▸

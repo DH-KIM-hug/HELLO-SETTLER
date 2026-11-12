@@ -64,7 +64,7 @@ func _init() -> void:
 	title_l.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	head.add_child(title_l)
 	step_l = Label.new()
-	step_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL - 1)
+	step_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)      # (Q23 ㊿) 가장 작은 글 11
 	step_l.add_theme_color_override("font_color", UiTheme.INK_SOFT)
 	head.add_child(step_l)
 	text_l = Label.new()
@@ -78,7 +78,7 @@ func _init() -> void:
 	prog_l = Label.new()
 	prog_l.name = "Progress"
 	prog_l.visible = false
-	prog_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL - 1)
+	prog_l.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL)      # (Q23 ㊿) 가장 작은 글 11
 	prog_l.add_theme_color_override("font_color", UiTheme.INK_SOFT)
 	prog_l.custom_minimum_size.y = 22.0              # 아래 6px은 막대 자리
 	prog_l.vertical_alignment = VERTICAL_ALIGNMENT_TOP
@@ -205,7 +205,7 @@ static func draw_site_marks(ci: CanvasItem, marks: Array) -> void:
 		ci.draw_arc(c, 9.0, -PI * 0.5, -PI * 0.5 + TAU * clampf(f, 0.0, 1.0), 28, UiTheme.PRIMARY, 3.0)
 		if m.size() > 2 and String(m[2]) != "":
 			var fnt := UiTheme.font(true)
-			var fs := UiTheme.SIZE_SMALL - 2
+			var fs := UiTheme.SIZE_SMALL          # (Q23 ㊿) 가장 작은 글 11 (예전 9)
 			var w := fnt.get_string_size(String(m[2]), HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 			var at := c + Vector2(-w * 0.5, 13.0 + fs)          # 고리 바로 아래 가운데 (화면 가장자리에서 잘리지 않게)
 			ci.draw_rect(Rect2(at + Vector2(-3, -fs - 1), Vector2(w + 6, fs + 6)), Color(1, 0.98, 0.9, 0.85))

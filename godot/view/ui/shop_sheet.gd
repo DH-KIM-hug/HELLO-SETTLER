@@ -2,17 +2,21 @@
 ## 세로 = 아래에서 올라오는 시트 (화면 78%), 가로 = 오른쪽 패널. 위: 제목 · 지폐 / 탭 줄 (잠긴 탭은 흐리게 '곧', 새로 열린 탭은 부드럽게 빛남) /
 ## 카드 2열: 물건 그림 + 이름 + '거인에게는 / 병 안에서는' 두 줄 + 값 버튼. 못 사면 값이 흐리게, 누르면 "지폐가 n 모자라요".
 ## 사면 물건이 거인의 손에 (Shop.buy) — 아래 띠 [손]에서 뚜껑을 열고 떨어뜨린다. 숫자는 값에만.
-## 쓰는 법: add_child(ShopSheet.new()) → setup(village) → open(). 신호: closed · bought(item).
+## (Q23 ㊽) 사면 바로 손에 들고, 토스트 옆 [되돌리기]가 UNDO_SECS초 — 누르면 낸 지폐를 모두 돌려받고 손에서 빠진다 (Shop.undo_buy).
+##   떨어뜨려 병 안에 들어간 뒤에는 되돌릴 수 없다 (단추가 사라짐). 새 병 사기는 선반의 물음 그대로.
+## 쓰는 법: add_child(ShopSheet.new()) → setup(village) → open(). 신호: closed · bought(item) · undone(item).
 class_name ShopSheet
 extends Control
 
 signal closed
 signal bought(item: String)
+signal undone(item: String)
 
 const SHEET_FRAC := 0.8
 const REFRESH := 0.5
 const ICON_PX := 56
 const TOAST_SECS := 2.4
+const UNDO_SECS := 4.0                 # (Q23 ㊽) 산 뒤 [되돌리기]가 떠 있는 시간
 
 var village: Village
 var tab := "건물"
@@ -26,6 +30,9 @@ var scroll: ScrollContainer
 var grid: GridContainer
 var locked_box: VBoxContainer
 var toast: Label
+var toast_row: HBoxContainer
+var undo_btn: Button
+var _undo := {}                        # 되돌릴 수 있는 마지막 구매 {hand_id, item, mig}
 var hand_l: Label
 var close_btn: Button
 var odds_panel: PanelContainer         # 이주민 뽑기 공개 확률표 (기획서 11.2 — 확률 공개)
@@ -115,8 +122,14 @@ func _build() -> void:
 	locked_box = VBoxContainer.new()
 	locked_box.add_theme_constant_override("separation", 6)
 	body.add_child(locked_box)
+	toast_row = HBoxContainer.new()
+	toast_row.add_theme_constant_override("separation", UiTheme.GAP)
+	toast_row.visible = false
+	outer.add_child(toast_row)
 	toast = Label.new()
 	toast.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	toast.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	toast.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	toast.add_theme_color_override("font_color", UiTheme.PAPER)
 	var tsb := StyleBoxFlat.new()
@@ -125,7 +138,14 @@ func _build() -> void:
 	tsb.set_content_margin_all(6)
 	toast.add_theme_stylebox_override("normal", tsb)
 	toast.visible = false
-	outer.add_child(toast)
+	toast_row.add_child(toast)
+	undo_btn = Button.new()                # [되돌리기] — 종이 단추 (주요 동작 초록 아님)
+	undo_btn.text = "되돌리기"
+	undo_btn.focus_mode = Control.FOCUS_NONE
+	undo_btn.custom_minimum_size = Vector2(88, UiTheme.TOUCH)
+	undo_btn.visible = false
+	undo_btn.pressed.connect(undo_last)
+	toast_row.add_child(undo_btn)
 	var foot := HBoxContainer.new()
 	foot.add_theme_constant_override("separation", UiTheme.GAP)
 	outer.add_child(foot)
@@ -277,6 +297,7 @@ func _layout() -> void:
 # ───────────────────────── 열기·닫기 ─────────────────────────
 ## 열면 새로 열린 탭부터 (없으면 지난 탭)
 func open() -> void:
+	var was := visible
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
@@ -287,6 +308,8 @@ func open() -> void:
 				tab = t
 				break
 	select_tab(tab)
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
 
 
 func close() -> void:
@@ -294,6 +317,7 @@ func close() -> void:
 		GameAudio.fx("sheet_close", "Room", -2.0)
 	visible = false
 	hide_odds()
+	_hide_toast()                          # 닫으면 [되돌리기]도 끝 (산 것은 손에 그대로)
 	closed.emit()
 
 
@@ -317,7 +341,10 @@ func _process(dt: float) -> void:
 	if _toast_t > 0.0:
 		_toast_t -= dt
 		if _toast_t <= 0.0:
-			toast.visible = false
+			_hide_toast()
+	if undo_btn.visible and Shop.hand_item(int(_undo.get("hand_id", -1))).is_empty():
+		undo_btn.visible = false             # 그새 떨어뜨렸으면 되돌릴 수 없다
+		_undo = {}
 	_style_tabs()
 	if _t >= REFRESH:
 		_t = 0.0
@@ -488,7 +515,8 @@ func press(item: String) -> void:
 	var r := Shop.buy(village, item)
 	if bool(r["ok"]):
 		GameAudio.fx("coins")
-		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % String(Shop.card(village, item)["name"]))
+		_undo = {"hand_id": int(r["hand_id"]), "item": item, "mig": Market.mig_serial if item == Immigrants.ITEM else -1}
+		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % String(Shop.card(village, item)["name"]), true)
 		bought.emit(item)
 	else:
 		GameAudio.fx("glass_tap_light", "Room", -8.0)
@@ -497,10 +525,43 @@ func press(item: String) -> void:
 	_refresh()
 
 
-func show_toast(text: String) -> void:
+func show_toast(text: String, can_undo := false) -> void:
 	toast.text = text
 	toast.visible = true
-	_toast_t = TOAST_SECS
+	toast_row.visible = true
+	undo_btn.visible = can_undo and not _undo.is_empty()
+	if not undo_btn.visible:
+		_undo = {}
+	_toast_t = UNDO_SECS if undo_btn.visible else TOAST_SECS
+
+
+func _hide_toast() -> void:
+	toast.visible = false
+	toast_row.visible = false
+	undo_btn.visible = false
+	_undo = {}
+
+
+## [되돌리기] — 방금 산 것이 아직 손에 있으면 지폐를 모두 돌려받는다. 되돌렸으면 true
+func undo_last() -> bool:
+	if _undo.is_empty():
+		return false
+	var u := _undo
+	_undo = {}
+	undo_btn.visible = false
+	if not Shop.undo_buy(village, int(u["hand_id"]), int(u["mig"])):
+		show_toast("이미 병 안에 내려갔어요.")
+		return false
+	GameAudio.ui_click()
+	show_toast("%s — 되돌렸어요. 지폐를 돌려받았어요." % String(Shop.card(village, String(u["item"]))["name"]))
+	undone.emit(String(u["item"]))
+	_sig = ""
+	_refresh()
+	return true
+
+
+func undo_visible() -> bool:
+	return undo_btn.visible and toast_row.visible
 
 
 # ───────────────────────── 시험용 ─────────────────────────

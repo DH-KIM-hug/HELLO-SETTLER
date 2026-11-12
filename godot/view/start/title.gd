@@ -204,7 +204,7 @@ func _build_ui() -> void:
 	# 구석: 톱니 · 버전
 	gear = _gear_button(ink)
 	ui.add_child(gear)
-	version_l = _label("v" + String(ProjectSettings.get_setting("application/config/version", "0.1.0")), UiTheme.SIZE_SMALL - 1, false, Color(ink, 0.6), Color(0, 0, 0, 0))
+	version_l = _label("v" + String(ProjectSettings.get_setting("application/config/version", "0.1.0")), UiTheme.SIZE_SMALL, false, Color(ink, 0.75), Color(0, 0, 0, 0))
 	ui.add_child(version_l)
 
 

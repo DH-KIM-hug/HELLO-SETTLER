@@ -44,6 +44,7 @@ const LOW_MEM := 3.0 * 1024.0 * 1024.0 * 1024.0
 const TITLE_HANDOFF := 0.62          # 타이틀이 병 쪽으로 다가가다 넘겨주는 beyond (④ 병 전체 — 유리 바깥)
 const LEAVE_TIME := 0.9              # 뒤로 가기 → 방으로 날아 나가는 시간
 const DOUBLE_TAP := 0.35
+const PATH_VIS_H := 32.0             # (Q23 ㊾) [마을로 가기]·[병 밖으로]의 보이는 높이 (누르는 높이는 UiTheme.TOUCH)
 
 var world: JarWorld
 var great_view: GreatTreeView         # 큰 나무 다섯 (view/great_tree_view.gd)
@@ -1249,12 +1250,14 @@ func _setup_world_ui() -> void:
 	goto_btn = _bar_button(root, "마을로 가기", open_goto)
 	goto_btn.clip_text = false
 	goto_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
-	goto_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 32)
+	goto_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 0)
+	UiTheme.hit_pad(goto_btn, PATH_VIS_H)         # (Q23 ㊾) 보이는 높이 32 그대로, 누르는 높이 44
 	if room_view:
 		out_btn = _bar_button(root, "병 밖으로", go_outside)
 		out_btn.clip_text = false
 		out_btn.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
-		out_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 32)
+		out_btn.custom_minimum_size = Vector2(WorldMinimap.SIZE, 0)
+		UiTheme.hit_pad(out_btn, PATH_VIS_H)
 	goto_list = PanelContainer.new()
 	goto_list.theme_type_variation = "TopBar"
 	goto_list.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1266,12 +1269,24 @@ func _setup_world_ui() -> void:
 		if n != null:
 			hb.adopt(n)
 	get_viewport().size_changed.connect(_layout_world_ui)
+	apply_early()
 	_layout_world_ui()
 
 
 func layout_bars() -> void:
 	super()
 	_layout_world_ui()
+
+
+## (Q23 54) 첫 병 첫날(고비 전)은 둥근 지도를 감춤 — [마을로 가기]가 그 자리로 올라감
+func apply_early() -> void:
+	super()
+	if minimap == null:
+		return
+	var on := not early_days()
+	if minimap.visible != on:
+		minimap.visible = on
+		_layout_world_ui()
 
 
 ## [창고] 창고 띠는 둥근 지도 왼쪽까지
@@ -1286,12 +1301,17 @@ func _layout_world_ui() -> void:
 	minimap.position = Vector2(get_viewport().get_visible_rect().size.x - d - 8.0, top_h + 8.0)
 	minimap.size = Vector2(d, d)
 	var vw := get_viewport().get_visible_rect().size.x
-	goto_btn.position = Vector2(vw - d - 8.0, top_h + 8.0 + d + 6.0)
-	goto_btn.size = Vector2(d, 32)
+	# (Q23 ㊾) 단추 칸은 누르는 높이(44) — 보이는 바탕(32)은 그 가운데. 첫 단추의 보이는 위끝은 예전처럼 지도 아래 6
+	var hit := float(UiTheme.TOUCH)
+	var pad := (hit - PATH_VIS_H) * 0.5
+	var map_on := minimap.visible
+	var y0 := (top_h + 8.0 + d + 6.0 - pad) if map_on else (top_h + 8.0 - pad)
+	goto_btn.position = Vector2(vw - d - 8.0, y0)
+	goto_btn.size = Vector2(d, hit)
 	if out_btn != null:
-		out_btn.position = goto_btn.position + Vector2(0, 38.0)
-		out_btn.size = Vector2(d, 32)
-	goto_list.position = Vector2(vw - 200.0 - 8.0, goto_btn.position.y + 38.0)
+		out_btn.position = goto_btn.position + Vector2(0, hit)     # 누르는 칸끼리 맞닿고 겹치지 않음 (보이는 틈 12)
+		out_btn.size = Vector2(d, hit)
+	goto_list.position = Vector2(vw - 200.0 - 8.0, goto_btn.position.y + hit)
 	goto_list.size = Vector2(200.0, 0)
 	split_bar.anchor_left = 0.0
 	split_bar.anchor_right = 1.0
@@ -1348,7 +1368,8 @@ func open_goto() -> void:
 	for q in world.settlements:
 		var b := _bar_button(goto_box, "%s · %d명" % [q.settlement_name, q.people.size()], fly_to_settlement.bind(q))
 		b.add_theme_font_size_override("font_size", UiTheme.SIZE_SMALL + 1)
-		b.custom_minimum_size = Vector2(0, 36)
+		b.custom_minimum_size = Vector2(0, 0)
+		UiTheme.hit_pad(b, 36.0)                  # (Q23 ㊾) 보이는 줄 36 그대로, 누르는 높이 44
 	goto_list.visible = true
 
 
