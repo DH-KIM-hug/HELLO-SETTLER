@@ -1243,3 +1243,8 @@ const SOUVENIR_HINT_SECS := 6.0          # 처음 주운 한 줄이 떠 있는 �
 const SOUVENIR_SHEET_PIC := 48.0         # 선반 시트 [기념품] 칸의 그림 한 장 (화면 px)
 const SOUVENIR_ALTAR_MIN_PX := 30.0      # 제단 위 기념품이 화면에서 적어도 이만큼 (px — 멀리서도 읽히게, Q17 남은 일)
 const SOUVENIR_BACK_LIFT := 1.5          # 선반 뒷줄 기념품을 이만큼(cm) 올려 세운다 (작은 받침 — 앞줄에 가리지 않게, Q17 남은 일)
+# Q25 (2026-11-12): 연장이 모자람 — 신호 · 촌장의 편지 · 상점의 연장 꾸러미 (sim/tool_short.gd · docs/REVIEW_2026-11-12 1-2)
+const TOOL_SHORT_IDLE := 2               # 일터 없는 성한 어른이 이만큼 이상 (+ 창고에 연장 없음 + 빈 일터 하나 이상)이면 '모자람'
+const TOOL_SHORT_HOURS := 12             # 그 조건이 이만큼 (병 시간, 한 시간마다 봄) 이어지면 신호가 켜진다 — 연장 하나가 잠깐 돌아왔다 다시 쥐어지는 흔들림에 켜지지 않게
+const TOOL_SHORT_OFF_HOURS := 6          # 조건이 이만큼 이어서 풀리면 꺼진다
+const TOOL_WISH_EVERY := 4.0 * DAY       # 촌장의 '연장이 모자라요' 편지는 마지막 편지에서 이만큼 뒤에야 또 (열린 편지가 있으면 쓰지 않음)
