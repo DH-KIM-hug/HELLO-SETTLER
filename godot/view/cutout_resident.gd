@@ -610,14 +610,17 @@ func _frames_ok() -> bool:
 	return on and not _baby and body != "" and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(_frame_clip(), body) >= 0
 
 
-## 방식 C 몸 (Q22, 2026-11-12 "어른 남자 먼저"): 어른 여자 평상복 a → 여자 장면 그림 (woman_c) · 어른 남자 평상복 (c·e) → 남자 장면 그림
-## (man_c — 튜닉·바지, 만들어 둔 때만) · 그 밖 "" (컷아웃 인형 그대로)
+## 방식 C 몸 (Q22, 2026-11-12 "어른 남자 먼저"): 어른 여자 평상복 a → 여자 장면 그림 (woman_c) · 어른 여자 평상복 b → 여자 둘째 벌
+## (woman2_c — 치마·끈 조끼·앞치마, Q22 ⑤, 만들어 둔 때만) · 어른 남자 평상복 (c·e) → 남자 장면 그림 (man_c — 튜닉·바지, 만들어 둔 때만) ·
+## 그 밖 "" (컷아웃 인형 그대로). 평상복 묶음은 Lib.look_from이 어른 여자에게 a·b 반반으로 고른 것 그대로
 func frame_body() -> String:
 	if String(dlook.get("body", "")) != "adult":
 		return ""
 	var p := int(dlook.get("personal", -1))
 	if p == 0:
 		return FrameLib.DIR
+	if p == 1 and String(dlook.get("sex", "")) == "f" and FrameLib.has_body(FrameLib.WOMAN2_DIR):
+		return FrameLib.WOMAN2_DIR
 	if String(dlook.get("sex", "")) == "m" and MAN_VEST.has(p) and FrameLib.has_body(FrameLib.MAN_DIR):
 		return FrameLib.MAN_DIR
 	return ""
@@ -627,9 +630,27 @@ func frame_body() -> String:
 const MAN_VEST := {2: true, 4: false}
 
 
-## 방식 C 인형에 넘기는 생김새: 조끼 없는 남자는 둘째 물감(조끼 자리)을 튜닉 물감으로
+## 여자 둘째 벌의 앞치마 (Q22 ⑤): 집안마다 (세 집 중 두 집이 앞치마) — 그 안에서 다섯 명 중 한 명은 반대.
+## 앞치마 자리(둘째 물감)를 크림 물감으로 칠하면 앞치마, 치마 물감으로 칠하면 앞치마 없음 (남자 조끼와 같은 식)
+const APRON_HOUSES := 3
+const APRON_FLIP := 5
+
+
+func woman2_apron() -> bool:
+	var hh := _hh_seed if _hh_seed >= 0 else seed_id
+	var on := posmod(hash([hh, 59]), APRON_HOUSES) != 0
+	if posmod(hash([seed_id, 61]), APRON_FLIP) == 0:
+		on = not on
+	return on
+
+
+## 방식 C 인형에 넘기는 생김새: 조끼 없는 남자 · 앞치마 없는 여자 둘째 벌은 둘째 물감(조끼·앞치마 자리)을 주 물감(튜닉·치마)으로
 func _frame_look() -> Dictionary:
-	if frame_body() != FrameLib.MAN_DIR or bool(MAN_VEST.get(int(dlook.get("personal", -1)), false)):
+	var fb := frame_body()
+	if fb == FrameLib.WOMAN2_DIR:
+		if woman2_apron():
+			return dlook
+	elif fb != FrameLib.MAN_DIR or bool(MAN_VEST.get(int(dlook.get("personal", -1)), false)):
 		return dlook
 	var l := dlook.duplicate(true)
 	var d: Array = l["dye"]
