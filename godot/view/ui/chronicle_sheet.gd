@@ -277,9 +277,27 @@ func _scroll_start() -> void:
 	scroll.scroll_vertical = 0
 	if tab != 0 or not is_instance_valid(_last_day):
 		return
-	await get_tree().process_frame
-	if is_instance_valid(_last_day):
-		scroll.scroll_vertical = maxi(0, int(_last_day.global_position.y - body.global_position.y) - 4)
+	# (Q21 ㊸) 줄 높이(손글씨 줄바꿈)와 스크롤 끝은 화면 몇 장에 걸쳐 정해진다 — 한 장만 기다리면 끝이 아직 0이라 맨 위(1일차)에 머묾.
+	# 끝이 마지막 날 머리줄에 닿거나(또는 더 늘지 않을 때)까지 몇 장 더 맞춤
+	var bar := scroll.get_v_scroll_bar()
+	var last_max := -1.0
+	for i in 8:
+		await get_tree().process_frame
+		if not is_instance_valid(_last_day) or not visible or tab != 0:
+			return
+		var want := maxi(0, int(_last_day.global_position.y - body.global_position.y) - 4)
+		scroll.scroll_vertical = want
+		if scroll_settled(i, want, scroll.scroll_vertical, bar.max_value, last_max, bar.page):
+			return
+		last_max = bar.max_value
+
+
+## (Q21 ㊸) 열 때 맞춤을 그만둬도 되나: 마지막 날 머리줄까지 내려갔거나, 스크롤 끝이 두 장 내리 같고 그 끝에 닿았을 때.
+## 머리줄 자리가 아직 0(줄이 아직 놓이지 않음)이면 '닿음'으로 치지 않는다 — 예전엔 첫 장에서 그만둬 1일차에 머묾
+static func scroll_settled(i: int, want: int, got: int, max_v: float, last_max: float, page: float) -> bool:
+	if want > 0 and got >= want:
+		return true
+	return i >= 2 and page > 0.0 and is_equal_approx(max_v, last_max) and got >= int(max_v - page) - 1
 
 
 func _process(dt: float) -> void:

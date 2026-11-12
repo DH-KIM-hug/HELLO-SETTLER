@@ -20,7 +20,13 @@ func check(ok: bool, what: String) -> void:
 
 
 func all() -> void:
-	run.timed(self, ["test_words", "test_pram", "test_errand", "test_fishing", "test_save", "test_days", "test_determinism", "test_view"])
+	run.timed(self, ["test_words", "test_pram", "test_errand", "test_errand_q21", "test_fishing", "test_save", "test_days", "test_determinism", "test_view",
+		"test_chronicle_scroll"])
+
+
+## 장면(_ready)이 필요한 시험 — tests/kids_view_tests.gd(장면 묶음 kids_view)가 부른다
+func scene_all() -> void:
+	run.timed(self, ["test_outing_bubbles"])
 
 
 # ───────────────────────── 도우미 ─────────────────────────
@@ -726,3 +732,257 @@ func test_view() -> void:
 	check(OutingView.pic_w("bundle") > 0.05 and OutingView.pic_w("rod") > OutingView.pic_w("fish"), "소품 크기")
 	var gen := FileAccess.get_file_as_string("res://tools/kids/make_outing.py")
 	check(gen.contains("kids_outing.png") and not gen.contains("http"), "그림은 tools/kids/make_outing.py가 그림 (밖의 그림 없음)")
+
+
+# ───────────────────────── Q21 다듬기 ─────────────────────────
+## 놀이 시계만 돌려 심부름이 끝날 때까지 — 지나는 동안 본 기록(문 앞에서 정한 뒤의 첫 모습)을 돌려줌
+func _play_errand(v: Village) -> Dictionary:
+	var seen := {}
+	for i in 8000:
+		var e := ChildOutings.errand(v)
+		if e.is_empty():
+			break
+		if seen.is_empty() and int(e.get("pk", 0)) == 1:
+			seen = e.duplicate()
+		ChildOutings.step(v, 30.0)
+	return seen
+
+
+func test_errand_q21() -> void:
+	print("== 나들이 Q21: 오래 머물 사람 먼저 · 문 앞에서 다른 식구로 · 가까이의 식구를 찾아감 · 젖먹이를 안은 사람은 다른 식구가 없을 때만")
+	# ㊴ 고르기: 곧 자리를 뜰 어르신보다 오래 머물 식구 먼저
+	var v := _village(9.5)
+	var hs := _street(v)
+	var b: Building = hs["b"]
+	var rng0 := str(v.rng.state) + str(v.social_rng.state) + str(v.pop_rng.state)
+	var elder := _who(v, "베른")
+	var greta := _who(v, "그레타")
+	elder.steps = [ResidentAI.act(60.0, "idle")]
+	greta.steps = [ResidentAI.act(1.0e6, "idle")]
+	var kid := _who(v, "리나")
+	check(ChildOutings.leaves_soon(elder, ChildOutings.walk_need(Vector2(kid.x, kid.y), ChildOutings._door(b))) and not ChildOutings.leaves_soon(greta, 3000.0), "곧 자리를 뜰 사람을 앎 (남은 일 시간 — 읽기만)")
+	check(ChildOutings.try_errand(v, kid), "나섬")
+	var e := ChildOutings.errand(v)
+	check(int(e["to"]) == b.id and int(e["rc"]) == greta.id and int(e["rc0"]) == greta.id, "어르신 댁으로 가되 받을 사람은 오래 머물 그레타")
+	# ㊴ 문 앞에서 다른 식구로: 처음 고른 그레타가 짐을 들고 떠남 → 문 가까이의 베른 어르신이 받음
+	greta.carry = "밀"
+	elder.steps = [ResidentAI.act(1.0e6, "idle")]
+	var sig := _sig(v)
+	var seen := _play_errand(v)
+	var given := _events(v, 0, &"errand_given")
+	check(given.size() == 1 and int(given[0]["v"]) == elder.id and int(seen.get("re", 0)) == 1 and int(seen.get("sk", 0)) == 0, "처음 고른 사람이 자리를 뜨면 문 가까이의 다른 식구가 받음 (바꿔 고름)")
+	check(ChildOutings.errand_done(v, kid.id), "다녀온 것으로 침")
+	# ㊴ 문 가까이에 아무도 없으면 조금 떨어진 곳에서 쉬는 식구를 찾아감
+	var u := _village(9.5)
+	var us := _street(u)
+	var ub: Building = us["b"]
+	var k2 := _who(u, "리나")
+	check(ChildOutings.try_errand(u, k2), "나섬")
+	var ue := ChildOutings.errand(u)
+	check(int(ue["to"]) == ub.id, "어르신 댁으로 (%d)" % int(ue["to"]))
+	var g2 := _who(u, "그레타")
+	var e2 := _who(u, "베른")
+	g2.carry = "밀"
+	var away := Vector2.INF
+	for off: Vector2 in [Vector2(4.0, 1.5), Vector2(-4.0, 1.5), Vector2(0.5, 4.2), Vector2(4.0, -1.0), Vector2(-4.0, -1.0)]:
+		var q := ChildOutings._door(ub) + off
+		if not u.water_at(q.x, q.y):
+			away = q
+			break
+	_rest_at(e2, away)
+	e2.anim = "sit"
+	seen = _play_errand(u)
+	given = _events(u, 0, &"errand_given")
+	check(given.size() == 1 and int(given[0]["v"]) == e2.id and int(seen.get("sk", 0)) == 1, "문에서 조금 떨어져 쉬는 어르신을 찾아가 건넴 (%s)" % str(seen.get("sk", "?")))
+	check(Vector2(float(seen["rx"]), float(seen["ry"])).distance_to(away) < 0.01, "건네는 곳 = 어르신이 쉬는 자리")
+	# 아무도 없으면 예전처럼 조금 기다리다 돌아옴 (다음에 다시)
+	var w := _village(9.5)
+	_street(w)
+	check(ChildOutings.try_errand(w, _who(w, "리나")), "나섬")
+	var wb := w.bld(int(ChildOutings.errand(w)["to"]))
+	for r in w.people:
+		if r.home == wb.id:
+			r.carry = "밀"
+	_play_errand(w)
+	check(not ChildOutings.errand_done(w, _who(w, "리나").id) and int(_events(w, 0, &"errand_ended")[0]["v"]) == 0, "식구가 모두 짐을 들고 떠났으면 못 건네고 돌아옴")
+	# 아기를 보는 부모의 돌봄이 아이가 닿기 전에 끝나면 고르지 않음 (유모차를 끌고 나서곤 함)
+	var c := _village(9.5)
+	var cs := _street(c)
+	var cb: Building = cs["b"]
+	var cg := _who(c, "그레타")
+	_who(c, "베른").carry = "밀"
+	cg.action = "care"
+	cg.steps = [ResidentAI.act(30.0, "sit")]
+	cg.anim = "sit"
+	for r in c.people:
+		if r.home == (cs["c"] as Building).id and not r.is_child():
+			r.steps = [ResidentAI.act(1.0e6, "idle")]
+	var ck := _who(c, "리나")
+	var ok := ChildOutings.try_errand(c, ck)
+	check(ok and int(ChildOutings.errand(c)["to"]) == (cs["c"] as Building).id, "곧 끝날 돌봄 중인 부모보다 오래 머물 이웃 집 먼저 (어르신 댁이어도)")
+	cg.steps = [ResidentAI.act(1.0e6, "sit")]
+	for r in c.people:
+		if r.home == (cs["c"] as Building).id and not r.is_child():
+			r.steps.clear()
+	(ChildOutings.state(c))["err"] = {}
+	check(ChildOutings.try_errand(c, ck) and int(ChildOutings.errand(c)["rc"]) == cg.id, "오래 돌볼 부모면 감")
+	# ㊷ 젖먹이를 안은 사람은 다른 식구가 있으면 고르지 않음 · 없으면 고르되 표시 (화면: 팔 대신 끄덕)
+	var m := _village(9.5)
+	var ms := _street(m)
+	var mb: Building = ms["b"]
+	var mom := _who(m, "마르타")
+	mom.home = mb.id
+	_who(m, "한스").home = mb.id
+	var baby := _baby(m, mb)
+	_rest_at(mom, ChildOutings._door(mb) + Vector2(-0.3, 0.2))
+	mom.action = "care"
+	mom.steps = [ResidentAI.act(1.0e6, "idle")]
+	_who(m, "한스").carry = "밀"
+	_who(m, "베른").carry = "밀"
+	var mg := _who(m, "그레타")
+	check(ChildOutings.holds_baby(m, mom) and not ChildOutings.holds_baby(m, mg) and baby.age < ChildPlay.TODDLE_AGE, "젖먹이를 안은 사람을 앎 (화면이 품에 그리는 규칙과 같게)")
+	var mk := _who(m, "펠릭스")
+	_rest_at(mk, ChildOutings._door(m.bld(mk.home)) + Vector2(0.2, 0.2))
+	check(ChildOutings.try_errand(m, mk), "나섬")
+	var me := ChildOutings.errand(m)
+	check(int(me["to"]) == mb.id and int(me["rc"]) == mg.id, "아기를 안은 엄마 대신 그레타가 받음")
+	(ChildOutings.state(m))["err"] = {}
+	mg.carry = "밀"
+	check(ChildOutings.try_errand(m, mk) and int(ChildOutings.errand(m)["rc"]) == mom.id, "다른 식구가 없으면 아기를 안은 엄마")
+	seen = _play_errand(m)
+	check(int(seen.get("hb", 0)) == 1 and ChildOutings.errand_done(m, mk.id), "받을 때 '아기를 안음' 표시 (화면은 팔을 내밀지 않음)")
+	# 그림뿐
+	check(_sig(v) != "" and str(v.rng.state) + str(v.social_rng.state) + str(v.pop_rng.state) == rng0, "마을 난수를 뽑지 않음")
+	check(_sig(v) == sig, "그림뿐: 고르기·바꿔 고르기·찾아가기가 주민·창고·집을 바꾸지 않음")
+	# 저장: 문 앞에서 받을 사람을 정한 뒤(Q21 열쇠 rc0·pk·sk·qx·qy·hb·cw·re)에 저장 → 불러와도 같은 사람에게 같은 줄
+	var sv := _village(9.5)
+	_street(sv)
+	check(ChildOutings.try_errand(sv, _who(sv, "리나")), "나섬")
+	for i in 4000:
+		var ee := ChildOutings.errand(sv)
+		if ee.is_empty() or int(ee.get("pk", 0)) == 1:
+			break
+		ChildOutings.step(sv, 30.0)
+	var se := ChildOutings.errand(sv)
+	check(int(se.get("pk", 0)) == 1 and se.has("rc0") and se.has("cw") and se.has("hb"), "받을 사람을 정한 기록 (Q21 열쇠)")
+	var sw := Village.from_dict(bytes_to_var(var_to_bytes(sv.to_dict())))
+	check(SaveCodec.digest(SaveCodec.enc(sw.kids)) == SaveCodec.digest(SaveCodec.enc(sv.kids)), "불러온 나들이 상태가 같음 (Q21 열쇠 포함)")
+	var sa := sv.events.serial
+	var sb := sw.events.serial
+	_play_errand(sv)
+	_play_errand(sw)
+	var ga2 := _events(sv, sa, &"errand_given")
+	var gb2 := _events(sw, sb, &"errand_given")
+	check(ga2.size() == 1 and gb2.size() == 1 and int(ga2[0]["v"]) == int(gb2[0]["v"]) and String(sw.book[-1]["text"]) == String(sv.book[-1]["text"]), "불러온 마을에서도 같은 사람에게 · 같은 연대기 줄")
+	# 옛 기록 (Q21 열쇠 없음)도 문 앞에서 새로 고름
+	var o := _village(9.5)
+	var os := _street(o)
+	var ob: Building = os["b"]
+	var ok2 := _who(o, "리나")
+	var od := ChildOutings._door(ob)
+	(ChildOutings.state(o))["err"] = {"k": ok2.id, "to": ob.id, "rc": _who(o, "그레타").id, "why": "elder", "ph": 1, "c": 0.0,
+		"x": od.x, "y": od.y, "tx": od.x, "ty": od.y, "rx": od.x, "ry": od.y, "done": 0}
+	_play_errand(o)
+	check(ChildOutings.errand_done(o, ok2.id), "Q21 전의 저장(열쇠 없는 기록)도 그대로 이어서 건넴")
+
+
+## ㊵ 심부름 중인 아이 위엔 나들이의 말만 (시뮬의 끼니 혼잣말·다른 연출 말은 가림), 인형은 하나 — 하루 장면이 그 아이를 집어 가지 않음
+func test_outing_bubbles() -> void:
+	print("== 나들이 Q21: 심부름 중인 아이 — 나들이 말만 · 인형 하나 · 하루 장면이 집어 가지 않음")
+	var keep_cut := CutoutResident.override
+	CutoutResident.override = 1
+	var scene: Node = load("res://scenes/test_village.tscn").instantiate()
+	run.root.add_child(scene)
+	scene.set("paused", true)
+	(scene.get("clock") as JarClock).creation = false
+	var v: Village = scene.get("village")
+	var vw: VillageView = scene.get("view")
+	v.water.offline = true
+	var hm := v.add_building("오두막", v.fire.x + 5.0, v.fire.y + 2.0, true)
+	var adult: Resident = null
+	for r in v.people:
+		if r.is_adult() and not r.is_elder():
+			adult = r
+			break
+	var kid := v.add_person("보리", "f", 2.5, "", v.fire.x + 1.0, v.fire.y + 1.0, null, null)
+	adult.home = hm.id
+	var door := ChildOutings._door(hm)
+	_rest_at(adult, door + Vector2(0.4, 0.2))
+	_rest_at(kid, Vector2(v.fire.x + 1.0, v.fire.y + 1.0))
+	kid.action = "eat"
+	kid.anim = "eat"
+	kid.say = "배고파요…"
+	kid.say_t = 1.0e5
+	(ChildOutings.state(v))["err"] = {"k": kid.id, "to": hm.id, "rc": adult.id, "rc0": adult.id, "why": "", "ph": 1, "c": 0.0,
+		"x": door.x, "y": door.y, "tx": door.x, "ty": door.y, "rx": door.x, "ry": door.y, "done": 0, "pk": 1, "cw": 0.5}
+	var other: Resident = null                 # 나들이와 상관없는 이웃 — 이 사람의 혼잣말은 그대로 보여야 함 (빈 비교가 아님)
+	for r in v.people:
+		if r.is_adult() and r != adult:
+			other = r
+			break
+	_rest_at(other, door + Vector2(-1.6, 0.9))
+	other.say = "볕이 좋네."
+	other.say_t = 1.0e5
+	vw.sync(0.0, true)
+	for i in 150:
+		vw.sync(1.0 / 30.0)
+	var kv := vw.kids_view
+	var cam: JarCamera = scene.get("cam")
+	scene.call("look_at_ground", door)
+	cam.ppu = 44.0
+	cam.ppu_goal = 44.0
+	cam._apply()
+	vw.stage_say[kid.id] = ["저도 도와줄래요!", "cheer", 30.0]
+	var vs: Vector2 = scene.get_viewport().get_visible_rect().size
+	var box: Control = scene.get("bubbles")
+	for c in box.get_children():
+		box.remove_child(c)
+		c.free()
+	scene.call("_bubbles_of", v, vw, vs, 0)
+	var texts: Array = []
+	for c in box.get_children():
+		if c is Label:
+			texts.append((c as Label).text)
+	check(kv.out.busy(kid.id) and not texts.has("배고파요…") and not texts.has("저도 도와줄래요!") and texts.has("볕이 좋네."), "심부름 중인 아이 위에 시뮬의 혼잣말·다른 연출 말이 뜨지 않음 (곁의 이웃 말은 뜸) %s" % str(texts))
+	check(kid.say == "배고파요…" and kid.action == "eat", "말·할 일 자체(시뮬)는 그대로 — 화면에서만 가림")
+	var m := vw.residents.get(kid.id) as Node3D
+	var pu: Variant = kv.out._pup.get(kid.id)
+	check(m != null and pu != null and Vector2(m.position.x, m.position.z).distance_to((pu as OutingView.Pup).pos) < 0.01 \
+		and Vector2(m.position.x, m.position.z).distance_to(Vector2(kid.x, kid.y)) > 2.0, "아이 인형은 하나 — 심부름 자리에 (시뮬의 끼니 자리에는 없음) [인형 %s · 따로 선 자리 %s · 시뮬 (%.1f, %.1f)]" % [
+			str(m.position) if m != null else "-", str((pu as OutingView.Pup).pos) if pu != null else "-", kid.x, kid.y])
+	var dv := DailyView.of(vw)
+	check(dv == null or dv._kids_hold(kid.id), "하루 장면(세수·수다)이 심부름 중인 아이를 집어 가지 않음")
+	# 건네는 단계: 나들이의 말은 뜸 (다른 연출 말을 비우고)
+	(ChildOutings.errand(v))["ph"] = 2
+	vw.sync(1.0 / 30.0)
+	for c in box.get_children():
+		box.remove_child(c)
+		c.free()
+	scene.call("_bubbles_of", v, vw, vs, 0)
+	texts.clear()
+	for c in box.get_children():
+		if c is Label:
+			texts.append((c as Label).text)
+	var own: Array = KidsView.SAY["errand_here"]
+	var hit := false
+	for t: String in texts:
+		hit = hit or own.has(t)
+	check(hit and texts.has("볕이 좋네.") and not texts.has("배고파요…") and not texts.has("저도 도와줄래요!"), "건넬 때는 나들이의 말만 뜸 %s" % str(texts))
+	# ㊶ 건네는 자리는 문 앞에서 카메라 쪽으로 한 걸음 이상
+	var hand := kv.out.hand_spot(door)
+	var b2 := Vector2(kv._back.x, kv._back.z)
+	check((hand - door).dot(b2) >= OutingView.HAND_STEP - 0.01, "건네는 자리는 문 앞보다 카메라 쪽으로 한 걸음 이상 (%.2f칸)" % (hand - door).dot(b2))
+	(ChildOutings.state(v))["err"] = {}
+	run.root.remove_child(scene)
+	scene.free()
+	CutoutResident.override = keep_cut
+
+
+## ㊸ 연대기를 열 때 맞춤을 너무 일찍 그만두지 않음 (줄이 아직 놓이지 않은 첫 장 = 머리줄 자리 0)
+func test_chronicle_scroll() -> void:
+	print("== 나들이 Q21: 연대기를 열면 가장 최근 날로 — 줄이 놓이기 전 첫 장에서 그만두지 않음")
+	check(not ChronicleSheet.scroll_settled(0, 0, 0, 0.0, -1.0, 0.0), "첫 장 (줄이 아직 안 놓임 · 끝 0): 계속 맞춤 (예전엔 여기서 그만둬 1일차에 머묾)")
+	check(not ChronicleSheet.scroll_settled(1, 2266, 0, 0.0, 0.0, 0.0), "끝이 아직 0이면 계속")
+	check(ChronicleSheet.scroll_settled(2, 2266, 2266, 2600.0, 2600.0, 334.0), "마지막 날 머리줄까지 내려가면 그만둠")
+	check(ChronicleSheet.scroll_settled(3, 2266, 2098, 2432.0, 2432.0, 334.0), "머리줄이 끝보다 아래면 끝에 닿았을 때 그만둠 (새 줄이 보임)")
+	check(not ChronicleSheet.scroll_settled(3, 2266, 1500, 2432.0, 2000.0, 334.0), "끝이 아직 늘어나는 중이면 계속")

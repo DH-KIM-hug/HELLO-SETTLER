@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_man"])
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -1075,6 +1075,14 @@ func test_frames_man() -> void:
 			same = false
 	check(same, "남자 몸: 장면 순서 · 보기 · 시작 위상이 여자 몸과 같다")
 	check(FL.load_index("밀가루", FL.MAN_DIR) >= 0 and FL.load_index(FL.BABY_LOAD, FL.MAN_DIR) >= 0, "남자 몸에도 짐 그림 · 아기 그림")
+	# 여자 몸과 같은 꾸러미 형식 (Q22 ③-0·③-1): 압축 몸 그림 + 물감 코드 텍스처 넷, 장면마다 그리는 몫(sub), 옛 마스크 두 장은 없음
+	var imp := ConfigFile.new()
+	imp.load(FL.MAN_DIR + "frames_atlas.png.import")
+	var pk := int(imp.get_value("params", "compress/mode", 0)) == 2 and bool(imp.get_value("params", "compress/high_quality", false))
+	for n: String in FL.MASK_TEX:
+		pk = pk and ResourceLoader.exists(FL.MAN_DIR + String(FL.MASK_TEX[n]))
+	pk = pk and not ResourceLoader.exists(FL.MAN_DIR + "frames_mask0.png") and (M["frames"][0] as Dictionary).has("sub")
+	check(pk, "남자 몸: 여자 몸과 같은 꾸러미 형식 (VRAM 압축 몸 그림 · 물감 코드 넷 · 장면마다 sub · 옛 마스크 없음)")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 2211
 	var want := {"m2": null, "m4": null, "f0": null, "f1": null, "child": null}
@@ -1135,3 +1143,141 @@ func test_frames_man() -> void:
 	FL.spike = spike0
 	for c: Variant in want.values():
 		(c as CutoutResident).free()
+
+
+## 방식 C 옷 한 벌의 그래픽 메모리 (Q22 ③-0, 2026-11-12): 몸 그림은 VRAM 압축 (데스크톱 BPTC · 폰 ASTC 4×4, 밉맵),
+## 물감 마스크 두 장은 코드 텍스처(한 바이트, 밉맵 없음) + 코드표 + 4분의 1 크기 마스크 둘 (= 옛 마스크의 밉맵 2단) — tools/cutout_c/pack_masks.py.
+## 코드가 옛 마스크 값을 그대로 돌려주는지 (텍셀 표본), 4분의 1 마스크가 엔진이 만드는 밉맵 2단과 바이트까지 같은지.
+func test_frames_c_memory() -> void:
+	var FL := CutoutResident.FrameLib
+	var dir: String = FL.DIR
+	var imp := ConfigFile.new()
+	imp.load(dir + "frames_atlas.png.import")
+	check(int(imp.get_value("params", "compress/mode", 0)) == 2 and bool(imp.get_value("params", "compress/high_quality", false))
+		and bool(imp.get_value("params", "mipmaps/generate", false)), "방식 C 몸 그림: VRAM 압축 · 높은 품질 (BPTC / ASTC 4×4) · 밉맵")
+	var imp_ok := true
+	for n: String in FL.MASK_TEX:
+		var c := ConfigFile.new()
+		imp_ok = imp_ok and c.load(dir + String(FL.MASK_TEX[n]) + ".import") == OK and int(c.get_value("params", "compress/mode", -1)) == 0 \
+			and bool(c.get_value("params", "mipmaps/generate", false)) == String(n).begins_with("fmq") \
+			and not bool(c.get_value("params", "process/fix_alpha_border", true)) and int(c.get_value("params", "detect_3d/compress_to", 1)) == 0
+	check(imp_ok, "방식 C 마스크: 손실 없음 · 코드·코드표는 밉맵 없음 · 4분의 1 마스크만 밉맵 · 알파 가장자리 고침 끔")
+	check(not ResourceLoader.exists(dir + "frames_mask0.png") and not ResourceLoader.exists(dir + "frames_mask1.png"),
+		"옛 마스크 두 장은 게임에 없음 (raw/의 빌드 재료)")
+	var mat: ShaderMaterial = FL.material(CutoutResident.game_material().get_shader_parameter("palette"))
+	var fa: Texture2D = mat.get_shader_parameter("frames_atlas")
+	var fc: Variant = mat.get_shader_parameter("fcode")
+	var fl: Variant = mat.get_shader_parameter("flut")
+	var q0: Variant = mat.get_shader_parameter("fmq0")
+	var q1: Variant = mat.get_shader_parameter("fmq1")
+	check(fc is Texture2D and fl is Texture2D and q0 is Texture2D and q1 is Texture2D
+		and (fc as Texture2D).get_size() == fa.get_size() and (fl as Texture2D).get_size() == Vector2(256, 2)
+		and (q0 as Texture2D).get_size() * 4.0 == fa.get_size() and (q1 as Texture2D).get_size() * 4.0 == fa.get_size(),
+		"방식 C 재질: 코드 = 몸 그림 크기 · 코드표 256×2 · 4분의 1 마스크 둘")
+	var raw := ProjectSettings.globalize_path(dir + "raw/")
+	var art := ProjectSettings.globalize_path(dir)
+	var m0 := Image.load_from_file(raw + "frames_mask0.png")
+	var m1 := Image.load_from_file(raw + "frames_mask1.png")
+	var code := Image.load_from_file(art + "frames_mcode.png")
+	var lut := Image.load_from_file(art + "frames_mlut.png")
+	if m0 == null or m1 == null or code == null or lut == null:
+		check(false, "방식 C 마스크 원본·코드 그림을 읽음")
+		return
+	for im: Image in [m0, m1, lut]:
+		im.convert(Image.FORMAT_RGBA8)
+	code.convert(Image.FORMAT_L8)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 312
+	var n := 0
+	var same := 0
+	var dyed := 0
+	var zero_ok := true
+	while n < 20000:
+		var x := rng.randi() % code.get_width()
+		var y := rng.randi() % code.get_height()
+		var a := m0.get_pixel(x, y)
+		var b := m1.get_pixel(x, y)
+		if a == Color(0, 0, 0, 0) and b == Color(0, 0, 0, 0) and rng.randf() < 0.9:
+			continue                                   # 빈 텍셀은 조금만 (그림 쪽을 더 봄)
+		n += 1
+		var ci := code.get_pixel(x, y).r8
+		var da := lut.get_pixel(ci, 0)
+		var db := lut.get_pixel(ci, 1)
+		if da == a and db == b:
+			same += 1
+		if a.r + a.g + a.b + a.a + b.r + b.g > 0.0:
+			dyed += 1
+		if a == Color(0, 0, 0, 0) and b == Color(0, 0, 0, 0):
+			zero_ok = zero_ok and da == Color(0, 0, 0, 0) and db == Color(0, 0, 0, 0)
+	check(zero_ok and same >= int(n * 0.995), "방식 C 마스크 코드: 텍셀 표본 %d개 (물든 텍셀 %d) 가운데 %d개가 옛 값 그대로 (≥ 99.5%%), 빈 텍셀은 늘 빈 값" % [n, dyed, same])
+	var mips_ok := true
+	for i in 2:
+		var full: Image = [m0, m1][i]
+		full.generate_mipmaps()
+		var q := Image.load_from_file(art + "frames_mq%d.png" % i)
+		q.convert(Image.FORMAT_RGBA8)
+		var ofs := full.get_mipmap_offset(2)
+		mips_ok = mips_ok and q.get_size() == full.get_size() / 4 and full.get_data().slice(ofs, ofs + q.get_data().size()) == q.get_data()
+	check(mips_ok, "방식 C 4분의 1 마스크 = 옛 마스크의 밉맵 2단 (바이트까지 같음 — 멀리서는 옛 마스크와 똑같이 걸러짐)")
+	# Q22 ③-1 (2026-11-12): 빈틈없이 담은 아틀라스 (tools/cutout_c/pack_atlas.py) — 장면마다 쓰는 몫만, 서로 겹치지 않게
+	var L: Dictionary = FL.lib()
+	var aw := int(L["atlas"][0])
+	var ah := int(L["atlas"][1])
+	var grid: Array = L.get("grid", L["atlas"])
+	check(fa.get_size() == Vector2(aw, ah) and aw % 16 == 0 and ah % 16 == 0 and aw <= 4096 and ah <= 4096
+		and aw * ah <= int(grid[0]) * int(grid[1]) * 0.7,
+		"방식 C 아틀라스: %d×%d (16의 배수 · 4096 이하 · 칸 격자 %d×%d의 70%% 이하)" % [aw, ah, int(grid[0]), int(grid[1])])
+	var cw := float(L["cell"][0])
+	var ch := float(L["cell"][1])
+	var rects := {}                     # 아틀라스 텍셀 사각형 → 처음 쓴 이름
+	var rect_bad := []
+	var fd: Texture2D = mat.get_shader_parameter("fdata")
+	if fd.get_height() != 5:
+		rect_bad.append("fdata 줄 %d" % fd.get_height())
+	var items: Array = []
+	for f: Dictionary in L["frames"]:
+		items.append(["%s/%s" % [f["clip"], f["view"]], f["uv"], f.get("sub", null), true])
+	for e: Dictionary in (L.get("loads", []) as Array) + (L.get("lids", []) as Array):
+		items.append([String(e.get("name", e.get("set", "?"))), e["uv"], null, false])
+	for it: Array in items:
+		var uv: Array = it[1]
+		var r := Rect2(float(uv[0]) * aw, float(uv[1]) * ah, (float(uv[2]) - float(uv[0])) * aw, (float(uv[3]) - float(uv[1])) * ah)
+		var ri := Rect2i(roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y))
+		if (r.position - Vector2(ri.position)).length() > 0.01 or (r.size - Vector2(ri.size)).length() > 0.01 or ri.position.x < 0 \
+				or ri.position.y < 0 or ri.end.x > aw or ri.end.y > ah or ri.size.x <= 0 or ri.size.y <= 0:
+			rect_bad.append("%s 자리" % it[0])
+			continue
+		if it[2] != null:
+			var sb: Array = it[2]
+			# 그리는 몫 = 칸의 일부 (0~1), 그 텍셀 크기 = 아틀라스의 사각형 (배율 그대로 — 인형이 같은 자리·크기로 그려짐)
+			if float(sb[0]) < 0.0 or float(sb[1]) < 0.0 or float(sb[2]) > 1.0 or float(sb[3]) > 1.0 \
+					or absf((float(sb[2]) - float(sb[0])) * cw - ri.size.x) > 0.01 or absf((float(sb[3]) - float(sb[1])) * ch - ri.size.y) > 0.01:
+				rect_bad.append("%s 몫" % it[0])
+		elif bool(it[3]) and L.has("grid"):
+			rect_bad.append("%s 몫 없음" % it[0])
+		rects[ri] = it[0]
+	var keys: Array = rects.keys()
+	for i in keys.size():
+		for j in range(i + 1, keys.size()):
+			if (keys[i] as Rect2i).intersects(keys[j]):
+				rect_bad.append("%s ↔ %s 겹침" % [rects[keys[i]], rects[keys[j]]])
+	check(rect_bad.is_empty() and keys.size() >= 200, "방식 C 아틀라스: 사각형 %d개가 텍셀에 맞고 아틀라스 안 · 서로 겹치지 않음 · 몸 장면은 칸과 같은 배율 %s" % [keys.size(), rect_bad.slice(0, 6)])
+	var atl := Image.load_from_file(art + "frames_atlas.png")
+	atl.convert(Image.FORMAT_RGBA8)
+	var stray := 0
+	var seen := 0
+	while seen < 20000:
+		var x := rng.randi() % aw
+		var y := rng.randi() % ah
+		if atl.get_pixel(x, y).a8 == 0:
+			continue
+		seen += 1
+		var inside := false
+		for k: Rect2i in keys:
+			if k.has_point(Vector2i(x, y)):
+				inside = true
+				break
+		if not inside:
+			stray += 1
+	check(stray == 0, "방식 C 아틀라스: 그림이 있는 텍셀 표본 %d개 모두 어떤 장면·짐 그림의 사각형 안 (밖 %d)" % [seen, stray])
+

@@ -1,5 +1,5 @@
 ## 방식 C 주민 시험판 — 장면 그림 라이브러리 (docs/RESIDENTS_2D.md 7장, 2026-11-08 스파이크; 기본값은 그대로 컷아웃)
-## art/cutout/woman_c/frames.json + frames_atlas.png + frames_mask0/1.png (tools/cutout_c/build_frames.py) +
+## art/cutout/woman_c/frames.json + frames_atlas.png + 물감 마스크 (frames_mcode · mlut · mq0 · mq1 — tools/cutout_c/build_frames.py · pack_masks.py) +
 ## 지금 컷아웃 라이브러리의 머리·모자 조각 (proto/cutout_a/cut_lib.gd — 같은 아틀라스·물감 마스크·바탕색).
 ## 켜기: 환경 변수 NAZAKJI_FRAMES=1 또는 FrameLib.spike = 1 (CutoutResident가 여자 평상복 a 몸에만 씀).
 extends RefCounted
@@ -32,6 +32,9 @@ const LOAD_CLIP := {"carry": 1, "hold": 1, "cradle": 2, "rock": 2}
 ## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
 ## 밉맵에서 점선으로 끊김 — 1.06에서 보였음)
 const HEAD_FIT := 1.17
+
+## 물감 마스크 텍스처 (Q22 ③-0, 2026-11-12 — 옛 frames_mask0/1.png 두 장은 raw/의 빌드 재료): 셰이더 이름 → 파일
+const MASK_TEX := {"fcode": "frames_mcode.png", "flut": "frames_mlut.png", "fmq0": "frames_mq0.png", "fmq1": "frames_mq1.png"}
 
 ## -1 = 환경 변수를 따름 · 0 끔 · 1 켬
 static var spike := -1
@@ -228,8 +231,9 @@ static func material(palette: PackedVector3Array, dir := DIR) -> ShaderMaterial:
 		_mat.set_shader_parameter(n, cut.get_shader_parameter(n))
 	_mat.set_shader_parameter("palette", palette)
 	_mat.set_shader_parameter("frames_atlas", load(dir + "frames_atlas.png"))
-	_mat.set_shader_parameter("fmask0", load(dir + "frames_mask0.png"))
-	_mat.set_shader_parameter("fmask1", load(dir + "frames_mask1.png"))
+	# 물감 마스크 (Q22 ③-0, 2026-11-12): 코드 텍스처 + 코드표 + 4분의 1 크기 마스크 둘 (tools/cutout_c/pack_masks.py, 셰이더 masks())
+	for n: String in MASK_TEX:
+		_mat.set_shader_parameter(n, load(dir + String(MASK_TEX[n])))
 	_mat.set_shader_parameter("fdata", _fdata(dir))
 	var off := PackedInt32Array()
 	var nn := PackedInt32Array()
@@ -277,10 +281,11 @@ static func material(palette: PackedVector3Array, dir := DIR) -> ShaderMaterial:
 
 
 ## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품·짐 (기울기, 손 x, y, 배율),
-## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13)
+## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13),
+## [4] = 그리는 몫 (장면 칸의 0~1: 왼쪽, 위, 오른쪽, 아래 — Q22 ③-1 빈틈없이 담은 아틀라스, tools/cutout_c/pack_atlas.py. 없으면 칸 전체)
 static func _fdata(dir := DIR) -> ImageTexture:
 	var fr: Array = lib(dir)["frames"]
-	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
+	var img := Image.create(fr.size(), 5, false, Image.FORMAT_RGBAF)
 	for i in fr.size():
 		var f: Dictionary = fr[i]
 		var uv: Array = f["uv"]
@@ -289,4 +294,6 @@ static func _fdata(dir := DIR) -> ImageTexture:
 		var pr: Array = f.get("prop", [0.0, 0.0, 0.0, 0.0, 0.0])
 		img.set_pixel(i, 2, Color(pr[0], pr[1], pr[2], pr[3]))
 		img.set_pixel(i, 3, Color(pr[4], float(f.get("prop_short", pr[0])), float(f.get("lie", 0.0)), float(f.get("shut", 0.0))))
+		var sb: Array = f.get("sub", [0.0, 0.0, 1.0, 1.0])
+		img.set_pixel(i, 4, Color(sb[0], sb[1], sb[2], sb[3]))
 	return ImageTexture.create_from_image(img)

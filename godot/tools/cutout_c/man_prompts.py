@@ -6,7 +6,7 @@ a drop-in second body with the same anchors, frame counts and timing.
 usage: man_prompts.py <sheet> <out_path>           (sheet = woman_c raw sheet name, e.g. walk_q_front, sit_q_back, reap_back)
 Attached images (gen_man.sh): 1) raw/ref_man_A.png (concept res_A man, front + 3/4: build and style),
 2) raw/ref_inset_man.png (res_A in-game inset x5: the in-game proportions), 3) woman_c/raw/<sheet>.png (the finished sheet).
-Dye classes the build reads from the drawn colours (build_frames_man.py classify_man):
+Dye classes the build reads from the drawn colours (build_frames.py --body man_c classify_man):
   skin = bare hands / forearms · main = TUNIC (sage green) · second = VEST (dusty rose — painting it the tunic colour = no vest)
   trim = BELT (brown leather) · leg = TROUSERS (cream) · shoe = BOOTS (dark brown) · far leg (3/4 views) = cyan trousers / navy boot."""
 import sys

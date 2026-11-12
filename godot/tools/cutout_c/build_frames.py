@@ -1,10 +1,13 @@
 """Method-C resident spike (docs/RESIDENTS_2D.md section 7, 2026-11-08): frame sheets -> frame atlas + dye masks + anchors.
 
-usage: python3 build_frames.py            (needs raw/{walk,carry,idle}_{front,q_front,q_back,back}.png)
+usage: python3 build_frames.py [--body man_c]   (default woman_c; needs <body>/raw/ sheets — Q22 3: the man body, art/cutout/man_c/log.md)
 in : art/cutout/woman_c/raw/<clip>_<view>.png  (gen.sh: 2x4 cells, magenta head placeholder, chroma green)
-out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed)
-     art/cutout/woman_c/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
-     art/cutout/woman_c/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
+out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed) — Q22 3-1 (2026-11-12): laid out on a grid
+                                          of cells first, then trimmed and packed tightly (pack_atlas.py; frames.json "sub" + "uv")
+     art/cutout/woman_c/raw/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
+     art/cutout/woman_c/raw/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
+     art/cutout/woman_c/frames_mcode.png + frames_mlut.png + frames_mq0/1.png  the two masks packed for the game (pack_masks.py, Q22 3-0
+                                          2026-11-12: 70 MB -> 12 MB of GPU memory per outfit with the atlas VRAM-compressed)
      art/cutout/woman_c/frames.json       per frame: uv rect, head anchor (chin, rig units, origin = soles centre, y up),
                                           hand anchors, sack box; per clip: frame count, stride; base colours
      raw/check_<clip>_<view>.png          aligned frames | dye-class view (eyeball check, not used by the game)
@@ -30,8 +33,14 @@ import cut_sheets as C   # noqa: E402  key() + guide line removal (same 1536x102
 import pose_ref as PR    # noqa: E402  cell template geometry (root, ground line, step S, foot depth offsets)
 import pose_states as PS  # noqa: E402  v11 state sheets (sit / kneel / eat, look up, hoe, gather): puppets, clip entries, prop grips
 
-ART = os.path.normpath(os.path.join(HERE, "..", "..", "art", "cutout", "woman_c"))
+# Q22 3 (2026-11-12): one build for every method C body — `--body man_c` (default woman_c). Each body is its own folder with raw/ sheets;
+# the pose references and the shared load / baby pictures always come from the woman's raw/ (WRAW: the man's sheets are redrawn from
+# hers, same cells). Body-specific: the dye classifier and the far-leg repaint colours (BODY_OPT).
+BODY = sys.argv[sys.argv.index("--body") + 1] if "--body" in sys.argv else "woman_c"
+ART = os.path.normpath(os.path.join(HERE, "..", "..", "art", "cutout", BODY))
 RAW = os.path.join(ART, "raw")
+WRAW = os.path.normpath(os.path.join(ART, "..", "woman_c", "raw"))
+CHECK_DIR = os.environ.get("CUTC_CHECK_DIR", RAW)     # raw/check_<sheet>.png eyeball images (not used by the game)
 VIEWS = ["front", "q_front", "q_back", "back"]
 CW, CH = 384, 512
 FIG = 920.0            # rig units of the old doll (cut_lib fig) — same screen_h maps to the same height
@@ -253,6 +262,104 @@ def classify(rgb, alpha, magenta, feet, fig_h, legzone=None, has_sack=False):
     return lab
 
 
+# ── Q22 3 (2026-11-12 "어른 남자 먼저"): the adult man body (art/cutout/man_c, tools/cutout_c/man_prompts.py) ──
+SHIN_ZONE = 0.2       # man: skin-coloured blobs wholly in this lowest part of a walking / standing figure are tan shins (trousers)
+SHOE_NEAR = 0.16     # man: a brown blob whose lowest pixel is this close to the soles (x figure height) is a boot, else the belt
+
+
+def classify_man(rgb, alpha, magenta, feet, fig_h, legzone=None, has_sack=False):
+    """Q22 man: hard dye class per pixel from the drawn garment colours (man_prompts.py): skin = warm tan hands / forearms,
+    main = sage-green TUNIC, second = dusty-rose VEST, trim = brown BELT, leg = cream TROUSERS, shoe = dark-brown BOOTS (the
+    far leg was repainted from its cyan / navy key colours in frames_of). Belt and boots are both brown: a brown blob is a boot
+    when it reaches down to the soles (walking / standing) or touches a puppet boot (state cells: legzone), else the belt.
+    Ink and the magenta disc = none. Then the same edge / speckle clean-up as the woman's classify()."""
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    L = luma(rgb)
+    lab = np.zeros(rgb.shape[:2], np.int8)
+    fg = (alpha > 128) & ~magenta
+    ink = L < 62
+    skin = (r - b > 85) & (L > 120) & (r > 185) & (g - b > 35)
+    green = (g > b + 22) & (g >= r - 12) & ~skin
+    rose = (r - g > 38) & (np.abs(g - b) < 16) & (r > 115) & ~skin
+    cream = (L > 188) & (r - b < 80) & (g - b > 8) & ~skin & ~green
+    brown = (L >= 45) & (L < 150) & (r - b > 35) & (r - g > 18) & (g - b > 8) & ~skin & ~rose & ~green
+    lab[fg & brown] = 4
+    lab[fg & cream] = 5
+    lab[fg & green] = 2
+    lab[fg & rose] = 3
+    lab[fg & skin] = 1
+    lab[fg & ink] = 0
+    left = fg & ~ink & (lab == 0)
+    if left.any():
+        cents = {c: np.median(rgb[fg & (lab == c)], axis=0) for c in (1, 2, 3, 4, 5) if (fg & (lab == c)).sum() > 20}
+        ks = list(cents)
+        d = np.stack([((rgb - cents[k]) ** 2).sum(-1) for k in ks], -1)
+        lab[left] = np.array(ks, np.int8)[d.argmin(-1)][left]
+    # tan shins: in some walking sheets the model kept the woman's TAN stocking colour on the near leg's lower part (between the
+    # cream trouser and the boot) — read as skin it took the skin dye (an orange band above the boot, cradle q_back, first capture).
+    # A skin blob lying wholly in the lowest SHIN_ZONE of a walking / standing figure (no hand is that low there) is that trouser
+    # leg: recoloured pixel by pixel to the trouser cream (same shading) and classed as legwear. State cells (hands reach the
+    # ground) are not touched.
+    if legzone is None:
+        low = np.arange(rgb.shape[0])[:, None] > feet - SHIN_ZONE * fig_h
+        cream_ref = np.median(rgb[fg & (lab == 5)], 0) if (fg & (lab == 5)).sum() > 50 else np.array([246.0, 228.0, 186.0])
+        for n_, _cy, _cx, _box, m_ in blobs(fg & (lab == 1), 1):
+            if (m_ & ~low).sum() == 0:
+                Lm = L[m_]
+                rgb[m_] = np.clip(cream_ref[None] * (Lm / max(float(np.median(Lm)), 1.0))[:, None], 0, 255)
+                lab[m_] = 5
+    # belt or boot: per brown blob
+    for n_, _cy, _cx, box, m_ in blobs(fg & (lab == 4), 1):
+        boot = (box[3] >= feet - SHOE_NEAR * fig_h) if legzone is None else bool((m_ & legzone).any())
+        if boot:
+            lab[m_] = 6
+    # edges: pixels next to ink / the silhouette take the majority class of the nearby core pixels
+    core = fg & ~dilate(ink | ~fg, 1)
+    edge = fg & ~ink & ~core
+    cnt = np.zeros(rgb.shape[:2] + (len(CLASSES),), np.int16)
+    for dy in range(-2, 3):
+        for dx in range(-2, 3):
+            sl = shift(lab, dy, dx)
+            sc = shift(core, dy, dx)
+            for c in range(1, len(CLASSES)):
+                cnt[..., c] += (sc & (sl == c))
+    best = cnt.argmax(-1).astype(np.int8)
+    lab[edge & (cnt.max(-1) > 0)] = best[edge & (cnt.max(-1) > 0)]
+    if VEST_SEAM:
+        # vest switch (Q22): the ink line BETWEEN the vest and the tunic (inside the figure, not its outline) is recoloured pixel
+        # by pixel to the tunic's own shade and takes the tunic class — with the vest dyed the tunic colour ("no vest") it reads
+        # as a fold of the tunic, not as the outline of a vest. Nothing is moved; the outline of the figure stays ink.
+        cv, ct = core & (lab == 3), core & (lab == 2)
+        seam = fg & ink & dilate(cv, 4) & dilate(ct, 4) & ~dilate(~fg, 3)
+        if seam.any() and ct.sum() > 50:
+            rgb[seam] = np.median(rgb[ct], 0) * VEST_SEAM
+            lab[seam] = 2
+    for c in range(1, len(CLASSES)):
+        for n_, _cy, _cx, _box, m_ in blobs(lab == c, 1):
+            if n_ >= SPECK_IN:
+                continue
+            near = dilate(m_, 4) & ~m_
+            if n_ >= SPECK and (near & ~fg).any():
+                continue
+            ring = near & (lab > 0)
+            if ring.sum() < 4:
+                continue
+            around = np.bincount(lab[ring].astype(np.int64), minlength=len(CLASSES))
+            if around[c] < 0.15 * ring.sum() and around.argmax() != c:
+                lab[m_] = around.argmax()
+    return lab
+
+
+VEST_SEAM = 0.6       # man: vest / tunic seam = this shade of the tunic (0 = keep the ink line)
+
+
+# body-specific build options (Q22 3): the dye classifier and the colours the cyan / navy far leg is repainted to (then darkened in
+# the shader by mask1.A) — woman: tan stocking / brown shoe; man: cream trouser / dark-brown boot
+BODIES = {"woman_c": dict(classify=classify, far_leg=(np.array([224.0, 165.0, 113.0]), np.array([124.0, 72.0, 49.0]))),
+          "man_c": dict(classify=classify_man, far_leg=(np.array([246.0, 228.0, 186.0]), np.array([118.0, 66.0, 40.0])))}
+BODY_OPT = BODIES[BODY]
+
+
 def frames_of(sheet):
     rgba = C.key(os.path.join(RAW, sheet + ".png")).astype(np.float32)
     out = []
@@ -282,7 +389,7 @@ def frames_of(sheet):
             far_sh = far_sh | (rim & (L_ < mid))
             # v5: repaint in the normal stocking / shoe colours; the 3/4 far leg is darkened AFTER the dye in the shader
             # (frames_mask1.a = far leg) so the near / far step survives any stocking colour
-            STOCK, SHOE = np.array([224.0, 165.0, 113.0]), np.array([124.0, 72.0, 49.0])
+            STOCK, SHOE = BODY_OPT["far_leg"]
             rgb[far_st] = np.clip(STOCK[None] * (L_[far_st] / st_ref)[:, None], 0, 255)
             rgb[far_sh] = np.clip(SHOE[None] * (L_[far_sh] / sh_ref)[:, None], 0, 255)
             if far.sum() > 150:
@@ -347,7 +454,7 @@ def ref_boot_x(clip, view):
     the same way as on the drawing — a boot partly behind the other leg / the hem is compared like with like"""
     key_ = (clip, view)
     if key_ not in _ref_boot_cache:
-        rgba = C.key(os.path.join(RAW, f"pose_{clip}_{view}.png")).astype(np.float32)
+        rgba = C.key(os.path.join(WRAW, f"pose_{clip}_{view}.png")).astype(np.float32)
         res = []
         for i in range(8):
             x0, y0 = (i % 4) * CW, (i // 4) * CH
@@ -406,7 +513,7 @@ def load_pictures():
     out = []
     import prompts as PT
     for sname in LOAD_SHEETS:
-        p = os.path.join(RAW, sname + ".png")
+        p = os.path.join(WRAW, sname + ".png")
         if not os.path.exists(p):
             continue
         rgba = C.key(p).astype(np.float32)
@@ -686,7 +793,7 @@ def main():
                 lz = np.zeros((CH, CW), bool)
                 for bx, by in PS.boots(name, fi_):
                     lz |= (xx - bx) ** 2 + (yy - by) ** 2 < BOOT_R ** 2
-            lab = classify(f["rgb"], f["a"], f["mag"], f["feet"], f["feet"] - f["head"]["top"], lz)
+            lab = BODY_OPT["classify"](f["rgb"], f["a"], f["mag"], f["feet"], f["feet"] - f["head"]["top"], lz)
             if pose:
                 ox, oy = CW / 2.0, float(PR.GROUND)
             else:
@@ -967,7 +1074,7 @@ def main():
     # with the baby's own colours by the shader) and the eyelid pictures one too (mask0 R = skin, the body's skin dye)
     skin_rgb = [int(base["skin"][i:i + 2], 16) for i in (0, 2, 4)]
     lids = lid_pictures(skin_rgb)
-    load_tab, lid_tab, where = [], [], {}
+    load_tab, lid_tab, where, pic_px = [], [], {}, {}
     for lname, pic, msk in [l_ for l_ in loads if not l_[0].startswith("lid_")] + [("lid_" + ls[0], ls[1], ls[2]) for ls in lids]:
         ph, pw = pic.shape[:2]
         ax0, ay0 = load_pos[lname]
@@ -975,6 +1082,7 @@ def main():
         if msk is not None:
             m0[ay0:ay0 + ph, ax0:ax0 + pw, :2] = msk
         where[lname] = dict(uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH], size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)])
+        pic_px[lname] = (ax0, ay0, ax0 + pw, ay0 + ph)
         if not lname.startswith("lid_") and not lname.startswith("baby") and not lname.startswith("ear_"):
             load_tab.append(dict(name=lname, **where[lname]))
         if lname.startswith("ear_"):
@@ -991,18 +1099,37 @@ def main():
     bhr = [BABY_BASE[n_][1] for n_ in set(BABY_PIC.values()) if BABY_BASE[n_][1] is not None]
     base["baby_skin"] = "%02x%02x%02x" % tuple(int(t) for t in bsk)
     base["baby_hair"] = "%02x%02x%02x" % tuple(int(t) for t in (np.median(np.array(bhr), 0) if bhr else (119, 72, 47)))
+    # Q22 3-1 (2026-11-12): the grid above is only the build layout — every cell trimmed to its used texels and every picture moved
+    # into a tight atlas (pack_atlas.py). "uv" = where the drawn part now is, "sub" = that part as fractions of the cell rect (the
+    # shader clamps the body quad's corners into it, so the doll is drawn where it was). The uv lists are shared with load_tab /
+    # lid_tab / frames, so they are rewritten in place.
+    import pack_atlas
+    grid = [AW, AH]
+    cell_px = {key: ((i % cols) * cw, (i // cols) * ch, (i % cols) * cw + cw, (i // cols) * ch + ch) for i, key in enumerate(order)}
+    atlas, m0, m1, place = pack_atlas.repack(atlas, m0, m1, cell_px, pic_px)
+    AH, AW = atlas.shape[:2]
+    for key in order:
+        cellinfo[key]["uv"][:] = [round(v, 7) for v in place[key]["uv"]]
+    for fr, e in zip(frames, entries):
+        fr["sub"] = [round(v, 7) for v in place[(e[2], e[3])]["sub"]]
+    for lname in pic_px:
+        where[lname]["uv"][:] = [round(v, 7) for v in place[lname]["uv"]]
     def save(arr, name):
         Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(ART, name), optimize=True)
     save(atlas, "frames_atlas.png")
-    save(m0, "frames_mask0.png")
-    save(m1, "frames_mask1.png")
+    # Q22 3-0 (2026-11-12): the masks are build sources now (raw/ is not imported) — the game reads them packed (pack_masks.py)
+    save(m0, os.path.join("raw", "frames_mask0.png"))
+    save(m1, os.path.join("raw", "frames_mask1.png"))
+    import pack_masks
+    pack_masks.pack(m0, m1, out=ART)
     nclip = {cl: len(cells) for cl, _, cells in CLIPS}
     for cl in state_clips:
         nclip[cl] = len(PS.ENTRIES[cl])
         seen = [fr["fists_seen"] for fr in frames if fr["clip"] == cl and "fists_seen" in fr]
         if seen:
             print(f"  {cl}: fists found on the drawing in {sum(all(x) for x in seen)} of {len(seen)} frames (else the puppet's)")
-    lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], cell=[cw, ch], views=VIEWS,
+    lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], grid=grid, cell=[cw, ch], views=VIEWS,
+               pack=dict(gap=pack_atlas.GAP, qpad=pack_atlas.QPAD, align=pack_atlas.ALIGN),
                clips=[cl for cl, _, _ in CLIPS] + state_clips, frames_per_clip=nclip, stride=strides, base=base, cells=len(order),
                loads=load_tab, lids=lid_tab, frames=frames)
     with open(os.path.join(ART, "frames.json"), "w") as fh:
@@ -1029,7 +1156,7 @@ def main():
         bg = np.full(sheet.shape[:2] + (3,), 120.0)
         out = bg * (1 - sheet[..., 3:4] / 255) + sheet[..., :3] * sheet[..., 3:4] / 255
         out[470, :] = [0, 0, 255]
-        Image.fromarray(out.astype(np.uint8)).resize((out.shape[1] // 2, out.shape[0] // 2)).save(os.path.join(RAW, f"check_{name}.png"))
+        Image.fromarray(out.astype(np.uint8)).resize((out.shape[1] // 2, out.shape[0] // 2)).save(os.path.join(CHECK_DIR, f"check_{name}.png"))
 
 
 if __name__ == "__main__":

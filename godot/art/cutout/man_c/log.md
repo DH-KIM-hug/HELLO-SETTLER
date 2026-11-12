@@ -18,11 +18,12 @@ woman, so the runtime takes it as a second body with no per-body tables.
   herself fails (her hold rows) are held to her boots instead (6 px).
 - `tools/cutout_c/pick_man.py [sheet]` — best take per sheet, failing cells replaced by the WHOLE cell of another take that passes
   (unmoved, unscaled — every take redraws the same sheet layout) -> `raw/<sheet>.png`.
-- **Build (one command)**: `python3 godot/tools/cutout_c/build_frames_man.py` (reads `raw/` + the woman's pose references and the
-  shared load / baby pictures in `woman_c/raw`) -> `frames_atlas.png`, `frames_mask0.png`, `frames_mask1.png`, `frames.json`
-  (woman's format). `MAN_CHECK_DIR=<dir>` puts the `check_<sheet>.png` eyeball images elsewhere. `build_frames_man.py` is a copy of
-  `build_frames.py` (left untouched — the atlas-memory work changes it); after both merges the new packed format must be applied to
-  this copy too (or `build_frames.py` given an ART / classifier switch) and the man rebuilt from `raw/`.
+- **Build (one command)**: `python3 godot/tools/cutout_c/build_frames.py --body man_c` (the woman's build with a body switch: `BODIES`
+  in build_frames.py — man = `classify_man` + cream / dark-boot far-leg repaint; reads `man_c/raw/` + the woman's pose references and
+  the shared load / baby pictures in `woman_c/raw`; `CUTC_CHECK_DIR=<dir>` puts the `check_<sheet>.png` images elsewhere) ->
+  `frames_atlas.png` (tight-packed, pack_atlas.py), `frames_mcode / mlut / mq0 / mq1.png` (pack_masks.py), `raw/frames_mask0/1.png`
+  (build sources), `frames.json` (with per-frame `sub`). Same format and `.import` settings as woman_c (atlas VRAM-compressed, high
+  quality, mipmaps; masks lossless). Rebuilding woman_c with the switched script is byte-identical to the committed woman outputs.
 - Inputs: `raw/ref_man_A.png` (concept `design/concept/residents/res_A.png` man, front + 3/4, x2), `raw/ref_inset_man.png`
   (res_A in-game inset man, x5). Style matched to woman_c and res_A: thick ink, flat colour + one shade, ~5 heads, no face on the body.
 
@@ -79,16 +80,15 @@ Build "boot x - ref" (3/4 traced sheets, px, planted frames): walk q_front R -2 
   of a walking / standing figure is recoloured pixel by pixel to the trouser cream and classed as legwear (state cells untouched).
   Checked on the class images of all gait sheets (legs now one class) and in the recaptured strips (cradle 3/4 back: band gone).
 
-## Final rebuild pending the packed pipeline
-The files here are a TEMPORARY viewing build in the pre-77697298 format (frames_atlas + frames_mask0/1). The atlas-memory change
-(packed masks, VRAM-compressed atlas) and the tight atlas packing now in progress change build_frames.py / pack_masks.py /
-frame_lib.gd; once they are merged, man_c must be rebuilt from `raw/` in that format (the copy `build_frames_man.py` already
-calls `pack_masks.pack(m0, m1, out=man_c)` when pack_masks.py exists, but the trimming change will need porting too — or, better,
-`build_frames.py` given an ART / classifier switch so the man is not a fork). Trial run of 77697298's pack_masks on these masks:
-256 codes (fits), 6,433 of 4,352,976 texels not exact (6,106 dyed) — the same rate as the woman.
+## Final build in the packed format (2026-11-12, after merging 77697298 + e8841ae5)
+`build_frames_man.py` (the temporary copy) is gone; `build_frames.py --body man_c` builds the man. pack_atlas: 1548x2812 grid ->
+2080x1296 tight atlas (212 cells trimmed, 21 pictures). pack_masks: 256 codes (fits the 256 limit), 6,433 of 2,695,680 texels not exact
+(6,106 dyed) — the woman's rate. GPU memory (Apple M4 Pro, Metal, shot_atlas_mem.gd tex): atlas 2080x1296 BPTC 4.28 MB + code
+3.17 MB + lut 0.002 MB + quarter masks 1.25 MB x 2 = 9.95 MB per body (woman 9.82 MB); imported `.astc.ctex` 3,595,524 B
+(woman 3,714,548 B). The old-format top-level frames_mask0/1.png were removed.
 
 ## Result
-Atlas 1548x2812 (cell 129x152, 212 cells, 304 frame records — same clips, views, frame counts, t0 and strides as woman_c; the
+Atlas 2080x1296 tight-packed from a 1548x2812 grid (cell 129x152, 212 cells, 304 frame records — same clips, views, frame counts, t0 and strides as woman_c; the
 loads / baby / closed-eye lids are the woman's pictures at the same seats). Base colours: skin f5a562, main 9a9d6b, second cd6b6a,
 trim 9c5630, leg f8e2bd, shoe 7a4229.
 

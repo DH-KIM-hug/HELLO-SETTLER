@@ -19,7 +19,7 @@ WRAW = os.path.join(ART, "woman_c", "raw")
 CW, CH = 384, 512
 # planted boot vs the pose reference: the woman's sheets were held to (4, 5) px; the man's redraws of them land 4-7 px behind
 # on the near boot in most takes (a slightly longer boot drawing), so the man is held to (8, 7) px = 3 atlas px, ~0.7 screen px at
-# ppu 44. Sliding inside a stance is checked by build_frames_man.py's "boot x - ref" print (same numbers per stance = no slide).
+# ppu 44. Sliding inside a stance is checked by build_frames.py --body man_c's "boot x - ref" print (same numbers per stance = no slide).
 K.PLANT_TOL = (8.0, 7.0)
 HEAD_TOL = (6.0, 6.0, 8.0)     # px: head centre x, chin y, diameter — the anchor the head piece is laid on
 SOLE_TOL = 8.0                  # px: lowest opaque row (the ground under the figure)

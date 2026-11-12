@@ -1,6 +1,8 @@
 ## 유모차 산책 · 아이의 첫 심부름 · 아이의 첫 낚시 (ROADMAP E2-2 · E2-3) 캡처. 실행 (창이 필요): godot --path godot -s res://tools/shot_kids2.gd
 ## 넓은 세상(world.tscn) 마을에 가족(젖먹이·아이 넷·노인)을 꾸려 1080×1920(논리 360×640)으로 찍는다 → godot_shots/kids2/k2_*.png
 ##   K2_ONLY=pram·meet·dog·park·errand·fish·book 로 하나씩 (비우면 전부 + 한 장 모음 k2_sheet.png · 연대기는 k2_book_1~3)
+##   (Q21) K2_ONLY=k3 → 다듬기 캡처 k3_*.png + 모음 k3_sheet.png (다섯 칸 격자): 문 앞 한 걸음에서 건넴 (가까이·기본 확대) · 처음 고른 사람이 자리를 떠
+##   다른 식구가 받음 · 젖먹이를 안은 어른이 받음 (팔 대신 끄덕) · 시뮬의 아이가 놀이·끼니 중인데 나들이 인형 위엔 나들이 말만 · 갓 연 연대기
 ## 마을 기본 확대(ppu 21)와 가까이(ppu 44). 저장은 도구 지킴이 폴더(user://_tool/…)로만 간다 (save/user_paths.gd).
 extends SceneTree
 
@@ -23,6 +25,8 @@ var mum_t: Resident
 var elder: Resident
 var nb: Resident                  # 이웃 어른
 var sheet: PackedStringArray = []
+var sheet3: PackedStringArray = []
+var _k3 := false
 var _area := Vector2.ZERO         # 트인 띠의 왼쪽 위 (가로 8.8 · 세로 4)
 var _hb: Building                 # 아기네 집 (심부름을 받는 집)
 var _hc: Building                 # 심부름 가는 아이네 집
@@ -51,6 +55,12 @@ func _initialize() -> void:
 	vp.add_child(scene)
 	var only := OS.get_environment("K2_ONLY")
 	plan = [_build]
+	if only.contains("k3"):
+		_k3 = true
+		_plan_k3()
+		plan.append(_sheet3)
+		plan.append(_finish)
+		return
 	if only == "" or only.contains("errand"):
 		plan.append(_s_errand.bind(2, ""))
 		_seq("k2_errand_carry", NEAR, 3, 50)
@@ -377,6 +387,8 @@ func _shot(name: String) -> int:
 	var path := out_dir.path_join(name + ".png")
 	img.get_region(rect).save_png(path)
 	sheet.append(path)
+	if _k3:
+		sheet3.append(path)
 	var note := ""
 	var kv: KidsView = scene.view.kids_view
 	var pr := ChildOutings.pram(v)
@@ -397,6 +409,10 @@ func _shot(name: String) -> int:
 		var km := _model(v.person(int(e["k"]))) as CutoutResident
 		if rm != null and km != null:
 			note += " 아이 보기 %d 좌우 %+.0f · 어른 보기 %d 좌우 %+.0f 아기 안음 %s" % [int(km.doll.view), float(km.doll.mirror), int(rm.doll.view), float(rm.doll.mirror), str(rm.carry_baby)]
+			note += " · 받는 이 %s (처음 %s · 바꿔 고름 %s · 안음 %s) 아이 인형 (%.2f, %.2f) 시뮬 (%.2f, %.2f) · 어른 인형 (%.2f, %.2f) 문 (%.2f, %.2f)" % [v.person(int(e["rc"])).name,
+				str(e.get("rc0", "?")), str(e.get("re", "?")), str(e.get("hb", "?")), km.position.x, km.position.z, v.person(int(e["k"])).x, v.person(int(e["k"])).y,
+				rm.position.x, rm.position.z, float(e["tx"]), float(e["ty"])]
+	note += _bubbles_note()
 	var f := ChildOutings.fishing(v)
 	if not f.is_empty():
 		note += " 낚시: 단계 %d c %.1f" % [int(f["ph"]), float(f["c"]) / ChildOutings.RS]
@@ -662,6 +678,205 @@ func _book_shot(name: String, last: bool) -> int:
 	return 4
 
 
+# ───────────────────────── (Q21) 다듬기 캡처 k3 ─────────────────────────
+func _plan_k3() -> void:
+	# ㊶ 문 앞 한 걸음에서 건넴 — 가까이(44)와 기본(21) 확대, 건넨 뒤 아이가 돌아가는 동안 받은 이가 그 자리에서 바라봄
+	if OS.get_environment("K3_FROM") == "book":
+		plan.append(_k3_book)
+		plan.append(_k3_book_shot.bind("k3_book_open"))
+		return
+	plan.append(_k3_errand.bind(2, "plain"))
+	plan.append(_until.bind(_err_ph.bind(2), 1500))
+	_seq("k3_give_near", NEAR, 1, 14)
+	_seq("k3_give_far", FAR, 1, 2)
+	plan.append(_until.bind(_err_ph.bind(3), 400))
+	_seq("k3_pat_near", NEAR, 1, 12)
+	plan.append(_until.bind(_err_ph.bind(4), 400))
+	_seq("k3_after_near", NEAR, 1, 30)
+	_seq("k3_after_far", FAR, 1, 2)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	# ㊴ 처음 고른 어르신이 가는 사이 자리를 떠남 → 문 가까이의 다른 식구가 받음
+	plan.append(_k3_errand.bind(3, "repick"))
+	plan.append(_until.bind(_err_picked, 1500))
+	_seq("k3_repick_come", NEAR, 1, 10)
+	plan.append(_until.bind(_err_ph.bind(3), 600))
+	_seq("k3_repick_give", NEAR, 1, 10)
+	_seq("k3_repick_far", FAR, 1, 2)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	# ㊴ 문 앞에 아무도 없음 (어르신이 조금 떨어진 풀밭에 앉아 쉼) → 아이가 찾아가 건넴
+	plan.append(_k3_errand.bind(0, "seek"))
+	plan.append(_until.bind(_err_picked, 1500))
+	_seq("k3_seek_go", NEAR, 1, 40)
+	plan.append(_until.bind(_err_ph.bind(2), 1500))
+	_seq("k3_seek_give", NEAR, 1, 10)
+	_seq("k3_seek_far", FAR, 1, 2)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	# ㊷ 젖먹이를 안은 엄마만 집에 있음 → 팔을 내밀지 않고 끄덕, 보퉁이는 발치에
+	plan.append(_k3_errand.bind(1, "baby"))
+	plan.append(_until.bind(_err_ph.bind(2), 1500))
+	_seq("k3_baby_give", NEAR, 1, 30)
+	plan.append(_until.bind(_err_ph.bind(3), 400))
+	_seq("k3_baby_nod", NEAR, 1, 14)
+	plan.append(_until.bind(_err_ph.bind(4), 400))
+	_seq("k3_baby_after", NEAR, 1, 30)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	# ㊵ 시뮬의 아이는 끼니·놀이 중 (배고파요 혼잣말 · 다른 연출 말) — 나들이 인형 위엔 나들이 말만, 인형은 하나
+	plan.append(_k3_errand.bind(0, "meal"))
+	_seq("k3_meal_walk", NEAR, 1, 40)
+	plan.append(_until.bind(_err_ph.bind(2), 1500))
+	_seq("k3_meal_give", NEAR, 1, 8)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	plan.append(_k3_errand.bind(2, "game"))
+	_seq("k3_game_walk", NEAR, 1, 40)
+	plan.append(_k3_home_shot.bind("k3_game_home"))
+	plan.append(_until.bind(_err_ph.bind(2), 1500))
+	_seq("k3_game_give", NEAR, 1, 8)
+	plan.append(_until.bind(_err_ph.bind(-1), 1500))
+	# ㊸ 갓 연 연대기 (보통 쓰임과 같게 open_chronicle(0) → 화면 몇 장 뒤)
+	plan.append(_k3_book)
+	plan.append(_k3_book_shot.bind("k3_book_open"))
+
+
+## 심부름 장면 (k3). how: plain · repick (어르신이 가는 사이 떠남) · baby (젖먹이 엄마만) · meal · game (시뮬의 아이가 끼니·놀이 중)
+func _k3_errand(ki: int, how: String) -> int:
+	_hour_in(9.1, 10.3)
+	if elder.dead or not v.people.has(elder):      # 찍는 사이 병의 며칠이 지나 어르신이 잠들었으면 새 어르신 (그림 도구만)
+		elder = v.add_person("할매", "f", 21.0, "", v.fire.x + 1.0, v.fire.y + 0.5, null, null)
+		print("  (어르신이 잠들어 새 어르신을 둠)")
+	_fresh()
+	scene.paused = true
+	var k := kids[ki]
+	var st := ChildOutings.state(v)
+	(st["ed"] as Dictionary).erase(str(k.id))
+	st["err"] = {}
+	(ChildPlay._state(v)["g"] as Array).clear()
+	_others_away([k, elder, mum_i] + ([nb] if how == "repick" else []))
+	var dc := ChildOutings._door(_hc)
+	var db := ChildOutings._door(_hb)
+	k.home = _hc.id
+	for q: Resident in v.people:                   # 앞 장면의 혼잣말·연출 말은 비움
+		q.say = ""
+		q.say_t = 0.0
+	scene.view.stage_say.clear()
+	_hold(k, "rest", dc.x + 0.3, dc.y + 0.3, "쉬는 중")
+	elder.home = _hb.id
+	mum_i.home = _hb.id
+	infant.home = _hb.id if how == "baby" else _hc.id      # 젖먹이는 '아기' 장면에서만 받는 집에
+	nb.home = mum_t.home
+	_hold(mum_i, "work", _area.x - 14.0, _area.y - 12.0, "일하는 중")
+	if how == "baby":
+		_hold(elder, "work", _area.x - 15.0, _area.y - 12.0, "일하는 중")
+		_hold(mum_i, "care", Vector2(_hb.x, _hb.y).x + 0.3, _hb.y + 0.4, "%s 안고 어르는 중" % infant.name)
+	else:
+		_hold(elder, "rest", db.x + 0.6, db.y + 0.35, "쉬는 중")
+	if how == "repick":
+		nb.home = _hb.id
+		_hold(nb, "chores", _hb.x + 0.9, _hb.y + 0.6, "집 앞에 앉아 쉬는 중")
+		nb.anim = "sit"
+		nb.steps = [ResidentAI.act(1.0e6, "sit")]
+	var ok := ChildOutings.try_errand(v, k)
+	var e := ChildOutings.errand(v)
+	if not ok:
+		print("  (못 나섬: 맑은 날 %s · 시각 %.2f · 끼니 틈 %s · 아이 한가 %s · 받을 집 %s · 놀이 %s · 할 일 %s/%s)" % [ChildOutings.calm(v), v.hour_now(), ChildOutings.free_span(v, Balance.ERRAND_FREE),
+			ChildOutings._kid_free(v, k, Balance.ERRAND_AGE), str(ChildOutings._errand_target(v, k).size()), str(ChildPlay.game_of(v, k.id)), k.action, k.carry])
+		var need := ChildOutings.walk_need(Vector2(k.x, k.y), db)
+		print("  (받는 집 %d 거리 %.1f · 걸음 %.0f · 틈 %s · 받을 사람 %s · 남은 %s · 어르신 %s/%s 문에서 %.1f 아픔 %.0f 잠 %s)" % [_hb.id, Vector2(_hb.x - _hc.x, _hb.y - _hc.y).length(), need,
+			ChildOutings.free_span(v, need + 3300.0), str(ChildOutings._receiver(v, _hb, -1, 0.0)), ChildOutings.stay_left(elder), elder.action, elder.anim, Vector2(elder.x, elder.y).distance_to(db), elder.sick_left, elder.sleeping])
+	if ok and how == "seek":         # 아이가 가는 사이 어르신이 문에서 조금 떨어진 풀밭으로 가 앉음 (화면 앞쪽 오른편)
+		var away := db + _scr(Vector2(3.2, 2.4))
+		_hold(elder, "rest", away.x, away.y, "쉬는 중")
+		elder.anim = "sit"
+		elder.steps = [ResidentAI.act(1.0e6, "sit")]
+	if ok and how == "repick":       # 아이가 가는 사이 어르신이 모닥불 쪽으로 떠남
+		_hold(elder, "rest", v.fire.x + 1.0, v.fire.y + 0.6, "모닥불 곁에서 쉬는 중")
+	if ok and how == "meal":         # 시뮬의 아이는 제 집 앞에서 끼니 중 · 배고프다는 혼잣말 · 다른 연출의 말
+		k.action = "eat"
+		k.anim = "eat"
+		k.doing = "먹는 중"
+		k.steps = [ResidentAI.act(1.0e6, "eat")]
+		k.say = "배고파요…"
+		k.say_t = 1.0e5
+		scene.view.stage_say[k.id] = ["저도 도와줄래요!", "cheer", 1.0e5]
+	if ok and how == "game":         # 시뮬의 아이는 제 집 앞에서 동생들과 놀이 중
+		for j in kids.size():
+			if j == ki:
+				continue
+			_hold(kids[j], "play", dc.x + 0.8 + 0.6 * float(j), dc.y + 0.9, "노는 중")
+		k.action = "play"
+		k.anim = "play"
+		var pp := Vector2(dc.x + 1.2, dc.y + 1.1)
+		var joined := ChildPlay.try_play(v, k, pp, 1.0e5)
+		for j in kids.size():
+			if j != ki:
+				ChildPlay.try_play(v, kids[j], pp, 1.0e5)
+		k.say = "저도 할래요!"
+		k.say_t = 1.0e5
+		print("  시뮬의 아이 놀이: %s · 놀이 %s" % [joined, str(ChildPlay.game_of(v, k.id))])
+	print("k3 심부름 [%s] %s: 벌어짐 %s · 받을 사람 %s · 까닭 '%s'" % [how, k.name, ok, v.person(int(e.get("rc", -1))).name if not e.is_empty() else "-", String(e.get("why", "?"))])
+	_c = (dc + db) * 0.5
+	_follow = k
+	_half_wide = Vector2(96, 70)
+	scene.refresh()
+	scene.paused = false
+	return 50
+
+
+func _err_picked() -> bool:
+	var e := ChildOutings.errand(v)
+	return e.is_empty() or int(e.get("pk", 0)) == 1
+
+
+## 시뮬의 아이 자리(제 집 앞) — 인형이 둘로 보이지 않는지
+func _k3_home_shot(name: String) -> int:
+	var keep := _follow
+	_follow = null
+	var k := v.person(int(ChildOutings.errand(v).get("k", -1)))
+	var keep_c := _c
+	if k != null:
+		_c = Vector2(k.x, k.y)
+	_centre(NEAR, 0)
+	_shot(name)
+	_follow = keep
+	_c = keep_c
+	return 2
+
+
+## 이번 화면에 뜬 말풍선 (나들이 아이 위의 말 확인)
+func _bubbles_note() -> String:
+	var box: Control = scene.get("bubbles")
+	var t := PackedStringArray()
+	for c in box.get_children():
+		if c is Label:
+			t.append((c as Label).text)
+	return " · 말풍선 [%s]" % ", ".join(t)
+
+
+func _k3_book() -> int:
+	scene.paused = true
+	if scene.chronicle.visible:
+		scene.chronicle.close()
+	scene.open_chronicle(0)
+	return 20
+
+
+func _k3_book_shot(name: String) -> int:
+	var ch: ChronicleSheet = scene.chronicle
+	var path := out_dir.path_join(name + ".png")
+	vp.get_texture().get_image().save_png(path)
+	sheet3.append(path)
+	var bar := ch.scroll.get_v_scroll_bar()
+	var last_y := int(ch._last_day.global_position.y - ch.body.global_position.y) if is_instance_valid(ch._last_day) else -1
+	print("  %s  연대기 %d줄 · 스크롤 %d / 끝 %d (막대 %.0f · 보이는 높이 %.0f) · 마지막 날 머리줄 %d · 몸 높이 %.0f" % [name, v.book.size(), ch.scroll.scroll_vertical,
+		int(bar.max_value - bar.page), bar.max_value, bar.page, last_y, ch.body.size.y])
+	ch.close()
+	return 4
+
+
+func _sheet3() -> int:
+	_grid(sheet3, 5, "k3_sheet.png")
+	return 1
+
+
 ## 한 줄로는 너무 길어 (100장) 열 줄 격자로 — 반으로 줄여 칸 가운데에
 func _sheet() -> int:
 	var cw := 300
@@ -680,3 +895,23 @@ func _sheet() -> int:
 	img.save_png(out_dir.path_join("k2_sheet.png"))
 	print("모음: %s (%d장)" % [out_dir.path_join("k2_sheet.png"), sheet.size()])
 	return 1
+
+
+## (Q21) cols칸 격자 — 칸마다 비율을 지켜 맞춤 (원래 크기보다 키우지 않음)
+func _grid(list: PackedStringArray, cols: int, file: String) -> void:
+	var cw := 576
+	var ch := 432
+	var gap := 10
+	var rows := int(ceil(list.size() / float(cols)))
+	var img := Image.create(cols * cw + (cols - 1) * gap, rows * ch + (rows - 1) * gap, false, Image.FORMAT_RGB8)
+	img.fill(Color("1e1f2a"))
+	for i in list.size():
+		var one := Image.load_from_file(list[i])
+		one.convert(Image.FORMAT_RGB8)
+		var k := minf(1.0, minf(float(cw) / one.get_width(), float(ch) / one.get_height()))
+		if k < 1.0:
+			one.resize(int(one.get_width() * k), int(one.get_height() * k), Image.INTERPOLATE_LANCZOS)
+		var at := Vector2i((i % cols) * (cw + gap) + (cw - one.get_width()) / 2, (i / cols) * (ch + gap) + (ch - one.get_height()) / 2)
+		img.blit_rect(one, Rect2i(Vector2i.ZERO, one.get_size()), at)
+	img.save_png(out_dir.path_join(file))
+	print("모음: %s (%d장)" % [out_dir.path_join(file), list.size()])
