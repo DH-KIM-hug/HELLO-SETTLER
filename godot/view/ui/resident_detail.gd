@@ -242,10 +242,13 @@ func open(p: Resident) -> void:
 		scroll.scroll_vertical = 0
 	if following and (other or p.dead):
 		set_following(false)
+	var was := visible
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	_refresh()
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
 
 
 func close() -> void:

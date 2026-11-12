@@ -16,6 +16,9 @@ var voice := true                       # 주민 목소리 (AUDIO.md 7)
 var vibration := true
 var language := "ko"
 var notify := false              # 알림 기본 꺼짐 (notifications GDD A2, 2026-11-08)
+## (Q23 51) 움직임 줄이기 — 켜면 화면 흔들림 · 카메라 기울기 · 선반 미끄러짐 · 시트 밀려 올라옴 · 반짝 밀림을 끔.
+## 읽는 곳은 한 곳: JarCamera.reduce_motion() (이 값을 이름으로 읽는다 — stage_director · tremor_fx · shelf_twinkle · UiTheme.slide_in …)
+var reduce_motion := false
 ## 주민 그림: 2D 종이 인형 (art-bible 5.2, 2026-11-08 시안 A — 화면만, 시뮬레이션과 무관). 미리 보기 빌드는 켜짐이 기본.
 ## 끄면 예전 3D 모델 (view/cutout_resident.gd CutoutResident.enabled — 시험은 override로 고정)
 var cutout_residents := true
@@ -50,6 +53,7 @@ static func load_from(p: String) -> GameSettings:
 	s.voice = bool(cf.get_value("sound", "voice", s.voice))
 	s.vibration = bool(cf.get_value("device", "vibration", s.vibration))
 	s.notify = bool(cf.get_value("device", "notify", s.notify))
+	s.reduce_motion = bool(cf.get_value("view", "reduce_motion", s.reduce_motion))
 	s.cutout_residents = bool(cf.get_value("view", "cutout_residents", s.cutout_residents))
 	s.picture_buildings = bool(cf.get_value("view", "picture_buildings", s.picture_buildings))
 	s.picture_flora = bool(cf.get_value("view", "picture_flora", s.picture_flora))
@@ -68,6 +72,7 @@ func save(p := "") -> Error:
 	cf.set_value("sound", "voice", voice)
 	cf.set_value("device", "vibration", vibration)
 	cf.set_value("device", "notify", notify)
+	cf.set_value("view", "reduce_motion", reduce_motion)
 	cf.set_value("view", "cutout_residents", cutout_residents)
 	cf.set_value("view", "picture_buildings", picture_buildings)
 	cf.set_value("view", "picture_flora", picture_flora)

@@ -136,6 +136,7 @@ var _nudge_tw: Tween
 
 const PICK_R := 34.0                 # 주민 누르기: 손가락 둘레 (화면 기준 px) — 몸 높이가 크면 그만큼 넓게
 const TAP_SLOP := 10.0               # 이만큼 넘게 끌면 누르기가 아니라 끌기
+const TOOL_GAP := 6                  # (Q23 ㊾) 아래 도구 단추 사이 (px)
 const GEAR_HOLD := 0.6               # 톱니를 이만큼(초) 길게 누르면 개발 모드
 
 
@@ -701,7 +702,7 @@ func _setup_ui() -> void:
 	bottom_bar.mouse_filter = Control.MOUSE_FILTER_STOP
 	root.add_child(bottom_bar)
 	var brow := HBoxContainer.new()
-	brow.add_theme_constant_override("separation", 2)
+	brow.add_theme_constant_override("separation", TOOL_GAP)      # (Q23 ㊾) 도구 사이 6 (예전 2 — 옆 단추를 잘못 누르지 않게)
 	bottom_bar.add_child(brow)
 	altar_btn = _tool_button(brow, "제단", "제단", open_altar)
 	shop_btn = _tool_button(brow, "상점", "상점", open_shop)
@@ -783,6 +784,7 @@ func _setup_ui() -> void:
 	shop_sheet.setup(village)
 	dlayer.add_child(shop_sheet)
 	shop_sheet.bought.connect(func(_it: String) -> void: _hand_glow_t = 4.0)
+	shop_sheet.undone.connect(func(_it: String) -> void: _hand_glow_t = 0.0)
 	shelf_sheet = ShelfSheet.new()
 	dlayer.add_child(shelf_sheet)
 	settings_sheet = SettingsSheet.new()
@@ -842,7 +844,29 @@ func _setup_ui() -> void:
 	GameSettings.get_current().apply()
 	set_debug_mode(not OS.has_feature("mobile"))
 	get_viewport().size_changed.connect(layout_bars)
+	apply_early()
 	layout_bars()
+
+
+## (Q23 54) 첫 며칠 — 첫 병이 첫날이고 아직 넘은 고비가 없으면 늘 떠 있는 것을 줄인다 (힉):
+## 창고 띠는 접힌 [창고 ▸] (별지기가 직접 펴거나 접은 적이 있으면 그 뜻대로), 넓은 세상의 둥근 지도는 감춤 ([마을로 가기]는 그대로).
+## 수첩이 가리키는 것(제단·상점·연대기·사람들·유리·슬롯)은 건드리지 않는다. 둘째 날 또는 첫 고비부터 펼침 — 그 뒤엔 다시 접지 않는다
+var early_over := false
+
+
+func early_days() -> bool:
+	if early_over or jar_id != 1 or village == null:
+		return false
+	if village.day_no() >= 2 or Milestones.count(village) > 0:
+		early_over = true
+		return false
+	return true
+
+
+## 1초마다 · 처음 한 번 — 접고 펼칠 것을 맞춤 (넓은 세상은 지도도 — world_village가 덧붙임)
+func apply_early() -> void:
+	if store_strip != null:
+		store_strip.set_auto_fold(early_days())
 
 
 ## 시트를 모두 닫는다 (하나만 열려 있게) — keep은 남김
@@ -1319,27 +1343,13 @@ func _gear_button() -> Button:
 	icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	icon.set_anchors_preset(Control.PRESET_FULL_RECT)
 	icon.draw.connect(func() -> void:
-		var c := icon.size * 0.5
+		var g := gear_shapes(icon.size * 0.5)
 		var hb := HudBatch.of(icon)
 		if hb != null:                          # (P1b) 바탕 겹에 함께
-			var g := HudBatch.Geo.new()
-			for i in 8:
-				var a := TAU * i / 8.0
-				var xf := Transform2D(a, c + Vector2(cos(a), sin(a)) * 8.5)
-				g.polygon(xf * PackedVector2Array([Vector2(-2.5, -2.5), Vector2(2.5, -2.5), Vector2(2.5, 2.5), Vector2(-2.5, 2.5)]), UiTheme.INK)
-			g.circle(c, 8.0, UiTheme.INK)
-			g.circle(c, 3.5, UiTheme.BUTTON)
 			hb.put_shapes(icon, g)
 			return
-		for i in 8:
-			var a := TAU * i / 8.0
-			var d := Vector2(cos(a), sin(a))
-			var p := c + d * 8.5
-			icon.draw_set_transform(p, a, Vector2.ONE)
-			icon.draw_rect(Rect2(-2.5, -2.5, 5, 5), UiTheme.INK)
-		icon.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		icon.draw_circle(c, 8.0, UiTheme.INK)
-		icon.draw_circle(c, 3.5, UiTheme.BUTTON))
+		for i in range(0, g.pts.size(), 3):
+			icon.draw_colored_polygon(g.pts.slice(i, i + 3), g.cols[i]))
 	b.add_child(icon)
 	b.button_down.connect(func() -> void:
 		_gear_down_t = 0.0
@@ -1353,6 +1363,30 @@ func _gear_button() -> Button:
 		close_sheets(settings_sheet)
 		settings_sheet.open())
 	return b
+
+
+## (Q23 53) 톱니 — 아래 도구 아이콘과 같은 칠: 나무색 몸 + 밤색 먹선 + 크림색 구멍 + 밝은 윗면 (예전엔 까만 단색)
+const GEAR_BODY := Color("c98d4f")
+const GEAR_LIGHT := Color("e7b77a")
+const GEAR_LINE := Color("4a3424")
+
+
+static func gear_shapes(c: Vector2) -> HudBatch.Geo:
+	var g := HudBatch.Geo.new()
+	var teeth := func(half: float, rad: float, col: Color) -> void:
+		for i in 8:
+			var a := TAU * i / 8.0 + TAU / 16.0
+			var xf := Transform2D(a, c + Vector2(cos(a), sin(a)) * rad)
+			g.polygon(xf * PackedVector2Array([Vector2(-half, -half), Vector2(half, -half), Vector2(half, half), Vector2(-half, half)]), col)
+	teeth.call(4.0, 10.0, GEAR_LINE)         # 먹선 (톱니·몸을 조금 크게 먼저)
+	g.circle(c, 10.6, GEAR_LINE)
+	teeth.call(2.7, 10.0, GEAR_BODY)
+	g.circle(c, 9.2, GEAR_BODY)
+	g.circle(c + Vector2(-1.2, -1.4), 7.0, GEAR_LIGHT)      # 빛 받는 윗면
+	g.circle(c + Vector2(0.4, 0.5), 6.4, GEAR_BODY)
+	g.circle(c, 4.4, GEAR_LINE)              # 가운데 구멍
+	g.circle(c, 3.0, UiTheme.PAPER)
+	return g
 
 
 ## 배속 칩 길게 누르기 → 배속 목록
@@ -1570,6 +1604,7 @@ func _update_ui() -> void:
 	_layout_t += get_process_delta_time()
 	if _layout_t > 1.0:
 		_layout_t = 0.0
+		apply_early()
 		if SafeArea.insets(get_viewport()) != _insets:
 			layout_bars()
 	var fv := focus_village()

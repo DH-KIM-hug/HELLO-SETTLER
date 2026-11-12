@@ -207,7 +207,7 @@ func _style_tabs() -> void:
 		for st in ["normal", "hover", "pressed"]:
 			b.add_theme_stylebox_override(st, _tab_box(bg if st != "hover" else bg.lightened(0.06), UiTheme.PARCHMENT_EDGE, 3 if on else 1))
 		for c in ["font_color", "font_hover_color", "font_pressed_color", "font_focus_color", "font_hover_pressed_color"]:
-			b.add_theme_color_override(c, UiTheme.INK_BROWN if on else UiTheme.INK_BROWN.lightened(0.3))
+			b.add_theme_color_override(c, UiTheme.INK_BROWN if on else UiTheme.INK_BROWN_SOFT)
 		b.add_theme_font_override("font", UiTheme.font(on))
 
 
@@ -244,6 +244,7 @@ func _layout() -> void:
 
 # ───────────────────────── 열기·닫기 ─────────────────────────
 func open(t := -1) -> void:
+	var was := visible
 	if not visible:
 		GameAudio.fx("paper", "Room", -2.0)
 	visible = true
@@ -254,6 +255,8 @@ func open(t := -1) -> void:
 	_style_tabs()
 	_refresh()
 	_scroll_start()
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
 
 
 func close() -> void:
@@ -411,7 +414,7 @@ func _fill_recent() -> void:
 			body.add_child(row)
 			var tl := _label(row, _clock(float(e["t"])), "Small")
 			tl.custom_minimum_size.x = 34
-			tl.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+			tl.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 			var col := VBoxContainer.new()
 			col.add_theme_constant_override("separation", 1)
 			col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -479,7 +482,7 @@ func _soft(text: String) -> void:
 	body.add_child(sp)
 	var l := _hand(body, text)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+	l.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 
 
 # ───────────────────────── 창세 신화 ─────────────────────────
@@ -491,7 +494,7 @@ func _fill_myth() -> void:
 	body.add_child(sp)
 	var cap := _label(body, "— 태초의 이야기 —", "Small")
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.3))
+	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 	if lines.is_empty():
 		_soft("아직 아무도 이 땅의 처음을 이야기하지 않았어요.\n언젠가 노인들이 아이들에게 들려줄 거예요.")
 		_fill_jar()
@@ -538,7 +541,7 @@ func _fill_jar() -> void:
 	_rule(body)
 	var cap := _label(body, "— 이 병 —", "Small")
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.3))
+	cap.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 	var star := _hand(body, star_word(), UiTheme.SIZE_HAND + 4)
 	star.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	var notes := jar_notes()
@@ -566,7 +569,7 @@ func _fill_jar() -> void:
 	head.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	if notes.is_empty():
 		var l := _hand(col, "아직 이 병만의 버릇은 모르겠다. 지켜보다 보면 알게 되겠지.")
-		l.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+		l.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 		return
 	for n: Dictionary in notes:
 		var l := _hand(col, "· " + String(n.get("text", "")))
@@ -595,7 +598,7 @@ func _people_section(title: String, rows: Array, kind: String) -> void:
 	hd.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	if rows.is_empty():
 		var e := _label(body, {"alive": "아무도 없어요.", "dead": "아직 잠든 사람이 없어요.", "left": "아직 떠난 사람이 없어요."}[kind], "Small")
-		e.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+		e.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 		_rule(body)
 		return
 	var grid := GridContainer.new()
@@ -649,7 +652,7 @@ func _person_row(row: Dictionary, kind: String) -> Button:
 	hb.add_child(col)
 	var nm := _label(col, "%s · %d세" % [row["name"], int(row["age"])])
 	nm.clip_text = true
-	nm.add_theme_color_override("font_color", UiTheme.INK_BROWN if alive else UiTheme.INK_BROWN.lightened(0.3))
+	nm.add_theme_color_override("font_color", UiTheme.INK_BROWN if alive else UiTheme.INK_BROWN_SOFT)
 	var note := ""
 	match kind:
 		"alive":
@@ -661,7 +664,7 @@ func _person_row(row: Dictionary, kind: String) -> Button:
 	if note != "":
 		var nl := _label(col, note, "Small")
 		nl.clip_text = true
-		nl.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+		nl.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 	b.custom_minimum_size.y = maxf(UiTheme.TOUCH, 40.0)
 	if alive and r != null:
 		var rv: Village = row["v"]
@@ -680,7 +683,7 @@ func _fill_codex() -> void:
 	var hd := _label(body, "발견 %d / %d" % [c.x, c.y], "Section")
 	hd.add_theme_color_override("font_color", UiTheme.INK_BROWN)
 	var sub := _label(body, "세상이 바뀌면, 그 자리에 있던 사람이 찾아내요.", "Small", true)
-	sub.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.35))
+	sub.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 	# DISCOVERIES 25종 (발견한 것 먼저, 표 순서 그대로) — 곁가지(누룩·푸른 가루·얼룩버섯·물고기 지혜)는 찾은 것만 뒤에
 	var main: Array = rows.filter(func(r: Dictionary) -> bool: return String(r["doc"]) != "")
 	var side: Array = rows.filter(func(r: Dictionary) -> bool: return String(r["doc"]) == "" and bool(r["known"]))
@@ -746,7 +749,7 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 		q.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		q.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		q.theme_type_variation = "Title"
-		q.add_theme_color_override("font_color", Color(UiTheme.INK_BROWN, 0.3 if not known else 0.8))
+		q.add_theme_color_override("font_color", Color(UiTheme.INK_BROWN, 0.55 if not known else 0.8))
 		holder.add_child(q)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 1)
@@ -754,9 +757,9 @@ func _codex_card(row: Dictionary) -> PanelContainer:
 	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hb.add_child(col)
 	var nm := _label(col, String(row["name"]) if known else "???", "Section")
-	nm.add_theme_color_override("font_color", UiTheme.INK_BROWN if known else UiTheme.INK_BROWN.lightened(0.4))
+	nm.add_theme_color_override("font_color", UiTheme.INK_BROWN if known else UiTheme.INK_BROWN_FAINT)
 	var line := _label(col, Codex.credit(row) if known else String(row["hint"]), "Small", true)
-	line.add_theme_color_override("font_color", UiTheme.INK_BROWN.lightened(0.25 if known else 0.4))
+	line.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT if known else UiTheme.INK_BROWN_FAINT)
 	if not known:
 		line.add_theme_font_override("font", UiTheme.hand_font())
 		line.add_theme_font_size_override("font_size", UiTheme.SIZE_HAND_SMALL)

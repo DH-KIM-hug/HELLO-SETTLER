@@ -206,11 +206,14 @@ func _sm() -> GameSave:
 
 
 func open() -> void:
+	var was := visible
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	_sig = ""
 	_refresh()
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
 
 
 func close() -> void:
@@ -494,13 +497,14 @@ func _fill_buy(s: GameSave, shelf: Array) -> void:
 		b.toggle_mode = true
 		b.button_pressed = climate == String(c["name"])
 		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(56, 34)
+		b.custom_minimum_size = Vector2(56, 0)
 		var nm := String(c["name"])
 		b.pressed.connect(func() -> void:
 			climate = nm
 			_sig = ""
 			_refresh())
 		cr.add_child(b)
+		UiTheme.hit_pad(b, 34.0)                     # (Q23 ㊾) 보이는 높이 34 그대로, 누르는 높이 44
 	_label(cr, "다른 기후는 곧", "Small").size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	var can := Shelf.can_buy_jar(s.giant, n)
 	var row := HBoxContainer.new()

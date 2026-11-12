@@ -321,6 +321,31 @@ static func buy(v: Village, item: String) -> Dictionary:
 	return {"ok": true, "why": "", "hand_id": Market.hand_serial}
 
 
+## (Q23 ㊽) 방금 산 것을 되돌린다 — 아직 손에 들려 있을 때만 (떨어뜨렸으면 이미 병 안의 일이라 못 되돌림 → false).
+## 낸 지폐(paid)를 모두 돌려주고 손에서 빼고, 건물 설계도는 산 횟수를, 이주민 뽑기는 그날 횟수·꾸러미 번호를 되돌린다
+## (mig_serial = 살 때의 Market.mig_serial — 그 뒤에 또 뽑았으면 번호는 그대로 두고 그날 횟수만). 수첩의 '사 보기' 쪽지는 되돌리지 않는다
+static func undo_buy(v: Village, hand_id: int, mig_serial := -1) -> bool:
+	var h := hand_item(hand_id)
+	if h.is_empty():
+		return false
+	var item := String(h["item"])
+	Market.notes += float(h.get("paid", 0.0))
+	hand_remove(hand_id)
+	if is_building(item) and v != null:
+		var n := int(v.shop_bought.get(item, 0)) - 1
+		if n > 0:
+			v.shop_bought[item] = n
+		else:
+			v.shop_bought.erase(item)
+	if item == Immigrants.ITEM:
+		Market.mig_n = maxi(0, Market.mig_n - 1)
+		if mig_serial >= 0 and Market.mig_serial == mig_serial:
+			Market.mig_serial -= 1
+	if v != null:
+		v.giant_acted()
+	return true
+
+
 static func hand_item(id: int) -> Dictionary:
 	for h: Dictionary in Market.hand:
 		if int(h["id"]) == id:

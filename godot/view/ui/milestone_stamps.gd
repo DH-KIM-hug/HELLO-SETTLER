@@ -16,7 +16,7 @@ const STAMP := 46.0                                # 도장 한 칸 (px)
 const STAMP_SMALL := 30.0                          # 얇은 띠의 도장 한 칸 (px)
 const STAMP_TINY := 28.0                           # 도장이 MANY를 넘을 때 얇은 띠의 한 칸
 const MANY := 7                                    # 이보다 많으면 한 단계 작게
-const LABEL_TINY := 10                             # 그때의 이름 글씨 (px)
+const LABEL_TINY := 11                             # 그때의 이름 글씨 (px) — (Q23 ㊿) 가장 작은 글 11 (예전 10)
 const NEXT_RING := Color(0.45, 0.35, 0.24, 0.62)   # 다음 고비 자리의 점선 동그라미
 const TILT := [-0.10, 0.07, -0.05, 0.11, -0.08, 0.05, 0.09, -0.06]     # 손으로 찍은 듯한 기울기
 
@@ -63,7 +63,7 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 		l.theme_type_variation = "Small"
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		l.add_theme_color_override("font_color", UiTheme.INK_BROWN if st.passed else UiTheme.INK_BROWN.lightened(0.2 if st.next else 0.45))
+		l.add_theme_color_override("font_color", UiTheme.INK_BROWN if st.passed else (UiTheme.INK_BROWN_SOFT if st.next else UiTheme.INK_BROWN_FAINT))     # (Q23 ㊿) 빈 도장 이름도 3:1
 		if compact and many:
 			l.add_theme_font_size_override("font_size", LABEL_TINY)
 		cell.add_child(l)

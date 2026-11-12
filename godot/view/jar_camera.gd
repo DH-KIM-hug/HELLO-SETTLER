@@ -127,7 +127,7 @@ func _process(dt: float) -> void:
 		_apply()
 
 
-## (A28b) 짧은 떨림: amp = 화면 세로의 몫 (0.006 ≈ 세로 960에서 6px), dur 초. 움직임 줄이기 설정(A26 — 생기면)이 켜져 있으면 떨지 않는다
+## (A28b) 짧은 떨림: amp = 화면 세로의 몫 (0.006 ≈ 세로 960에서 6px), dur 초. 움직임 줄이기 설정(GameSettings.reduce_motion)이 켜져 있으면 떨지 않는다
 func shake(amp: float, dur: float) -> void:
 	if reduce_motion():
 		return
@@ -140,7 +140,7 @@ func shaking() -> bool:
 	return _shake_t < _shake_dur
 
 
-## 설정 '움직임 줄이기'·'흔들림' (ROADMAP A26 — 아직 없으면 늘 false)
+## 설정 '움직임 줄이기' (Q23 51 — 설정 시트 [기기] 칸, GameSettings.reduce_motion) · '흔들림'(아직 없음)
 static func reduce_motion() -> bool:
 	var s := GameSettings.get_current()
 	return s.get("reduce_motion") == true or s.get("screen_shake") == false or s.get_meta("reduce_motion", false) == true    # meta = 캡처 도구(shot_awaken -- reduce)

@@ -132,6 +132,9 @@ func _build_settings(body: VBoxContainer) -> void:
 	_section(body, "기기")
 	_toggle_row(body, "vibration", "진동")
 	_toggle_row(body, "notify", "알림")
+	_toggle_row(body, "reduce_motion", "움직임 줄이기")      # (Q23 51) 화면 흔들림 · 카메라 기울기 · 미끄러짐 · 시트 밀려 올라옴을 끔 (JarCamera.reduce_motion)
+	var rm := _label(body, "화면이 흔들리거나 미끄러지는 움직임을 줄여요.", "Small")
+	rm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_toggle_row(body, "picture_flora", "꽃·소품을 그림으로")     # 2D 그림책 꽃·풀·소품 (끄면 3D 모델 — 비교용)
 	_toggle_row(body, "picture_buildings", "건물을 그림으로")     # 2D 그림책 건물 (끄면 3D 모델 — 비교용) — VillageView가 다음 화면에 다시 그림
 	_toggle_row(body, "cutout_residents", "주민을 그림 인형으로 (시험)")     # 2D 컷아웃 주민 미리 보기 — 바로 바뀜 (VillageView가 다음 화면에)
@@ -162,7 +165,7 @@ func _build_settings(body: VBoxContainer) -> void:
 	# 처음부터 다시 시작 (맨 아래) — 두 번 묻고, 저장 폴더를 모두 지우고 지폐·장터를 처음으로 → 타이틀 [시작하기]. 설정(소리 등)은 그대로
 	_section(body, "처음부터")
 	reset_btn = _button(body, "처음부터 다시 시작")
-	reset_btn.add_theme_color_override("font_color", Color("a8452f"))
+	reset_btn.theme_type_variation = "Danger"            # (Q23 ㊼) 되돌릴 수 없는 일 — 테두리 + 밤색 글자
 	reset_btn.pressed.connect(func() -> void:
 		GameAudio.ui_click()
 		ask_reset())
@@ -291,7 +294,7 @@ func ask_reset() -> void:
 	if confirm.get_parent() == null:
 		add_child(confirm)
 	_reset_ask = 1
-	confirm.ask(RESET_Q1, "처음부터", "그만두기")
+	confirm.ask(RESET_Q1, "처음부터", "그만두기", true)
 
 
 func _on_reset_answer(yes: bool) -> void:
@@ -300,7 +303,7 @@ func _on_reset_answer(yes: bool) -> void:
 		return
 	if _reset_ask == 1:
 		_reset_ask = 2
-		confirm.ask.call_deferred(RESET_Q2, "모두 지우기", "그만두기")
+		confirm.ask.call_deferred(RESET_Q2, "모두 지우기", "그만두기", true)
 		return
 	_reset_ask = 0
 	reset_everything()
@@ -321,11 +324,14 @@ func reset_everything() -> void:
 
 
 func open() -> void:
+	var was := visible
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)
 	visible = true
 	show_page("settings")
 	_layout()
+	if not was:
+		UiTheme.slide_in(panel)              # (Q23 52)
 
 
 func close() -> void:
