@@ -10,6 +10,8 @@
 ##            Q22M_PIC=astc8: ASTC 8×8 (Q22 ③-1 비교 — 엔진의 가져오기는 4×4만 만듦, Image.compress는 4×4·8×8만 앎. 6×6은 엔진에 없음)
 ##            Q22M_ATLAS=res://…png: 몸 그림 대신 이 텍스처 (가져오기 설정만 다른 복사본 — Basis Universal 비교)
 ##            Q22M_PREFIX: 파일 이름 앞 (없으면 l2 — ③-1 비교는 l4)
+##            Q22M_PPUS=20,44,60,150: 찍을 확대 (없으면 20·44·60 — 큰 확대는 뷰포트를 키워 32명이 다 들어오게)
+##            Q22M_BODY=woman_c|woman2_c|man_c: 몸 (없으면 woman_c) — woman2_c · man_c는 위 두 줄 앞치마·조끼, 아래 두 줄 없음
 ## 2026-11-12 결과 (Apple M4 Pro · Metal): 옷 한 벌 70.9 MB → 14.7 MB (몸 그림 BPTC 6.33 + 코드 4.72 + 코드표 0.002 + 4분의 1 마스크 1.81 × 2),
 ##   world: 방식 C 켬 +70.96 MB → +14.72 MB. 전후 사진·차이: godot_shots/looks/l2_*.png, l2_sheet.png
 ## 2026-11-12 Q22 ③-1 빈틈없이 담기 (tools/cutout_c/pack_atlas.py): 14.67 MB → 9.82 MB (몸 그림 2384×1168 BPTC 4.20 + 코드 3.22 + 1.20 × 2).
@@ -70,7 +72,10 @@ func _initialize() -> void:
 			plan = [_w_build, _w_mem.bind("method C off"), _w_on, _w_mem.bind("method C on"), _finish]
 		_:
 			plan = [_s_build]
-			for p: float in PPUS:
+			var pp: Array = PPUS
+			if OS.get_environment("Q22M_PPUS") != "":
+				pp = Array(OS.get_environment("Q22M_PPUS").split(",")).map(func(x: String) -> float: return float(x))
+			for p: float in pp:
 				plan.append(_s_look.bind(p))
 				plan.append(_s_save)
 			plan.append(_finish)
@@ -227,7 +232,9 @@ func _s_build() -> int:
 	cam.far = 100.0
 	cam.current = true
 	var pal: PackedVector3Array = CutoutResident.game_material().get_shader_parameter("palette")
-	var mat: ShaderMaterial = FLib.material(pal)
+	var bname := OS.get_environment("Q22M_BODY")
+	var dir: String = {"woman2_c": FLib.WOMAN2_DIR, "man_c": FLib.MAN_DIR}.get(bname, FLib.DIR)
+	var mat: ShaderMaterial = FLib.material(pal, dir)
 	var pic := OS.get_environment("Q22M_PIC")
 	if pic != "":
 		mat = mat.duplicate() as ShaderMaterial
@@ -245,13 +252,19 @@ func _s_build() -> int:
 		mat.set_shader_parameter("atlas", _squeezed("res://art/cutout/woman_a/doll_atlas.png", hpic))
 	for ri in ROWS.size():
 		var r: Array = ROWS[ri]
-		var look := Lib.look_from(int(r[0]), "f", int(r[1]), int(r[2]))
-		look["head"] = ri % 2
+		var look := Lib.look_from(int(r[0]), "m" if dir == FLib.MAN_DIR else "f", int(r[1]), int(r[2]))
+		look["head"] = ri % 2 if dir != FLib.MAN_DIR else 3
+		if dir != FLib.DIR and ri >= 2:          # 앞치마 · 조끼 없음: 둘째 물감 자리를 주 물감으로 (CutoutResident._frame_look과 같음)
+			var dd: Array = look["dye"]
+			dd[3] = dd[2]
+		elif dir != FLib.DIR:                    # 앞치마 · 조끼 있음: 크림
+			var de: Array = look["dye"]
+			de[3] = Lib.OFF["cream"]
 		var hat := int(look["hat"]) if ri == 2 else -1
 		for ci in COLS.size():
 			var c: Array = COLS[ci]
 			var n: MeshInstance3D = FDoll.new()
-			n.setup(mat)
+			n.setup(mat, dir)
 			w.add_child(n)
 			n.set_look(look, hat)
 			n.set_prop(int(c[4]), String(c[5]))
@@ -299,7 +312,9 @@ func _squeezed(path: String, kind: String) -> ImageTexture:
 
 func _s_look(ppu: float) -> int:
 	_ppu = ppu
-	cam.size = 640.0 / ppu
+	var k := maxf(1.0, ceilf(ppu / 60.0))           # 큰 확대: 뷰포트를 키워 같은 화소 크기로 32명이 다 들어오게
+	vp.size = Vector2i(int(1080 * k), int(1920 * k))
+	cam.size = (vp.size.y / 3.0) / ppu
 	return 8
 
 
@@ -311,7 +326,7 @@ func _s_save() -> int:
 	for n: Node3D in dolls:
 		for h: float in [0.0, 1.05]:
 			for dx: float in [-0.42, 0.42]:
-				var sp: Vector2 = cam.unproject_position(n.global_position + Vector3(dx, h, 0)) * 3.0
+				var sp: Vector2 = cam.unproject_position(n.global_position + Vector3(dx, h, 0)) * (vp.size.x / 360.0)
 				if first:
 					r = Rect2(sp, Vector2.ZERO)
 					first = false
@@ -324,7 +339,8 @@ func _s_save() -> int:
 	var pre := OS.get_environment("Q22M_PREFIX")
 	if pre == "":
 		pre = "l2"
-	var fn := out_dir.path_join("%s_%s_ppu%d.png" % [pre, tag, int(_ppu)])
+	var bn := OS.get_environment("Q22M_BODY")
+	var fn := out_dir.path_join("%s_%s%s_ppu%d.png" % [pre, tag, ("_" + bn) if bn != "" else "", int(_ppu)])
 	img.get_region(ri).save_png(fn)
 	print("Q22M saved %s · %s · texture mem %.2f MB" % [fn.get_file(), ri, _mem() / 1048576.0])
 	return 2

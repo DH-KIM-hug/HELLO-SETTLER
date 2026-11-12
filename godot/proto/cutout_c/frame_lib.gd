@@ -50,7 +50,13 @@ static var _mats := {}        # 몸 폴더 → ShaderMaterial (_mat = 마지막�
 static func enabled() -> bool:
 	if spike >= 0:
 		return spike == 1
-	return OS.get_environment("NAZAKJI_FRAMES") == "1"
+	if _env < 0:                     # (Q22 ⑤ X) 환경 변수는 한 번만 읽음 (주민마다 장면마다 불림)
+		_env = 1 if OS.get_environment("NAZAKJI_FRAMES") == "1" else 0
+	return _env == 1
+
+
+static var _env := -1
+static var _has := {}            # 몸 폴더 → 장면 그림이 있나 (has_body — 파일 찾기를 한 번만)
 
 
 static func lib(dir := DIR) -> Dictionary:
@@ -61,7 +67,9 @@ static func lib(dir := DIR) -> Dictionary:
 
 ## 그 몸의 장면 그림이 있나 (Q22: 남자 몸은 man_c를 만든 뒤에만)
 static func has_body(dir: String) -> bool:
-	return _lib.has(dir) or FileAccess.file_exists(dir + "frames.json")
+	if not _has.has(dir):
+		_has[dir] = _lib.has(dir) or FileAccess.file_exists(dir + "frames.json")
+	return _has[dir]
 
 
 static func clip_index(c: String, dir := DIR) -> int:

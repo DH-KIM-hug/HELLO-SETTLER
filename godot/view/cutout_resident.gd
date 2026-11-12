@@ -107,6 +107,20 @@ var swaps := 0                   # 옷을 갈아입은 횟수 (시험)
 var frames_force := -1
 var fdoll: MeshInstance3D
 var _f_on := false
+## (Q22 ⑤ X, 2026-11-12) 방식 C 인형이 보이는 동안 컷아웃 인형의 GPU 일(sel · st · misc · 보기 고르기)은 건너뛰고 '밀림'만 적어 둠 →
+## 컷아웃 인형으로 돌아오는 그 장면에 (보이기 전에) 한꺼번에 보냄. 시뮬·동작 고르기(_d_clip · 빠르기 · 위상)는 늘 그대로 따라감
+var _d_stale := false
+var doll_pushes := 0             # 컷아웃 인형에 보낸 GPU 값 수 (시험 — 방식 C가 보이는 동안 늘지 않아야 함)
+## (X) 방식 C 길에서 장면마다 다시 찾던 값 (몸 · 동작이 같으면 그대로): 그 동작의 장면 그림이 있나 · 보폭 (rig ÷ fig)
+var _fk_body := ""
+var _fk_clip := ""
+var _fk_ok := false
+var _fk_stride := 0.0
+## (X) 보기 고르기는 한 장면에 한 번 (move_to와 tick이 같은 장면에 두 번 _refresh_doll을 부름 — 둘째는 같은 값)
+var _uv_frame := -1
+var _uv_dir := Vector3.ZERO
+var _uv_key := ""
+var _uv_cam := Basis()
 var _f_clip := ""
 var _f_rate := -1.0
 var _f_phase := 0.0
@@ -336,6 +350,9 @@ func build_look(lk: Dictionary) -> void:
 	item.visible = false
 	fdoll = null
 	_f_on = false
+	_d_stale = false
+	_fk_body = ""
+	_uv_frame = -1
 	_f_clip = ""
 	doll = Doll.new()
 	doll.material_override = game_material()
@@ -426,9 +443,14 @@ func _push_misc() -> void:
 	var gk: Vector2 = dlook.get("stretch", Vector2.ONE)              # (Q22 ④) 키 · 체격 (±6%, 화면만)
 	var w := react_sq.x * c * _warp.y * gk.y                        # (Q2-b) 화면 몸짓(set_body_warp)과 곱해서
 	var sy := maxf(react_sq.y, 0.05) * _warp.x * gk.x
-	var face := float(doll.mirror) * (-1.0 if w < 0.0 else 1.0)      # 화면에서 바라보는 쪽 (오른쪽 +1)
+	var shown_mirror: float = fdoll.mirror if _f_on else doll.mirror     # 지금 보이는 인형의 좌우 (방식 C가 보이면 컷아웃 보기는 멈춰 있음)
+	var face := shown_mirror * (-1.0 if w < 0.0 else 1.0)            # 화면에서 바라보는 쪽 (오른쪽 +1)
 	var roll := react_roll + _warp.z * face                         # 몸짓 기울임은 화면 오른쪽이 + → 바라보는 쪽 기준으로 바꿔 더함
-	doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -roll * face))
+	if _f_on:
+		_d_stale = true                                             # (X) 숨은 컷아웃 인형엔 보내지 않음 — 돌아올 때 다시
+	else:
+		doll.set_instance_shader_parameter("misc", Vector4(_doll_h * sy, w / sy, maxf(_d_rate, 0.0), -roll * face))
+		doll_pushes += 1
 	if fdoll != null:
 		fdoll.set_react(doll.position, w, sy, roll)              # 방식 C 인형도 같은 반응 (frame_doll.set_react)
 
@@ -463,7 +485,11 @@ func _react_clip(clip: String) -> String:
 
 func tick(dt: float) -> void:
 	_t += dt * Style.ANIM_SPEED
+	_tick_frame = Engine.get_process_frames()
 	_refresh_doll()
+
+
+var _tick_frame := -10           # tick이 마지막으로 불린 장면 (move_to가 같은 일을 두 번 하지 않게)
 
 
 # ───────────────────────── 인형에 입히기 ─────────────────────────
@@ -545,6 +571,7 @@ func _refresh_doll() -> void:
 	_update_shift(bool(s["work"]))
 	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
 	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
+	var sel_dirty := false
 	if outfit != _d_outfit or hat != _d_hat:
 		if _d_outfit >= 0 and outfit != _d_outfit and not _f_on:      # 방식 C 인형은 일 옷이 아직 없음 (평상복 그대로) → 연기도 없음
 			_swap_puff()
@@ -552,11 +579,10 @@ func _refresh_doll() -> void:
 		_d_hat = hat
 		doll.look = dlook
 		doll.outfit = outfit
-		doll.set_instance_shader_parameter("sel", Vector4(outfit, int(dlook["head"]), hat, int(s["prop"])))
-		_d_prop = int(s["prop"])
+		sel_dirty = true
 	if int(s["prop"]) != _d_prop:
 		_d_prop = int(s["prop"])
-		doll.set_instance_shader_parameter("sel", Vector4(_d_outfit, int(dlook["head"]), _d_hat, _d_prop))
+		sel_dirty = true
 	var clip: String = _react_clip(s["clip"])
 	var rate: float = Lib.CLIP_RATE[clip]
 	if clip == "walk" or clip == "carry":
@@ -565,11 +591,12 @@ func _refresh_doll() -> void:
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else 1.0)
 		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], clip) * _doll_h / float(Lib.lib()["fig"])
-		var wr := walk_rate(g / maxf(stride, 0.01), frame_dt())
-		if bool(wr["travel"]):
+		var wr := _walk_rate_f(g / maxf(stride, 0.01), frame_dt())     # (= walk_rate, -1 = travel)
+		if wr < 0.0:
 			clip = "travel" if clip == "walk" else "hold"
-		rate = float(wr["rate"]) if not bool(wr["travel"]) else Lib.CLIP_RATE[clip]
+		rate = wr if wr >= 0.0 else Lib.CLIP_RATE[clip]
 	rate = minf(rate, MAX_FRAME_STEP / frame_dt())
+	var st_dirty := false
 	if clip != _d_clip or not is_equal_approx(rate, _d_rate):
 		var now := _shader_time()
 		if clip == _d_clip and _d_rate > 0.0:
@@ -579,9 +606,27 @@ func _refresh_doll() -> void:
 		_d_clip = clip
 		_d_rate = rate
 		doll.clip = clip
-		_push_misc()
-		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(clip), _d_phase))
-	_refresh_frames()
+		st_dirty = true
+	# (Q22 ⑤ X) 어느 인형을 보일지 먼저 정하고, 보이는 인형에만 GPU 일을 함 — 숨은 컷아웃 인형은 '밀림'만 적어 두었다가
+	# 돌아오는 장면에 보이기 전에 한꺼번에 (sel · misc · st, 보기는 _update_view가 고른 뒤 다시) → 한 장면 튐 · 옛 값 없음
+	var use_f := _frames_ok()          # (몸 · 동작 확인은 _fk_*에 남아 _refresh_frames가 다시 찾지 않음)
+	if not use_f and _f_on:
+		_f_on = false
+		fdoll.visible = false
+		doll.visible = true
+	if use_f:
+		_d_stale = _d_stale or sel_dirty or st_dirty or not _f_on
+	else:
+		if _d_stale or sel_dirty:
+			doll.set_instance_shader_parameter("sel", Vector4(_d_outfit, int(dlook["head"]), _d_hat, _d_prop))
+			doll_pushes += 1
+		if _d_stale or st_dirty:
+			_push_misc()
+			doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
+			doll_pushes += 1
+		_d_stale = false
+	if use_f:
+		_refresh_frames()
 	_update_view()
 
 
@@ -605,18 +650,41 @@ func set_body_lift(y := 0.0) -> void:
 
 ## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
 func _frames_ok() -> bool:
-	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
+	if not (frames_force == 1 or (frames_force < 0 and FrameLib.enabled())) or _baby or not FRAME_CLIPS.has(_d_clip):
+		return false                  # (X) 끈 채로는 몸 고르기도 하지 않음 (기본 게임 — 장면마다 두 번)
 	var body := frame_body()
-	return on and not _baby and body != "" and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(_frame_clip(), body) >= 0
+	if body == "":
+		return false
+	var fc := _frame_clip()
+	if body != _fk_body or fc != _fk_clip:
+		_fk_body = body
+		_fk_clip = fc
+		_fk_ok = fc != "" and FrameLib.clip_index(fc, body) >= 0
+		_fk_stride = FrameLib.stride_rig(fc, body) / float(FrameLib.lib(body)["fig"]) if _fk_ok else 0.0
+	return _fk_ok
 
 
 ## 방식 C 몸 (Q22, 2026-11-12 "어른 남자 먼저"): 어른 여자 평상복 a → 여자 장면 그림 (woman_c) · 어른 여자 평상복 b → 여자 둘째 벌
 ## (woman2_c — 치마·끈 조끼·앞치마, Q22 ⑤, 만들어 둔 때만) · 어른 남자 평상복 (c·e) → 남자 장면 그림 (man_c — 튜닉·바지, 만들어 둔 때만) ·
 ## 그 밖 "" (컷아웃 인형 그대로). 평상복 묶음은 Lib.look_from이 어른 여자에게 a·b 반반으로 고른 것 그대로
 func frame_body() -> String:
+	var p := int(dlook.get("personal", -1))
+	if is_same(dlook, _fb_d) and p == _fb_p:
+		return _fb                    # (X) 같은 겉모습 기록 · 같은 평상복이면 고른 몸 그대로 (장면마다 부름)
+	_fb_d = dlook
+	_fb_p = p
+	_fb = _pick_frame_body(p)
+	return _fb
+
+
+var _fb_d: Dictionary
+var _fb_p := -9
+var _fb := ""
+
+
+func _pick_frame_body(p: int) -> String:
 	if String(dlook.get("body", "")) != "adult":
 		return ""
-	var p := int(dlook.get("personal", -1))
 	if p == 0:
 		return FrameLib.DIR
 	if p == 1 and String(dlook.get("sex", "")) == "f" and FrameLib.has_body(FrameLib.WOMAN2_DIR):
@@ -670,14 +738,10 @@ func _frame_clip() -> String:
 	return fc
 
 
+## 방식 C 인형에 입히기 — _refresh_doll이 _frames_ok()일 때만 부름 (끄기는 _refresh_doll이)
 func _refresh_frames() -> void:
-	if not _frames_ok():
-		if _f_on:
-			_f_on = false
-			fdoll.visible = false
-			doll.visible = true
-		return
-	var body := frame_body()
+	var body := _fk_body              # _frames_ok()가 방금 고른 몸 · 동작
+	var fc := _fk_clip
 	if fdoll == null:
 		fdoll = FrameDoll.new()
 		fdoll.setup(FrameLib.material(game_material().get_shader_parameter("palette"), body), body)
@@ -696,7 +760,6 @@ func _refresh_frames() -> void:
 	if _d_hat != _f_hat:
 		_f_hat = _d_hat
 		fdoll.set_look(_frame_look(), _d_hat)
-	var fc := _frame_clip()
 	var walking := fc == "walk" or fc == "carry" or fc == "cradle"
 	if carry_baby:
 		fdoll.set_baby(baby_dye.x, baby_dye.y)
@@ -704,17 +767,18 @@ func _refresh_frames() -> void:
 	else:
 		fdoll.set_prop(_d_prop, _item_kind if (fc == "carry" or fc == "hold") and _item_kind != "유모차" else "")      # v12: 나르는 짐은 따로 그린 그림 (밀·밀가루·빵이 갈림)
 	var rate: float = 0.0 if walking else Lib.CLIP_RATE["hold" if fc == "rock" else fc]
+	var g := 0.0
 	if walking:
-		var g := _gspeed()
+		g = _gspeed()
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait
 		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 화면 움직임을 그 보기의 걸음 축에 투영한 몫만큼 (발이 땅에 붙게,
 		# 사선으로 내려올 때 너무 느리게 미끄러지지 않게 — 2026-11-09), 앞·뒤 보기는 0.8
-		var stride := FrameLib.stride_rig(fc, body) * _doll_h / float(FrameLib.lib(body)["fig"])
+		var stride := _fk_stride * _doll_h
 		var hk: float = fdoll.step_k        # 화면 움직임을 그림의 걸음 축에 투영 (frame_doll.update_view)
-		var wr := walk_rate(g * hk / maxf(stride, 0.01), frame_dt())
-		rate = 0.0 if bool(wr["travel"]) or _d_clip == "travel" else float(wr["rate"])
-	fdoll.cycle_len = g_cycle(fc, rate)
+		var wr := _walk_rate_f(g * hk / maxf(stride, 0.01), frame_dt())
+		rate = 0.0 if wr < 0.0 or _d_clip == "travel" else wr
+	fdoll.cycle_len = g / rate if rate > 0.0 and walking else 0.0          # = g_cycle(fc, rate) (발 붙이기: 한 주기에 땅에서 가는 길)
 	if fc != _f_clip or not is_equal_approx(rate, _f_rate):
 		var now := _shader_time()
 		if fc == _f_clip and _f_rate >= 0.0:
@@ -752,6 +816,13 @@ static func walk_rate(want: float, fdt: float) -> Dictionary:
 	return {"travel": false, "rate": minf(r, MAX_FRAME_STEP / fdt)}
 
 
+## walk_rate와 같은 고르기 — 사전을 만들지 않음 (장면마다 부름): 걸음 빠르기, travel이면 -1
+static func _walk_rate_f(want: float, fdt: float) -> float:
+	if want > RATE_TRAVEL or want * fdt > TRAVEL_STEP:
+		return -1.0
+	return minf(snappedf(clampf(want, RATE_MIN, RATE_MAX), RATE_STEP), MAX_FRAME_STEP / fdt)
+
+
 ## 지금 한 장면의 길이 (초) — FPS를 모르거나 너무 높으면 낮게 잡음 (느린 폰에서도 넘어가지 않게)
 static func frame_dt() -> float:
 	return 1.0 / clampf(Engine.get_frames_per_second(), MIN_FPS, 60.0)
@@ -760,7 +831,9 @@ static func frame_dt() -> float:
 ## 빠른 흐름(VillageView.fast)에선 tick이 불리지 않고 자리만 순간이동 → 땅 빠르기를 잰 김에 인형도 맞춤 (아주 빠르면 travel)
 func move_to(p: Vector3, dt: float) -> void:
 	super(p, dt)
-	if doll != null and dt > 0.0:
+	# (Q22 ⑤ X) 보통 흐름에선 VillageView가 이 뒤에 tick을 불러 어차피 다시 입힘 → 직전 장면에 tick이 있었으면 여기선 건너뜀
+	# (빠른 흐름처럼 tick이 끊긴 때만 여기서 — 흐름이 바뀌는 첫 장면만 한 장면 늦음)
+	if doll != null and dt > 0.0 and Engine.get_process_frames() - _tick_frame > 1:
 		_refresh_doll()
 
 
@@ -797,23 +870,41 @@ func _update_view() -> void:
 	if cam == null:
 		return
 	var f := global_transform.basis.z
+	var lock := "front" if FRONT_ONLY.has(_d_clip) else ("side" if SIDE_ONLY.has(_d_clip) else "")
+	var fr := Engine.get_process_frames()
+	var key := ("C" if _f_on else "A") + lock
+	var cb := cam.global_transform.basis
+	if fr == _uv_frame and f == _uv_dir and key == _uv_key and cb == _uv_cam:
+		return                      # (X) 이 장면에 같은 쪽 · 같은 인형 · 같은 카메라로 이미 고름 (move_to 다음 tick)
+	_uv_frame = fr
+	_uv_dir = f
+	_uv_key = key
+	_uv_cam = cb
 	doll.move_dir = Vector3(f.x, 0.0, f.z)
-	var v0: int = doll.view
-	var m0: float = doll.mirror
-	doll.view_lock = "front" if FRONT_ONLY.has(_d_clip) else ("side" if SIDE_ONLY.has(_d_clip) else "")
-	doll.update_view(cam)
-	if _f_on:
+	doll.view_lock = lock
+	if _f_on:                   # (X) 방식 C 인형만 보기를 고름 — 컷아웃 인형의 보기 · 좌우는 그 값을 따라 둠 (GPU에는 돌아올 때 보냄)
 		fdoll.move_dir = doll.move_dir
 		fdoll.view_lock = doll.view_lock
 		fdoll.update_view(cam)
+		doll.view = fdoll.view
+		doll.mirror = fdoll.mirror
+		return
+	var v0: int = doll.view
+	var m0: float = doll.mirror
+	doll.update_view(cam)
 	if doll.view != v0 or doll.mirror != m0:
 		doll.set_instance_shader_parameter("st", Vector4(doll.view, doll.mirror, Lib.CLIPS.find(_d_clip), _d_phase))
+		doll_pushes += 1
 
 
 ## 셰이더 TIME과 같은 시계 (초, rollover마다 되돌아감)
 static func _shader_time() -> float:
-	var ro := float(ProjectSettings.get_setting("rendering/limits/time/time_rollover_secs", 3600.0))
-	return fposmod(Time.get_ticks_usec() / 1.0e6, ro)
+	if _rollover <= 0.0:
+		_rollover = float(ProjectSettings.get_setting("rendering/limits/time/time_rollover_secs", 3600.0))
+	return fposmod(Time.get_ticks_usec() / 1.0e6, _rollover)
+
+
+static var _rollover := 0.0
 
 
 # ───────────────────────── 아기 자리 (화면만) ─────────────────────────

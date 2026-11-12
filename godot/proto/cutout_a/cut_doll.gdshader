@@ -204,7 +204,13 @@ vec3 head_mask(vec2 uv, float lod) {
 	vec2 g = fract(q1);
 	float t1 = clamp(lod, 0.0, 1.0);
 	float t0 = 1.0 - t1;
-	vec3 m = vec3(0.0);
+	// (Q22 ⑤ Y, 2026-11-12) 코드를 먼저 모두 읽고, 무게가 있는 코드가 모두 같으면 (머리 · 얼굴 안쪽 — 대부분) 코드표를 한 번만 읽음 —
+	// 값은 옛 셈과 똑같음 (무게 합 = 1). 테두리만 옛날처럼 코드마다 코드표를 읽음.
+	// (가볍게 하려고 0단 겹선형만 쓰는 몸 마스크 식을 머리에 써 보았더니 머리선 · 눈가에 흰 점이 생겨 쓰지 않음 — 머리는 정확한 1단이 필요)
+	int cs[16];
+	float ws[16];
+	int first = -1;
+	bool same = true;
 	for (int y = 0; y < 4; y++) {
 		int py = clamp(j0.y + y / 2, 0, n1.y - 1);
 		int cy = py * 2 + (y & 1);
@@ -216,10 +222,27 @@ vec3 head_mask(vec2 uv, float lod) {
 			float wx1 = (x < 2 ? 1.0 - g.x : g.x) * 0.5;
 			float wx0 = (cx == clamp(i0.x, 0, n0.x - 1) ? 1.0 - f.x : 0.0) + (cx == clamp(i0.x + 1, 0, n0.x - 1) ? f.x : 0.0);
 			float w = t1 * wx1 * wy1 + t0 * wx0 * wy0;
+			int k = y * 4 + x;
+			ws[k] = w;
+			cs[k] = -1;
 			if (w > 0.0) {
 				int c = int(texelFetch(dye_code, ivec2(cx, cy), 0).r * 255.0 + 0.5);
-				m += w * texelFetch(head_data, ivec2(c, 0), 0).rgb;
+				cs[k] = c;
+				if (first < 0) {
+					first = c;
+				} else if (c != first) {
+					same = false;
+				}
 			}
+		}
+	}
+	if (same) {
+		return first < 0 ? vec3(0.0) : texelFetch(head_data, ivec2(first, 0), 0).rgb;
+	}
+	vec3 m = vec3(0.0);
+	for (int k = 0; k < 16; k++) {
+		if (cs[k] >= 0) {
+			m += ws[k] * texelFetch(head_data, ivec2(cs[k], 0), 0).rgb;
 		}
 	}
 	return m;
