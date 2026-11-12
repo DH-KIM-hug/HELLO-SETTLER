@@ -88,4 +88,5 @@
 - `.claude/skills/` 72개 · `.claude/agents/` 38개(고도·공통) · `.claude/docs/` · `.claude/scripts/` · `project.yaml`. 출처 https://github.com/Donchitos/Claude-Code-Game-Studios (라이선스 `.claude/CCGS-LICENSE`).
 - **넣지 않은 것**: 훅·settings.json(커밋·푸시·쓰기를 가로챔 — 우리 병합 절차와 충돌), 규칙(rules), 그쪽 CLAUDE.md, 기본 명령과 이름이 겹치는 `code-review`·`help`, 유니티·언리얼 에이전트.
 - **우선순위**: 이 CLAUDE.md(0~5장)와 `docs/` 기획서가 스킬의 기본 흐름보다 앞선다. 스킬이 `design/`·`production/`에 새 문서를 만들려 하면, 이미 있는 `docs/` 문서를 기준으로 삼는다. 사용자에게 하는 말은 스킬을 쓸 때도 한국어.
+- **기획팀 역할 스킬 (2026-11-12 사용자 매뉴얼 → 스킬화)**: `~/.claude/skills/game-design-team` — 🎨 컨셉 · 🧩 게임 · 📖 시나리오 · ⚖️ 밸런스 · 🗺 레벨 · 📐 UI · 🖌 그래픽 역할과 게슈탈트 · 자이가르닉 · 피츠 · 힉 · 카이와 · MDA · GameFlow · SDT · DDA 교차 검토. 사용자가 역할명을 부르거나 "기획해줘 / 재검토"면 이 스킬을 쓴다. 이 CLAUDE.md와 `docs/` 규칙이 스킬보다 앞선다 (그림 생성은 `codex exec`, BM 보류, 주민 쪽 숫자 금지 등).
 - 쓸 만한 것: `/balance-check` (BALANCE), `/playtest-report`, `/design-review`, `/scope-check`, `/qa-plan`, `/perf-profile`, `/test-flakiness`, `/ux-review`, `/consistency-check`, `/milestone-review`, 에이전트 `godot-specialist`·`economy-designer`·`game-designer`·`ux-designer`·`qa-lead`.
