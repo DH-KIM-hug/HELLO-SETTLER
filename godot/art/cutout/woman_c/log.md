@@ -5,6 +5,16 @@ Pipeline: `godot/tools/cutout_c/gen.sh <clip> <view>` (prompts `prompts.py`, tem
 `python3 godot/tools/cutout_c/build_frames.py` → `frames_atlas.png`, `frames_mask0/1.png`, `frames.json` →
 runtime `godot/proto/cutout_c/` → comparison `godot --path godot -s res://tools/shot_cutC_compare.gd` + `python3 godot/tools/cutout_c/compose_compare.py`.
 
+**Rebuild everything from `raw/` (one command, 2026-11-12 Q22 ③-1):** `cd godot/tools/cutout_c && python3 build_frames.py`
+(~90 s) → grid layout → `pack_atlas.py` trims every cell to its used texels and packs cells + load/eyelid pictures tightly
+(gap 8 texels, texel phase kept mod 4, sides multiples of 16) → `frames_atlas.png` + `frames.json` (per frame `uv` = drawn part in
+the packed atlas, `sub` = that part as 0..1 of the cell; top level `grid`, `pack`) → `raw/frames_mask0/1.png` (packed layout, build
+sources) → `pack_masks.py` → `frames_mcode/mlut/mq0/mq1.png`. Then `godot --headless --path godot --import`. Delete the untracked
+`raw/check_*.png` and `__pycache__/` afterwards. The same pipeline is meant for the man body (`man_c/`).
+2026-11-12 packed: 1548x2812 → 2384x1168 (64% of the texels), `.astc.ctex` 5,810,404 → 3,714,548 B, VRAM (BPTC) 6.33 → 4.20 MB,
+mask code 4.72 → 3.22 MB, quarter masks 1.81 → 1.20 MB each; whole outfit 14.67 → 9.82 MB. Renders: lossless repack (every drawn
+texel identical, `tools/shot_atlas_mem.gd` l4_* captures).
+
 Inputs (`-i`): `raw/ref_woman_A.png` (concept woman crop), `raw/ref_inset_woman.png` (in-game inset crop of res_A.png, x5), `raw/template.png` (2x4 cells).
 Body drawn with a flat MAGENTA circle in place of the head (anchor = circle bottom = chin; removed in build).
 

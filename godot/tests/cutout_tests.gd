@@ -1129,4 +1129,65 @@ func test_frames_c_memory() -> void:
 		var ofs := full.get_mipmap_offset(2)
 		mips_ok = mips_ok and q.get_size() == full.get_size() / 4 and full.get_data().slice(ofs, ofs + q.get_data().size()) == q.get_data()
 	check(mips_ok, "방식 C 4분의 1 마스크 = 옛 마스크의 밉맵 2단 (바이트까지 같음 — 멀리서는 옛 마스크와 똑같이 걸러짐)")
+	# Q22 ③-1 (2026-11-12): 빈틈없이 담은 아틀라스 (tools/cutout_c/pack_atlas.py) — 장면마다 쓰는 몫만, 서로 겹치지 않게
+	var L: Dictionary = FL.lib()
+	var aw := int(L["atlas"][0])
+	var ah := int(L["atlas"][1])
+	var grid: Array = L.get("grid", L["atlas"])
+	check(fa.get_size() == Vector2(aw, ah) and aw % 16 == 0 and ah % 16 == 0 and aw <= 4096 and ah <= 4096
+		and aw * ah <= int(grid[0]) * int(grid[1]) * 0.7,
+		"방식 C 아틀라스: %d×%d (16의 배수 · 4096 이하 · 칸 격자 %d×%d의 70%% 이하)" % [aw, ah, int(grid[0]), int(grid[1])])
+	var cw := float(L["cell"][0])
+	var ch := float(L["cell"][1])
+	var rects := {}                     # 아틀라스 텍셀 사각형 → 처음 쓴 이름
+	var rect_bad := []
+	var fd: Texture2D = mat.get_shader_parameter("fdata")
+	if fd.get_height() != 5:
+		rect_bad.append("fdata 줄 %d" % fd.get_height())
+	var items: Array = []
+	for f: Dictionary in L["frames"]:
+		items.append(["%s/%s" % [f["clip"], f["view"]], f["uv"], f.get("sub", null), true])
+	for e: Dictionary in (L.get("loads", []) as Array) + (L.get("lids", []) as Array):
+		items.append([String(e.get("name", e.get("set", "?"))), e["uv"], null, false])
+	for it: Array in items:
+		var uv: Array = it[1]
+		var r := Rect2(float(uv[0]) * aw, float(uv[1]) * ah, (float(uv[2]) - float(uv[0])) * aw, (float(uv[3]) - float(uv[1])) * ah)
+		var ri := Rect2i(roundi(r.position.x), roundi(r.position.y), roundi(r.size.x), roundi(r.size.y))
+		if (r.position - Vector2(ri.position)).length() > 0.01 or (r.size - Vector2(ri.size)).length() > 0.01 or ri.position.x < 0 \
+				or ri.position.y < 0 or ri.end.x > aw or ri.end.y > ah or ri.size.x <= 0 or ri.size.y <= 0:
+			rect_bad.append("%s 자리" % it[0])
+			continue
+		if it[2] != null:
+			var sb: Array = it[2]
+			# 그리는 몫 = 칸의 일부 (0~1), 그 텍셀 크기 = 아틀라스의 사각형 (배율 그대로 — 인형이 같은 자리·크기로 그려짐)
+			if float(sb[0]) < 0.0 or float(sb[1]) < 0.0 or float(sb[2]) > 1.0 or float(sb[3]) > 1.0 \
+					or absf((float(sb[2]) - float(sb[0])) * cw - ri.size.x) > 0.01 or absf((float(sb[3]) - float(sb[1])) * ch - ri.size.y) > 0.01:
+				rect_bad.append("%s 몫" % it[0])
+		elif bool(it[3]) and L.has("grid"):
+			rect_bad.append("%s 몫 없음" % it[0])
+		rects[ri] = it[0]
+	var keys: Array = rects.keys()
+	for i in keys.size():
+		for j in range(i + 1, keys.size()):
+			if (keys[i] as Rect2i).intersects(keys[j]):
+				rect_bad.append("%s ↔ %s 겹침" % [rects[keys[i]], rects[keys[j]]])
+	check(rect_bad.is_empty() and keys.size() >= 200, "방식 C 아틀라스: 사각형 %d개가 텍셀에 맞고 아틀라스 안 · 서로 겹치지 않음 · 몸 장면은 칸과 같은 배율 %s" % [keys.size(), rect_bad.slice(0, 6)])
+	var atl := Image.load_from_file(art + "frames_atlas.png")
+	atl.convert(Image.FORMAT_RGBA8)
+	var stray := 0
+	var seen := 0
+	while seen < 20000:
+		var x := rng.randi() % aw
+		var y := rng.randi() % ah
+		if atl.get_pixel(x, y).a8 == 0:
+			continue
+		seen += 1
+		var inside := false
+		for k: Rect2i in keys:
+			if k.has_point(Vector2i(x, y)):
+				inside = true
+				break
+		if not inside:
+			stray += 1
+	check(stray == 0, "방식 C 아틀라스: 그림이 있는 텍셀 표본 %d개 모두 어떤 장면·짐 그림의 사각형 안 (밖 %d)" % [seen, stray])
 

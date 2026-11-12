@@ -7,8 +7,13 @@
 ##            Q22M_PIC=etc2|astc|s3tc|bptc: 몸 그림(frames_atlas)을 그 형식으로 눌렀다 푼 그림으로 바꿔 찍음 (폰 형식의 모습을 데스크톱에서 봄),
 ##            raw = 누르지 않은 그림 (마스크를 바꾼 몫만 볼 때)
 ##            Q22M_HEAD=etc2|astc|…: 머리 그림(doll_atlas)도 같은 식으로
+##            Q22M_PIC=astc8: ASTC 8×8 (Q22 ③-1 비교 — 엔진의 가져오기는 4×4만 만듦, Image.compress는 4×4·8×8만 앎. 6×6은 엔진에 없음)
+##            Q22M_ATLAS=res://…png: 몸 그림 대신 이 텍스처 (가져오기 설정만 다른 복사본 — Basis Universal 비교)
+##            Q22M_PREFIX: 파일 이름 앞 (없으면 l2 — ③-1 비교는 l4)
 ## 2026-11-12 결과 (Apple M4 Pro · Metal): 옷 한 벌 70.9 MB → 14.7 MB (몸 그림 BPTC 6.33 + 코드 4.72 + 코드표 0.002 + 4분의 1 마스크 1.81 × 2),
 ##   world: 방식 C 켬 +70.96 MB → +14.72 MB. 전후 사진·차이: godot_shots/looks/l2_*.png, l2_sheet.png
+## 2026-11-12 Q22 ③-1 빈틈없이 담기 (tools/cutout_c/pack_atlas.py): 14.67 MB → 9.82 MB (몸 그림 2384×1168 BPTC 4.20 + 코드 3.22 + 1.20 × 2).
+##   전후 사진 l4_before_* / l4_pack_* (raw · astc · 가져온 그림 · astc8 · Basis 복사본), 차이 l4_diff_*, l4_sheet.png
 ## 게임 코드는 바꾸지 않음.
 extends SceneTree
 
@@ -227,6 +232,12 @@ func _s_build() -> int:
 	if pic != "":
 		mat = mat.duplicate() as ShaderMaterial
 		mat.set_shader_parameter("frames_atlas", _squeezed("res://art/cutout/woman_c/frames_atlas.png", pic))
+	var alt := OS.get_environment("Q22M_ATLAS")
+	if alt != "":                     # 몸 그림을 다른 가져오기 설정의 복사본으로 (Q22 ③-1: Basis Universal 비교)
+		if pic == "":
+			mat = mat.duplicate() as ShaderMaterial
+		mat.set_shader_parameter("frames_atlas", load(alt))
+		pic = alt.get_file()
 	var hpic := OS.get_environment("Q22M_HEAD")
 	if hpic != "":
 		if pic == "":
@@ -262,7 +273,7 @@ func _squeezed(path: String, kind: String) -> ImageTexture:
 	img.convert(Image.FORMAT_RGBA8)
 	img.fix_alpha_edges()
 	img.generate_mipmaps()
-	var cm := {"etc2": Image.COMPRESS_ETC2, "astc": Image.COMPRESS_ASTC, "s3tc": Image.COMPRESS_S3TC, "bptc": Image.COMPRESS_BPTC}
+	var cm := {"etc2": Image.COMPRESS_ETC2, "astc": Image.COMPRESS_ASTC, "astc8": Image.COMPRESS_ASTC, "s3tc": Image.COMPRESS_S3TC, "bptc": Image.COMPRESS_BPTC}
 	if kind == "raw":                 # 누르지 않음 (가져오기 전 손실 없는 그림 — 마스크만 바꾼 차이를 볼 때)
 		return ImageTexture.create_from_image(img)
 	var t0 := Time.get_ticks_msec()
@@ -273,9 +284,10 @@ func _squeezed(path: String, kind: String) -> ImageTexture:
 		var h := maxi(img.get_height() >> L, 1)
 		var ofs := img.get_mipmap_offset(L)
 		var lv := Image.create_from_data(w, h, false, Image.FORMAT_RGBA8, img.get_data().slice(ofs, ofs + w * h * 4))
-		var pad := Image.create((w + 3) / 4 * 4, (h + 3) / 4 * 4, false, Image.FORMAT_RGBA8)
+		var blk := 8 if kind == "astc8" else 4
+		var pad := Image.create((w + blk - 1) / blk * blk, (h + blk - 1) / blk * blk, false, Image.FORMAT_RGBA8)
 		pad.blit_rect(lv, Rect2i(0, 0, w, h), Vector2i.ZERO)
-		pad.compress(cm[kind], Image.COMPRESS_SOURCE_SRGB, Image.ASTC_FORMAT_4x4)
+		pad.compress(cm[kind], Image.COMPRESS_SOURCE_SRGB, Image.ASTC_FORMAT_8x8 if kind == "astc8" else Image.ASTC_FORMAT_4x4)
 		bytes += pad.get_data_size()
 		pad.decompress()
 		pad.convert(Image.FORMAT_RGBA8)
@@ -309,7 +321,10 @@ func _s_save() -> int:
 	var tag := OS.get_environment("Q22M_TAG")
 	if tag == "":
 		tag = "now"
-	var fn := out_dir.path_join("l2_%s_ppu%d.png" % [tag, int(_ppu)])
+	var pre := OS.get_environment("Q22M_PREFIX")
+	if pre == "":
+		pre = "l2"
+	var fn := out_dir.path_join("%s_%s_ppu%d.png" % [pre, tag, int(_ppu)])
 	img.get_region(ri).save_png(fn)
 	print("Q22M saved %s · %s · texture mem %.2f MB" % [fn.get_file(), ri, _mem() / 1048576.0])
 	return 2

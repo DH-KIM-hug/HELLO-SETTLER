@@ -2,7 +2,8 @@
 
 usage: python3 build_frames.py            (needs raw/{walk,carry,idle}_{front,q_front,q_back,back}.png)
 in : art/cutout/woman_c/raw/<clip>_<view>.png  (gen.sh: 2x4 cells, magenta head placeholder, chroma green)
-out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed)
+out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed) — Q22 3-1 (2026-11-12): laid out on a grid
+                                          of cells first, then trimmed and packed tightly (pack_atlas.py; frames.json "sub" + "uv")
      art/cutout/woman_c/raw/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
      art/cutout/woman_c/raw/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
      art/cutout/woman_c/frames_mcode.png + frames_mlut.png + frames_mq0/1.png  the two masks packed for the game (pack_masks.py, Q22 3-0
@@ -969,7 +970,7 @@ def main():
     # with the baby's own colours by the shader) and the eyelid pictures one too (mask0 R = skin, the body's skin dye)
     skin_rgb = [int(base["skin"][i:i + 2], 16) for i in (0, 2, 4)]
     lids = lid_pictures(skin_rgb)
-    load_tab, lid_tab, where = [], [], {}
+    load_tab, lid_tab, where, pic_px = [], [], {}, {}
     for lname, pic, msk in [l_ for l_ in loads if not l_[0].startswith("lid_")] + [("lid_" + ls[0], ls[1], ls[2]) for ls in lids]:
         ph, pw = pic.shape[:2]
         ax0, ay0 = load_pos[lname]
@@ -977,6 +978,7 @@ def main():
         if msk is not None:
             m0[ay0:ay0 + ph, ax0:ax0 + pw, :2] = msk
         where[lname] = dict(uv=[ax0 / AW, ay0 / AH, (ax0 + pw) / AW, (ay0 + ph) / AH], size=[round(pw / PX_PER_RIG, 1), round(ph / PX_PER_RIG, 1)])
+        pic_px[lname] = (ax0, ay0, ax0 + pw, ay0 + ph)
         if not lname.startswith("lid_") and not lname.startswith("baby") and not lname.startswith("ear_"):
             load_tab.append(dict(name=lname, **where[lname]))
         if lname.startswith("ear_"):
@@ -993,6 +995,21 @@ def main():
     bhr = [BABY_BASE[n_][1] for n_ in set(BABY_PIC.values()) if BABY_BASE[n_][1] is not None]
     base["baby_skin"] = "%02x%02x%02x" % tuple(int(t) for t in bsk)
     base["baby_hair"] = "%02x%02x%02x" % tuple(int(t) for t in (np.median(np.array(bhr), 0) if bhr else (119, 72, 47)))
+    # Q22 3-1 (2026-11-12): the grid above is only the build layout — every cell trimmed to its used texels and every picture moved
+    # into a tight atlas (pack_atlas.py). "uv" = where the drawn part now is, "sub" = that part as fractions of the cell rect (the
+    # shader clamps the body quad's corners into it, so the doll is drawn where it was). The uv lists are shared with load_tab /
+    # lid_tab / frames, so they are rewritten in place.
+    import pack_atlas
+    grid = [AW, AH]
+    cell_px = {key: ((i % cols) * cw, (i // cols) * ch, (i % cols) * cw + cw, (i // cols) * ch + ch) for i, key in enumerate(order)}
+    atlas, m0, m1, place = pack_atlas.repack(atlas, m0, m1, cell_px, pic_px)
+    AH, AW = atlas.shape[:2]
+    for key in order:
+        cellinfo[key]["uv"][:] = [round(v, 7) for v in place[key]["uv"]]
+    for fr, e in zip(frames, entries):
+        fr["sub"] = [round(v, 7) for v in place[(e[2], e[3])]["sub"]]
+    for lname in pic_px:
+        where[lname]["uv"][:] = [round(v, 7) for v in place[lname]["uv"]]
     def save(arr, name):
         Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(ART, name), optimize=True)
     save(atlas, "frames_atlas.png")
@@ -1007,7 +1024,8 @@ def main():
         seen = [fr["fists_seen"] for fr in frames if fr["clip"] == cl and "fists_seen" in fr]
         if seen:
             print(f"  {cl}: fists found on the drawing in {sum(all(x) for x in seen)} of {len(seen)} frames (else the puppet's)")
-    lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], cell=[cw, ch], views=VIEWS,
+    lib = dict(fig=FIG, d_rig=D_RIG, rect=[-W_RIG / 2, Y0, W_RIG / 2, H_RIG], atlas=[AW, AH], grid=grid, cell=[cw, ch], views=VIEWS,
+               pack=dict(gap=pack_atlas.GAP, qpad=pack_atlas.QPAD, align=pack_atlas.ALIGN),
                clips=[cl for cl, _, _ in CLIPS] + state_clips, frames_per_clip=nclip, stride=strides, base=base, cells=len(order),
                loads=load_tab, lids=lid_tab, frames=frames)
     with open(os.path.join(ART, "frames.json"), "w") as fh:

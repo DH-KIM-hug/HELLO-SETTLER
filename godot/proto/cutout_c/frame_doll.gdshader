@@ -18,8 +18,9 @@ uniform sampler2D fcode : filter_nearest, repeat_disable;
 uniform sampler2D flut : filter_nearest, repeat_disable;
 uniform sampler2D fmq0 : hint_default_black, filter_linear_mipmap, repeat_disable;
 uniform sampler2D fmq1 : hint_default_black, filter_linear_mipmap, repeat_disable;
-uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
-                                                                         // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, 눈 감음 1 — v13)
+uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형 (그리는 몫), [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
+                                                                         // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, 눈 감음 1 — v13),
+                                                                         // [4] 그리는 몫 (칸의 0~1 — Q22 ③-1, 2026-11-12)
 // 동작 = frames.json의 clips 차례 (걷기·나르기·서기·안고 서기 + 2026-11-10 앉기·먹기·올려다보기·무릎·괭이질·줍기) — frame_lib.material이 채움
 uniform int clip_off[16];        // 동작의 첫 장면 번호
 uniform int clip_n[16];          // 동작의 장면 수 (보기마다)
@@ -124,10 +125,12 @@ void vertex() {
 		vec2 p;
 		float layer;
 		if (group == 0 || group == 4) {
-			vec2 c = UV;                                       // 귀퉁이 (0~1)
+			// 귀퉁이 (0~1) → 그 장면이 쓰는 몫 (fdata[4] — Q22 ③-1: 아틀라스에는 칸의 쓰는 몫만 빈틈없이 담김, 그 몫이 아틀라스의 r)
+			vec4 sb = texelFetch(fdata, ivec2(fi, 4), 0);
+			vec2 c = clamp(UV, sb.xy, sb.zw);
 			p = vec2(mix(body_rect.x, body_rect.z, c.x), mix(body_rect.w, body_rect.y, c.y));
 			vec4 r = texelFetch(fdata, ivec2(fi, 0), 0);
-			UV = mix(r.xy, r.zw, c);
+			UV = mix(r.xy, r.zw, (c - sb.xy) / max(sb.zw - sb.xy, vec2(1e-6)));
 			layer = group == 0 ? body_layer[cur_view] : sack_layer[cur_view] + 0.5;
 		} else if (group == 5) {
 			// 짐 그림: 밑변 가운데가 원점 → 기울임·배율 → 그 장면의 짐 자리 (어깨 위 손 옆). 앞쪽 보기 = 머리 위, 뒤쪽 보기 = 몸·머리 뒤
