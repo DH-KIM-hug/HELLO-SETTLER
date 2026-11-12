@@ -293,6 +293,8 @@ func _people(n: int) -> Array:
 
 ## 셰이더 몫 가르기 (fill 2 = 켬 + 이 판): 몸 물감 마스크를 가까이에서도 4분의 1 마스크 두 장(텍셀 2개)으로만 읽게 고친 셰이더 —
 ## 원본 파일은 그대로, 이 도구 안에서만 문자열을 바꿔 만든다 (가까이 경로 = 코드 4×4 × (코드 1 + 코드표 2) = 48 읽기의 값)
+## (2026-11-12 Q22 ⑤ Y 뒤) 가까이 경로가 0단 겹선형(코드 4 + 코드표 2~8)으로 가벼워져, 이 판과의 차이 = 남은 가까이 경로 값
+## CPU 줄에 (tick = 주민 move_to + tick, render = 뷰포트 CPU + 준비)를 따로 적음 (X: 방식 C가 보이는 동안 컷아웃 인형 갱신 건너뛰기 확인용)
 static var _orig_shader: Shader
 static var _fast_shader: Shader
 
@@ -391,7 +393,8 @@ func _perf_step(dt: float) -> bool:
 			tick_ms + RenderingServer.viewport_get_measured_render_time_cpu(rid) + RenderingServer.get_frame_setup_time_cpu(),
 			RenderingServer.viewport_get_measured_render_time_gpu(rid) + RenderingServer.viewport_get_measured_render_time_gpu(root.get_viewport_rid()),
 			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_DRAW_CALLS_IN_FRAME),
-			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME)])
+			RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TOTAL_OBJECTS_IN_FRAME),
+			tick_ms])
 	if cf >= warm + meas:
 		_report_case()
 		cf = 0
@@ -411,19 +414,20 @@ func _report_case() -> void:
 	var c: Array = cases[ci]
 	if c.size() > 3:
 		return
-	var cols := [[], [], [], [], []]
+	var cols := [[], [], [], [], [], []]
 	for a: Array in samp:
-		for j in 5:
+		for j in 6:
 			cols[j].append(float(a[j]))
 	var fr := _avg_p95(cols[0])
 	var cpu := _avg_p95(cols[1])
 	var gpu := _avg_p95(cols[2])
+	var tk := _avg_p95(cols[5])
 	var shown := 0
 	for m: CutoutResident in nodes:
 		if m._f_on:
 			shown += 1
-	_log("Q22PERF ppu=%d n=%d spike=%s shownC=%d | frame avg %.2f p95 %.2f | cpu avg %.2f p95 %.2f | gpu avg %.2f p95 %.2f | draws %d objs %d | tex %.1f MB vmem %.1f MB" % [
-		int(c[0]), int(c[1]), ["off", "on", "on+fastmask"][int(c[2])], shown, fr.x, fr.y, cpu.x, cpu.y, gpu.x, gpu.y,
+	_log("Q22PERF ppu=%d n=%d spike=%s shownC=%d | frame avg %.2f p95 %.2f | cpu avg %.2f p95 %.2f (tick %.2f render %.2f) | gpu avg %.2f p95 %.2f | draws %d objs %d | tex %.1f MB vmem %.1f MB" % [
+		int(c[0]), int(c[1]), ["off", "on", "on+fastmask"][int(c[2])], shown, fr.x, fr.y, cpu.x, cpu.y, tk.x, cpu.x - tk.x, gpu.x, gpu.y,
 		int(_avg_p95(cols[3]).x), int(_avg_p95(cols[4]).x),
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_TEXTURE_MEM_USED) / 1048576.0,
 		RenderingServer.get_rendering_info(RenderingServer.RENDERING_INFO_VIDEO_MEM_USED) / 1048576.0])

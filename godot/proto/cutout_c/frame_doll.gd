@@ -106,6 +106,9 @@ const FRONT_LIM := 38.0
 const HYST_FRONT := 5.0
 ## 비스듬한 그림의 걸음 축 (화면, 오른쪽 +x · 아래 +y — pose_ref.geometry fwd)
 const STEP_AXIS := {1: Vector2(1.0, 0.55), 2: Vector2(1.0, -0.33)}
+## (Q22 ⑤ X) 위 축을 미리 정규화한 값 (장면마다 사전 찾기 · 정규화를 하지 않게)
+const AXIS1 := Vector2(0.876216, 0.481919)
+const AXIS2 := Vector2(0.949629, -0.313377)
 var step_k := 1.0          # 땅 빠르기 → 그림 걸음 축 위의 빠르기 (화면 움직임을 걸음 축에 투영, 그림 가로 보폭 기준) — 걸음 빠르기에 씀
 
 
@@ -121,14 +124,11 @@ func update_view(cam: Camera3D) -> void:
 	_update_lock(Vector2(d.x, d.z) * snappedf(cycle_len, LOCK_STEP))
 	var deg := rad_to_deg(atan2(d.dot(right), d.dot(toward)))
 	var a := absf(deg)
-	var lim := [FRONT_LIM, 110.0, 150.0]
-	for i in 3:
-		var h := HYST_FRONT if i == 0 else HYST
-		if view <= i:
-			lim[i] += h          # 지금 보기가 문턱 아래쪽이면 문턱을 올림 (더 버팀)
-		else:
-			lim[i] -= h
-	var v := 0 if a < lim[0] else (1 if a < lim[1] else (2 if a < lim[2] else 3))
+	# 지금 보기가 문턱 아래쪽이면 문턱을 올림 (더 버팀), 위쪽이면 내림 — (X) 배열을 만들지 않고 셋을 바로
+	var l0 := FRONT_LIM + (HYST_FRONT if view <= 0 else -HYST_FRONT)
+	var l1 := 110.0 + (HYST if view <= 1 else -HYST)
+	var l2 := 150.0 + (HYST if view <= 2 else -HYST)
+	var v := 0 if a < l0 else (1 if a < l1 else (2 if a < l2 else 3))
 	var m := 1.0 if deg >= 0.0 else -1.0
 	if view_lock == "front":
 		v = 0
@@ -144,7 +144,7 @@ func update_view(cam: Camera3D) -> void:
 	if view == 1 or view == 2:
 		var sin_t := sqrt(maxf(0.0, 1.0 - b.y.y * b.y.y))
 		var mv := Vector2(absf(d.dot(right)), d.dot(toward) * sin_t)       # +y = toward the camera = down the screen
-		var ax: Vector2 = (STEP_AXIS[view] as Vector2).normalized()
+		var ax: Vector2 = AXIS1 if view == 1 else AXIS2
 		step_k = maxf(0.3, mv.dot(ax)) * ax.x
 	else:
 		step_k = 0.8

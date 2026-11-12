@@ -231,7 +231,13 @@ vec3 head_mask(vec2 uv, float lod) {
 	vec2 g = fract(q1);
 	float t1 = clamp(lod, 0.0, 1.0);
 	float t0 = 1.0 - t1;
-	vec3 m = vec3(0.0);
+	// (Q22 ⑤ Y, 2026-11-12) 코드를 먼저 모두 읽고, 무게가 있는 코드가 모두 같으면 (머리 · 얼굴 안쪽 — 대부분) 코드표를 한 번만 읽음 —
+	// 값은 옛 셈과 똑같음 (무게 합 = 1). 테두리만 옛날처럼 코드마다 코드표를 읽음.
+	// (가볍게 하려고 0단 겹선형만 쓰는 몸 마스크 식을 머리에 써 보았더니 머리선 · 눈가에 흰 점이 생겨 쓰지 않음 — 머리는 정확한 1단이 필요)
+	int cs[16];
+	float ws[16];
+	int first = -1;
+	bool same = true;
 	for (int y = 0; y < 4; y++) {
 		int py = clamp(j0.y + y / 2, 0, n1.y - 1);
 		int cy = py * 2 + (y & 1);
@@ -243,10 +249,27 @@ vec3 head_mask(vec2 uv, float lod) {
 			float wx1 = (x < 2 ? 1.0 - g.x : g.x) * 0.5;
 			float wx0 = (cx == clamp(i0.x, 0, n0.x - 1) ? 1.0 - f.x : 0.0) + (cx == clamp(i0.x + 1, 0, n0.x - 1) ? f.x : 0.0);
 			float w = t1 * wx1 * wy1 + t0 * wx0 * wy0;
+			int k = y * 4 + x;
+			ws[k] = w;
+			cs[k] = -1;
 			if (w > 0.0) {
 				int c = int(texelFetch(dye_code, ivec2(cx, cy), 0).r * 255.0 + 0.5);
-				m += w * texelFetch(head_data, ivec2(c, 0), 0).rgb;
+				cs[k] = c;
+				if (first < 0) {
+					first = c;
+				} else if (c != first) {
+					same = false;
+				}
 			}
+		}
+	}
+	if (same) {
+		return first < 0 ? vec3(0.0) : texelFetch(head_data, ivec2(first, 0), 0).rgb;
+	}
+	vec3 m = vec3(0.0);
+	for (int k = 0; k < 16; k++) {
+		if (cs[k] >= 0) {
+			m += ws[k] * texelFetch(head_data, ivec2(cs[k], 0), 0).rgb;
 		}
 	}
 	return m;
@@ -418,6 +441,10 @@ vec3 dyed(vec3 c, float slot, float set_i) {
 }
 
 // 물감 마스크 두 장 (옛 fmask0 · fmask1을 밉맵째 삼선형으로 거른 값)을 uv · lod에서
+// (Q22 ⑤ Y, 2026-11-12) 가까이 경로를 가볍게: 옛날엔 lod < 2에서 0단 4×4 코드 + 코드표 2줄 = 48번 읽어 0단·1단을 정확히 만들었는데
+// (기본 확대 20부터 70 언저리까지 늘 이 길 — 화면 가득 320명이면 GPU +1 ms), 이제는 0단 겹선형 하나 (코드 4 + 코드표 — 넷이 같은
+// 코드면 2, 아니면 8)만 만들고 lod 1~2에서 4분의 1 마스크(2단, GPU 거름)와 섞는다. 1단 상자 대신 0단이라 테두리가 조금 더 또렷할 뿐,
+// 흐린 마스크가 옆 칸 물감을 끌어오지는 않음 (4분의 1 마스크는 lod 1 위에서만 섞여 들어옴 — 옛날과 같은 단).
 void masks(vec2 uv, float lod, out vec4 m0, out vec4 m1) {
 	if (lod >= 2.0) {
 		m0 = textureLod(fmq0, uv, lod - 2.0);
@@ -425,41 +452,23 @@ void masks(vec2 uv, float lod, out vec4 m0, out vec4 m1) {
 		return;
 	}
 	ivec2 n0 = textureSize(fcode, 0);
-	ivec2 n1 = n0 / 2;
 	vec2 q0 = uv * vec2(n0) - 0.5;          // 0단 텍셀 자리
-	vec2 q1 = uv * vec2(n1) - 0.5;          // 1단 텍셀 자리
 	ivec2 i0 = ivec2(floor(q0));
-	ivec2 j0 = ivec2(floor(q1));
 	vec2 f = fract(q0);
-	vec2 g = fract(q1);
-	float t1 = clamp(lod, 0.0, 1.0);        // 1단 몫 (lod 0 이하 = 0단만)
-	float t0 = 1.0 - t1;
-	if (lod >= 1.0) {
-		t0 = 0.0;
-		t1 = 1.0;
+	ivec2 a = clamp(i0, ivec2(0), n0 - 1);
+	ivec2 b = clamp(i0 + 1, ivec2(0), n0 - 1);
+	int c00 = int(texelFetch(fcode, ivec2(a.x, a.y), 0).r * 255.0 + 0.5);
+	int c10 = int(texelFetch(fcode, ivec2(b.x, a.y), 0).r * 255.0 + 0.5);
+	int c01 = int(texelFetch(fcode, ivec2(a.x, b.y), 0).r * 255.0 + 0.5);
+	int c11 = int(texelFetch(fcode, ivec2(b.x, b.y), 0).r * 255.0 + 0.5);
+	m0 = texelFetch(flut, ivec2(c00, 0), 0);
+	m1 = texelFetch(flut, ivec2(c00, 1), 0);
+	if (c10 != c00 || c01 != c00 || c11 != c00) {     // 테두리만 넷을 겹선형으로 (안쪽은 한 코드 = 코드표 두 번)
+		vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+		m0 = w.x * m0 + w.y * texelFetch(flut, ivec2(c10, 0), 0) + w.z * texelFetch(flut, ivec2(c01, 0), 0) + w.w * texelFetch(flut, ivec2(c11, 0), 0);
+		m1 = w.x * m1 + w.y * texelFetch(flut, ivec2(c10, 1), 0) + w.z * texelFetch(flut, ivec2(c01, 1), 0) + w.w * texelFetch(flut, ivec2(c11, 1), 0);
 	}
-	m0 = vec4(0.0);
-	m1 = vec4(0.0);
-	// 1단 텍셀 2×2 (j0 둘레) 각각의 아이 2×2 = 0단 텍셀 4×4 — 0단 겹선형의 2×2(i0 둘레)도 이 안에 있음
-	for (int y = 0; y < 4; y++) {
-		int py = clamp(j0.y + y / 2, 0, n1.y - 1);
-		int cy = py * 2 + (y & 1);
-		float wy1 = (y < 2 ? 1.0 - g.y : g.y) * 0.5;
-		float wy0 = (cy == clamp(i0.y, 0, n0.y - 1) ? 1.0 - f.y : 0.0) + (cy == clamp(i0.y + 1, 0, n0.y - 1) ? f.y : 0.0);
-		for (int x = 0; x < 4; x++) {
-			int px = clamp(j0.x + x / 2, 0, n1.x - 1);
-			int cx = px * 2 + (x & 1);
-			float wx1 = (x < 2 ? 1.0 - g.x : g.x) * 0.5;
-			float wx0 = (cx == clamp(i0.x, 0, n0.x - 1) ? 1.0 - f.x : 0.0) + (cx == clamp(i0.x + 1, 0, n0.x - 1) ? f.x : 0.0);
-			float w = t1 * wx1 * wy1 + t0 * wx0 * wy0;
-			if (w > 0.0) {
-				int c = int(texelFetch(fcode, ivec2(cx, cy), 0).r * 255.0 + 0.5);
-				m0 += w * texelFetch(flut, ivec2(c, 0), 0);
-				m1 += w * texelFetch(flut, ivec2(c, 1), 0);
-			}
-		}
-	}
-	if (lod > 1.0) {                        // 1단 ↔ 2단 (fmq의 0단)
+	if (lod > 1.0) {                        // 0단 겹선형 ↔ 2단 (fmq의 0단)
 		float t2 = lod - 1.0;
 		m0 = mix(m0, textureLod(fmq0, uv, 0.0), t2);
 		m1 = mix(m1, textureLod(fmq1, uv, 0.0), t2);

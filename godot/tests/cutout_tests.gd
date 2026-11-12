@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man", "test_frames_woman2",
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man", "test_frames_woman2", "test_frames_c_skips_cutout",
 		"test_gene_look", "test_gene_look_family", "test_head_variants_lib", "test_head_faces_kept", "test_head_mask_packed", "test_look_save_free"])
 
 
@@ -1586,3 +1586,73 @@ func test_look_save_free() -> void:
 	var m := _model(r)
 	check(r.genes == before and r.look_head == 0, "인형을 만들어도 주민의 유전자 · 겉모습 칸 그대로")
 	m.free()
+
+
+## (Q22 ⑤ X, 2026-11-12) 방식 C 인형이 보이는 동안 컷아웃 인형에는 장면마다 아무것도 보내지 않고 (CPU 2배였음),
+## 컷아웃 인형으로 돌아오는 그 장면에 (보이기 전에) 지금 상태를 한꺼번에 보냄 — 늘 컷아웃이던 인형과 같은 값 (옛 값 · 한 장면 튐 없음).
+## 다시 방식 C로 가면 또 멈춤. 화면만 — 주민 데이터는 그대로.
+func test_frames_c_skips_cutout() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 81
+	var r: Resident = null
+	for i in 400:
+		var q := _resident(rng, 8100 + i)
+		q.age = 10.0
+		var c := _model(q)
+		var ok := String(c.dlook.get("body", "")) == "adult" and int(c.dlook.get("personal", -1)) == 0
+		c.free()
+		if ok:
+			r = q
+			break
+	check(r != null, "어른 여자 평상복 a 주민을 찾음")
+	if r == null:
+		return
+	var before := var_to_str(r.to_dict()) if r.has_method("to_dict") else ""
+	var m := _model(r)          # 방식 C를 켠 인형
+	var k := _model(r)          # 늘 컷아웃인 인형 (같은 입력 — 비교용)
+	m.frames_force = 1
+	k.frames_force = 0
+	var feed := func(i: int) -> void:
+		for x: CutoutResident in [m, k]:
+			x.set_anim("walk" if i % 10 < 6 else "idle")
+			x.set_item("빵" if i % 7 < 3 else "")
+			x.move_to(Vector3(0.05 * i, 0, 0.02 * i), 1.0 / 30.0)
+			x.set_react(Vector3(0, 0.02 * (i % 3), 0), Vector2(1.0 + 0.03 * (i % 4), 1.0 - 0.02 * (i % 5)), 0.01 * (i % 3), 0.0, "")
+			x.tick(1.0 / 30.0)
+	feed.call(0)
+	check(m._f_on and not m.doll.visible and m.fdoll.visible, "켜면 방식 C 인형이 보임")
+	var p0 := m.doll_pushes
+	var st0: Vector4 = m.doll.get_instance_shader_parameter("st")
+	var misc0: Vector4 = m.doll.get_instance_shader_parameter("misc")
+	for i in range(1, 40):
+		feed.call(i)
+	var kept: bool = m._f_on and m.doll_pushes == p0
+	kept = kept and m.doll.get_instance_shader_parameter("st") == st0 and m.doll.get_instance_shader_parameter("misc") == misc0
+	check(kept, "방식 C가 보이는 동안 컷아웃 인형엔 아무것도 보내지 않음 (40장면 · 걷기/서기 · 짐 · 톡 반응: 보낸 수 %d → %d)" % [p0, m.doll_pushes])
+	check(k.doll_pushes > 0, "늘 컷아웃인 인형은 그동안 보냄 (%d)" % k.doll_pushes)
+	# 두 손을 내민 몸짓 (그 장면 그림이 없음) → 컷아웃 인형으로 돌아옴: 그 장면에 지금 상태 그대로
+	for x: CutoutResident in [m, k]:
+		x.arms_out = true
+	feed.call(40)
+	var ms: Vector4 = m.doll.get_instance_shader_parameter("st")
+	var ks: Vector4 = k.doll.get_instance_shader_parameter("st")
+	var same: bool = not m._f_on and m.doll.visible and not m.fdoll.visible and m.doll_pushes > p0
+	same = same and m.doll.get_instance_shader_parameter("sel") == k.doll.get_instance_shader_parameter("sel")
+	same = same and (m.doll.get_instance_shader_parameter("misc") as Vector4).is_equal_approx(k.doll.get_instance_shader_parameter("misc"))
+	same = same and is_equal_approx(ms.z, ks.z) and is_equal_approx(ms.z, float(Lib.CLIPS.find(m._d_clip))) and is_equal_approx(ms.w, m._d_phase)
+	check(same, "컷아웃으로 돌아오는 장면: 소품 · 옷 · 키 · 반응 · 동작 · 위상이 늘 컷아웃이던 인형과 같음 (%s %s / %s)" % [m._d_clip, ms, ks])
+	for x: CutoutResident in [m, k]:
+		x.arms_out = false
+	feed.call(41)
+	var p1 := m.doll_pushes
+	for i in range(42, 60):
+		feed.call(i)
+	check(m._f_on and m.doll_pushes == p1, "다시 방식 C → 컷아웃 인형엔 다시 보내지 않음 (%d → %d)" % [p1, m.doll_pushes])
+	m.frames_force = 0
+	feed.call(60)
+	check(not m._f_on and m.doll.visible and m.doll_pushes > p1 and m.doll.get_instance_shader_parameter("sel") == k.doll.get_instance_shader_parameter("sel"),
+		"끄면 컷아웃 인형이 지금 상태로 돌아옴")
+	if before != "":
+		check(var_to_str(r.to_dict()) == before, "주민 데이터 그대로 (화면만)")
+	m.free()
+	k.free()
