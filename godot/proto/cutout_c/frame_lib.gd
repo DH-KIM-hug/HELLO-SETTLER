@@ -1,5 +1,5 @@
 ## 방식 C 주민 시험판 — 장면 그림 라이브러리 (docs/RESIDENTS_2D.md 7장, 2026-11-08 스파이크; 기본값은 그대로 컷아웃)
-## art/cutout/woman_c/frames.json + frames_atlas.png + frames_mask0/1.png (tools/cutout_c/build_frames.py) +
+## art/cutout/woman_c/frames.json + frames_atlas.png + 물감 마스크 (frames_mcode · mlut · mq0 · mq1 — tools/cutout_c/build_frames.py · pack_masks.py) +
 ## 지금 컷아웃 라이브러리의 머리·모자 조각 (proto/cutout_a/cut_lib.gd — 같은 아틀라스·물감 마스크·바탕색).
 ## 켜기: 환경 변수 NAZAKJI_FRAMES=1 또는 FrameLib.spike = 1 (CutoutResident가 여자 평상복 a 몸에만 씀).
 extends RefCounted
@@ -30,6 +30,9 @@ const LOAD_CLIP := {"carry": 1, "hold": 1, "cradle": 2, "rock": 2}
 ## 머리 배율: 머리 조각(턱 위 248 rig) × HEAD_FIT × d_rig / 248 — 1.17이면 컷아웃과 같은 1.42배 (작게 하면 머리카락 가는 선이
 ## 밉맵에서 점선으로 끊김 — 1.06에서 보였음)
 const HEAD_FIT := 1.17
+
+## 물감 마스크 텍스처 (Q22 ③-0, 2026-11-12 — 옛 frames_mask0/1.png 두 장은 raw/의 빌드 재료): 셰이더 이름 → 파일
+const MASK_TEX := {"fcode": "frames_mcode.png", "flut": "frames_mlut.png", "fmq0": "frames_mq0.png", "fmq1": "frames_mq1.png"}
 
 ## -1 = 환경 변수를 따름 · 0 끔 · 1 켬
 static var spike := -1
@@ -218,8 +221,9 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 		_mat.set_shader_parameter(n, cut.get_shader_parameter(n))
 	_mat.set_shader_parameter("palette", palette)
 	_mat.set_shader_parameter("frames_atlas", load(DIR + "frames_atlas.png"))
-	_mat.set_shader_parameter("fmask0", load(DIR + "frames_mask0.png"))
-	_mat.set_shader_parameter("fmask1", load(DIR + "frames_mask1.png"))
+	# 물감 마스크 (Q22 ③-0, 2026-11-12): 코드 텍스처 + 코드표 + 4분의 1 크기 마스크 둘 (tools/cutout_c/pack_masks.py, 셰이더 masks())
+	for n: String in MASK_TEX:
+		_mat.set_shader_parameter(n, load(DIR + String(MASK_TEX[n])))
 	_mat.set_shader_parameter("fdata", _fdata())
 	var off := PackedInt32Array()
 	var nn := PackedInt32Array()

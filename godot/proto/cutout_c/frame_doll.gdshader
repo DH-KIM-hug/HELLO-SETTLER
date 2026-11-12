@@ -1,5 +1,5 @@
 // 방식 C 주민 시험판 (docs/RESIDENTS_2D.md 7장, 2026-11-08 — 스파이크, 기본값은 그대로 컷아웃):
-// 몸+옷 = 장면마다 그린 그림 한 장 (frames_atlas, 걸음·숨쉬기가 그림에 있음), 옷 색 = 물감 마스크 두 장 (frames_mask0/1),
+// 몸+옷 = 장면마다 그린 그림 한 장 (frames_atlas, 걸음·숨쉬기가 그림에 있음), 옷 색 = 물감 마스크 두 장 (frames_mask0/1 → Q22 ③-0 코드 텍스처, 아래 masks()),
 // 머리·얼굴·모자 = 지금 컷아웃 라이브러리의 머리 조각 (doll_atlas)을 그 장면의 턱 자리(fdata)에 얹음 → 머리·모자 조합은 그대로.
 // 한 사람 = 메시 하나 = 그리기 1번 (몸 사각형 + 손 겹 + 짐 그림 + 모든 머리·모자·소품 사각형, 고르지 않은 것은 점으로 접힘).
 // v12 (2026-11-10): 나르는 짐은 몸 장면에 그려 넣지 않고 따로 그린 그림(group 5)을 그 장면의 짐 자리에 얹음 — 밀·밀가루·빵이 갈림.
@@ -9,8 +9,15 @@ render_mode skip_vertex_transform, cull_disabled, ambient_light_disabled, specul
 uniform sampler2D atlas : filter_linear_mipmap, repeat_disable;          // 머리 조각 (컷아웃 라이브러리)
 uniform sampler2D dye_mask : hint_default_black, filter_linear_mipmap, repeat_disable;
 uniform sampler2D frames_atlas : filter_linear_mipmap, repeat_disable;   // 몸 장면들 + 짐 그림들 (v12)
-uniform sampler2D fmask0 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 피부 · 옷 주색 · 둘째(크림) · 장식(띠)
-uniform sampler2D fmask1 : hint_default_black, filter_linear_mipmap, repeat_disable;   // 다리(양말) · 신 · 짐을 받친 손 (앞쪽 보기의 나르기·안고 서기 — 짐 위에 다시 그릴 곳) · 먼 다리
+// 물감 마스크 두 장 (m0 = 피부 · 옷 주색 · 둘째(크림) · 장식(띠), m1 = 다리(양말) · 신 · 짐을 받친 손 (앞쪽 보기의 나르기·안고 서기 — 짐 위에
+// 다시 그릴 곳) · 먼 다리)을 Q22 ③-0 (2026-11-12)부터 작게 담음 (tools/cutout_c/pack_masks.py): 옛날엔 RGBA8 두 장을 밉맵째 = 47 MB.
+//   fcode: 텍셀마다 한 바이트 (코드표의 줄) · flut: 코드 → (m0, m1) · fmq0/1: 두 마스크의 밉맵 2단 (4분의 1 크기) — 그 아래 단은 GPU가.
+// 가까이(lod < 2)는 셰이더가 코드로 0단·1단을 직접 거르고 (0단 겹선형 · 1단 = 0단 2×2 평균의 겹선형, 둘을 lod로 섞음 — 삼선형과 같은 셈),
+// 멀리(lod ≥ 2)는 fmq를 GPU가 거른다 → 옛 마스크와 같은 값 (코드표가 담지 못한 드문 텍셀만 조금 다름 — pack_masks.py 참고).
+uniform sampler2D fcode : filter_nearest, repeat_disable;
+uniform sampler2D flut : filter_nearest, repeat_disable;
+uniform sampler2D fmq0 : hint_default_black, filter_linear_mipmap, repeat_disable;
+uniform sampler2D fmq1 : hint_default_black, filter_linear_mipmap, repeat_disable;
 uniform sampler2D fdata : filter_nearest, repeat_disable;               // 장면마다: [0] uv 사각형, [1] (턱 x, y, 시작 위상, 고개 기울기 rad) rig,
                                                                          // [2] 소품·짐 (기울기 rad, 손 x, y, 배율 — 0 = 없음), [3] (쥐는 자리: 소품 키의 몇 배, 짧은 연장의 기울기, 눕힘 rad, 눈 감음 1 — v13)
 // 동작 = frames.json의 clips 차례 (걷기·나르기·서기·안고 서기 + 2026-11-10 앉기·먹기·올려다보기·무릎·괭이질·줍기) — frame_lib.material이 채움
@@ -220,19 +227,76 @@ vec3 dyed(vec3 c, float slot, float set_i) {
 	return dye_with(c, s, base_col[int(set_i + 0.5) * 8 + s]);
 }
 
+// 물감 마스크 두 장 (옛 fmask0 · fmask1을 밉맵째 삼선형으로 거른 값)을 uv · lod에서
+void masks(vec2 uv, float lod, out vec4 m0, out vec4 m1) {
+	if (lod >= 2.0) {
+		m0 = textureLod(fmq0, uv, lod - 2.0);
+		m1 = textureLod(fmq1, uv, lod - 2.0);
+		return;
+	}
+	ivec2 n0 = textureSize(fcode, 0);
+	ivec2 n1 = n0 / 2;
+	vec2 q0 = uv * vec2(n0) - 0.5;          // 0단 텍셀 자리
+	vec2 q1 = uv * vec2(n1) - 0.5;          // 1단 텍셀 자리
+	ivec2 i0 = ivec2(floor(q0));
+	ivec2 j0 = ivec2(floor(q1));
+	vec2 f = fract(q0);
+	vec2 g = fract(q1);
+	float t1 = clamp(lod, 0.0, 1.0);        // 1단 몫 (lod 0 이하 = 0단만)
+	float t0 = 1.0 - t1;
+	if (lod >= 1.0) {
+		t0 = 0.0;
+		t1 = 1.0;
+	}
+	m0 = vec4(0.0);
+	m1 = vec4(0.0);
+	// 1단 텍셀 2×2 (j0 둘레) 각각의 아이 2×2 = 0단 텍셀 4×4 — 0단 겹선형의 2×2(i0 둘레)도 이 안에 있음
+	for (int y = 0; y < 4; y++) {
+		int py = clamp(j0.y + y / 2, 0, n1.y - 1);
+		int cy = py * 2 + (y & 1);
+		float wy1 = (y < 2 ? 1.0 - g.y : g.y) * 0.5;
+		float wy0 = (cy == clamp(i0.y, 0, n0.y - 1) ? 1.0 - f.y : 0.0) + (cy == clamp(i0.y + 1, 0, n0.y - 1) ? f.y : 0.0);
+		for (int x = 0; x < 4; x++) {
+			int px = clamp(j0.x + x / 2, 0, n1.x - 1);
+			int cx = px * 2 + (x & 1);
+			float wx1 = (x < 2 ? 1.0 - g.x : g.x) * 0.5;
+			float wx0 = (cx == clamp(i0.x, 0, n0.x - 1) ? 1.0 - f.x : 0.0) + (cx == clamp(i0.x + 1, 0, n0.x - 1) ? f.x : 0.0);
+			float w = t1 * wx1 * wy1 + t0 * wx0 * wy0;
+			if (w > 0.0) {
+				int c = int(texelFetch(fcode, ivec2(cx, cy), 0).r * 255.0 + 0.5);
+				m0 += w * texelFetch(flut, ivec2(c, 0), 0);
+				m1 += w * texelFetch(flut, ivec2(c, 1), 0);
+			}
+		}
+	}
+	if (lod > 1.0) {                        // 1단 ↔ 2단 (fmq의 0단)
+		float t2 = lod - 1.0;
+		m0 = mix(m0, textureLod(fmq0, uv, 0.0), t2);
+		m1 = mix(m1, textureLod(fmq1, uv, 0.0), t2);
+	}
+}
+
 void fragment() {
+	// 마스크의 lod (텍스처 미분은 버리기 전에 — 몸 그림과 같은 크기의 코드 텍스처 기준, GPU가 고르는 밉맵 단과 같은 식)
+	vec2 tdx = dFdx(UV) * vec2(textureSize(fcode, 0));
+	vec2 tdy = dFdy(UV) * vec2(textureSize(fcode, 0));
+	float mlod = 0.5 * log2(max(max(dot(tdx, tdx), dot(tdy, tdy)), 1e-8));
 	if (v_show < 0.5) {
 		discard;
 	}
 	vec3 c;
 	if (v_dye.w > 45.0) {
 		vec4 t = texture(frames_atlas, UV);
-		vec4 m0 = texture(fmask0, UV);
-		vec4 m1 = texture(fmask1, UV);
 		if (UV.x < v_win.x || UV.y < v_win.y || UV.x > v_win.z || UV.y > v_win.w) {
 			discard;
 		}
-		if (t.a < alpha_cut || (v_dye.w > 55.0 && v_dye.w < 65.0 && m1.b < 0.5)) {
+		if (t.a < alpha_cut) {
+			discard;
+		}
+		vec4 m0;
+		vec4 m1;
+		masks(UV, mlod, m0, m1);
+		if (v_dye.w > 55.0 && v_dye.w < 65.0 && m1.b < 0.5) {
 			discard;
 		}
 		c = t.rgb;
