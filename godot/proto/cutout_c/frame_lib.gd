@@ -270,10 +270,11 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 
 
 ## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품·짐 (기울기, 손 x, y, 배율),
-## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13)
+## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13),
+## [4] = 그리는 몫 (장면 칸의 0~1: 왼쪽, 위, 오른쪽, 아래 — Q22 ③-1 빈틈없이 담은 아틀라스, tools/cutout_c/pack_atlas.py. 없으면 칸 전체)
 static func _fdata() -> ImageTexture:
 	var fr: Array = lib()["frames"]
-	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
+	var img := Image.create(fr.size(), 5, false, Image.FORMAT_RGBAF)
 	for i in fr.size():
 		var f: Dictionary = fr[i]
 		var uv: Array = f["uv"]
@@ -282,4 +283,6 @@ static func _fdata() -> ImageTexture:
 		var pr: Array = f.get("prop", [0.0, 0.0, 0.0, 0.0, 0.0])
 		img.set_pixel(i, 2, Color(pr[0], pr[1], pr[2], pr[3]))
 		img.set_pixel(i, 3, Color(pr[4], float(f.get("prop_short", pr[0])), float(f.get("lie", 0.0)), float(f.get("shut", 0.0))))
+		var sb: Array = f.get("sub", [0.0, 0.0, 1.0, 1.0])
+		img.set_pixel(i, 4, Color(sb[0], sb[1], sb[2], sb[3]))
 	return ImageTexture.create_from_image(img)
