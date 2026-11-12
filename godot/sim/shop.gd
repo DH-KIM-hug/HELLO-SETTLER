@@ -58,6 +58,10 @@ const ITEMS := {
 		"kind": "stuff", "res": "돌", "amt": 40, "size": 1.8},
 	"녹슨 못": {"tab": "먹을 것·재료", "price": 700, "giant": "못 하나", "inside": "붉은 쇠기둥 — 쇠",
 		"kind": "stuff", "res": "철", "amt": 20, "size": 1.0, "lock": "철기 시대에"},
+	# (Q25 2026-11-12) 연장 꾸러미 — 연장(창고 "도구")이 곧 일터 수인데 대장간은 아직 못 짓는다. 일손이 연장보다 많아진 뒤에 진열이 열린다
+	# (ToolShort — 그 전엔 '일손이 남으면'). 떨어뜨리면 주민이 떼어 내 창고로 나르고 (하루 STUFF_PER_DAY), 촌장의 '연장이 모자라요' 편지가 이루어진다
+	ToolShort.TOOL_ITEM: {"tab": "먹을 것·재료", "price": 1200, "giant": "시계 나사 한 줌", "inside": "은빛 쇠붙이 무더기 — 떼어 내 두드리면 연장 여덟 자루. 일손이 남는 마을에",
+		"kind": "stuff", "res": "도구", "amt": 8, "size": 1.3, "tools": true},
 	"알약 부스러기": {"tab": "돌봄", "price": 900, "giant": "알약 가루 한 톨", "inside": "하얀 바위만 한 약 덩어리 — 몹시 아픈 사람이 가벼워져요",
 		"kind": "pill", "size": 1.2, "days": 3.0},
 	"반창고 조각": {"tab": "돌봄", "price": 300, "giant": "반창고 귀퉁이", "inside": "하얀 천 더미 — 다친 사람이 낫고 상처가 곪지 않아요",
@@ -238,6 +242,8 @@ static func card(v: Village, item: String) -> Dictionary:
 		lock2 = v.kitchen.egg_lock(v)          # 병마다 3일에 하나 (wallet-shop R6 · 한도 7)
 	if lock2 == "" and v.kitchen != null and String(d.get("kind", "")) == "aphids":
 		lock2 = v.kitchen.aphid_lock(v)
+	if lock2 == "" and bool(d.get("tools", false)) and v.tools_short_first < 0.0:
+		lock2 = "일손이 남으면"            # (Q25) 일손이 연장보다 많아진 적이 없으면 쓸 데가 없다 — 모자람이 처음 켜지면 열림
 	if lock2 == "" and int(d.get("era", 0)) > v.era:
 		lock2 = "%s 시대에" % Balance.ERAS[mini(int(d["era"]), Balance.ERAS.size() - 1)]
 	var inside2 := String(d["inside"])

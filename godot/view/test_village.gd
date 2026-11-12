@@ -785,6 +785,7 @@ func _setup_ui() -> void:
 	dlayer.add_child(shop_sheet)
 	shop_sheet.bought.connect(func(_it: String) -> void: _hand_glow_t = 4.0)
 	shop_sheet.undone.connect(func(_it: String) -> void: _hand_glow_t = 0.0)
+	altar_sheet.shop_requested.connect(open_shop_at)
 	shelf_sheet = ShelfSheet.new()
 	dlayer.add_child(shelf_sheet)
 	settings_sheet = SettingsSheet.new()
@@ -901,6 +902,16 @@ func open_shop() -> void:
 	shop_sheet.setup(focus_village())
 	shop_sheet.open()
 	Notebook.on(focus_village(), "shop_open")     # [거인의 수첩]
+
+
+## (Q25) 상점을 그 물건의 탭으로 연다 (촌장의 '연장이 모자라요' 편지 [연장 꾸러미 보기])
+func open_shop_at(item: String) -> void:
+	close_sheets(shop_sheet)
+	shop_sheet.setup(focus_village())
+	shop_sheet.open()
+	if Shop.ITEMS.has(item):
+		shop_sheet.select_tab(String(Shop.ITEMS[item]["tab"]))
+	Notebook.on(focus_village(), "shop_open")
 
 
 ## [선반] (UI 05 — 지금은 '곧 열려요' + 거인의 등불)
@@ -1764,7 +1775,59 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 			em.position = l.position + Vector2(ms.x - 4.0, -9.0)
 			bubbles.add_child(em)
 		shown += 1
+	if ToolShort.bubbles(vil) and not (director != null and director.hush_bubbles()):
+		_tool_bubbles(vil, vw, vs, placed, said)
 	return shown
+
+
+## (Q25) 연장이 모자란 마을: 일터 없이 노는 어른 머리 위에 작은 연장 그림 말풍선 (글 없음 — 깨닫기 전에도 그대로).
+## 화면만 (시뮬레이션은 ToolShort.on을 켜고 끌 뿐). 늘 떠 있지 않게: 한 사람마다 TOOL_BUBBLE_EVERY 현실 초에 TOOL_BUBBLE_SECS 동안,
+## 사람마다 때를 어긋나게 (id) · 한 마을에 TOOL_BUBBLE_MAX 개까지 · 말하고 있는 사람은 건너뜀
+const TOOL_BUBBLE_EVERY := 9.0
+const TOOL_BUBBLE_SECS := 3.2
+const TOOL_BUBBLE_MAX := 2
+const TOOL_BUBBLE_PX := 20.0
+var tool_bubble_now := -1.0             # 시험·캡처: 0 이상이면 이 현실 초를 '지금'으로 (늘 같은 사람에게 뜨게)
+
+
+func _tool_bubbles(vil: Village, vw: VillageView, vs: Vector2, placed: Array, said: Dictionary) -> void:
+	var now := tool_bubble_now if tool_bubble_now >= 0.0 else Time.get_ticks_msec() / 1000.0
+	var n := 0
+	for r in vil.people:
+		if n >= TOOL_BUBBLE_MAX:
+			return
+		if r.sleeping or not ToolShort.idle_hand(vil, r) or (r.say_t > 0.0 and r.say != ""):
+			continue
+		if fmod(now + float(r.id) * 2.71, TOOL_BUBBLE_EVERY) >= TOOL_BUBBLE_SECS:
+			continue
+		var m: ResidentModel = vw.residents.get(r.id)
+		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
+			continue
+		var p := head_px(cam.camera, m)
+		if p.x < 0 or p.y < top_h + 2.0 or p.x > vs.x or p.y > vs.y - bottom_h - 8.0:
+			continue
+		var pc := PanelContainer.new()
+		pc.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		var st: Array = BUBBLE_MOOD[""]
+		sb.bg_color = st[0]
+		sb.border_color = st[1]
+		sb.set_border_width_all(1)
+		sb.set_corner_radius_all(8)
+		sb.content_margin_left = 3
+		sb.content_margin_right = 3
+		sb.content_margin_top = 2
+		sb.content_margin_bottom = 2
+		pc.add_theme_stylebox_override("panel", sb)
+		var ic := GameIcons.rect("도구", TOOL_BUBBLE_PX)
+		pc.add_child(ic)
+		bubbles.add_child(pc)
+		var ms := Vector2(TOOL_BUBBLE_PX + 6.0, TOOL_BUBBLE_PX + 4.0)
+		pc.size = ms
+		pc.position = bubble_clear(bubble_pos(bubble_anchor(p, ms, false, vs, TapReact.px_per_unit(cam.camera, m.global_position)), ms, false, vs), ms, placed, vs, false)
+		placed.append(Rect2(pc.position, ms))
+		said["tool:%d" % r.id] = true
+		n += 1
 
 
 ## (Q2-d) 먼저 놓인 말풍선과 포개지면 그 위로 (위에 자리가 없으면 아래로) 비켜 놓음 — 멀리서 보면 이웃한 두 사람의 말이 겹쳤다

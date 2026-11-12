@@ -33,6 +33,9 @@
 | `&"found_object"` | `FoundObjects.discover` (매시간 `FoundObjects.hourly` — 묻힌 물건 곁에서 일하던·돌아다니던 사람, id 순, 난수 없음 · E3-16 / GD 3.0) | `{"kind": StringName (&"button"·&"marble"·&"cap"·&"sugar"·&"match"), "id": int}` | `who` = 찾은 사람 · `at` = 묻혀 있던 자리 | 아니오 | 아니오 (연대기는 `log_line` — 찾음·쓰임 한 줄씩) | `tests/found_tests.gd` (화면은 `FoundObjects.shown`을 직접 읽음) |
 | `&"butterfly_out"` | `Caterpillars._tick` (고치 → 나비 + 빈 고치) | `{"patch": int (꽃 무리 id)}` | `at` = 고치 자리 | 아니오 | 아니오 | `tests/production_tests.gd` (앞으로 #33 작은 장면) |
 | `&"awakened"` | `Awakening.awaken` (깨달음 — 한 번, 부르는 말을 정한 바로 뒤, awakening-altar R2) | `{"name_idx": int (Balance.WATCHER_NAMES 번호, 없으면 -1)}` | — | 아니오 (연대기 두 줄이 이미 올림) | 아니오 (연대기는 log_line 두 줄) | `view/stage_director.gd` (커서 — 보고 있는 무리면 깨달음 연출 EVENTS_STAGING 1, 2026-11-09) |
+| `&"tools_short"` | `ToolShort.hourly` (병 한 시간마다 — 창고 연장 0 · 빈 일터 1 이상 · 일터 없는 성한 어른 `TOOL_SHORT_IDLE`(2) 이상이 `TOOL_SHORT_HOURS`(12) 시간 이어지면 켜짐, `TOOL_SHORT_OFF_HOURS`(6) 시간 풀리면 꺼짐 · 난수 없음, ROADMAP Q25 2026-11-12) | 켜짐 `{"on": true, "idle": int, "empty": int (빈 일터 수), "ids": Array[int] (일터 없는 어른 id)}` · 꺼짐 `{"on": false, "secs": float (켜져 있던 병 초)}` | — | 아니오 | 아니오 | `view/test_village.gd` (연장 그림 말풍선은 `ToolShort.bubbles`를 읽음) · `tests/tool_short_tests.gd` |
+| `&"tools_wish"` | `ToolShort._maybe_wish` (모자람이 켜져 있고 제단이 섰을 때 촌장의 '연장이 모자라요' 소원 편지 — 열린 편지가 없고 마지막 편지에서 `TOOL_WISH_EVERY`(4일) 뒤 · 난수 · 말 없음) | `{"id": int (편지 id)}` | `who` = 촌장 | 아니오 | 아니오 | `tests/tool_short_tests.gd` (화면은 `letters`를 읽음 — 제단 시트 [연장 꾸러미 보기]) |
+| `&"tools_given"` | `ToolShort.given` ← `SkyDrops.drop` (연장 꾸러미를 떨어뜨림 — 열린 연장 편지는 `granted`) | `{"amt": float (연장 수), "wish": int (이루어진 편지 id, 없으면 -1)}` | — | 아니오 | 아니오 (연대기는 `SkyDrops._miracle`의 log_line) | `tests/tool_short_tests.gd` |
 
 ## 메모
 - 저장 순번은 위 표의 "예"인 kind와, 사건 없이 올리는 곳(`notebook.gd`·`awakening.gd`)에서만 오른다 — 10초 걸음마다 저장되지 않게.

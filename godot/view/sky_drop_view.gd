@@ -358,6 +358,26 @@ static func make_item(item: String) -> Node3D:
 			for i in 9:
 				var a := float(i) * 2.39
 				_mesh(n, _sphere(0.18, 5, 3), Color("f4cf62") if i % 3 else Color("fff0b0"), Vector3(cos(a) * 0.35 * sqrt(i), 0.15 + 0.05 * (i % 2), sin(a) * 0.35 * sqrt(i)))
+		ToolShort.TOOL_ITEM:              # (Q25) 시계 나사 한 줌 — 누운 은빛 나사 무더기 (주민에게는 쇠기둥 더미)
+			for i in 7:
+				var a := float(i) * 2.399
+				var rr := 0.28 * sqrt(float(i))
+				var lie := Vector3(PI * 0.5, a * 1.3, 0.0) if i < 6 else Vector3(0.25, 0.0, 0.2)
+				var at := Vector3(cos(a) * rr, 0.16 + (0.3 if i >= 4 else 0.0) + (0.55 if i == 6 else 0.0), sin(a) * rr)
+				var sh := CylinderMesh.new()
+				sh.top_radius = 0.11
+				sh.bottom_radius = 0.07
+				sh.height = 1.25
+				sh.radial_segments = 8
+				var xf := Basis.from_euler(lie)
+				_mesh(n, sh, Color("aeb5bc").lerp(Color("8d959d"), 0.15 * (i % 3)), at, lie)
+				var hd := CylinderMesh.new()
+				hd.top_radius = 0.24
+				hd.bottom_radius = 0.24
+				hd.height = 0.1
+				hd.radial_segments = 10
+				_mesh(n, hd, Color("d6dbe0"), at + xf * Vector3(0, 0.66, 0), lie)
+				_mesh(n, _box(Vector3(0.3, 0.04, 0.05)), Color("6f767d"), at + xf * Vector3(0, 0.72, 0), lie)
 		"자갈 한 알":
 			_mesh(n, _sphere(1.6, 7, 4), Color("9b968c"), Vector3(0, 0.9, 0), Vector3(0.3, 0.6, 0.1), Vector3(1.05, 0.72, 0.92))
 			_mesh(n, _sphere(0.8, 6, 3), Color("85807a"), Vector3(0.9, 0.5, 0.7), Vector3(0.4, 0.2, 0.0))

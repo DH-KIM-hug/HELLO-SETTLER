@@ -9,6 +9,7 @@ extends Control
 
 signal closed
 signal split_requested(from: Village)
+signal shop_requested(item: String)    # (Q25) 촌장의 '연장이 모자라요' 편지 [연장 꾸러미 보기] — 장면이 상점을 그 물건의 탭으로 연다
 signal reveal_requested(v: Village)     # [계시] (A5) — 장면이 받아 계시 연출(RevelationShow) → Village.giant_reveal   # 분가 편지 [새 땅 고르기] — 넓은 세상 장면이 받으면 거인이 땅을 고르는 화면으로
 
 const REFRESH := 0.5
@@ -293,7 +294,9 @@ func _refresh() -> void:
 	if wl.is_empty():
 		_label(letter_box, "아직 온 편지가 없어요." if village.altar_built else "제단이 생기면 사람들이 별지기님께 편지를 써요.", "Small")
 	for l: Dictionary in wl:
-		if l["kind"] == "wish":
+		if l["kind"] == "wish" and ToolShort.is_tool_wish(l):     # (Q25) 들어주는 길은 상점의 연장 꾸러미 — 떨어뜨리면 이루어짐
+			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "연장 꾸러미 보기", _on_tools_shop, true, "", true)
+		elif l["kind"] == "wish":
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])), true, "", true)
 		else:
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "새 땅 고르기", _on_split.bind(int(l["id"])), village.water is WorldWater, "", true)
@@ -413,6 +416,12 @@ func _on_grant(id: int) -> void:
 		GameAudio.fx("chime")                  # 소원 들어줌 (맑은 차임)
 		GameAudio.say("wish_granted")
 	_refresh()
+
+
+## (Q25) [연장 꾸러미 보기] — 장면이 상점을 연다 (시트는 닫힘)
+func _on_tools_shop() -> void:
+	GameAudio.ui_click()
+	shop_requested.emit(ToolShort.TOOL_ITEM)
 
 
 ## 분가 자리 고르기 — 장면이 split_requested를 받으면 거인이 땅을 누르는 화면, 아니면 가까운 좋은 자리를 바로
