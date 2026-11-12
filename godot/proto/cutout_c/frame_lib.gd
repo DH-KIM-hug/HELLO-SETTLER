@@ -8,6 +8,8 @@ const Cut := preload("res://proto/cutout_a/cut_lib.gd")
 const DIR := "res://art/cutout/woman_c/"
 ## Q22 (2026-11-12 "어른 남자 먼저"): 어른 남자 몸 (튜닉·바지·조끼 자리) — 여자 장면과 같은 자료 모양·장면 수·닻. 몸마다 자료·메시·재질 따로 (dir)
 const MAN_DIR := "res://art/cutout/man_c/"
+## Q22 ⑤ (2026-11-12): 어른 여자 둘째 벌 (치마·끈 조끼·앞치마 자리) — 여자 장면을 옷만 바꿔 다시 그림, 같은 장면 수·닻
+const WOMAN2_DIR := "res://art/cutout/woman2_c/"
 ## 그려진 동작 = frames.json의 clips (2026-11-10: 걷기·나르기·서기·안고 서기 + 앉기·먹기·올려다보기·무릎·괭이질·줍기). 셰이더 배열 길이
 const MAX_CLIPS := 16
 ## 머리가 위에 그려진 연장 (낫·나무망치 — 괭이·갈퀴는 날이 아래): 괭이질 장면의 날 쪽으로 머리가 가게 반 바퀴 더 돌림

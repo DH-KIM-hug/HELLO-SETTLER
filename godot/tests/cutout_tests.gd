@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man",
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man", "test_frames_woman2",
 		"test_gene_look", "test_gene_look_family", "test_head_variants_lib", "test_head_faces_kept", "test_head_mask_packed", "test_look_save_free"])
 
 
@@ -1117,11 +1117,11 @@ func test_frames_man() -> void:
 			c.set_anim("walk")
 			c.tick(0.0)
 			var body := String(c.fdoll.body) if c.fdoll != null else ""
-			var exp_body: String = String({"m2": FL.MAN_DIR, "m4": FL.MAN_DIR, "f0": FL.DIR}.get(k, "")) if on == 1 else ""
+			var exp_body: String = String({"m2": FL.MAN_DIR, "m4": FL.MAN_DIR, "f0": FL.DIR, "f1": FL.WOMAN2_DIR if FL.has_body(FL.WOMAN2_DIR) else ""}.get(k, "")) if on == 1 else ""
 			if c._f_on != (exp_body != "") or (c._f_on and (body != exp_body or c.doll.visible or c.fdoll.clip != "walk")):
 				(on_bad if on == 1 else off_bad).append("%s → %s %s" % [k, c._f_on, body])
 	check(off_bad.is_empty(), "시험판을 끄면 아무도 장면 그림이 아니다 %s" % [off_bad])
-	check(on_bad.is_empty(), "시험판을 켜면 어른 남자 → 남자 몸, 어른 여자 a → 여자 몸, 나머지 그대로 %s" % [on_bad])
+	check(on_bad.is_empty(), "시험판을 켜면 어른 남자 → 남자 몸, 어른 여자 a → 여자 몸, b → 여자 둘째 벌, 나머지 그대로 %s" % [on_bad])
 	# 조끼 자리: c = 생김새의 크림(둘째) 물감 · e = 튜닉(주색) 물감
 	var vest: Array = []
 	for k: String in ["m2", "m4"]:
@@ -1145,6 +1145,94 @@ func test_frames_man() -> void:
 	for c: Variant in want.values():
 		(c as CutoutResident).free()
 
+
+## Q22 ⑤ (2026-11-12): 어른 여자 둘째 벌 (woman2_c — 치마·끈 조끼·앞치마 자리). 여자 몸과 같은 동작 순서 · 보기 · 장면 수 · 시작 위상 ·
+## 꾸러미 형식, 시험판을 끄면 아무도 안 바뀜, 켜면 평상복 a → woman_c · b → woman2_c (한 마을에 두 벌이 다 나옴), 앞치마는 집안·사람마다
+func test_frames_woman2() -> void:
+	var FL := CutoutResident.FrameLib
+	check(FL.has_body(FL.WOMAN2_DIR), "여자 둘째 벌 장면 그림이 있다 (woman2_c/frames.json)")
+	if not FL.has_body(FL.WOMAN2_DIR):
+		return
+	var W: Dictionary = FL.lib()
+	var M: Dictionary = FL.lib(FL.WOMAN2_DIR)
+	check(M["clips"] == W["clips"] and M["frames_per_clip"] == W["frames_per_clip"] and M["views"] == W["views"]
+		and (M["frames"] as Array).size() == (W["frames"] as Array).size(), "둘째 벌: 여자 몸과 같은 동작 · 보기 · 장면 수 (%d)" % (M["frames"] as Array).size())
+	var same := true
+	for i in (M["frames"] as Array).size():
+		var a: Dictionary = M["frames"][i]
+		var b: Dictionary = W["frames"][i]
+		if a["clip"] != b["clip"] or a["view"] != b["view"] or not is_equal_approx(float(a["t0"]), float(b["t0"])):
+			same = false
+	check(same, "둘째 벌: 장면 순서 · 보기 · 시작 위상이 여자 몸과 같다")
+	check(FL.load_index("밀가루", FL.WOMAN2_DIR) >= 0 and FL.load_index(FL.BABY_LOAD, FL.WOMAN2_DIR) >= 0, "둘째 벌에도 짐 그림 · 아기 그림")
+	var imp := ConfigFile.new()
+	imp.load(FL.WOMAN2_DIR + "frames_atlas.png.import")
+	var pk := int(imp.get_value("params", "compress/mode", 0)) == 2 and bool(imp.get_value("params", "compress/high_quality", false))
+	for n: String in FL.MASK_TEX:
+		pk = pk and ResourceLoader.exists(FL.WOMAN2_DIR + String(FL.MASK_TEX[n]))
+	pk = pk and not ResourceLoader.exists(FL.WOMAN2_DIR + "frames_mask0.png") and (M["frames"][0] as Dictionary).has("sub")
+	check(pk, "둘째 벌: 같은 꾸러미 형식 (VRAM 압축 몸 그림 · 물감 코드 넷 · 장면마다 sub · 옛 마스크 없음)")
+	# 한 마을 (같은 씨앗의 어른 여자 여럿): 시험판 끔 = 아무도 장면 그림 아님 · 켬 = a → woman_c, b → woman2_c, 둘 다 나옴
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2212
+	var women: Array[CutoutResident] = []
+	for i in 400:
+		var r := _resident(rng, 22600 + i)
+		var c := _model(r)
+		if String(c.dlook.get("body", "")) == "adult" and String(c.dlook["sex"]) == "f" and women.size() < 40:
+			women.append(c)
+		else:
+			c.free()
+	var spike0: int = FL.spike
+	var off_bad := []
+	var on_bad := []
+	var used := {}
+	var apron := {}
+	for on: int in [0, 1]:
+		FL.spike = on
+		for c in women:
+			c.set_anim("walk")
+			c.tick(0.0)
+			var p := int(c.dlook["personal"])
+			var exp_body: String = (FL.DIR if p == 0 else (FL.WOMAN2_DIR if p == 1 else "")) if on == 1 else ""
+			var body := String(c.fdoll.body) if c.fdoll != null else ""
+			if c._f_on != (exp_body != "") or (c._f_on and (body != exp_body or c.doll.visible or c.fdoll.clip != "walk")):
+				(on_bad if on == 1 else off_bad).append("%d → %s %s" % [p, c._f_on, body])
+			if on == 1 and c._f_on:
+				used[body] = true
+				if body == FL.WOMAN2_DIR:
+					# 앞치마 자리(둘째 물감 = dyes0.w): 앞치마 = 생김새의 크림 물감 · 없음 = 치마(주색) 물감
+					var d: Vector4 = c.fdoll.get_instance_shader_parameter("dyes0")
+					var dy: Array = c.dlook["dye"]
+					var on_ap := c.woman2_apron()
+					if int(d.w) != (int(dy[3]) if on_ap else int(dy[2])) or int(d.z) != int(dy[2]):
+						on_bad.append("apron dye %s %s" % [on_ap, d])
+					apron[on_ap] = true
+	check(off_bad.is_empty(), "둘째 벌: 시험판을 끄면 아무도 장면 그림이 아니다 %s" % [off_bad])
+	check(on_bad.is_empty(), "둘째 벌: 시험판을 켜면 평상복 a → woman_c · b → woman2_c, 앞치마 자리 물감이 맞다 %s" % [on_bad])
+	check(used.has(FL.DIR) and used.has(FL.WOMAN2_DIR), "한 마을에 여자 두 벌이 다 나온다 %s" % [used.keys()])
+	check(apron.has(true) and apron.has(false), "앞치마 두른 사람 · 안 두른 사람이 다 있다 %s" % [apron.keys()])
+	# 앞치마는 사람마다 늘 같다 (집안 씨앗 · 주민 번호에서)
+	var w2: Array = women.filter(func(c: CutoutResident) -> bool: return int(c.dlook["personal"]) == 1)
+	var stable := true
+	for c: CutoutResident in w2:
+		stable = stable and c.woman2_apron() == c.woman2_apron()
+	check(stable and not w2.is_empty(), "앞치마 선택이 늘 같다")
+	# 나르기 · 앉기도 둘째 벌 장면 그림
+	if not w2.is_empty():
+		var m: CutoutResident = w2[0]
+		m.set_item("밀가루")
+		m.set_anim("walk")
+		m.tick(0.0)
+		var sx := int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x)
+		check(m._f_on and m.fdoll.clip == "carry" and sx == FL.load_index("밀가루", FL.WOMAN2_DIR), "둘째 벌: 밀가루를 나르면 나르기 장면 + 밀가루 그림 (%s %d)" % [m.fdoll.clip, sx])
+		m.set_item("")
+		m.set_anim("sit")
+		m.tick(0.0)
+		check(m._f_on and m.fdoll.clip == "sit", "둘째 벌: 앉기도 장면 그림")
+	FL.spike = spike0
+	for c in women:
+		c.free()
 
 ## 방식 C 옷 한 벌의 그래픽 메모리 (Q22 ③-0, 2026-11-12): 몸 그림은 VRAM 압축 (데스크톱 BPTC · 폰 ASTC 4×4, 밉맵),
 ## 물감 마스크 두 장은 코드 텍스처(한 바이트, 밉맵 없음) + 코드표 + 4분의 1 크기 마스크 둘 (= 옛 마스크의 밉맵 2단) — tools/cutout_c/pack_masks.py.

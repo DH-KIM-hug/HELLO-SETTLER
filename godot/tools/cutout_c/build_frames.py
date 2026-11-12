@@ -1,6 +1,6 @@
 """Method-C resident spike (docs/RESIDENTS_2D.md section 7, 2026-11-08): frame sheets -> frame atlas + dye masks + anchors.
 
-usage: python3 build_frames.py [--body man_c]   (default woman_c; needs <body>/raw/ sheets — Q22 3: the man body, art/cutout/man_c/log.md)
+usage: python3 build_frames.py [--body man_c | woman2_c]   (default woman_c; needs <body>/raw/ sheets — Q22 3: the man body, art/cutout/man_c/log.md)
 in : art/cutout/woman_c/raw/<clip>_<view>.png  (gen.sh: 2x4 cells, magenta head placeholder, chroma green)
 out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed) — Q22 3-1 (2026-11-12): laid out on a grid
                                           of cells first, then trimmed and packed tightly (pack_atlas.py; frames.json "sub" + "uv")
@@ -353,10 +353,128 @@ def classify_man(rgb, alpha, magenta, feet, fig_h, legzone=None, has_sack=False)
 VEST_SEAM = 0.6       # man: vest / tunic seam = this shade of the tunic (0 = keep the ink line)
 
 
+# ── Q22 5 (2026-11-12, user: "a 바탕 + b 몇 개", man -> second woman outfit): skirt + laced bodice + apron (art/cutout/woman2_c,
+#    tools/cutout_c/woman2_prompts.py). The woman's sheets redrawn with only the clothes changed: the skirt, sleeves, stockings and
+#    shoes are hers (same colours), the upper dress became a brown laced BODICE, the sash is gone and the apron is drawn LILAC — a
+#    key colour, so the apron is its own dye class and is repainted cream here.
+W2_CREAM = np.array([243.0, 230.0, 204.0])   # the apron's drawn-lilac is repainted to this cream (shading kept) — undyed it reads as linen
+APRON_SEAM = 0.8      # woman2: apron / skirt seam = this shade of the skirt (0 = keep the ink line) — "no apron" = skirt folds
+
+
+def lilac_of(rgb):
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    # the model drew the key from pale violet (#CBA6DE) to pink-lilac (#D89CCE — b about r) between sheets: blue well above green
+    # is the test (the rose skirt has b = g, skin / blouse / bodice b < g); the magenta head disc is removed before this
+    return (b > g + 25) & (b >= r - 18) & (g < r - 8) & (luma(rgb) > 110)
+
+
+def classify_woman2(rgb, alpha, magenta, feet, fig_h, legzone=None, has_sack=False):
+    """Q22 5 second woman outfit: main = rose SKIRT, second = APRON (drawn lilac -> repainted cream), trim = brown BODICE,
+    skin / leg / shoe as the woman's classify() (below the skirt hem: tan -> stocking, dark -> shoe). The cream BLOUSE (sleeves,
+    yoke above the bodice, the bodice lacing) is NOT dyed: it is held as class 7 through the clean-up and returned as 0."""
+    r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
+    L = luma(rgb)
+    lab = np.zeros(rgb.shape[:2], np.int8)
+    fg = (alpha > 128) & ~magenta
+    ink = L < 72
+    lil = lilac_of(rgb)
+    rose = (r - g > 45) & (np.abs(g - b) < 28) & (L < 190) & (L > 100) & (r > 150) & ~lil
+    cream = (L > 196) & (r - b < 80) & (g - b > 22) & ~lil
+    skin = (r - b > 85) & (L > 135) & ~rose
+    brown = (L >= 72) & (L < 150) & (r - b > 35) & ~rose
+    lab[fg & brown] = 4
+    lab[fg & skin] = 1
+    lab[fg & cream] = 7
+    lab[fg & rose] = 2
+    lab[fg & lil] = 3
+    lab[fg & ink] = 0
+    left = fg & ~ink & (lab == 0)
+    if left.any():
+        cents = {c: np.median(rgb[fg & (lab == c)], axis=0) for c in (1, 2, 3, 4, 7) if (fg & (lab == c)).sum() > 20}
+        ks = list(cents)
+        d = np.stack([((rgb - cents[k]) ** 2).sum(-1) for k in ks], -1)
+        lab[left] = np.array(ks, np.int8)[d.argmin(-1)][left]
+    # below the skirt hem (as classify()): per column, rows under the lowest solid rose pixel are stockings / shoes
+    rose_l = (lab == 2)
+    rose_l = dilate(~dilate(~rose_l, 2), 2) & rose_l
+    H = rgb.shape[0]
+    rows = np.arange(H)[:, None]
+    hem = np.where(rose_l.any(0), H - 1 - np.argmax(rose_l[::-1], 0), -1)
+    hem = np.maximum.reduce([shift(hem[None, :], 0, d)[0] for d in range(-6, 7)])
+    zone = rows > feet - LEG_ZONE * fig_h
+    if legzone is not None:
+        zone = legzone
+        lab[zone & fg & ~ink & (lab == 4)] = 6
+    below = zone & ((rows > hem[None, :] + 2) | (hem[None, :] < 0))
+    dark = (L < SHOE_L)
+    cloth = np.zeros_like(fg)
+    for n_, _cy, _cx, _box, m_ in blobs(fg & ((lab == 3) | (lab == 7)), 1):
+        if (m_ & ~below).sum() > 0.5 * n_:
+            cloth |= m_
+    lab[below & fg & ~ink & dark & ~cloth] = 6
+    lab[below & fg & ~ink & ~dark & ~cloth] = 5
+    if legzone is not None:
+        sks = list(blobs(lab == 1, 1))
+        for n_, _cy, _cx, _box, m_ in blobs(lab == 5, 1):
+            ring = dilate(m_, 1)
+            if sum((ms & ~zone).sum() for _n, _a, _b, _c, ms in sks if (ring & ms).any()) >= 30:
+                lab[m_] = 1
+    # a brown blob that reaches down to the soles of a walking / standing figure is a shoe, not the bodice (the shoes of a
+    # skirt this long are wholly below the hem anyway — this catches a shoe toe the hem test missed)
+    if legzone is None:
+        for n_, _cy, _cx, box, m_ in blobs(fg & (lab == 4), 1):
+            if box[1] >= feet - SHOE_NEAR * fig_h:
+                lab[m_] = 6
+    core = fg & ~dilate(ink | ~fg, 1)
+    edge = fg & ~ink & ~core
+    cnt = np.zeros(rgb.shape[:2] + (len(CLASSES),), np.int16)
+    for dy in range(-2, 3):
+        for dx in range(-2, 3):
+            sl = shift(lab, dy, dx)
+            sc = shift(core, dy, dx)
+            for c in range(1, len(CLASSES)):
+                cnt[..., c] += (sc & (sl == c))
+    best = cnt.argmax(-1).astype(np.int8)
+    lab[edge & (cnt.max(-1) > 0)] = best[edge & (cnt.max(-1) > 0)]
+    for c in range(1, len(CLASSES)):
+        for n_, _cy, _cx, _box, m_ in blobs(lab == c, 1):
+            if n_ >= SPECK_IN:
+                continue
+            near = dilate(m_, 4) & ~m_
+            if n_ >= SPECK and (near & ~fg).any():
+                continue
+            ring = near & (lab > 0)
+            if ring.sum() < 4:
+                continue
+            around = np.bincount(lab[ring].astype(np.int64), minlength=len(CLASSES))
+            if around[c] < 0.15 * ring.sum() and around.argmax() != c:
+                lab[m_] = around.argmax()
+    # apron switch: the ink line BETWEEN the apron and the skirt (inside the figure) takes the skirt's own shade and class, so an
+    # apron dyed the skirt colour ("no apron") reads as skirt folds, not as an apron outline (as the man's vest seam)
+    if APRON_SEAM:
+        ca, cs = core & (lab == 3), core & (lab == 2)
+        seam = fg & ink & dilate(ca, 4) & dilate(cs, 4) & ~dilate(~fg, 3)
+        if seam.any() and cs.sum() > 50:
+            rgb[seam] = np.median(rgb[cs], 0) * APRON_SEAM
+            lab[seam] = 2
+    # the lilac key -> cream linen (shading kept): the apron pixels and every lilac-tinted pixel around them (anti-aliased rim,
+    # half-transparent edge — no lilac fringe in the atlas). Colours only: no pixel is moved, added or removed.
+    ap = (lab == 3) & fg
+    if ap.sum() > 30:
+        Lm = float(np.median(L[ap]))
+        tint = ap | ((alpha > 0) & dilate(ap, 3) & lilac_of(rgb) & (lab != 2))
+        rgb[tint] = np.clip(W2_CREAM[None] * (L[tint] / max(Lm, 1.0))[:, None], 0, 255)
+    lab[lab == 7] = 0
+    return lab
+
+
 # body-specific build options (Q22 3): the dye classifier and the colours the cyan / navy far leg is repainted to (then darkened in
 # the shader by mask1.A) — woman: tan stocking / brown shoe; man: cream trouser / dark-brown boot
 BODIES = {"woman_c": dict(classify=classify, far_leg=(np.array([224.0, 165.0, 113.0]), np.array([124.0, 72.0, 49.0]))),
-          "man_c": dict(classify=classify_man, far_leg=(np.array([246.0, 228.0, 186.0]), np.array([118.0, 66.0, 40.0])))}
+          "man_c": dict(classify=classify_man, far_leg=(np.array([246.0, 228.0, 186.0]), np.array([118.0, 66.0, 40.0]))),
+          # Q22 5: the second woman outfit keeps her stockings / shoes; lilac apron pixels are never taken for the far leg's key
+          "woman2_c": dict(classify=classify_woman2, far_leg=(np.array([224.0, 165.0, 113.0]), np.array([124.0, 72.0, 49.0])),
+                           lilac=True)}
 BODY_OPT = BODIES[BODY]
 
 
@@ -374,6 +492,8 @@ def frames_of(sheet):
         legrows = np.arange(CH)[:, None] > 330          # leg zone only (the sack stripe is blue too)
         far_st &= legrows
         far_sh &= legrows
+        if BODY_OPT.get("lilac"):
+            far_sh &= ~lilac_of(rgb) & (g >= r - 5)     # woman2: a dark lilac apron-edge pixel is not the navy shoe (navy: g >= r)
         far = far_st | far_sh
         far_c = None
         if far.any():
@@ -384,6 +504,8 @@ def frames_of(sheet):
             # used to stay blue in the atlas -> the same recolour for every bluish pixel within 4 px of the far leg. Colours
             # only: no pixel is moved, added or removed.
             rim = (a > 60) & legrows & (b > r + 10) & (b > g + 3) & ~far & dilate(far, 4)
+            if BODY_OPT.get("lilac"):
+                rim &= ~lilac_of(rgb)      # woman2: the lilac apron next to the far leg keeps its colour (repainted cream later)
             mid = 0.5 * (st_ref + sh_ref)
             far_st = far_st | (rim & (L_ >= mid))
             far_sh = far_sh | (rim & (L_ < mid))

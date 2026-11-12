@@ -14,7 +14,8 @@ import check_pose as K          # noqa: E402
 from build_frames import luma, blobs   # noqa: E402
 
 ART = os.path.normpath(os.path.join(HERE, "..", "..", "art", "cutout"))
-MRAW = os.path.join(ART, "man_c", "raw")
+# Q22 5: CUTC_BODY=woman2_c checks the second woman outfit the same way (default man_c)
+MRAW = os.path.join(ART, os.environ.get("CUTC_BODY", "man_c"), "raw")
 WRAW = os.path.join(ART, "woman_c", "raw")
 CW, CH = 384, 512
 # planted boot vs the pose reference: the woman's sheets were held to (4, 5) px; the man's redraws of them land 4-7 px behind
