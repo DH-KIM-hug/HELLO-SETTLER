@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://chh2ccv6bt5tt"
-path="res://.godot/imported/frames_mask1.png-ac6111c7a591ad51dc7d3214112188c4.ctex"
+uid="uid://duaamtumrduxw"
+path="res://.godot/imported/frames_mcode.png-4d379f88c8692f924e17e64d58673e3f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://art/cutout/woman_c/frames_mask1.png"
-dest_files=["res://.godot/imported/frames_mask1.png-ac6111c7a591ad51dc7d3214112188c4.ctex"]
+source_file="res://art/cutout/woman_c/frames_mcode.png"
+dest_files=["res://.godot/imported/frames_mcode.png-4d379f88c8692f924e17e64d58673e3f.ctex"]
 
 [params]
 
@@ -23,7 +23,7 @@ compress/rdo_quality_loss=0.0
 compress/hdr_compression=1
 compress/normal_map=0
 compress/channel_pack=0
-mipmaps/generate=true
+mipmaps/generate=false
 mipmaps/limit=-1
 roughness/mode=0
 roughness/src_normal=""

@@ -3,8 +3,10 @@
 usage: python3 build_frames.py            (needs raw/{walk,carry,idle}_{front,q_front,q_back,back}.png)
 in : art/cutout/woman_c/raw/<clip>_<view>.png  (gen.sh: 2x4 cells, magenta head placeholder, chroma green)
 out: art/cutout/woman_c/frames_atlas.png  body+clothes per frame (the magenta head removed)
-     art/cutout/woman_c/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
-     art/cutout/woman_c/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
+     art/cutout/woman_c/raw/frames_mask0.png  dye weights R skin  G main  B second(cream)  A trim
+     art/cutout/woman_c/raw/frames_mask1.png  dye weights R legwear  G shoe  B hands of the carry / hold frames (not a dye: drawn again over the load, v12)  A far leg (3/4, darkened)
+     art/cutout/woman_c/frames_mcode.png + frames_mlut.png + frames_mq0/1.png  the two masks packed for the game (pack_masks.py, Q22 3-0
+                                          2026-11-12: 70 MB -> 12 MB of GPU memory per outfit with the atlas VRAM-compressed)
      art/cutout/woman_c/frames.json       per frame: uv rect, head anchor (chin, rig units, origin = soles centre, y up),
                                           hand anchors, sack box; per clip: frame count, stride; base colours
      raw/check_<clip>_<view>.png          aligned frames | dye-class view (eyeball check, not used by the game)
@@ -994,8 +996,11 @@ def main():
     def save(arr, name):
         Image.fromarray(np.clip(arr, 0, 255).astype(np.uint8), "RGBA").save(os.path.join(ART, name), optimize=True)
     save(atlas, "frames_atlas.png")
-    save(m0, "frames_mask0.png")
-    save(m1, "frames_mask1.png")
+    # Q22 3-0 (2026-11-12): the masks are build sources now (raw/ is not imported) — the game reads them packed (pack_masks.py)
+    save(m0, os.path.join("raw", "frames_mask0.png"))
+    save(m1, os.path.join("raw", "frames_mask1.png"))
+    import pack_masks
+    pack_masks.pack(m0, m1)
     nclip = {cl: len(cells) for cl, _, cells in CLIPS}
     for cl in state_clips:
         nclip[cl] = len(PS.ENTRIES[cl])
