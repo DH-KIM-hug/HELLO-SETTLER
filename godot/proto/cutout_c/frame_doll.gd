@@ -27,8 +27,13 @@ var _load := ""
 var _baby := Vector4(-1, -1, -1, -1)
 
 
-func setup(mat: ShaderMaterial) -> void:
-	mesh = FLib.mesh()
+## 몸 (Q22): 장면 그림 폴더 — FLib.DIR 여자 · FLib.MAN_DIR 남자
+var body := FLib.DIR
+
+
+func setup(mat: ShaderMaterial, dir := FLib.DIR) -> void:
+	body = dir
+	mesh = FLib.mesh(dir)
 	material_override = mat
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	extra_cull_margin = 0.5
@@ -50,7 +55,7 @@ func set_prop(id: int, load := "") -> void:
 	if int(_sel.w) == id and load == _load:
 		return
 	_load = load
-	_sel.x = FLib.load_index(load)
+	_sel.x = FLib.load_index(load, body)
 	_sel.w = id
 	set_instance_shader_parameter("sel", _sel)
 	var pf := FLib.prop_fit(id)
@@ -85,7 +90,7 @@ func set_react(pos: Vector3, w: float, sy: float, roll: float) -> void:
 
 func _push() -> void:
 	set_instance_shader_parameter("misc", Vector4(screen_h * _react.x, _react.y, rate, _react.z))
-	set_instance_shader_parameter("st", Vector4(view, mirror, FLib.clip_index(clip), phase))
+	set_instance_shader_parameter("st", Vector4(view, mirror, FLib.clip_index(clip, body), phase))
 
 
 ## 컷아웃 인형(cut_doll.update_view)과 같은 문턱: 다가옴 = 앞, 30~110° = 비스듬한 앞, 110~150° = 비스듬한 뒤, 멀어짐 = 뒤 —
