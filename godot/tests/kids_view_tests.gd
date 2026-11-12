@@ -21,6 +21,7 @@ func all() -> void:
 	var old := CutoutResident.override
 	CutoutResident.override = 1
 	run.timed(self, ["test_first_steps_view", "test_story_view", "test_bubble_dodge", "test_hop_view", "test_skip_view", "test_play_sounds"])
+	(load("res://tests/outing_tests.gd") as GDScript).new(run, quick).scene_all()     # (Q21 ㊵) 심부름 중인 아이의 말풍선 — 장면이 필요해 이 묶음에서
 	CutoutResident.override = old
 
 

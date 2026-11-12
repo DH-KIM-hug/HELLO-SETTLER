@@ -871,7 +871,7 @@ func claimed(r: Resident, m: ResidentModel, tap: TapReact, key := "", sid := "",
 ## kids_view.gd에 물어볼 함수가 아직 없어 그 장부를 읽기만 한다 — 다른 곳은 이 함수 하나만 거친다
 func _kids_hold(id: int) -> bool:
 	var kv := vw.kids_view
-	return kv != null and (kv._peek.has(id) or kv._steps_par.has(id) or kv._story.has(id) or kv._kid.has(id))
+	return kv != null and (kv._peek.has(id) or kv._steps_par.has(id) or kv._story.has(id) or kv._kid.has(id) or (kv.out != null and kv.out.busy(id)))     # (Q21 ㊵) 심부름·낚시 중인 인형도
 
 
 ## 강아지를 쓰다듬는 아이인가 (dog_pals.gd에도 물어볼 함수가 아직 없음 — 읽기만, 이 함수 하나만 거친다)
