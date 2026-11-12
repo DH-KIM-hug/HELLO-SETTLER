@@ -5,11 +5,16 @@
 ##
 ## 실행:
 ##   godot --headless --path godot -s res://tools/measure_outings.gd -- run <씨앗 처음> <씨앗 끝> <일수> <연대기 폴더> [걸음 초]
+##   (Q21) 심부름을 다녀온 몫은 EVT 줄 뒤 ERR 줄 (나섬 · 건넴 · 못 건넴 · 못 건넨 몫). 'trace'로 부르면 (run 대신) 병 10분씩 걸으며
+##   못 건넨 심부름마다 TRACE 줄 (받을 사람이 그때 무엇을 하고 문에서 얼마나 떨어졌나) — 걸음 크기가 달라 OUT 값은 run과 견주지 않는다.
 extends SceneTree
 
 const H := 3600.0
 const D := 86400.0
 const MARKS := [10, 20, 30, 40]
+
+var _trace := false
+var _last_err := {}
 
 
 func _initialize() -> void:
@@ -21,6 +26,7 @@ func _initialize() -> void:
 	var days := int(args[3]) if args.size() > 3 else 20
 	var dir := String(args[4]) if args.size() > 4 else ""
 	var step := float(args[5]) if args.size() > 5 else 30.0
+	_trace = args.size() > 0 and String(args[0]) == "trace"
 	for s in range(s0, s1 + 1):
 		_run(s, days, dir, step)
 	quit()
@@ -42,7 +48,15 @@ func _run(s: int, days: int, dir: String, step: float) -> void:
 	var cur := 0
 	var evt := {}
 	while v.t < days * D - 1.0 and not v.people.is_empty():
-		jw.advance(minf(H, days * D - v.t))
+		jw.advance(minf(600.0 if _trace else H, days * D - v.t))
+		if _trace:
+			var er := ChildOutings.errand(v)
+			if not er.is_empty():
+				_last_err = er.duplicate()
+				var q := v.person(int(er["rc"]))
+				var hm := v.bld(int(er["to"]))
+				if q != null and hm != null:
+					_last_err["q"] = "%s %s/%s 문에서 %.1f 노인 %s 아기안음 %s" % [q.name, q.action, q.anim, Vector2(q.x, q.y).distance_to(ChildOutings._door(hm)), q.is_elder(), q.carry]
 		for e: Dictionary in v.events.since(cur):      # 나들이 사건 세기 (읽기만 — 시뮬은 그대로)
 			cur = int(e["n"])
 			var kd := String(e["kind"])
@@ -51,6 +65,8 @@ func _run(s: int, days: int, dir: String, step: float) -> void:
 				if kd == "errand_ended" or kd == "first_fishing_ended":
 					var kk := kd + ("_ok" if int(e["v"]) == 1 else "_no")
 					evt[kk] = int(evt.get(kk, 0)) + 1
+					if _trace and kd == "errand_ended" and int(e["v"]) != 1:
+						print("TRACE seed %d day %.2f  %s" % [s, v.t / D, str(_last_err)])
 		for q: Village in jw.settlements:
 			q.crises.clear()
 			if q.revelation_pending():
@@ -70,6 +86,9 @@ func _run(s: int, days: int, dir: String, step: float) -> void:
 		kids += int(r.is_child() and r.age >= Balance.ERRAND_AGE)
 	print("EVT seed %d  %s  (심부름 나이 아이 %d · 다녀온 아이 %d · 낚아 본 아이 %d · 물고기 떼 %d)" % [s, JSON.stringify(evt), kids,
 		(ChildOutings.peek(v).get("ed", {}) as Dictionary).size(), (ChildOutings.peek(v).get("fd", {}) as Dictionary).size(), v.wild.herds.size() if v.wild != null else 0])
+	var e_go := int(evt.get("errand_started", 0))
+	var e_no := int(evt.get("errand_ended_no", 0))
+	print("ERR seed %d  started %d  given %d  not_given %d  not_given_ratio %.3f" % [s, e_go, int(evt.get("errand_given", 0)), e_no, float(e_no) / maxf(1.0, float(e_go))])
 	print("DONE seed %d  %.0fs" % [s, (Time.get_ticks_msec() - t0) / 1000.0])
 
 

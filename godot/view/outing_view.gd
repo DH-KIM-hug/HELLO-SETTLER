@@ -27,6 +27,7 @@ const PRAM_FRONT := 0.2           # 앞모습: 부모보다 카메라 쪽으로 
 const PRAM_BACK := 0.08           # 뒷모습: 부모보다 뒤로
 const FACE_CAM := 0.22             # 마주 볼 때 바라보는 곳을 이만큼 카메라 쪽으로 (옆모습이 뒤통수로 넘어가지 않게)
 const GIVE_GAP := 0.42             # 첫 심부름: 건넬 때 아이와 어른 사이 (화면 가로 칸)
+const HAND_STEP := 0.6             # (Q21 ㊶) 건네는 자리: 시뮬의 문 앞에서 카메라 쪽으로 이만큼 (칸 — 집 그림에 가리면 더 앞으로)
 const PARK_SIDE := 0.36            # 세워 둔 유모차: 집 그림 가운데에서 그림 폭의 이만큼 옆 (화면)
 const PARK_OUT := 0.18             # 집 그림 밑변에서 (KidsView.FS_CLEAR에 더해) 이만큼 앞
 const BABY_K := Vector2(0.92, 0.8)     # 유모차 속 아기 크기 (옆모습, 앞·뒷모습)
@@ -65,9 +66,13 @@ var _p_roll := 0.0
 var _p_run := 0.0                 # 굴러간 길 (달그락 흔들림)
 var _p_gig := -1.0                # 아기가 까르르 (−1 = 없음)
 var _p_side := 1.0                # 아기가 손을 내미는 쪽 (화면 오른쪽 +)
-var _e_goal := Vector2.INF        # 첫 심부름: 받을 사람 자리 (시뮬) — 바뀌면 내어 세울 만큼을 다시 셈
-var _e_want := Vector2.ZERO       # 집 그림에 가려지지 않게 화면 앞으로 내어 세울 만큼
-var _e_off := Vector2.ZERO        # 지금 (매끄럽게)
+var _e_goal := Vector2.INF        # 첫 심부름: 이웃집 문 앞 (시뮬) — 바뀌면 건네는 자리를 다시 셈
+var _e_want := Vector2.ZERO       # 문 앞 → 건네는 자리 (카메라 쪽으로 한 걸음, 집 그림에 가리면 더)
+var _e_dwant := Vector2.ZERO      # 시뮬의 문 앞 → 그 앞 한 걸음 (찾아가는 길에 문 앞을 지날 때)
+var _e_r2 := Vector2.ZERO         # 그 셈을 한 때의 화면 오른쪽 (카메라가 돌면 다시 셈)
+var _e_side := -1.0               # 아이가 받을 사람의 화면 어느 쪽에 서나 (제 집 쪽)
+var _e_drop := Vector3.INF        # (㊷) 아기를 안은 어른 발치에 내려놓은 보퉁이 (땅 위 자리)
+var _own_say := {}                # (Q21 ㊵) 나들이가 띄운 말: 주민 id → 글 (그 사람에게는 이 말만 보임)
 var _park := {}                   # 세워 둔 유모차: 집 id → [자리, 좌우]
 var seen: Array = []              # (시험) 이번 화면에 그린 것 이름
 
@@ -223,6 +228,9 @@ func begin(dt: float, fast: bool) -> void:
 		if (e["kind"] as StringName) == &"stroller_met":
 			_meet_start(int(e["who"]), int(e["v"]))
 	_direct(dt)
+	for id: int in _own_say.keys():            # 말풍선이 사라졌거나 나들이가 끝난 사람
+		if not vw.stage_say.has(id) or not busy(id):
+			_own_say.erase(id)
 	for id: int in _armed.keys():              # 내민 팔: 지시가 끝나면 내림
 		var d: Dictionary = _dir.get(id, {})
 		if not bool(d.get("arms", false)):
@@ -262,6 +270,7 @@ func _drop_all() -> void:
 	_meet = null
 	_p_gig = -1.0
 	_once.clear()
+	_own_say.clear()
 	_hide_all()
 
 
@@ -301,49 +310,63 @@ func _direct(dt: float) -> void:
 					nd["lean"] = -mt.side * 0.2 * k * (0.85 + 0.15 * sin(_clock * 2.4))
 				_dir[mt.nb] = nd
 		_dir[cr] = d
-	# ── 첫 심부름
+	# ── 첫 심부름 (Q21 ㊶: 건네는 자리는 문 앞에서 카메라 쪽으로 한 걸음 — 집 그림에 가리면 더 앞으로. 아이도 받을 사람도 그 자리에서 다 보임)
 	var e := ChildOutings.errand(v)
 	if e.is_empty():
 		_clear_once("e")
 		_e_goal = Vector2.INF
 		_e_want = Vector2.ZERO
-		_e_off = Vector2.ZERO
 	else:
 		var kid := int(e["k"])
 		var ph := int(e["ph"])
 		var u := float(e["c"]) / ChildOutings.RS
+		var picked := int(e.get("pk", 1 if ph >= 2 else 0)) == 1
+		var door := Vector2(float(e["rx"]), float(e["ry"])) if picked else Vector2(float(e["tx"]), float(e["ty"]))     # 건네는 곳: 문 앞 (찾아간 사람이면 그 사람 자리)
+		if door.distance_to(_e_goal) > 0.05 or _r2().distance_to(_e_r2) > 0.05:
+			_e_goal = door
+			_e_r2 = _r2()
+			_e_want = hand_spot(door) - door
+			var td := Vector2(float(e["tx"]), float(e["ty"]))
+			_e_dwant = hand_spot(td) - td if td.distance_to(door) > 0.05 else _e_want
+			var kh := v.person(kid)
+			var hd := ChildOutings._door(v.bld(kh.home)) if kh != null and v.bld(kh.home) != null else door - r2
+			if picked and int(e.get("sk", 0)) == 1:
+				hd = Vector2(float(e["x"]), float(e["y"]))       # 찾아가는 길: 아이가 오는 쪽
+			_e_side = signf((hd - door).dot(r2))      # 아이는 제 집 쪽에서 와서 그쪽으로 돌아감 → 받을 사람의 그쪽 옆에 섬
+			if _e_side == 0.0:
+				_e_side = -1.0
+		var hand := door + _e_want
 		var kp := Vector2(float(e["x"]), float(e["y"]))
-		var rp := Vector2(float(e["rx"]), float(e["ry"]))
-		# 받을 사람이 집 그림에 가려지는 자리(시뮬의 문 앞 · 집 곁)에 있으면 화면에서만 둘을 그림 앞으로 내어 세운다 (아이는 다가갈수록 조금씩)
-		var rq := v.person(int(e["rc"]))
-		var goal := rp if ph >= 2 else (Vector2(rq.x, rq.y) if ph == 1 and rq != null else Vector2(float(e["tx"]), float(e["ty"])))
-		if goal.distance_to(_e_goal) > 0.1:
-			_e_goal = goal
-			_e_want = _out_front(goal)
-		_e_off = _e_off.move_toward(_e_want, 1.6 * dt)
-		var e_side := signf((kp - rp).dot(r2))             # 아이가 어른의 화면 어느 쪽에서 왔나 (바로 앞뒤면 왼쪽)
-		if absf((kp - rp).dot(r2)) < 0.12:
-			e_side = -1.0
-		kp += _e_off * (1.0 - smoothstep(0.5, 2.6, kp.distance_to(goal)))
-		rp += _e_off
-		if ph == 2 or ph == 3:
-			kp = rp + r2 * e_side * GIVE_GAP + _b2() * 0.04       # 건넬 때: 어른의 화면 옆 (몸에 가리지 않게)
+		var near_k := 1.0 - smoothstep(0.5, 2.6, kp.distance_to(door))
+		var td := Vector2(float(e["tx"]), float(e["ty"]))
+		var near_d := (1.0 - smoothstep(0.5, 2.6, kp.distance_to(td))) * (1.0 - near_k)      # 찾아가는 길: 시뮬의 문 앞(집 그림 밑)도 한 걸음 앞으로
+		kp += (_e_want + r2 * _e_side * GIVE_GAP) * near_k + _e_dwant * near_d      # 문 가까이에서는 건네는 자리 옆 쪽으로 (받을 사람과 겹치지 않게 — 오갈 때 모두)
+		var rc := int(e["rc"])
+		var hb := int(e.get("hb", 0)) == 1 or _holding(rc)
+		if ph == 1:
+			var stand := hand + r2 * _e_side * GIVE_GAP * (1.0 if picked else 1.6) + _b2() * 0.04
+			kp = kp.lerp(stand, near_k)        # 찾아가는 길이면 시뮬의 걸음 그대로, 닿을수록 그 사람 옆으로
+		elif ph == 2 or ph == 3:
+			kp = hand + r2 * _e_side * GIVE_GAP + _b2() * 0.04       # 건넬 때: 어른의 화면 옆 (몸에 가리지 않게)
 		var d := {"pos": kp, "sp": 2.4, "back": 1.4}
 		match ph:
-			0, 1:
+			0:
 				d["arms"] = true
+			1:
+				d["arms"] = true
+				d["face"] = hand + _b2() * FACE_CAM if picked else door - _b2() * 0.6
 			2:
-				d["face"] = rp + _b2() * FACE_CAM
+				d["face"] = hand + _b2() * FACE_CAM
 				d["arms"] = u < Balance.ERRAND_GIVE * 0.7
 				if _first("e_here"):
-					kv._say(kid, "errand_here", "cheer", 1.5)
+					_say_own(kid, "errand_here", "cheer", 1.5)
 			3:
-				d["face"] = rp + _b2() * FACE_CAM
-				var q := absf(sin(u * 5.2))               # 쓰다듬는 손길에 고개가 꾹꾹
+				d["face"] = hand + _b2() * FACE_CAM
+				var q := absf(sin(u * 5.2))               # 쓰다듬는 손길에 고개가 꾹꾹 (아기를 안은 어른이면 고개만 끄덕 — 아이는 그대로 기뻐함)
 				d["sy"] = 1.0 - 0.07 * q
 				d["sx"] = 1.0 + 0.05 * q
 				if _first("e_pat"):
-					kv._say(int(e["rc"]), "errand_thanks", "love", 1.6)
+					_say_own(rc, "errand_thanks", "love", 1.6)
 					kv._fx("hearts", kp, 0.55, 1.4, 0.8)
 					GameAudio.fx("child_laugh", "Village", -14.0, kp)
 			_:
@@ -352,22 +375,25 @@ func _direct(dt: float) -> void:
 				else:
 					d["arms"] = true
 		_dir[kid] = d
-		if ph == 1 and rq != null and _e_off.length() > 0.05 and kp.distance_to(goal + _e_off) < 2.2 and not _dir.has(rq.id):
-			_dir[rq.id] = {"pos": goal + _e_off, "sp": 1.0, "face": kp, "back": 1.2}      # 아이가 오는 걸 보고 그림 앞으로 나옴
-		if ph == 2 or ph == 3:
-			var rc := int(e["rc"])
-			var rr := v.person(rc)
-			var rd := {"pos": rp, "sp": 1.2, "face": kp + _b2() * FACE_CAM, "back": 1.2, "anim": "sit" if rr != null and rr.anim == "sit" else "idle"}
-			var side := signf((kp - rp).dot(r2))
+		if picked and ph >= 1 and (ph <= 3 or int(e["done"]) == 1) and not _dir.has(rc):
+			var rd := {"pos": hand, "sp": Balance.ERRAND_COME, "face": kp + _b2() * FACE_CAM, "back": 1.2, "anim": "idle"}
+			var side := signf((kp - hand).dot(r2))
 			if ph == 2:
-				rd["arms"] = u > Balance.ERRAND_GIVE * 0.45
-				rd["lean"] = side * 0.08 * smoothstep(0.2, 0.8, u / Balance.ERRAND_GIVE)
-			else:
+				var w := smoothstep(0.2, 0.8, u / Balance.ERRAND_GIVE)
+				if hb:
+					rd["lean"] = side * 0.12 * w                       # (㊷) 아기를 안았으니 팔 대신 몸만 기울임
+					rd["sy"] = 1.0 - 0.03 * w
+				else:
+					rd["arms"] = u > Balance.ERRAND_GIVE * 0.45
+					rd["lean"] = side * 0.08 * w
+			elif ph == 3:
 				var k := smoothstep(0.0, 0.25, u) * (1.0 - smoothstep(Balance.ERRAND_PAT - 0.3, Balance.ERRAND_PAT, u))
-				rd["lean"] = side * (0.08 + 0.14 * k) * (0.9 + 0.1 * sin(u * 5.2))
-				rd["sy"] = 1.0 - 0.05 * k
-			if not _dir.has(rc):
-				_dir[rc] = rd
+				var nod := absf(sin(u * 4.0)) if hb else 0.0           # (㊷) 쓰다듬는 대신 고개를 끄덕끄덕
+				rd["lean"] = side * (0.08 + 0.14 * k) * (0.9 + 0.1 * sin(u * 5.2)) if not hb else side * 0.1 * k
+				rd["sy"] = 1.0 - 0.05 * k - 0.05 * nod * k
+			elif ph == 4:
+				rd["face"] = kp + _b2() * FACE_CAM                     # 깡충깡충 돌아가는 아이를 바라봄 (끝나면 제 자리로)
+			_dir[rc] = rd
 	# ── 첫 낚시
 	var f := ChildOutings.fishing(v)
 	if f.is_empty():
@@ -390,7 +416,7 @@ func _direct(dt: float) -> void:
 				if u > 0.25 and u < 1.9:
 					d["hop"] = 0.13 * absf(sin((u - 0.25) * 5.7))
 				if _first("f_got"):
-					kv._say(kid, "fish_got", "cheer", 2.2)
+					_say_own(kid, "fish_got", "cheer", 2.2)
 					GameAudio.fx("small_cheer", "Village", -11.0, seat)
 					kv._fx("sparkle", seat + wdir * 0.25, 0.6, 1.2, 0.8)
 			4:
@@ -437,6 +463,39 @@ func _cast(seat: Vector2, wdir: Vector2) -> Vector2:
 		if v.water_at(q.x, q.y) and v.water_at(q2.x, q2.y):
 			return q
 	return seat + wdir * ChildOutings.FLOAT_D
+
+
+## (Q21 ㊶) 첫 심부름을 건네는 자리: 문 앞에서 카메라 쪽(트인 땅)으로 한 걸음 — 그 자리와 양옆이 집 그림에 가리면 더 앞으로
+func hand_spot(door: Vector2) -> Vector2:
+	var q := door + _b2() * HAND_STEP
+	return q + _out_front(q)
+
+
+## 이 사람이 (지난 화면에) 젖먹이를 품에 안고 그려졌나
+func _holding(id: int) -> bool:
+	var cm := _cut(id)
+	return cm != null and cm.carry_baby
+
+
+## (Q21 ㊵) 나들이 중인 사람 (심부름·낚시의 아이, 낚시의 곁 어른, 심부름을 받는 어른) — 그 사람에게는 나들이의 말만 보인다
+func busy(id: int) -> bool:
+	return _dir.has(id) or _pup.has(id)
+
+
+## 이 말풍선을 띄워도 되나: 나들이 중인 사람이면 나들이가 띄운 말만 (시뮬의 혼잣말·놀이·끼니·이야기 장면의 말은 가림 — 화면만, 말 자체는 그대로)
+func bubble_ok(id: int, text: String) -> bool:
+	if not busy(id):
+		return true
+	return _own_say.has(id) and String(_own_say[id]) == text
+
+
+## 나들이의 말 — 그 사람에게 다른 연출 말풍선이 떠 있으면 비우고 띄움
+func _say_own(id: int, key: String, mood: String, secs: float) -> void:
+	if vw.stage_say.has(id) and not (_own_say.has(id) and String(_own_say[id]) == String((vw.stage_say[id] as Array)[0])):
+		vw.stage_say.erase(id)
+	kv._say(id, key, mood, secs)
+	if vw.stage_say.has(id):
+		_own_say[id] = String((vw.stage_say[id] as Array)[0])
 
 
 func _out_front(p: Vector2) -> Vector2:
@@ -709,6 +768,7 @@ func _hand_y(cm: CutoutResident, k: float) -> float:
 func _errand_draw() -> void:
 	var e := ChildOutings.errand(v)
 	if e.is_empty():
+		_e_drop = Vector3.INF
 		return
 	var km := _cut(int(e["k"]))
 	if km == null:
@@ -723,12 +783,23 @@ func _errand_draw() -> void:
 		_spr("e_item", pic, o, Vector2(kpt.x, kpt.y), w, 0.0, kpt.z)
 		return
 	var rm := _cut(int(e["rc"]))
-	if rm == null or ph == 4:
+	var hb := int(e.get("hb", 0)) == 1 or (rm != null and rm.carry_baby)
+	if rm == null or (ph == 4 and not hb):
 		return
 	var rel := rm.position - km.position
 	var roff := Vector2(rel.dot(kv._right), 0.0)       # 어른이 아이보다 화면 가로로 얼마나
 	var dz := rel.dot(Vector3(kv._back.x, 0.0, kv._back.z))
 	roff.y = -dz * _sn() + (rm.position.y - km.position.y) * kv._cu
+	if hb:          # (Q21 ㊷) 젖먹이를 안은 어른: 손을 내밀지 않음 — 아이가 그 사람 발치(둘 사이)에 내려놓음, 아이가 돌아가는 동안에도 그 자리에
+		if ph == 4:      # 아이는 떠났다 — 놓아 둔 자리 그대로
+			if _e_drop != Vector3.INF:
+				_spr("e_item", pic, _e_drop, Vector2(0.0, w * 0.42), w, 0.0, 0.05)
+			return
+		var foot := Vector2(roff.x * 0.55, roff.y * 0.55 + w * 0.42)
+		var kk := smoothstep(0.3, 0.8, u / Balance.ERRAND_GIVE) if ph == 2 else 1.0
+		_e_drop = km.position.lerp(rm.position, 0.55)
+		_spr("e_item", pic, o, Vector2(kpt.x, kpt.y).lerp(foot, kk), w, 0.0, lerpf(kpt.z, 0.05, kk))
+		return
 	var seated := rm._d_clip == "sit"
 	var rpt := _hold_pt(rm, 0.3 if seated else 0.4, 0.1)
 	var to := roff + Vector2(rpt.x, rpt.y)

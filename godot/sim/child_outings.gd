@@ -9,10 +9,13 @@ extends RefCounted
 ## 상태는 v.kids["out"] (저장됨 — 열쇠가 없는 옛 저장은 빈 상태로 시작). 숫자·문자열·배열만 담는다.
 ##   n 순번 · acc · next · pram 걷는 중인 산책 · pd 아기마다 [날, 횟수, 마지막 때] · park 집마다 유모차를 세워 둔 때 · p1 병의 첫 산책 줄
 ##   err 벌어진 심부름 · ed 다녀온 아이 · e1 · fish 벌어진 낚시 · fd 낚아 본 아이 · f1
+##   (Q21) err 안: rc0 처음 고른 받을 사람 · pk 문 앞에서 받을 사람을 정했나 · qx·qy 받을 사람이 나오기 시작한 자리 · cw 나오는 시간 ·
+##         hb 받을 사람이 젖먹이를 안고 있나 · re 다른 식구로 바꿔 골랐나 (열쇠가 없는 옛 기록은 0 — 문 앞에서 새로 고른다)
 
 const IV := 30.0
 const RS := 288.0                         # 현실 1초 = 병 288초 (보통 빠르기)
 const ARRIVE := 0.06
+const GIVE_STOP := 0.45                   # (Q21) 찾아간 사람 앞 이만큼에서 멈춰 건넴
 const BACK_R := 0.35                      # 돌아가는 인형이 제 자리에 닿았다고 보는 거리
 const SEAT_GAP := 0.52                    # 물가에 나란히 앉은 두 사람 사이 (칸)
 const FLOAT_D := 0.8                      # 아이 자리에서 찌까지 (칸 — 물이어야 함)
@@ -312,8 +315,9 @@ static func try_errand(v: Village, r: Resident) -> bool:
 		return false
 	var hm: Building = pick[0]
 	var to := _door(hm)
-	st["err"] = {"k": r.id, "to": hm.id, "rc": (pick[1] as Resident).id, "why": String(pick[2]), "ph": 0, "c": 0.0,
-		"x": r.x, "y": r.y, "tx": to.x, "ty": to.y, "rx": to.x, "ry": to.y, "done": 0}
+	var rc := (pick[1] as Resident).id
+	st["err"] = {"k": r.id, "to": hm.id, "rc": rc, "rc0": rc, "why": String(pick[2]), "ph": 0, "c": 0.0,
+		"x": r.x, "y": r.y, "tx": to.x, "ty": to.y, "rx": to.x, "ry": to.y, "done": 0, "pk": 0}
 	v.emit(&"errand_started", {"who": r.id, "at": Vector2(r.x, r.y), "v": hm.id})
 	return true
 
@@ -325,18 +329,90 @@ static func _receiver_ok(q: Resident, hm: Building) -> bool:
 	return Vector2(q.x, q.y).distance_to(_door(hm)) <= Balance.ERRAND_NEAR
 
 
-static func _receiver(v: Village, hm: Building, want: int) -> Resident:
+## (Q21 ㊴) 이 사람이 지금 자리에 얼마나 더 머물까 (병 초 — 읽기만): 지금 걸음부터 '걷기'가 끼기 전까지 '하기'의 남은 시간
+static func stay_left(q: Resident) -> float:
+	var s := 0.0
+	for one: Dictionary in q.steps:
+		if String(one.get("k", "")) != "do":
+			break
+		s += float(one.get("left", 0.0))
+	return s
+
+
+## (Q21 ㊷) 젖먹이를 품에 안고 있는 사람인가 — 화면이 아기를 품에 그리는 규칙(ChildPlay.minder · 빈손 · 서 있거나 걷는 중)과 같게, 읽기만
+static func holds_baby(v: Village, q: Resident) -> bool:
+	if q == null or q.carry != "" or not (q.anim == "idle" or q.anim == "walk" or q.anim == "carry"):
+		return false
+	for b: Resident in v.people:
+		if b.is_baby() and not b.dead and b.age < ChildPlay.TODDLE_AGE and b.home == q.home and ChildPlay.minder(v, b, v.people) == q:
+			return true
+	return false
+
+
+## 아이가 (from)에서 (to)까지 두 손에 들고 걸어가는 시간 (병 초 — 놀이 시계)
+static func walk_need(from: Vector2, to: Vector2) -> float:
+	return from.distance_to(to) / Balance.ERRAND_WALK * RS
+
+
+## 아이가 닿을 때까지 지금 자리에 있을 것 같지 않은가 (need = 아이가 걸어갈 시간)
+static func leaves_soon(q: Resident, need: float) -> bool:
+	return need > 0.0 and stay_left(q) < need * Balance.ERRAND_STAY_K
+
+
+## 나설 때 받을 사람 고르기: 지금 하는 일을 아이가 걸어갈 시간(× ERRAND_STAY_K)보다 오래 할 사람 먼저 — 아이가 닿기 전에 자리를 뜰 사람은 뒤로 (㊴).
+## 젖먹이를 안은 사람은 다른 식구가 없을 때만 (㊷)
+static func _receiver(v: Village, hm: Building, want: int, need := 0.0) -> Resident:
 	var best: Resident = null
 	var bs := 1.0e9
 	var door := _door(hm)
 	for q: Resident in v.people:
 		if not _receiver_ok(q, hm):
 			continue
-		var s := Vector2(q.x, q.y).distance_to(door) - (100.0 if q.id == want else 0.0) - (10.0 if q.is_elder() else 0.0)
+		var soon := leaves_soon(q, need)
+		var s := Vector2(q.x, q.y).distance_to(door) - (100.0 if q.id == want else 0.0) - (10.0 if q.is_elder() else 0.0) + (50.0 if holds_baby(v, q) else 0.0) \
+			+ (20.0 if soon else 0.0) + (5.0 if q.job >= 0 else 0.0)
 		if s < bs:
 			bs = s
 			best = q
 	return best
+
+
+## (Q21 ㊴) 아이가 문 앞에 닿았을 때: 그 집 식구 가운데 문 가까이 있는 어른 아무나 (처음 고른 사람 먼저 · 걷는 중이어도 — 화면이 문 앞 한 걸음에 세움).
+## 일하러 가는 사람·짐을 든 사람은 부르지 않는다. 젖먹이를 안은 사람은 다른 식구가 없을 때만
+static func _arrive_ok(q: Resident, hm: Building) -> bool:
+	if q.home != hm.id or q.is_child() or not _well(q) or q.carry != "" or not RECV.has(q.action):
+		return false
+	return Vector2(q.x, q.y).distance_to(_door(hm)) <= Balance.ERRAND_NEAR
+
+
+static func _arrive_pick(v: Village, hm: Building, want: int, seek := false) -> Resident:
+	var best: Resident = null
+	var bs := 1.0e9
+	var door := _door(hm)
+	for q: Resident in v.people:
+		if seek:       # 문 가까이에 아무도 없으면: 조금 떨어진 곳(ERRAND_SEEK 안)에서 쉬거나 걷는 그 집 식구를 찾아감 — 물 위는 아님
+			if q.home != hm.id or q.is_child() or not _well(q) or q.carry != "" or not RECV.has(q.action) or v.water_at(q.x, q.y) \
+					or Vector2(q.x, q.y).distance_to(door) > Balance.ERRAND_SEEK:
+				continue
+		elif not _arrive_ok(q, hm):
+			continue
+		var s := Vector2(q.x, q.y).distance_to(door) - (100.0 if q.id == want else 0.0) + (0.0 if STILL.has(q.anim) else 10.0) + (50.0 if holds_baby(v, q) else 0.0)
+		if s < bs:
+			bs = s
+			best = q
+	return best
+
+
+## 그 집 식구 어른이 집으로 돌아오는 길인가 (남은 걸음 가운데 문 가까이로 가는 걸음이 있음 — 유모차 산책에서 돌아오는 부모 등) — 그러면 더 기다림
+static func _coming(v: Village, hm: Building) -> bool:
+	var door := _door(hm)
+	for q: Resident in v.people:
+		if q.home != hm.id or q.is_child() or not _well(q) or (q.carry != "" and q.carry != "유모차") or not RECV.has(q.action):
+			continue
+		for one: Dictionary in q.steps:
+			if String(one.get("k", "")) == "walk" and Vector2(float(one["x"]), float(one["y"])).distance_to(door) <= Balance.ERRAND_NEAR:
+				return true
+	return false
 
 
 ## → [집, 받을 사람, 까닭("elder"·"sick"·"baby"·"")] 또는 빈 배열. 노인·앓는 이·아기가 있는 집 먼저, 그다음 가까운 집.
@@ -344,15 +420,20 @@ static func _errand_target(v: Village, r: Resident) -> Array:
 	var own := v.bld(r.home)
 	var best: Array = []
 	var bs := 1.0e9
+	var back := (Balance.ERRAND_WAIT + Balance.ERRAND_GIVE + Balance.ERRAND_PAT) * RS
 	for hm: Building in v.houses():
 		if hm.id == r.home or not hm.built:
 			continue
 		var d := Vector2(hm.x - own.x, hm.y - own.y).length()
 		if d < Balance.ERRAND_R.x or d > Balance.ERRAND_R.y:
 			continue
-		var q := _receiver(v, hm, -1)
+		var need := walk_need(Vector2(r.x, r.y), _door(hm))
+		if not free_span(v, need + back):
+			continue                               # 가서 건네기 전에 끼니·저녁이 걸리는 먼 집
+		var q := _receiver(v, hm, -1, need)
 		if q == null:
 			continue
+		var late := leaves_soon(q, need)
 		var why := ""
 		for p: Resident in v.people:
 			if p.home != hm.id or p.dead:
@@ -364,7 +445,7 @@ static func _errand_target(v: Village, r: Resident) -> Array:
 				why = "elder"
 			elif p.is_baby() and why == "":
 				why = "baby"
-		var s := d + (0.0 if why != "" else 100.0)
+		var s := d + (0.0 if why != "" else 100.0) + (150.0 if late else 0.0) + (30.0 if q.job >= 0 and not q.is_elder() else 0.0)
 		if s < bs:
 			bs = s
 			best = [hm, q, why]
@@ -389,23 +470,43 @@ static func _errand_step(v: Village, st: Dictionary, e: Dictionary, pd: float) -
 		0:      # 이웃집 문 앞으로
 			if _toward(e, "x", "y", float(e["tx"]), float(e["ty"]), Balance.ERRAND_WALK, pd):
 				_errand_phase(e, 1)
-		1:      # 받을 사람에게 다가감 (없으면 문 앞에서 기다림)
-			var q := v.person(int(e["rc"]))
-			if q == null or not _receiver_ok(q, hm):
-				q = _receiver(v, hm, int(e["rc"]))
-			if q != null:
-				e["rc"] = q.id
-				var side := Vector2(float(e["x"]) - q.x, float(e["y"]) - q.y)
-				side = side.normalized() if side.length() > 0.01 else Vector2(-1.0, 0.0)
-				var at := Vector2(q.x, q.y) + side * 0.42
-				if _toward(e, "x", "y", at.x, at.y, Balance.ERRAND_WALK, pd):
-					e["rx"] = q.x
-					e["ry"] = q.y
+		1:      # 문 앞: 받을 사람을 정하고 (처음 고른 사람이 자리를 떴으면 문 가까이의 다른 식구) 그 사람이 문 앞 한 걸음 자리로 나옴. 아무도 없으면 기다림
+			if int(e.get("pk", 0)) == 0:
+				var door := Vector2(float(e["tx"]), float(e["ty"]))
+				var q := _arrive_pick(v, hm, int(e.get("rc0", e["rc"])))
+				var sk := 0
+				if q == null and float(e["c"]) > Balance.ERRAND_LOOK * RS:      # 문 앞에서 잠깐 둘러본 뒤에도 없으면 가까이의 식구를 찾아감
+					q = _arrive_pick(v, hm, int(e.get("rc0", e["rc"])), true)
+					sk = 1
+				if q != null:
+					e["re"] = int(q.id != int(e.get("rc0", e["rc"])))
+					e["rc"] = q.id
+					e["pk"] = 1
+					e["sk"] = sk
+					e["qx"] = q.x
+					e["qy"] = q.y
+					e["hb"] = int(holds_baby(v, q))
+					if sk == 1:      # 건네는 자리 = 그 사람이 있는 곳 (아이가 걸어감)
+						e["rx"] = q.x
+						e["ry"] = q.y
+						e["cw"] = 0.5
+					else:            # 건네는 자리 = 문 앞 (받을 사람이 나옴 — 화면은 그보다 한 걸음 앞으로)
+						e["rx"] = door.x
+						e["ry"] = door.y
+						e["cw"] = clampf(Vector2(q.x, q.y).distance_to(door) / Balance.ERRAND_COME, 0.5, Balance.ERRAND_COME_MAX)
+					e["c"] = 0.0
+				elif float(e["c"]) > (Balance.ERRAND_WAIT_HOME if _coming(v, hm) else Balance.ERRAND_WAIT) * RS:
+					e["no"] = "wait"
+					_errand_phase(e, 4)
+			else:
+				var at := Vector2(float(e["rx"]), float(e["ry"]))
+				var there := _toward(e, "x", "y", at.x, at.y, Balance.ERRAND_WALK, pd, GIVE_STOP)
+				var q := v.person(int(e["rc"]))
+				if q == null or q.dead:
+					e["pk"] = 0                        # 그사이 받을 사람이 없어짐 — 다시 고름
+				elif there and float(e["c"]) >= float(e.get("cw", 0.5)) * RS:
 					_errand_phase(e, 2)
 					_errand_given(v, st, e, r, q, hm)
-			elif float(e["c"]) > Balance.ERRAND_WAIT * RS:
-				e["no"] = "wait"
-				_errand_phase(e, 4)
 		2:      # 건넴
 			if float(e["c"]) >= Balance.ERRAND_GIVE * RS:
 				_errand_phase(e, 3)
@@ -427,7 +528,7 @@ static func _errand_phase(e: Dictionary, ph: int) -> void:
 static func _errand_given(v: Village, st: Dictionary, e: Dictionary, r: Resident, q: Resident, hm: Building) -> void:
 	e["done"] = 1
 	(st["ed"] as Dictionary)[str(r.id)] = v.t
-	v.emit(&"errand_given", {"who": r.id, "at": Vector2(q.x, q.y), "v": q.id})
+	v.emit(&"errand_given", {"who": r.id, "at": Vector2(float(e["rx"]), float(e["ry"])), "v": q.id})
 	var kid := _nm(r.name, "은", "는")
 	if int(st.get("e1", 0)) == 0:
 		st["e1"] = 1

@@ -1684,6 +1684,8 @@ func _bubbles_of(vil: Village, vw: VillageView, vs: Vector2, shown: int) -> int:
 			staged = false
 		else:
 			continue
+		if vw.kids_view != null and vw.kids_view.out != null and not vw.kids_view.out.bubble_ok(r.id, text):
+			continue                  # (Q21 ㊵) 심부름·낚시 중인 사람: 나들이의 말만 (시뮬 자리의 놀이·끼니·혼잣말은 그 인형 위에 띄우지 않음)
 		var m: ResidentModel = vw.residents.get(r.id)
 		if m == null or not m.is_visible_in_tree() or cam.camera.is_position_behind(m.global_position):
 			continue
