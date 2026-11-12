@@ -6,6 +6,8 @@ extends RefCounted
 
 const Cut := preload("res://proto/cutout_a/cut_lib.gd")
 const DIR := "res://art/cutout/woman_c/"
+## Q22 (2026-11-12 "어른 남자 먼저"): 어른 남자 몸 (튜닉·바지·조끼 자리) — 여자 장면과 같은 자료 모양·장면 수·닻. 몸마다 자료·메시·재질 따로 (dir)
+const MAN_DIR := "res://art/cutout/man_c/"
 ## 그려진 동작 = frames.json의 clips (2026-11-10: 걷기·나르기·서기·안고 서기 + 앉기·먹기·올려다보기·무릎·괭이질·줍기). 셰이더 배열 길이
 const MAX_CLIPS := 16
 ## 머리가 위에 그려진 연장 (낫·나무망치 — 괭이·갈퀴는 날이 아래): 괭이질 장면의 날 쪽으로 머리가 가게 반 바퀴 더 돌림
@@ -33,9 +35,11 @@ const HEAD_FIT := 1.17
 
 ## -1 = 환경 변수를 따름 · 0 끔 · 1 켬
 static var spike := -1
-static var _lib: Dictionary
+static var _lib := {}         # 몸 폴더 → frames.json
 static var _mesh: ArrayMesh
 static var _mat: ShaderMaterial
+static var _meshes := {}      # 몸 폴더 → ArrayMesh (_mesh = 마지막에 만든 것)
+static var _mats := {}        # 몸 폴더 → ShaderMaterial (_mat = 마지막에 만든 것)
 
 
 static func enabled() -> bool:
@@ -44,14 +48,19 @@ static func enabled() -> bool:
 	return OS.get_environment("NAZAKJI_FRAMES") == "1"
 
 
-static func lib() -> Dictionary:
-	if _lib.is_empty():
-		_lib = JSON.parse_string(FileAccess.open(DIR + "frames.json", FileAccess.READ).get_as_text())
-	return _lib
+static func lib(dir := DIR) -> Dictionary:
+	if not _lib.has(dir):
+		_lib[dir] = JSON.parse_string(FileAccess.open(dir + "frames.json", FileAccess.READ).get_as_text())
+	return _lib[dir]
 
 
-static func clip_index(c: String) -> int:
-	return (lib()["clips"] as Array).find(c)
+## 그 몸의 장면 그림이 있나 (Q22: 남자 몸은 man_c를 만든 뒤에만)
+static func has_body(dir: String) -> bool:
+	return _lib.has(dir) or FileAccess.file_exists(dir + "frames.json")
+
+
+static func clip_index(c: String, dir := DIR) -> int:
+	return (lib(dir)["clips"] as Array).find(c)
 
 
 ## 짐 이름 → 짐 그림 이름 ("" = 짐 없음)
@@ -64,9 +73,9 @@ static func load_name(kind: String) -> String:
 
 
 ## 짐 이름 → frames.json loads의 번호 (-1 = 짐 없음 · 그림 없음)
-static func load_index(kind: String) -> int:
+static func load_index(kind: String, dir := DIR) -> int:
 	var nm := load_name(kind)
-	var ls: Array = lib().get("loads", [])
+	var ls: Array = lib(dir).get("loads", [])
 	for i in ls.size():
 		if String(ls[i]["name"]) == nm:
 			return i
@@ -81,13 +90,13 @@ static func prop_fit(id: int) -> Vector2:
 
 
 ## 걷기 한 주기(두 걸음)에 디딘 발이 가는 길 (rig) — 장면 그림에서 잰 값 (비스듬한 보기 디딤 장면의 두 발 사이 × 2)
-static func stride_rig(clip: String) -> float:
-	return float(lib()["stride"].get(clip, lib()["stride"]["walk"]))
+static func stride_rig(clip: String, dir := DIR) -> float:
+	return float(lib(dir)["stride"].get(clip, lib(dir)["stride"]["walk"]))
 
 
-static func mesh() -> ArrayMesh:
-	if _mesh != null:
-		return _mesh
+static func mesh(dir := DIR) -> ArrayMesh:
+	if _meshes.has(dir):
+		return _meshes[dir]
 	var verts := PackedVector3Array()
 	var uvs := PackedVector2Array()
 	var c0 := PackedFloat32Array()
@@ -97,7 +106,7 @@ static func mesh() -> ArrayMesh:
 	# 몸 장면 (group 0) + 짐을 받친 손을 짐 위에 다시 그리는 겹 (group 4): 귀퉁이만 (UV = 0~1, 셰이더가 장면 사각형으로)
 	# 뿌리 줄(rig y = 0)에서 위아래 둘로 나눔 (2026-11-10): 뿌리보다 아래 = 비스듬한 보기에서 앞으로 디딘 발. 셰이더가 그 아래
 	# 꼭짓점만 카메라 쪽으로 당겨 땅에 가려 잘리지 않게 한다 (frame_doll.gdshader ground_pull).
-	var rc: Array = lib()["rect"]
+	var rc: Array = lib(dir)["rect"]
 	var y_root := clampf(float(rc[3]) / maxf(float(rc[3]) - float(rc[1]), 1.0), 0.0, 1.0)
 	for g in [0, 4]:
 		for band: Vector2 in [Vector2(0.0, y_root), Vector2(y_root, 1.0)]:
@@ -112,7 +121,7 @@ static func mesh() -> ArrayMesh:
 				c2.append_array([-1, 0, 0, 0])
 			idx.append_array([b, b + 1, b + 2, b, b + 2, b + 3])
 	# 짐 그림 (group 5, v12): 밑변 가운데가 원점인 사각형 (rig), 묶음 번호 = loads의 번호. 밀(Q16)은 옛 인형의 이삭 그림 — 보기마다 한 장
-	var ls: Array = lib().get("loads", [])
+	var ls: Array = lib(dir).get("loads", [])
 	var first := {}          # 그림 이름 → 묶음 번호 (같은 이름의 첫 번호: 아기 그림은 보기마다 한 장씩 같은 번호를 씀 — v13)
 	for li in ls.size():
 		if not first.has(ls[li]["name"]):
@@ -156,7 +165,7 @@ static func mesh() -> ArrayMesh:
 	# 감은 눈 (group 6, v13 — 자는 장면): 머리 묶음마다 앞 얼굴 위에 얹는 작은 그림. 사각형은 그 머리 조각과 똑같은 네 귀퉁이로 만들고
 	# (겹만 반 겹 위) 그림은 UV를 늘여 제자리에 오게 한다 — 셰이더가 눈꺼풀 그림 창(c0.xy · c1.zw) 밖은 버림. 작은 사각형을 따로 얹으면
 	# 누운 머리 조각의 기울어진 깊이(셰이더의 땅 위로 당기기) 뒤에 숨는다.
-	for e: Dictionary in lib().get("lids", []):
+	for e: Dictionary in lib(dir).get("lids", []):
 		var r: Array = e["rect"]
 		var uv: Array = e["uv"]
 		var host: Array = r
@@ -191,6 +200,7 @@ static func mesh() -> ArrayMesh:
 	_mesh = ArrayMesh.new()
 	_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr, [], {}, fl)
 	_mesh.custom_aabb = AABB(Vector3(-0.8, -0.1, -0.8), Vector3(1.6, 1.6, 1.6))
+	_meshes[dir] = _mesh
 	return _mesh
 
 
@@ -207,20 +217,20 @@ static func shoe_dye(i: int) -> int:
 	return Cut.OFF["shoe"] + 1 if i == Cut.OFF["shoe"] + 3 else i
 
 
-static func material(palette: PackedVector3Array) -> ShaderMaterial:
-	if _mat != null:
-		return _mat
-	var L := lib()
+static func material(palette: PackedVector3Array, dir := DIR) -> ShaderMaterial:
+	if _mats.has(dir):
+		return _mats[dir]
+	var L := lib(dir)
 	var cut: ShaderMaterial = Cut.material()
 	_mat = ShaderMaterial.new()
 	_mat.shader = load("res://proto/cutout_c/frame_doll.gdshader")
 	for n in ["atlas", "dye_mask", "base_col", "head_top", "fig", "lit_tint", "shade_tint"]:
 		_mat.set_shader_parameter(n, cut.get_shader_parameter(n))
 	_mat.set_shader_parameter("palette", palette)
-	_mat.set_shader_parameter("frames_atlas", load(DIR + "frames_atlas.png"))
-	_mat.set_shader_parameter("fmask0", load(DIR + "frames_mask0.png"))
-	_mat.set_shader_parameter("fmask1", load(DIR + "frames_mask1.png"))
-	_mat.set_shader_parameter("fdata", _fdata())
+	_mat.set_shader_parameter("frames_atlas", load(dir + "frames_atlas.png"))
+	_mat.set_shader_parameter("fmask0", load(dir + "frames_mask0.png"))
+	_mat.set_shader_parameter("fmask1", load(dir + "frames_mask1.png"))
+	_mat.set_shader_parameter("fdata", _fdata(dir))
 	var off := PackedInt32Array()
 	var nn := PackedInt32Array()
 	var lc := PackedInt32Array()
@@ -262,13 +272,14 @@ static func material(palette: PackedVector3Array) -> ShaderMaterial:
 		var c := Color(String(L["base"].get(nm, "ffffff"))) if nm != "" else Color.WHITE
 		fb.append(Vector3(c.r, c.g, c.b))
 	_mat.set_shader_parameter("fbase", fb)
+	_mats[dir] = _mat
 	return _mat
 
 
 ## 장면 자료 텍스처: 가로 = 장면, [0] = uv 사각형, [1] = 턱 자리 (rig) · 시작 위상 · 고개 기울기, [2] = 소품·짐 (기울기, 손 x, y, 배율),
 ## [3] = (쥐는 자리: 소품 키의 몇 배, 짧은 연장(낫·망치)의 기울기 — v12, 눕힘 rad (자기) — v12, 눈 감음 1 (자기) — v13)
-static func _fdata() -> ImageTexture:
-	var fr: Array = lib()["frames"]
+static func _fdata(dir := DIR) -> ImageTexture:
+	var fr: Array = lib(dir)["frames"]
 	var img := Image.create(fr.size(), 4, false, Image.FORMAT_RGBAF)
 	for i in fr.size():
 		var f: Dictionary = fr[i]

@@ -522,8 +522,35 @@ func set_body_lift(y := 0.0) -> void:
 ## 방식 C 시험판: 쓸 수 있으면 장면 그림 인형을 보이고 컷아웃 인형을 숨김 (걸음 빠르기 = 땅 빠르기 ÷ 그림에서 잰 보폭)
 func _frames_ok() -> bool:
 	var on := frames_force == 1 or (frames_force < 0 and FrameLib.enabled())
-	return on and not _baby and String(dlook.get("body", "")) == "adult" \
-		and int(dlook.get("personal", -1)) == 0 and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(_frame_clip()) >= 0
+	var body := frame_body()
+	return on and not _baby and body != "" and FRAME_CLIPS.has(_d_clip) and FrameLib.clip_index(_frame_clip(), body) >= 0
+
+
+## 방식 C 몸 (Q22, 2026-11-12 "어른 남자 먼저"): 어른 여자 평상복 a → 여자 장면 그림 (woman_c) · 어른 남자 평상복 (c·e) → 남자 장면 그림
+## (man_c — 튜닉·바지, 만들어 둔 때만) · 그 밖 "" (컷아웃 인형 그대로)
+func frame_body() -> String:
+	if String(dlook.get("body", "")) != "adult":
+		return ""
+	var p := int(dlook.get("personal", -1))
+	if p == 0:
+		return FrameLib.DIR
+	if String(dlook.get("sex", "")) == "m" and MAN_VEST.has(p) and FrameLib.has_body(FrameLib.MAN_DIR):
+		return FrameLib.MAN_DIR
+	return ""
+
+
+## 남자 평상복 묶음 → 조끼 (Q22): 남자 장면 그림의 조끼 자리(둘째 물감)를 생김새의 크림 물감으로 칠하면 조끼, 튜닉 물감으로 칠하면 조끼 없음
+const MAN_VEST := {2: true, 4: false}
+
+
+## 방식 C 인형에 넘기는 생김새: 조끼 없는 남자는 둘째 물감(조끼 자리)을 튜닉 물감으로
+func _frame_look() -> Dictionary:
+	if frame_body() != FrameLib.MAN_DIR or bool(MAN_VEST.get(int(dlook.get("personal", -1)), false)):
+		return dlook
+	var l := dlook.duplicate(true)
+	var d: Array = l["dye"]
+	d[3] = d[2]
+	return l
 
 
 ## 지금 동작의 장면 그림 이름. 아기를 안으면 (v13) 나르기 → 안고 걷기(cradle), 안고 서기 → 안고 서기(rock) — 그 밖의 동작은 아기 장면이 없어 컷아웃 인형
@@ -545,10 +572,15 @@ func _refresh_frames() -> void:
 			fdoll.visible = false
 			doll.visible = true
 		return
+	var body := frame_body()
 	if fdoll == null:
 		fdoll = FrameDoll.new()
-		fdoll.setup(FrameLib.material(game_material().get_shader_parameter("palette")))
+		fdoll.setup(FrameLib.material(game_material().get_shader_parameter("palette"), body), body)
 		add_child(fdoll)
+	elif fdoll.body != body:          # (Q22) 생김새가 바뀌어 다른 몸 — 메시·재질을 그 몸 것으로
+		fdoll.setup(FrameLib.material(game_material().get_shader_parameter("palette"), body), body)
+		_f_clip = ""
+		_f_hat = -9
 	if not _f_on:
 		_f_on = true
 		fdoll.visible = true
@@ -558,7 +590,7 @@ func _refresh_frames() -> void:
 	fdoll.screen_h = _doll_h
 	if _d_hat != _f_hat:
 		_f_hat = _d_hat
-		fdoll.set_look(dlook, _d_hat)
+		fdoll.set_look(_frame_look(), _d_hat)
 	var fc := _frame_clip()
 	var walking := fc == "walk" or fc == "carry" or fc == "cradle"
 	if carry_baby:
@@ -573,7 +605,7 @@ func _refresh_frames() -> void:
 			g = GROUND_NORMAL * _gait
 		# 그림의 보폭은 화면 가로 (비스듬한 보기에서 잰 값) → 화면 움직임을 그 보기의 걸음 축에 투영한 몫만큼 (발이 땅에 붙게,
 		# 사선으로 내려올 때 너무 느리게 미끄러지지 않게 — 2026-11-09), 앞·뒤 보기는 0.8
-		var stride := FrameLib.stride_rig(fc) * _doll_h / float(FrameLib.lib()["fig"])
+		var stride := FrameLib.stride_rig(fc, body) * _doll_h / float(FrameLib.lib(body)["fig"])
 		var hk: float = fdoll.step_k        # 화면 움직임을 그림의 걸음 축에 투영 (frame_doll.update_view)
 		var wr := walk_rate(g * hk / maxf(stride, 0.01), frame_dt())
 		rate = 0.0 if bool(wr["travel"]) or _d_clip == "travel" else float(wr["rate"])

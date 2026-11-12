@@ -23,7 +23,7 @@ func all() -> void:
 	run.timed(self, ["test_look_deterministic", "test_tones_from_genes", "test_household", "test_clip_map", "test_hat_time",
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
-		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c"])
+		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_man"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -1053,3 +1053,85 @@ func test_frames_c() -> void:
 	m.tick(0.0)
 	check(not m._f_on and m.doll.visible and not m.fdoll.visible, "끄면 컷아웃 인형으로 돌아옴")
 	m.free()
+
+
+## (Q22 2026-11-12 "어른 남자 먼저") 방식 C 남자 몸 (art/cutout/man_c — 튜닉·바지): 여자 몸과 같은 동작·보기·장면 수 (그대로 바꿔 끼움),
+## 시험판을 켜면 어른 남자(평상복 c·e)는 남자 장면 그림 · 어른 여자 평상복 a는 여자 장면 그림 · 나머지(여자 b·아이·노인)는 컷아웃 그대로,
+## 끄면 아무도 바뀌지 않는다. 조끼 자리(둘째 물감): 평상복 c = 크림 조끼 · e = 튜닉 물감 (조끼 없음)
+func test_frames_man() -> void:
+	var FL := CutoutResident.FrameLib
+	check(FL.has_body(FL.MAN_DIR), "남자 장면 그림이 있다 (man_c/frames.json)")
+	if not FL.has_body(FL.MAN_DIR):
+		return
+	var W: Dictionary = FL.lib()
+	var M: Dictionary = FL.lib(FL.MAN_DIR)
+	check(M["clips"] == W["clips"] and M["frames_per_clip"] == W["frames_per_clip"] and M["views"] == W["views"]
+		and (M["frames"] as Array).size() == (W["frames"] as Array).size(), "남자 몸: 여자 몸과 같은 동작 · 보기 · 장면 수 (%d)" % (M["frames"] as Array).size())
+	var same := true
+	for i in (M["frames"] as Array).size():
+		var a: Dictionary = M["frames"][i]
+		var b: Dictionary = W["frames"][i]
+		if a["clip"] != b["clip"] or a["view"] != b["view"] or not is_equal_approx(float(a["t0"]), float(b["t0"])):
+			same = false
+	check(same, "남자 몸: 장면 순서 · 보기 · 시작 위상이 여자 몸과 같다")
+	check(FL.load_index("밀가루", FL.MAN_DIR) >= 0 and FL.load_index(FL.BABY_LOAD, FL.MAN_DIR) >= 0, "남자 몸에도 짐 그림 · 아기 그림")
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 2211
+	var want := {"m2": null, "m4": null, "f0": null, "f1": null, "child": null}
+	for i in 600:
+		var r := _resident(rng, 22100 + i)
+		if i % 5 == 0:
+			r.age = 2.5
+		var c := _model(r)
+		var k := ""
+		if String(c.dlook.get("body", "")) == "child":
+			k = "child"
+		elif String(c.dlook.get("body", "")) == "adult":
+			k = String(c.dlook["sex"]) + str(int(c.dlook["personal"]))
+		if want.has(k) and want[k] == null:
+			want[k] = c
+		else:
+			c.free()
+	check(not want.values().has(null), "어른 남자 c · e, 어른 여자 a · b, 아이를 찾음 %s" % [want.keys().filter(func(x: String) -> bool: return want[x] == null)])
+	if want.values().has(null):
+		for c: Variant in want.values():
+			if c != null:
+				(c as CutoutResident).free()
+		return
+	var spike0: int = FL.spike
+	var off_bad := []
+	var on_bad := []
+	for on: int in [0, 1]:
+		FL.spike = on
+		for k: String in want:
+			var c: CutoutResident = want[k]
+			c.set_anim("walk")
+			c.tick(0.0)
+			var body := String(c.fdoll.body) if c.fdoll != null else ""
+			var exp_body: String = String({"m2": FL.MAN_DIR, "m4": FL.MAN_DIR, "f0": FL.DIR}.get(k, "")) if on == 1 else ""
+			if c._f_on != (exp_body != "") or (c._f_on and (body != exp_body or c.doll.visible or c.fdoll.clip != "walk")):
+				(on_bad if on == 1 else off_bad).append("%s → %s %s" % [k, c._f_on, body])
+	check(off_bad.is_empty(), "시험판을 끄면 아무도 장면 그림이 아니다 %s" % [off_bad])
+	check(on_bad.is_empty(), "시험판을 켜면 어른 남자 → 남자 몸, 어른 여자 a → 여자 몸, 나머지 그대로 %s" % [on_bad])
+	# 조끼 자리: c = 생김새의 크림(둘째) 물감 · e = 튜닉(주색) 물감
+	var vest: Array = []
+	for k: String in ["m2", "m4"]:
+		var c: CutoutResident = want[k]
+		var d: Vector4 = c.fdoll.get_instance_shader_parameter("dyes0")
+		var dy: Array = c.dlook["dye"]
+		vest.append(int(d.w) == int(dy[3]) if k == "m2" else int(d.w) == int(dy[2]))
+	check(vest == [true, true], "남자 조끼: 평상복 c는 크림 조끼, e는 튜닉 물감 (조끼 없음) %s" % [vest])
+	# 나르기 · 앉기도 남자 장면 그림 (짐 그림은 남자 몸의 짐 번호)
+	var m: CutoutResident = want["m2"]
+	m.set_item("밀가루")
+	m.set_anim("walk")
+	m.tick(0.0)
+	var sx := int((m.fdoll.get_instance_shader_parameter("sel") as Vector4).x)
+	check(m._f_on and m.fdoll.clip == "carry" and sx == FL.load_index("밀가루", FL.MAN_DIR), "남자 몸: 밀가루를 나르면 나르기 장면 + 밀가루 그림 (%s %d)" % [m.fdoll.clip, sx])
+	m.set_item("")
+	m.set_anim("sit")
+	m.tick(0.0)
+	check(m._f_on and m.fdoll.clip == "sit", "남자 몸: 앉기도 장면 그림")
+	FL.spike = spike0
+	for c: Variant in want.values():
+		(c as CutoutResident).free()
