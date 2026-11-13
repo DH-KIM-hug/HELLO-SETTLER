@@ -275,6 +275,21 @@ func test_words() -> void:
 				texts.append(String((b["say"] as Dictionary)["text"]))
 			if b.has("caption"):
 				texts.append(String(b["caption"]))
+	# (Q33) 반기는 아이는 인형의 손 흔들기 동작으로 — 2초 남짓 (세 번쯤) 흔들고 내림
+	var waves := ""
+	for sid: String in ["homecoming", "homecoming_quiet"]:
+		var t0 := -1.0
+		var t1 := -1.0
+		for b: Dictionary in Stagings.get_scene(sid).get("beats", []):
+			var po: Dictionary = b.get("pose", {})
+			if String(po.get("who", "")) == "child" and String(po.get("anim", "")) == "wave":
+				t0 = float(b["t"])
+			elif t0 >= 0.0 and t1 < 0.0 and ((String(po.get("who", "")) == "child" and String(po.get("anim", "")) != "wave") or String(b.get("unpose", "")) == "child"):
+				t1 = float(b["t"])
+		var swings := (t1 - t0) * float(CutoutResident.Lib.CLIP_RATE["wave"])
+		if t0 < 0.0 or t1 < 0.0 or swings < 2.0 or swings > 3.5:
+			waves += "%s %.1f~%.1f (%.1f번) " % [sid, t0, t1, swings]
+	check(waves == "", "반김: 아이가 손 흔들기 동작으로 두세 번 흔들고 내림 %s" % waves)
 	var bad := ""
 	var re := RegEx.create_from_string("[0-9]")
 	for t: String in texts:

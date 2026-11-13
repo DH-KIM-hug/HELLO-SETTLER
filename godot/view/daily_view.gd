@@ -195,8 +195,9 @@ const WELCOME_WARM := [Vector2(0.62, 0.16), Vector2(-0.62, 0.2), Vector2(1.05, -
 const WELCOME_COLD := [Vector2(1.9, 0.3), Vector2(-1.95, 0.25), Vector2(2.45, -0.4), Vector2(-2.5, -0.35)]     # 서먹: 멀찍이
 const WELCOME_DUR := 6.4
 const WELCOME_COLD_DUR := 5.0
-const WAVE_DUR := 2.4                      # 손 흔드는 길이 (사람마다 조금씩 늦게)
+const WAVE_DUR := 2.0                      # 손 흔드는 길이 (사람마다 조금씩 늦게) — 인형의 wave 동작(1.4번/초)으로 세 번 가까이 (Q33)
 const WAVE_LAG := 0.3
+const WAVE_MARK_FADE := Vector2(26.0, 36.0)   # (Q33) 흔들림 금: 세계 1칸이 이만큼(px)부터 옅어져 사라짐 — 기본 확대(20)에선 거들고 가까이(44)에선 팔만
 const GIVE_AT := Vector2(2.2, 3.2)         # 빵을 건네는 때 (장면 초 — 손에서 손으로)
 const LOAF_H := 0.42
 const LOAF_X := 0.2
@@ -504,9 +505,12 @@ class Pics extends KidBubbles:
 			draw_circle(q, rad, Color(DROP, a))
 			draw_circle(q + Vector2(-0.3, -0.3) * rad, rad * 0.35, Color(1, 1, 1, a))
 
-	## (E2-4) 손 흔들기: 머리 옆 (든 손 쪽) 작은 흔들림 금 둘이 까딱까딱 (p = 머리 꼭대기, u = 0~1, dir = 화면 쪽 ±1)
+	## (E2-4) 손 흔들기: 머리 옆 (든 손 쪽) 작은 흔들림 금 둘이 까딱까딱 (p = 머리 꼭대기, u = 0~1, dir = 화면 쪽 ±1).
+	## (Q33) 인형이 진짜로 팔을 들어 흔드므로 금은 멀리서 볼 때만 거든다 — 가까이(WAVE_MARK_FADE 넘게) 보면 사라짐
 	func draw_wave(p: Vector2, unit: float, u: float, dir: float) -> void:
-		var a := smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.85, 1.0, u))
+		var a := smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.85, 1.0, u)) * (1.0 - smoothstep(WAVE_MARK_FADE.x, WAVE_MARK_FADE.y, unit))
+		if a <= 0.0:
+			return
 		var s := maxf(3.4, unit * 0.09)
 		var o := p + Vector2(dir * unit * 0.04, -unit * 0.1)        # 머리 위 (가까이 선 옆 사람의 얼굴을 덮지 않게 — 2026-11-14 캡처)
 		var wig := sin(u * TAU * 3.0) * 0.35
@@ -2309,10 +2313,10 @@ func _play_welcome(h: Hold, m: ResidentModel) -> void:
 		h.p = Vector4(0.0, 1.0, 1.0, -0.04 + 0.02 * sin(t * 0.9 + float(h.role)))
 		return
 	var wu := (t - float(h.role - 1) * WAVE_LAG) / WAVE_DUR
-	if wu >= 0.0 and wu < 1.0:                     # 손을 흔듦 (팔을 든 몸 + 흔들림 금)
+	if wu >= 0.0 and wu < 1.0:                     # 손을 흔듦 (Q33: 인형의 손 흔들기 동작 — 팔을 머리 옆으로 들고 세 번 + 흔들림 금)
 		var k := sin(wu * PI)
-		h.hint = "lookup"
-		h.p = Vector4(0.03 * absf(sin(wu * TAU * 1.5)), 1.0, 1.0 + 0.03 * k, 0.09 * sin(wu * TAU * 3.0) * k)
+		h.hint = "wave"
+		h.p = Vector4(0.02 * absf(sin(wu * TAU * 1.5)), 1.0, 1.0 + 0.02 * k, 0.03 * sin(wu * TAU * 3.0) * k)
 		bub.add_fx(m, "wave", wu, -1.0 if (nh.at - h.at).dot(_right) >= 0.0 else 1.0)     # 흔들림 금은 새 이웃 반대쪽 (옆 사람 머리를 덮지 않게)
 	if h.role == 1:                                # 빵: 들고 있다가 손에서 손으로
 		var dx := 1.0 if (nh.at - h.at).dot(_right) >= 0.0 else -1.0

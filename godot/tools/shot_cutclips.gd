@@ -3,12 +3,12 @@
 ## → godot_shots/cutclips_<clip>_<TAG>.png — 옷 묶음 7 (a b c e 어른 · d 농부 일 옷 · f 아이 · g 노인) 줄 ×
 ##                                          보기 4 (앞 · 비스듬한 앞 · 비스듬한 뒤 · 뒤) × 장면 PHASES칸
 ##   godot_shots/cutclips_walkstrip_<TAG>.png — 걷기 8장면: 몸 4 × 보기 4 (+ 비스듬한 보기 뒤집은 것 = 왼쪽으로 걸음) 줄
-## 환경 변수: TAG (기본 "after"), CLIPS (쉼표, 기본 sit,eat,sleep,kneel,gather), SETS (기본 0,1,2,4,3,5,6).
+## 환경 변수: TAG (기본 "after"), CLIPS (쉼표, 기본 sit,eat,sleep,kneel,gather), SETS (기본 0,1,2,4,3,5,6), SUBDIR, PHASES (쉼표).
 ## 물감 -1 = 그린 색 그대로, 모자 없음, 먹기는 빵.
 extends SceneTree
 
 const Lib := preload("res://proto/cutout_a/cut_lib.gd")
-const PHASES := [0.0, 0.25, 0.45, 0.7]
+var PHASES := [0.0, 0.25, 0.45, 0.7]
 var CW := 120
 var RH := 150
 var SLEEP_W := 190
@@ -23,6 +23,10 @@ var tag := "after"
 
 func _initialize() -> void:
 	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots").simplify_path()
+	if OS.get_environment("SUBDIR") != "":         # (Q33) 하위 폴더 · 장면 칸 (쉼표) — 손 흔들기 점검: SUBDIR=wave_q33 PHASES=0,0.25,0.5,0.75
+		out_dir = out_dir.path_join(OS.get_environment("SUBDIR"))
+	if OS.get_environment("PHASES") != "":
+		PHASES = Array(OS.get_environment("PHASES").split(",")).map(func(x: String) -> float: return float(x))
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	if OS.get_environment("TAG") != "":
 		tag = OS.get_environment("TAG")
@@ -136,7 +140,11 @@ func _sheet(cells: Array, cw: int, title: String) -> SubViewport:
 			m.position = base
 			var clip: String = c[4]
 			var prop := 0 if clip == "eat" else -1
-			m.set_instance_shader_parameter("sel", Vector4(c[0], c[1], -1, prop))
+			var hat := -1
+			if OS.get_environment("HATS") != "":            # (Q33) 줄마다 모자 (쉼표, -1 = 없음) — 든 손이 챙에 가리는지
+				var hs := OS.get_environment("HATS").split(",")
+				hat = int(hs[ri % hs.size()])
+			m.set_instance_shader_parameter("sel", Vector4(c[0], c[1], hat, prop))
 			m.set_instance_shader_parameter("st", Vector4(c[2], c[3], Lib.CLIPS.find(clip), float(c[5]) + 0.0005))
 			m.set_instance_shader_parameter("misc", Vector4(0.95, 1, 0, 0))      # 빠르기 0 = 그 장면에서 멈춤
 			m.set_instance_shader_parameter("dyes0", Vector4(-1, -1, -1, -1))

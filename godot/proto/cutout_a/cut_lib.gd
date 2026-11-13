@@ -19,9 +19,11 @@ const NSLOT := 11
 ## 걸음을 멈춘 큰 보폭 자세에 작은 들썩임만 (CutoutResident.walk_rate가 고름)
 ## lookup = 서서 하늘을 올려다보고 한 팔로 위를 가리킴 (2026-11-08 수첩 쪽지 7 "아이들이 자꾸 하늘을 올려다보네" — 끝에 덧붙여 앞 번호는 그대로)
 ## reap = 낫질 (Q8 밀 거두기, 2026-11-11): 허리를 숙이고 작은 낫을 앞으로 내밀었다 당겨 벰 — 끝에 덧붙여 앞 번호는 그대로
-const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup", "reap"]
+## wave = 한 팔을 머리 옆으로 높이 들고 좌우로 흔듦 (Q33, 2026-11-14 — 맞이 · 돌아옴 반김 · 깨달은 뒤 톡 반응. 끝에 덧붙여 앞 번호는 그대로)
+## walkwave = 걸으며 손 흔들기 (wave 바로 뒤 — 셰이더는 wave_clip과 그다음 번호를 흔드는 팔로 봄). 빠르기는 걷기처럼 땅 빠르기에 맞춤
+const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup", "reap", "wave", "walkwave"]
 const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35, "sit": 0.3, "eat": 0.4, "sleep": 0.22,
-	"kneel": 0.16, "gather": 0.45, "travel": 2.2, "lookup": 0.32, "reap": 0.7}
+	"kneel": 0.16, "gather": 0.45, "travel": 2.2, "lookup": 0.32, "reap": 0.7, "wave": 1.4, "walkwave": 0.9}
 ## 낫 그림 (날이 위 · 자루가 오른쪽 아래)에서 손에 쥐는 자리 (그림 가운데에서, rig) · 낫의 배율 (작은 낫 — 괭이 키의 반쯤)
 const REAP_GRIP := Vector2(48.0, -78.0)
 const REAP_K := 1.15
@@ -255,6 +257,7 @@ static func material() -> ShaderMaterial:
 		hk.append(1.0)
 	_mat.set_shader_parameter("head_k", hk)
 	_mat.set_shader_parameter("set_col", SET_COL)
+	_mat.set_shader_parameter("wave_clip", CLIPS.find("wave"))
 	_mat.set_shader_parameter("fig", float(L["fig"]))
 	var pl: Array = L["prop_layer"]
 	_mat.set_shader_parameter("prop_layer", Vector4i(int(pl[0]), int(pl[1]), int(pl[2]), int(pl[3])))     # 보기마다 소품의 겹 (ORDER)
@@ -716,10 +719,73 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 				a[5] = Vector4(lerpf(rest_f.x, -1.25, u), 0, 0, 1)
 				a[4] = Vector4(rest_s.y, 0, 0, 1)
 				a[6] = Vector4(rest_f.y, 0, 0, 1)
+		"wave":
+			# 뒤쪽 보기(비스듬한 뒤 · 뒤)에선 든 팔이 몸에서 떨어져 보임 → 흔들지 않고 서 있기 (게임에선 앞 보기로만 오지만 표에도 남기지 않음)
+			if v >= 2:
+				a = _pose("idle", v, t)
+			else:
+				_wave(a, v, side, w, s)
+		"walkwave":
+			# 걸으며 손 흔들기 (돌아옴 반김: 광장으로 걸어오던 아이) — 걸음 그대로 + 한 팔은 wave처럼 (걸음 한 주기에 한 번 왔다 갔다).
+			# 멀어지며 걷는 보기(비스듬한 뒤 · 뒤)에선 그냥 걸음 (든 팔이 떠 보임 — 2026-11-14 메인 검토)
+			a = _pose("walk", v, t)
+			if v < 2:
+				_wave(a, v, side, w, sin(w + 0.8), false)
 	if clip in NO_CANE:
 		var f11: Vector4 = a[11]
 		a[11] = Vector4(f11.x, 0, 0, 1)
 	return a
+
+
+## (Q33, 2026-11-14) 손 흔들기: 한 팔을 머리 옆으로 높이 들고 (팔꿈치는 머리 옆 · 손은 머리 꼭대기 높이) 아래팔을 팔꿈치에서
+## 좌우로 크게 흔듦 — 한 주기 = 한 번 왔다 갔다 (CLIP_RATE: 2초에 세 번 가까이). 기본 확대(어른 키 ≈ 폰 화면 50px)에서도 읽히게 과장:
+## 아래팔을 조금 늘이고(WAVE_REACH), 흔드는 폭이 큼. 큰 머리 뒤로 숨지 않게 팔꿈치를 머리 옆선 밖으로 (어깨는 머리에 가려 있으므로
+## 소매를 옮겨도 떨어져 보이지 않음). 흔드는 팔 = 지팡이를 쥐지 않은 팔 (노인 몸 g의 지팡이는 앞·뒤 보기에서 팔 a, 비스듬한 뒤에서 b).
+## 몸은 흔드는 쪽 반대로 살짝 기울고 조금 들썩임 — 차분하게 (뛰지 않음). 서서 흔들기는 앞 보기로만 (CutoutResident.FRONT_ONLY),
+## 걸으며 흔들기(walkwave)는 비스듬한 보기에서 소매를 어깨에 둔 채 아래팔만 늘여 머리 옆으로.
+const WAVE_ELBOW := Vector2(145.0, 640.0)     # 묶음 a 앞 보기의 팔꿈치 자리 (바깥쪽 = +, rig)
+const WAVE_REACH := 220.0                     # 팔꿈치 → 손 (rig — 그린 아래팔의 약 1.5배)
+const WAVE_TILT := 0.6                       # 세운 아래팔이 바깥으로 기운 가운데 각 (rad)
+const WAVE_SWING := 0.45                      # 흔드는 폭 (± rad)
+## 몸마다 흔드는 아래팔을 더 올리는 만큼 (rig, 앞 보기만 — 동작 표의 묶음 칸 소품 자리에 실어 셰이더가 더함).
+## 아이 몸 f는 어깨가 낮고 머리가 커서 그대로면 손이 귀 높이에 머묾 → 크게 올림 (2026-11-14 메인 검토 "아이 손이 머리 위로")
+const WAVE_LIFT := {"a": Vector2(0, 0), "b": Vector2(0, 0), "c": Vector2(0, 0), "d": Vector2(0, 0), "e": Vector2(0, 0), "f": Vector2(0, 100), "g": Vector2(0, 0)}
+const WAVE_SLEEVE := 2.4                      # 소매(위팔) 돌림 — 바깥 위로
+
+
+static func _wave(a: Array, v: int, side: bool, w: float, s: float, body := true) -> void:
+	# 앞·뒤·비스듬한 앞: 그림 오른쪽 팔(b) · 비스듬한 뒤: a — 지팡이를 쥐지 않은 팔, 그림에서 머리 오른쪽(바라보는 앞) 어깨.
+	# (비스듬한 보기의 가까운 팔 a는 어깨가 머리 뒤쪽이라 들면 얼굴을 가로지름 — 2026-11-14 캡처 walk3)
+	var arm := "a" if v == 2 else "b"
+	var out := -1.0 if v == 2 else 1.0                 # 화면에서 바깥쪽
+	var rot := (WAVE_SLEEVE if not side else 1.5) * out
+	var g: Array = _arm_geo(v, "a")[arm]
+	var sh: Vector2 = g[0]
+	var el: Vector2 = g[1]
+	var hd: Vector2 = g[2]
+	var et := Vector2(WAVE_ELBOW.x * out, WAVE_ELBOW.y)
+	var tr := et - (sh + (el - sh).rotated(rot))
+	if side:
+		tr = Vector2.ZERO          # 비스듬한 보기: 소매는 어깨에 그대로 (옮기면 노인의 큰 소매가 떠 보임) — 아래팔을 늘여 머리 옆으로
+		et = sh + (el - sh).rotated(rot)
+	var d := hd - el
+	var wf := sqrt(maxf(WAVE_REACH * WAVE_REACH - d.x * d.x, 1.0)) / maxf(absf(d.y), 1.0)
+	var dw := Vector2(d.x, d.y * wf)
+	var ang := WAVE_TILT + WAVE_SWING * s                  # 세로에서 바깥으로
+	var want := Vector2(sin(ang) * out, cos(ang))
+	var tot := want.angle() - dw.angle()
+	var si := 3 if arm == "a" else 4
+	a[si] = Vector4(rot, tr.x, tr.y, 1)
+	a[si + 2] = Vector4(wrapf(tot - rot, -PI, PI), 0, 0, wf)
+	if not body:
+		return                                             # (walkwave) 몸·다리·다른 팔은 걸음 그대로
+	a[1] = Vector4(-0.03 * out + 0.012 * s * out, 0, 2.5 * absf(sin(w)), 1)      # 흔드는 쪽 반대로 살짝 · 작은 들썩임
+	a[2] = Vector4(0.04 * out + 0.025 * sin(w - 0.6), 0, 0, 1)                   # 고개를 흔드는 손 쪽으로 조금
+	a[9] = Vector4(0.05 * sin(w + 0.6), 0, 0, 1)
+	var rest := 3 if arm == "b" else 4                     # 다른 팔은 쉬는 자리 (_pose의 rest_s · rest_f)
+	var inn := 1.0 if rest == 3 else -1.0
+	a[rest] = Vector4((0.0 if side else 0.06 * inn) + 0.02 * s, 0, 0, 1)
+	a[rest + 2] = Vector4((0.14 if side else 0.24) * inn, 0, 0, 1)
 
 
 ## 땅에 앉기: 엉덩이를 내리고(다리 길이의 반쯤) 다리를 앞으로. 앞 보기 = 다리가 카메라 쪽으로 짧게 (발이 치마 아래로),
@@ -807,6 +873,8 @@ static func bake_anim(mod := Callable()) -> ImageTexture:
 						off = _hand_local(a, v, "a", sn) - _hand_local(a, v, "a")
 					elif clip == "reap":
 						off = _hand_local(a, v, REAP_HAND[v], sn) - _hand_local(a, v, REAP_HAND[v], "d")
+					elif clip == "wave" or clip == "walkwave":
+						off = WAVE_LIFT[sn] if v == 0 else Vector2.ZERO     # (Q33) 흔드는 팔을 몸마다 더 올림 (소품은 흔드는 동안 없음)
 					else:
 						off = (po[0] as PackedVector2Array)[si * 4 + v]
 					img.set_pixel(SET_COL + si, y, Color(off.x, off.y, fl.x * leg_len(sn, v), fl.w))

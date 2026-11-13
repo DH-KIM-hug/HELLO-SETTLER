@@ -8,7 +8,8 @@
 ##   짐(또는 아기) 든 idle → hold · work/torch → 연장이 괭이·낫이면 괭이질(hoe + 그 연장), 망치·도끼·곡괭이면 같은 내려찍기 + 나무망치,
 ##   약초·빈손 채집(GATHER_TOOLS)·사냥꾼 → gather (숙여 줍기), 그 밖 → idle ·
 ##   sit → sit · eat → eat (빵 — 먹을거리를 들었으면 그것) · sleep → sleep (누움, 앞 보기) · pray → kneel (제단 기도 · 깨달음 KNEEL) ·
-##   그 밖(play·fly·wave·chat·사이 동작…) → idle. 앉기·먹기·줍기는 비스듬한 보기로만 (앞·뒤 보기에선 앉은 다리가 안 읽힘).
+##   wave → wave (Q33: 한 팔을 머리 옆으로 높이 들고 좌우로 흔듦 — 연출의 anim "wave" · react_hint "wave", 앞 보기로만, 짐은 내려 둔 그림) ·
+##   그 밖(play·fly·chat·사이 동작…) → idle. 앉기·먹기·줍기는 비스듬한 보기로만 (앞·뒤 보기에선 앉은 다리가 안 읽힘).
 ## 일 옷 (A23 ③, art-bible 5.2 직업 옷): 일터에서 일을 시작하는 순간(work 동작) 일 옷으로 갈아입고 — 일터 문 앞에서 작은 연기와 함께
 ##   잠깐 사라졌다 나타남 (SWAP_HIDE) — 그 일(같은 행동)을 하는 동안은 일감을 나르러 걸어도 일 옷, 행동이 바뀌거나 쉬기·먹기·자기·기도로
 ##   가면 평상복으로 (같은 연기). 지금 일 옷은 모든 일이 농부 옷 하나 (look_from jobs).
@@ -61,7 +62,8 @@ const GATHER_TOOLS := ["tool_herbs"]
 const GATHER_JOBS := ["사냥꾼"]
 ## 비스듬한 보기로만 보이는 동작 (앞 → 비스듬한 앞, 뒤 → 비스듬한 뒤) · 늘 앞 보기 (누움)
 const SIDE_ONLY := ["sit", "eat", "gather"]
-const FRONT_ONLY := ["sleep", "lookup"]      # lookup (수첩 쪽지 7) — 하늘(거인 쪽)을 올려다보는 얼굴·가리키는 팔이 보이게
+const WAVE_WALK := 0.15           # (Q33) 이 빠르기(칸/초)보다 빨리 움직이는 사람은 걸으며 흔듦 (walkwave)
+const FRONT_ONLY := ["sleep", "lookup", "wave"]      # lookup (수첩 쪽지 7) — 하늘(거인 쪽)을 올려다보는 얼굴·가리키는 팔이 보이게 · wave (Q33) 머리 옆으로 든 팔
 ## 일 옷을 벗는 동작 (쉬기·먹기·자기·기도·놀기)
 const OFF_SHIFT := ["sit", "eat", "sleep", "pray", "play", "fly"]
 const SWAP_HIDE := 0.18          # 옷을 갈아입는 동안 사라지는 시간 (현실 초)
@@ -130,7 +132,7 @@ var react_off := Vector3.ZERO    # 부모(VillageView) 틀 기준 옮김: y = �
 var react_sq := Vector2.ONE      # (가로, 세로) 배율 — 찌그러짐·늘어남
 var react_roll := 0.0            # 바라보는 쪽으로 숙이는 기울기 (rad, 발끝 중심)
 var react_turn := 0.0            # 종이 인형이 세로 축으로 도는 바퀴 수 (0.5 = 반대쪽을 봄)
-var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴 · E2-4 맞이의 손 흔들기) · (E2-1 2차, 하루의 흐름만) sit · eat · walk · carry · hold · stand · (E2-4) hoe · gather
+var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴) · wave (Q33 손 흔들기 — E2-4 맞이 · 깨달은 뒤 톡 반응) · (E2-1 2차, 하루의 흐름만) sit · eat · walk · carry · hold · stand · (E2-4) hoe · gather
 var react_speed := -1.0          # (E2-1 2차) walk·carry 힌트로 그린 인형만 걸을 때의 땅 빠르기 (칸/현실 초) — -1이면 잰 값 그대로
 
 
@@ -475,6 +477,10 @@ func _react_clip(clip: String) -> String:
 		return clip
 	if react_hint == "lookup" and (clip == "idle" or clip == "walk"):
 		return "lookup"
+	if react_hint == "wave" and not carry_baby:     # (Q33) 손 흔들기 — 서 있거나 걷던(멈춘) 사람·짐을 든 사람 (짐은 그림에서 내려 둠). 일·앉기·잠·아기 안기는 그대로
+		return "wave" if clip == "idle" or clip == "walk" or clip == "hold" or clip == "carry" or clip == "lookup" or clip == "walkwave" else clip
+	if clip == "walkwave":                         # 반응하는 동안 발은 멈춤 (톡 반응이 인형을 붙듦) → 서서 흔들기
+		return "wave"
 	if REACT_CLIPS.has(react_hint):                 # (E2-1 2차) 하루의 흐름이 정한 동작 — 잠·기도는 그대로
 		return clip if clip == "sleep" or clip == "kneel" else String(REACT_CLIPS[react_hint])
 	if clip == "walk":
@@ -532,6 +538,8 @@ func doll_state() -> Dictionary:
 			clip = "gather"
 		"lookup":                              # (수첩 쪽지 7) 하늘을 올려다보며 가리킴
 			clip = "lookup"
+		"wave":                                # (Q33) 손 흔들기 — 연출(StageDirector 몸짓 anim)이 고름. 시뮬은 이 동작을 쓰지 않음.
+			clip = "walkwave" if _gspeed() > WAVE_WALK else "wave"     # 걸어오던 사람은 걸으며 흔듦 (발이 미끄러지지 않게)
 		_:
 			clip = "idle"
 	if _baby:
@@ -569,6 +577,9 @@ func _refresh_doll() -> void:
 	var s := doll_state()
 	if REACT_CLIPS.has(react_hint) and not _baby and s["clip"] != "sleep" and s["clip"] != "kneel":
 		s["prop"] = 0 if react_hint == "eat" else -1     # (E2-1 2차) 그림만: 한 입 먹는 빵 · 그 밖엔 연장을 내려놓은 빈손
+	var clip: String = _react_clip(s["clip"])
+	if clip == "wave" or clip == "walkwave":
+		s["prop"] = -1                                   # (Q33) 흔드는 동안 든 짐·연장은 그림에서 내려 둠 (화면만)
 	_update_shift(bool(s["work"]))
 	var outfit := int(dlook["jobs"]["farmer"]) if on_shift else int(dlook["personal"])
 	var hat := int(dlook["hat"]) if daylight and not _baby else -1          # R6: 낮엔 머리쓰개, 저녁엔 벗음
@@ -584,17 +595,16 @@ func _refresh_doll() -> void:
 	if int(s["prop"]) != _d_prop:
 		_d_prop = int(s["prop"])
 		sel_dirty = true
-	var clip: String = _react_clip(s["clip"])
 	var rate: float = Lib.CLIP_RATE[clip]
-	if clip == "walk" or clip == "carry":
+	if clip == "walk" or clip == "carry" or clip == "walkwave":
 		# 발이 미끄러지지 않게: 주기/초 = 땅 빠르기 ÷ (한 주기 걸음 × 키 배율). 모르면 보통 걸음
 		var g := _gspeed()
 		if g < 0.0:
 			g = GROUND_NORMAL * _gait * (Balance.WALK_CHILD if _child else 1.0)
-		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], clip) * _doll_h / float(Lib.lib()["fig"])
+		var stride := Lib.stride_rig(Lib.SETS[clampi(outfit, 0, Lib.SETS.size() - 1)], "walk" if clip == "walkwave" else clip) * _doll_h / float(Lib.lib()["fig"])
 		var wr := _walk_rate_f(g / maxf(stride, 0.01), frame_dt())     # (= walk_rate, -1 = travel)
 		if wr < 0.0:
-			clip = "travel" if clip == "walk" else "hold"
+			clip = "travel" if clip == "walk" else ("wave" if clip == "walkwave" else "hold")
 		rate = wr if wr >= 0.0 else Lib.CLIP_RATE[clip]
 	rate = minf(rate, MAX_FRAME_STEP / frame_dt())
 	var st_dirty := false
@@ -602,6 +612,8 @@ func _refresh_doll() -> void:
 		var now := _shader_time()
 		if clip == _d_clip and _d_rate > 0.0:
 			_d_phase = fposmod(_d_phase + now * (_d_rate - rate), 1.0)     # 빠르기만 바뀜: 지금 자세에서 이어서
+		elif clip == "wave":
+			_d_phase = fposmod(-now * rate, 1.0)                          # (Q33) 손 흔들기는 늘 처음부터 (팔을 든 가운데에서 바깥으로)
 		elif clip != _d_clip:
 			_d_phase = fposmod(_rng.randf() - now * rate, 1.0)            # 새 동작: 사람마다 다른 자리에서
 		_d_clip = clip

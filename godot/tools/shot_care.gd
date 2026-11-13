@@ -9,12 +9,12 @@ const CARE := ["soup", "warm", "cold", "teach"]
 
 
 func _initialize() -> void:
-	tag = "e24"
+	tag = "e24" if OS.get_environment("TAG") == "" else OS.get_environment("TAG")
 	if not UserPaths.of("user://save").begins_with(UserPaths.TOOL_ROOT + "/"):
 		push_error("shot_care: 도구 폴더가 아님 — 그만둠")
 		plan = [_finish]
 		return
-	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/care_e24").simplify_path()
+	out_dir = ProjectSettings.globalize_path("res://").path_join("../godot_shots/" + (OS.get_environment("SUBDIR") if OS.get_environment("SUBDIR") != "" else "care_e24")).simplify_path()     # (Q33) SUBDIR=wave_q33 TAG=q33
 	DirAccess.make_dir_recursive_absolute(out_dir)
 	CutoutResident.override = 1
 	Village.default_created = {"year": 2026, "month": 6, "day": 15}
@@ -141,7 +141,7 @@ func _plan_welcome(nm: String, warm: bool) -> void:
 		plan.append(_shot.bind("%s_%d_1come" % [nm, int(ppu)]))
 		plan.append(_until.bind(_at.bind(DailyView.WELCOME, 0.0), 10.0))
 		if warm:
-			_shots(DailyView.WELCOME, nm, ppu, [[0.9, "wave", true], [2.75, "give"], [3.7, "bread"], [5.6, "end"]])
+			_shots(DailyView.WELCOME, nm, ppu, [[0.9, "wave", true], [1.15, "wave2"], [1.4, "wave3"], [2.75, "give"], [3.7, "bread"], [5.6, "end"]])
 		else:
 			_shots(DailyView.WELCOME, nm, ppu, [[1.2, "watch", true], [3.6, "watch"]])
 		plan.append(_until.bind(_over, 12.0))

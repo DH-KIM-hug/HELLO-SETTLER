@@ -583,7 +583,7 @@ func _sync_residents(dt: float) -> void:
 		if not po.is_empty():           # (E1-0) 연출이 몸짓·표정을 잠깐 정함 · (E1-1) 조짐: 멈춰 서서 하늘을 봄
 			if po.has("face"):
 				m.set_face(String(po["face"]))
-			if po.has("anim") and r.anim != "walk":
+			if po.has("anim") and (r.anim != "walk" or String(po["anim"]) == "wave"):     # (Q33) 손 흔들기는 걸으면서도 (종이 인형 = walkwave)
 				m.set_anim(String(po["anim"]), r.action)
 		m.set_lod(lod_close and not fast)
 		if not fast:                    # 빠른 흐름: 몸짓(걷기 보간·팔다리)은 멈춰 두고 자리만 옮긴다

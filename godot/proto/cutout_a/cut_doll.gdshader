@@ -23,6 +23,9 @@ uniform int set_col = 11;          // 동작 표의 묶음 칸 시작: 옷 묶�
 uniform float fig = 920.0;         // rig 단위로 그림 키
 uniform vec2 body_pivot = vec2(0.0, 380.0);
 uniform float layer_eps = 0.004;   // 겹 순서: 겹 하나마다 카메라 쪽으로 (세계 단위)
+uniform int wave_clip = -1;        // (Q33) 손 흔들기 동작 번호 (wave, 그다음 walkwave) — 그 동작에선 아래팔(팔 조각)을 비스듬한 겹으로: 팔꿈치 쪽은 머리 뒤,
+uniform vec2 wave_layer = vec2(8.0, 20.0);   // 손 쪽은 모자 위 (든 손이 챙에 가리지 않고, 팔이 얼굴 위로 튀어나오지 않게) — (팔꿈치, 손) 겹
+uniform float wave_span = 170.0;   // 팔꿈치 돌림 중심 → 손 끝 (rig, 그린 아래팔)
 uniform vec3 lit_tint : source_color = vec3(1.0);
 uniform vec3 shade_tint : source_color = vec3(0.55, 0.76, 0.87);
 uniform float self_lit = 0.5;      // 그늘 속에서도 이만큼 원래 밝기 쪽으로 (R5)
@@ -146,6 +149,10 @@ void vertex() {
 		if ((slot == 5 || slot == 6) && CUSTOM3.z < 0.5) {
 			p = xf(p, CUSTOM2.yz, anim(slot - 2, row0, f));   // 아래팔은 소매(어깨)를 따라
 		}
+		int wz = int(st.z + 0.5);
+		if (group == 0 && cur_view == 0 && slot == 6 && CUSTOM3.z < 0.5 && wave_clip >= 0 && (wz == wave_clip || wz == wave_clip + 1)) {
+			p += ps.xy;     // (Q33) 흔드는 아래팔(앞 보기 = 팔 b)만 몸마다 더 올림 (소매는 머리 뒤에 숨은 채 — 옮기면 소매 끝이 머리 옆에 떠 보임) — 묶음 칸의 소품 자리 (흔드는 동안 소품 없음, cut_lib.WAVE_LIFT)
+		}
 		if (group == 1 || group == 2 || group == 7) {
 			if (group == 2) {
 				// 모자 = 머리와 한 덩어리: 고른 머리의 정수리에 놓은 뒤 머리와 똑같이 (턱 기준) 돌림 — 제 꼭대기 기준으로 돌면 머리에서 떨어짐
@@ -174,6 +181,12 @@ void vertex() {
 		float k = misc.x / fig;
 		vec3 org = MODEL_MATRIX[3].xyz;
 		float layer = group == 3 ? float(bk ? back_layer[cur_view - 2] : prop_layer[cur_view]) - 0.5 : VERTEX.z;
+		int cz = int(st.z + 0.5);
+		if (group == 0 && cur_view < 2 && (slot == 5 || slot == 6) && CUSTOM3.z < 0.5 && wave_clip >= 0 && (cz == wave_clip || cz == wave_clip + 1)) {
+			// (Q33) 흔드는 아래팔: 정점마다 겹을 달리 — 사각형이 깊이로 비스듬히 서서 팔꿈치 쪽은 머리 뒤로 숨고 손 쪽은 머리·모자 앞으로
+			// (쉬는 팔은 엉덩이 옆이라 겹칠 것이 없음). 그린 아래팔은 팔꿈치(piv) 아래로 늘어진 그림 → 원래 y가 낮을수록 손 쪽
+			layer = mix(wave_layer.x, wave_layer.y, clamp((piv.y - VERTEX.y) / wave_span, 0.0, 1.0));
+		}
 		vec3 w = org + right * (p.x * k) + vec3(0.0, p.y * k / cu, 0.0) + back * (layer * layer_eps);
 		VERTEX = (VIEW_MATRIX * vec4(w, 1.0)).xyz;
 		NORMAL = normalize((VIEW_MATRIX * vec4(back, 0.0)).xyz);

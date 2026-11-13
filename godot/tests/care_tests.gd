@@ -244,7 +244,7 @@ func test_welcome_warm() -> void:
 	for i in int(DailyView.WELCOME_DUR / DT) - 2:
 		_tick(vw, dv)
 		for id in cast:
-			if id != n.id and _doll(vw, v.person(id)).react_hint == "lookup":
+			if id != n.id and _doll(vw, v.person(id)).react_hint == "wave" and _doll(vw, v.person(id))._d_clip == "wave":     # (Q33) 인형의 손 흔들기 동작
 				waved[id] = true
 		for it: Array in dv.bub.fx:
 			wave_fx = wave_fx or String(it[1]) == "wave"
@@ -286,7 +286,7 @@ func test_welcome_cold() -> void:
 	for i in int(DailyView.WELCOME_COLD_DUR / DT) - 2:
 		_tick(vw, dv)
 		for id in cast:
-			waved = waved or (id != n.id and _doll(vw, v.person(id)).react_hint == "lookup")
+			waved = waved or (id != n.id and (_doll(vw, v.person(id)).react_hint == "wave" or _doll(vw, v.person(id))._d_clip == "wave"))
 		for it: Array in dv.bub.props:
 			loaf = loaf or String(it[0]) == "loaf"
 		if i == 40:
