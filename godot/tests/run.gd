@@ -14,7 +14,7 @@ const SLOW := ["test_village_population", "test_nine_days"]
 var fails := 0
 var mode := "full"                    # quick · long · full
 var times: Array = []                 # [이름, 초]
-const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily", "nest", "souvenirs", "ui_polish", "tool_short", "care"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
+const TREE_SUITES := ["milestone", "start", "era", "shop", "village", "discovery", "room", "immigrant", "shelf", "portrait", "people", "campfire", "notebook", "slowdown", "tinyworld", "staging", "ui_batch", "building_info", "flower_info", "bld2d", "flora2d", "tap_react", "first_moments", "site_piles", "dogs_play", "kids_view", "daily", "nest", "souvenirs", "ui_polish", "tool_short", "care", "away_faith"]        # 장면을 띄우는 묶음 — 첫 화면(_process)에서
 var _later: Array = []
 var _t0 := 0
 
@@ -56,7 +56,7 @@ const SUITES := {"milestone": "res://tests/milestone_tests.gd", "world": "res://
 	"tap_react": "res://tests/tap_react_tests.gd", "first_moments": "res://tests/first_moments_tests.gd", "site_piles": "res://tests/site_piles_tests.gd", "nest": "res://tests/nest_tests.gd",
 	"kids": "res://tests/kids_tests.gd", "dogs_play": "res://tests/dogs_play_tests.gd", "kids_view": "res://tests/kids_view_tests.gd", "daily": "res://tests/daily_tests.gd",
 	"tool_guard": "res://tests/tool_guard_tests.gd", "tool_short": "res://tests/tool_short_tests.gd", "spare_hands": "res://tests/spare_hands_tests.gd",
-	"care": "res://tests/care_tests.gd"}
+	"care": "res://tests/care_tests.gd", "away_faith": "res://tests/away_faith_tests.gd"}
 
 
 func _initialize() -> void:

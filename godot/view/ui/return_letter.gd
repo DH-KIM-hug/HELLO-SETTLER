@@ -221,6 +221,8 @@ func _fill_letter() -> void:
 	_into = body
 	if village != null and village.aware:          # 촌장이 쓴 편지 = 손글씨 — 마을이 부르는 말로 (깨닫기 전엔 부름 없이, STORY 4)
 		_label(WatcherName.fill(village, "{w}께,"), "Hand")
+	if data.get("festival", false):          # (Q28) 반김이 먼저 — 편지도 반기는 줄로 시작
+		_label(WatcherName.fill(village, "모두 광장에 모여 {w:을/를} 반겼어요!"), "Hand")
 	_label("자리를 비우신 동안 이런 일이 있었어요.", "Hand")
 	for e: String in data.get("events", []):
 		_label("· " + e, "Hand")
@@ -241,10 +243,8 @@ func _fill_letter() -> void:
 		_label("기다리는 것", "Section")
 		for w: String in waiting:
 			_label("· " + w, "Hand")
-	if data.get("long", false):
-		_label(WatcherName.fill(village, "오래 비우셔서, {w} 이야기를 옛날이야기로 여기는 아이들도 생겼어요."), "Hand")
-	elif data.get("festival", false):
-		_label(WatcherName.fill(village, "모두 광장에 모여 {w:을/를} 기다리고 있어요!"), "Hand")
+	if data.get("long", false):              # (Q28) 오래 비운 이야기는 맨 끝에 — 탓하는 말 없이 (반기는 줄은 맨 위)
+		_label(WatcherName.fill(village, "{w} 이야기를 옛날이야기처럼 듣는 아이들도 있어요. 노인들이 다시 들려주고 있어요."), "Hand")
 	var sign := _label("— 촌장 %s 올림" % String(data.get("chief", "")), "Hand")
 	sign.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
 

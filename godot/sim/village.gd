@@ -90,6 +90,10 @@ var discoveries: Dictionary = {}      # 발견 id → {t, who: 주민 id, name} 
 var disc: Dictionary = {}             # 발견 조건의 상태 {trees0, bake_t, sun_t, sun_elders} (sim/discovery.gd — 옛 저장은 빈 값)
 var disc_rng := RandomNumberGenerator.new()   # 발견할 사람 고르기 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
 var faith := 50.0
+var doubt_said := 0                   # (측정·시험 — 저장 안 함) 의심하는 말(LINES_DOUBT)을 한 횟수 (Q28)
+var away_floor: Dictionary = {}       # (Q28) 비운 동안 사람 id → 믿음의 바닥 (떠날 때 믿음 × Balance.AWAY_FAITH_FLOOR). 지켜보면 비움. 저장 안 함 (따라잡기는 저장 없이 한 번에)
+var q28_legacy := false               # (측정·시험만 — 저장 안 함, 마을마다) true면 Q28 이전 규칙 — 바닥 없음 · 등불 안의 비움에도 의심 (tools/q28_absence.gd 전후 비교)
+var away_doubt := ""                  # (Q28) 마지막 비움: "" 비운 적 없음(예전 규칙) · "short" 등불 안에 돌아옴 — 의심하는 말 없음 · "long" 등불 상한을 넘김 — 의심해도 됨 (to_dict가 빈 값이 아닐 때만 저장)
 var fear := 0.0
 var stock: Dictionary = {}
 var manna: Array = []                 # 들판의 낟알 {x, y, amt, born, res}
@@ -1278,16 +1282,28 @@ func _update_belief(dt: float) -> void:
 		faith = 0.0
 		return
 	var w := is_watching()
+	if w and not away_floor.is_empty():
+		away_floor.clear()                # 다시 지켜봄 — 다음 비움은 그때의 믿음으로 새 바닥
 	var sum := 0.0
 	for p in people:
 		if w:
 			p.belief += dt * p.f("belief_up") / (DAY * Balance.BELIEF_UP_DAYS)
 		else:
-			p.belief -= dt * p.f("belief_down") / (DAY * (Balance.BELIEF_DOWN_CHILD_DAYS if p.is_child() else Balance.BELIEF_DOWN_ADULT_DAYS))
+			p.belief = away_lower(p, p.belief - dt * p.f("belief_down") / (DAY * (Balance.BELIEF_DOWN_CHILD_DAYS if p.is_child() else Balance.BELIEF_DOWN_ADULT_DAYS)))
 		p.belief = clampf(p.belief, 0.0, 1.0)
 		sum += p.belief
 	faith = sum / people.size() * 100.0 if not people.is_empty() else 0.0
 	# 부락의 두려움(0~100) = 주민 두려움 평균 × 100 — sim/health.gd가 사람마다 내린다 (HEALTH.md 4)
+
+
+## (Q28) 비운 동안 믿음을 낮출 때의 바닥 — 한 번 비우는 동안 그 사람이 떠날 때(비운 동안 처음 본 때) 믿음의 Balance.AWAY_FAITH_FLOOR 아래로는
+## 줄지 않는다 (이미 그보다 낮으면 그대로 — 바닥이 믿음을 올리지는 않음). 돌려줌 = 낮춘 뒤의 믿음
+func away_lower(p: Resident, to: float) -> float:
+	if q28_legacy:
+		return to
+	if not away_floor.has(p.id):
+		away_floor[p.id] = p.belief * Balance.AWAY_FAITH_FLOOR
+	return maxf(to, minf(p.belief, float(away_floor[p.id])))
 
 
 ## 믿음을 모두에게 — 깨닫기 전엔 아무 일 없음 (design/gdd/giant-touch.md R5 · 사용자 결정 ⑤: 깨닫기 전 손짓은 경이만)
@@ -2193,6 +2209,10 @@ func _idle_chatter_main() -> void:
 	if not aware:                         # 거인을 모른다 — 믿음·의심 말은 아직 없다
 		return
 	var dbt := awake.filter(func(q: Resident) -> bool: return q.belief < Balance.DOUBT_BELOW)
+	if away_doubt == "short" and not q28_legacy:     # (Q28) 등불 안에 돌아온 비움 — 아이가 지켜보는 이를 의심하는 말 없음. 의심이 다 풀리면 예전 규칙
+		if dbt.is_empty() and is_watching():   # 돌아와 지켜보는 동안 의심이 다 풀렸다 (비운 동안엔 지우지 않음)
+			away_doubt = ""
+		dbt = []
 	if not dbt.is_empty() and rng.randf() < 0.6:
 		var kid: Resident = dbt[0]
 		for q: Resident in dbt:
@@ -2200,6 +2220,7 @@ func _idle_chatter_main() -> void:
 				kid = q
 				break
 		speak(kid, Balance.LINES_DOUBT[rng.randi() % Balance.LINES_DOUBT.size()], 6)
+		doubt_said += 1
 		var elder: Resident = null
 		for q: Resident in awake:
 			if q.age >= 15.0 and q.belief > 0.5 and (elder == null or q.age > elder.age):
@@ -4150,7 +4171,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off", "doubt_said", "away_floor", "away_doubt", "q28_legacy"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)
@@ -4163,6 +4184,8 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 	d["smalls"] = smalls.to_dict()
 	d["hand"] = hand.to_dict()
 	d["flora"] = flora.to_dict()
+	if away_doubt != "":
+		d["away_doubt"] = away_doubt    # (Q28) 비운 적 없는 마을의 저장은 예전과 같게 — 빈 값이면 칸 없음
 	if dogs != null:
 		d["dogs"] = dogs.to_dict()    # [강아지]
 	if caterpillars != null:
@@ -4206,6 +4229,7 @@ func to_dict(with_book := true, with_water := true) -> Dictionary:
 static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 	var v := Village.new()
 	SaveCodec.apply(v, d, SAVE_SKIP)
+	v.away_doubt = String(d.get("away_doubt", ""))
 	v.water = water_obj if water_obj != null else JarWater.from_dict(d["water"])
 	v.air = JarAir.from_dict(d["air"])
 	v.mold = Mold.from_dict(d["mold"])

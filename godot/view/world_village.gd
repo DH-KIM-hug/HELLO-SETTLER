@@ -1501,6 +1501,11 @@ func open_glass_note(it: Dictionary) -> void:
 			altar_sheet.open()
 
 
+## (Q28) 돌아와 반기는 연출은 마을이 보일 때만 — 병 밖(④⑤ 방)이면 편지를 유리에 붙여 둔다 (아래)
+func _welcome_ok() -> bool:
+	return not (room_zoom != null and cam.stage() >= 4 and not _enter_fly)
+
+
 ## (B1) '자리를 비운 동안' 편지: 병 밖(④⑤ 방)에 있는 동안 오면 펼치지 않고 유리에 붙여 둔다 (누르면 펼침).
 ## 타이틀에서 들어와 마을로 날아 들어가는 중이면 그대로 펼침
 func show_return_letter(letter: Dictionary) -> void:
