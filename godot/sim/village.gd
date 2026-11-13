@@ -2473,6 +2473,10 @@ func _chief_build(skip: Dictionary) -> void:
 		want = Wildlife.want(self)            # [들짐승] 식량 다양성 — 물고기가 사는 호숫가 어부 · 사슴 무리 쪽 사냥꾼 (WILDLIFE 6)
 	else:
 		want = VillageEra.want_late(self)     # 치료소 → 교회 → 광장 → 망루 → 나루터 (A6 — RESIDENT_AI 6.2)
+	var spare := false
+	if want == "":
+		want = spare_want(skip)               # (Q26) 다른 바람이 하나도 없는데 일손이 남는다 → 쓸모 있는 일터 하나 더 (먹을 것 → 땔감 → 재료)
+		spare = want != ""
 	if want == "" or skip.has(want):
 		return
 	var token := want                     # 이 바람의 이름 (집은 "집" — 못 지으면 이 이름으로 건너뜀)
@@ -2554,6 +2558,9 @@ func _chief_build(skip: Dictionary) -> void:
 		wishes.erase(wish)
 		log_line("촌장 %s%s {w:이/가} 들어주신 %s 자리부터 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 		return
+	if spare:
+		log_line("손이 노는 사람들이 늘자 촌장 %s%s %s 자리를 하나 더 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
+		return
 	log_line("촌장 %s%s %s 자리를 정했다." % [cn, josa(cn, "이", "가"), Balance.label(want)])
 
 
@@ -2573,6 +2580,59 @@ func _upgradable(type: String) -> Building:
 		if b.built and b.type == type and b.upgrade_to == "":
 			return b
 	return null
+
+
+## (2026-11-13 Q26 · design/gdd/mayor-decisions.md F2 13번 칸) 일손이 남을 때 더 지을 일터 — 없으면 "".
+## 촌장의 차례 맨 끝에서만 부른다 (다른 바람이 하나도 없을 때). 병 SPARE_FROM_DAY 날 뒤 · 일터 없는 성한 어른 SPARE_IDLE 명 이상 ·
+## 빈 일터(캘 바위 없는 채석장 빼고, 짓는 일터 터 포함)가 창고 연장 수보다 적을 때 (연장이 없으면 빈 일터가 하나도 없을 때만 — 그 하나가 비면
+## '연장이 모자라요' 신호가 켜진다, Q25). 먹을 것 → 땔감 → 재료 차례 (Balance.SPARE_ORDER)로 그 시대에 아는 · 자재가 되는 · 쓸모 있는 첫 종류.
+## 읽기만 한다 (난수 · 상태 변경 없음)
+func spare_want(skip := {}) -> String:
+	if t < Balance.SPARE_FROM_DAY * DAY:
+		return ""
+	var hands := 0
+	for p in people:
+		if ToolShort.idle_hand(self, p):
+			hands += 1
+	if hands < Balance.SPARE_IDLE:
+		return ""
+	var empty := 0
+	for b in buildings:
+		if not b.def().get("job", false) or (b.built and b.worker >= 0):
+			continue
+		if b.type == "채석장" and quarry_no_rock(b):
+			continue
+		empty += 1                        # 다 지었는데 빈 일터 · 짓는 일터 터
+	if empty >= maxi(1, floori(float(stock.get("도구", 0.0)))):
+		return ""
+	for ty: String in Balance.SPARE_ORDER:
+		if skip.has(ty) or not VillageEra.can_build(self, ty) or not _affordable(ty):
+			continue
+		if Balance.SPARE_CAP.has(ty) and count_type(ty) >= int(Balance.SPARE_CAP[ty]):
+			continue
+		if _spare_useful(ty):
+			return ty
+	return ""
+
+
+## 일손이 남을 때 이 일터가 쓸모 있나 (spare_want)
+func _spare_useful(ty: String) -> bool:
+	match ty:
+		"농장":             # 창고 먹을 것이 SPARE_FOOD_DAYS 날치 아래 · 밭이 죽으로 먹일 사람(FARM_FEEDS)이 식구보다 적을 때만 (제물이 남는 먹을 것을 가져가 창고는 늘 2일치 남짓 — 날치만 보면 밭이 끝없이 는다)
+			return food_total() < Balance.SPARE_FOOD_DAYS * Production.day_need(self) \
+				and count_type("농장") * Balance.FARM_FEEDS < people.size()
+		"어부":
+			return Wildlife.fish_near(self)
+		"버섯꾼":
+			return flora != null and flora.trust and flora.edible_mature() >= 2
+		"나무꾼":
+			return _standing_trees() >= Balance.FOREST_MIN     # 벨 갈대 · 꽃대가 넉넉할 때만 (모자라면 산림관부터 — 예전 차례)
+		"제재소":             # 켤 통나무가 쌓여 있고 돌이 넉넉할 때만 (병의 돌은 끝이 있다 — 일손 때문에 밭 · 집 몫의 돌을 쓰지 않게)
+			return float(stock.get("통나무", 0.0)) >= float(Balance.ENOUGH["통나무"]) \
+				and float(stock.get("돌", 0.0)) - _owed("돌") >= float(Balance.ENOUGH["돌"])
+		"산림관":
+			return count_type("나무꾼") >= 3                  # 벌목장이 늘었으면 묘목원도 하나 더
+	return false
 
 
 ## [하늘의 것] 버섯꾼을 둘 만한가: 하늘의 것에 익숙해졌고 다 자란 먹는 버섯이 둘 넘게 서 있다

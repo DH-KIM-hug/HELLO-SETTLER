@@ -383,15 +383,22 @@ static func want(v: Village) -> String:
 	var w := v.wild
 	if w == null or v.era < 1:
 		return ""
-	if v.count_type("어부") == 0 and VillageEra.can_build(v, "어부"):
-		var h := w._nearest_live(v, "fish", v.center, v.territory_r() + 6.0)
-		if not h.is_empty() and int(h["n"]) >= 6 and shore_point(v, v.center, v.territory_r()) != null:
-			return "어부"
+	if v.count_type("어부") == 0 and VillageEra.can_build(v, "어부") and fish_near(v):
+		return "어부"
 	# 애벌레 잡이 (사냥꾼 키 — production-chain R1-5): 꽃 무리에 애벌레가 살고, 마을이 열 명 넘으면
 	if v.count_type("사냥꾼") == 0 and v.people.size() >= HUNT_POP and VillageEra.can_build(v, "사냥꾼") \
 			and v.caterpillars != null and not v.caterpillars.cats.is_empty():
 		return "사냥꾼"
 	return ""
+
+
+## 물고기가 여섯 넘게 사는 호수가 영역 곁에 있고 영역 안에 물가가 있다 (어부를 둘 만한가 — want · Village.spare_want). 읽기만 한다
+static func fish_near(v: Village) -> bool:
+	var w := v.wild
+	if w == null:
+		return false
+	var h := w._nearest_live(v, "fish", v.center, v.territory_r() + 6.0)
+	return not h.is_empty() and int(h["n"]) >= 6 and shore_point(v, v.center, v.territory_r()) != null
 
 
 ## 자리를 찾는 중심: 어부 = 마을에서 가까운 물가 (영역 안)

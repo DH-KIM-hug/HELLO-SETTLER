@@ -7,6 +7,7 @@
 ## 거인:
 ##   none   아무것도 주지 않는다 (공물만 걷음)
 ##   wish   '연장이 모자라요' 편지가 오면 그때만 연장 꾸러미를 사서 창고 곁에 떨어뜨린다 (지폐가 모자라면 모일 때까지 기다림)
+##   stone  wish + 병 60일 뒤 창고의 돌이 4 아래면 자갈 한 알을 사서 창고 곁에 (사흘에 한 번까지 — Q26: 돌 천장을 걷으면)
 ##   help   balance_v5_report의 help (건물 소원을 모두 들어줌 · 먹을 것이 1일치 아래면 병 하루 한 번 하늘 낟알) + wish
 ## 병 정오마다 본다: 식구 · 어른 · 일터 없는 어른(아기 돌봄 빼고) · 창고의 연장 · 일터(지어진 일 건물) · 빈 일터 · 먹을 것 날치 · 지폐.
 ## 씨앗마다 TOOLS 줄 하나(JSON) — 모으기는 밖에서. DIGEST 줄 = 경제가 같은지 보는 지문 (병 20일 · 끝).
@@ -16,6 +17,7 @@ const H := 3600.0
 const D := 86400.0
 const TOOL_ITEM := "연장 꾸러미"
 const TOOL_WISH := "연장"
+const GRAVEL_ITEM := "자갈 한 알"
 
 var jw: JarWorld
 var mode := "none"
@@ -26,7 +28,10 @@ var bought: Array = []        # [병 날, 값]
 var wish_at: Array = []       # '연장' 편지가 온 병 날
 var last_help := -1.0e9
 var helps := 0
+var gravel: Array = []        # (Q26 stone) [병 날, 값] — 자갈 한 알
+var last_gravel := -1.0e9
 var digests := {}
+var extra := {}              # (Q26) 날 → [판자, 돌, 짓는 터, 땅이 품는 인구, 영역 반지름, 일터 종류별 수]
 
 
 func _initialize() -> void:
@@ -38,8 +43,14 @@ func _initialize() -> void:
 	var s1 := int(args[3]) if args.size() > 3 else s0
 	var days := int(args[4]) if args.size() > 4 else 200
 	step = float(args[5]) if args.size() > 5 else 30.0
+	var dump := args[6] if args.size() > 6 else ""       # (Q26) 끝난 세상을 이 파일에 (var_to_bytes) — tools/shot_spare_hands.gd가 읽음
 	for s in range(s0, s1 + 1):
 		_run(s, days)
+		if dump != "":
+			var f := FileAccess.open(dump, FileAccess.WRITE)
+			f.store_buffer(var_to_bytes(jw.to_dict()))
+			f.close()
+			print("DUMP %s" % dump)
 	quit()
 
 
@@ -57,7 +68,10 @@ func _run(s: int, days: int) -> void:
 	wish_at = []
 	last_help = -1.0e9
 	helps = 0
+	gravel = []
+	last_gravel = -1.0e9
 	digests = {}
+	extra = {}
 	var tapped := 0
 	var dropped := false
 	while v.t < 23.0 * H:                  # 창세의 날 (measure_growth와 같음)
@@ -90,9 +104,9 @@ func _run(s: int, days: int) -> void:
 			digests[dn] = _digest()
 	_set_step(sdt0)
 	digests[days] = _digest()
-	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "wish_at": wish_at, "helps": helps,
+	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "helps": helps,
 		"end_pop": v.people.size(), "settlements": jw.settlements.size(), "era": v.era, "notes": int(Market.notes),
-		"starved": int(v.stats["starved"]), "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
+		"starved": int(v.stats["starved"]), "extra": extra, "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
 	print("TOOLS " + JSON.stringify(out))
 	for k: int in digests:
 		print("DIGEST seed %d mode %s day %d %s" % [s, mode, k, digests[k]])
@@ -114,6 +128,10 @@ func _giant(v: Village) -> void:
 				_buy_tools(q)
 			elif mode == "help":
 				q.grant_wish(int(l["id"]))
+	if mode == "stone":                    # (Q26) + 창고의 돌이 바닥나면 자갈 한 알 (병 60일 뒤, 사흘에 한 번까지 — 지폐가 있을 때)
+		if v.t > 60.0 * D and float(v.stock.get("돌", 0.0)) - v._owed("돌") < 4.0 and v.t - last_gravel >= 3.0 * D:
+			if _buy_tools(v, GRAVEL_ITEM):
+				last_gravel = v.t
 	if mode == "help":
 		var d := v.food_total() / maxf(1.0, Production.day_need(v))
 		if d < 1.0 and v.t - last_help >= D:
@@ -122,16 +140,16 @@ func _giant(v: Village) -> void:
 			last_help = v.t
 
 
-func _buy_tools(q: Village) -> void:
-	if not Shop.ITEMS.has(TOOL_ITEM):
-		return
-	var c := Shop.can_buy(q, TOOL_ITEM)
+func _buy_tools(q: Village, item := TOOL_ITEM) -> bool:
+	if not Shop.ITEMS.has(item):
+		return false
+	var c := Shop.can_buy(q, item)
 	if not bool(c["ok"]):
-		return
-	var price := Shop.price(q, TOOL_ITEM)
-	var r := Shop.buy(q, TOOL_ITEM)
+		return false
+	var price := Shop.price(q, item)
+	var r := Shop.buy(q, item)
 	if not bool(r["ok"]):
-		return
+		return false
 	if not q.air.lid_open:
 		q.open_lid()
 	var s := q.store()
@@ -141,14 +159,18 @@ func _buy_tools(q: Village) -> void:
 		var a := float(i) * 2.399
 		var p := at + Vector2(cos(a), sin(a)) * (3.0 + 0.4 * i)
 		var h := Shop.hand_item(int(r["hand_id"]))
-		res = SkyDrops.drop(q, TOOL_ITEM, p, h)
+		res = SkyDrops.drop(q, item, p, h)
 		if bool(res.get("ok", false)):
 			Shop.hand_remove(int(r["hand_id"]))
 			break
 	if not bool(res.get("ok", false)):
 		Shop.undo_buy(q, int(r["hand_id"]))
-		return
-	bought.append([snappedf(q.t / D, 0.01), int(price)])
+		return false
+	if item == TOOL_ITEM:
+		bought.append([snappedf(q.t / D, 0.01), int(price)])
+	else:
+		gravel.append([snappedf(q.t / D, 0.01), int(price)])
+	return true
 
 
 func _sample(v: Village) -> void:
@@ -170,6 +192,15 @@ func _sample(v: Village) -> void:
 	for q: Village in jw.settlements:
 		total += q.people.size()
 	var fd := v.food_total() / maxf(1.0, Production.day_need(v))
+	var types := {}
+	var sites := 0
+	for b: Building in v.buildings:
+		if b.is_site():
+			sites += 1
+		if b.built:
+			types[b.type] = int(types.get(b.type, 0)) + 1
+	extra[int(v.t / D)] = [snappedf(float(v.stock.get("판자", 0.0)), 0.1), snappedf(float(v.stock.get("돌", 0.0)), 0.1), sites,
+		snappedf(v.land_capacity(), 0.1), snappedf(v.territory_r(), 0.1), types]
 	daily[int(v.t / D)] = [v.people.size(), adults, idle, snappedf(float(v.stock.get("도구", 0.0)), 0.1), jobs, empty, snappedf(fd, 0.01), int(Market.notes), total]
 
 

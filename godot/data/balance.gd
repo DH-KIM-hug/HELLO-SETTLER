@@ -1248,3 +1248,12 @@ const TOOL_SHORT_IDLE := 2               # 일터 없는 성한 어른이 이만
 const TOOL_SHORT_HOURS := 12             # 그 조건이 이만큼 (병 시간, 한 시간마다 봄) 이어지면 신호가 켜진다 — 연장 하나가 잠깐 돌아왔다 다시 쥐어지는 흔들림에 켜지지 않게
 const TOOL_SHORT_OFF_HOURS := 6          # 조건이 이만큼 이어서 풀리면 꺼진다
 const TOOL_WISH_EVERY := 4.0 * DAY       # 촌장의 '연장이 모자라요' 편지는 마지막 편지에서 이만큼 뒤에야 또 (열린 편지가 있으면 쓰지 않음)
+# Q26 (2026-11-13): 일손이 남을 때 — 촌장이 쓸모 있는 일터를 더 짓는다 (Village.spare_want · design/gdd/mayor-decisions.md F2 13번 칸).
+# 다른 바람이 하나도 없을 때만 (차례 맨 끝), 먹을 것 → 땔감 → 재료 순, 그 시대에 아는 건물 · 자재가 될 때만, 빈 일터가 연장보다 적을 때만.
+const SPARE_FROM_DAY := 60.0             # 병 날이 이만큼 지나야 (다듬는 범위 — 첫 60일의 마을은 예전과 같게)
+const SPARE_IDLE := 4                    # 일터 없는 성한 어른이 이만큼 이상 (ToolShort.idle_hand — 아기 돌봄 · 앓음 빼고)
+const SPARE_FOOD_DAYS := 3.0             # 밭은 창고 먹을 것이 이 날치 아래일 때만 더
+## 일손이 남아 더 지을 때 종류마다 마을 전체 수가 이만큼까지 (예전 규칙이 지은 것도 셈). 밭은 SPARE_FOOD_DAYS와 식구 ÷ FARM_FEEDS(6)가 막는다
+const SPARE_CAP := {"어부": 2, "버섯꾼": 2, "나무꾼": 4, "제재소": 3, "산림관": 2}
+## 차례 (먹을 것 → 땔감 → 재료)
+const SPARE_ORDER := ["농장", "어부", "버섯꾼", "나무꾼", "제재소", "산림관"]
