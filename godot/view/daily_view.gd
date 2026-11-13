@@ -29,7 +29,11 @@ const FIRE := 5                            # (2차) 모닥불 아침
 const HUM := 6                             # (2차) 콧노래 — 쥐지 않는 풍선
 const LUNCH := 7                           # (2차) 점심 보따리
 const STROLL := 8                          # (2차) 노을 산책
-const NAMES := {STRETCH: "stretch", WASH: "wash", CHAT: "chat", STARS: "stars", FIRE: "fire", HUM: "hum", LUNCH: "lunch", STROLL: "stroll"}
+const SOUP := 9                            # (E2-4) 아픈 이웃에 수프
+const WELCOME := 10                        # (E2-4) 새 이웃 맞이
+const TEACH := 11                          # (E2-4) 아이가 어른 곁에서 따라 해 봄
+const NAMES := {STRETCH: "stretch", WASH: "wash", CHAT: "chat", STARS: "stars", FIRE: "fire", HUM: "hum", LUNCH: "lunch", STROLL: "stroll",
+	SOUP: "soup", WELCOME: "welcome", TEACH: "teach"}
 const WELL := "우물"
 
 # ── 언제·몇 번 (병의 시각) ──
@@ -159,6 +163,59 @@ const STROLL_PAUSE := 1.6                  # 돌아서기 전에 나란히 서�
 const HAND_H := 0.4                        # 노부부의 맞잡은 손: 키의 이 몫 높이에
 const SOCIAL_WALKS := ["court", "old_walk"]     # 시뮬의 짝 만남 (걸으며 이야기 · 노부부의 저녁) — 그날 저녁엔 산책을 또 그리지 않음
 
+# ══ E2-4 서로 돌보는 모습 1차 (그림으로만 — ROADMAP E2-4) ══
+# 수프 · 맞이 · 가르치기. 2차 장면과 같은 문 (잔잔한 날 · 보통 빠르기 이하 · 오프닝 밖 · 밤 아님 — 시간 창이 낮뿐).
+# 시뮬은 읽기만: 병이 낫는 빠르기 · 행복 · 창고 · 난수 · 연대기 그대로. 말은 화면 말풍선(VillageView.stage_say)만.
+# ⑨ 수프: 앓아누운 이웃이 있는 낮, 사이가 가장 좋은 쉬는 이웃(없으면 식구)이 김 나는 그릇을 들고 그 집 문 앞(누운 자리가 보이면 그 곁)까지 가서 내려놓고 돌아옴
+const SOUP_H := Vector2(9.5, 16.5)
+const SOUP_PER_DAY := 3
+const SOUP_NEAR := 6.0                     # 쉬는 이웃이 그 집 문 앞에서 이 칸 안일 때만 (걸어감 — 순간이동 없음)
+const SOUP_MIN := 0.5
+const SOUP_BESIDE := 0.62                  # 보이게 누운 사람(모닥불 곁·치료소) 곁에 서는 거리 (화면 가로)
+const SOUP_SIDE := 0.32                    # 문 앞: 문 가운데에서 이만큼 옆으로 서고, 그릇은 문 쪽으로 내려놓음
+const SOUP_BOWL_X := 0.3                   # 그릇: 선 자리에서 문(누운 사람) 쪽으로 화면 가로 이만큼 (인형과 겹치지 않게)
+const SOUP_WALK := 1.0                     # 그릇을 들고 걷는 빠르기 (칸/초, 아이는 × WALK_CHILD)
+const SOUP_APPROACH_MAX := 8.0
+const SOUP_PUT := 1.0                      # 숙여 내려놓는 길이 (현실 초)
+const SOUP_SAY_AT := 0.6
+const SOUP_DUR := 3.6
+const SOUP_LEAVE := 9.0                    # 내려놓은 그릇이 문 앞에 남아 있는 길이 (현실 초 — 그림뿐)
+const SOUP_SAY := "얼른 나아요."
+const BOWL_H := 0.42                       # 든 그릇: 키의 이 몫 높이에
+const BOWL_X := 0.22                       # 〃 가는 쪽으로 화면 옆 이만큼 (칸)
+# ⑩ 맞이: 새 이웃이 온 날 — 반기는 마을이면 가까운 이웃 서넛이 다가와 손을 흔들고 한 사람이 빵을 건넴, 서먹한 마을이면 멀찍이 서서 바라봄
+const WELCOME_H := Vector2(7.0, 19.5)
+const WELCOME_WIN := 0.5                   # 내려온 뒤 이 몫의 하루 안에 (병의 시각)
+const WELCOME_R := 7.0                     # 새 이웃에게서 이 칸 안의 이웃
+const WELCOME_MIN := 2
+const WELCOME_MAX := 4
+const WELCOME_WALK := 1.2
+const WELCOME_APPROACH_MAX := 7.0
+const WELCOME_WARM := [Vector2(0.62, 0.16), Vector2(-0.62, 0.2), Vector2(1.05, -0.24), Vector2(-1.12, -0.22)]      # 반김: 설 자리 [화면 가로, 화면 앞] (첫째 = 빵을 건넬 사람)
+const WELCOME_COLD := [Vector2(1.9, 0.3), Vector2(-1.95, 0.25), Vector2(2.45, -0.4), Vector2(-2.5, -0.35)]     # 서먹: 멀찍이
+const WELCOME_DUR := 6.4
+const WELCOME_COLD_DUR := 5.0
+const WAVE_DUR := 2.4                      # 손 흔드는 길이 (사람마다 조금씩 늦게)
+const WAVE_LAG := 0.3
+const GIVE_AT := Vector2(2.2, 3.2)         # 빵을 건네는 때 (장면 초 — 손에서 손으로)
+const LOAF_H := 0.42
+const LOAF_X := 0.2
+# ⑪ 가르치기: 일하는 어른 곁에 한가한 아이가 서서 지켜보다 따라 해 봄 (부모·조부모의 일터 먼저)
+const TEACH_H := Vector2(8.5, 17.0)
+const TEACH_PER_DAY := 3
+const TEACH_NEAR := 5.0
+const TEACH_MIN := 0.4
+const TEACH_SIDE := 0.55                   # 어른 옆 이만큼 (화면 가로)
+const TEACH_FRONT := 0.12                  # 〃 화면 앞으로 조금 (어른의 연장과 겹치지 않게)
+const TEACH_WALK := 1.0
+const TEACH_APPROACH_MAX := 7.0
+const TEACH_WATCH := 1.8                   # 지켜보는 길이
+const TEACH_TRY := 3.6                     # 따라 해 보는 길이
+const TEACH_DUR := 6.4
+const TEACH_SAY_AT := 0.3
+const TEACH_SAY := "이렇게 하는 거야."
+const CARE_SAY_SECS := 2.6
+
 ## 빈손으로 걸어가는 사람을 세워도 되는 할 일 (어디로 가는 길이든 걷는 동안만 — 일하는 몸짓·짐·식사 중은 아님)
 const WALK_OK := {"work": true, "haul": true, "build": true, "care": true, "chores": true, "social": true, "rest": true, "idle": true, "wander": true, "eat": true, "pray": true}
 const FREE := {"social": true, "rest": true, "idle": true, "chores": true, "": true}
@@ -213,6 +270,11 @@ class Scene:
 	var lead := 0.0                # (산책) 뒤쪽 사람이 앞서는 거리
 	var back := 0                  # (산책) 화면 뒤쪽에 선 사람의 차례
 	var old := false               # (산책) 노부부 — 손을 잡음
+	var target := -1               # (E2-4 수프) 앓는 사람 id
+	var bowl := Vector2.ZERO       # (E2-4 수프) 그릇을 내려놓을 땅
+	var warm := false              # (E2-4 맞이) 반기는 마을
+	var mimic := ""                # (E2-4 가르치기) 아이가 따라 하는 동작 (hoe · gather)
+	var said := false              # (E2-4) 말풍선을 띄웠나
 
 
 ## 그림 풍선 (아이들 풍선과 같은 모양 — KidBubbles) + 해·하품·빵·꽃, 물방울·반짝임
@@ -228,13 +290,24 @@ class Pics extends KidBubbles:
 	const NOTE := Color("3d4f7a")
 	var fx: Array = []             # [모델, 종류, 0~1, 화면 쪽(±1)]
 	var props: Array = []          # (2차) 몸·땅에 붙는 작은 그림 [종류, 인형 a, 키 몫, 옆(칸), 인형 b(없으면 null), 키 몫, 옆, a→b 섞기 0~1]
+	var grounds: Array = []        # (E2-4) 땅에 놓인 작은 그림 [종류, 세계 자리 Vector3, 짙기 0~1]
+	var now := 0.0                 # (E2-4) 김이 오르는 시계 (DailyView._clock)
+	const BOWL := Color("a86b3c")      # (E2-4) 나무 그릇
+	const SOUP_C := Color("eab25a")    # 〃 수프
+	const STEAM := Color("fffbea")
 
 	func begin() -> void:
 		clear()
-		if not fx.is_empty() or not props.is_empty():
+		if not fx.is_empty() or not props.is_empty() or not grounds.is_empty():
 			fx.clear()
 			props.clear()
+			grounds.clear()
 			queue_redraw()
+
+	## (E2-4) 땅 위 한 점에 놓인 그림 (그릇)
+	func add_ground(kind: String, at: Vector3, a := 1.0) -> void:
+		grounds.append([kind, at, a])
+		queue_redraw()
 
 	## (2차) 소품 하나: 인형 a의 몸 (키의 ha 몫 높이, 화면 옆으로 xa칸)에 — b가 있으면 b의 그 자리까지 w만큼 섞은 곳에
 	func add_prop(kind: String, a: Node3D, ha: float, xa: float, b: Node3D = null, hb := 0.0, xb := 0.0, w := 0.0) -> void:
@@ -254,11 +327,18 @@ class Pics extends KidBubbles:
 		return cam.unproject_position(feet) + up * top * hfrac + Vector2(side * up.length(), 0.0)
 
 	func _draw_props() -> void:
-		if props.is_empty() or not is_inside_tree():
+		if (props.is_empty() and grounds.is_empty()) or not is_inside_tree():
 			return
 		var cam := get_viewport().get_camera_3d()
 		if cam == null:
 			return
+		for it: Array in grounds:                  # (E2-4) 땅에 놓인 그릇 — 몸에 붙는 그림보다 먼저 (사람이 앞에 서면 손에 든 것이 위에)
+			var at: Vector3 = it[1]
+			if cam.is_position_behind(at):
+				continue
+			var gu := TapReact.up_px(cam, at).length()
+			var br := maxf(3.4, gu * 0.1)
+			draw_bowl(cam.unproject_position(at) - Vector2(0.0, br * 0.72), br, float(it[2]))     # 그릇 밑이 땅에 닿게
 		for it: Array in props:
 			var a: Node3D = it[1]
 			if not is_instance_valid(a) or not a.is_visible_in_tree():
@@ -281,6 +361,51 @@ class Pics extends KidBubbles:
 					draw_cloth(p + Vector2(0.0, unit * 0.06), maxf(6.5, unit * 0.3))
 				"hands":
 					draw_hands(pa, pb, unit)
+				"bowl":
+					draw_bowl(p, maxf(3.4, unit * 0.1), 1.0)
+				"loaf":
+					draw_loaf(p, maxf(3.6, unit * 0.1))
+
+	## (E2-4) 김 나는 나무 그릇: 둥근 밑 + 수프 낯 + 위로 굽이치며 오르는 김 둘 (p = 그릇 밑 가운데 위, r = 반 너비 화소, a = 짙기)
+	func draw_bowl(p: Vector2, r: float, a: float) -> void:
+		var ink := Color(INK, a)
+		var lw := 1.0 if r < 6.0 else 1.4
+		var body := PackedVector2Array()
+		for i in 13:
+			var ang := PI * float(i) / 12.0
+			body.append(p + Vector2(cos(ang) * r, sin(ang) * r * 0.78))
+		draw_colored_polygon(body, Color(BOWL, a))
+		draw_polyline(body, ink, lw, true)
+		var top := PackedVector2Array()
+		for i in 17:
+			var ang := TAU * float(i) / 16.0
+			top.append(p + Vector2(cos(ang) * r, sin(ang) * r * 0.3))
+		draw_colored_polygon(top, Color(SOUP_C, a))
+		draw_polyline(top, ink, lw, true)
+		draw_line(p + Vector2(-r * 0.62, r * 0.36), p + Vector2(r * 0.1, r * 0.62), Color(BOWL.lightened(0.3), a), maxf(1.0, r * 0.12), true)
+		for k in 2:                                # 김: 천천히 오르며 흐려지는 굽은 줄
+			var ph := fposmod(now * 0.55 + float(k) * 0.5, 1.0)
+			var base := p + Vector2((-0.3 + 0.6 * float(k)) * r, -r * (0.35 + ph * 1.5))
+			var line := PackedVector2Array()
+			for j in 6:
+				var f := float(j) / 5.0
+				line.append(base + Vector2(sin(f * PI * 1.6 + now * 2.2 + float(k)) * r * 0.22, -f * r * 1.1))
+			var sa := a * sin(ph * PI) * 0.85
+			draw_polyline(line, Color(INK, sa * 0.35), maxf(1.6, r * 0.2) + 1.2, true)
+			draw_polyline(line, Color(STEAM, sa), maxf(1.6, r * 0.2), true)
+
+	## (E2-4) 빵 한 덩이 (건네는 빵 — 그림뿐, 창고는 그대로)
+	func draw_loaf(p: Vector2, r: float) -> void:
+		var loaf := PackedVector2Array()
+		for i in 18:
+			var ang := TAU * float(i) / 18.0
+			loaf.append(p + Vector2(cos(ang) * r, sin(ang) * r * (0.62 if sin(ang) < 0.0 else 0.48)))
+		draw_colored_polygon(loaf, CRUST)
+		loaf.append(loaf[0])
+		draw_polyline(loaf, INK, 1.0 if r < 6.0 else 1.3, true)
+		for i in 3:
+			var x := (-0.48 + 0.48 * float(i)) * r
+			draw_line(p + Vector2(x - r * 0.12, -r * 0.3), p + Vector2(x + r * 0.12, r * 0.1), CRUST.lightened(0.45), maxf(1.0, r * 0.14), true)
 
 	## 보따리: 바닥이 납작한 천 뭉치 + 위로 묶은 매듭 귀 둘 + 물방울무늬 (p = 가운데, r = 반 너비 화소)
 	## (2026-11-12 캡처를 보고) 둥글고 번들거리는 공은 토마토처럼 보임 → 작게, 납작한 바닥, 밝은 귀, 무늬
@@ -360,6 +485,8 @@ class Pics extends KidBubbles:
 			var unit := TapReact.up_px(cam, m.global_position).length()
 			if String(it[1]) == "drops":
 				draw_drops(p, unit, float(it[2]), float(it[3]))
+			elif String(it[1]) == "wave":
+				draw_wave(p, unit, float(it[2]), float(it[3]))
 			else:
 				draw_spark(p, unit, float(it[2]), float(it[3]))
 
@@ -376,6 +503,18 @@ class Pics extends KidBubbles:
 			draw_circle(q, rad + 0.7, Color(INK, a * 0.55))
 			draw_circle(q, rad, Color(DROP, a))
 			draw_circle(q + Vector2(-0.3, -0.3) * rad, rad * 0.35, Color(1, 1, 1, a))
+
+	## (E2-4) 손 흔들기: 머리 옆 (든 손 쪽) 작은 흔들림 금 둘이 까딱까딱 (p = 머리 꼭대기, u = 0~1, dir = 화면 쪽 ±1)
+	func draw_wave(p: Vector2, unit: float, u: float, dir: float) -> void:
+		var a := smoothstep(0.0, 0.12, u) * (1.0 - smoothstep(0.85, 1.0, u))
+		var s := maxf(3.4, unit * 0.09)
+		var o := p + Vector2(dir * unit * 0.04, -unit * 0.1)        # 머리 위 (가까이 선 옆 사람의 얼굴을 덮지 않게 — 2026-11-14 캡처)
+		var wig := sin(u * TAU * 3.0) * 0.35
+		for i in 2:
+			var c := o + Vector2(dir * s * (0.6 + 0.75 * float(i)), 0.0)
+			var a0 := -0.9 + wig if dir > 0.0 else PI - 0.9 - wig
+			draw_arc(c, s * (0.7 + 0.45 * float(i)), a0, a0 + 1.8, 8, Color(INK, a * 0.5), 3.0, true)
+			draw_arc(c, s * (0.7 + 0.45 * float(i)), a0, a0 + 1.8, 8, Color(1.0, 0.97, 0.7, a), 1.5, true)
 
 	## 씻고 난 얼굴 곁의 반짝임 둘
 	func draw_spark(p: Vector2, unit: float, u: float, dir: float) -> void:
@@ -480,7 +619,7 @@ var bub: Pics
 var enabled := true               # 끄면 아무것도 고르지 않음 (시험)
 var hold_commuters := HOLD_COMMUTERS     # 빈손으로 걸어가는 사람을 잠깐 세우나 — 끄면 한가히 서 있는·앉아 있는 사람만
 var mute := {}                    # 종류 → true: 그 장면은 스스로 시작하지 않음 (시험·캡처 — start_…로 부르는 것은 됨)
-var started := {STRETCH: 0, WASH: 0, CHAT: 0, STARS: 0, FIRE: 0, HUM: 0, LUNCH: 0, STROLL: 0}     # 지금까지 시작한 장면 수 (시험·캡처)
+var started := {STRETCH: 0, WASH: 0, CHAT: 0, STARS: 0, FIRE: 0, HUM: 0, LUNCH: 0, STROLL: 0, SOUP: 0, WELCOME: 0, TEACH: 0}     # 지금까지 시작한 장면 수 (시험·캡처)
 var history: Array = []           # [날, 종류, [id…]] — 시작한 장면 (가장 최근 64개 · 시험)
 var _holds := {}                  # 주민 id → Hold
 var _list: Array = []             # Hold (훑는 순서)
@@ -498,6 +637,10 @@ var _scan_n := 0
 var _clock := 0.0
 var _right := Vector2.RIGHT       # 화면 오른쪽 (땅 위, 이 화면 틀)
 var _front := Vector2.DOWN        # 카메라 쪽 = 화면 아래 (땅 위)
+var _mine := {}                   # (E2-4) 이 화면이 띄운 말풍선: 주민 id → 글 (그 말풍선은 '다른 연출'로 치지 않음)
+var _fed := {}                    # (E2-4) 오늘 수프를 받은 앓는 사람 id → true
+var _welcomed := {}               # (E2-4) 맞이를 그린 내려옴 (v.migrants의 시각) → true
+var _bowls: Array = []            # (E2-4) 문 앞에 내려놓은 그릇 [땅 자리 Vector3, 사라지는 _clock]
 
 
 ## 그 화면의 DailyView (없으면 만들어 붙임)
@@ -648,6 +791,7 @@ func clear() -> void:
 	_holds.clear()
 	_scenes.clear()
 	_hums.clear()
+	_bowls.clear()
 	if bub != null:
 		bub.begin()
 
@@ -658,6 +802,7 @@ func step(dt: float, tap: TapReact = null) -> void:
 		return
 	_clock += dt
 	bub.begin()
+	bub.now = _clock
 	if not on():
 		_hums.clear()
 		if not _list.is_empty():
@@ -669,6 +814,7 @@ func step(dt: float, tap: TapReact = null) -> void:
 		_today.clear()
 		_did.clear()
 		_slot.clear()
+		_fed.clear()
 	_dirs()
 	for i in range(_scenes.size() - 1, -1, -1):
 		var sc: Scene = _scenes[i]
@@ -693,6 +839,7 @@ func step(dt: float, tap: TapReact = null) -> void:
 		_scan_n += 1
 		_scan(day, tap)
 	_hum_step(tap)
+	_bowls_step()
 	if _list.is_empty():
 		return
 	var cam := get_viewport().get_camera_3d() if is_inside_tree() else null
@@ -845,7 +992,7 @@ func claimed(r: Resident, m: ResidentModel, tap: TapReact, key := "", sid := "",
 	if r.sick_left > 0.0 or r.is_sick() or r.is_injured() or r.grief_until > v.t:
 		return true
 	var id := r.id
-	if vw.staged.has(id) or vw.pose_over.has(id) or vw.hint_pose.has(id) or vw.stage_say.has(id):     # 첫 순간·사건 연출
+	if vw.staged.has(id) or vw.pose_over.has(id) or vw.hint_pose.has(id) or (vw.stage_say.has(id) and not own_say(id)):     # 첫 순간·사건 연출 (E2-4: 이 화면의 말풍선은 빼고)
 		return true
 	if vw.social != null and (vw.social.busy(id) or not vw.social.say_of(id).is_empty()):             # 짧은 이야기
 		return true
@@ -932,7 +1079,8 @@ func _scene_ok(sc: Scene, tap: TapReact) -> bool:
 func _begin(kind: int, people: Array, spots: Array, dur: float, focus: Vector2, day: int, slot: int) -> Scene:
 	var sc := Scene.new()
 	sc.kind = kind
-	sc.wait_max = float({STARS: STAR_APPROACH_MAX, FIRE: FIRE_APPROACH_MAX, LUNCH: LUNCH_APPROACH_MAX, STROLL: STROLL_APPROACH_MAX}.get(kind, APPROACH_MAX))
+	sc.wait_max = float({STARS: STAR_APPROACH_MAX, FIRE: FIRE_APPROACH_MAX, LUNCH: LUNCH_APPROACH_MAX, STROLL: STROLL_APPROACH_MAX,
+		SOUP: SOUP_APPROACH_MAX, WELCOME: WELCOME_APPROACH_MAX, TEACH: TEACH_APPROACH_MAX}.get(kind, APPROACH_MAX))
 	sc.dur = dur
 	sc.focus = focus
 	sc.day = day
@@ -955,7 +1103,7 @@ func _begin(kind: int, people: Array, spots: Array, dur: float, focus: Vector2, 
 		h.late = kind == STARS and r.action == "sleep"
 		h.act0 = r.action
 		h.legs = kind >= FIRE
-		h.work = kind == LUNCH and i == 1
+		h.work = (kind == LUNCH or kind == TEACH) and i == 1
 		_hum_drop(r.id)
 		sc.who.append(h)
 		_holds[r.id] = h
@@ -1185,6 +1333,12 @@ func _scan(day: int, tap: TapReact) -> void:
 		_scan_lunch(day, int((hr - LUNCH_H.x) / SLOT_H), tap)
 	if hr >= STROLL_H.x and hr < STROLL_H.y and not mute.has(STROLL):
 		_scan_stroll(day, int((hr - STROLL_H.x) / SLOT_H), tap)
+	if hr >= SOUP_H.x and hr < SOUP_H.y and not mute.has(SOUP):          # (E2-4) 서로 돌보는 모습
+		_scan_soup(day, int((hr - SOUP_H.x) / SLOT_H), tap)
+	if hr >= WELCOME_H.x and hr < WELCOME_H.y and not mute.has(WELCOME):
+		_scan_welcome(day, tap)
+	if hr >= TEACH_H.x and hr < TEACH_H.y and not mute.has(TEACH):
+		_scan_teach(day, int((hr - TEACH_H.x) / SLOT_H), tap)
 
 
 func _scan_stretch(day: int, tap: TapReact) -> void:
@@ -1311,7 +1465,7 @@ func _look_of(h: Hold) -> Vector2:
 			return h.sc.focus - h.at
 		STRETCH:
 			return h.sc.look
-		FIRE, LUNCH, STROLL:
+		FIRE, LUNCH, STROLL, SOUP, WELCOME, TEACH:
 			return h.look
 	return Vector2.ZERO
 
@@ -1380,6 +1534,12 @@ func _play(h: Hold, m: ResidentModel) -> Vector2:
 			_play_lunch(h, m)
 		STROLL:
 			_play_stroll(h, m)
+		SOUP:
+			_play_soup(h, m)
+		WELCOME:
+			_play_welcome(h, m)
+		TEACH:
+			_play_teach(h, m)
 	return _look_of(h)
 
 
@@ -1453,6 +1613,18 @@ func _walk_in(h: Hold, m: ResidentModel, d: float) -> void:
 		bub.add_prop("bundle", m, BUNDLE_H, dx * BUNDLE_X)
 		if sc.wait < LUNCH_SHOW and not _says(h.r):
 			bub.add(m, "bundle", sc.wait / LUNCH_SHOW, false, _clock)
+	elif sc.kind == SOUP:                          # (E2-4) 김 나는 그릇을 두 손으로 들고
+		var dx := 1.0 if (h.spot - h.at).dot(_right) >= 0.0 else -1.0
+		h.hint = "carry" if d > 0.02 else "hold"
+		bub.add_prop("bowl", m, BOWL_H, dx * BOWL_X)
+	elif sc.kind == WELCOME:
+		if h.role == 0:                            # 새 이웃: 그 자리에 서서 다가오는 이웃들을 봄
+			h.hint = "still"
+			h.look = _crowd(sc) - h.at
+		elif h.role == 1 and sc.warm:              # 빵을 건넬 사람: 빵을 들고
+			var dx := 1.0 if (h.spot - h.at).dot(_right) >= 0.0 else -1.0
+			h.hint = "carry" if d > 0.02 else "hold"
+			bub.add_prop("loaf", m, LOAF_H, dx * LOAF_X)
 
 
 # ───────────────────────── ⑤ 모닥불 아침 ─────────────────────────
@@ -1859,4 +2031,443 @@ func _scan_stroll(day: int, slot: int, tap: TapReact) -> void:
 	for e: Array in pairs:
 		if start_stroll(e[1], e[2], slot, tap):
 			_slot[STROLL] = slot
+			return
+
+
+# ═════════════════════════ E2-4 서로 돌보는 모습 1차 (그림으로만) ═════════════════════════
+## 이 화면이 띄운 말풍선이 아직 떠 있나 (그 사람은 '다른 연출'에 쥐인 것이 아님)
+func own_say(id: int) -> bool:
+	if not _mine.has(id):
+		return false
+	var s: Array = vw.stage_say.get(id, [])
+	if s.is_empty() or String(s[0]) != String(_mine[id]):
+		_mine.erase(id)
+		return false
+	return true
+
+
+## 화면 말풍선 하나 (시뮬레이션의 말이 아님 — r.say는 건드리지 않음). 다른 말이 떠 있으면 띄우지 않음
+func _care_say(r: Resident, text: String) -> void:
+	if _says(r):
+		return
+	vw.stage_say[r.id] = [text, "", CARE_SAY_SECS]
+	_mine[r.id] = text
+
+
+## 식구인가 (짝 · 부모와 자식 · 형제 · 조부모와 손주) — 읽기만
+static func kin_of(v0: Village, a: Resident, b: Resident) -> bool:
+	if a == null or b == null or a == b:
+		return false
+	if family(a, b) or Social._family(a, b):
+		return true
+	return elder_of(v0, a, b) or elder_of(v0, b, a)
+
+
+## up이 kid의 부모·조부모인가 (가르치기: 그 일터 먼저)
+static func elder_of(v0: Village, up: Resident, kid: Resident) -> bool:
+	if up.id in kid.parents:
+		return true
+	for pid in kid.parents:
+		var p := v0.person(pid)
+		if p != null and up.id in p.parents:
+			return true
+	return false
+
+
+func _bowls_step() -> void:
+	for i in range(_bowls.size() - 1, -1, -1):
+		var e: Array = _bowls[i]
+		var left := float(e[1]) - _clock
+		if left <= 0.0:
+			_bowls.remove_at(i)
+		else:
+			bub.add_ground("bowl", e[0], clampf(left / 1.2, 0.0, 1.0))
+
+
+func _ground3(p: Vector2) -> Vector3:
+	return vw.to_global(Vector3(p.x, vw.gy(p.x, p.y), p.y))
+
+
+## 그 사람이 sick에게 수프를 들고 갈 자리 [설 자리, 그릇 자리] — 보이게 누운 사람(모닥불 곁·치료소)이면 그 곁, 집 안이면 집 문 앞 (없으면 빈 배열)
+func soup_spots(c: Resident, sick: Resident) -> Array:
+	var pc := _pos(c)
+	var ms := _model(sick)
+	var hm := v.bld(sick.home)
+	if ms != null:
+		var ps := Vector2(ms.position.x, ms.position.z)
+		var s := (pc - ps).dot(_right)
+		var side := 1.0 if s > 0.02 or (absf(s) <= 0.02 and (c.id & 1) == 0) else -1.0
+		for k in 2:
+			var sd := side if k == 0 else -side
+			var spot := ps + _right * sd * SOUP_BESIDE + _front * 0.1
+			if open_at(spot, FIRE_NEAR):
+				return [spot, spot - _right * sd * SOUP_BOWL_X + _front * 0.08]
+		return []
+	if hm == null or not hm.built:
+		return []
+	var c0 := Vector2(hm.x, hm.y)
+	var out := front_of(hm) + DOOR_OUT
+	var s2 := (pc - c0).dot(_right)
+	var side2 := 1.0 if s2 > 0.02 or (absf(s2) <= 0.02 and (c.id & 1) == 0) else -1.0
+	var x := clear_x(hm, side2 * SOUP_SIDE, out, 0.0)
+	var spot2 := c0 + _front * out + _right * x
+	var dx := -1.0 if x > 0.0 else 1.0                 # 그릇은 문 가운데 쪽으로
+	return [spot2, spot2 + _right * dx * SOUP_BOWL_X - _front * 0.04]
+
+
+## ⑨ 수프: 쉬는 사람 c가 앓는 sick의 집 문 앞(또는 누운 곁)까지 그릇을 들고 걸어가 내려놓고 "얼른 나아요." → 돌아감.
+## 그릇은 그림뿐 (창고 · 병이 낫는 빠르기 그대로). 앓는 사람마다 하루 한 번
+func start_soup(c: Resident, sick: Resident, slot := 0, tap: TapReact = null) -> bool:
+	if c == null or sick == null or c == sick or sick.dead or not sick.is_sick() or _fed.has(sick.id) or c.is_baby():
+		return false
+	if not _can(c, tap) or not still(c, c.age < Balance.AGE_ADULT):
+		return false
+	_dirs()
+	var sp := soup_spots(c, sick)
+	if sp.is_empty():
+		return false
+	var pc := _pos(c)
+	var spot: Vector2 = sp[0]
+	var d := pc.distance_to(spot)
+	if d > SOUP_NEAR or d < SOUP_MIN or not _quiet(spot) or not open_line(pc, spot, PATH_FIRE, 0.6, 0.3):
+		return false
+	var sc := _begin(SOUP, [c], [spot], SOUP_DUR, sp[1], day_of(v), slot)
+	sc.target = sick.id
+	sc.bowl = sp[1]
+	sc.walk = SOUP_WALK * (Balance.WALK_CHILD if c.age < Balance.AGE_ADULT else 1.0)
+	_fed[sick.id] = true
+	return true
+
+
+func _play_soup(h: Hold, m: ResidentModel) -> void:
+	var sc := h.sc
+	var t := sc.t
+	h.look = sc.bowl - h.at
+	h.speed = -1.0
+	h.p = REST
+	h.hint = "hold"
+	if t < SOUP_PUT:                               # 숙여 내려놓음: 그릇이 손에서 땅으로
+		var k := sin(clampf(t / SOUP_PUT, 0.0, 1.0) * PI)
+		h.p = Vector4(0.0, 1.0 + 0.03 * k, 1.0 - 0.1 * k, 0.3 * k)
+		var dx := 1.0 if (sc.bowl - h.at).dot(_right) >= 0.0 else -1.0
+		var w := smoothstep(0.2, 0.75, t / SOUP_PUT)
+		if w < 1.0:
+			bub.add_prop("bowl", m, BOWL_H * (1.0 - w * 0.85), dx * (BOWL_X + (SOUP_BOWL_X - BOWL_X) * w))
+	else:
+		h.hint = "stand"
+		var nk := SocialStage.nod_at(clampf((t - SOUP_PUT - 0.6) / 1.4, 0.0, 1.0))
+		h.p = Vector4(0.0, 1.0 + SocialStage.NOD_SQ * 0.5 * nk, 1.0 - SocialStage.NOD_SQ * nk, SocialStage.NOD_LEAN * nk)
+	if t >= SOUP_PUT * 0.75:
+		bub.add_ground("bowl", _ground3(sc.bowl))
+	if t >= SOUP_SAY_AT and not sc.said:
+		sc.said = true
+		_care_say(h.r, SOUP_SAY)
+	if t >= sc.dur - 0.05 and not sc.snd and _bowls.size() < 4:     # 끝나면 그릇은 문 앞에 잠깐 남음 (그림 — 사그라듦)
+		sc.snd = true
+		_bowls.append([_ground3(sc.bowl), _clock + SOUP_LEAVE])
+
+
+func _scan_soup(day: int, slot: int, tap: TapReact) -> void:
+	if int(_today.get(SOUP, 0)) >= SOUP_PER_DAY or active(SOUP) >= 1:
+		return
+	for sick in v.people:
+		if sick.dead or not sick.is_sick() or _fed.has(sick.id):
+			continue
+		var tp := Vector2(sick.x, sick.y)
+		var best: Resident = null
+		var best_b := 0.0
+		var kin := PackedInt32Array()
+		for c in v.people:
+			if c == sick or c.is_baby() or c.dead or _did.has(c.id * 16 + SOUP) or Vector2(c.x, c.y).distance_to(tp) > SOUP_NEAR + 1.5:
+				continue
+			if not still(c, c.age < Balance.AGE_ADULT) or not _can(c, tap):
+				continue
+			var b := Social.bond(v, c.id, sick.id)
+			if b > best_b or (b > 0.0 and b == best_b and best != null and mix(day, SOUP, slot, c.id) < mix(day, SOUP, slot, best.id)):
+				best = c
+				best_b = b
+			if kin_of(v, c, sick):
+				kin.append(c.id)
+		if best != null and start_soup(best, sick, slot, tap):          # 사이가 가장 좋은 쉬는 이웃
+			return
+		for id in ranked(day, SOUP, slot, kin):                         # 없으면 (못 가면) 식구
+			if start_soup(v.person(id), sick, slot, tap):
+				return
+
+
+## 맞이 장면의 이웃들이 모인 가운데 (새 이웃이 바라볼 곳)
+func _crowd(sc: Scene) -> Vector2:
+	var c := Vector2.ZERO
+	var n := 0
+	for i in range(1, sc.who.size()):
+		c += (sc.who[i] as Hold).at
+		n += 1
+	return c / float(n) if n > 0 else (sc.who[0] as Hold).at + _front
+
+
+## (E2-4) 그 사람이 든 맞이 장면이 반기는 쪽인가 (빵을 건네는 사람은 반김에만 — 시험)
+func warm_of(id: int) -> bool:
+	var h: Hold = _holds.get(id)
+	return h != null and h.sc != null and h.sc.warm
+
+
+## 반기는 마을인가 (Immigrants._greet가 적은 맞이의 종류 — 읽기만): 반김이면 다가와 손을 흔들고, 경계·술렁임이면 멀찍이서 바라봄
+static func warm_welcome(v0: Village) -> bool:
+	return String(v0.migrants.get("kind", "")) == "welcome"
+
+
+## ⑩ 맞이: 새 이웃 n 둘레로 이웃들(people — 가까운 순, 2~4명)이 걸어와 섬. 반기는 마을이면 손을 흔들고 가장 가까운 어른이 빵(그림)을 건넴,
+## 아니면 멀찍이 서서 바라봄. 새 이웃은 그 자리에 서서 둘러선 이웃을 차례로 봄
+func start_welcome(n: Resident, people: Array, warm: bool, tap: TapReact = null) -> bool:
+	if n == null or people.size() < WELCOME_MIN or n.is_baby() or not _can(n, tap) or not (still(n, n.age < Balance.AGE_ADULT) or commuter(n)):
+		return false
+	_dirs()
+	var pn := _pos(n)
+	if not _quiet(pn):
+		return false
+	var cand: Array = []                           # 갈 수 있는 사람 (가까운 순 그대로)
+	for r: Resident in people:
+		if r != null and r != n and not r.is_baby() and _can(r, tap) and (still(r, r.age < Balance.AGE_ADULT) or commuter(r)) and _pos(r).distance_to(pn) <= WELCOME_R:
+			cand.append(r)
+	cand = cand.slice(0, WELCOME_MAX)
+	if cand.size() < WELCOME_MIN:
+		return false
+	var giver: Resident = null                     # 빵을 건넬 사람 (반김): 가장 가까운 어른 → 첫 자리 (그 사람이 온 쪽)
+	if warm:
+		for r: Resident in cand:
+			if r.age >= Balance.AGE_ADULT and (giver == null or _pos(r).distance_to(pn) < _pos(giver).distance_to(pn)):
+				giver = r
+		if giver == null:
+			return false
+	var lead: Resident = giver if giver != null else cand[0]
+	var side := -1.0 if (_pos(lead) - pn).dot(_right) < 0.0 else 1.0
+	var slots: Array = WELCOME_WARM if warm else WELCOME_COLD
+	var spots: Array = []                          # [화면 가로, 땅 자리, 자리 번호]
+	for k in slots.size():
+		var o: Vector2 = slots[k]
+		var p := pn + _right * o.x * side + _front * o.y
+		if open_at(p, FIRE_NEAR):
+			spots.append([o.x * side, p, k])
+	var rest: Array = cand.duplicate()
+	var who: Array = [n]
+	var at: Array = [pn]
+	if giver != null:
+		if spots.is_empty() or int(spots[0][2]) != 0:
+			return false
+		rest.erase(giver)
+		who.append(giver)
+		at.append(spots[0][1])
+		spots.remove_at(0)
+	var m := mini(rest.size(), spots.size())
+	rest = rest.slice(0, m)
+	spots = spots.slice(0, m)
+	if who.size() - 1 + m < WELCOME_MIN:
+		return false
+	spots.sort_custom(func(x: Array, y: Array) -> bool: return float(x[0]) < float(y[0]))
+	rest.sort_custom(func(x: Resident, y: Resident) -> bool:
+		var dx := (_pos(x) - _pos(y)).dot(_right)
+		return dx < 0.0 or (dx == 0.0 and x.id < y.id))
+	for i in m:                                    # 왼쪽 사람 → 왼쪽 자리 (길이 엇갈리지 않게)
+		who.append(rest[i])
+		at.append(spots[i][1])
+	for i in range(1, who.size()):
+		if not open_line(_pos(who[i]), at[i], PATH_FIRE, 0.6, 0.0):
+			return false
+	var sc := _begin(WELCOME, who, at, WELCOME_DUR if warm else WELCOME_COLD_DUR, pn, day_of(v), 0)
+	sc.warm = warm
+	sc.walk = WELCOME_WALK
+	return true
+
+
+func _play_welcome(h: Hold, m: ResidentModel) -> void:
+	var sc := h.sc
+	var t := sc.t
+	var nh: Hold = sc.who[0]
+	h.speed = -1.0
+	h.p = REST
+	h.hint = "still"
+	if h.role == 0:                                # 새 이웃: 둘러선 이웃을 차례로 바라봄
+		var k := 1 + int(t / 1.3) % maxi(1, sc.who.size() - 1)
+		h.look = (sc.who[mini(k, sc.who.size() - 1)] as Hold).at - h.at
+		if sc.warm:
+			var gh: Hold = sc.who[1]
+			if t >= GIVE_AT.x - 0.3:
+				h.look = gh.at - h.at
+			var bow := _bump(t, 1.0, 0.5) + _bump(t, GIVE_AT.y + 0.4, 0.5)
+			h.p = Vector4(0.0, 1.0 + 0.02 * bow, 1.0 - 0.06 * bow, 0.22 * bow)
+			if t >= GIVE_AT.y - 0.1:               # 받은 빵을 안고
+				h.hint = "hold"
+				var dx := 1.0 if (gh.at - h.at).dot(_right) >= 0.0 else -1.0
+				bub.add_prop("loaf", m, LOAF_H * 0.8, dx * LOAF_X * 0.6)     # 가슴에 안음 (얼굴을 가리지 않게)
+			if t >= GIVE_AT.y and t < GIVE_AT.y + 1.6 and not _says(h.r):
+				bub.add(m, "heart", (t - GIVE_AT.y) / 1.6, true, _clock)
+		else:                                      # 서먹: 조금 움츠림
+			h.p = Vector4(0.0, 0.98, 0.96, 0.05 * sin(t * 1.3))
+		return
+	h.look = nh.at - h.at
+	if not sc.warm:                                # 멀찍이 서서 바라보기만
+		h.p = Vector4(0.0, 1.0, 1.0, -0.04 + 0.02 * sin(t * 0.9 + float(h.role)))
+		return
+	var wu := (t - float(h.role - 1) * WAVE_LAG) / WAVE_DUR
+	if wu >= 0.0 and wu < 1.0:                     # 손을 흔듦 (팔을 든 몸 + 흔들림 금)
+		var k := sin(wu * PI)
+		h.hint = "lookup"
+		h.p = Vector4(0.03 * absf(sin(wu * TAU * 1.5)), 1.0, 1.0 + 0.03 * k, 0.09 * sin(wu * TAU * 3.0) * k)
+		bub.add_fx(m, "wave", wu, -1.0 if (nh.at - h.at).dot(_right) >= 0.0 else 1.0)     # 흔들림 금은 새 이웃 반대쪽 (옆 사람 머리를 덮지 않게)
+	if h.role == 1:                                # 빵: 들고 있다가 손에서 손으로
+		var dx := 1.0 if (nh.at - h.at).dot(_right) >= 0.0 else -1.0
+		if t < GIVE_AT.x:
+			if wu >= 1.0:
+				h.hint = "hold"
+			bub.add_prop("loaf", m, LOAF_H, dx * LOAF_X)
+			if t < 1.2 and not _says(h.r):
+				bub.add(m, "bread", t / 1.2, false, _clock)
+		elif t < GIVE_AT.y:
+			var u := (t - GIVE_AT.x) / (GIVE_AT.y - GIVE_AT.x)
+			h.hint = "hold"
+			h.p = Vector4(0.0, 1.0, 1.0, 0.12 * sin(u * PI))
+			bub.add_prop("loaf", m, LOAF_H, dx * LOAF_X, _model(nh.r), LOAF_H * 0.8, -dx * LOAF_X * 0.6, smoothstep(0.1, 0.9, u))
+		else:
+			h.hint = "stand"
+
+
+func _scan_welcome(_day: int, tap: TapReact) -> void:
+	if v.migrants.is_empty() or active(WELCOME) >= 1:
+		return
+	var t0 := float(v.migrants.get("t", -1.0e9))
+	if v.t < t0 or v.t > t0 + WELCOME_WIN * Balance.DAY or _welcomed.has(t0):
+		return
+	var came := {}
+	var n: Resident = null
+	for id: Variant in v.migrants.get("ids", []):
+		came[int(id)] = true
+		var r := v.person(int(id))
+		if n == null and r != null and not r.dead and not r.is_baby() and _model(r) != null:
+			n = r
+	if n == null or not _can(n, tap):
+		return
+	var pn := _pos(n)
+	var near: Array = []
+	for r in v.people:
+		if r.dead or r.is_baby() or came.has(r.id) or _holds.has(r.id):
+			continue
+		var d := Vector2(r.x, r.y).distance_to(pn)
+		if d <= WELCOME_R and (still(r, r.age < Balance.AGE_ADULT) or commuter(r)) and _can(r, tap):
+			near.append([d, r.id, r])
+	if near.size() < WELCOME_MIN:
+		return
+	near.sort_custom(func(x: Array, y: Array) -> bool: return float(x[0]) < float(y[0]) or (float(x[0]) == float(y[0]) and int(x[1]) < int(y[1])))
+	var people: Array = []
+	for e: Array in near.slice(0, WELCOME_MAX):
+		people.append(e[2])
+	if start_welcome(n, people, warm_welcome(v), tap):
+		_welcomed[t0] = true
+
+
+## 그 어른이 지금 하는 일을 아이가 따라 할 몸짓 (괭이·낫질 → 괭이질 흉내, 그 밖 → 숙여 줍기 흉내) — 그린 인형의 동작을 읽기만
+func mimic_of(a: Resident) -> String:
+	var m := _model(a)
+	if m is CutoutResident:
+		var clip := String((m as CutoutResident).doll_state().get("clip", ""))
+		if clip == "hoe" or clip == "reap":
+			return "hoe"
+	return "gather"
+
+
+## 따라 하는 아이가 바라볼 쪽: 어른과 같은 쪽 — 다만 어른이 화면 안쪽(뒷모습)을 보면 아이는 같은 옆쪽으로 비스듬히 앞을 봄
+## (뒷모습끼리는 따라 하는 몸짓이 읽히지 않음 — 2026-11-14 캡처를 보고)
+func mimic_dir(am: Node3D, kid_at: Vector2, adult_at: Vector2) -> Vector2:
+	var ad := Vector2(sin(am.rotation.y), cos(am.rotation.y)) if am != null else adult_at - kid_at
+	if ad.dot(_front) >= 0.2:
+		return ad
+	var lat := ad.dot(_right)
+	var sx := signf(lat) if absf(lat) > 0.15 else (1.0 if (kid_at - adult_at).dot(_right) >= 0.0 else -1.0)
+	return _right * sx + _front * 0.6
+
+
+## ⑪ 가르치기: 한가한 아이 k가 일하는 어른 a 곁에 와서 지켜보고 ("이렇게 하는 거야.") 따라 해 봄. 솜씨는 그대로 (그림뿐)
+func start_teach(k: Resident, a: Resident, slot := 0, tap: TapReact = null) -> bool:
+	if k == null or a == null or k == a or k.age >= Balance.AGE_ADULT or k.is_baby() or a.age < Balance.AGE_ADULT or a.anim != "work":
+		return false
+	if not _can(a, tap) or not _can(k, tap) or not still(k, true):
+		return false
+	_dirs()
+	var pk := _pos(k)
+	var pa := _pos(a)
+	var d := pk.distance_to(pa)
+	if d > TEACH_NEAR or d < TEACH_MIN or not _quiet(pa):
+		return false
+	var s := (pk - pa).dot(_right)
+	var side := 1.0 if s > 0.02 or (absf(s) <= 0.02 and (k.id & 1) == 0) else -1.0
+	var spot := pa + _right * side * TEACH_SIDE + _front * TEACH_FRONT
+	if not open_line(pk, spot, PATH_FIRE, 0.6, 0.7):
+		spot = pa - _right * side * TEACH_SIDE + _front * TEACH_FRONT
+		if not open_line(pk, spot, PATH_FIRE, 0.6, 0.7):
+			return false
+	var sc := _begin(TEACH, [k, a], [spot, pa], TEACH_DUR, pa, day_of(v), slot)
+	sc.walk = TEACH_WALK * Balance.WALK_CHILD
+	sc.mimic = mimic_of(a)
+	return true
+
+
+func _play_teach(h: Hold, m: ResidentModel) -> void:
+	var sc := h.sc
+	var t := sc.t
+	var ah: Hold = sc.who[1]
+	h.speed = -1.0
+	h.p = REST
+	if h.role == 1:                                # 어른: 일하던 그대로 (시뮬에서도 계속 일함) + 한마디
+		h.hint = "still"
+		h.look = Vector2.ZERO
+		if t >= TEACH_SAY_AT and not sc.said:
+			sc.said = true
+			_care_say(h.r, TEACH_SAY)
+		if t >= TEACH_WATCH + TEACH_TRY and not _says(h.r):
+			bub.add(m, "heart", (t - TEACH_WATCH - TEACH_TRY) / (sc.dur - TEACH_WATCH - TEACH_TRY), true, _clock)
+		return
+	var am := _model(ah.r)
+	if t < TEACH_WATCH:                            # 지켜봄: 고개를 갸웃
+		h.hint = "stand"
+		h.look = ah.at - h.at
+		h.p = Vector4(0.0, 1.0, 1.0, 0.08 * sin(clampf(t / TEACH_WATCH, 0.0, 1.0) * PI))
+	elif t < TEACH_WATCH + TEACH_TRY:              # 따라 해 봄: 어른과 같은 쪽을 보고 같은 몸짓 (빈손)
+		h.hint = sc.mimic
+		h.look = mimic_dir(am, h.at, ah.at)
+	else:                                          # 해냈다 — 폴짝
+		var u := (t - TEACH_WATCH - TEACH_TRY) / (sc.dur - TEACH_WATCH - TEACH_TRY)
+		var hop := absf(sin(clampf(u / 0.5, 0.0, 1.0) * TAU))
+		h.hint = "stand"
+		h.look = ah.at - h.at
+		h.p = Vector4(0.07 * hop, 1.0 - 0.03 * hop, 1.0 + 0.04 * hop, 0.0)
+
+
+func _scan_teach(day: int, slot: int, tap: TapReact) -> void:
+	if int(_today.get(TEACH, 0)) >= TEACH_PER_DAY or active(TEACH) >= 1:
+		return
+	var kids := PackedInt32Array()
+	for k in v.people:
+		if k.age < Balance.AGE_ADULT and not k.is_baby() and not k.dead and not _did.has(k.id * 16 + TEACH) and still(k, true):
+			kids.append(k.id)
+	if kids.is_empty():
+		return
+	for kid_id in ranked(day, TEACH, slot, kids):
+		var k := v.person(kid_id)
+		if not _can(k, tap):
+			continue
+		var pk := Vector2(k.x, k.y)
+		var best: Resident = null
+		var best_d := INF
+		var best_up := false
+		for a in v.people:
+			if a.age < Balance.AGE_ADULT or a.anim != "work" or a.dead:
+				continue
+			var d := Vector2(a.x, a.y).distance_to(pk)
+			if d > TEACH_NEAR or d < TEACH_MIN or not _can(a, tap):
+				continue
+			var up := elder_of(v, a, k)                # 부모·조부모의 일터 먼저
+			if (up and not best_up) or (up == best_up and d < best_d):
+				best = a
+				best_d = d
+				best_up = up
+		if best != null and start_teach(k, best, slot, tap):
 			return

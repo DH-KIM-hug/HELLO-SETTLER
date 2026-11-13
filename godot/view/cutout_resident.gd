@@ -130,7 +130,7 @@ var react_off := Vector3.ZERO    # 부모(VillageView) 틀 기준 옮김: y = �
 var react_sq := Vector2.ONE      # (가로, 세로) 배율 — 찌그러짐·늘어남
 var react_roll := 0.0            # 바라보는 쪽으로 숙이는 기울기 (rad, 발끝 중심)
 var react_turn := 0.0            # 종이 인형이 세로 축으로 도는 바퀴 수 (0.5 = 반대쪽을 봄)
-var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴) · (E2-1 2차, 하루의 흐름만) sit · eat · walk · carry · hold · stand
+var react_hint := ""             # "" · still (걷던 발을 멈춤) · lookup (올려다봄 — 깨달은 뒤에만 옴 · E2-4 맞이의 손 흔들기) · (E2-1 2차, 하루의 흐름만) sit · eat · walk · carry · hold · stand · (E2-4) hoe · gather
 var react_speed := -1.0          # (E2-1 2차) walk·carry 힌트로 그린 인형만 걸을 때의 땅 빠르기 (칸/현실 초) — -1이면 잰 값 그대로
 
 
@@ -465,7 +465,8 @@ func react_top() -> float:
 
 
 ## (E2-1 2차) 하루의 흐름(view/daily_view.gd)이 그린 인형에만 입히는 동작: 힌트 → 동작. 소품은 eat만 빵, 나머지는 빈손 (화면만 — 시뮬의 짐·식량은 그대로)
-const REACT_CLIPS := {"sit": "sit", "eat": "eat", "walk": "walk", "carry": "carry", "hold": "hold", "stand": "idle"}
+const REACT_CLIPS := {"sit": "sit", "eat": "eat", "walk": "walk", "carry": "carry", "hold": "hold", "stand": "idle",
+	"hoe": "hoe", "gather": "gather"}     # (E2-4) 가르치기: 아이가 빈손으로 괭이질·줍기를 따라 해 봄
 
 
 ## 반응하는 동안의 동작: 걷던 발은 멈추고(짐은 든 채), 올려다보기는 서 있을 때만 — 일·앉기·잠은 그대로
