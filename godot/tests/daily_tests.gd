@@ -113,7 +113,7 @@ func _fix(hour := 10.0, second := false) -> Array:
 	var vw := _view(_scn, v)
 	var dv := DailyView.of(vw)
 	if not second:
-		dv.mute = {DailyView.FIRE: true, DailyView.HUM: true, DailyView.LUNCH: true, DailyView.STROLL: true}
+		dv.mute = {DailyView.FIRE: true, DailyView.HUM: true, DailyView.LUNCH: true, DailyView.STROLL: true, DailyView.SOUP: true, DailyView.WELCOME: true, DailyView.TEACH: true}
 	_aim(_scn, v.fire, 44.0)
 	return [_scn, v, vw, dv]
 
@@ -311,12 +311,13 @@ func _law(v: Village, vw: VillageView, dv: DailyView) -> String:
 			return "자는 사람 %s (%s)" % [r.name, DailyView.NAMES[kind]]
 		if r.carry != "":
 			return "짐 든 사람 %s" % r.name
-		var fed := kind == DailyView.LUNCH and dv.role_of(id) == 1          # 점심 보따리를 받는 사람: 시뮬에서는 그 자리에서 계속 일하는 중
+		var fed := (kind == DailyView.LUNCH or kind == DailyView.TEACH) and dv.role_of(id) == 1          # 점심 보따리를 받는 사람 · (E2-4) 가르치는 어른: 시뮬에서는 그 자리에서 계속 일하는 중
 		if r.anim == "eat" or (r.anim == "work" and not fed) or r.anim == "carry" or r.anim == "pray" or r.anim == "play":
 			return "일하거나 먹는 몸짓의 사람 %s (%s/%s)" % [r.name, r.action, r.anim]
 		if not ["walk", "idle", "sit"].has(r.anim) and not (bed and r.anim == "sleep") and not fed:
 			return "뜻밖의 몸짓 %s (%s/%s)" % [r.name, r.action, r.anim]
-		if r.is_baby() or (r.age < Balance.AGE_ADULT and kind != DailyView.STARS and not (kind == DailyView.LUNCH and dv.role_of(id) == 0)):
+		var kid_ok := kind == DailyView.STARS or kind == DailyView.SOUP or (kind == DailyView.WELCOME and (dv.role_of(id) != 1 or not dv.warm_of(id))) or ((kind == DailyView.LUNCH or kind == DailyView.TEACH) and dv.role_of(id) == 0)
+		if r.is_baby() or (r.age < Balance.AGE_ADULT and not kid_ok):
 			return "아이를 어른 장면에 %s" % r.name
 		if kind >= DailyView.FIRE and dv.calm() != "":
 			return "잔잔하지 않은 날의 2차 장면 %s (%s)" % [r.name, dv.calm()]
@@ -327,7 +328,8 @@ func _law(v: Village, vw: VillageView, dv: DailyView) -> String:
 		if vw.staged.has(id) or vw.pose_over.has(id) or (vw.social != null and vw.social.busy(id)):
 			return "다른 연출 속 사람 %s" % r.name
 	if dv.active(DailyView.STRETCH) > DailyView.STRETCH_AT_ONCE or dv.active(DailyView.WASH) > 1 or dv.active(DailyView.CHAT) > 1 or dv.active(DailyView.STARS) > 1 \
-			or dv.active(DailyView.FIRE) > 1 or dv.active(DailyView.LUNCH) > 1 or dv.active(DailyView.STROLL) > 1 or dv.hummers().size() > 1:
+			or dv.active(DailyView.FIRE) > 1 or dv.active(DailyView.LUNCH) > 1 or dv.active(DailyView.STROLL) > 1 or dv.hummers().size() > 1 \
+			or dv.active(DailyView.SOUP) > 1 or dv.active(DailyView.WELCOME) > 1 or dv.active(DailyView.TEACH) > 1:
 		return "한꺼번에 너무 많은 장면"
 	for id in dv.hummers():
 		var r := v.person(id)
@@ -1029,7 +1031,7 @@ func test_zoom() -> void:
 ## 그 종류들만 스스로 시작하게 (나머지는 끔)
 func _only(dv: DailyView, keep: Array) -> void:
 	dv.mute = {}
-	for k in range(DailyView.STRETCH, DailyView.STROLL + 1):
+	for k in range(DailyView.STRETCH, DailyView.TEACH + 1):          # (E2-4 수프·맞이·가르치기도)
 		if not keep.has(k):
 			dv.mute[k] = true
 
