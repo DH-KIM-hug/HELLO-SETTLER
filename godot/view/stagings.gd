@@ -242,11 +242,68 @@ const MINIS := {
 
 
 static func has(id: String) -> bool:
-	return SCENES.has(id)
+	return SCENES.has(id) or id == NAMES_ID
 
 
 static func get_scene(id: String) -> Dictionary:
+	if id == NAMES_ID:
+		return names_scene(3, false, false)
 	return SCENES.get(id, {})
+
+
+# ───────────────────────── (Q31) 벚꽃 철 이름 부르기 ─────────────────────────
+# 해마다 (누군가 떠난 해에) 한 번, 약 15~20초 — 잔치가 아니다: 장례 연출의 조용한 변형 (sim/names_call.gd · view/moment_cast.gd "names").
+#   ① 화면이 따뜻한 어둠에 잠깐 잠기고 (자리를 옮김) 해 질 녘 — 벚나무 아래(멀면 묘지 곁 · 모닥불 곁), 꽃잎이 천천히 진다 (멀리서 본 뒤 가까이)
+#   → ② 사람들이 천천히 걸어 들어와 반원으로 섬 (깡충 뛰지 않음 · 어깨를 조금 늘어뜨림) → ③ 한 사람씩 등불을 내려놓음 (작고 따뜻한 빛)
+#   → ④ 부르는 사람(가장 나이 많은 어른)이 한 걸음 나서고, 한 사람씩 이름을 부름 — 말풍선에 이름 (한 번에 둘 · 셋, Balance.NAMES_SHOW_MAX까지 ·
+#     넘치면 마지막에 "그리고… 여러 이웃.") → ⑤ 모두 고개 숙임 → ⑥ 손글씨 카드 → ⑦ 화면이 잠겼다 풀리며 제자리.
+#   깨닫기 전 · 뒤 같음 (기도 · 무릎 · 지켜보는 이 이야기 없음). 숫자 없음. 이름 수에 따라 길이가 달라져 표 대신 함수로 만든다 (names_scene).
+const NAMES_ID := "names_call"
+const NAMES_LAMPS := 7                       # 등불 = 둘레에 선 사람마다 하나 (MomentCast.NAMES_RING 자리 수)
+const NAMES_CALL_GAP := 1.25                 # 이름과 이름 사이 (초) — 말풍선 3초라 한 번에 둘 · 셋
+const NAMES_SAY := 3.0
+
+
+## n = 화면에 부르는 이름 수 (1 ~ Balance.NAMES_SHOW_MAX) · more = 이름이 넘쳐 "그리고 여러 이웃" · first = 그 병의 첫 이름 부르기
+static func names_scene(n: int, more: bool, first: bool) -> Dictionary:
+	n = clampi(n, 1, Balance.NAMES_SHOW_MAX)
+	var beats: Array = [
+		{"t": 0.0, "veil": [1.0, 0.5], "vignette": 0.55, "hush": [0.75, 1.2], "fx": ["low_wind", -8.0, "Room", 0.95]},
+	]
+	var t_calls := 6.4
+	var t_bow := t_calls + NAMES_CALL_GAP * float(n - 1 + (1 if more else 0)) + 2.2
+	var t_cap := t_bow + 1.0
+	var t_veil := t_cap + 2.6
+	var t_back := t_veil + 0.7
+	var dur := t_back + 1.0
+	beats.append({"t": 0.6, "cam": {"mark": "wide", "size": 12.5, "pitch": 32.0, "lift": 1.6, "cut": true}, "light_at": "spot",
+		"dark": [0.55, 1.8], "veil": [0.0, 1.0], "fxs": [["petals", "petals", dur - 1.2, 0.0]],
+		"dolls": [{"who": "all", "gait": "walk", "droop": 0.5, "place": "approach", "look": "spot"},
+			{"who": "all", "go": "ring", "secs": 2.6, "look": "spot", "stagger": 0.2}]})
+	beats.append({"t": 1.2, "fx": ["slow_steps", -8.0, "Room", 0.95]})
+	beats.append({"t": 2.6, "cam": {"mark": "cam", "size": 7.2, "pitch": 30.0, "lift": 0.85, "dur": 2.6}})     # 멀리서 (나무 · 모여드는 사람) → 가까이
+	for i in NAMES_LAMPS:                    # 한 사람씩 등불을 내려놓음 (사람이 없는 자리는 표시가 없어 건너뜀)
+		var b := {"t": 3.6 + 0.3 * float(i), "fxs": [["lantern", "lamp%d" % i, dur - 3.6 - 0.3 * float(i), 0.0]]}
+		if i == 0:
+			b["light"] = [0.4, 1.6]
+			b["fx"] = ["chime", -17.0, "Room", 0.8]
+		beats.append(b)
+	beats.append({"t": 5.6, "dolls": [{"who": "caller", "go": "front", "secs": 1.0, "look": "spot"},
+		{"who": "near", "bow": [1.2, 0.08], "stagger": 0.12}]})
+	for i in n:
+		beats.append({"t": t_calls + NAMES_CALL_GAP * float(i), "says": [{"who": "c%d" % i, "texts": ["{n%d}" % i], "secs": NAMES_SAY}]})
+	if more:
+		beats.append({"t": t_calls + NAMES_CALL_GAP * float(n), "says": [{"who": "more", "texts": ["그리고… 여러 이웃."], "secs": NAMES_SAY}]})
+	beats.append({"t": t_bow, "dolls": [{"who": "all", "bow": [1.8, 0.14], "stagger": 0.12}], "fx": ["low_wind", -11.0, "Room", 0.85]})
+	beats.append({"t": t_cap, "caption": "벚꽃잎이 지는 저녁,\n사람들은 %s떠난 이들의 이름을 불렀다." % ("처음으로 " if first else ""),
+		"fx": ["paper", -9.0, "Room"]})
+	beats.append({"t": t_veil, "veil": [1.0, 0.6]})
+	beats.append({"t": t_back, "dolls": [{"who": "all", "back": 0.0}], "back": 0.1, "vignette": 0.0, "dark": [0.0, 0.4], "light": [0.0, 0.4],
+		"hush": [0.0, 1.0], "veil": [0.0, 0.8]})
+	return {"dur": dur, "short": 0.85, "rate": 4.0, "at": "ctx", "cast": "names", "light_r": 2.6, "hud": false,
+		"reason": "떠난 이들의 이름을 불러요",
+		"card": {"find": "의 이름을 불렀다", "at": t_cap - 0.2},
+		"beats": beats}
 
 
 ## fx · fxr 값 → 줄들: 한 줄 ["소리", dB, …]이면 [그 줄], 여러 줄 [[…], […]]이면 그대로

@@ -419,7 +419,7 @@ func _read_events(q: Village) -> void:
 			continue
 		if e["kind"] == &"awakened":
 			_aw_ev[q] = float(e["t"])
-		elif e["kind"] == &"born" or e["kind"] == &"wish_granted" or e["kind"] == &"died":
+		elif e["kind"] == &"born" or e["kind"] == &"wish_granted" or e["kind"] == &"died" or e["kind"] == &"names_called":
 			if first and q.t - float(e["t"]) >= JUST:
 				continue                           # 처음 보는 무리의 지난 일 — 연출하지 않음
 			if not _pend.has(q):
@@ -486,6 +486,9 @@ func play(stage_id: String, q: Village, ctx: Dictionary = {}) -> bool:
 	id = stage_id
 	v = q
 	spec = Stagings.get_scene(stage_id)
+	if stage_id == Stagings.NAMES_ID:              # (Q31) 이름 수만큼 길이가 달라짐
+		var nn: Array = ctx.get("names", [])
+		spec = Stagings.names_scene(mini(nn.size(), Balance.NAMES_SHOW_MAX), nn.size() > Balance.NAMES_SHOW_MAX, bool(ctx.get("first", false)))
 	k = float(spec.get("short", 1.0)) if _firsts().play_count(stage_id) > 0 else 1.0
 	_firsts().played(stage_id)
 	t = 0.0
@@ -1093,6 +1096,8 @@ func _go_back(secs: float) -> void:
 func moment_id(e: Dictionary) -> String:
 	if e["kind"] == &"wish_granted":
 		return "miracle" if _firsts().play_count("miracle") == 0 else "wish_more"
+	if e["kind"] == &"names_called":                   # (Q31) 벚꽃 철 이름 부르기 — 해마다 긴 연출 (두 번째 해부터 조금 짧게)
+		return Stagings.NAMES_ID
 	if e["kind"] == &"died":                           # 그 마을의 첫 죽음 (첫 무덤) = 긴 연출
 		return "first_death" if bool((e.get("v", {}) as Dictionary).get("first", false)) else "death_more"
 	return "first_baby" if bool((e.get("v", {}) as Dictionary).get("first", false)) else "baby_more"
@@ -1104,6 +1109,14 @@ static func moment_ctx(e: Dictionary) -> Dictionary:
 		return {"who": int(e.get("who", -1)), "id": int(d.get("id", -1))}
 	if e["kind"] == &"died":
 		return {"grave": int(e.get("who", -1)), "name": String(d.get("name", "")), "also": d.get("also", [])}
+	if e["kind"] == &"names_called":
+		var c := {"who": int(e.get("who", -1)), "at": e.get("at", Vector2.ZERO), "names": d.get("names", []), "graves": d.get("graves", []),
+			"first": bool(d.get("first", false)), "place": String(d.get("place", ""))}
+		if d.get("tree") is Vector2:
+			c["tree"] = d["tree"]
+		if d.get("behind") is Vector2:
+			c["behind"] = d["behind"]
+		return c
 	return {"baby": int(e.get("who", -1)), "mom": int(d.get("mom", -1)), "home": int(d.get("home", -1))}
 
 
@@ -1115,6 +1128,8 @@ func _watch_moments(q: Village, can_stage: bool) -> void:
 	while not pend.is_empty():
 		var e: Dictionary = pend.pop_front()
 		if not can_stage or q.t - float(e["t"]) >= STALE:
+			continue
+		if e["kind"] == &"names_called" and _passes_by("died"):     # (Q31) 빠르게 가는 중 + '죽음에 멈춤'을 껐다 → 연대기 줄만
 			continue
 		var mid := moment_id(e)
 		if Stagings.has(mid):

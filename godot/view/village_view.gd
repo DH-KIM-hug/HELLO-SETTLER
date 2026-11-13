@@ -674,7 +674,7 @@ func _wonder_hints(dt: float) -> void:
 		if float(hp["left"]) <= 0.0:
 			hint_pose.erase(id)
 	var k := v.wonder / Awakening.WONDER_NEED
-	if v.aware or fast or k < HINT_FROM or not pose_over.is_empty():
+	if v.aware or fast or k < HINT_FROM or not pose_over.is_empty() or not staged.is_empty():     # (Q31) 연출이 인형을 쥔 동안(이름 부르기 · 장례 …)엔 조짐 말풍선 없음
 		return
 	_hint_t -= dt
 	if _hint_t > 0.0:

@@ -8,6 +8,8 @@
 ##    "born_n": 센 출생 수, "kids": [이 마을에서 난 아이 id — 아직 어른이 아닌], "steps_call": {"baby", "at" 어림한 때, "last" 마감, "used"} 첫걸음마를 보러 이웃을 부른 것}
 ## 옛 저장: "v"가 없으면 첫 걸음에 이미 넘은 고비를 조용히 넘은 것으로 적는다 (사건·별명·잔치 없음). "v" 1(고비 넷이던 때)이면 새 고비 둘만,
 ##   "v" 2(고비 여섯이던 때)이면 '첫 푸른 밀 고개'만 같은 규칙으로. "v" 4까지(고비 일곱이던 때)이면 4~7일차 고비 셋(Q27)만 같은 규칙으로.
+##   "v" 5까지(고비 열하나이던 때)이면 '첫 이름 부르기'(Q31)만 — 지난 벚꽃 철에 모였어야 했으면 조용히 (NamesCall.quiet_past).
+## 첫 이름 부르기 "names" (Q31 2026-11-14): 벚꽃 철 이름 부르기(sim/names_call.gd)가 처음 열린 저녁 — 잔치 · 별명 없음, 연대기 줄 · 도장 · 기념품(말린 벚꽃 한 가지)만.
 ## 첫걸음마 (Q9 ⑦): 잔치 없음 — 병의 첫 걸음마 때는 이웃을 먼저 부르고(steps_hold) STEPS_GATHER_SECS 뒤 아기가 걸음을 뗀다 (ChildPlay._care_tick → on_first_steps).
 ##   부르는 이웃 (Q9 ⑮ 2026-11-11 넓힘): 어른만, 문에서 가까운 차례로 STEPS_CLAP_R 안에서 — 쉬던 사람은 모두(STEPS_CLAP_MAX까지), 모자라면 손이 빈 채
 ##   일하거나 걷던 어른이 하던 일을 잠깐 내려놓고 (STEPS_CLAP_WANT까지 — 병마다 한 번뿐인 일, 잔치에 부를 때처럼). 자는 사람·밥 먹는 사람·짐 든 사람·
@@ -30,8 +32,8 @@
 class_name Milestones
 extends RefCounted
 
-const VERSION := 5
-const ORDER := ["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35", "winter"]     # 보통 넘는 차례 (2026-11-11 · Q27 2026-11-13 측정 — 도장 띠·다음 고비 한 줄의 차례)
+const VERSION := 6                                       # (Q31) 판 6 — 첫 이름 부르기
+const ORDER := ["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35", "winter", "names"]     # 보통 넘는 차례 (2026-11-11 · Q27 2026-11-13 측정 — 도장 띠·다음 고비 한 줄의 차례 · Q31 첫 이름 부르기는 첫 겨울 뒤 벚꽃 철)
 const FEAST_RANK := ["bread", "stone", "gen3", "pop35", "pop12", "grown", "green", "winter", "pop20"]         # 잔치가 있는 고비 — 뒤로 갈수록 큰 잔치 (같은 날 겹치면 뒤쪽이 먼저). 첫걸음마 · 일터 스물은 잔치가 없다
 const FEAST_SMALL := ["grown", "green", "stone", "gen3", "pop35"]      # 작은 잔치 (Balance.FEAST_SMALL_SECS — 저녁 한때)
 const WORK_MANY := Balance.MILESTONE_WORK                     # (Q27) 일터 스물
@@ -53,7 +55,7 @@ const PULL_ACTS := ["work", "build", "forage", "haul", "chores", "rest", "social
 
 ## 수첩 도장 이름 (거인 UI)
 const LABEL := {"bread": "첫 빵", "steps": "첫걸음마", "pop12": "식구 열둘", "grown": "첫 어른", "green": "첫 고개", "pop20": "식구 스물", "winter": "첫 겨울",
-	"work20": "일터 스물", "stone": "첫 돌집", "gen3": "삼대", "pop35": "큰 마을"}
+	"work20": "일터 스물", "stone": "첫 돌집", "gen3": "삼대", "pop35": "큰 마을", "names": "이름 부름"}
 ## 다음 고비 한 줄 (거인 UI — 숫자를 써도 된다)
 const NEXT := {
 	"bread": "첫 빵을 구우면 잔치가 열려요",
@@ -67,6 +69,7 @@ const NEXT := {
 	"stone": "처음으로 돌집에 식구가 들면 집들이 잔치가 열려요",
 	"gen3": "한 집에 삼대가 모여 살면 가족 잔치가 열려요",
 	"pop35": "식구가 서른다섯이 되면 큰 마을 잔치가 열려요",
+	"names": "누군가 떠난 해에는 벚꽃이 지는 저녁, 마을이 모여 이름을 불러요",
 }
 const NEXT_DONE := "여기까지의 고비를 모두 넘었어요"
 ## 별명 (이름 앞에 붙는 말 — 주민 쪽 글이라 숫자 없음)
@@ -85,6 +88,8 @@ const LINE := {
 	"stone": ["{n}{ga} 마을에서 처음 돌로 지은 집에 들었다. 바람이 불어도 끄떡없는 집이다.", "마을에서 처음 돌로 지은 집에 식구가 들었다. 바람이 불어도 끄떡없는 집이다."],
 	"gen3": ["{n}{ga} 자식, 손주와 한 지붕 아래 산다. 마을에 처음으로 삼대가 한집에 모였다.", "마을에 처음으로 삼대가 한집에 모였다."],
 	"pop35": ["저녁마다 골목골목 밥 짓는 연기가 오른다. {n}{ga} 어귀에 서서 오래 마을을 바라보았다.", "저녁마다 골목골목 밥 짓는 연기가 오른다. 마을은 어느새 큰 마을이 되었다."],
+	"names": ["{n}{ga} 맨 앞에 서서 처음 이름을 불렀다. 그날부터 벚꽃이 지는 저녁이면 마을은 떠난 이들의 이름을 부르게 되었다.",     # (Q31) 잔치 · 별명 없음
+		"그날부터 벚꽃이 지는 저녁이면 마을은 떠난 이들의 이름을 부르게 되었다."],
 }
 ## 첫 푸른 밀 고개 — 창고가 없는 마을 (햇밀 다발을 첫 밭 울타리에 · 밭도 없으면 모닥불 곁에)
 const GREEN_LINE_FIELD := ["{n}{ga} 갓 거둔 햇밀 다발을 밭 울타리에 걸었다.", "밭 울타리에 갓 거둔 햇밀 다발이 걸렸다."]
@@ -135,6 +140,7 @@ static func step(v: Village, _dt: float) -> void:
 		_pass(v, "green")                             # 고개는 자정에 끝난다 — 햇밀 다발은 그날 아침에 건다 (잔치는 그 저녁)
 	if _dt > 0.0 and int(v.t / Balance.MILESTONE_LOOK_SECS) != int((v.t - _dt) / Balance.MILESTONE_LOOK_SECS):
 		_late_tick(v)                                 # (Q27) 일터 스물 · 첫 돌집 · 삼대 (식구 수는 위에서 걸음마다)
+	NamesCall.step(v)                                 # (Q31) 벚꽃 철 이름 부르기 — 잔치 앞에 (그날 저녁 잔치가 기다리면 모이지 않음). 주민은 건드리지 않는다
 	if not (m.get("feasts", []) as Array).is_empty():
 		_try_feast(v, day)
 	var f: Dictionary = m.get("feast", {})
@@ -168,6 +174,7 @@ static func _baseline(v: Village) -> void:
 	if green_over(v):
 		_mark_silent(v, "green")
 	_quiet_late(v)
+	NamesCall.quiet_past(v)                           # (Q31) 지난 벚꽃 철에 모였어야 했으면 조용히
 
 
 ## 옛 저장: 그 뒤에 생긴 고비만 같은 규칙으로 — 이미 넘었으면 조용히.
@@ -185,6 +192,8 @@ static func _upgrade(v: Village) -> void:
 				Souvenirs.make(v, id, (v.milestones["passed"] as Dictionary)[id], true)
 	if was < 5:                                       # (Q27) 고비 일곱이던 때의 저장: 이미 이룬 4~7일차 고비는 조용히 (사건 · 별명 · 잔치 없음 — 도장과 기념품만)
 		_quiet_late(v)
+	if was < 6:                                       # (Q31) 이름 부르기가 없던 때의 저장: 지난 벚꽃 철에 이미 모였어야 했으면 조용히 (다시 틀지 않음)
+		NamesCall.quiet_past(v)
 
 
 # ───────────────────────── (Q27) 4~7일차 고비 ─────────────────────────
@@ -562,6 +571,17 @@ static func _front(q: Resident, front: Array, doing: String) -> void:
 	q.doing = doing
 
 
+## (Q31) 첫 이름 부르기 — NamesCall.gather가 부름 (잔치 · 별명 없음: 연대기 줄 · 도장 · 기념품)
+static func pass_names(v: Village, who: Resident) -> void:
+	if not is_passed(v, "names"):
+		_pass(v, "names", who)
+
+
+## (Q31) 옛 저장 — NamesCall.quiet_past가 부름
+static func mark_silent(v: Village, id: String) -> void:
+	_mark_silent(v, id)
+
+
 static func _mark_silent(v: Village, id: String) -> void:
 	(v.milestones["passed"] as Dictionary)[id] = {"t": v.t, "who": -1, "name": "", "nick": "", "silent": true}
 	Souvenirs.make(v, id, (v.milestones["passed"] as Dictionary)[id], true)     # (Q17) 조용히 넘은 고비도 기념품 하나
@@ -596,8 +616,8 @@ static func _pass(v: Village, id: String, lead: Resident = null) -> void:
 	var cands := _leaders(v, id, lead)
 	var who: Resident = null
 	var nick := ""
-	for c: Resident in cands:                         # 별명은 한 사람에 하나 — 이미 있으면 다음 사람에게
-		if c.nickname.is_empty():
+	for c: Resident in cands:                         # 별명은 한 사람에 하나 — 이미 있으면 다음 사람에게 (별명이 없는 고비 — Q31 첫 이름 부르기 — 는 첫 후보)
+		if NICK.has(id) and c.nickname.is_empty():
 			who = c
 			nick = String(NICK[id])
 			c.nickname = nick
@@ -632,6 +652,10 @@ static func _pass(v: Village, id: String, lead: Resident = null) -> void:
 		rec["y"] = st.y if st != null else v.fire.y + 0.9
 	elif (id == "stone" or id == "gen3") and lead != null:     # (Q27) 그 집 번호
 		rec["b"] = lead.home
+	elif id == "names":                               # (Q31) 모인 자리
+		var lc := NamesCall.last(v)
+		rec["x"] = float(lc.get("x", v.fire.x))
+		rec["y"] = float(lc.get("y", v.fire.y))
 	if feast_day >= 0:
 		(m["feasts"] as Array).append({"id": id, "day": feast_day})
 	var pair: Array = LINE[id]
@@ -706,6 +730,8 @@ static func _leaders(v: Village, id: String, lead: Resident = null) -> Array:
 			for p: Resident in hands:
 				_add(out, p)
 			_add(out, v.chief())
+		"names":                                          # (Q31) 이름을 부른 사람 (가장 나이 많은 성한 어른 — NamesCall.caller)
+			_add(out, lead)
 		"stone", "gen3":                                  # (Q27) 그 집의 어른 · 가장 윗대 (lead) — 이미 별명이 있으면 그 집 다른 어른에게
 			_add(out, lead)
 			if lead != null:
@@ -752,6 +778,10 @@ static func _spot(v: Village, id: String, lead: Resident = null) -> Vector2:
 			return Vector2(b.x, b.y)
 	if id == "steps" and lead != null:
 		return ChildPlay.door(v, lead)
+	if id == "names":                                 # (Q31) 모인 자리
+		var lc := NamesCall.last(v)
+		if not lc.is_empty():
+			return Vector2(float(lc["x"]), float(lc["y"]))
 	if (id == "stone" or id == "gen3") and lead != null:     # (Q27) 그 집
 		var hm := v.bld(lead.home)
 		if hm != null:
