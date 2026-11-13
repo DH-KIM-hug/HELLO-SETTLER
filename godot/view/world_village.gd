@@ -52,6 +52,7 @@ var sunflower_view: SunflowerView     # 초거대 해바라기·씨앗비·목�
 var wterrain: WorldTerrain
 var extra_views: Array = []          # 두 번째 무리부터 [Village, VillageView]
 var minimap: WorldMinimap
+var map_chosen := false              # (Q29) 별지기가 첫날의 접힌 지도를 직접 펼친 적이 있음 (hud.cfg — 다음에도 그 뜻대로)
 var souvenir_note: SouvenirNote       # [기념품 Q17] 선반의 기념품을 누르면 뜨는 쪽지 (view/room/souvenir_note.gd)
 var _focus: Village
 var _rot_shown := 0
@@ -1229,7 +1230,9 @@ func _setup_world_ui() -> void:
 	minimap = WorldMinimap.new()
 	minimap.setup(world)
 	minimap.pressed_at.connect(_on_map_pressed)
+	minimap.unfold_pressed.connect(unfold_map)
 	root.add_child(minimap)
+	map_chosen = load_map_open()
 	split_bar = PanelContainer.new()
 	split_bar.theme_type_variation = "TopBar"
 	split_bar.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -1278,15 +1281,35 @@ func layout_bars() -> void:
 	_layout_world_ui()
 
 
-## (Q23 54) 첫 병 첫날(고비 전)은 둥근 지도를 감춤 — [마을로 가기]가 그 자리로 올라감
+## (Q23 54) 첫 병 첫날(고비 전)은 둥근 지도를 접어 둠 — [마을로 가기]가 그 자리로 올라감.
+## (Q29) 감추지 않고 작은 동그라미(접힌 지도)로 [마을로 가기] 왼쪽에 둔다 — 누르면 펼침 (별지기가 고른 것은 기억)
 func apply_early() -> void:
 	super()
 	if minimap == null:
 		return
-	var on := not early_days()
-	if minimap.visible != on:
-		minimap.visible = on
+	var fold := early_days() and not map_chosen
+	if minimap.folded != fold:
+		minimap.set_folded(fold)
 		_layout_world_ui()
+
+
+## (Q29) 접힌 지도를 누름 → 펼침 (그 뒤엔 첫날에도 펼친 채)
+func unfold_map() -> void:
+	map_chosen = true
+	save_map_open()
+	apply_early()
+
+
+static func load_map_open() -> bool:
+	var cf := ConfigFile.new()
+	return cf.load(StoreStrip.cfg_path) == OK and bool(cf.get_value("minimap", "open", false))
+
+
+static func save_map_open() -> void:
+	var cf := ConfigFile.new()
+	cf.load(StoreStrip.cfg_path)
+	cf.set_value("minimap", "open", true)
+	cf.save(StoreStrip.cfg_path)
 
 
 ## [창고] 창고 띠는 둥근 지도 왼쪽까지
@@ -1298,14 +1321,19 @@ func _layout_world_ui() -> void:
 	if minimap == null:
 		return
 	var d := WorldMinimap.SIZE
-	minimap.position = Vector2(get_viewport().get_visible_rect().size.x - d - 8.0, top_h + 8.0)
-	minimap.size = Vector2(d, d)
 	var vw := get_viewport().get_visible_rect().size.x
 	# (Q23 ㊾) 단추 칸은 누르는 높이(44) — 보이는 바탕(32)은 그 가운데. 첫 단추의 보이는 위끝은 예전처럼 지도 아래 6
 	var hit := float(UiTheme.TOUCH)
 	var pad := (hit - PATH_VIS_H) * 0.5
-	var map_on := minimap.visible
+	var map_on := minimap.visible and not minimap.folded
 	var y0 := (top_h + 8.0 + d + 6.0 - pad) if map_on else (top_h + 8.0 - pad)
+	if map_on:
+		minimap.position = Vector2(vw - d - 8.0, top_h + 8.0)
+		minimap.size = Vector2(d, d)
+	else:                                    # (Q29) 접힌 지도 = [마을로 가기] 왼쪽 (가운데 줄 맞춤, 누르는 칸끼리 6 띄움)
+		var nb := WorldMinimap.NUB
+		minimap.position = Vector2(vw - d - 8.0 - 6.0 - nb, y0 + (hit - nb) * 0.5)
+		minimap.size = Vector2(nb, nb)
 	goto_btn.position = Vector2(vw - d - 8.0, y0)
 	goto_btn.size = Vector2(d, hit)
 	if out_btn != null:

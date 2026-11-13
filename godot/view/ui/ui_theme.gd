@@ -339,13 +339,13 @@ static func slide_ok() -> bool:
 	return slide_in_tools or UserPaths.tool_script(OS.get_cmdline_args()) == ""
 
 
-## 패널을 제자리보다 아래(가로 창은 오른쪽)에서 SHEET_SLIDE초 동안 밀어 올린다. 움직였으면 true
+## 패널을 제자리보다 아래(가로 창은 오른쪽)에서 SHEET_SLIDE초 동안 밀어 올린다. 움직였으면 true.
+## (Q29) 닫히며 내려가던 중이면 먼저 제자리로 되돌려 받는다 (닫히는 중에 다시 열어도 패널은 하나)
 static func slide_in(panel: Control) -> bool:
+	reclaim(panel)
 	if panel == null or not panel.is_inside_tree() or not slide_ok():
 		return false
-	var old: Variant = panel.get_meta("slide_tw") if panel.has_meta("slide_tw") else null
-	if old is Tween and (old as Tween).is_valid():
-		(old as Tween).kill()
+	_kill_tw(panel)
 	var vs := panel.get_viewport_rect().size
 	var side := vs.x > vs.y
 	var to := panel.position
@@ -359,4 +359,128 @@ static func slide_in(panel: Control) -> bool:
 	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
 	tw.tween_property(panel, prop, to.x if side else to.y, SHEET_SLIDE)
 	panel.set_meta("slide_tw", tw)
+	panel.set_meta("slide_rest", to)
+	tw.finished.connect(_slid_in.bind(panel))
 	return true
+
+
+static func _slid_in(panel: Control) -> void:
+	if is_instance_valid(panel):
+		panel.remove_meta("slide_rest")
+		panel.remove_meta("slide_tw")
+
+
+## 움직이던 것을 멈추고 끝 모양으로 (열리던 중이면 제자리 · 크기 1 · 또렷하게)
+static func _kill_tw(panel: Control) -> void:
+	var old: Variant = panel.get_meta("slide_tw") if panel.has_meta("slide_tw") else null
+	if old is Tween and (old as Tween).is_valid():
+		(old as Tween).kill()
+		panel.scale = Vector2.ONE
+		panel.modulate.a = 1.0
+	if panel.has_meta("slide_rest"):
+		panel.position = panel.get_meta("slide_rest")
+		panel.remove_meta("slide_rest")
+	panel.remove_meta("slide_tw")
+
+
+# ───────────── (Q29) 닫을 때도 짝으로 — 시트는 내려가고, 카드는 살짝 가라앉으며 흐려짐 ─────────────
+## 카드(건물 · 꽃)가 나타나고 사라지는 시간 · 움직이는 거리 (시트보다 짧고 작게)
+const CARD_FADE := 0.16
+const CARD_RISE := 14.0
+const CARD_SCALE := 0.96
+
+
+## 시트가 닫힐 때 (부르는 쪽은 그 뒤 바로 owner.visible = false — 열림/닫힘 상태는 그 자리에서 바뀐다).
+## 패널만 owner 옆의 '닫히는 판'(holder — 같은 자리 · 같은 테마)으로 옮겨 SHEET_SLIDE초 동안 아래로 내려가고, 끝나면 owner로 돌아간다.
+## 내려가는 동안 패널은 누름을 받지 않는다 (맨 위 막이가 먹음 — 닫기 · 사기 단추가 두 번 눌리지 않게). 움직였으면 true
+static func slide_out(owner: Control, panel: Control, gentle := false) -> bool:
+	if owner == null or panel == null or panel.get_parent() != owner or not owner.is_visible_in_tree() or not slide_ok():
+		return false
+	var host := owner.get_parent()
+	if host == null or panel.has_meta("closing"):
+		return false
+	_kill_tw(panel)
+	var holder := Control.new()
+	holder.name = "%sClosing" % owner.name
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	holder.theme = owner.theme
+	for i in 4:
+		holder.set_anchor(i as Side, owner.get_anchor(i as Side))
+		holder.set_offset(i as Side, owner.get_offset(i as Side))
+	owner.add_sibling(holder)
+	var info := {"owner": owner, "holder": holder, "idx": panel.get_index(), "mf": panel.mouse_filter, "rest": panel.position}
+	panel.reparent(holder, false)
+	panel.position = info["rest"]
+	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE      # 가장자리(바탕)를 끌거나 눌러도 닫기가 다시 불리지 않게
+	var block := Control.new()                              # 내용 위 막이 (컨테이너가 패널 크기로 맞춤 · 맨 뒤 = 맨 먼저 누름을 받음)
+	block.name = "ClosingBlock"
+	block.mouse_filter = Control.MOUSE_FILTER_STOP
+	panel.add_child(block)
+	info["block"] = block
+	panel.set_meta("closing", info)
+	var vs := panel.get_viewport_rect().size
+	var side := vs.x > vs.y
+	var rest: Vector2 = info["rest"]
+	var dist := CARD_RISE if gentle else ((panel.size.x if panel.size.x > 1.0 else vs.x * 0.5) if side else (panel.size.y if panel.size.y > 1.0 else vs.y * 0.6))
+	var tw := panel.create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_property(panel, "position:x" if side else "position:y", (rest.x if side else rest.y) + dist, CARD_FADE if gentle else SHEET_SLIDE)
+	if gentle:
+		tw.parallel().tween_property(panel, "modulate:a", 0.0, CARD_FADE)
+	tw.finished.connect(reclaim.bind(panel))
+	panel.set_meta("slide_tw", tw)
+	return true
+
+
+## 닫히며 내려가던 패널을 제자리(owner 안 · 원래 순서 · 원래 위치)로 되돌린다. 닫히는 중이 아니면 아무것도 안 함
+static func reclaim(panel: Control) -> void:
+	if panel == null or not is_instance_valid(panel) or not panel.has_meta("closing"):
+		return
+	var info: Dictionary = panel.get_meta("closing")
+	panel.remove_meta("closing")
+	_kill_tw(panel)
+	var block: Variant = info.get("block")
+	if block != null and is_instance_valid(block):
+		(block as Node).get_parent().remove_child(block)
+		(block as Node).free()
+	panel.mouse_filter = info["mf"]
+	panel.modulate.a = 1.0
+	panel.scale = Vector2.ONE
+	var owner: Variant = info.get("owner")
+	var holder: Variant = info.get("holder")
+	if owner != null and is_instance_valid(owner) and not (owner as Node).is_queued_for_deletion():
+		panel.reparent(owner as Node, false)
+		(owner as Node).move_child(panel, mini(int(info["idx"]), (owner as Node).get_child_count() - 1))
+		panel.position = info["rest"]
+	if holder != null and is_instance_valid(holder):
+		(holder as Node).queue_free()                  # (owner가 먼저 사라졌으면 패널도 함께)
+
+
+## 닫히는 중인가 (시험 · 캡처)
+static func closing(panel: Control) -> bool:
+	return panel != null and panel.has_meta("closing")
+
+
+## 카드(건물 · 꽃)가 나타남 — 살짝 커지며 또렷해짐 (CARD_FADE초). 위치는 건드리지 않는다
+## (카드는 내용 높이만큼 아래에서 자라므로 첫 화면에 높이가 바뀌어도 자리가 어긋나지 않게 — 크기 · 투명도만). 움직였으면 true
+static func card_in(panel: Control) -> bool:
+	reclaim(panel)
+	if panel == null or not panel.is_inside_tree() or not slide_ok():
+		return false
+	_kill_tw(panel)
+	var sz := panel.size if panel.size.x > 1.0 else panel.get_combined_minimum_size()
+	panel.pivot_offset = Vector2(sz.x * 0.5, sz.y)       # 아래 가운데에서 자람
+	panel.scale = Vector2(CARD_SCALE, CARD_SCALE)
+	panel.modulate.a = 0.0
+	var tw := panel.create_tween()
+	tw.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	tw.tween_property(panel, "scale", Vector2.ONE, CARD_FADE)
+	tw.parallel().tween_property(panel, "modulate:a", 1.0, CARD_FADE * 0.8)
+	tw.finished.connect(_slid_in.bind(panel))
+	panel.set_meta("slide_tw", tw)
+	return true
+
+
+## 카드가 사라짐 — 조금 가라앉으며 흐려짐 (slide_out의 부드러운 판)
+static func card_out(owner: Control, panel: Control) -> bool:
+	return slide_out(owner, panel, true)
