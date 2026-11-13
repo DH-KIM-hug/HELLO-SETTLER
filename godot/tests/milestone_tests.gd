@@ -364,7 +364,8 @@ func test_words() -> void:
 	var bad := ""
 	var texts: Array = []
 	for id: String in Milestones.ORDER:
-		texts.append(String(Milestones.NICK[id]))
+		if Milestones.NICK.has(id):                    # (Q31) 첫 이름 부르기는 별명이 없다
+			texts.append(String(Milestones.NICK[id]))
 		if Milestones.FEAST_LINE.has(id):
 			texts.append(String(Milestones.FEAST_LINE[id]))
 		for t: String in Milestones.LINE[id]:
@@ -379,12 +380,12 @@ func test_words() -> void:
 		if not _clean(t):
 			ok = false
 			bad = t
-	check(ok and texts.size() == 54, "주민 쪽 글(별명·연대기·하는 일·말풍선)에 금지어·숫자 없음 (%d줄 · %s)" % [texts.size(), bad])
+	check(ok and texts.size() == 56, "주민 쪽 글(별명·연대기·하는 일·말풍선)에 금지어·숫자 없음 (%d줄 · %s)" % [texts.size(), bad])
 	var all_ids := true
 	for id: String in Milestones.ORDER:
-		all_ids = all_ids and Milestones.LABEL.has(id) and Milestones.NEXT.has(id) and Milestones.NICK.has(id) and Milestones.LINE.has(id) \
+		all_ids = all_ids and Milestones.LABEL.has(id) and Milestones.NEXT.has(id) and (Milestones.NICK.has(id) or id == "names") and Milestones.LINE.has(id) \
 			and Milestones.FEAST_LINE.has(id) == Milestones.FEAST_RANK.has(id)
-	check(all_ids and Milestones.ORDER.size() == 11 and not Milestones.FEAST_RANK.has("steps"), "고비 열하나 모두 도장 이름·다음 줄·별명·연대기, 잔치가 있는 고비는 잔치 줄 (첫걸음마는 잔치 없음)")
+	check(all_ids and Milestones.ORDER.size() == 12 and not Milestones.FEAST_RANK.has("steps"), "고비 열둘 모두 도장 이름·다음 줄·별명·연대기, 잔치가 있는 고비는 잔치 줄 (첫걸음마는 잔치 없음)")
 	# 깨닫기 전에도 같은 글 (거인을 모르는 말만)
 	var keep := Village.start_aware
 	Village.start_aware = false
@@ -1079,11 +1080,11 @@ func _strip_size(st: MilestoneStamps) -> Vector2:
 ## 도장 띠: 자리 일곱이 넘는 차례대로 한 줄에 (540 px 화면 — 줄이지 않은 도장·글씨로), 얇은 띠 높이 안에. 여덟이어도 깨지지 않는다
 func test_strip_seven() -> void:
 	var v := _fresh(25)
-	var seven: Array = Milestones.stamps(v).filter(func(s: Dictionary) -> bool: return not Milestones.LATE.has(String(s["id"])))     # (Q27) 고비 일곱이던 때의 띠
+	var seven: Array = Milestones.stamps(v).filter(func(s: Dictionary) -> bool: return not Milestones.LATE.has(String(s["id"])) and String(s["id"]) != "names")     # (Q27) 고비 일곱이던 때의 띠
 	var st := MilestoneStamps.build(seven, Milestones.next_line(v), true)
 	run.root.add_child(st)
 	var row := st.get_node("Row")
-	var seven_ids: Array = Milestones.ORDER.filter(func(id: String) -> bool: return not Milestones.LATE.has(id))
+	var seven_ids: Array = Milestones.ORDER.filter(func(id: String) -> bool: return not Milestones.LATE.has(id) and id != "names")
 	var order_ok := row.get_child_count() == seven_ids.size()
 	var nexts := 0
 	for i in row.get_child_count():
@@ -2286,10 +2287,10 @@ func _three(v: Village, same_roof := true) -> Array:
 
 
 func test_q27_order() -> void:
-	check(Milestones.ORDER == ["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35", "winter"],
-		"고비 열하나: 첫 28일의 차례는 그대로, 그 뒤에 일터 스물 · 첫 돌집 · 삼대 · 큰 마을 · (첫 겨울)")
-	check(Milestones.VERSION == 5 and Milestones.WORK_MANY == Balance.MILESTONE_WORK and Balance.MILESTONE_WORK == 20 and Milestones.STONE_HOUSE == "석조주택"
-		and Milestones.POP_TOWN == Balance.MILESTONE_POP_TOWN and Balance.MILESTONE_POP_TOWN == 35, "기록 판 5 · 일터 · 식구 기준은 balance.gd의 값 (20 · 35)")
+	check(Milestones.ORDER == ["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35", "winter", "names"],
+		"고비 열둘: 첫 28일의 차례는 그대로, 그 뒤에 일터 스물 · 첫 돌집 · 삼대 · 큰 마을 · (첫 겨울) · (Q31) 첫 이름 부르기")
+	check(Milestones.VERSION == 6 and Milestones.WORK_MANY == Balance.MILESTONE_WORK and Balance.MILESTONE_WORK == 20 and Milestones.STONE_HOUSE == "석조주택"
+		and Milestones.POP_TOWN == Balance.MILESTONE_POP_TOWN and Balance.MILESTONE_POP_TOWN == 35, "기록 판 6 (Q31) · 일터 · 식구 기준은 balance.gd의 값 (20 · 35)")
 	check(not Milestones.FEAST_RANK.has("work20") and Milestones.FEAST_SMALL.has("stone") and Milestones.FEAST_SMALL.has("gen3")
 		and Milestones.FEAST_SMALL.has("pop35") and Milestones.FEAST_RANK.find("stone") < Milestones.FEAST_RANK.find("pop12")
 		and Milestones.FEAST_RANK.find("gen3") < Milestones.FEAST_RANK.find("pop12") and Milestones.FEAST_RANK.find("pop35") < Milestones.FEAST_RANK.find("pop12"),

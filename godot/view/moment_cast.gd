@@ -3,6 +3,8 @@
 ## — 세로로 긴 화면이라 옆으로는 좁게(±1.5칸), 앞뒤로 겹쳐 세운다. StageDirector가 연출을 시작할 때 한 번 만든다.
 ## 돌려줌 = {roles: 역할 → [주민 id], slots: 자리 이름 → {주민 id → Vector2}, marks: 이름 → Vector2, names: 자막·말에 넣을 이름}
 ## (E1-5 첫 죽음과 장례 — EVENTS_STAGING 5) "funeral" = 집 앞에 모임 → 행렬 → 무덤가 · "grave" = 짧은 판 (무덤 곁의 이웃만). 무덤은 Village.graves에서.
+## (Q31 벚꽃 철 이름 부르기) "names" = 해 질 녘 벚나무 아래(묘지 곁 · 모닥불 곁)에 반원으로 둘러섬 → 등불을 내려놓음 → 한 사람씩 이름을 부름.
+##   모두 멀리서 오므로 화면이 잠긴 동안 곁에 놓였다가(approach) 걸어 들어온다 (화면만 — 시뮬레이션의 그 사람은 제 일을 그대로).
 class_name MomentCast
 extends RefCounted
 
@@ -15,6 +17,10 @@ const WALK_IN := 1.6                 # 멀리 있던 사람은 제 자리에서 
 const FILE_GAP := 0.6                # 행렬: 앞사람과의 사이 (칸)
 ## 무덤가에 서는 자리 (화면 기준 각도 °· 반지름 칸 — 돌 뒤로 둥글게, 카메라 쪽은 비워 돌과 꽃이 보이게): 가족 → 이웃 차례
 const GRAVE_RING := [Vector2(160, 0.95), Vector2(122, 0.9), Vector2(88, 1.0), Vector2(52, 0.95), Vector2(18, 1.0), Vector2(197, 1.3), Vector2(-17, 1.35)]
+## (Q31) 이름 부르기: 등불 둘레에 서는 자리 (화면 기준 각도 ° · 반지름 칸 — 뒤로 반원, 카메라 쪽은 비워 등불과 얼굴이 보이게). 부르는 사람이 가운데 뒤
+const NAMES_RING := [Vector2(90, 1.25), Vector2(128, 1.3), Vector2(52, 1.3), Vector2(162, 1.45), Vector2(18, 1.45), Vector2(196, 1.6), Vector2(-16, 1.6)]
+const NAMES_GROWN := 5               # 이름 부르기에 서는 어른 (부르는 사람 포함) — 세로 화면에서 겹치지 않게 아이 둘과 함께 일곱까지
+const NAMES_KIDS := 2
 
 
 static func door(h: Building) -> Vector2:
@@ -112,6 +118,15 @@ static func focus(kind: String, q: Village, ctx: Dictionary) -> Dictionary:
 		return {"at": square(q) + Vector2(0.0, 1.3), "front": Vector2.ZERO}
 	if kind == "grave":
 		return {"at": grave_at(q, ctx), "front": Vector2.ZERO}
+	if kind == "names":                               # (Q31) 모인 자리 — 벚나무 아래면 나무를 등지고 마을 쪽에서 봄
+		var at: Vector2 = ctx.get("at", square(q) + Vector2(0.0, 1.4))
+		var fr := Vector2(0, 1)
+		var bh: Variant = ctx.get("behind", ctx.get("tree"))
+		if bh is Vector2:
+			var d: Vector2 = at - (bh as Vector2)
+			if d.length() > 0.1:
+				fr = d.normalized()
+		return {"at": at, "front": fr}
 	return {"at": _receiver(q, ctx)["at"], "front": Vector2.ZERO}
 
 
@@ -129,6 +144,8 @@ static func build(kind: String, q: Village, ctx: Dictionary, right: Vector2, bac
 			return _funeral(q, ctx, right, back, near, ax2[0] if ax2.size() > 1 else right, ax2[1] if ax2.size() > 1 else back)
 		"grave":
 			return _grave(q, ctx, near)
+		"names":
+			return _names(q, ctx, right, back)
 	return _wish(q, ctx, right, back, near)
 
 
@@ -403,3 +420,79 @@ static func _grave(q: Village, ctx: Dictionary, near: float) -> Dictionary:
 		"marks": {"grave": gp, "spot": gp},
 		"names": {"who": names_line(who if who != "" else "누군가", ctx.get("also", [])), "one": who if who != "" else "누군가"},
 		"grave": int(ctx.get("grave", -1))}
+
+
+## (Q31) 벚꽃 철 이름 부르기: 부르는 사람(caller — 가장 나이 많은 성한 어른, 사건의 who) 가운데 뒤 · 떠난 이의 가족 어른 → 다른 어른(마을 가운데에서 가까운 차례)
+## · 아이 둘까지가 등불 둘레에 반원으로 섬 (ring). 걸어 들어오기 전 자리(approach)는 화면 왼쪽 위에서 줄지어 (장례의 무덤가로 들어오는 쪽과 같게).
+## 이름을 부르는 차례: c0 = 부르는 사람, c1 … = 둘레의 사람을 차례로 (사람보다 이름이 많으면 다시 처음부터). more = 이름이 넘칠 때 마지막 한마디.
+## 깨어 있는 사람만 (Awakening.witnesses — 자는 사람 · 앓는 사람 · 아기 빼고). 난수 없음.
+static func _names(q: Village, ctx: Dictionary, right: Vector2, back: Vector2) -> Dictionary:
+	var f := focus("names", q, ctx)
+	var at: Vector2 = f["at"]
+	var ws := Awakening.witnesses(q)
+	var who := q.person(int(ctx.get("who", -1)))
+	if who != null and not who in ws:
+		who = null
+	var gone_ids: Array = ctx.get("graves", [])
+	var kin: Array[Resident] = []
+	for gid: Variant in gone_ids:
+		for r in kin_of(q, departed(q, int(gid))):
+			if not r in kin:
+				kin.append(r)
+	var home := square(q)
+	var pool: Array[Resident] = ws.duplicate()
+	pool.sort_custom(func(a: Resident, b: Resident) -> bool:     # 가족 → 나이 많은 어른 먼저 … (같으면 마을 가운데에서 가까운 차례 · 번호)
+		var ka := 0 if a in kin else 1
+		var kb := 0 if b in kin else 1
+		if ka != kb:
+			return ka < kb
+		var da := Vector2(a.x, a.y).distance_squared_to(home)
+		var db := Vector2(b.x, b.y).distance_squared_to(home)
+		return da < db if da != db else a.id < b.id)
+	if who == null:
+		for r in pool:
+			if r.age >= Balance.AGE_ADULT and (who == null or r.age > who.age):
+				who = r
+	var grown: Array = [who.id] if who != null else []
+	var kids: Array = []
+	for r in pool:
+		if who != null and r.id == who.id:
+			continue
+		if r.is_child():
+			if kids.size() < NAMES_KIDS:
+				kids.append(r.id)
+		elif grown.size() < NAMES_GROWN:
+			grown.append(r.id)
+	var order: Array = grown + kids
+	var s_ring := {}
+	var s_app := {}
+	var s_front := {}
+	var marks := {"spot": at, "cam": at - back * 0.15, "wide": at - back * 1.6, "petals": at - back * 0.6}
+	var adir := (right * -0.82 + back * -0.57).normalized()
+	for i in order.size():
+		var rid := int(order[i])
+		var ring: Vector2 = NAMES_RING[mini(i, NAMES_RING.size() - 1)]
+		var a := deg_to_rad(ring.x)
+		var p := at + right * (cos(a) * ring.y) + back * (-sin(a) * ring.y * 0.8)
+		s_ring[rid] = p
+		s_app[rid] = at + adir * (2.8 + FILE_GAP * float(i)) + Vector2(-adir.y, adir.x) * (0.3 if i % 2 == 1 else 0.0)
+		s_front[rid] = at + (p - at) * 0.86          # 부르는 사람이 반 걸음 나섬 (제 등불 뒤에서)
+		var to_c := at - p
+		marks["lamp%d" % i] = p + (to_c.normalized() if to_c.length() > 0.05 else back) * 0.5
+	if ctx.get("tree") is Vector2:
+		marks["tree"] = ctx["tree"]
+	var names: Array = ctx.get("names", [])
+	var nm := {}
+	var shown := mini(names.size(), Balance.NAMES_SHOW_MAX)
+	for i in shown:
+		nm["n%d" % i] = String(names[i])
+	var roles := {"caller": [who.id] if who != null else [], "all": order, "crowd": grown.slice(1), "kids": kids,
+		"near": order.slice(1), "more": ([who.id] if who != null else []) if names.size() > Balance.NAMES_SHOW_MAX else []}
+	for i in shown:                                    # i번째 이름을 부르는 사람
+		roles["c%d" % i] = [int(order[i % order.size()])] if not order.is_empty() else []
+	return {"roles": roles,
+		"slots": {"ring": s_ring, "approach": s_app, "front": s_front},
+		"marks": marks,
+		"names": nm,
+		"shown": shown,
+		"first": bool(ctx.get("first", false))}

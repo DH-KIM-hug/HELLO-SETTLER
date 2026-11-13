@@ -19,6 +19,8 @@ const STAMP := 46.0                                # 도장 한 칸 (px)
 const STAMP_SMALL := 30.0                          # 얇은 띠의 도장 한 칸 (px)
 const STAMP_TINY := 28.0                           # 도장이 MANY를 넘을 때 얇은 띠의 한 칸
 const STAMP_MANY := 40.0                           # (Q27) 도장이 MANY를 넘을 때 큰 도장 줄의 한 칸
+const STAMP_CROWD := 36.0                          # (Q31) 큰 도장 줄이 CROWD를 넘을 때 (열둘 — 500 px 안)
+const CROWD := 11
 const SHOW := 7                                    # (Q27) 얇은 띠에 한 번에 보이는 도장 수 (다음 고비 둘레의 창)
 const MANY := 7                                    # 이보다 많으면 한 단계 작게
 const LABEL_TINY := 11                             # 그때의 이름 글씨 (px) — (Q23 ㊿) 가장 작은 글 11 (예전 10)
@@ -39,7 +41,7 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 	var row := HBoxContainer.new()
 	row.name = "Row"
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_theme_constant_override("separation", 2 if compact else 4)
+	row.add_theme_constant_override("separation", 2 if compact or all.size() > CROWD else 4)
 	m.add_child(row)
 	var from := 0
 	var upto := all.size()
@@ -76,8 +78,9 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 		if compact:
 			var px := STAMP_TINY if many else STAMP_SMALL
 			st.custom_minimum_size = Vector2(px, px)
-		elif many:                                    # (Q27) 큰 도장 줄도 열이면 한 단계 작게 (500 px 안)
-			st.custom_minimum_size = Vector2(STAMP_MANY, STAMP_MANY)
+		elif many:                                    # (Q27) 큰 도장 줄도 열이면 한 단계 작게 (500 px 안) · (Q31) 열둘이면 한 단계 더
+			var bx := STAMP_CROWD if (upto - from) > CROWD else STAMP_MANY
+			st.custom_minimum_size = Vector2(bx, bx)
 		cell.add_child(st)
 		var l := Label.new()
 		l.text = String(s["label"])
@@ -231,4 +234,16 @@ class Stamp extends Control:
 				for e: Vector2 in [Vector2(-4.5, -1.5), Vector2(4.5, -1.5), Vector2(-6.5, 2.5), Vector2(6.5, 2.5), Vector2(-4.5, 6.5), Vector2(4.5, 6.5)]:
 					draw_line(e * s, (e + Vector2(0.0, 4.0)) * s, paper, 1.0 * w, true)
 				draw_rect(Rect2(Vector2(-2.2, 3.5) * s, Vector2(4.4, 7.0) * s), paper)
+			"names":                                    # (Q31) 첫 이름 부르기 — 벚꽃 한 송이 (꽃잎 다섯 · 끝이 살짝 갈라짐) + 떨어지는 꽃잎 하나
+				var o := Vector2(-1.5, -1.5) * s
+				for k in 5:
+					var a := -PI / 2.0 + TAU * float(k) / 5.0
+					var d := Vector2(cos(a), sin(a))
+					draw_circle(o + d * 5.6 * s, 4.4 * s, ink)
+					draw_line(o + d * 8.2 * s, o + d * 10.2 * s, paper, 1.1 * w, true)     # 꽃잎 끝의 작은 홈
+				draw_circle(o, 2.4 * s, paper)
+				draw_circle(o, 1.1 * s, ink)
+				var pp := Vector2(9.0, 9.5) * s
+				draw_colored_polygon(PackedVector2Array([pp + Vector2(0.0, -3.2) * s, pp + Vector2(2.4, 0.0) * s, pp + Vector2(0.0, 3.2) * s,
+					pp + Vector2(-2.4, 0.0) * s]), ink)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

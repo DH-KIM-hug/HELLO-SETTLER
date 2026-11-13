@@ -1272,3 +1272,13 @@ const DECO_PEBBLE_MAX := 12              # 한 무리 땅에 조약돌 (손에 �
 const DECO_PEBBLE_PLAZA := 3.0           # 광장 가에서 이만큼(칸) 안이면 '광장 조약돌'
 const DECO_PEBBLE_NEAR := 10.0           # 집이 모닥불에서 이만큼(칸) 안인 사람만 보탬을 받음
 const DECO_STAND_SHAKE := 0.5            # 병 받침이 있으면 흔들림 연출 폭 ×이만큼
+# Q31 (2026-11-14 메인 판단 — 사용자 위임): 벚꽃 철 이름 부르기 — 해마다 벚꽃잎이 지는 저녁, 지난 모임 뒤에 떠난 이들의 이름을 부른다 (sim/names_call.gd · STORY 2)
+# 시뮬레이션 값(행복 · 일 · 걸음 · 난수 …)은 하나도 바꾸지 않는다 — 연대기 한 줄 · 고비 기록 · 사건만. 모임의 그림은 화면의 연출 (view/stagings.gd "names_call")
+const NAMES_FROM := Vector2i(4, 10)      # 벚꽃잎이 지는 철의 첫 저녁 (월, 일) — 해마다 이날 저녁에 모인다
+const NAMES_UNTIL := Vector2i(5, 10)     # 막히면(위기 · 추운 저녁 · 잔치 · 첫 한 시간) 다음 저녁으로 — 이날까지 (월, 일). 끝내 못 모이면 그해는 건너뛰고 이름은 다음 해로
+const NAMES_HOUR := 18.0                 # 해 질 녘 — 이 시각부터 (병 시각)
+const NAMES_LATEST := 19.0               # 이 시각까지 막혀 있으면 그 저녁은 건너뜀
+const NAMES_COLD_MAX := 0.3              # 그 저녁 바깥 추위(Health.cold_of)가 이보다 크면 추운 저녁 — 다음 저녁으로 (DailyView.COLD_MAX와 같은 금)
+const NAMES_LINE_MAX := 3                # 연대기 줄에 적는 이름 수 — 넘으면 "… 그리고 여러 이웃"
+const NAMES_SHOW_MAX := 6                # 화면 말풍선으로 부르는 이름 수 (한 번에 둘 · 셋씩) — 넘으면 마지막에 "그리고 여러 이웃…"
+const NAMES_TREE_REACH := 30.0           # 벚나무 줄기 둘레가 영역 반지름 + 이만큼 안이면 그 나무 아래 (FRUIT_REACH와 같은 잣대) — 아니면 묘지 · 모닥불 곁

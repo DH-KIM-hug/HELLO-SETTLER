@@ -10,8 +10,13 @@ const SPARK_CORE := 0.62              # 반짝임 가운데의 또렷한 빛 (�
 const DOOR_OPEN := 1.1                # 문이 열리는 시간 (초 — 가는 빛 한 줄이 부채꼴로 넓어짐)
 const DOOR_SLIT := 0.07               # 처음 문틈의 너비 (다 열렸을 때의 몇 배)
 const DOOR_SIZE := Vector2(2.3, 2.7)  # 땅에 번진 빛의 너비 · 길이 (칸)
+const LANTERN := Vector2(0.3, 0.42)   # (Q31) 등불 그림 (칸 — 주민 키의 반쯤)
+const PETAL_COL := Color("f7c4d2")    # (Q31) 벚꽃잎 (혼례 꽃잎보다 옅게)
+const PETAL_BOX := Vector3(4.2, 0.6, 3.2)   # 꽃잎이 생기는 곳 (반 너비 — 모인 자리 위)
+const PETAL_TOP := 3.4                # 그 높이 (칸)
 
 var kind := "glow"                    # "glow" 문간의 빛 · "sparkle" 반짝임 · "hearts" 하트 · "door" 문틈에서 번지는 빛
+                                      # (Q31) "lantern" 땅에 내려놓은 작은 종이 등불 · "petals" 천천히 지는 벚꽃잎
 var size := 1.0                       # 크기 배수 (짧은 판 — 멀리서 볼 때도 보이게 화면 크기에 맞춤)
 var life := 3.0                       # 켜져 있는 시간 (초 — 그 뒤 스러짐)
 var t := 0.0
@@ -48,6 +53,64 @@ func _ready() -> void:
 		"door":                           # 문이 열림: 집 쪽(-z)의 가는 빛 한 줄이 앞마당으로 부채꼴처럼 넓어진다 (문짝을 그리지 않음 — 집 그림은 그대로)
 			var gs := sqrt(size)
 			_door = _quad(DOOR_SIZE * gs, Color(1.0, 0.84, 0.5), 0.62, Vector3(0, 0.09, DOOR_SIZE.y * gs * 0.5 - 0.2), true, wedge_tex())
+		"lantern":                        # (Q31) 땅의 따뜻한 빛 웅덩이 + 둥근 빛무리 + 종이 등불 그림 (빛무리가 숨 쉬듯 조금 흔들림)
+			_quad(Vector2(1.2, 1.2), Color(1.0, 0.72, 0.38), 0.36, Vector3(0, 0.06, 0), true)
+			_quad(Vector2(0.62, 0.62), Color(1.0, 0.8, 0.46), 0.34, Vector3(0, LANTERN.y * 0.55, 0.02), false)
+			var mi := MeshInstance3D.new()
+			var q := QuadMesh.new()
+			q.size = LANTERN
+			mi.mesh = q
+			var m := StandardMaterial3D.new()
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+			m.albedo_texture = lantern_tex()
+			m.albedo_color = Color(1, 1, 1, 0.0)
+			m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+			mi.material_override = m
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.position = Vector3(0, LANTERN.y * 0.5, 0)
+			add_child(mi)
+			_mats.append([m, 1.0])
+		"petals":                         # (Q31) 모인 자리 위에서 천천히 지는 벚꽃잎 (팔랑이며 옆으로 흐름)
+			var pt := CPUParticles3D.new()
+			pt.amount = 46
+			pt.lifetime = 6.0
+			pt.preprocess = 3.0               # 시작할 때 이미 지고 있게
+			pt.local_coords = false
+			pt.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+			pt.emission_box_extents = PETAL_BOX
+			pt.position = Vector3(0, PETAL_TOP, 0)
+			pt.direction = Vector3(0.4, -1, 0.1)
+			pt.spread = 25.0
+			pt.gravity = Vector3(0.18, -0.32, 0.05)
+			pt.initial_velocity_min = 0.08
+			pt.initial_velocity_max = 0.3
+			pt.angular_velocity_min = -160.0
+			pt.angular_velocity_max = 160.0
+			pt.scale_amount_min = 0.7
+			pt.scale_amount_max = 1.25
+			var ramp := Gradient.new()
+			ramp.set_color(0, Color(1, 1, 1, 0.0))
+			ramp.set_color(1, Color(1, 1, 1, 0.0))
+			ramp.add_point(0.12, Color(1, 1, 1, 1.0))
+			ramp.add_point(0.85, Color(1, 1, 1, 1.0))
+			pt.color_ramp = ramp
+			var qm := QuadMesh.new()
+			qm.size = Vector2(0.15, 0.11)
+			var pm := StandardMaterial3D.new()
+			pm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			pm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			pm.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+			pm.vertex_color_use_as_albedo = true
+			pm.cull_mode = BaseMaterial3D.CULL_DISABLED
+			pm.albedo_texture = petal_tex()
+			pm.albedo_color = PETAL_COL
+			qm.material = pm
+			pt.mesh = qm
+			pt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(pt)
+			_parts.append(pt)
 		"sparkle":
 			_quad(Vector2(1.7, 1.7) * size, Color(1.0, 0.93, 0.7), 0.7, Vector3.ZERO, false)
 			if size > 1.0:                    # 멀리서 보는 짧은 판: 옅은 빛무리만으론 풀밭에 묻힘 → 가운데에 또렷한 빛 한 점
@@ -145,6 +208,56 @@ static func wedge_tex() -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
+## (Q31) 종이 등불 그림: 둥근 몸통(따뜻한 빛 · 가운데가 밝음) + 위아래 어두운 테 + 작은 고리 (테두리는 마을 그림처럼 갈색)
+static func lantern_tex() -> ImageTexture:
+	var w := 40
+	var h := 56
+	var img := Image.create(w, h, false, Image.FORMAT_RGBA8)
+	var line := Color("563517")
+	var paper := Color("ffd98a")
+	var glow := Color("fff3c8")
+	var cap := Color("7a4a24")
+	for y in h:
+		for x in w:
+			var fx := (float(x) + 0.5) / w - 0.5
+			var fy := (float(y) + 0.5) / h
+			var col := Color(0, 0, 0, 0)
+			var by := (fy - 0.6) / 0.31                       # 몸통 (가로로 조금 넓은 둥근 꼴)
+			var bx := fx / 0.43
+			var r := sqrt(bx * bx + by * by)
+			if r <= 1.0:
+				col = line
+				if r <= 0.84:
+					col = paper.lerp(glow, clampf(1.0 - r * 1.15, 0.0, 1.0))
+					if absf(by) < 0.9 and fmod(absf(fx) * 9.0 + 0.25, 1.0) < 0.12 and r > 0.3:
+						col = col.darkened(0.12)                # 종이 살 (세로 줄)
+			if fy > 0.24 and fy < 0.33 and absf(fx) < 0.25:  # 위 테
+				col = line if (fy < 0.255 or fy > 0.305 or absf(fx) > 0.21) else cap
+			if fy > 0.88 and fy < 0.95 and absf(fx) < 0.2:   # 아래 테
+				col = line if (fy > 0.925 or absf(fx) > 0.16) else cap
+			var ring := Vector2(fx, (fy - 0.15) * float(h) / float(w)).length()
+			if ring > 0.085 and ring < 0.15 and fy < 0.25:  # 고리
+				col = line
+			img.set_pixel(x, y, col)
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## (Q31) 꽃잎 하나: 끝이 살짝 갈라진 둥근 잎 (흰색 — 재질 색으로 물들임)
+static func petal_tex() -> ImageTexture:
+	var n := 24
+	var img := Image.create(n, n, false, Image.FORMAT_RGBA8)
+	for y in n:
+		for x in n:
+			var px := (float(x) + 0.5) / n * 2.0 - 1.0
+			var py := (float(y) + 0.5) / n * 2.0 - 1.0
+			var r := Vector2(px / 0.62, (py + 0.05) / 0.92).length()
+			var notch := py < -0.6 and absf(px) < 0.14
+			var a := clampf((1.0 - r) * 6.0, 0.0, 1.0) * (0.0 if notch else 1.0)
+			img.set_pixel(x, y, Color(1, 1, 1, a).lerp(Color(1, 0.9, 0.93, a), clampf(py + 0.5, 0.0, 1.0)))
+	return ImageTexture.create_from_image(img)
+
+
 ## 문이 열린 만큼 0~1 (처음엔 가는 틈 — 끝에서 느려짐)
 func door_open() -> float:
 	var u := clampf(t / DOOR_OPEN, 0.0, 1.0)
@@ -210,7 +323,7 @@ func level() -> float:
 
 func _apply() -> void:
 	var k := level()
-	var breathe := 1.0 + (0.08 * sin(t * 2.4) if kind == "glow" else 0.0)
+	var breathe := 1.0 + (0.08 * sin(t * 2.4) if kind == "glow" else 0.06 * sin(t * 3.1 + position.x * 1.7) if kind == "lantern" else 0.0)
 	for e: Array in _mats:
 		(e[0] as StandardMaterial3D).albedo_color.a = float(e[1]) * k * breathe
 	if _door != null:

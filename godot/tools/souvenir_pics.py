@@ -5,11 +5,12 @@
 tools/milestone_signs.py와 같은 팔레트·같은 굵은 갈색 테두리의 손그림 (도형만 — 외부 그림을 쓰지 않는다).
 아주 작게 보이는 그림이라 (병 안에서 24~40점) 덩어리를 크게, 테두리를 굵게, 밝은 점 하나씩.
 
-칸 = 192점. 4칸 × 4줄 (768 × 768 — Q27에서 넷째 줄) — 자리는 view/souvenir_view.gd PICS와 같게:
+칸 = 192점. 4칸 × 5줄 (768 × 960 — Q27에서 넷째 줄 · Q31에서 다섯째 줄) — 자리는 view/souvenir_view.gd PICS와 같게:
     첫 빵 한 조각 · 아기 발도장 잎 · 꽃목걸이 · 눈금 새긴 나뭇가지
     햇밀 이삭 하나 · 작은 등 · 마른 꽃다발 · '더' 바구니
     납작한 돌 (넓은 것 — 두 칸) · 납작한 돌 (좁은 것) · 반짝임 별
     (Q27) 세 가닥 땋은 끈 · 작은 나무 망치 · 새 집 문패 · 말린 열매 꾸러미
+    (Q31) 말린 벚꽃 한 가지 (첫 이름 부르기) — 앞 네 줄은 그대로
 
     python3 godot/tools/souvenir_pics.py   →  godot/art/milestones/souvenirs.png
 """
@@ -260,6 +261,29 @@ def bouquet():
     return im
 
 
+def sprig():
+    """(Q31) 말린 벚꽃 한 가지 — 벚꽃잎이 지는 저녁, 처음 이름을 부르던 날 꺾어 말린 작은 가지 (흰 끈으로 묶음)"""
+    im, d = canvas()
+    stroke(d, [(48, 170), (96, 104), (150, 40)], WOOD_D, 13)        # 가지 (휘어 오름)
+    stroke(d, [(96, 104), (140, 112)], WOOD_D, 8)                  # 곁가지
+    stroke(d, [(118, 76), (98, 44)], WOOD_D, 7)
+    line(d, [(56, 160), (92, 110)], WOOD, 4)
+    for x, y, a in ((128, 70, -0.5), (162, 104, 0.9)):             # 잎 둘 (바랜 연두)
+        tx, ty = x + math.cos(a) * 26, y + math.sin(a) * 26
+        mx, my = (x + tx) / 2, (y + ty) / 2
+        nx, ny = -math.sin(a) * 10, math.cos(a) * 10
+        poly(d, bez((x, y), (mx + nx, my + ny), (tx, ty), 8) + bez((tx, ty), (mx - nx, my - ny), (x, y), 8)[1:-1], LEAF_L, 6)
+    blossom = "#f9d3dc"
+    for x, y, r, t in ((150, 36, 17, 0.3), (98, 42, 15, 1.1), (142, 116, 15, 0.7), (74, 118, 12, 0.2)):
+        flower(d, x, y, r, blossom, heart=HEART, n=5, turn=t)
+    for x, y in ((44, 70), (172, 160), (30, 128)):                 # 떨어지는 꽃잎 셋
+        poly(d, bez((x, y - 9), (x + 11, y - 2), (x, y + 9), 6) + bez((x, y + 9), (x - 11, y - 2), (x, y - 9), 6)[1:-1], blossom, 5)
+    stroke(d, [(64, 134), (82, 148)], WHITE, 8)                    # 흰 끈
+    stroke(d, [(70, 142), (58, 166)], WHITE, 5)
+    dot(d, 146, 30, 4, WHITE)
+    return im
+
+
 def more():
     """'더' — 작은 바구니에 담긴 나머지 (빵 꼭지 · 꽃 · 이삭이 삐죽)"""
     im, d = canvas()
@@ -394,11 +418,12 @@ def spark():
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     out = os.path.join(here, "..", "art", "milestones", "souvenirs.png")
-    sheet = Image.new("RGBA", (C * 4, C * 4), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (C * 4, C * 5), (0, 0, 0, 0))
     cells = [(bread(), 0, 0), (steps(), 1, 0), (necklace(), 2, 0), (twig(), 3, 0),
              (wheat(), 0, 1), (lamp(), 1, 1), (bouquet(), 2, 1), (more(), 3, 1),
              (stone(C * 2), 0, 2), (stone(C), 2, 2), (spark(), 3, 2),
-             (braid(), 0, 3), (mallet(), 1, 3), (plaque(), 2, 3), (pouch(), 3, 3)]
+             (braid(), 0, 3), (mallet(), 1, 3), (plaque(), 2, 3), (pouch(), 3, 3),
+             (sprig(), 0, 4)]
     for im, cx, cy in cells:
         small = im.resize((im.size[0] // S, im.size[1] // S), Image.LANCZOS)
         sheet.alpha_composite(small, (cx * C, cy * C))
