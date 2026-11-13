@@ -11,7 +11,7 @@
 
 > **Quick reference** — Layer: `Presentation/Narrative` · Priority: `MVP` (도감은 VS #44) · Key deps: `사건 흐름(7), 병 시간·따라잡기(1)` · 담당 파일: `sim/chronicle.gd`(읽기) · `Village.book`(줄, 저장) · `save/catch_up.gd` 편지 요약 · `view/ui/chronicle_sheet.gd` · `view/ui/return_letter.gd` · `view/ui/catchup_screen.gd`
 
-**메인 판단 (사용자 위임, 2026-11-08)**: C1 **편지 본문에서 숫자를 뺌** — "우리는 13명 → 17명이 되었어요" → "아기 둘이 태어나고, 한 분이 잠드셨어요." (숫자는 머리띠에만, 아트 바이블 7.8) · C2 **변화 없는 줄은 쓰지 않음** (지금 버그) · C3 **연대기 날짜 표기는 여백 색인 '별생활 N일째'** (병 달력 n일차는 주민 쪽 표현이 아니라 별지기 색인) · C4 **기록 문장에서 나이 숫자 뺌** ("(57세)" → 주민 상세로) · C5 **편지 요약은 `book` 문자열이 아닌 사건 kind로 고름** (`born`·`died`·`married`·`building_completed`·`revelation`·`immigrants_arrived`·`food_short_started`) · C6 **잊힌 첫 장은 처음부터 빈 쪽으로 보임** (흐린 글자 자리 세 줄).
+**메인 판단 (사용자 위임, 2026-11-08)**: C1 **편지 본문에서 숫자를 뺌** — "우리는 13명 → 17명이 되었어요" → "아기 둘이 태어나고, 한 분이 잠드셨어요." (숫자는 머리띠에만, 아트 바이블 7.8) · C2 **변화 없는 줄은 쓰지 않음** (지금 버그) · C3 **연대기 날짜 표기는 여백 색인 '별생활 N일째'** (병 달력 n일차는 주민 쪽 표현이 아니라 별지기 색인) · C4 **기록 문장에서 나이 숫자 뺌** ("(57세)" → 주민 상세로) — 코드 ✅ 2026-11-14 Q34 · C5 **편지 요약은 `book` 문자열이 아닌 사건 kind로 고름** (`born`·`died`·`married`·`building_completed`·`revelation`·`immigrants_arrived`·`food_short_started`) · C6 **잊힌 첫 장은 처음부터 빈 쪽으로 보임** (흐린 글자 자리 세 줄).
 
 ## Overview
 
