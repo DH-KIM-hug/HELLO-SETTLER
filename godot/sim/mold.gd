@@ -234,7 +234,7 @@ func _start_swarm(v: Village) -> void:
 	if episodes == 0:
 		v.log_line("그늘진 창고 뒤에서 털뭉치 괴물들이 통통 튀어나왔다. 주민 무릎만 한 것들이 떼로 몰려다녔다.")
 	else:
-		v.log_line("털뭉치 괴물들이 또 왔다. %d번째였다." % (episodes + 1))
+		v.log_line("털뭉치 괴물들이 또 왔다. %s 번째였다." % SmallCrises.nth_word(episodes + 1))     # 숫자 없이 말로 (Q34)
 
 
 ## 창고 둘레의 그늘·젖은 땅 (젖음 − 볕) — 가장 습한 곳부터 n자리

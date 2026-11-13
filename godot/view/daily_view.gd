@@ -1549,7 +1549,7 @@ func _play(h: Hold, m: ResidentModel) -> Vector2:
 func calm() -> String:
 	if Health.cold_of(Health.base_temp(v, v.t)) > COLD_MAX:
 		return "cold"
-	if SmallCrises.active_count(v) > 0 or not v.crises.is_empty() or v.deficit > 0.0:
+	if v.in_crisis():                     # 지금 벌어지는 위기만 — v.crises(시작 알림 줄)는 쌓이기만 할 수 있어 읽지 않는다 (Q34)
 		return "crisis"
 	if Milestones.feast_on(v) or VillageEra.wedding_on(v):
 		return "feast"

@@ -135,7 +135,7 @@ func test_info_inherited() -> void:
 	check(ok and saw_mom, "상세: 부모 이름 · 물려받은 무늬 넷 ('엄마 꿀떡이의 …' · '아빠 …의 …' · '새로 생긴 …')")
 	var last := v.dogs.info(v, pups[-1])
 	var nb := v.person(int(last["named_by"]))
-	check(nb != null and nb.is_child() and last["named_by_name"] == nb.name and has_line(v, "'%s'라는 이름" % last["name"]),
+	check(nb != null and nb.is_child() and last["named_by_name"] == nb.name and has_line(v, "'%s'%s 이름" % [last["name"], Village.josa(String(last["name"]), "이라는", "라는")]),
 		"막내 이름은 아이(%s)가 지어 줌 — 연대기에도" % last["named_by_name"])
 	var starter := v.dogs.info(v, dad)
 	check((starter["inherited"] as Array).is_empty() and starter["mom_name"] == "" and starter["named_by"] == -1, "처음부터 있던 강아지: 물려받은 줄 없음")

@@ -68,14 +68,9 @@ static func blocked(v: Village) -> String:
 	return ""
 
 
-## 지금 위기인가 — 작은 위기(날벌레 · 물덩이 · 먼지)가 마을에 있음 · 먹을 것이 모자람 · 털뭉치 괴물 떼가 돌아다님 · 돌림병이 도는 중.
-## Village.crises는 '시작됨' 알림 줄이라 (화면의 JarClock이 가져가면 비고, 헤드리스에선 쌓이기만 함) 읽지 않는다 — 지켜보든 아니든 같게
+## 지금 위기인가 — Village.in_crisis()와 같음 (옛 이름 그대로 둠)
 static func in_crisis(v: Village) -> bool:
-	if SmallCrises.active_count(v) > 0 or v.deficit > 0.0:
-		return true
-	if v.mold != null and not v.mold.wild().is_empty():
-		return true
-	return v.outbreaks.has(Balance.PLAGUE)
+	return v.in_crisis()
 
 
 ## after(병 시각) 뒤에 무덤에 묻힌 사람들 (묻힌 차례) — 무덤 기록 [{id, name, t, …}]

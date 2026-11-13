@@ -71,8 +71,8 @@ const SIZE_SMALL := 0.95              # 이보다 작으면 '작음', SIZE_BIG�
 const SIZE_BIG := 1.05
 ## 주민의 말·연대기 (시험이 금지어를 본다 — 여기 모아 둔다)
 const LINES := {
-	"born": "%s 강아지 %d마리를 낳았다. 어린 %s 막내에게 '%s'라는 이름을 지어 주었다.",
-	"born_noname": "%s 강아지 %d마리를 낳았다.",
+	"born": "%s 강아지 %s 낳았다. 어린 %s %s'%s'%s 이름을 지어 주었다.",     # 막내에게 (둘 이상일 때만) · 이라는/라는
+	"born_noname": "%s 강아지 %s 낳았다.",      # 수는 말로 (CatchUp.count_words — Q34)
 	"adopted": "%s네 집이 다 자란 강아지 %s{j}를 데려갔다.",
 	"village_dog": "다 자란 강아지 %s 이제 마을 강아지가 되었다. 모두가 조금씩 먹이를 나눠 준다.",
 	"died": "늙은 강아지 %s %s 조용히 잠들었다.",
@@ -526,9 +526,11 @@ func litter(v: Village, mom: Dictionary, dad: Dictionary, n: int) -> Array:
 	var mn := String(mom["name"])
 	var who := "%s%s" % [mn, Village.josa(mn, "이", "가")]
 	if namer != null:
-		v.log_line(LINES["born"] % [who, n, "%s%s" % [namer.name, Village.josa(namer.name, "이", "가")], out[-1]["name"]])
+		var pn := String(out[-1]["name"])
+		v.log_line(LINES["born"] % [who, CatchUp.count_words(n, "마리", "을", "를"), "%s%s" % [namer.name, Village.josa(namer.name, "이", "가")],
+			"막내에게 " if n > 1 else "", pn, Village.josa(pn, "이라는", "라는")])
 	else:
-		v.log_line(LINES["born_noname"] % [who, n])
+		v.log_line(LINES["born_noname"] % [who, CatchUp.count_words(n, "마리", "을", "를")])
 	return out
 
 

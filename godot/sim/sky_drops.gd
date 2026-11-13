@@ -351,7 +351,7 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 					melted += 1
 			v.mold.stats["melted"] = int(v.mold.stats["melted"]) + melted
 			if melted > 0:
-				v.log_line("하얀 모래가 닿자 털뭉치 괴물 %d마리가 녹아 버렸다." % melted)
+				v.log_line("하얀 모래가 닿자 털뭉치 괴물 %s 녹아 버렸다." % CatchUp.count_words(melted, "마리", "이", "가"))     # 숫자 없이 말로 (Q34)
 			if bool(pv["field"]):
 				_salt_ground(v, p, size + 1.0)
 		"ampoule":

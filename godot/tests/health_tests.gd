@@ -304,7 +304,12 @@ func test_severity() -> void:
 	for e: Dictionary in d.crises:
 		texts.append(e["text"])
 	var joined := "\n".join(texts)
-	check(joined.contains("한스(") and joined.contains("기침병으로 숨을 거두었다.") and joined.contains("고뿔로 숨을 거두었다.") and joined.contains("한스가 기침병으로 쓰러졌다"), "연대기: 병 이름으로 (기침병으로 · 고뿔로)")
+	var aged := ""
+	for ln: String in texts:
+		if ln.contains("숨을 거두었다") and (RegEx.create_from_string("[0-9]").search(ln) != null or ln.contains("세)")):
+			aged = ln
+	check(aged == "", "연대기 죽음 줄에 나이 숫자 없음 (chronicle-letters C4) %s" % aged)
+	check(joined.contains("한스가 ") and joined.contains("기침병으로 숨을 거두었다.") and joined.contains("고뿔로 숨을 거두었다.") and joined.contains("한스가 기침병으로 쓰러졌다"), "연대기: 병 이름으로 (기침병으로 · 고뿔로)")
 	check(a.death_why == "기침병" and int(d.stats.get("died_sick", 0)) == 2, "death_why = 병 이름 (%s), 통계 died_sick %d" % [a.death_why, d.stats.get("died_sick", 0)])
 	check(Health.ro("열병") == "으로" and Health.ro("고뿔") == "로" and Health.ro("배앓이") == "로" and Health.ro("곪은 상처") == "로", "조사 으로/로 (열병으로 · 고뿔로 · 배앓이로)")
 
@@ -669,7 +674,7 @@ func test_deaths_and_text() -> void:
 	check(deaths.get("추위", 0) == 1 and deaths.get("병", 0) == 1 and deaths.get("더위", 0) == 1, "death_why: %s" % str(deaths))
 	check(int(v.stats.get("died_cold", 0)) == 1 and int(v.stats.get("died_sick", 0)) == 1 and v.stats["starved"] <= 1, "통계: 추위 %d · 병 %d" % [v.stats.get("died_cold", 0), v.stats.get("died_sick", 0)])
 	texts.append_array([Balance.LINE_FEAR, Balance.LINE_SICK_WARN, "몸이 으슬으슬해…", "아야, 다리를 삐었어…", "마을에 기침 소리가 늘었다. 앓아누운 집이 하나둘이 아니었다.",
-		"마르타가 불같은 열병으로 몹시 아파요.", "검은 역병이 돌기 시작했다.", "그 열병을 이겨 낸 사람들은 다시 앓지 않았다.", "한스(24세)가 기침병으로 숨을 거두었다.",
+		"마르타가 불같은 열병으로 몹시 아파요.", "검은 역병이 돌기 시작했다.", "그 열병을 이겨 낸 사람들은 다시 앓지 않았다.", "한스가 젊은 나이에 기침병으로 숨을 거두었다.", "한스가 오랜 삶을 마치고 잠들 듯 숨을 거두었다.",
 		"열병을 앓고 있음 (2일째)", "몹시 아픔", "이겨 낸 병: 열병 · 고뿔"])
 	for st: String in ["앓아누운 중", "모닥불 곁에 앓아누운 중", "집에서 몸을 녹이는 중", "집 안에서 더위를 피하는 중", "모닥불 곁에서 몸을 녹이는 중", "집에 숨어 있는 중", "땔감 나르는 중"]:
 		texts.append(st)

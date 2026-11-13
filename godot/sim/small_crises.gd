@@ -337,10 +337,11 @@ func _start_gnats(v: Village) -> void:
 	if gnat_episodes == 0:
 		v.log_line("날개 달린 하늘 괴물이 마을로 내려왔다. 날갯짓 소리에 모두 집으로 숨었다.")
 	else:
-		v.log_line("날개 괴물이 또 내려왔다. %s번째였다." % _nth(gnat_episodes + 1))
+		v.log_line("날개 괴물이 또 내려왔다. %s 번째였다." % nth_word(gnat_episodes + 1))
 
 
-static func _nth(n: int) -> String:
+## 차례를 말로 (첫 · 두 · 세 … 열, 그 뒤는 "여러") — 연대기에 숫자를 쓰지 않는다 (Q34)
+static func nth_word(n: int) -> String:
 	var w := ["", "첫", "두", "세", "네", "다섯", "여섯", "일곱", "여덟", "아홉", "열"]
 	return w[n] if n < w.size() else "여러"
 

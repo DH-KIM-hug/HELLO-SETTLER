@@ -1628,12 +1628,15 @@ func test_calm() -> void:
 			v.created_date = date0.duplicate()
 			_clock(v, 12.0)],
 		["식량이 모자란 날", func() -> void: v.deficit = 0.4, func() -> void: v.deficit = 0.0],
-		["위기가 막 시작된 때", func() -> void: v.crises.append({"t": v.t, "kind": "hunger", "text": ""}), func() -> void: v.crises.clear()],
+		["돌림병이 도는 중", func() -> void: v.outbreaks[Balance.PLAGUE] = {"c": 1.0, "l": 0.0, "s": 0.5, "name": Balance.PLAGUE, "t": v.t, "n": 0, "won": 0}, func() -> void: v.outbreaks.erase(Balance.PLAGUE)],
 		["작은 위기(떠돌이 물방울) 중", func() -> void: v.smalls.drop_phase = "fall", func() -> void: v.smalls.drop_phase = "calm"],
 		["빠른 흐름", func() -> void: vw.fast = true, func() -> void: vw.fast = false],
 		["보통보다 빠른 빠르기", func() -> void: vw.social.stage_on = false, func() -> void: vw.social.stage_on = true],
 	]
 	check(v.crises.is_empty() and v.deficit == 0.0 and v.smalls != null and SmallCrises.active_count(v) == 0 and v.hand.soaks.is_empty(), "(준비) 위기·분무가 없는 마을")
+	v.crises.append({"t": v.t - 30.0 * Balance.DAY, "kind": "hunger", "text": "옛 알림"})
+	check(dv.calm() != "crisis" and v.crises.size() == 1, "지난 위기의 시작 알림 줄(화면이 안 가져가 쌓임)은 calm()을 막지 않는다 (Q34) — %s" % dv.calm())
+	v.crises.clear()
 	for g: Array in gates:
 		var bad: Array = []
 		for st: Array in starts:

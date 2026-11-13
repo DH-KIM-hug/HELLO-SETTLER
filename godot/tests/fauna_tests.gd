@@ -192,7 +192,17 @@ func test_adopt() -> void:
 	var homes0 := dg.dogless_homes(v).size()
 	var pups := dg.litter(v, mom, dad, 2)
 	check(pups.size() == 2 and dg.is_pup(v, pups[0]) and int(pups[0]["mom"]) == int(mom["id"]), "새끼 둘 — 엄마 곁")
-	check(has_line(v, "강아지 2마리를 낳았다"), "연대기: 새끼를 낳음 (아이가 이름)")
+	check(has_line(v, "강아지 두 마리를 낳았다"), "연대기: 새끼를 낳음 (아이가 이름)")
+	var v1 := proto(71)                   # 따로 한 마을 — 아래 입양 검사와 섞이지 않게
+	v1.advance(30.0)
+	var vd1 := v1.dogs.village_dogs(v1)
+	var one := v1.dogs.litter(v1, vd1.filter(func(x: Dictionary) -> bool: return x["sex"] == "f")[0], vd1.filter(func(x: Dictionary) -> bool: return x["sex"] == "m")[0], 1)
+	var pn := String(one[0]["name"])
+	var ln1 := ""
+	for e: Dictionary in v1.book:
+		if String(e["text"]).contains("강아지 한 마리를 낳았다"):
+			ln1 = String(e["text"])
+	check(ln1 != "" and not ln1.contains("막내") and ln1.contains("'%s'%s 이름" % [pn, Village.josa(pn, "이라는", "라는")]), "한 마리면 '막내' 없이 · 이라는/라는 받침대로 (Q34): %s" % ln1)
 	v.t += Dogs.PUP_DAYS * Balance.DAY + 10.0
 	dg._dawn(v)
 	var adopted := pups.filter(func(p: Dictionary) -> bool: return int(p["owner"]) >= 0).size()

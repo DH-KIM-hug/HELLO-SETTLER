@@ -197,10 +197,9 @@ func _add_world(l: Dictionary) -> void:
 			continue
 		var nm := q.settlement_name if q.settlement_name != "" else "다른 무리"
 		if not befores.has(q.sid):
-			extra.append("젊은 부부들이 새 땅으로 떠나 '%s'%s 세웠어요 (%d명)." % [nm, Village.josa(nm, "을", "를"), q.people.size()])
+			extra.append("젊은 부부들이 새 땅으로 떠나 '%s'%s 세웠어요." % [nm, Village.josa(nm, "을", "를")])     # 편지 본문엔 숫자 없음 (C1 — 수는 머리띠에)
 			continue
 		var ql := letter(q, befores[q.sid], away)
-		var b0 := int(befores[q.sid]["pop"])
 		var top := ""
 		for e: String in ql["events"]:
 			if not e in [filler_wait(q), "아이들이 들판에서 뛰어놀았어요.", "밤마다 모닥불 앞에 모여 노래했어요.", "다들 맡은 일을 부지런히 했어요."]:
@@ -208,7 +207,7 @@ func _add_world(l: Dictionary) -> void:
 				break
 		if top == "":
 			top = "모두 잘 지냈어요."
-		extra.append("%s (%d명 → %d명): %s" % [nm, b0, q.people.size(), top])
+		extra.append("%s 소식: %s" % [nm, top])     # 편지 본문엔 숫자 없음 (C1 — 인구는 머리띠 world_pop0/1)
 		if not (ql["altar_line"] as String).is_empty():
 			(l["waiting"] as Array).append("%s 제단에도 제물이 있어요." % nm)
 		if q.open_letters("split").size() > 0:

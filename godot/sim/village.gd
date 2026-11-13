@@ -714,6 +714,16 @@ func crisis(kind: String, text: String) -> void:
 	emit(&"crisis", {"v": kind})
 
 
+## 지금 위기인가 — 작은 위기(날벌레 · 물덩이 · 먼지)가 마을에 있음 · 먹을 것이 모자람 · 털뭉치 괴물 떼가 돌아다님 · 돌림병이 도는 중. 읽기만
+## crises는 '시작됨' 알림 줄이라 (화면의 JarClock이 가져가면 비고, 헤드리스에선 쌓이기만 함) 읽지 않는다 — 지켜보든 아니든 같게 (Q31 · Q34)
+func in_crisis() -> bool:
+	if SmallCrises.active_count(self) > 0 or deficit > 0.0:
+		return true
+	if mold != null and not mold.wild().is_empty():
+		return true
+	return outbreaks.has(Balance.PLAGUE)
+
+
 func speak(r: Resident, text: String, dur := 6.0) -> void:
 	r.say = WatcherName.fill(self, text)      # {w} = 마을이 부르는 말 (STORY 4 · N2)
 	r.say_t = dur
@@ -2167,25 +2177,30 @@ func kill(p: Resident, why: String) -> void:
 	people.erase(p)
 	_people_by_id.erase(p.id)
 	dead.append(p)
-	var age := p.shown_age()
+	# 기록에 나이 숫자는 쓰지 않는다 (chronicle-letters C4 — 나이는 주민 상세에). 일찍 떠난 이에게만 말로 한 마디
+	var young := ""
+	if p.is_child():
+		young = "어린 나이에 "
+	elif p.age < Balance.AGE_ADULT + (Balance.AGE_ELDER - Balance.AGE_ADULT) * 0.4:
+		young = "젊은 나이에 "
 	var ga := josa(p.name, "이", "가")
 	var nb := josa(p.name, "은", "는")
 	match ("질병" if Balance.DISEASES.has(why) else why):
 		"질병":      # "한스가 기침병으로 숨을 거두었다." (이번 유행의 이름 — HEALTH.md 2.4·2.5)
 			var dn := p.disease_name if p.disease_name != "" else why
-			log_line("%s(%d세)%s %s%s 숨을 거두었다." % [p.name, age, ga, dn, Health.ro(dn)])
+			log_line("%s%s %s%s%s 숨을 거두었다." % [p.name, ga, young, dn, Health.ro(dn)])
 		"노환":
-			log_line("%s(%d세)%s 잠들 듯 숨을 거두었다." % [p.name, age, ga])
+			log_line("%s%s 오랜 삶을 마치고 잠들 듯 숨을 거두었다." % [p.name, ga])
 		"병":
-			log_line("%s(%d세)%s 앓아누운 끝에 끝내 일어나지 못했다." % [p.name, age, ga])
+			log_line("%s%s %s앓아누운 끝에 끝내 일어나지 못했다." % [p.name, ga, young])
 		"추위":
 			var ssn: String = jar_date()["season"]
-			log_line("%s, %s(%d세)%s 끝내 따뜻해지지 못했다." % ["그 겨울" if ssn == "겨울" else "그 추운 날", p.name, age, nb])
+			log_line("%s, %s%s 끝내 따뜻해지지 못했다." % ["그 겨울" if ssn == "겨울" else "그 추운 날", p.name, nb])
 		"더위":
 			var ssn: String = jar_date()["season"]
-			log_line("%s, %s(%d세)%s 끝내 더위를 이기지 못했다." % ["그 여름" if ssn == "여름" else "그 무더운 날", p.name, age, nb])
+			log_line("%s, %s%s 끝내 더위를 이기지 못했다." % ["그 여름" if ssn == "여름" else "그 무더운 날", p.name, nb])
 		_:
-			log_line("%s(%d세)%s 굶주림 끝에 숨을 거두었다." % [p.name, age, ga])
+			log_line("%s%s %s굶주림 끝에 숨을 거두었다." % [p.name, ga, young])
 	# 두려움: 가족(부모·자식·배우자·형제) +0.2, 반경 6칸에서 본 사람 +0.05 (HEALTH.md 4)
 	for q in people:
 		if q.id == p.partner or q.id in p.parents or p.id in q.parents or _siblings(p, q):
@@ -3747,8 +3762,9 @@ func move_people_to(nv: Village, movers: Array[Resident]) -> void:
 	var nm: String = movers[0].name
 	for r in movers:                      # 연대기 '사람들' — 분가로 떠남 (UI 07)
 		departed.append({"id": r.id, "name": r.name, "sex": r.sex, "age": r.shown_age(), "t": t, "to": nv.settlement_name, "to_sid": nv.sid})
-	log_line("%s의 가족을 비롯한 %d명이 새 땅을 찾아 떠났다. 남은 사람들은 마을 어귀까지 배웅했다." % [nm, movers.size()])
-	nv.log_line("%s의 가족을 비롯한 %d명이 옛 마을을 떠나 이 땅에 처음으로 불을 피웠다." % [nm, movers.size()])
+	var many := CatchUp.count_words(movers.size(), "", "이", "가")     # 수는 말로 (Q34 — 연대기에 숫자 없음)
+	log_line("%s의 가족을 비롯한 %s 새 땅을 찾아 떠났다. 남은 사람들은 마을 어귀까지 배웅했다." % [nm, many])
+	nv.log_line("%s의 가족을 비롯한 %s 옛 마을을 떠나 이 땅에 처음으로 불을 피웠다." % [nm, many])
 	recalc_fear()
 	nv.recalc_fear()
 	_update_belief(0.0)
@@ -3903,9 +3919,9 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		_arrive_fed()
 		Awakening.start(self)
 		if aware:
-			log_line("어느 아침, {w}의 손이 하늘에서 내려와 우리 조상 %d명과 오두막 두 채를 이 땅에 내려놓았다." % people.size())
+			log_line("어느 아침, {w}의 손이 하늘에서 내려와 우리 조상 %s 오두막 두 채를 이 땅에 내려놓았다." % CatchUp.count_words(people.size(), "", "과", "와"))     # 수는 말로 (Q34)
 		else:                             # 아직 거인을 모른다 (6.5) — 어떻게 왔는지 아무도 모른다
-			log_line("어느 아침, 우리 조상 %d명이 오두막 두 채 곁에서 눈을 떴다. 어떻게 이 땅에 왔는지 기억하는 사람은 없었다." % people.size())
+			log_line("어느 아침, 우리 조상 %s 오두막 두 채 곁에서 눈을 떴다. 어떻게 이 땅에 왔는지 기억하는 사람은 없었다." % CatchUp.count_words(people.size(), "", "이", "가"))
 		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
 	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)
 
