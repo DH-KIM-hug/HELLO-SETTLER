@@ -6,6 +6,9 @@
 ## 넘는 차례(Milestones.ORDER)대로 왼쪽부터, 도장 사이는 가는 점선으로 잇고, 다음 고비 자리는 점선 동그라미를 조금 진하게.
 ## 도장 일곱 (Q9 ⑭ 2026-11-11 — 첫 푸른 밀 고개 '첫 고개'가 늘어): 일곱까지는 같은 크기로 한 줄에 들어간다 (540 px 화면 — 한 칸에 이름 한 줄).
 ## 일곱을 넘으면(여덟까지 봄) 도장과 글씨를 한 단계 줄인다 (MANY).
+## 도장 열하나 (Q27 2026-11-13 — 일터 스물 · 첫 돌집 · 삼대 · 큰 마을이 늘어): 열하나는 540 px 화면의 얇은 띠에 한 줄로 들어가지 않는다
+##   (이름이 서로 붙고 띠가 화면 밖으로 밀림 — 캡처로 확인). 얇은 띠는 일곱 칸 창(SHOW)만 보인다: 다음 고비가 가운데쯤 오게 (앞쪽 셋 · 다음 · 뒤쪽 셋,
+##   양 끝에서는 끝에 붙임). 창 밖 앞쪽 도장은 첫 칸의 점선 꼬리로 이어짐만 보인다. 큰 도장 줄(넓은 자리용)은 모두 — 한 단계 작게.
 class_name MilestoneStamps
 extends VBoxContainer
 
@@ -15,6 +18,8 @@ const PAPER := Color("fdf6dc")                     # 수첩 종이 (도장 안 �
 const STAMP := 46.0                                # 도장 한 칸 (px)
 const STAMP_SMALL := 30.0                          # 얇은 띠의 도장 한 칸 (px)
 const STAMP_TINY := 28.0                           # 도장이 MANY를 넘을 때 얇은 띠의 한 칸
+const STAMP_MANY := 40.0                           # (Q27) 도장이 MANY를 넘을 때 큰 도장 줄의 한 칸
+const SHOW := 7                                    # (Q27) 얇은 띠에 한 번에 보이는 도장 수 (다음 고비 둘레의 창)
 const MANY := 7                                    # 이보다 많으면 한 단계 작게
 const LABEL_TINY := 11                             # 그때의 이름 글씨 (px) — (Q23 ㊿) 가장 작은 글 11 (예전 10)
 const NEXT_RING := Color(0.45, 0.35, 0.24, 0.62)   # 다음 고비 자리의 점선 동그라미
@@ -36,10 +41,24 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	row.add_theme_constant_override("separation", 2 if compact else 4)
 	m.add_child(row)
-	var many := all.size() > MANY
+	var from := 0
+	var upto := all.size()
+	if compact and all.size() > SHOW:                 # (Q27) 다음 고비 둘레 일곱 칸만
+		var nx := all.size() - 1
+		for k in all.size():
+			if not bool((all[k] as Dictionary)["passed"]):
+				nx = k
+				break
+		from = clampi(nx - SHOW / 2, 0, all.size() - SHOW)
+		upto = from + SHOW
+	var many := (upto - from) > MANY
 	var next_found := false
 	var i := 0
 	for s: Dictionary in all:
+		if i < from or i >= upto:
+			next_found = next_found or not bool(s["passed"])
+			i += 1
+			continue
 		var cell := VBoxContainer.new()               # 도장 아래에 이름 (얇은 띠도 — 여섯이 한 줄에 들어가게)
 		cell.name = "Cell_" + String(s["id"])
 		cell.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -57,6 +76,8 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 		if compact:
 			var px := STAMP_TINY if many else STAMP_SMALL
 			st.custom_minimum_size = Vector2(px, px)
+		elif many:                                    # (Q27) 큰 도장 줄도 열이면 한 단계 작게 (500 px 안)
+			st.custom_minimum_size = Vector2(STAMP_MANY, STAMP_MANY)
 		cell.add_child(st)
 		var l := Label.new()
 		l.text = String(s["label"])
@@ -64,7 +85,7 @@ static func build(all: Array, next_text: String, compact := false) -> MilestoneS
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		l.add_theme_color_override("font_color", UiTheme.INK_BROWN if st.passed else (UiTheme.INK_BROWN_SOFT if st.next else UiTheme.INK_BROWN_FAINT))     # (Q23 ㊿) 빈 도장 이름도 3:1
-		if compact and many:
+		if many:
 			l.add_theme_font_size_override("font_size", LABEL_TINY)
 		cell.add_child(l)
 		i += 1
@@ -184,4 +205,30 @@ class Stamp extends Control:
 					draw_colored_polygon(PackedVector2Array([o + Vector2(-6.5, 0.0) * s, o + Vector2(0.0, -7.0) * s, o + Vector2(6.5, 0.0) * s]), ink)
 					draw_rect(Rect2(o + Vector2(-4.5, 0.0) * s, Vector2(9.0, 8.0) * s), ink)
 					draw_rect(Rect2(o + Vector2(-1.2, 3.5) * s, Vector2(2.4, 4.5) * s), paper)
+			"gen3":                                     # (Q27) 삼대 — 키가 다른 세 사람이 나란히 (어른 · 어른 · 아이)
+				for f: Vector3 in [Vector3(-7.0, -6.0, 1.0), Vector3(0.5, -4.0, 0.92), Vector3(7.5, 1.5, 0.7)]:
+					var o := Vector2(f.x, f.y) * s
+					draw_circle(o, 2.8 * f.z * s, ink)
+					draw_colored_polygon(PackedVector2Array([o + Vector2(-3.6 * f.z, 13.0 - f.y) * s, o + Vector2(0.0, 2.6 * f.z) * s,
+						o + Vector2(3.6 * f.z, 13.0 - f.y) * s]), ink)
+			"work20":                                   # (Q27) 일터 스물 — 망치 (머리 + 자루)
+				draw_set_transform(c, tilt + 0.6, Vector2.ONE)
+				draw_line(Vector2(0.0, -4.0) * s, Vector2(0.0, 12.0) * s, ink, 2.6 * w, true)
+				draw_rect(Rect2(Vector2(-8.5, -10.5) * s, Vector2(17.0, 7.5) * s), ink)
+				draw_line(Vector2(-5.5, -7.0) * s, Vector2(5.5, -7.0) * s, paper, 1.3 * w, true)
+			"pop35":                                    # (Q27) 큰 마을 — 지붕 셋 (식구 스물의 지붕 둘에 하나 더, 가운데가 높게)
+				for f: Vector3 in [Vector3(-8.0, 3.0, 0.8), Vector3(8.0, 3.0, 0.8), Vector3(0.0, -1.5, 1.0)]:
+					var o := Vector2(f.x, f.y) * s
+					var k := f.z
+					draw_colored_polygon(PackedVector2Array([o + Vector2(-5.5, 0.0) * k * s, o + Vector2(0.0, -6.0) * k * s, o + Vector2(5.5, 0.0) * k * s]), ink)
+					draw_rect(Rect2(o + Vector2(-4.0, 0.0) * k * s, Vector2(8.0, 7.0) * k * s), ink)
+					draw_rect(Rect2(o + Vector2(-1.1, 3.0) * k * s, Vector2(2.2, 4.0) * k * s), paper)
+			"stone":                                    # (Q27) 첫 돌집 — 지붕 + 돌 쌓은 벽(가로 줄 둘 · 엇갈린 이음) + 문
+				draw_colored_polygon(PackedVector2Array([Vector2(-11.0, -1.5) * s, Vector2(0.0, -11.5) * s, Vector2(11.0, -1.5) * s]), ink)
+				draw_rect(Rect2(Vector2(-8.5, -1.5) * s, Vector2(17.0, 12.0) * s), ink)
+				for y: float in [2.5, 6.5]:
+					draw_line(Vector2(-8.0, y) * s, Vector2(8.0, y) * s, paper, 1.0 * w, true)
+				for e: Vector2 in [Vector2(-4.5, -1.5), Vector2(4.5, -1.5), Vector2(-6.5, 2.5), Vector2(6.5, 2.5), Vector2(-4.5, 6.5), Vector2(4.5, 6.5)]:
+					draw_line(e * s, (e + Vector2(0.0, 4.0)) * s, paper, 1.0 * w, true)
+				draw_rect(Rect2(Vector2(-2.2, 3.5) * s, Vector2(4.4, 7.0) * s), paper)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
