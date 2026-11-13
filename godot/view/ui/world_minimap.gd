@@ -6,8 +6,12 @@ class_name WorldMinimap
 extends Control
 
 signal pressed_at(p: Vector2)
+signal unfold_pressed                  # (Q29) 접힌 작은 지도를 누름 — 장면이 펼친다
 
 const SIZE := 88.0                     # 지름 (기준 360 폭 화면 px)
+## (Q29) 첫 병 첫날의 '접힌 지도' — 같은 지도 그림을 작은 동그라미로 (보이는 지름 NUB_VIS · 누르는 칸 NUB, 48 논리px = 엄지 칸)
+const NUB := 48.0
+const NUB_VIS := 38.0
 const RES := 128                       # 지도 그림 한 변 (픽셀)
 const REDRAW_MIN := 2.0
 const REDRAW_EVERY := 30.0
@@ -26,6 +30,18 @@ var _view_r := 40.0
 var _angle := 0.0
 var _focus: Village
 var render_ms := 0.0
+var folded := false
+
+
+## (Q29) 접기 · 펴기 — 접히면 작은 동그라미 (무리 점 하나만), 누르면 unfold_pressed
+func set_folded(on: bool) -> void:
+	if folded == on:
+		return
+	folded = on
+	var d := NUB if on else SIZE
+	custom_minimum_size = Vector2(d, d)
+	size = Vector2(d, d)
+	queue_redraw()
 
 
 func setup(jw: JarWorld) -> void:
@@ -119,6 +135,9 @@ func from_map(q: Vector2) -> Vector2:
 
 
 func _draw() -> void:
+	if folded:
+		_draw_nub()
+		return
 	var c := size * 0.5
 	var rad := SIZE * 0.5 - 3.0
 	var hb := HudBatch.of(self)
@@ -152,6 +171,45 @@ func _draw() -> void:
 	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), top.pts, top.cols)
 
 
+## 접힌 지도: 유리 테두리 안에 접힌 종이 지도 그림 (세 칸 지그재그 + 지금 무리 점) — 첫날엔 안 본 땅(안개)뿐이라
+## 지도 그림을 줄여 넣으면 흰 동그라미로만 보여서, '지도'로 읽히는 모양을 그린다. 삼각형 배열 한두 번
+func _draw_nub() -> void:
+	var c := size * 0.5
+	var rad := NUB_VIS * 0.5 - 2.5
+	var g := HudBatch.Geo.new()
+	g.circle(c, rad + 2.5, RIM)
+	g.circle(c, rad + 1.0, Color("dfe9ee"))
+	g.circle(c, rad - 0.5, Color("cfe3c4"))
+	var hb := HudBatch.of(self)
+	if hb != null:
+		hb.put_shapes(self, g)
+	else:
+		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), g.pts, g.cols)
+	var top := HudBatch.Geo.new()
+	var w := 7.0                            # 한 칸 너비 (세 칸 = 21)
+	var h := 16.0
+	var x0 := c.x - w * 1.5
+	var y0 := c.y - h * 0.5
+	var lean := 2.0                          # 지그재그로 접힌 높낮이
+	var paper := [Color("fbf6e6"), Color("e9dfc2"), Color("fbf6e6")]
+	for i in 3:
+		var l := x0 + w * i
+		var dl := lean if i % 2 == 1 else 0.0
+		var dr := lean if i % 2 == 0 else 0.0
+		top.polygon(PackedVector2Array([Vector2(l, y0 + dl), Vector2(l + w, y0 + dr), Vector2(l + w, y0 + h + dr), Vector2(l, y0 + h + dl)]), paper[i])
+	var outline := PackedVector2Array([Vector2(x0, y0), Vector2(x0 + w, y0 + lean), Vector2(x0 + 2 * w, y0), Vector2(x0 + 3 * w, y0 + lean),
+		Vector2(x0 + 3 * w, y0 + h + lean), Vector2(x0 + 2 * w, y0 + h), Vector2(x0 + w, y0 + h + lean), Vector2(x0, y0 + h), Vector2(x0, y0)])
+	top.polyline(outline, RIM, 1.2, false)
+	top.line(Vector2(x0 + w, y0 + lean), Vector2(x0 + w, y0 + h + lean), RIM, 1.0)
+	top.line(Vector2(x0 + 2 * w, y0), Vector2(x0 + 2 * w, y0 + h), RIM, 1.0)
+	top.line(Vector2(x0 + 2.0, y0 + 9.0), Vector2(x0 + w + 3.0, y0 + 6.5), Color("6fb7c9"), 1.6)     # 물줄기 한 가닥
+	top.line(Vector2(x0 + w + 3.0, y0 + 6.5), Vector2(x0 + 3 * w - 2.0, y0 + 11.0), Color("6fb7c9"), 1.6)
+	var dot := Vector2(c.x + 1.5, y0 + h * 0.62)
+	top.circle(dot, 2.8, RIM)
+	top.circle(dot, 1.9, Color("e8b04a"))
+	RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), PackedInt32Array(), top.pts, top.cols)
+
+
 func _gui_input(e: InputEvent) -> void:
 	var pos := Vector2.INF
 	if e is InputEventMouseButton and (e as InputEventMouseButton).pressed and (e as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
@@ -159,6 +217,12 @@ func _gui_input(e: InputEvent) -> void:
 	elif e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed:
 		pos = (e as InputEventScreenTouch).position
 	if pos == Vector2.INF:
+		return
+	if folded:                             # 접힌 지도: 누르는 칸(NUB) 어디든 = 펼치기
+		if Rect2(Vector2.ZERO, size).has_point(pos):
+			accept_event()
+			GameAudio.ui_click()
+			unfold_pressed.emit()
 		return
 	if pos.distance_to(size * 0.5) > SIZE * 0.5:
 		return

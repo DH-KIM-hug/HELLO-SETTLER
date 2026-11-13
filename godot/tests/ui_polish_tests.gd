@@ -28,7 +28,7 @@ func all() -> void:
 	StoreStrip.cfg_path = TMP_HUD
 	StartFlow.navigate = false
 	run.timed(self, ["test_confirm_danger", "test_shop_undo", "test_undo_kinds", "test_contrast_and_sizes", "test_reduce_motion",
-		"test_slide", "test_scene_hits", "test_early_fold"])
+		"test_slide", "test_scene_hits", "test_early_fold", "test_sheet_close", "test_card_motion", "test_first_day_map", "test_shop_tabs"])
 	for p: String in [TMP_SETTINGS, TMP_HUD]:
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(p))
 	GameSettings.path = old_set
@@ -353,7 +353,7 @@ func test_early_fold() -> void:
 	var goto: Button = n.get("goto_btn")
 	check(bool(n.call("early_days")), "첫 병 첫날 (고비 전) = 첫 며칠")
 	check(strip.collapsed and not strip.chosen, "창고 띠는 접힌 [창고 ▸]")
-	check(not mm.visible and goto.visible, "둥근 지도는 감추고 [마을로 가기]는 그대로")
+	check(mm.visible and mm.folded and goto.visible, "둥근 지도는 작게 접고 (Q29) [마을로 가기]는 그대로")
 	var top: float = n.get("top_h")
 	check(goto.get_global_rect().position.y < top + 12.0, "[마을로 가기]가 지도 자리로 올라옴")
 	for b in n.call("tool_buttons"):
@@ -362,11 +362,11 @@ func test_early_fold() -> void:
 	# 둘째 날 → 펼침 (그 뒤엔 다시 접지 않음)
 	v.t = maxf(v.t, Balance.DAY + 1.0)
 	n.call("apply_early")
-	check(not strip.collapsed and mm.visible, "둘째 날이면 창고 띠 펼침 · 지도 보임")
+	check(not strip.collapsed and mm.visible and not mm.folded, "둘째 날이면 창고 띠 펼침 · 지도 펼침")
 	check(goto.get_global_rect().position.y > mm.get_global_rect().end.y - 8.0, "[마을로 가기]는 다시 지도 아래")
 	v.t = 0.5 * Balance.DAY
 	n.call("apply_early")
-	check(not strip.collapsed and mm.visible, "한 번 펼친 뒤엔 다시 접지 않음")
+	check(not strip.collapsed and not mm.folded, "한 번 펼친 뒤엔 다시 접지 않음")
 	remove(n)
 	# 별지기가 직접 펴 둔 적이 있으면 첫날에도 그 뜻대로
 	StoreStrip.save_collapsed(false)
@@ -386,3 +386,231 @@ func test_early_fold() -> void:
 		check(true, "(식량이 넉넉한 병 — 주의 모양 건너뜀)")
 	remove(n2)
 	DirAccess.remove_absolute(ProjectSettings.globalize_path(TMP_HUD))
+
+
+# ───────────────────────── (Q29) 시트 닫기 모션 ─────────────────────────
+func _step(panel: Control, secs: float) -> void:
+	var tw: Variant = panel.get_meta("slide_tw") if panel.has_meta("slide_tw") else null
+	if tw is Tween and (tw as Tween).is_valid():
+		(tw as Tween).custom_step(secs)
+
+
+func test_sheet_close() -> void:
+	var cur := GameSettings.get_current()
+	var keep := cur.reduce_motion
+	cur.reduce_motion = false
+	UiTheme.slide_in_tools = true
+	var ss := SettingsSheet.new()
+	run.root.add_child(ss)
+	ss.open()
+	_step(ss.panel, 1.0)
+	var rest := ss.panel.position
+	var idx := ss.panel.get_index()
+	var n_closed := [0]
+	ss.closed.connect(func() -> void: n_closed[0] += 1)
+	ss.close()
+	var holder := ss.panel.get_parent()
+	check(not ss.visible and n_closed[0] == 1, "닫으면 그 자리에서 닫힘 (visible = false · closed 한 번)")
+	check(UiTheme.closing(ss.panel) and holder != ss and ss.panel.is_visible_in_tree(), "패널은 옆의 닫히는 판에서 계속 보이며 내려감")
+	check(holder != null and holder.get("theme") == ss.theme, "닫히는 판도 같은 테마 (모양이 바뀌지 않음)")
+	_step(ss.panel, UiTheme.SHEET_SLIDE * 0.5)
+	check(ss.panel.position.y > rest.y + 10.0, "닫히는 중간: 제자리보다 아래 (%.0f → %.0f)" % [rest.y, ss.panel.position.y])
+	# 닫히는 동안 누름 — 패널 위를 눌러도 [닫기]가 다시 불리지 않음 (막이가 먹음)
+	var block: Control = ss.panel.get_node_or_null("ClosingBlock")
+	check(block != null and block.mouse_filter == Control.MOUSE_FILTER_STOP and block.get_index() == ss.panel.get_child_count() - 1 and ss.panel.mouse_filter == Control.MOUSE_FILTER_IGNORE,
+		"닫히는 동안: 맨 위 막이가 누름을 먹고 패널 바탕도 누름을 받지 않음")
+	check(ss.close_btn.is_ancestor_of(block) == false and block.get_parent() == ss.panel, "막이는 [닫기]를 포함한 내용 전체 위 (패널 크기에 맞춤)")
+	check(n_closed[0] == 1, "닫는 동안 closed는 한 번뿐")
+	_step(ss.panel, UiTheme.SHEET_SLIDE)
+	check(ss.panel.get_parent() == ss and ss.panel.get_index() == idx and ss.panel.position.is_equal_approx(rest), "다 내려가면 패널이 제자리(시트 안 · 같은 순서 · 같은 위치)로")
+	check(not UiTheme.closing(ss.panel) and ss.panel.get_node_or_null("ClosingBlock") == null and ss.panel.mouse_filter == Control.MOUSE_FILTER_STOP, "막이는 치워지고 패널은 다시 누름을 받음")
+	check(holder.is_queued_for_deletion(), "닫히는 판은 치움")
+	# 닫히는 중에 다시 열기 → 패널은 하나, 그대로 다시 올라옴
+	ss.open()
+	_step(ss.panel, 1.0)
+	ss.close()
+	ss.open()
+	check(ss.visible and ss.panel.get_parent() == ss and not UiTheme.closing(ss.panel), "닫히는 중에 다시 열면 패널을 되돌려 받아 다시 올라옴")
+	_step(ss.panel, 1.0)
+	check(ss.panel.position.is_equal_approx(rest), "다시 연 패널도 제자리")
+	# 열리는 중에 닫기 → 끝나면 제자리 (중간 자리를 제자리로 잘못 기억하지 않음)
+	ss.close()
+	_step(ss.panel, 1.0)
+	ss.open()
+	_step(ss.panel, UiTheme.SHEET_SLIDE * 0.4)
+	ss.close()
+	_step(ss.panel, 1.0)
+	check(ss.panel.get_parent() == ss and ss.panel.position.is_equal_approx(rest), "열리는 중에 닫아도 끝나면 제자리 (%.0f)" % ss.panel.position.y)
+	# 움직임 줄이기 = 바로 닫힘
+	ss.open()
+	cur.reduce_motion = true
+	ss.close()
+	check(not UiTheme.closing(ss.panel) and ss.panel.get_parent() == ss, "움직임 줄이기면 바로 닫힘 (내려가지 않음)")
+	cur.reduce_motion = false
+	# 닫히는 중에 시트가 사라져도 남는 것 없음
+	ss.open()
+	_step(ss.panel, 1.0)
+	ss.close()
+	var h2 := ss.panel.get_parent()
+	var pnl := ss.panel
+	run.root.remove_child(ss)
+	ss.free()
+	UiTheme.reclaim(pnl)
+	check(h2.is_queued_for_deletion(), "시트가 먼저 사라지면 닫히는 판이 패널과 함께 치워짐")
+	UiTheme.slide_in_tools = false
+	cur.reduce_motion = keep
+	var n := 0
+	for f: String in ["altar_sheet", "chronicle_sheet", "people_sheet", "shelf_sheet", "store_sheet", "shop_sheet", "resident_detail", "settings_sheet"]:
+		if FileAccess.get_file_as_string("res://view/ui/%s.gd" % f).contains("UiTheme.slide_out(self, panel)"):
+			n += 1
+	check(n == 8, "시트 여덟이 닫힐 때 내려감 (%d/8)" % n)
+
+
+# ───────────────────────── (Q29) 건물 · 꽃 카드 모션 ─────────────────────────
+func test_card_motion() -> void:
+	var cur := GameSettings.get_current()
+	var keep := cur.reduce_motion
+	cur.reduce_motion = false
+	UiTheme.slide_in_tools = true
+	var v := proto()
+	var bc := BuildingInfo.new()
+	run.root.add_child(bc)
+	if v.buildings.is_empty():
+		check(true, "(건물이 없는 병 — 건물 카드 건너뜀)")
+	else:
+		bc.open(v, v.buildings[0])
+		check(bc.panel.modulate.a < 0.05 and bc.panel.scale.x < 1.0, "건물 카드가 나타날 때: 흐리고 살짝 작게 시작")
+		var p0 := bc.panel.position
+		_step(bc.panel, UiTheme.CARD_FADE * 0.5)
+		check(bc.panel.modulate.a > 0.2 and bc.panel.modulate.a < 1.0 and bc.panel.position.is_equal_approx(p0), "중간: 또렷해지는 중 · 자리는 그대로 (위치를 안 건드림)")
+		_step(bc.panel, 1.0)
+		check(is_equal_approx(bc.panel.modulate.a, 1.0) and bc.panel.scale.is_equal_approx(Vector2.ONE), "끝: 또렷 · 제 크기")
+		check(UiTheme.CARD_FADE <= UiTheme.SHEET_SLIDE and UiTheme.CARD_RISE < 30.0, "카드 모션은 시트보다 짧고 작게 (%.0fms · %.0fpx)" % [UiTheme.CARD_FADE * 1000.0, UiTheme.CARD_RISE])
+		var other: Building = v.buildings[1] if v.buildings.size() > 1 else v.buildings[0]
+		bc.open(v, other)
+		check(not bc.panel.has_meta("slide_tw"), "열린 카드에서 다른 건물로 바꿀 땐 다시 움직이지 않음")
+		var rest := bc.panel.position
+		bc.close()
+		check(not bc.visible and UiTheme.closing(bc.panel), "닫으면: 바로 닫힘 · 패널은 가라앉으며 흐려짐")
+		_step(bc.panel, UiTheme.CARD_FADE * 0.5)
+		check(bc.panel.modulate.a < 1.0 and bc.panel.position.y > rest.y and bc.panel.position.y <= rest.y + UiTheme.CARD_RISE + 0.1, "사라지는 중간: 흐려지며 조금(%.0fpx 안) 가라앉음" % UiTheme.CARD_RISE)
+		bc.open(v, v.buildings[0])
+		check(bc.visible and bc.panel.get_parent() == bc and bc.panel.position.is_equal_approx(rest), "사라지는 중에 다른 건물을 누르면 카드를 되돌려 받아 다시 나타남")
+		_step(bc.panel, 1.0)
+		cur.reduce_motion = true
+		bc.close()
+		bc.open(v, v.buildings[0])
+		check(is_equal_approx(bc.panel.modulate.a, 1.0) and bc.panel.scale.is_equal_approx(Vector2.ONE) and not UiTheme.closing(bc.panel), "움직임 줄이기면 카드도 바로 (흐림 · 크기 변화 없음)")
+		cur.reduce_motion = false
+		bc.close()
+		_step(bc.panel, 1.0)
+	run.root.remove_child(bc)
+	bc.free()
+	var src := FileAccess.get_file_as_string("res://view/ui/flower_info.gd")
+	check(src.contains("UiTheme.card_in(panel)") and src.contains("UiTheme.card_out(self, panel)"), "꽃 카드도 같은 모션 (card_in · card_out)")
+	var fc := FlowerInfo.new()
+	run.root.add_child(fc)
+	fc.visible = true
+	check(UiTheme.card_in(fc.panel) and fc.panel.modulate.a < 0.05, "꽃 카드 패널: 나타나는 모션")
+	_step(fc.panel, 1.0)
+	fc.close()
+	check(UiTheme.closing(fc.panel) and not fc.visible, "꽃 카드 패널: 사라지는 모션")
+	_step(fc.panel, 1.0)
+	check(fc.panel.get_parent() == fc and is_equal_approx(fc.panel.modulate.a, 1.0), "꽃 카드: 끝나면 제자리 · 또렷하게 돌아옴 (다음에 열 때를 위해)")
+	run.root.remove_child(fc)
+	fc.free()
+	UiTheme.slide_in_tools = false
+	cur.reduce_motion = keep
+
+
+# ───────────────────────── (Q29) 첫날에도 지도를 펼칠 수단 ─────────────────────────
+func test_first_day_map() -> void:
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TMP_HUD))
+	var n := world()
+	n.call("layout_bars")
+	var mm: WorldMinimap = n.get("minimap")
+	var goto: Button = n.get("goto_btn")
+	var strip: StoreStrip = n.get("store_strip")
+	check(bool(n.call("early_days")) and mm.visible and mm.folded, "첫날: 지도는 감추지 않고 작게 접힘")
+	var r := mm.get_global_rect()
+	check(r.size.x >= 48.0 and r.size.y >= 48.0, "접힌 지도의 누르는 칸 %.0f×%.0f (48 이상 — 엄지 칸)" % [r.size.x, r.size.y])
+	check(WorldMinimap.NUB_VIS < WorldMinimap.SIZE * 0.5, "보이는 동그라미는 작게 (%.0f · 펼친 지도 %.0f)" % [WorldMinimap.NUB_VIS, WorldMinimap.SIZE])
+	var vw := n.get_viewport().get_visible_rect().size.x
+	var gr := goto.get_global_rect()
+	check(not r.intersects(gr) and r.end.x <= gr.position.x - 5.9 and absf(r.get_center().y - gr.get_center().y) < 1.0, "[마을로 가기] 왼쪽 같은 줄 · 누르는 칸끼리 6 띄움")
+	check(r.position.x > vw * 0.5, "오른쪽 위 (길 단추 옆)")
+	check(not r.intersects(strip.hit_rect()), "창고 띠의 누르는 칸과 겹치지 않음")
+	check(goto.get_global_rect().position.y < float(n.get("top_h")) + 12.0, "[마을로 가기]는 그대로 맨 위 (첫날 접기 유지)")
+	# 누르면 펼침 (날아가지 않음)
+	var flew := [false]
+	mm.pressed_at.connect(func(_p: Vector2) -> void: flew[0] = true)
+	var e := InputEventMouseButton.new()
+	e.button_index = MOUSE_BUTTON_LEFT
+	e.pressed = true
+	e.position = mm.size * 0.5
+	mm._gui_input(e)
+	check(not mm.folded and not flew[0], "접힌 지도를 누르면 펼쳐짐 (그 자리로 날아가지 않음)")
+	e.position = mm.size * 0.5
+	check(is_equal_approx(mm.size.x, WorldMinimap.SIZE) and goto.get_global_rect().position.y > mm.get_global_rect().end.y - 8.0, "펼치면 제 크기 · [마을로 가기]는 지도 아래로")
+	check(bool(n.call("early_days")) and bool(n.get("map_chosen")), "아직 첫날이어도 펼친 채 (별지기가 고름)")
+	n.call("apply_early")
+	check(not mm.folded, "1초마다 맞춰도 다시 접지 않음")
+	mm._gui_input(e)
+	check(flew[0], "펼친 뒤 누르면 평소처럼 그곳으로")
+	remove(n)
+	var n2 := world()
+	var mm2: WorldMinimap = n2.get("minimap")
+	check(bool(n2.call("early_days")) and not mm2.folded, "다음에 열어도 펼친 채 (hud.cfg에 기억)")
+	remove(n2)
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TMP_HUD))
+
+
+# ───────────────────────── (Q29) 상점: 잠긴 탭 숨김 · 새 탭 한 번 반짝임 ─────────────────────────
+func test_shop_tabs() -> void:
+	Market.reset(1000.0)
+	var v := proto()
+	Shop.update_unlocks(v)
+	var sh := ShopSheet.new()
+	run.root.add_child(sh)
+	sh.setup(v)
+	sh.open()
+	var shown := sh.shown_tabs()
+	var all_open := true
+	for t: String in shown:
+		if not Shop.tab_open(v, t):
+			all_open = false
+	check(all_open and shown.size() < Shop.TABS.size() and shown.size() >= 1, "잠긴 탭은 숨김 — 보이는 탭 %s" % ", ".join(shown))
+	check(not shown.has("이주민") and not shown.has("생물"), "첫날: 이주민 · 생물 탭은 보이지 않음")
+	check(not sh.flash.is_empty() and not Shop.has_new(v), "처음 연 탭들은 한 번 반짝이고 본 것으로 (상점 버튼 옆 반짝임 꺼짐)")
+	sh._process(ShopSheet.TAB_FLASH + 0.1)
+	check(sh.flash.is_empty(), "반짝임은 %.1f초 뒤 끝 (한 번뿐)" % ShopSheet.TAB_FLASH)
+	# 열려 있는 동안 새 탭이 열림 → 그 자리에 나타나며 한 번 반짝
+	v.shop_open["이주민"] = v.t
+	sh._process(ShopSheet.REFRESH + 0.01)
+	var b: Button = sh.tab_buttons["이주민"]
+	check(b.visible and sh.flash.has("이주민") and sh.tab != "이주민", "새로 열린 탭이 나타남 (고른 탭은 그대로 — 손을 빼앗지 않음)")
+	sh._process(ShopSheet.TAB_FLASH * 0.5 - ShopSheet.REFRESH)
+	var sb := b.get_theme_stylebox("normal") as StyleBoxFlat
+	check(sb != null and sb.shadow_size >= 3 and sb.border_color == UiTheme.GLOW.darkened(0.2), "반짝이는 동안: 금빛 테두리 · 은은한 빛 (그림자 %d)" % (sb.shadow_size if sb != null else -1))
+	var txt := b.text
+	check(txt == "이주민", "탭 글자는 그대로 (숫자 · 빨간 점 없음: \"%s\")" % txt)
+	sh._process(ShopSheet.TAB_FLASH)
+	check(not sh.flash.has("이주민") and not b.has_theme_stylebox_override("normal"), "끝나면 보통 탭 모양 (한 번뿐)")
+	sh.close()
+	sh.open()
+	check(sh.flash.is_empty(), "다시 열어도 또 반짝이지 않음")
+	# 잠긴 탭을 바로 고르면 (편지의 [보기] 등) 그 탭만 흐리게 보이고 '곧' 안내
+	sh.select_tab("생물")
+	var bb: Button = sh.tab_buttons["생물"]
+	check(bb.visible and sh.locked_text().contains("곧") and bb.modulate.a < 0.9, "잠긴 탭을 바로 고른 때만 흐리게 보이며 '곧'")
+	sh.select_tab("건물")
+	check(not bb.visible, "다른 탭으로 가면 다시 숨김")
+	var tall := true
+	for t: String in sh.shown_tabs():
+		if (sh.tab_buttons[t] as Button).custom_minimum_size.y < UiTheme.TOUCH:
+			tall = false
+	check(tall, "탭 누르는 높이 44 이상")
+	sh.close()
+	run.root.remove_child(sh)
+	sh.free()
+	Market.reset(0.0)

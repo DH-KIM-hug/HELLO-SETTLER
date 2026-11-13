@@ -213,6 +213,7 @@ func free_rect() -> Rect2:
 func open(v: Village, p: Dictionary) -> void:
 	if v == null or p.is_empty():
 		return
+	var was := visible
 	if not visible:
 		GameAudio.fx("sheet_open", "Room", -2.0)
 	village = v
@@ -222,11 +223,14 @@ func open(v: Village, p: Dictionary) -> void:
 	_t = 0.0
 	visible = true
 	_refresh()
+	if not was:
+		UiTheme.card_in(panel)               # (Q29) 살짝 커지며 또렷해짐 (움직임 줄이기면 바로)
 
 
 func close() -> void:
 	if visible:
 		GameAudio.fx("sheet_close", "Room", -2.0)
+		UiTheme.card_out(self, panel)        # (Q29) 살짝 가라앉으며 흐려짐 (움직임 줄이기면 바로)
 	visible = false
 	pick = {}
 	closed.emit()

@@ -1,5 +1,5 @@
 ## 거인의 상점 시트 — docs/UI.md 화면 06 · SHOP.md 1 · 4 · ROADMAP A7.
-## 세로 = 아래에서 올라오는 시트 (화면 78%), 가로 = 오른쪽 패널. 위: 제목 · 지폐 / 탭 줄 (잠긴 탭은 흐리게 '곧', 새로 열린 탭은 부드럽게 빛남) /
+## 세로 = 아래에서 올라오는 시트 (화면 78%), 가로 = 오른쪽 패널. 위: 제목 · 지폐 / 탭 줄 (Q29: 잠긴 탭은 숨김, 새로 열린 탭은 나타나며 한 번 금빛으로 부풂) /
 ## 카드 2열: 물건 그림 + 이름 + '거인에게는 / 병 안에서는' 두 줄 + 값 버튼. 못 사면 값이 흐리게, 누르면 "지폐가 n 모자라요".
 ## 사면 물건이 거인의 손에 (Shop.buy) — 아래 띠 [손]에서 뚜껑을 열고 떨어뜨린다. 숫자는 값에만.
 ## (Q23 ㊽) 사면 바로 손에 들고, 토스트 옆 [되돌리기]가 UNDO_SECS초 — 누르면 낸 지폐를 모두 돌려받고 손에서 빠진다 (Shop.undo_buy).
@@ -17,6 +17,8 @@ const REFRESH := 0.5
 const ICON_PX := 56
 const TOAST_SECS := 2.4
 const UNDO_SECS := 4.0                 # (Q23 ㊽) 산 뒤 [되돌리기]가 떠 있는 시간
+const TAB_FLASH := 2.4                 # (Q29) 새로 열린 탭이 한 번 금빛으로 부풀었다 가라앉는 시간
+const TAB_FADE := 0.25                 # (Q29) 새로 열린 탭이 나타나는 시간 (움직임 줄이기면 바로)
 
 var village: Village
 var tab := "건물"
@@ -39,9 +41,12 @@ var odds_panel: PanelContainer         # 이주민 뽑기 공개 확률표 (기�
 var odds_body: VBoxContainer
 var _cards: Array = []                 # [{name, text, dim, btn}]
 var _t := 0.0
-var _glow_t := 0.0
 var _toast_t := 0.0
 var _sig := ""
+var flash: Dictionary = {}             # (Q29) 탭 → 남은 반짝임 (초) — 열린 걸 처음 보여 줄 때 한 번
+var _tab_sig := ""
+var _sb_sel: StyleBoxFlat
+var _sb_flash: Dictionary = {}         # 탭 → 반짝이는 동안 쓰는 바탕 (한 번 만들고 색만 바꿈)
 
 
 func _init() -> void:
@@ -303,10 +308,12 @@ func open() -> void:
 	visible = true
 	if village != null:
 		Shop.update_unlocks(village)
-		for t: String in Shop.TABS:
-			if Shop.is_new(village, t):
-				tab = t
-				break
+		var fresh := take_new()
+		if not fresh.is_empty():
+			tab = fresh[0]
+		elif not Shop.tab_open(village, tab):
+			tab = Shop.TABS[0]
+	_tab_sig = ""
 	select_tab(tab)
 	if not was:
 		UiTheme.slide_in(panel)              # (Q23 52) 아래에서 밀려 올라옴 (움직임 줄이기면 그대로)
@@ -315,6 +322,7 @@ func open() -> void:
 func close() -> void:
 	if visible:
 		GameAudio.fx("sheet_close", "Room", -2.0)
+		UiTheme.slide_out(self, panel)       # (Q29) 열 때와 짝으로 아래로 내려감 (움직임 줄이기면 바로) — 닫히는 동안 누름은 막힘
 	visible = false
 	hide_odds()
 	_hide_toast()                          # 닫으면 [되돌리기]도 끝 (산 것은 손에 그대로)
@@ -328,6 +336,7 @@ func select_tab(t: String) -> void:
 	scroll.scroll_vertical = 0
 	_sig = ""
 	_refresh()
+	_style_tabs()
 	var b: Button = tab_buttons.get(t)
 	if b != null and is_inside_tree():
 		tab_scroll.ensure_control_visible.call_deferred(b)
@@ -337,7 +346,6 @@ func _process(dt: float) -> void:
 	if not visible or village == null:
 		return
 	_t += dt
-	_glow_t += dt
 	if _toast_t > 0.0:
 		_toast_t -= dt
 		if _toast_t <= 0.0:
@@ -345,38 +353,87 @@ func _process(dt: float) -> void:
 	if undo_btn.visible and Shop.hand_item(int(_undo.get("hand_id", -1))).is_empty():
 		undo_btn.visible = false             # 그새 떨어뜨렸으면 되돌릴 수 없다
 		_undo = {}
-	_style_tabs()
+	if not flash.is_empty():
+		for t: String in flash.keys():
+			flash[t] = float(flash[t]) - dt
+			if float(flash[t]) <= 0.0:
+				flash.erase(t)
+				_tab_sig = ""
 	if _t >= REFRESH:
 		_t = 0.0
+		take_new()                           # 열려 있는 동안 새 탭이 열리면 그 자리에 나타나며 한 번 반짝
 		_refresh()
+	_style_tabs()
 
 
-## 탭 모양: 고른 탭 = 초록, 잠긴 탭 = 흐리게, 새로 열린 탭 = 금빛으로 숨 쉼 (빨간 점 대신)
+## (Q29) 새로 열린 탭을 한 번 반짝이게 걸고 본 것으로 적는다 (반짝임은 한 번뿐 — 상점 버튼 옆 반짝임도 꺼짐). 새로 열린 탭 목록
+func take_new() -> PackedStringArray:
+	var out := PackedStringArray()
+	if village == null:
+		return out
+	for t: String in Shop.TABS:
+		if Shop.is_new(village, t):
+			flash[t] = TAB_FLASH
+			Shop.mark_seen(village, t)
+			out.append(t)
+	if not out.is_empty():
+		_tab_sig = ""
+	return out
+
+
+## 탭 모양: 잠긴 탭은 숨김 (Q29 — 편지의 [보기]처럼 그 탭을 바로 고른 때만 흐리게 보임), 고른 탭 = 초록,
+## 새로 열린 탭 = 나타나며 금빛으로 한 번 부풀었다 가라앉음 (빨간 점 · 숫자 없이). 바뀐 것이 없으면 아무것도 안 함
 func _style_tabs() -> void:
-	var k := 0.5 + 0.5 * sin(_glow_t * 2.6)
+	var sig := "%s|%d" % [tab, village.shop_open.size() if village != null else -1]
+	if sig == _tab_sig and flash.is_empty():
+		return
+	_tab_sig = sig
+	var calm := not UiTheme.slide_ok()
 	for t: String in tab_buttons:
 		var b: Button = tab_buttons[t]
 		var open_t := village != null and Shop.tab_open(village, t)
-		b.modulate = Color(1, 1, 1, 1.0 if open_t else 0.55)
-		var sb: StyleBoxFlat
-		if t == tab:
-			sb = UiTheme._box(UiTheme.PRIMARY, UiTheme.INK, 1, 6, 6)
-		elif village != null and Shop.is_new(village, t):
-			sb = UiTheme._box(UiTheme.BUTTON.lerp(Color("fff1c4"), k), UiTheme.GLOW.darkened(0.2), 2, 6, 6)
-			sb.shadow_color = Color(UiTheme.GLOW, 0.3 + 0.4 * k)
-			sb.shadow_size = int(2 + 4 * k)
-		else:
-			b.remove_theme_stylebox_override("normal")
-			b.remove_theme_stylebox_override("hover")
-			b.remove_theme_stylebox_override("pressed")
+		b.visible = open_t or t == tab
+		var a := 1.0 if open_t else 0.55
+		var sb: StyleBoxFlat = null
+		if flash.has(t):
+			var age := TAB_FLASH - float(flash[t])
+			var k := 1.0 if calm else sin(PI * clampf(age / TAB_FLASH, 0.0, 1.0))
+			if not calm:
+				a *= clampf(age / TAB_FADE, 0.0, 1.0)
+			sb = _sb_flash.get(t)
+			if sb == null:
+				sb = UiTheme._box(UiTheme.BUTTON, UiTheme.GLOW.darkened(0.2), 2, 6, 6)
+				_sb_flash[t] = sb
+			sb.bg_color = UiTheme.PRIMARY if t == tab else UiTheme.BUTTON.lerp(Color("fff1c4"), k)
+			sb.border_color = UiTheme.INK.lerp(UiTheme.GLOW.darkened(0.2), k) if t == tab else UiTheme.GLOW.darkened(0.2)
+			sb.shadow_color = Color(UiTheme.GLOW, 0.6 * k)
+			sb.shadow_size = int(round(1.0 + 5.0 * k))
+		elif t == tab:
+			if _sb_sel == null:
+				_sb_sel = UiTheme._box(UiTheme.PRIMARY, UiTheme.INK, 1, 6, 6)
+			sb = _sb_sel
+		b.modulate = Color(1, 1, 1, a)
+		if sb == null:
+			for st in ["normal", "hover", "pressed"]:
+				b.remove_theme_stylebox_override(st)
 			for c in ["font_color", "font_hover_color", "font_pressed_color"]:
 				b.remove_theme_color_override(c)
 			continue
 		for st in ["normal", "hover", "pressed"]:
-			b.add_theme_stylebox_override(st, sb)
+			if b.get_theme_stylebox(st) != sb:
+				b.add_theme_stylebox_override(st, sb)
 		var fc := UiTheme.CHIP_TEXT if t == tab else UiTheme.INK
 		for c in ["font_color", "font_hover_color", "font_pressed_color"]:
 			b.add_theme_color_override(c, fc)
+
+
+## (Q29) 지금 보이는 탭 이름 (시험 · 캡처)
+func shown_tabs() -> PackedStringArray:
+	var out := PackedStringArray()
+	for t: String in tab_buttons:
+		if (tab_buttons[t] as Button).visible:
+			out.append(t)
+	return out
 
 
 # ───────────────────────── 카드 ─────────────────────────

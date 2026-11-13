@@ -125,6 +125,7 @@ func open(v: Village = null) -> void:
 func close() -> void:
 	if visible:
 		GameAudio.fx("sheet_close", "Room", -2.0)
+		UiTheme.slide_out(self, panel)       # (Q29) 열 때와 짝으로 아래로 내려감 (움직임 줄이기면 바로) — 닫히는 동안 누름은 막힘
 	visible = false
 	closed.emit()
 
