@@ -13,6 +13,7 @@ signal shop_requested(item: String)    # (Q25) 촌장의 '연장이 모자라요
 signal reveal_requested(v: Village)     # [계시] (A5) — 장면이 받아 계시 연출(RevelationShow) → Village.giant_reveal   # 분가 편지 [새 땅 고르기] — 넓은 세상 장면이 받으면 거인이 땅을 고르는 화면으로
 
 const REFRESH := 0.5
+const STONE_BTN := "자갈 보기"           # (Q30) 촌장의 '돌이 모자라요' 편지 카드의 단추 — 상점의 자갈 한 알 탭으로
 const SHEET_FRAC := 0.7                # 세로 화면: 아래 시트 높이 (화면의 70%)
 const FORCE_AMT := 10                 # [강제로 거두기] 한 번에 거두는 개수 (안)
 
@@ -297,6 +298,8 @@ func _refresh() -> void:
 	for l: Dictionary in wl:
 		if l["kind"] == "wish" and ToolShort.is_tool_wish(l):     # (Q25) 들어주는 길은 상점의 연장 꾸러미 — 떨어뜨리면 이루어짐
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "연장 꾸러미 보기", _on_tools_shop, true, "", true)
+		elif l["kind"] == "wish" and StoneShort.is_stone_wish(l):  # (Q30) 들어주는 길은 자갈 한 알 · 회색 돌멩이 — 떨어뜨리면 이루어짐
+			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], STONE_BTN, _on_stone_shop, true, "", true)
 		elif l["kind"] == "wish":
 			_card(letter_box, "%s의 편지" % l["name"], "\"%s\"" % l["text"], "들어준다", _on_grant.bind(int(l["id"])), true, "", true)
 		else:
@@ -423,6 +426,12 @@ func _on_grant(id: int) -> void:
 func _on_tools_shop() -> void:
 	GameAudio.ui_click()
 	shop_requested.emit(ToolShort.TOOL_ITEM)
+
+
+## (Q30) [자갈 보기] — 장면이 상점을 자갈 한 알 탭으로 연다 (회색 돌멩이는 '땅' 탭 — 같은 표시)
+func _on_stone_shop() -> void:
+	GameAudio.ui_click()
+	shop_requested.emit(StoneShort.ITEMS[0])
 
 
 ## 분가 자리 고르기 — 장면이 split_requested를 받으면 거인이 땅을 누르는 화면, 아니면 가까운 좋은 자리를 바로

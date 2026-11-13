@@ -13,6 +13,7 @@ const TAB_ICON := {"건물": "마을로 가기", "먹을 것·재료": "각설�
 	"생물": "작은 양", "이주민": "이주민 뽑기", "꾸미기": "조약돌"}
 const FOOD_FULL := "먹을 것·재료+"      # 2일차에 먹을 것·재료가 모두 열림 (반짝임이 한 번 더)
 const AMPOULE := "영양제 앰플"
+const LETTER_MARK := "촌장의 편지에 적힌 것"   # (Q30) 열린 연장 · 돌 편지가 바라는 물건 카드의 작은 표시
 const AMPOULE_MAX := 2
 const VEIN_MAX := 2                     # 광맥 돌은 종류마다 한 병에 둘까지 (SHOP 2.4 — 세상이 광물 덩어리가 되지 않게)
 const WAIT_ANIMAL := "짐승이 병 안에 살 수 있어야 해요"
@@ -273,6 +274,8 @@ static func card(v: Village, item: String) -> Dictionary:
 		out["using"] = JarDeco.using(v, item)
 		if JarDeco.TINTS.has(item):
 			out["tint"] = JarDeco.TINTS[item]
+	if (bool(d.get("tools", false)) and not ToolShort.open_wish(v).is_empty()) or (StoneShort.is_stone_item(item) and not StoneShort.open_wish(v).is_empty()):
+		out["letter"] = LETTER_MARK          # (Q30) 촌장의 '연장이 · 돌이 모자라요' 편지가 열려 있는 동안 그 물건 카드에 작은 표시 (ShopSheet)
 	if item == Immigrants.ITEM:
 		out["odds"] = true                   # 확률 공개 — 카드에 [확률 보기]
 		out["left"] = Immigrants.left_today()

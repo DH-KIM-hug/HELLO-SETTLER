@@ -78,6 +78,8 @@ static func _maybe_wish(v: Village) -> void:
 		return
 	if v.tools_wish_t >= 0.0 and v.t - v.tools_wish_t < Balance.TOOL_WISH_EVERY:
 		return
+	if StoneShort.wrote_today(v):
+		return                                   # (Q30) 오늘 '돌이 모자라요'를 썼다 — 같은 날 두 통은 쓰지 않음 (같은 때면 연장 편지가 먼저 — StoneShort._maybe_wish)
 	var c := v.chief()
 	if c == null:
 		return

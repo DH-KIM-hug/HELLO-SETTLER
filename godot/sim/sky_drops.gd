@@ -385,6 +385,8 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 	_miracle(v, item, p)
 	if res == "도구":
 		ToolShort.given(v, total)                # (Q25) 촌장의 '연장이 모자라요' 편지가 이루어짐 · 사건 &"tools_given"
+	if StoneShort.is_stone_item(item):
+		StoneShort.given(v, item)                # (Q30) 촌장의 '돌이 모자라요' 편지가 이루어짐 · 사건 &"stone_given"
 	Health.food_carry(v, item)                   # [B7] 먹는 물건 (각설탕·마른 약초)에 바깥의 열병이 묻어 옴 (2% — WORLD_EVENTS 5)
 	v.end_giant()
 	return {"ok": true, "why": "", "drop": o, "crushed": crushed, "fled": fled}
