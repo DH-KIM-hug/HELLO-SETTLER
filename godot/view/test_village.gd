@@ -79,6 +79,8 @@ var _loaded_clock: JarClock
 var _away := 0.0
 var _book_from := 0
 var _crowd: Array = []
+var welcoming := false                # (Q28) 돌아와 반기는 연출 중 — 끝나면 편지
+var _voiced := false                  # (Q28) 반기는 목소리를 연출 때 냈다 (편지를 닫을 때 또 내지 않음)
 var _letter_layer: CanvasLayer
 # A5 계시 · A10 연대기 · A4b 깨달음 (view/ui/revelation_show.gd · chronicle_sheet.gd · guide_caption.gd · view/sky_beam.gd)
 var altar_btn: Button
@@ -337,7 +339,7 @@ func _on_caught_up(letter: Dictionary) -> void:
 		catchup_screen = null
 	_crowd = _on_return_all(_away)
 	refresh()
-	show_return_letter(letter)
+	_welcome_then_letter(letter)
 	print("[저장] 비운 %s 따라잡음 — 인구 %d → %d · 큰 일 %d줄 · %s" % [CatchUp.away_words(_away), letter.get("pop0", 0), letter.get("pop1", 0),
 		(letter.get("events", []) as Array).size(), village.fmt_time(village.t)])
 	var sm := GameSave.get_instance()
@@ -365,8 +367,42 @@ func _on_return_all(away: float) -> Array:
 	return CatchUp.on_return(village, away)
 
 
+## (Q28) 돌아오면 반김 먼저, 소식(편지)은 그 뒤 — 반기는 사람들을 잠깐 바라보는 짧은 연출 (Stagings "homecoming" · "homecoming_quiet").
+## 하루 넘게 비웠으면 귀환 축제를, 하루 안이면 올려다보며 손 흔드는 사람들을. 연출이 끝나거나 건너뛰면 편지가 펼쳐진다.
+## 깨닫기 전 · 반기는 사람이 없음 · 마을이 보이지 않음(_welcome_ok) · 다른 연출 중이면 예전처럼 곧바로 편지.
+func _welcome_then_letter(letter: Dictionary) -> void:
+	welcoming = false
+	if _crowd.is_empty() or director == null or not village.aware or not _welcome_ok():
+		show_return_letter(letter)
+		return
+	var sid := "homecoming" if village.t - village.festival_t < 60.0 else "homecoming_quiet"
+	if not director.play(sid, village):
+		show_return_letter(letter)
+		return
+	welcoming = true
+	_welcome_voice()
+	director.finished.connect(func(_id: String, _sk: bool) -> void:
+		welcoming = false
+		show_return_letter(letter), CONNECT_ONE_SHOT)
+
+
+## (Q28) 반기는 연출을 띄워도 되나 — 넓은 세상은 병 밖(방)에 있을 때 아님
+func _welcome_ok() -> bool:
+	return true
+
+
+## 광장의 환호 / 반가운 한마디 (예전엔 편지를 닫을 때 — Q28부터 반기는 연출과 함께)
+func _welcome_voice() -> void:
+	_voiced = true
+	if village.t - village.festival_t < 60.0:
+		GameAudio.say("miracle", _crowd.slice(0, 2))       # 광장의 환호
+	else:
+		GameAudio.say("hello", _crowd.slice(0, 1))
+
+
 func _on_letter_closed() -> void:
-	if _crowd.is_empty():
+	if _crowd.is_empty() or _voiced:
+		_voiced = false
 		return
 	if village.t - village.festival_t < 60.0:
 		GameAudio.say("miracle", _crowd.slice(0, 2))       # "거인님이 돌아오셨다!" — 광장의 환호

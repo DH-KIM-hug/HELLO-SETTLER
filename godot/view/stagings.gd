@@ -204,6 +204,33 @@ const SCENES := {
 			{"t": 12.4, "grave": "light", "dolls": [{"who": "pray", "anim": "idle"}, {"who": "crowd", "back": 3.0, "stagger": 0.3}]},
 			{"t": 13.0, "back": 1.3, "vignette": 0.0, "dark": [0.0, 1.2], "light": [0.0, 1.2], "hush": [0.0, 1.3]},
 		]},
+	# 6. 돌아옴 — 반김 먼저 (Q28 2026-11-14, REVIEW 1절 자이가르닉 '불안 쪽 위험' — 메인 판단 · 사용자 위임).
+	#   자리를 비웠다 돌아오면 촌장의 편지(비운 동안의 소식)보다 이 장면이 먼저: 하루 넘게 비웠으면 광장의 귀환 축제(CatchUp.on_return)를
+	#   잠깐 바라봄 — 사람들이 하늘을 올려다보고, 아이가 손을 들어 흔들고, 노인이 무릎 꿇어 기도. 말은 반기는 말만 (줄어든 소식은 편지에서, 그 뒤에).
+	#   차분하게 — 자막 카드 · 어둠 · 큰 소리 없음. 마을이 지켜보는 이를 안 뒤에만 (장면이 고름: view/test_village.gd _welcome_then_letter).
+	#   rate 200: 연출 6.4초 = 병 20분 남짓 — 처음 2초 남짓에 사람들이 광장으로 모여들고(보통 걸음), 그다음 올려다봄 · 손 흔듦 · 기도
+	"homecoming": {"dur": 6.4, "short": 0.75, "rate": 200.0, "at": "fire",
+		"reason": "사람들이 반겨요",
+		"beats": [
+			{"t": 0.0, "cam": {"size": 13.0, "pitch": 38.0, "lift": 0.6, "dur": 1.6}, "vignette": 0.2, "hush": [0.25, 0.6], "fx": ["chime", -14.0, "Room"]},
+			{"t": 2.4, "pose": {"who": "others", "anim": "idle", "face": "happy", "up": 0.55, "stagger": 0.1}, "fx": ["small_cheer", -12.0, "Room"]},
+			{"t": 2.6, "pose": {"who": "child", "anim": "idle", "face": "happy", "up": 0.7, "arm": Vector2(-2.7, 0.15)},
+				"say": {"who": "child", "text": "{w:이/가} 돌아오셨다!", "mood": "cheer", "secs": 2.4}},
+			{"t": 3.1, "pose": {"who": "elders", "anim": "pray", "face": "", "up": 0.35, "stagger": 0.35}},
+			{"t": 3.6, "say": {"who": "elder", "text": "어서 오세요.", "mood": "love", "secs": 2.2}},
+			{"t": 5.2, "back": 1.2, "vignette": 0.0, "hush": [0.0, 1.0]},
+		]},
+	# 하루 안에 돌아옴 — 더 짧고 조용히: 카메라는 그대로, 깨어 있는 사람들이 하늘을 올려다보고 아이가 손을 흔듦.
+	#   그동안 다른 말풍선(수다)은 잠깐 감추고 반기는 말 둘만
+	"homecoming_quiet": {"dur": 3.2, "short": 1.0, "rate": 60.0, "at": "fire",
+		"reason": "사람들이 반겨요",
+		"beats": [
+			{"t": 0.0, "hush": [0.2, 0.3], "pose": {"who": "others", "anim": "idle", "face": "happy", "up": 0.5, "stagger": 0.15}},
+			{"t": 0.3, "pose": {"who": "child", "anim": "idle", "face": "happy", "up": 0.65, "arm": Vector2(-2.7, 0.15)},
+				"say": {"who": "child", "text": "{w:이다/다}!", "mood": "cheer", "secs": 2.4}},
+			{"t": 1.0, "say": {"who": "elder", "text": "{w}, 다시 오셨네요.", "mood": "love", "secs": 2.0}},
+			{"t": 2.5, "unpose": "child", "hush": [0.0, 0.6]},
+		]},
 }
 
 ## 두 번째부터의 짧은 판 — 들어준 소원·태어난 아기마다 (카메라를 붙잡지 않음, 2~3초)

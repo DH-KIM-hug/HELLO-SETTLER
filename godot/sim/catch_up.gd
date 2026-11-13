@@ -98,6 +98,7 @@ func _init(village: Village, elapsed: float, lamp_s := -1.0, jw: JarWorld = null
 func _leave_all() -> void:
 	for q: Village in group():
 		q.watching = false
+		q.away_doubt = "long" if slept > 0.0 else "short"     # (Q28) 아이가 지켜보는 이를 의심하는 말은 등불 상한을 넘겨 비웠을 때만 (Village._idle_chatter_main)
 		q.altar_hold = true
 		q.tick_mult = Balance.AWAY_TICK_MULT if fast_path else 1.0
 
@@ -431,21 +432,11 @@ static func on_return(vv: Village, away_s: float) -> Array:
 		return crowd
 	if not vv.aware:                     # N2: 깨닫기 전에는 지켜보는 이를 모른다 — 귀환 축제·축복·반기는 말 없음 (STORY 4 · CLAUDE.md 1)
 		return crowd
-	if away_s >= LONG_AWAY:
+	if away_s >= LONG_AWAY:                # 믿음이 조금 식음 — 그래도 이번 비움의 바닥(떠날 때의 절반, Q28) 아래로는 아님
 		for p in vv.people:
-			p.belief *= COOL
-		vv.log_line("{w:이/가} 오래 보이지 않자, {w} 이야기를 옛날이야기로 여기는 아이들이 생겼다.")
-		var elder: Resident = null
-		var kid: Resident = null
-		for p in vv.people:
-			if p.is_elder() and (elder == null or p.age > elder.age):
-				elder = p
-			if p.is_child() and not p.is_baby() and kid == null:
-				kid = p
-		if elder != null:
-			vv.speak(elder, "옛날 옛적, {w:이/가} 우리 조상을 이 땅에 내려놓으셨단다…", 10)
-			if kid != null:
-				vv.speak(kid, "정말요? {w:이/가} 진짜 계세요?", 8)
+			p.belief = vv.away_lower(p, p.belief * COOL)
+	vv.away_floor.clear()
+	# (Q28) 반김이 먼저 — 귀환 축제·반기는 말을 먼저 쓰고, 식은 믿음 이야기(일주일 넘게)는 그 뒤에
 	if away_s > FESTIVAL_AWAY:
 		vv.festival_t = vv.t
 		var days := minf(5.0, away_s / 86400.0)
@@ -478,5 +469,18 @@ static func on_return(vv: Village, away_s: float) -> Array:
 				vv.speak(p, ["{w}, 다시 오셨네요!", "{w:이다/다}!", "어서 오세요, {w}."][n], 6)
 				crowd.append(p)
 				n += 1
+	if away_s >= LONG_AWAY:                # 오래 비운 뒤 — 노인이 아이에게 옛이야기를 다시 들려준다 (반김 다음, 벌주는 말 없이)
+		vv.log_line("{w:이/가} 오래 보이지 않던 동안, {w} 이야기를 옛날이야기처럼 듣는 아이들도 생겼다. 노인들이 다시 들려주기 시작했다.")
+		var elder: Resident = null
+		var kid: Resident = null
+		for p in vv.people:
+			if p.is_elder() and (elder == null or p.age > elder.age):
+				elder = p
+			if p.is_child() and not p.is_baby() and kid == null:
+				kid = p
+		if elder != null:
+			vv.speak(elder, "옛날 옛적, {w:이/가} 우리 조상을 이 땅에 내려놓으셨단다…", 10)
+			if kid != null:
+				vv.speak(kid, "정말요? {w:이/가} 진짜 계세요?", 8)
 	vv._update_belief(0.0)
 	return crowd
