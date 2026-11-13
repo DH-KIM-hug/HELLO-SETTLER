@@ -1261,3 +1261,12 @@ const SPARE_ORDER := ["농장", "어부", "버섯꾼", "나무꾼", "제재소",
 const MILESTONE_POP_TOWN := 35          # 고비 '큰 마을' — 식구 수 (병 70일 둘레 — 서른두 씨앗 가운데값)
 const MILESTONE_WORK := 20               # 고비 '일터 스물' — 다 지은 일터(일하는 건물) 수
 const MILESTONE_LOOK_SECS := 600.0       # 4~7일차 고비를 살피는 간격 (병 초 — 열 분에 한 번: 일터 · 돌집 · 삼대를 세는 값이 커서 걸음마다 세지 않는다)
+# Q30 (2026-11-14 메인 판단 — 사용자 위임): 돌이 모자람 — 촌장의 '돌이 모자라요' 편지 (sim/stone_short.gd · 측정 tools/measure_tools.gd stonewish · veinwish).
+# 병의 돌 바위는 끝이 있다. 창고 돌이 바닥나고 캘 바위가 닿지 않으면 돌 드는 일터를 더 짓지 못해 일손이 남는다 (Q26 — 200일 노는 어른 ~33명).
+const STONE_SHORT_MIN := 1.0             # 창고의 쓸 수 있는 돌(짓는 터 몫을 뺀 것)이 이만큼 아래면 '바닥' (가장 싼 돌 드는 일터 = 돌 1)
+const STONE_SHORT_IDLE := 4              # 일터 없는 성한 어른이 이만큼 이상 (= SPARE_IDLE — 돌이 생기면 '일손이 남을 때' 규칙이 지을 만큼)
+const STONE_SHORT_HOURS := 12            # 그 조건이 이만큼 (병 시간) 이어지면 신호가 켜진다 (연장과 같음)
+const STONE_SHORT_OFF_HOURS := 6         # 이만큼 이어서 풀리면 꺼진다
+const STONE_WISH_EVERY := 4.0 * DAY      # 촌장의 '돌이 모자라요' 편지 간격 (연장 편지와 같음 · 열린 편지가 있으면 쓰지 않음 · 연장 편지와 같은 날엔 쓰지 않음)
+## 들어주지 않은 돌 편지가 닫힌 뒤 다음 편지까지: STONE_WISH_EVERY × 2^(이어서 못 받은 수 − 1) — 4 → 8 → 16일, 이 값까지. 돌을 떨어뜨리면 처음으로 (2026-11-14 메인 판단 — 도움 없는 마을에 조르지 않게)
+const STONE_WISH_BACKOFF_MAX := 16.0 * DAY

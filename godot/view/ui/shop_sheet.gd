@@ -440,6 +440,7 @@ func shown_tabs() -> PackedStringArray:
 func _state_sig() -> String:
 	var s := "%s|%d|%d|%s|%s|%d|%s" % [tab, int(Market.notes), Market.hand.size(), str(village.shop_open.keys()), str(village.shop_bought), village.era,
 		str(SkyDrops.active_towers(village))] + "|%d|%s" % [Immigrants.today_count(), ",".join(Shop.items_in("건물", village))]   # 주민이 스스로 깨치면 진열이 바뀜
+	s += "|%s|%s" % [str(ToolShort.open_wish(village).get("id", -1)), str(StoneShort.open_wish(village).get("id", -1))]     # (Q30) 편지 표시가 바뀜
 	return s
 
 
@@ -511,8 +512,28 @@ func _card(item: String) -> void:
 	if lock != "":
 		ic.modulate = Color(1, 1, 1, 0.5)
 	col.add_child(ic)
+	var mark := String(c.get("letter", ""))
+	if mark != "":                                      # (Q30) 촌장의 편지가 바라는 물건 — 금빛 가는 테두리 + 작은 한 줄 (값은 그대로)
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = UiTheme.PAPER_DEEP
+		sb.border_color = UiTheme.GLOW
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(6)
+		sb.set_content_margin_all(6)
+		card.add_theme_stylebox_override("panel", sb)
 	var nm := _label(col, String(c["name"]))
 	nm.add_theme_font_override("font", UiTheme.font(true))
+	if mark != "":
+		var mrow := HBoxContainer.new()
+		mrow.alignment = BoxContainer.ALIGNMENT_CENTER
+		mrow.add_theme_constant_override("separation", 3)
+		col.add_child(mrow)
+		if GameIcons.has("소원"):
+			var mi := GameIcons.rect("소원", 16)
+			mi.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			mrow.add_child(mi)
+		var ml := _label(mrow, mark, "Small")
+		ml.add_theme_color_override("font_color", UiTheme.INK_BROWN_SOFT)
 	nm.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	nm.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	var g := _two(col, "별지기에게는", String(c["giant"]))
@@ -536,7 +557,7 @@ func _card(item: String) -> void:
 	b.pressed.connect(press.bind(item))
 	col.add_child(b)
 	_cards.append({"name": item, "text": "별지기에게는: %s\n병 안에서는: %s" % [c["giant"], c["inside"]], "dim": lock != "" or not bool(can["ok"]), "btn": b,
-		"labels": [g, ins]})
+		"labels": [g, ins], "mark": mark})
 	if item == Shop.AMPOULE and lock == "":
 		_two(col, "", "탑은 한 병에 둘까지 · 물가는 녹조 주의").modulate = Color(1, 1, 1, 0.85)
 	if bool(c.get("odds", false)):                       # 이주민 뽑기: 확률 공개 + 오늘 남은 횟수

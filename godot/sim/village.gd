@@ -173,6 +173,15 @@ var tools_short_h := 0                # 한 시간마다 본 조건: 이어서 �
 var tools_short_first := -1.0         # 처음 켜진 병 시각 (상점의 연장 꾸러미가 열림)
 var tools_wish_t := -1.0              # 마지막 '연장이 모자라요' 편지를 쓴 병 시각
 var tools_signal_off := false         # 시험 전용 (저장 안 함) — 신호를 끈 같은 마을과 경제가 같은지 견줄 때
+# (Q30 2026-11-14) 돌이 모자람 — sim/stone_short.gd (신호 · 촌장의 '돌이 모자라요' 편지 · 자갈 한 알 / 회색 돌멩이). 옛 저장은 기본값 = 꺼짐
+var stone_short_t := -1.0             # 돌 모자람 신호가 켜진 병 시각 (-1 = 꺼짐)
+var stone_short_h := 0                # 이어서 모자란 시간 (+) · 이어서 풀린 시간 (−)
+var stone_short_first := -1.0         # 처음 켜진 병 시각
+var stone_wish_t := -1.0              # 마지막 '돌이 모자라요' 편지를 쓴 병 시각
+var stone_wish_id := -1               # 그 편지의 id (닫히는 것을 지켜봄 — 닫히면 -1)
+var stone_wish_miss := 0              # 이어서 들어주지 않고 닫힌 돌 편지 수 (다음 편지까지 4 → 8 → 16일, 돌로 들어주면 0)
+var stone_wish_closed_t := -1.0       # 들어주지 않은 돌 편지가 닫힌 병 시각
+var stone_signal_off := false         # 시험 전용 (저장 안 함)
 var _people_by_id: Dictionary = {}
 var _bld_by_id: Dictionary = {}
 var _fp_val := 0.0                    # (저장 안 함) 이 걸음 처음에 센 _food_people() — enough("밀")이 같은 걸음 안에서 다시 쓴다
@@ -1024,6 +1033,7 @@ func step(dt: float) -> void:
 		Kitchen.hourly(self)          # 우유·계란 없는 부엌 — 진딧물 목장·큰 알·씨앗 방앗간 (E3-14 — sim/kitchen.gd)
 		CoreWarmth.hourly(self)       # [핵] 병의 따뜻함 — 땅 흔들림 · 처음 보인 차이의 수첩 한 줄 (A28b, 보통 별은 아무것도 안 함)
 		ToolShort.hourly(self)        # (Q25) 연장이 모자람 — 신호 사건 · 촌장의 편지 (난수 · 경제 그대로)
+		StoneShort.hourly(self)       # (Q30) 돌이 모자람 — 신호 사건 · 촌장의 편지 (연장 편지 다음 · 같은 날엔 하나만)
 	SimProf.mark("discovery")
 	if _timers["decay"] >= HOUR:      # 오솔길은 다니지 않으면 옅어진다 (1분에 ×0.997)
 		var f := pow(0.997, _timers["decay"] / 60.0)
@@ -3249,6 +3259,8 @@ func grant_wish(id: int) -> bool:
 			continue
 		if ToolShort.is_tool_wish(l):
 			return false                  # (Q25) '연장이 모자라요'는 연장 꾸러미를 떨어뜨려야 이루어진다 (ToolShort.given)
+		if StoneShort.is_stone_wish(l):
+			return false                  # (Q30) '돌이 모자라요'는 자갈 한 알 · 회색 돌멩이를 떨어뜨려야 이루어진다 (StoneShort.given)
 		l["state"] = "granted"
 		var ty: String = l["type"]
 		if not Production.knows(self, ty):
@@ -4150,7 +4162,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off", "stone_signal_off"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

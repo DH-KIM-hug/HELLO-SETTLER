@@ -8,6 +8,8 @@
 ##   none   아무것도 주지 않는다 (공물만 걷음)
 ##   wish   '연장이 모자라요' 편지가 오면 그때만 연장 꾸러미를 사서 창고 곁에 떨어뜨린다 (지폐가 모자라면 모일 때까지 기다림)
 ##   stone  wish + 병 60일 뒤 창고의 돌이 4 아래면 자갈 한 알을 사서 창고 곁에 (사흘에 한 번까지 — Q26: 돌 천장을 걷으면)
+##   stonewish  (Q30) wish + '돌이 모자라요' 편지가 오면 그때만 자갈 한 알 (300)
+##   veinwish   (Q30) wish + '돌이 모자라요' 편지가 오면 회색 돌멩이 (1,200 · 한 병에 둘까지) — 못 사면 자갈 한 알
 ##   help   balance_v5_report의 help (건물 소원을 모두 들어줌 · 먹을 것이 1일치 아래면 병 하루 한 번 하늘 낟알) + wish
 ## 병 정오마다 본다: 식구 · 어른 · 일터 없는 어른(아기 돌봄 빼고) · 창고의 연장 · 일터(지어진 일 건물) · 빈 일터 · 먹을 것 날치 · 지폐.
 ## 씨앗마다 TOOLS 줄 하나(JSON) — 모으기는 밖에서. DIGEST 줄 = 경제가 같은지 보는 지문 (병 20일 · 끝).
@@ -18,6 +20,7 @@ const D := 86400.0
 const TOOL_ITEM := "연장 꾸러미"
 const TOOL_WISH := "연장"
 const GRAVEL_ITEM := "자갈 한 알"
+const VEIN_ITEM := "회색 돌멩이"
 
 var jw: JarWorld
 var mode := "none"
@@ -26,6 +29,7 @@ var step := 30.0
 var daily := {}              # 날 → [식구, 어른, 일터 없는 어른, 연장, 일터, 빈 일터, 먹을 것 날치, 지폐, 병 전체 식구]
 var bought: Array = []        # [병 날, 값]
 var wish_at: Array = []       # '연장' 편지가 온 병 날
+var stone_at: Array = []      # (Q30) '돌' 편지가 온 병 날 (모든 거인 모드에서 적음 — none은 사지 않음)
 var last_help := -1.0e9
 var helps := 0
 var gravel: Array = []        # (Q26 stone) [병 날, 값] — 자갈 한 알
@@ -66,6 +70,7 @@ func _run(s: int, days: int) -> void:
 	daily = {}
 	bought = []
 	wish_at = []
+	stone_at = []
 	last_help = -1.0e9
 	helps = 0
 	gravel = []
@@ -104,7 +109,7 @@ func _run(s: int, days: int) -> void:
 			digests[dn] = _digest()
 	_set_step(sdt0)
 	digests[days] = _digest()
-	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "helps": helps,
+	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "stone_at": stone_at, "helps": helps,
 		"end_pop": v.people.size(), "settlements": jw.settlements.size(), "era": v.era, "notes": int(Market.notes),
 		"starved": int(v.stats["starved"]), "extra": extra, "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
 	print("TOOLS " + JSON.stringify(out))
@@ -119,6 +124,12 @@ func _set_step(dt: float) -> void:
 
 func _giant(v: Village) -> void:
 	if mode == "none":
+		for l: Dictionary in v.open_letters("wish"):      # (Q30) 편지가 온 날만 적는다 (사지 않음)
+			var dd := snappedf(float(l["t"]) / D, 0.01)
+			if StoneShort.is_stone_wish(l) and not stone_at.has(dd):
+				stone_at.append(dd)
+			elif String(l["type"]) == TOOL_WISH and not wish_at.has(dd):
+				wish_at.append(dd)
 		return
 	for q: Village in jw.settlements:
 		for l: Dictionary in q.open_letters("wish"):
@@ -126,6 +137,14 @@ func _giant(v: Village) -> void:
 				if not wish_at.has(snappedf(float(l["t"]) / D, 0.01)):
 					wish_at.append(snappedf(float(l["t"]) / D, 0.01))
 				_buy_tools(q)
+			elif StoneShort.is_stone_wish(l):    # (Q30) '돌이 모자라요' — stonewish: 자갈 한 알 · veinwish: 회색 돌멩이 (못 사면 자갈)
+				if not stone_at.has(snappedf(float(l["t"]) / D, 0.01)):
+					stone_at.append(snappedf(float(l["t"]) / D, 0.01))
+				if mode == "veinwish":
+					if not _buy_tools(q, VEIN_ITEM):
+						_buy_tools(q, GRAVEL_ITEM)
+				elif mode == "stonewish":
+					_buy_tools(q, GRAVEL_ITEM)
 			elif mode == "help":
 				q.grant_wish(int(l["id"]))
 	if mode == "stone":                    # (Q26) + 창고의 돌이 바닥나면 자갈 한 알 (병 60일 뒤, 사흘에 한 번까지 — 지폐가 있을 때)
