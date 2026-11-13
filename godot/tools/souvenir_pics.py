@@ -5,10 +5,11 @@
 tools/milestone_signs.py와 같은 팔레트·같은 굵은 갈색 테두리의 손그림 (도형만 — 외부 그림을 쓰지 않는다).
 아주 작게 보이는 그림이라 (병 안에서 24~40점) 덩어리를 크게, 테두리를 굵게, 밝은 점 하나씩.
 
-칸 = 192점. 4칸 × 3줄 (768 × 576) — 자리는 view/souvenir_view.gd PICS와 같게:
+칸 = 192점. 4칸 × 4줄 (768 × 768 — Q27에서 넷째 줄) — 자리는 view/souvenir_view.gd PICS와 같게:
     첫 빵 한 조각 · 아기 발도장 잎 · 꽃목걸이 · 눈금 새긴 나뭇가지
     햇밀 이삭 하나 · 작은 등 · 마른 꽃다발 · '더' 바구니
     납작한 돌 (넓은 것 — 두 칸) · 납작한 돌 (좁은 것) · 반짝임 별
+    (Q27) 세 가닥 땋은 끈 · 작은 나무 망치 · 새 집 문패 · 말린 열매 꾸러미
 
     python3 godot/tools/souvenir_pics.py   →  godot/art/milestones/souvenirs.png
 """
@@ -277,6 +278,83 @@ def more():
     return im
 
 
+# ───────────────────────── (Q27) 4~7일차 고비의 기념품 ─────────────────────────
+def braid():
+    """세 가닥 땋은 끈 — 할머니 · 어머니 · 아이의 실을 한데 땋은 끈 (고리 + 술)"""
+    im, d = canvas()
+    cols = [ROSE, WHEAT_L, LEAF_L]
+    pts = [(96 + 46 * math.cos(math.pi * 0.75 + i * math.tau * 0.8 / 48), 92 + 50 * math.sin(math.pi * 0.75 + i * math.tau * 0.8 / 48)) for i in range(49)]
+    line(d, pts, LINE, 22)
+    for k in range(48):                                            # 땋은 마디 — 세 빛깔이 번갈아
+        a, b = pts[k], pts[k + 1]
+        line(d, [a, b], cols[(k // 2) % 3], 13)
+        if k % 2 == 0:
+            mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
+            dot(d, mx, my, 2.2, LINE)
+    kx, ky = 96, 150
+    stroke(d, [pts[0], (kx - 4, ky)], cols[0], 10)
+    stroke(d, [pts[-1], (kx + 4, ky)], cols[1], 10)
+    dot(d, kx, ky, 11, ROPE, 6)
+    for j, c in enumerate(cols):
+        x = kx - 12 + j * 12
+        stroke(d, [(kx, ky + 6), (x, 182)], c, 6, 5)
+    dot(d, 64, 54, 4.5, WHITE)
+    return im
+
+
+def mallet():
+    """작은 나무 망치 — 일터마다 손때 묻은 망치 하나 (손잡이에 감은 끈)"""
+    im, d = canvas()
+    a, b = (58, 166), (118, 76)
+    stroke(d, [a, b], WOOD_L, 16)
+    for t in (0.14, 0.24):                                         # 손잡이에 감은 끈
+        cx, cy = a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t
+        line(d, [(cx - 10, cy - 5), (cx + 10, cy + 5)], LINE, 8)
+        line(d, [(cx - 9, cy - 4.5), (cx + 9, cy + 4.5)], ROPE, 4)
+    g = Image.new("RGBA", im.size, (0, 0, 0, 0))
+    gd = ImageDraw.Draw(g)
+    gd.rounded_rectangle([60 * S, 30 * S, 172 * S, 86 * S], radius=14 * S, fill=LINE)       # 망치 머리
+    gd.rounded_rectangle([68 * S, 37 * S, 164 * S, 79 * S], radius=9 * S, fill=WOOD)
+    gd.rounded_rectangle([68 * S, 37 * S, 82 * S, 79 * S], radius=6 * S, fill=WOOD_D)
+    gd.rounded_rectangle([150 * S, 37 * S, 164 * S, 79 * S], radius=6 * S, fill=WOOD_D)
+    line(gd, [(88, 46), (142, 46)], WOOD_L, 5)
+    g = g.rotate(34, center=(116 * S, 58 * S), resample=Image.BICUBIC)
+    im.alpha_composite(g)
+    d = ImageDraw.Draw(im)
+    dot(d, 108, 40, 4.5, WHITE)
+    return im
+
+
+def plaque():
+    """새 집 문패 — 새 살림을 차린 집 문에 거는 작은 나무 판 (끈 + 꽃 한 송이)"""
+    im, d = canvas()
+    line(d, [(64, 70), (96, 26), (128, 70)], LINE, 8)              # 거는 끈
+    line(d, [(64, 70), (96, 27), (128, 70)], ROPE, 3.5)
+    dot(d, 96, 26, 7, WOOD_D, 5)
+    d.rounded_rectangle([30 * S, 64 * S, 162 * S, 150 * S], radius=16 * S, fill=LINE)
+    d.rounded_rectangle([38 * S, 71 * S, 154 * S, 143 * S], radius=11 * S, fill=WOOD_L)
+    line(d, [(48, 82), (144, 82)], BOARD, 5)
+    for y in (104, 124):                                           # 새긴 줄 (글이 아니라 무늬)
+        line(d, [(58, y), (134, y)], WOOD_D, 5)
+    flower(d, 146, 146, 13, PINK, turn=0.4)
+    dot(d, 50, 90, 4.5, WHITE)
+    return im
+
+
+def pouch():
+    """말린 열매 꾸러미 — 곳간을 채운 해에 묶은 작은 자루 (열매가 삐죽)"""
+    im, d = canvas()
+    for (x, y), c in (((80, 52), ROSE), ((104, 46), WHEAT), ((122, 58), LOAF)):
+        dot(d, x, y, 15, c, 6)
+    poly(d, bez((70, 74), (24, 110), (54, 168), 12) + [(138, 168)] + bez((138, 168), (168, 110), (122, 74), 12)[1:], BOARD_D)
+    stroke(d, [(64, 84), (128, 84)], ROPE, 10)                    # 묶은 끈
+    stroke(d, [(110, 84), (132, 104)], ROPE, 5)
+    for x0, x1 in ((80, 72), (112, 120)):                        # 자루 주름
+        line(d, [(x0, 96), (x1, 156)], WOOD_L, 4)
+    dot(d, 74, 108, 4.5, WHITE)
+    return im
+
+
 # ───────────────────────── 납작한 돌 · 반짝임 ─────────────────────────
 def stone(w):
     """어귀의 납작한 돌 — 윗면 가운데가 그림 바닥에서 38점쯤 (view/souvenir_view.gd STONE_TOP)"""
@@ -316,10 +394,11 @@ def spark():
 def main():
     here = os.path.dirname(os.path.abspath(__file__))
     out = os.path.join(here, "..", "art", "milestones", "souvenirs.png")
-    sheet = Image.new("RGBA", (C * 4, C * 3), (0, 0, 0, 0))
+    sheet = Image.new("RGBA", (C * 4, C * 4), (0, 0, 0, 0))
     cells = [(bread(), 0, 0), (steps(), 1, 0), (necklace(), 2, 0), (twig(), 3, 0),
              (wheat(), 0, 1), (lamp(), 1, 1), (bouquet(), 2, 1), (more(), 3, 1),
-             (stone(C * 2), 0, 2), (stone(C), 2, 2), (spark(), 3, 2)]
+             (stone(C * 2), 0, 2), (stone(C), 2, 2), (spark(), 3, 2),
+             (braid(), 0, 3), (mallet(), 1, 3), (plaque(), 2, 3), (pouch(), 3, 3)]
     for im, cx, cy in cells:
         small = im.resize((im.size[0] // S, im.size[1] // S), Image.LANCZOS)
         sheet.alpha_composite(small, (cx * C, cy * C))

@@ -1257,3 +1257,7 @@ const SPARE_FOOD_DAYS := 3.0             # 밭은 창고 먹을 것이 이 날�
 const SPARE_CAP := {"어부": 2, "버섯꾼": 2, "나무꾼": 4, "제재소": 3, "산림관": 2}
 ## 차례 (먹을 것 → 땔감 → 재료)
 const SPARE_ORDER := ["농장", "어부", "버섯꾼", "나무꾼", "제재소", "산림관"]
+# Q27 (2026-11-13 메인 판단 — 사용자 위임): 4~7일차(병 36~84일) 고비 넷 — 일터 스물 · 첫 돌집 · 삼대가 한집에 · 큰 마을 (sim/milestones.gd · 측정 tools/measure_milestones.gd — 서른두 씨앗)
+const MILESTONE_POP_TOWN := 35          # 고비 '큰 마을' — 식구 수 (병 70일 둘레 — 서른두 씨앗 가운데값)
+const MILESTONE_WORK := 20               # 고비 '일터 스물' — 다 지은 일터(일하는 건물) 수
+const MILESTONE_LOOK_SECS := 600.0       # 4~7일차 고비를 살피는 간격 (병 초 — 열 분에 한 번: 일터 · 돌집 · 삼대를 세는 값이 커서 걸음마다 세지 않는다)

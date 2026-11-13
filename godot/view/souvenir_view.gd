@@ -8,11 +8,12 @@ extends Node3D
 
 const NODE_NAME := "SouvenirView"
 const TEX := "res://art/milestones/souvenirs.png"
-const ATLAS := Vector2(768.0, 576.0)
+const ATLAS := Vector2(768.0, 768.0)     # (Q27) 넷째 줄 — 4~7일차 고비 기념품
 const PICS := {
 	"bread": Rect2(0, 0, 192, 192), "steps": Rect2(192, 0, 192, 192), "pop12": Rect2(384, 0, 192, 192), "grown": Rect2(576, 0, 192, 192),
 	"green": Rect2(0, 192, 192, 192), "pop20": Rect2(192, 192, 192, 192), "winter": Rect2(384, 192, 192, 192), "more": Rect2(576, 192, 192, 192),
 	"stone3": Rect2(0, 384, 384, 192), "stone1": Rect2(384, 384, 192, 192), "spark": Rect2(576, 384, 192, 192),
+	"gen3": Rect2(0, 576, 192, 192), "work20": Rect2(192, 576, 192, 192), "stone": Rect2(384, 576, 192, 192), "pop35": Rect2(576, 576, 192, 192),     # (Q27) 땋은 끈 · 망치 · 문패 · 말린 열매 꾸러미
 }
 const ITEM := 0.5                     # 기념품 그림 한 장 (칸 — 정사각)
 const PITCH := 0.44                   # 나란히 놓는 간격 (칸)

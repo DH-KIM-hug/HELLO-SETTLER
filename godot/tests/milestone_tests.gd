@@ -27,7 +27,8 @@ func all() -> void:
 		"test_steps", "test_steps_gather", "test_steps_wait", "test_grown", "test_old_save_born", "test_strip_seven", "test_sign_near", "test_clap_view",
 		"test_green", "test_green_old_save", "test_green_nick", "test_sheaf",
 		"test_quiet_decor", "test_pinwheel_far", "test_feast_view", "test_grown_feast", "test_grown_far", "test_clap_sound", "test_bubble_keep_out",
-		"test_post_side", "test_say_keep_out"])
+		"test_post_side", "test_say_keep_out",
+		"test_q27_order", "test_q27_work20", "test_q27_stone", "test_q27_gen3", "test_q27_words", "test_q27_save", "test_q27_old_save", "test_q27_strip", "test_q27_pop35"])
 
 
 func _world(seed_v := 5) -> JarWorld:
@@ -378,12 +379,12 @@ func test_words() -> void:
 		if not _clean(t):
 			ok = false
 			bad = t
-	check(ok and texts.size() == 39, "주민 쪽 글(별명·연대기·하는 일·말풍선)에 금지어·숫자 없음 (%d줄 · %s)" % [texts.size(), bad])
+	check(ok and texts.size() == 54, "주민 쪽 글(별명·연대기·하는 일·말풍선)에 금지어·숫자 없음 (%d줄 · %s)" % [texts.size(), bad])
 	var all_ids := true
 	for id: String in Milestones.ORDER:
 		all_ids = all_ids and Milestones.LABEL.has(id) and Milestones.NEXT.has(id) and Milestones.NICK.has(id) and Milestones.LINE.has(id) \
 			and Milestones.FEAST_LINE.has(id) == Milestones.FEAST_RANK.has(id)
-	check(all_ids and Milestones.ORDER.size() == 7 and not Milestones.FEAST_RANK.has("steps"), "고비 일곱 모두 도장 이름·다음 줄·별명·연대기, 잔치가 있는 고비는 잔치 줄 (첫걸음마는 잔치 없음)")
+	check(all_ids and Milestones.ORDER.size() == 11 and not Milestones.FEAST_RANK.has("steps"), "고비 열하나 모두 도장 이름·다음 줄·별명·연대기, 잔치가 있는 고비는 잔치 줄 (첫걸음마는 잔치 없음)")
 	# 깨닫기 전에도 같은 글 (거인을 모르는 말만)
 	var keep := Village.start_aware
 	Village.start_aware = false
@@ -409,7 +410,7 @@ func test_notebook() -> void:
 			if cell.get_child(0).get("passed"):
 				c += 1
 		return c
-	check(st.get_node("Row").get_child_count() == 7 and passed.call(st) == 0, "도장 자리 일곱, 찍힌 것 없음")
+	check(st.get_node("Row").get_child_count() == Milestones.ORDER.size() and passed.call(st) == 0, "큰 도장 줄: 자리 열하나 모두, 찍힌 것 없음")
 	check((st.get_node("Next") as Label).text == "첫 빵을 구우면 잔치가 열려요", "다음 고비 한 줄")
 	st.queue_free()
 	_bake(v, v.people[0])
@@ -423,10 +424,10 @@ func test_notebook() -> void:
 	for t in sh.tab_btns.size():
 		sh.open(t)
 		var ms := sh.strip.find_child("MilestoneStamps", true, false)
-		on_all = on_all and sh.strip.visible and ms != null and ms.get_node("Row").get_child_count() == 7 and passed.call(ms) == 1 \
+		on_all = on_all and sh.strip.visible and ms != null and ms.get_node("Row").get_child_count() == mini(Milestones.ORDER.size(), MilestoneStamps.SHOW) and passed.call(ms) == 1 \
 			and (ms.get_node("Next") as Label).text == String(Milestones.NEXT["steps"])
 		in_body = in_body or sh.body.find_child("MilestoneStamps", true, false) != null
-	check(sh.tab_btns.size() >= 3 and on_all, "도장 띠: 탭 %d개 어디서나 — 자리 일곱 · 첫 빵 도장 하나 · 다음 고비 한 줄" % sh.tab_btns.size())
+	check(sh.tab_btns.size() >= 3 and on_all, "도장 띠: 탭 %d개 어디서나 — 일곱 칸 창 · 첫 빵 도장 하나 · 다음 고비 한 줄" % sh.tab_btns.size())
 	check(not in_body, "탭 안(수첩 장 아래)에는 도장 줄이 더 없다")
 	check(sh.strip.get_parent() == sh.tab_btns[0].get_parent().get_parent() and sh.strip.get_index() < sh.tab_btns[0].get_parent().get_index(),
 		"도장 띠는 탭 줄 위에 있다")
@@ -1078,22 +1079,24 @@ func _strip_size(st: MilestoneStamps) -> Vector2:
 ## 도장 띠: 자리 일곱이 넘는 차례대로 한 줄에 (540 px 화면 — 줄이지 않은 도장·글씨로), 얇은 띠 높이 안에. 여덟이어도 깨지지 않는다
 func test_strip_seven() -> void:
 	var v := _fresh(25)
-	var st := MilestoneStamps.make(v, true)
+	var seven: Array = Milestones.stamps(v).filter(func(s: Dictionary) -> bool: return not Milestones.LATE.has(String(s["id"])))     # (Q27) 고비 일곱이던 때의 띠
+	var st := MilestoneStamps.build(seven, Milestones.next_line(v), true)
 	run.root.add_child(st)
 	var row := st.get_node("Row")
-	var order_ok := row.get_child_count() == Milestones.ORDER.size()
+	var seven_ids: Array = Milestones.ORDER.filter(func(id: String) -> bool: return not Milestones.LATE.has(id))
+	var order_ok := row.get_child_count() == seven_ids.size()
 	var nexts := 0
 	for i in row.get_child_count():
-		order_ok = order_ok and String(row.get_child(i).name) == "Cell_" + String(Milestones.ORDER[i])
+		order_ok = order_ok and String(row.get_child(i).name) == "Cell_" + String(seven_ids[i])
 		nexts += 1 if row.get_child(i).get_child(0).get("next") else 0
-	check(order_ok and Milestones.ORDER == ["bread", "steps", "pop12", "grown", "green", "pop20", "winter"], "도장은 넘는 차례대로 (첫 빵 · 첫걸음마 · 식구 열둘 · 첫 어른 · 첫 고개 · 식구 스물 · 첫 겨울)")
+	check(order_ok and seven_ids == ["bread", "steps", "pop12", "grown", "green", "pop20", "winter"], "도장은 넘는 차례대로 (첫 빵 · 첫걸음마 · 식구 열둘 · 첫 어른 · 첫 고개 · 식구 스물 · 첫 겨울)")
 	var labels_ok := true
 	var widest := 0.0
 	var cell_w := (STRIP_W - float((row as HBoxContainer).get_theme_constant("separation")) * float(row.get_child_count() - 1)) / float(row.get_child_count())
 	for i in row.get_child_count():
 		var lb := row.get_child(i).get_child(1) as Label
 		var stp := row.get_child(i).get_child(0) as Control
-		labels_ok = labels_ok and lb.text == String(Milestones.LABEL[Milestones.ORDER[i]]) and lb.get_theme_font_size("font_size") >= 12 \
+		labels_ok = labels_ok and lb.text == String(Milestones.LABEL[seven_ids[i]]) and lb.get_theme_font_size("font_size") >= 12 \
 			and is_equal_approx(stp.custom_minimum_size.x, MilestoneStamps.STAMP_SMALL)
 		widest = maxf(widest, lb.get_minimum_size().x)
 	check(labels_ok and widest <= cell_w and String(Milestones.LABEL["green"]) == "첫 고개",
@@ -1102,14 +1105,14 @@ func test_strip_seven() -> void:
 	var ms := _strip_size(st)
 	check(ms.x <= STRIP_W and ms.y <= 100.0 and ms.y >= 60.0, "얇은 띠: 일곱이 한 줄 · 높이 100 px 안 (%.0f × %.0f)" % [ms.x, ms.y])
 	st.queue_free()
-	var eight: Array = Milestones.stamps(v)
+	var eight: Array = seven.duplicate()
 	eight.append({"id": "x1", "label": "식구 서른", "passed": false})
 	var s8 := MilestoneStamps.build(eight, Milestones.next_line(v), true)
 	run.root.add_child(s8)
 	var m8 := _strip_size(s8)
-	check(s8.get_node("Row").get_child_count() == 8 and m8.x <= STRIP_W and m8.y <= 100.0, "여덟이어도 한 줄 · 높이 100 px 안 (%.0f × %.0f)" % [m8.x, m8.y])
+	check(s8.get_node("Row").get_child_count() == MilestoneStamps.SHOW and m8.x <= STRIP_W and m8.y <= 100.0, "여덟이면 얇은 띠는 일곱 칸 창 · 한 줄 · 높이 100 px 안 (%.0f × %.0f)" % [m8.x, m8.y])
 	s8.queue_free()
-	var big := MilestoneStamps.make(v, false)
+	var big := MilestoneStamps.build(seven, Milestones.next_line(v), false)
 	run.root.add_child(big)
 	check(big.get_node("Row").get_child_count() == 7 and big.get_combined_minimum_size().x <= 500.0, "큰 도장 줄도 일곱이 들어간다 (%.0f)" % big.get_combined_minimum_size().x)
 	big.queue_free()
@@ -2249,3 +2252,337 @@ func test_say_keep_out() -> void:
 	scene.free()
 	run.root.size = size0
 	CutoutResident.override = old_cut
+
+
+# ───────────────────────── Q27 — 4~7일차 고비 셋 (일터 스물 · 첫 돌집 · 삼대가 한집에) ─────────────────────────
+## 모닥불에서 먼 곳에 다 지은 건물 하나 (자리가 겹쳐도 상관없는 시험용 — 줄지어 놓음)
+func _put(v: Village, type: String, i: int) -> Building:
+	return v.add_building(type, v.fire.x + 14.0 + 2.5 * float(i % 8), v.fire.y - 10.0 + 2.5 * float(i / 8), true)
+
+
+## 일터가 n곳이 되도록 더 짓는다
+func _work_to(v: Village, n: int) -> void:
+	var i := 0
+	while Milestones.workplaces(v) < n:
+		_put(v, "나무꾼", i)
+		i += 1
+
+
+## 산 사람 셋 (윗대 · 가운데 · 손주)을 한 집에 — 윗대는 처음 온 어른 가운데 번호가 가장 작은 사람, 가운데는 그 아이, 손주는 가운데의 아이
+func _three(v: Village, same_roof := true) -> Array:
+	var top: Resident = null
+	for p in v.people:
+		if p.is_adult() and (top == null or p.id < top.id):
+			top = p
+	var h := _put(v, "목조주택", 40)
+	var mid := v.add_person("가운데", "f", Balance.AGE_ADULT + 1.0, "", h.x, h.y, top, top)
+	mid.parents = PackedInt32Array([top.id, top.partner if top.partner >= 0 else top.id])
+	var kid := v.add_person("손주", "m", 0.5, "", h.x, h.y, mid, mid)
+	kid.parents = PackedInt32Array([mid.id, mid.id])
+	top.home = h.id
+	mid.home = h.id
+	kid.home = h.id if same_roof else -1
+	return [top, mid, kid, h]
+
+
+func test_q27_order() -> void:
+	check(Milestones.ORDER == ["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35", "winter"],
+		"고비 열하나: 첫 28일의 차례는 그대로, 그 뒤에 일터 스물 · 첫 돌집 · 삼대 · 큰 마을 · (첫 겨울)")
+	check(Milestones.VERSION == 5 and Milestones.WORK_MANY == Balance.MILESTONE_WORK and Balance.MILESTONE_WORK == 20 and Milestones.STONE_HOUSE == "석조주택"
+		and Milestones.POP_TOWN == Balance.MILESTONE_POP_TOWN and Balance.MILESTONE_POP_TOWN == 35, "기록 판 5 · 일터 · 식구 기준은 balance.gd의 값 (20 · 35)")
+	check(not Milestones.FEAST_RANK.has("work20") and Milestones.FEAST_SMALL.has("stone") and Milestones.FEAST_SMALL.has("gen3")
+		and Milestones.FEAST_SMALL.has("pop35") and Milestones.FEAST_RANK.find("stone") < Milestones.FEAST_RANK.find("pop12")
+		and Milestones.FEAST_RANK.find("gen3") < Milestones.FEAST_RANK.find("pop12") and Milestones.FEAST_RANK.find("pop35") < Milestones.FEAST_RANK.find("pop12"),
+		"일터 스물은 잔치 없음 · 첫 돌집 · 삼대 · 큰 마을은 작은 잔치 (같은 날 겹치면 큰 잔치가 먼저)")
+	var art_ok := true
+	for id: String in Milestones.LATE:
+		art_ok = art_ok and Souvenirs.NAME.has(id) and SouvenirView.PICS.has(id) and SouvenirView.pic_texture(id) != null
+	var tex := load(SouvenirView.TEX) as Texture2D
+	check(art_ok and tex != null and Vector2(tex.get_size()) == SouvenirView.ATLAS, "기념품 그림: 셋 다 그림판에 자리가 있다 (%s)" % str(tex.get_size() if tex != null else Vector2.ZERO))
+
+
+func test_q27_work20() -> void:
+	var v := _aged(61)
+	var n0 := v.events.serial
+	var book0 := v.book.size()
+	_work_to(v, Milestones.WORK_MANY - 1)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	check(not Milestones.is_passed(v, "work20"), "일터 열아홉 곳은 아직 (%d곳)" % Milestones.workplaces(v))
+	_put(v, "어부", 30)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	var rec := _rec(v, "work20")
+	check(Milestones.is_passed(v, "work20") and _ms_count(v, "work20", n0) == 1 and not bool(rec.get("silent", true)), "스무 곳이 되면 살피는 때(병 열 분 안)에 고비")
+	var who := v.person(int(rec.get("who", -1)))
+	check(who != null and who == v.chief() and who.nickname == "일터를 일군", "촌장(가장 나이 많은 어른)에게 별명 (%s)" % Milestones.title_of(who))
+	var line := ""
+	for i in range(book0, v.book.size()):
+		if String(v.book[i]["text"]).contains("망치 소리"):
+			line = String(v.book[i]["text"])
+	check(line != "" and _clean(line) and who != null and line.contains("'일터를 일군 %s'" % who.name), "연대기 한 줄 — 금지어·숫자 없음 (%s)" % line)
+	check((v.milestones["feasts"] as Array).is_empty(), "잔치는 없다")
+	check(Souvenirs.is_waiting(v, "work20"), "기념품 '작은 나무 망치'가 기다린다")
+	_put(v, "어부", 31)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	check(_ms_count(v, "work20", n0) == 1, "일터가 더 늘어도 한 번뿐")
+	for b in v.buildings.duplicate():                # 일터가 줄었다 다시 늘어도
+		if b.type == "나무꾼" and b.x > v.fire.x + 13.0:
+			v.buildings.erase(b)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	_work_to(v, Milestones.WORK_MANY + 2)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	check(_ms_count(v, "work20", n0) == 1, "줄었다 다시 늘어도 한 번뿐")
+
+
+func test_q27_stone() -> void:
+	var v := _aged(62)
+	var n0 := v.events.serial
+	var h := _put(v, "석조주택", 0)
+	check(Milestones.stone_home(v) == null and not Milestones.is_passed(v, "stone"), "빈 돌집은 아직 — 식구가 들어야 (마을은 빈 집에 곧 식구를 들이므로 걸음 없이 셈만)")
+	var half := v.add_building("석조주택", v.fire.x - 14.0, v.fire.y + 9.0, false)
+	var a: Resident = null
+	for p in v.people:
+		if p.is_adult() and (a == null or p.id < a.id):
+			a = p
+	a.home = half.id
+	check(Milestones.stone_home(v) == null, "짓는 중인 돌집은 세지 않는다")
+	a.home = h.id
+	v.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	var rec := _rec(v, "stone")
+	check(Milestones.is_passed(v, "stone") and _ms_count(v, "stone", n0) == 1 and int(rec.get("b", -1)) == h.id and int(rec.get("who", -1)) == a.id,
+		"돌집에 식구가 들면 고비 — 그 집 · 그 어른")
+	check(a.nickname == "첫 돌집에 든" and _lines(v, "%s%s 마을에서 처음 돌로 지은 집에 들었다" % [a.name, Village.josa(a.name, "이", "가")]) == 1,
+		"별명 · 연대기 (%s)" % Milestones.title_of(a))
+	var e := _last(v, &"milestone")
+	check(e["at"] == Vector2(h.x, h.y), "사건 자리 = 그 돌집")
+	var guard := 0                                    # 그날 저녁: 집들이 잔치 (작은 잔치)
+	while not Milestones.feast_on(v) and guard < 40:
+		v.advance(H)
+		guard += 1
+	var f: Dictionary = v.milestones["feast"]
+	check(Milestones.feast_id(v) == "stone" and is_equal_approx(float(f["until"]) - float(f["t0"]), Balance.FEAST_SMALL_SECS) and _lines(v, "집들이 잔치") == 1,
+		"저녁에 집들이 잔치 — 작은 잔치 (%s)" % Milestones.feast_id(v))
+	var h2 := _put(v, "석조주택", 1)
+	for p in v.people:
+		if p != a and p.is_adult():
+			p.home = h2.id
+			break
+	v.advance(Balance.MILESTONE_LOOK_SECS * 3.0)
+	check(_ms_count(v, "stone", n0) == 1, "둘째 돌집은 고비가 아니다")
+
+
+func test_q27_gen3() -> void:
+	var v := _aged(63)
+	var n0 := v.events.serial
+	var tri := _three(v, false)
+	check(not Milestones.is_passed(v, "gen3") and Milestones.three_gen(v) == null, "손주가 다른 집에 살면 아직 (마을이 집 없는 아이를 부모 집에 들이므로 걸음 없이 셈만)")
+	var kid: Resident = tri[2]
+	kid.home = (tri[3] as Building).id
+	(tri[1] as Resident).dead = true
+	check(Milestones.three_gen(v) == null, "가운데 대가 죽었으면 삼대가 아니다")
+	(tri[1] as Resident).dead = false
+	var top: Resident = tri[0]
+	check(Milestones.three_gen(v) == top, "셋이 한 집에 — 가장 윗대")
+	v.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	var rec := _rec(v, "gen3")
+	check(Milestones.is_passed(v, "gen3") and _ms_count(v, "gen3", n0) == 1 and int(rec.get("who", -1)) == top.id and int(rec.get("b", -1)) == (tri[3] as Building).id,
+		"삼대가 한집에 — 고비 (윗대 · 그 집)")
+	check(top.nickname == "삼대를 이룬" and _lines(v, "마을에 처음으로 삼대가 한집에 모였다") == 1, "별명 · 연대기 (%s)" % Milestones.title_of(top))
+	check(Souvenirs.is_waiting(v, "gen3") and str(v.milestones["feasts"]).contains("gen3"), "기념품 하나 · 그날 저녁 가족 잔치를 기다린다 (%s)" % str(v.milestones["feasts"]))
+	kid.home = -1
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	kid.home = (tri[3] as Building).id
+	v.advance(Balance.MILESTONE_LOOK_SECS * 2.0)
+	check(_ms_count(v, "gen3", n0) == 1, "흩어졌다 다시 모여도 한 번뿐")
+	var v2 := _aged(64)                               # 이미 별명이 있는 윗대: 그 집의 다른 어른에게
+	var t2 := _three(v2)
+	(t2[0] as Resident).nickname = "첫 빵을 구운"
+	v2.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	var heir := v2.person(int(_rec(v2, "gen3").get("who", -1)))
+	check(Milestones.is_passed(v2, "gen3") and (t2[0] as Resident).nickname == "첫 빵을 구운" and heir != null and heir != t2[0] and heir.home == (t2[3] as Building).id
+		and heir.is_adult() and heir.nickname == "삼대를 이룬", "윗대에게 별명이 있으면 그 집의 별명 없는 다음 어른에게 (%s)" % Milestones.title_of(heir))
+
+
+func test_q27_words() -> void:
+	var texts: Array = []
+	for id: String in Milestones.LATE:
+		texts.append(String(Milestones.NICK[id]))
+		for t: String in Milestones.LINE[id]:
+			texts.append(t)
+		if Milestones.FEAST_LINE.has(id):
+			texts.append(String(Milestones.FEAST_LINE[id]))
+		for place: String in ["stone", "altar"]:
+			texts.append(Souvenirs.line(id, place, "보리"))
+			texts.append(Souvenirs.line(id, place, ""))
+	var bad: Array = []
+	for t: String in texts:
+		var filled := t.replace("{n}", "보리").replace("{ga}", "가")
+		var plain := filled.replace("제단", "")                       # 제단 줄은 깨달은 뒤(제단이 선 뒤)에만 — 그 말은 거기서 써도 된다
+		if not _clean(plain) or filled.contains("{"):
+			bad.append(t)
+	check(texts.size() == 4 * 3 + 3 + 4 * 4 and bad.is_empty(), "새 고비 넷의 주민 쪽 글: 금지어·숫자·안 채운 칸 없음 (%d줄 %s)" % [texts.size(), str(bad)])
+	var ui_ok := true
+	for id: String in Milestones.LATE:
+		ui_ok = ui_ok and String(Milestones.LABEL[id]).length() <= 5 and String(Milestones.NEXT[id]) != ""
+	check(ui_ok, "도장 이름은 짧게 (다섯 글자 안) · 다음 고비 한 줄이 있다")
+
+
+func test_q27_save() -> void:
+	var jw := _world(65)
+	var v := jw.primary()
+	v.chief_off = true
+	v.t = 40.0 * D
+	v.advance(2.0)
+	_set_date(v, 6, 10, 9.0)
+	var tri := _three(v)
+	v.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	check(Milestones.is_passed(v, "gen3"), "삼대 넘음")
+	var d: Dictionary = bytes_to_var(var_to_bytes(jw.to_dict()))
+	var jw2 := JarWorld.from_dict(d)
+	var v2 := jw2.primary()
+	check(SaveCodec.digest(jw.to_dict()) == SaveCodec.digest(jw2.to_dict()) and Milestones.is_passed(v2, "gen3")
+		and v2.person((tri[0] as Resident).id).nickname == "삼대를 이룬", "왕복: 넘은 고비 · 별명이 저장된다")
+	var n0 := v2.events.serial
+	_work_to(v2, Milestones.WORK_MANY)
+	v2.advance(12.0 * H)
+	check(_ms_count(v2, "gen3", n0) == 0 and _ms_count(v2, "work20", n0) == 1 and _count(v2, &"feast", n0) == 1,
+		"불러온 뒤 삼대는 다시 없고 · 일터 스물은 새로 · 기다리던 가족 잔치는 그날 저녁에")
+
+
+## 고비 일곱이던 때(v 4)의 저장 — 이미 이룬 것은 조용히, 아직인 것은 나중에 제대로
+func test_q27_old_save() -> void:
+	var jw := _world(66)
+	var v := jw.primary()
+	v.chief_off = true
+	v.t = 50.0 * D
+	v.advance(2.0)
+	_set_date(v, 6, 10, 9.0)
+	_bake(v, v.people[0])
+	v.advance(2.0)
+	_work_to(v, Milestones.WORK_MANY + 1)
+	_three(v)
+	var d: Dictionary = bytes_to_var(var_to_bytes(jw.to_dict()))
+	_to_v4(d)
+	var jw2 := JarWorld.from_dict(d)
+	var v2 := jw2.primary()
+	check(int(v2.milestones.get("v", 0)) == 4 and not Milestones.is_passed(v2, "work20") and Milestones.is_passed(v2, "bread"), "고비 일곱이던 때의 저장")
+	var n0 := v2.events.serial
+	var book0 := v2.book.size()
+	v2.advance(2.0)
+	check(int(v2.milestones["v"]) == Milestones.VERSION and Milestones.is_passed(v2, "work20") and Milestones.is_passed(v2, "gen3") and not Milestones.is_passed(v2, "stone"),
+		"이미 이룬 일터 스물 · 삼대는 넘은 것으로, 돌집은 아직")
+	check(bool(_rec(v2, "work20")["silent"]) and bool(_rec(v2, "gen3")["silent"]) and not bool(_rec(v2, "bread")["silent"]), "조용히 적힌다 (다른 기록은 그대로)")
+	var nick_same := true                             # (불러온 뒤 식구 열둘처럼 새로 넘는 고비는 따로 — 4~7일차 고비의 별명만 본다)
+	for p in v2.people:
+		nick_same = nick_same and not ["일터를 일군", "첫 돌집에 든", "삼대를 이룬", "큰 마을을 채운"].has(p.nickname)
+	var said := 0
+	for i in range(book0, v2.book.size()):
+		var t := String(v2.book[i]["text"])
+		said += 1 if t.contains("망치 소리") or t.contains("삼대") or t.contains("땋은") or t.contains("나무 망치") else 0
+	check(_ms_count(v2, "work20", n0) + _ms_count(v2, "gen3", n0) == 0 and nick_same and said == 0, "사건 · 별명 · 연대기 줄 없음")
+	check(Souvenirs.is_waiting(v2, "work20") and Souvenirs.is_waiting(v2, "gen3"), "기념품은 조용히 기다린다 (Q17 옛 저장 규칙과 같이)")
+	v2.advance(14.0 * H)
+	var late_feast := 0
+	for e: Dictionary in v2.events.since(n0):
+		if e["kind"] == &"feast" and Milestones.LATE.has(String((e["v"] as Dictionary)["id"])):
+			late_feast += 1
+	check(late_feast == 0 and _ms_count(v2, "bread", n0) == 0, "지난 고비를 다시 축하하지 않는다 (조용히 적힌 고비의 잔치 없음 · 첫 빵 다시 없음)")
+	var a: Resident = null
+	for p in v2.people:
+		if p.is_adult() and p.nickname == "" and (a == null or p.id < a.id):
+			a = p
+	a.home = _put(v2, "석조주택", 50).id
+	v2.advance(Balance.MILESTONE_LOOK_SECS * 1.1)
+	check(Milestones.is_passed(v2, "stone") and not bool(_rec(v2, "stone")["silent"]) and _ms_count(v2, "stone", n0) == 1, "아직이던 첫 돌집은 넘는 날 제대로 고비")
+
+
+## 저장의 고비 기록을 고비 일곱이던 때("v" 4)로 되돌린다
+func _to_v4(x: Variant) -> void:
+	if x is Dictionary:
+		var d: Dictionary = x
+		if d.has("milestones") and d["milestones"] is Dictionary and (d["milestones"] as Dictionary).has("v"):
+			var m: Dictionary = d["milestones"]
+			m["v"] = 4
+			if m.has("passed") and m["passed"] is Dictionary:
+				for id: String in ["work20", "stone", "gen3", "pop35"]:
+					(m["passed"] as Dictionary).erase(id)
+		for k: Variant in d:
+			_to_v4(d[k])
+	elif x is Array:
+		for e: Variant in x:
+			_to_v4(e)
+
+
+## 도장 열하나 (Q27): 얇은 띠는 다음 고비 둘레 일곱 칸 창 — 도장·이름 글씨는 일곱일 때 크기 그대로, 이름이 제 칸 안에 · 큰 줄은 모두
+func _window_of(st: MilestoneStamps) -> Array:
+	var ids: Array = []
+	for c in st.get_node("Row").get_children():
+		ids.append(String(c.name).trim_prefix("Cell_"))
+	return ids
+
+
+func test_q27_strip() -> void:
+	var v := _fresh(67)
+	var cases := [[[], ["bread", "steps", "pop12", "grown", "green", "pop20", "work20"], "bread"],
+		[["bread", "steps", "pop12", "grown", "green", "pop20"], ["grown", "green", "pop20", "work20", "stone", "gen3", "pop35"], "work20"],
+		[["bread", "steps", "pop12", "grown", "green", "pop20", "work20", "stone", "gen3", "pop35"], ["pop20", "work20", "stone", "gen3", "pop35", "winter"], "winter"]]
+	for cs: Array in cases:
+		var all: Array = []
+		for id: String in Milestones.ORDER:
+			all.append({"id": id, "label": String(Milestones.LABEL[id]), "passed": (cs[0] as Array).has(id)})
+		var st := MilestoneStamps.build(all, "", true)
+		run.root.add_child(st)
+		var row := st.get_node("Row") as HBoxContainer
+		var win := _window_of(st)
+		var nexts: Array = []
+		var widest := 0.0
+		var size_ok := true
+		for c in row.get_children():
+			var stp := c.get_child(0) as Control
+			var lb := c.get_child(1) as Label
+			if stp.get("next"):
+				nexts.append(String(stp.get("id")))
+			widest = maxf(widest, lb.get_minimum_size().x)
+			size_ok = size_ok and is_equal_approx(stp.custom_minimum_size.x, MilestoneStamps.STAMP_SMALL) and lb.get_theme_font_size("font_size") >= 12
+		var want: Array = cs[1]
+		if want.size() < MilestoneStamps.SHOW:
+			want = Milestones.ORDER.slice(Milestones.ORDER.size() - MilestoneStamps.SHOW)
+		var cell_w := (STRIP_W - float(row.get_theme_constant("separation")) * float(row.get_child_count() - 1)) / float(row.get_child_count())
+		var ms := _strip_size(st)
+		check(win == want and nexts == [cs[2]] and size_ok and widest <= cell_w and ms.x <= STRIP_W and ms.y <= 100.0,
+			"넘은 고비 %d개: 창 %s · 다음 %s · 일곱일 때 크기 · 이름 %.0f ≤ 칸 %.0f px · 띠 %.0f × %.0f" % [(cs[0] as Array).size(), str(win), str(nexts), widest, cell_w, ms.x, ms.y])
+		st.queue_free()
+	var big := MilestoneStamps.make(v, false)
+	run.root.add_child(big)
+	check(big.get_node("Row").get_child_count() == Milestones.ORDER.size() and big.get_combined_minimum_size().x <= 500.0, "큰 도장 줄은 열하나 모두 (%.0f)" % big.get_combined_minimum_size().x)
+	big.queue_free()
+
+
+## 큰 마을 (식구 서른다섯): 식구 열둘 · 스물과 같은 규칙 — 늘어난 바로 그때 · 막 늘어난 식구의 부모에게 별명 · 작은 잔치 · 한 번뿐
+func test_q27_pop35() -> void:
+	var v := _aged(68, 60.0, 10.0)
+	for id: String in ["pop12", "pop20"]:            # 앞의 식구 고비는 이미 넘은 마을 (그 잔치가 같은 저녁에 겹치지 않게)
+		Milestones._mark_silent(v, id)
+	_grow_to(v, Milestones.POP_BIG, false)
+	v.advance(2.0)
+	var n0 := v.events.serial
+	_grow_to(v, Milestones.POP_TOWN - 1, false)
+	v.advance(2.0)
+	check(not Milestones.is_passed(v, "pop35"), "서른넷은 아직 (%d명)" % v.people.size())
+	var baby := _grow_to(v, Milestones.POP_TOWN)
+	v.advance(2.0)
+	var rec := _rec(v, "pop35")
+	var who := v.person(int(rec.get("who", -1)))
+	check(Milestones.is_passed(v, "pop35") and _ms_count(v, "pop35", n0) == 1 and who != null and baby.parents.has(who.id) and who.nickname == "큰 마을을 채운",
+		"서른다섯 번째 식구가 나면 바로 — 그 부모에게 별명 (%s)" % Milestones.title_of(who))
+	check(_lines(v, "마을은 어느새 큰 마을이 되었다") + _lines(v, "어귀에 서서 오래 마을을 바라보았다") == 1 and Souvenirs.is_waiting(v, "pop35"), "연대기 한 줄 · 기념품 '말린 열매 꾸러미'")
+	var guard := 0
+	while not Milestones.feast_on(v) and guard < 40:
+		v.advance(H)
+		guard += 1
+	var f: Dictionary = v.milestones["feast"]
+	check(Milestones.feast_id(v) == "pop35" and is_equal_approx(float(f["until"]) - float(f["t0"]), Balance.FEAST_SMALL_SECS), "그날 저녁 작은 잔치 (%s)" % Milestones.feast_id(v))
+	v.kill(v.people[v.people.size() - 1], "노환")
+	v.advance(2.0)
+	_grow_to(v, Milestones.POP_TOWN + 1)
+	v.advance(2.0)
+	check(_ms_count(v, "pop35", n0) == 1, "줄었다 다시 늘어도 한 번뿐")

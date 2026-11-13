@@ -5,13 +5,19 @@
 ## (창조 첫날의 톡 세 번 · 떨어뜨리기 한 번(목격)과 제단 공물 걷기 · 계시만). 병 한 시간씩, 30초 걸음.
 ##
 ## 실행:
-##   godot --headless --path godot -s res://tools/measure_milestones.gd -- <씨앗 처음> <씨앗 끝> [일수 40] [걸음 초 30]
+##   godot --headless --path godot -s res://tools/measure_milestones.gd -- <씨앗 처음> <씨앗 끝> [일수 40] [걸음 초 30] [거인 none|help]
+## 거인 (Q27 2026-11-13): none = 위와 같다 (돕지 않음) · help = 흔히 돕는 거인 (tools/measure_tools.gd의 help와 같음 — 소원 편지를 모두
+##   들어주고, '연장이 모자라요' 편지면 연장 꾸러미를 사서 창고 곁에, 먹을 것이 하루치 아래면 병 하루 한 번 하늘 낟알)
 ## 씨앗마다 MILE 줄 하나 (JSON) — 모으기는 밖에서 (tools/measure_milestones_sum.py):
 ##   ms      고비 id → 넘은 병 날 (Milestones.ORDER 전부, 못 넘었으면 -1)
 ##   ev      일 이름 → 처음 일어난 병 날 (없으면 -1):
 ##           born 첫 아기 · steps 첫걸음마 · weaned 마을에서 난 아이가 처음 아기 티를 벗음 · grown 마을에서 난 아이가 처음 어른이 됨 ·
 ##           grown_kit 처음 온 아이가 처음 어른이 됨 · wedding 첫 혼인 · migrant 첫 이주민 · death 첫 죽음 · elder_death 첫 노환 ·
 ##           upgrade 처음 넓혀 지음 · house1~3 스스로 다 지은 집 (첫날 뒤 n번째) · pop13~19 식구 수 · era 시대가 바뀜 · aware 깨달음 · split 분가
+##           (Q27) gen3 산 사람 셋이 할머니·어머니·손주로 이어짐 · gen3_roof 그 셋이 한집에 · grandkid 마을에서 난 사람의 아이가 처음 태어남 ·
+##           born_wed 마을에서 난 사람이 처음 혼인 · born_home 마을에서 난 사람이 짝과 부모 집이 아닌 집에 삶 · work15/20/25 지어진 일터 수 ·
+##           pop20~40 식구 · house10/15 다 지은 집 수 · era2 두 번째 시대 · food10/20/30 병 28일 뒤 먹을 것이 처음 그 날치를 넘음
+##   fd      병 날 → 정오의 먹을 것 날치 (Q27)
 ##   steps_n 첫걸음마 고비에 문 앞까지 와 선 이웃 수 (고비를 못 넘었으면 -1)
 ##   kinds   사건 kind → [처음 병 날, 횟수] (첫 무리 것만 · 흔한 것은 뺌)
 ##   built   [병 날, 건물 종류] 다 지은 순서 (첫 무리)
@@ -33,6 +39,11 @@ var firsts: Array = []
 var born_ids: Array = []
 var kit_kids: Array = []
 var day1_houses := {}
+var mode := "none"
+var fd := {}
+var last_help := -1.0e9
+var helps := 0
+var bought: Array = []
 
 
 func _initialize() -> void:
@@ -43,6 +54,7 @@ func _initialize() -> void:
 	var s1 := int(args[1]) if args.size() > 1 else s0
 	var days := int(args[2]) if args.size() > 2 else 40
 	watch_step = float(args[3]) if args.size() > 3 else 30.0
+	mode = args[4] if args.size() > 4 else "none"
 	print("CONST ORDER %s | AGE_K %.1f AGE_BABY %.1f AGE_ADULT %.1f TODDLE %.3f | watch_step %.0f" % [str(Milestones.ORDER), Balance.AGE_K, Balance.AGE_BABY,
 		Balance.AGE_ADULT, ChildPlay.TODDLE_AGE, watch_step])
 	for s in range(s0, s1 + 1):
@@ -70,6 +82,10 @@ func _run(s: int, days: int) -> void:
 	born_ids = []
 	kit_kids = []
 	day1_houses = {}
+	fd = {}
+	last_help = -1.0e9
+	helps = 0
+	bought = []
 	for p: Resident in v.people:
 		if p.age < Balance.AGE_ADULT:
 			kit_kids.append(p.id)
@@ -101,7 +117,10 @@ func _run(s: int, days: int) -> void:
 		var hr := int(_hour(v))
 		if hr == 8 or hr == 20:
 			_collect()
+		_giant(v)
 		_sample(v)
+		if hr == 12:
+			fd[str(int(v.t / D))] = snappedf(v.food_total() / maxf(1.0, Production.day_need(v)), 0.1)
 	_line(v, days, (Time.get_ticks_msec() - t0) / 1000.0)
 
 
@@ -147,6 +166,10 @@ func _sample(v: Village) -> void:
 	for n in range(13, 20):
 		if pop >= n:
 			_first("pop%d" % n, day)
+	for n in [25, 30, 35, 40]:
+		if pop >= n:
+			_first("pop%d" % n, day)
+	_q27(v, day)
 	for id: int in born_ids:
 		var p := v.person(id)
 		if p == null:
@@ -198,9 +221,108 @@ func _line(v: Village, days: int, secs: float) -> void:
 		bad += q.check_invariants().size() + q.violations.size()
 	var out := {"seed": seed_v, "days": days, "ms": ms, "ev": ev, "kinds": kinds, "built": built, "firsts": firsts, "end_pop": v.people.size(),
 		"born": int(v.stats["born"]), "died": int(v.stats["died"]), "day1_houses": day1_houses.size(), "era": v.era, "aware": v.aware,
-		"settlements": jw.settlements.size(), "bad": bad, "secs": int(secs),
+		"settlements": jw.settlements.size(), "bad": bad, "secs": int(secs), "mode": mode, "fd": fd, "helps": helps, "bought": bought,
 		"steps_n": int((passed["steps"] as Dictionary).get("n", -1)) if passed.has("steps") else -1}
 	print("MILE " + JSON.stringify(out))
+
+
+## (Q27) 4~7일차(병 36~84일)를 채울 고비 후보
+func _q27(v: Village, day: float) -> void:
+	var here := {}
+	for id: int in born_ids:
+		here[id] = true
+	for p: Resident in v.people:
+		if p.parents.size() == 2 and here.has(p.id):
+			if p.partner >= 0:
+				_first("born_wed", day)
+				var own := p.home >= 0
+				for pid in p.parents:
+					var par := v.person(pid)
+					if par != null and not par.dead and par.home == p.home:
+						own = false
+				if own:
+					_first("born_home", day)
+		for pid in p.parents:
+			var q := v.person(pid)
+			if q == null or q.dead:
+				continue
+			for gid in q.parents:
+				var r := v.person(gid)
+				if r == null or r.dead:
+					continue
+				_first("gen3", day)
+				if p.home >= 0 and p.home == q.home and q.home == r.home:
+					_first("gen3_roof", day)
+	for id: int in born_ids:
+		var p := v.person(id)
+		if p == null:
+			continue
+		for pid in p.parents:
+			if here.has(int(pid)):
+				_first("grandkid", day)
+	var jobs := 0
+	var houses := 0
+	for b: Building in v.buildings:
+		if b.built and b.def().get("job", false):
+			jobs += 1
+		if b.built and b.is_house():
+			houses += 1
+	for n in [15, 20, 25]:
+		if jobs >= n:
+			_first("work%d" % n, day)
+	for n in [10, 15]:
+		if houses >= n:
+			_first("house%d_all" % n, day)
+	if v.era >= 2:
+		_first("era2", day)
+	if day >= 28.0:
+		var f := v.food_total() / maxf(1.0, Production.day_need(v))
+		for n in [10, 20, 30]:
+			if f >= float(n):
+				_first("food%d" % n, day)
+
+
+## (Q27) 흔히 돕는 거인 — tools/measure_tools.gd의 help와 같다
+func _giant(v: Village) -> void:
+	if mode != "help":
+		return
+	for q: Village in jw.settlements:
+		for l: Dictionary in q.open_letters("wish"):
+			if String(l["type"]) == "연장":
+				_buy_tools(q)
+			else:
+				q.grant_wish(int(l["id"]))
+	var d := v.food_total() / maxf(1.0, Production.day_need(v))
+	if d < 1.0 and v.t - last_help >= D:
+		v.manna_fall("giant")
+		helps += 1
+		last_help = v.t
+
+
+func _buy_tools(q: Village) -> void:
+	var item := ToolShort.TOOL_ITEM
+	if not Shop.ITEMS.has(item) or not bool(Shop.can_buy(q, item)["ok"]):
+		return
+	var price := Shop.price(q, item)
+	var r := Shop.buy(q, item)
+	if not bool(r["ok"]):
+		return
+	if not q.air.lid_open:
+		q.open_lid()
+	var s := q.store()
+	var at := Vector2(s.x, s.y)
+	var res := {}
+	for i in 24:
+		var a := float(i) * 2.399
+		var p := at + Vector2(cos(a), sin(a)) * (3.0 + 0.4 * i)
+		res = SkyDrops.drop(q, item, p, Shop.hand_item(int(r["hand_id"])))
+		if bool(res.get("ok", false)):
+			Shop.hand_remove(int(r["hand_id"]))
+			break
+	if not bool(res.get("ok", false)):
+		Shop.undo_buy(q, int(r["hand_id"]))
+		return
+	bought.append([snappedf(q.t / D, 0.01), int(price)])
 
 
 func _collect() -> void:
