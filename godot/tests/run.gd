@@ -851,26 +851,41 @@ func test_away_rate() -> void:
 
 ## 따라잡기 빠른 길 (ROADMAP 4 — CatchUp.fast: 걸음 60초 · 물 간격 ×2 · 건강·공기·버섯·혼인출산 간격 ×2 · 일자리 3분):
 ## 시드 몇 개로 정밀 따라잡기와 견주면 인구·먹을 것·제물·떠난 사람이 통계로 같다 (평균이 허용 범위 안), 시간은 더 짧다
+## (Q35, 2026-11-14) 먹을 것은 끝 순간 값이 아니라 마지막 병 하루의 평균 (300초마다 잼) — 끝 순간 값은 수확·요리 한 번에 수백씩 출렁여
+##   병 3일째엔 같은 정밀 계산끼리도(걸음 30초 ↔ 31초) 시드 8개 평균이 ±30%를 넘나든다 (tools/measure_catchup_fast.gd -- 6 31 48 null).
+##   하루 평균이면 시드별 차이의 표준오차가 평균의 약 10% (시드 12개) — 30% 허용은 표준오차 3배라 잡음으로는 거의 안 걸리고, 진짜 차이는 잡는다.
+##   전체 시험은 시드 12개 · 줄에 ±(차이의 표준오차)와 끝 순간 먹을 것(food_end, 참고만)을 함께 찍는다.
 func test_catchup_fast() -> void:
 	print("== 따라잡기 빠른 길 = 정밀 따라잡기 (통계)")
 	var keep_r := CatchUp.rate_override
 	var keep_s := CatchUp.step_override
 	CatchUp.rate_override = -1.0
 	CatchUp.step_override = -1.0
-	var seeds := [31, 32, 33, 34, 35, 36] if mode == "quick" else [31, 32, 33, 34, 35, 36, 37, 38]   # 시드마다 먹을 것 편차가 커서(약 600~1600) 3개 평균은 30% 허용을 쉽게 넘음 — 6개 (F-1, 2026-11-08)
+	var seeds := [31, 32, 33, 34, 35, 36] if mode == "quick" else [31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42]   # 시드마다 먹을 것 편차가 커서(약 600~1600) 3개 평균은 30% 허용을 쉽게 넘음 — 6개 (F-1, 2026-11-08) · 전체는 병 3일이라 더 출렁여 12개 (Q35)
 	var rate := 3.0 if mode == "quick" else 6.0          # 병 1.5일 ('느리게') · 전체 시험은 3일 ('보통')
 	var sums := {"exact": {}, "fast": {}}
+	var diffs := {}                                       # 열쇠 → 시드마다 (빠른 길 − 정밀) — 표준오차
 	var ms := {"exact": 0.0, "fast": 0.0}
 	var ok_inv := true
 	var same_t := true
+	var last_n := int(Balance.DAY / CatchUp.EXACT_CHUNK)  # 마지막 병 하루 = 300초 덩이 288개
 	for sd: int in seeds:
 		var t_end := -1.0
+		var rows := {}
 		for mode: String in ["exact", "fast"]:
 			CatchUp.fast = mode == "fast"
 			var v := Village.new_prototype(sd)
 			var c := CatchUp.new(v, 12.0 * Balance.HOUR, 12.0 * Balance.HOUR, null, rate)
-			c.run()
+			var food_s: Array = []                        # run(0)은 300초 한 덩이씩 (나눠 흘려도 결과는 같다 — test_away_rate)
+			while not c.run(0.0):
+				food_s.append(v.food_total())
+			food_s.append(v.food_total())
 			c.finish()
+			var food_avg := 0.0
+			var tail := food_s.slice(maxi(0, food_s.size() - last_n))
+			for x: float in tail:
+				food_avg += x
+			food_avg /= maxf(1.0, float(tail.size()))
 			ms[mode] += c.real_ms
 			if t_end < 0.0:
 				t_end = v.t
@@ -880,28 +895,51 @@ func test_catchup_fast() -> void:
 			var alt := v.altar_items()
 			for k: String in alt:
 				offer += int(alt[k])
-			var row := {"pop": v.people.size(), "food": v.food_total(), "offer": offer, "dead": v.dead.size(), "built": v.buildings.filter(func(b: Building) -> bool: return b.built).size()}
+			var row := {"pop": v.people.size(), "food": food_avg, "food_end": v.food_total(), "offer": offer, "dead": v.dead.size(), "built": v.buildings.filter(func(b: Building) -> bool: return b.built).size()}
+			rows[mode] = row
 			for k: String in row:
 				sums[mode][k] = float(sums[mode].get(k, 0.0)) + float(row[k])
+		for k: String in rows["exact"]:
+			if not diffs.has(k):
+				diffs[k] = []
+			(diffs[k] as Array).append(float(rows["fast"][k]) - float(rows["exact"][k]))
 	CatchUp.fast = true
 	CatchUp.rate_override = keep_r
 	CatchUp.step_override = keep_s
 	var n := float(seeds.size())
 	var line := PackedStringArray()
 	var close := true
-	for k: String in ["pop", "food", "offer", "dead", "built"]:
+	for k: String in ["pop", "food", "food_end", "offer", "dead", "built"]:
 		var a := float(sums["exact"][k]) / n
 		var b := float(sums["fast"][k]) / n
-		line.append("%s %.1f/%.1f" % [k, a, b])
+		var se := _mean_se(diffs[k])
+		line.append("%s %.1f/%.1f±%.1f" % [k, a, b, se])
+		if k == "food_end":
+			continue                                              # 참고만 — 끝 순간 값은 출렁임이 커서 하루 평균(food)으로 본다 (Q35)
 		var tol: float = {"pop": 0.15, "food": 0.3, "offer": 0.35, "dead": 1.0, "built": 0.15}[k]
 		if k == "dead":
 			close = close and absf(a - b) <= 1.5                 # 사람 수가 작아 비율 대신 평균 차이 (1.5명)
 		else:
 			close = close and absf(a - b) <= tol * maxf(1.0, a)
-	print("  정밀/빠른 길 평균 (시드 %d개): %s · %.0f ms / %.0f ms" % [seeds.size(), " · ".join(line), ms["exact"], ms["fast"]])
+	print("  정밀/빠른 길 평균 (시드 %d개, ±는 차이의 표준오차): %s · %.0f ms / %.0f ms" % [seeds.size(), " · ".join(line), ms["exact"], ms["fast"]])
 	check(same_t and ok_inv, "빠른 길도 같은 병 시간만큼 흐르고 값 이상 없음")
 	check(close, "빠른 길 결과 = 정밀 결과 (평균이 허용 범위 안): %s" % " · ".join(line))
 	check(ms["fast"] < ms["exact"] * 0.85, "빠른 길이 더 빠르다 (%.0f ms < %.0f ms)" % [ms["fast"], ms["exact"]])
+
+
+## 시드별 차이들의 평균의 표준오차 (표본 표준편차 / √n)
+static func _mean_se(xs: Array) -> float:
+	var m := xs.size()
+	if m < 2:
+		return 0.0
+	var mu := 0.0
+	for x: float in xs:
+		mu += x
+	mu /= m
+	var ss := 0.0
+	for x: float in xs:
+		ss += (x - mu) * (x - mu)
+	return sqrt(ss / float(m - 1)) / sqrt(float(m))
 
 
 static func world_sig(jw: JarWorld) -> String:
