@@ -94,6 +94,10 @@ func update(dt: float) -> void:
 	var inside := cam.inside_glass()
 	# 방: ③부터 (①②는 그리지 않음)
 	room.visible = stage >= 3
+	if room.visible and scene.has_method("focus_village"):
+		var fv: Variant = scene.call("focus_village")
+		if fv is Village:
+			room.set_deco(JarDeco.look(fv))      # (Q32) 병 받침 · 유리 빛깔 · 코르크 무늬 (바뀐 것이 없으면 그대로)
 	room.light.visible = stage >= 3
 	room.light.shadow_enabled = stage >= 4 and room_shadows
 	room.set_haze(1.0 if inside else 0.0)

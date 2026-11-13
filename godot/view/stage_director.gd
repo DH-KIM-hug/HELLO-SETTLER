@@ -753,7 +753,7 @@ func _beat(b: Dictionary) -> void:
 	if b.has("shake"):
 		var cam0 := _cam()
 		if cam0 != null:
-			cam0.shake(float(b["shake"][0]), float(b["shake"][1]) * k)    # 움직임 줄이기면 JarCamera가 떨지 않음
+			cam0.shake(float(b["shake"][0]) * JarDeco.shake_mult(v), float(b["shake"][1]) * k)    # 움직임 줄이기면 JarCamera가 떨지 않음 · (Q32) 병 받침이 있으면 덜 흔들림
 	if b.has("gift") and _beam != null and is_instance_valid(_beam) and _beam.get_parent() is Node3D:
 		_gift = AwakenGift.spawn(_beam.get_parent(), _beam.position, float(b["gift"]) * maxf(k, 0.6))
 		_gift.driven = true

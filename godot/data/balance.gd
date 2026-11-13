@@ -1263,3 +1263,12 @@ const MILESTONE_WORK := 20               # 고비 '일터 스물' — 다 지은
 const MILESTONE_LOOK_SECS := 600.0       # 4~7일차 고비를 살피는 간격 (병 초 — 열 분에 한 번: 일터 · 돌집 · 삼대를 세는 값이 커서 걸음마다 세지 않는다)
 # Q28 (2026-11-14): 비운 동안 믿음의 바닥 · 의심은 등불 상한을 넘겨 비웠을 때만 (docs/REVIEW_2026-11-12 1절 자이가르닉 — 출석 압박을 덜어 냄)
 const AWAY_FAITH_FLOOR := 0.5            # 한 번 비우는 동안 사람마다 믿음이 떠날 때(비운 동안 처음 본 때)의 이만큼 아래로는 줄지 않는다 (Village.away_lower — 비운 동안의 식음 · 일주일 넘게 비운 뒤의 식음 모두)
+# Q32 (2026-11-14): 꾸미기 탭 — 첫 7일 범위의 지폐 쓰는 곳 (sim/jar_deco.gd · SHOP 2.7). 효과는 아주 작게, 주민 쪽엔 숫자 없음
+const DECO_OPEN_DAY := 3                 # 꾸미기 탭이 열리는 병 날 (첫 수확이 먼저면 그때 — JarDeco.tab_ready)
+## 광장 조약돌이 집이 광장 곁인 사람의 행복에 보태는 몫의 **상한** (행복 0~1 위 — 광장 조약돌 DECO_PEBBLE_FULL개면 다 참, 하나에 그 몫만큼)
+const DECO_PEBBLE_HAPPY := 0.01
+const DECO_PEBBLE_FULL := 4              # 광장 조약돌이 이만큼이면 보탬이 다 참 (그 뒤로는 보기에만 좋음)
+const DECO_PEBBLE_MAX := 12              # 한 무리 땅에 조약돌 (손에 든 것 포함)
+const DECO_PEBBLE_PLAZA := 3.0           # 광장 가에서 이만큼(칸) 안이면 '광장 조약돌'
+const DECO_PEBBLE_NEAR := 10.0           # 집이 모닥불에서 이만큼(칸) 안인 사람만 보탬을 받음
+const DECO_STAND_SHAKE := 0.5            # 병 받침이 있으면 흔들림 연출 폭 ×이만큼

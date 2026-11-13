@@ -199,6 +199,7 @@ var algae: Array = []                 # 녹조 {x, y, t, until}
 var care: Dictionary = {}             # 돌봄 효과가 끝나는 병 시각 {pill, bandage}
 var shop_open: Dictionary = {}        # 상점 탭 → 열린 병 시각 (Shop.update_unlocks)
 var shop_seen: Array = []             # 거인이 들여다본 탭 (상점 버튼 옆 반짝임)
+var deco: Dictionary = {}             # (Q32) 꾸미기 — 조약돌 · 병 받침 · 유리 빛깔 · 코르크 무늬 (sim/jar_deco.gd). 아무것도 안 샀으면 비어 있음
 var shop_bought: Dictionary = {}      # 이 병에 사 준 건물 수 (또 사면 ×1.5)
 # BALANCE v5 (sim/production.gd · sim/altar.gd)
 var blueprints: Dictionary = {}       # 거인이 내려 준 설계도 — 건물 종류 → 받은 병 시각 (그 병 주민이 그 건물을 지을 줄 앎)
@@ -1343,6 +1344,7 @@ func _update_happiness() -> void:
 	var gyd := VillageEra.first_built(self, "묘지")
 	var gm := Balance.GRIEF_GRAVE if gyd != null else 1.0
 	var cheer := {}               # 집 → 그 집 '명랑' 식구 몫의 합
+	var pebble := JarDeco.plaza_bonus(self)              # (Q32) 광장 조약돌 (없으면 0)
 	for p in people:
 		var hh := p.f("house_happy", 0.0)
 		if hh != 0.0 and p.home >= 0:
@@ -1367,6 +1369,8 @@ func _update_happiness() -> void:
 		h += Wildlife.happy(self, p)                      # [들짐승] 물가에서 낚싯대를 드리운 날 (WILDLIFE 2)
 		h += FoundObjects.happy(self, p)                  # [떨어진 물건] 잔치 각설탕이 있는 동안 아이들 (E3-16)
 		h += Immigrants.mood(self)                        # [이주민] 축제처럼 맞이 ↑ · 경계 ↓ (기획서 11.2 — 하루 동안)
+		if pebble > 0.0 and JarDeco.near_plaza(self, p):
+			h += pebble                                   # (Q32) 광장 조약돌 — 집이 광장 곁인 사람만, 아주 조금 (Balance.DECO_PEBBLE_HAPPY 상한)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
 		if p.home >= 0 and not cheer.is_empty():
 			h += float(cheer.get(p.home, 0.0)) - p.f("house_happy", 0.0)      # 같은 집 식구의 '명랑' (자기 몫은 빼고)
@@ -3059,7 +3063,7 @@ func _turn_data() -> void:
 		var x: float = o["x"]
 		o["x"] = -float(o["y"])
 		o["y"] = x
-	for list: Array in [trees, rocks, manna, drops, towers, algae, graves, veins]:     # [상점] 하늘에서 내려온 것 · 무덤도 병과 함께 돈다
+	for list: Array in [trees, rocks, manna, drops, towers, algae, graves, veins, JarDeco.pebbles(self)]:     # [상점] 하늘에서 내려온 것 · 무덤 · (Q32) 조약돌도 병과 함께 돈다
 		for o: Dictionary in list:
 			rp.call(o)
 	for b in buildings:

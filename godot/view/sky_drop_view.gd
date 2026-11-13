@@ -17,6 +17,8 @@ var v: Village
 var terrain: JarTerrain
 var _nodes := {}                         # drop id → {node, item}
 var _towers := {}                        # tower id → {node, decal}
+var _pebbles := {}                       # (Q32) 조약돌 id → node (Village.deco.pebbles — sim/jar_deco.gd)
+const PEBBLE_KINDS := 4                   # 조약돌 모델 넷 (크림 · 옅은 푸른 회색 · 모래 · 옅은 이끼 — art/src/build_items.py deco_pebble_0..3)
 var _algae: Node3D
 var _algae_key := ""
 var _falls: Array = []                   # [{node, y0, t}]
@@ -101,9 +103,53 @@ func sync(dt: float) -> void:
 			(_towers[id]["node"] as Node3D).queue_free()
 			(_towers[id]["decal"] as Node3D).queue_free()
 			_towers.erase(id)
+	_sync_pebbles()
 	_sync_algae()
 	_sync_blueprint(dt)
 	_animate(dt)
+
+
+## (Q32) 조약돌 — 내려놓은 자리에 남는 매끈한 둥근 돌 (새로 놓인 것은 하늘에서 떨어짐)
+func _sync_pebbles() -> void:
+	var list := JarDeco.pebbles(v)
+	if list.is_empty() and _pebbles.is_empty():
+		return
+	var seen := {}
+	for pb: Dictionary in list:
+		var id := int(pb["id"])
+		seen[id] = true
+		var p := Vector3(float(pb["x"]), gy(float(pb["x"]), float(pb["y"])), float(pb["y"]))
+		var n: Node3D = _pebbles.get(id)
+		if n == null:
+			n = pebble_node(id)
+			add_child(n)
+			n.position = p
+			_pebbles[id] = n
+			if v.t - float(pb["t"]) < FRESH:
+				fall(n, p.y)
+		elif not _falling(n) and (absf(n.position.x - p.x) > 0.01 or absf(n.position.z - p.z) > 0.01):
+			n.position = p                       # 병이 돌았을 때
+	for id: int in _pebbles.keys():
+		if not seen.has(id):
+			(_pebbles[id] as Node3D).queue_free()
+			_pebbles.erase(id)
+
+
+## 조약돌 하나 (id마다 빛깔 · 모양이 조금씩 다름 — 난수 없이)
+static func pebble_node(id: int) -> Node3D:
+	var n := Node3D.new()
+	n.name = "pebble"
+	_pebble_shape(n, id)
+	return n
+
+
+static func _pebble_shape(n: Node3D, id: int) -> void:
+	var k := (0.88 + 0.08 * float(posmod(id * 5, 4))) * JarDeco.PEBBLE_SIZE / 0.38     # 모델 반지름 0.38칸 (art/src/build_items.py deco_pebble_*)
+	Art.instance(n, "deco_pebble_%d" % posmod(id * 7 + 3, PEBBLE_KINDS), Transform3D(Basis(Vector3.UP, float(id) * 1.3).scaled(Vector3.ONE * k), Vector3.ZERO))
+
+
+func pebble_count() -> int:
+	return _pebbles.size()
 
 
 func _falling(n: Node3D) -> bool:
@@ -378,6 +424,8 @@ static func make_item(item: String) -> Node3D:
 				hd.radial_segments = 10
 				_mesh(n, hd, Color("d6dbe0"), at + xf * Vector3(0, 0.66, 0), lie)
 				_mesh(n, _box(Vector3(0.3, 0.04, 0.05)), Color("6f767d"), at + xf * Vector3(0, 0.72, 0), lie)
+		JarDeco.PEBBLE:                   # (Q32) 손에 든 조약돌 = 놓일 모양 그대로
+			_pebble_shape(n, 1)
 		"자갈 한 알":
 			_mesh(n, _sphere(1.6, 7, 4), Color("9b968c"), Vector3(0, 0.9, 0), Vector3(0.3, 0.6, 0.1), Vector3(1.05, 0.72, 0.92))
 			_mesh(n, _sphere(0.8, 6, 3), Color("85807a"), Vector3(0.9, 0.5, 0.7), Vector3(0.4, 0.2, 0.0))

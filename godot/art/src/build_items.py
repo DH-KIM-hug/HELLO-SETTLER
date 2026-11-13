@@ -182,10 +182,39 @@ def build_wheat_stalk():
     m.export(OUT)
 
 
+# (Q32) 꾸미기 조약돌 (godot sim/jar_deco.gd · view/sky_drop_view.gd): a smooth flattened river pebble, four soft colours.
+# radius ~0.38 cell (a resident can sit on it), top lighter, a faint pale band on two of them.
+PEBBLES = [("d2c7b2", None), ("b0bdbb", "dfe6e2"), ("cbb59a", None), ("b5bea6", "e3e6d6")]
+
+
+def build_deco_pebbles():
+    for i, (col, band) in enumerate(PEBBLES):
+        m = Model("deco_pebble_%d" % i, 560 + i)
+        sx, sy = (1.0, 0.8 + 0.06 * (i % 3))
+
+        def shade_f(f, col=col, band=band):
+            c = f.calc_center_median()
+            if band and abs(c.x * 0.6 + c.y * 0.8) < 0.05 and f.normal.z > -0.2:
+                return band
+            if f.normal.z > 0.75:
+                return shade(col, 1.12)
+            if f.normal.z < -0.1:
+                return shade(col, 0.82)
+            return col
+        m.sphere(0.38, pos=(0, 0, 0.13), scl=(sx, sy, 0.62), rot=(0, 0, i * 0.9), color=col, seg=16, rings=9, colfn=shade_f)
+        m.export(OUT)
+
+
 if __name__ == "__main__":
     print("items ->", OUT)
+    only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
+    if only:
+        for nm in only:
+            globals()["build_" + nm]()
+        sys.exit(0)
     build_altar()
     build_ampoule()
     build_vein_hills()
     build_sugar_cube()
     build_wheat_stalk()
+    build_deco_pebbles()

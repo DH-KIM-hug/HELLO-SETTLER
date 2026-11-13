@@ -375,6 +375,148 @@ def build_sugar_bowl():
     m.export(OUT)
 
 
+# ───────────── (Q32) jar decorations: stand + cork patterns (godot sim/jar_deco.gd · view/room/giant_room.gd set_deco) ─────────────
+WALNUT = "86593a"
+WALNUT_LIGHT = "a87650"
+WALNUT_DARK = "6a4529"
+HEMP = "eadfc2"
+HEMP_DARK = "c2b08a"
+WAX = "8c3a34"
+WAX_LIGHT = "a54b42"
+BRAND = "5c3b23"
+CORK_Z0 = JAR_H + 0.4          # cork bottom (build_cork)
+CORK_TOP = CORK_Z0 + 4.0
+CORK_SIDE_R = 5.15
+
+
+def torus(m, R, r, z, seg, tseg, color, group="body", pos=(0, 0), tilt=None):
+    """Ring around the Z axis (centre radius R, tube radius r) at height z; normals point away from the tube centre."""
+    rings = []
+    for j in range(tseg + 1):
+        t = j * math.tau / tseg
+        rr, zz = R + r * math.cos(t), z + r * math.sin(t)
+        rings.append([Vector((pos[0] + math.cos(i * math.tau / seg) * rr, pos[1] + math.sin(i * math.tau / seg) * rr, zz))
+                      for i in range(seg)])
+    fs = m.strip(rings, color=color, group=group, smooth=True, close=True)
+    for f in fs:
+        f.normal_update()
+        c = f.calc_center_median()
+        a = math.atan2(c.y - pos[1], c.x - pos[0])
+        tube = Vector((pos[0] + math.cos(a) * R, pos[1] + math.sin(a) * R, z))
+        if (c - tube).dot(f.normal) < 0:
+            f.normal_flip()
+    m._bm(group).normal_update()
+    return fs
+
+
+def build_jar_stand():
+    """Walnut stand: a low turned collar the jar sits in (outer r 7.5, top 0.95) with a lighter bevel and a groove."""
+    m = Model("jar_stand", 641)
+    seg = 44
+    prof = [(JAR_R + 0.1, 0.0), (7.3, 0.0), (7.5, 0.18), (7.5, 0.52), (7.42, 0.6), (7.42, 0.66), (7.48, 0.74), (7.3, 0.95),
+            (6.7, 1.0), (JAR_R + 0.1, 0.95), (JAR_R + 0.1, 0.0)]
+
+    def col(f):
+        c = f.calc_center_median()
+        if c.z > 0.9:
+            return WALNUT_LIGHT        # top bevel catches the window light
+        if 0.58 < c.z < 0.7:
+            return WALNUT_DARK         # groove
+        return WALNUT
+    rings = [[Vector((math.cos(i * math.tau / seg) * r, math.sin(i * math.tau / seg) * r, z)) for i in range(seg)] for (r, z) in prof]
+    fs = m.strip(rings, color=WALNUT, close=True, smooth=False)
+    for f in fs:
+        f.normal_update()
+        c = f.calc_center_median()
+        rad = Vector((c.x, c.y, 0)).normalized()
+        # outward = away from the ring's own cross-section centre (r 6.8, z 0.5)
+        cen = rad * 6.8 + Vector((0, 0, 0.5))
+        if (c - cen).dot(f.normal) < 0:
+            f.normal_flip()
+    m._bm("body").normal_update()
+    m._finish(m._bm("body"), fs, WALNUT, False, colfn=col)
+    m.export(OUT)
+
+
+def build_cork_twine():
+    """Pale hemp twine wound twice round the cork, tied in a small bow at the front with two short tails."""
+    m = Model("cork_twine", 642)
+    seg = 36
+    for z in (CORK_Z0 + 2.74, CORK_Z0 + 3.2):
+        torus(m, CORK_SIDE_R + 0.05, 0.16, z, seg, 6, HEMP)
+    fy = -(CORK_SIDE_R + 0.26)                      # front (-Y)
+    zk = CORK_Z0 + 2.97
+    m.sphere(0.3, pos=(0.0, fy, zk), scl=(1.1, 0.75, 1.0), color=HEMP_DARK, seg=8, rings=5)
+    for sx in (-1, 1):                               # two loops of the bow + two tails
+        torus(m, 0.36, 0.1, 0.0, 14, 5, HEMP, pos=(0, 0))
+        bm = m._bm("body")
+        loop = [f for f in bm.faces][-14 * 5:]
+        verts = {v for f in loop for v in f.verts}
+        import mathutils
+        mat = mathutils.Matrix.Translation((sx * 0.62, fy - 0.06, zk + 0.12)) @ mathutils.Matrix.Rotation(sx * 0.35, 4, "Y") \
+            @ mathutils.Matrix.Rotation(math.pi / 2, 4, "X") @ mathutils.Matrix.Diagonal((1.35, 0.8, 1.0, 1.0))
+        bmesh.ops.transform(bm, matrix=mat, verts=list(verts))
+        bm.normal_update()
+        m.cyl(0.075, 0.065, 1.15, pos=(sx * 0.2, fy - 0.04, zk - 1.12), rot=(0, -sx * 0.28, 0), color=HEMP, seg=6)
+        m.sphere(0.1, pos=(sx * 0.2 + sx * 0.3, fy - 0.04, zk - 1.12), color=HEMP_DARK, seg=6, rings=3)
+    m.export(OUT)
+
+
+def build_cork_wax():
+    """Wax seal: a muted red wax cap over the cork top with drips down the side and a stamped round seal."""
+    m = Model("cork_wax", 643)
+    seg = 36
+    m.cyl(5.05, 5.0, 0.22, pos=(0, 0, CORK_TOP - 0.02), color=WAX, seg=seg, smooth=True, cap=WAX)
+    torus(m, 5.05, 0.16, CORK_TOP + 0.06, seg, 6, WAX)
+    rng = m.rng
+    for k in range(9):                               # drips (front half more, they show)
+        a = -math.pi / 2 + (k - 4) * 0.38 + rng.uniform(-0.08, 0.08)
+        L = rng.uniform(0.45, 1.25)
+        x, y = math.cos(a) * (CORK_SIDE_R + 0.06), math.sin(a) * (CORK_SIDE_R + 0.06)
+        m.cyl(0.2, 0.17, L, pos=(x, y, CORK_TOP + 0.05 - L), color=WAX, seg=8, smooth=True)
+        m.sphere(0.2, pos=(x, y, CORK_TOP + 0.05 - L), scl=(1, 1, 1.25), color=WAX, seg=8, rings=4)
+    m.cyl(1.55, 1.5, 0.2, pos=(0, 0, CORK_TOP + 0.18), color=WAX_LIGHT, seg=24, smooth=True, cap=WAX_LIGHT)   # the seal
+    torus(m, 1.2, 0.07, CORK_TOP + 0.4, 24, 4, WAX)
+    for i in range(5):                               # small stamped star
+        a = i * math.tau / 5 + math.pi / 2
+        m.box((0.16, 0.62, 0.06), pos=(math.cos(a) * 0.32, math.sin(a) * 0.32, CORK_TOP + 0.38), rot=(0, 0, a - math.pi / 2), color=WAX)
+    m.export(OUT)
+
+
+def build_cork_brand():
+    """Burnt brand on the cork top: a thin ring and a little sprig (stem + four leaves), plus a burnt band on the side."""
+    m = Model("cork_brand", 644)
+    seg = 40
+    z = CORK_TOP + 0.02
+    rings = [[Vector((math.cos(i * math.tau / seg) * r, math.sin(i * math.tau / seg) * r, z)) for i in range(seg)] for r in (3.55, 3.85)]
+    fs = m.strip(rings, color=BRAND, close=True)
+    for f in fs:
+        f.normal_update()
+        if f.normal.z < 0:
+            f.normal_flip()
+    ang = 0.5                                        # sprig leaning a little (stem along this angle from +Y)
+    d = Vector((-math.sin(ang), math.cos(ang), 0.0))
+    nrm = Vector((d.y, -d.x, 0.0))
+    m.box((0.16, 3.4, 0.03), pos=(0, 0.0, z - 0.015), rot=(0, 0, ang), color=BRAND)
+    for k, (t, sd) in enumerate(((1.15, 0), (0.6, 1), (0.6, -1), (0.0, 1), (0.0, -1), (-0.6, 1), (-0.6, -1))):
+        if sd == 0:                                  # tip leaf along the stem
+            c = d * (t + 0.35)
+            la = ang
+        else:
+            c = d * t + nrm * sd * 0.42
+            la = ang + sd * 0.75
+        m.sphere(0.48, pos=(c.x, c.y, z + 0.005), scl=(0.34, 1.0, 0.04), rot=(0, 0, la), color=BRAND, seg=10, rings=3, smooth=False)
+    rings2 = [[Vector((math.cos(i * math.tau / seg) * r, math.sin(i * math.tau / seg) * r, zz)) for i in range(seg)]
+              for (r, zz) in ((CORK_SIDE_R + 0.025, CORK_Z0 + 3.3), (CORK_SIDE_R + 0.025, CORK_Z0 + 3.45))]
+    fs2 = m.strip(rings2, color=BRAND, close=True)
+    for f in fs2:
+        f.normal_update()
+        c = f.calc_center_median()
+        if Vector((c.x, c.y, 0)).dot(f.normal) < 0:
+            f.normal_flip()
+    m.export(OUT)
+
+
 if __name__ == "__main__":
     print("room ->", OUT)
     only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv else []
@@ -394,3 +536,7 @@ if __name__ == "__main__":
     build_watering_can()
     build_tweezers()
     build_sugar_bowl()
+    build_jar_stand()
+    build_cork_twine()
+    build_cork_wax()
+    build_cork_brand()

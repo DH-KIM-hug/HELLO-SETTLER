@@ -350,7 +350,7 @@ func _process(dt: float) -> void:
 		_toast_t -= dt
 		if _toast_t <= 0.0:
 			_hide_toast()
-	if undo_btn.visible and Shop.hand_item(int(_undo.get("hand_id", -1))).is_empty():
+	if undo_btn.visible and not Shop.can_undo(int(_undo.get("hand_id", -1))):
 		undo_btn.visible = false             # 그새 떨어뜨렸으면 되돌릴 수 없다
 		_undo = {}
 	if not flash.is_empty():
@@ -384,7 +384,7 @@ func take_new() -> PackedStringArray:
 ## 탭 모양: 잠긴 탭은 숨김 (Q29 — 편지의 [보기]처럼 그 탭을 바로 고른 때만 흐리게 보임), 고른 탭 = 초록,
 ## 새로 열린 탭 = 나타나며 금빛으로 한 번 부풀었다 가라앉음 (빨간 점 · 숫자 없이). 바뀐 것이 없으면 아무것도 안 함
 func _style_tabs() -> void:
-	var sig := "%s|%d" % [tab, village.shop_open.size() if village != null else -1]
+	var sig := "%s|%d|%s" % [tab, village.shop_open.size() if village != null else -1, str(village != null and Shop.tab_open(village, JarDeco.TAB))]
 	if sig == _tab_sig and flash.is_empty():
 		return
 	_tab_sig = sig
@@ -439,7 +439,8 @@ func shown_tabs() -> PackedStringArray:
 # ───────────────────────── 카드 ─────────────────────────
 func _state_sig() -> String:
 	var s := "%s|%d|%d|%s|%s|%d|%s" % [tab, int(Market.notes), Market.hand.size(), str(village.shop_open.keys()), str(village.shop_bought), village.era,
-		str(SkyDrops.active_towers(village))] + "|%d|%s" % [Immigrants.today_count(), ",".join(Shop.items_in("건물", village))]   # 주민이 스스로 깨치면 진열이 바뀜
+		str(SkyDrops.active_towers(village))] + "|%d|%s" % [Immigrants.today_count(), ",".join(Shop.items_in("건물", village))] \
+		+ "|%s|%s|%d" % [str(Shop.tab_open(village, JarDeco.TAB)), str(JarDeco.look(village)), JarDeco.pebbles_used(village)]     # (Q32) 꾸미기   # 주민이 스스로 깨치면 진열이 바뀜
 	return s
 
 
@@ -508,6 +509,8 @@ func _card(item: String) -> void:
 	else:
 		ic = GameIcons.rect(String(c["icon"]), ICON_PX)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	if c.has("tint"):                                    # (Q32) 유리 빛깔 — 같은 그림을 그 빛으로 살짝 물들임
+		ic.self_modulate = (c["tint"] as Color).lerp(Color.WHITE, 0.15)
 	if lock != "":
 		ic.modulate = Color(1, 1, 1, 0.5)
 	col.add_child(ic)
@@ -528,6 +531,19 @@ func _card(item: String) -> void:
 	if lock != "":
 		b.text = lock
 		b.disabled = true
+	elif bool(c.get("owned", false)):                 # (Q32) 산 유리 빛깔 · 코르크 무늬: 골라 씀 (쓰는 중을 다시 누르면 기본으로)
+		b.text = "쓰는 중" if bool(c.get("using", false)) else "바꾸기"
+		if bool(c.get("using", false)):
+			var sb := UiTheme._box(UiTheme.PRIMARY, UiTheme.INK, 1, 6, 6)
+			for st in ["normal", "hover", "pressed"]:
+				b.add_theme_stylebox_override(st, sb)
+			for fc in ["font_color", "font_hover_color", "font_pressed_color"]:
+				b.add_theme_color_override(fc, UiTheme.CHIP_TEXT)
+		b.pressed.connect(choose.bind(item))
+		col.add_child(b)
+		_cards.append({"name": item, "text": "별지기에게는: %s\n병 안에서는: %s" % [c["giant"], c["inside"]], "dim": false, "btn": b,
+			"labels": [g, ins], "owned": true, "using": bool(c.get("using", false))})
+		return
 	else:
 		b.text = Shop._num(float(c["price"]))
 		GameIcons.button_icon(b, "지폐", 20)
@@ -573,11 +589,36 @@ func press(item: String) -> void:
 	if bool(r["ok"]):
 		GameAudio.fx("coins")
 		_undo = {"hand_id": int(r["hand_id"]), "item": item, "mig": Market.mig_serial if item == Immigrants.ITEM else -1}
-		show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % String(Shop.card(village, item)["name"]), true)
+		if bool(r.get("attached", false)):            # (Q32) 병 받침 · 유리 빛깔 · 코르크 무늬 — 손에 들지 않고 곧바로 병에
+			show_toast(attached_line(item), true)
+		else:
+			show_toast("%s — 손에 들었어요. 아래 [손]에서 떨어뜨려요." % String(Shop.card(village, item)["name"]), true)
 		bought.emit(item)
 	else:
 		GameAudio.fx("glass_tap_light", "Room", -8.0)
 		show_toast(String(r["why"]))
+	_sig = ""
+	_refresh()
+
+
+## (Q32) 병에 곧바로 붙인 꾸미기의 한 줄
+static func attached_line(item: String) -> String:
+	if item == JarDeco.STAND:
+		return "병 받침 — 병 밑에 받쳤어요. 땅이 울려도 덜 흔들려요."
+	if JarDeco.TINTS.has(item):
+		return "%s — 병 유리에 빛깔이 들었어요. 병 밖에서 보여요." % item
+	return "%s — 코르크를 바꿨어요. 병 밖에서 보여요." % item
+
+
+## (Q32) [바꾸기] · [쓰는 중] — 산 유리 빛깔 · 코르크 무늬 가운데 골라 씀
+func choose(item: String) -> void:
+	GameAudio.ui_click()
+	var now := Shop.choose(village, item)
+	var glass := JarDeco.TINTS.has(item)
+	if now == "":
+		show_toast("맑은 유리로 되돌렸어요." if glass else "민무늬 코르크로 되돌렸어요.")
+	else:
+		show_toast("%s%s 바꿨어요." % [now, Village.josa(now, "으로", "로")])
 	_sig = ""
 	_refresh()
 

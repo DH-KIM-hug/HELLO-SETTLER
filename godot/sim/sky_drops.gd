@@ -139,7 +139,7 @@ static func blocks(v: Village, x: float, y: float, size: float) -> bool:
 	for tw: Dictionary in v.towers:
 		if Vector2(float(tw["x"]) - x, float(tw["y"]) - y).length() < Shop.ITEMS[Shop.AMPOULE]["size"] + size + 0.4:
 			return true
-	return false
+	return JarDeco.blocks(v, x, y, size)              # (Q32) 조약돌 (없으면 곧바로 false)
 
 
 ## 남은 양에 따른 크기 (1 = 처음, 다 깎이면 0.3쯤) — 화면도 같은 값을 쓴다
@@ -158,6 +158,8 @@ static func shrink(d: Dictionary) -> float:
 static func preview(v: Village, item: String, p: Vector2) -> Dictionary:
 	if Shop.is_building(item):
 		return preview_building(v, item, p)
+	if item == JarDeco.PEBBLE:                        # (Q32) 조약돌 — 부수지 않음 (건물 위엔 못 놓음)
+		return JarDeco.preview(v, p)
 	var d := def(item)
 	var size := float(d.get("size", 1.5))
 	var out := {"ok": true, "why": "", "warn": "", "crush": [], "people": 0, "field": false, "size": size}
@@ -292,6 +294,12 @@ static func drop(v: Village, item: String, p: Vector2, h: Dictionary = {}) -> Di
 	var pv := preview(v, item, p)
 	if not bool(pv["ok"]):
 		return pv
+	if item == JarDeco.PEBBLE:                        # (Q32) 꾸미기 조약돌 — 그 자리에 남음 (깎지 않음)
+		v.begin_giant()
+		var pb := JarDeco.place(v, p)
+		v.stats["sky_drops"] = int(v.stats.get("sky_drops", 0)) + 1
+		v.end_giant()
+		return {"ok": true, "why": "", "drop": {}, "pebble": pb, "crushed": 0, "fled": 0}
 	var d := def(item)
 	var size := float(d.get("size", 1.5))
 	v.begin_giant()

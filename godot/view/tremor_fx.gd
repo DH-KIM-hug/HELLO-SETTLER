@@ -88,7 +88,7 @@ func start(lost := 0.0, pot := "") -> void:
 		_place_shards(pot)
 	var jc := _camera()
 	if jc != null:
-		jc.shake(SHAKE_AMP, SHAKE_DUR)
+		jc.shake(SHAKE_AMP * JarDeco.shake_mult(v), SHAKE_DUR)     # (Q32) 병 받침이 있으면 덜 흔들림
 		if GameSettings.get_current().vibration and OS.has_feature("mobile"):
 			Input.vibrate_handheld(260, 0.45)
 	GameAudio.fx("drop_thud", "Village", -3.0, v.center, 0.55)

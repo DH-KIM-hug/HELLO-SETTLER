@@ -457,7 +457,7 @@ func aim_at(sp: Vector2, touch: bool) -> void:
 		if tool != "":
 			drop_btn.text = String(TOOL_GO[tool])
 			return
-		drop_btn.text = "여기에 놓기" if Shop.is_building(String(_aim["item"])) else ("내려놓기" if String(_aim["item"]) == Immigrants.ITEM else "떨어뜨리기")
+		drop_btn.text = "여기에 놓기" if Shop.is_building(String(_aim["item"])) else ("내려놓기" if String(_aim["item"]) in [Immigrants.ITEM, JarDeco.PEBBLE] else "떨어뜨리기")
 
 
 func cancel_drop() -> void:

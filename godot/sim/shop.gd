@@ -1,6 +1,6 @@
 ## 거인의 상점 — docs/SHOP.md (진열 1 · 물건 2 · 손의 흐름 3) · ROADMAP A7. 순수 로직 (화면은 view/ui/shop_sheet.gd).
 ## 진열 탭은 병(Village)마다 열린다: 1일차 건물 + 빵 부스러기 → 2일차 먹을 것·재료 전부 → 첫 병자·첫 위기 조짐이 생긴 날 돌봄 →
-##   첫 수확 다음 날 땅 (광맥 돌 4종은 돌마다 그 시대에). 생물(작은 가축 6종)·이주민·꾸미기는 아직 '곧'. 열린 때는 Village.shop_open (탭 → 병 시각)에 걸어 둔다 (한 번 열리면 그대로).
+##   첫 수확 다음 날 땅 (광맥 돌 4종은 돌마다 그 시대에). 생물(작은 가축 6종)·이주민은 그때그때 · 꾸미기는 병 3일차나 첫 수확 뒤 (Q32 — sim/jar_deco.gd). 열린 때는 Village.shop_open (탭 → 병 시각)에 걸어 둔다 (한 번 열리면 그대로).
 ## 산 물건은 **거인의 손** (Market.hand — 모든 병이 함께, 최대 5개, 거인 묶음에 저장)에 들린다. 떨어뜨리기는 sim/sky_drops.gd.
 ## 건물은 같은 병에서 또 사면 ×1.5 (Village.shop_bought). 영양제 앰플은 한 병에 동시에 2개까지 (손에 든 것 포함).
 ## 카드 글: '거인에게는 / 병 안에서는' 두 줄 (SHOP 4). 주민 말·연대기에는 상점·구매·키트·상자를 쓰지 않는다 (sky_drops.gd가 맡음).
@@ -16,6 +16,8 @@ const AMPOULE := "영양제 앰플"
 const AMPOULE_MAX := 2
 const VEIN_MAX := 2                     # 광맥 돌은 종류마다 한 병에 둘까지 (SHOP 2.4 — 세상이 광물 덩어리가 되지 않게)
 const WAIT_ANIMAL := "짐승이 병 안에 살 수 있어야 해요"
+## (Q32) 방금 병에 붙인 꾸미기 [{id(hand_serial), item, paid, prev, v}] — 되돌리기 동안만 (저장 안 함)
+static var _applied: Array = []
 
 ## 건물 사 주기 (SHOP 2.1) — 값은 Balance.SHOP, 열리는 시대는 그 건물의 시대 (기획서 8.3 · 21장 '상점 건물 시대').
 ## (2026-11-08 사용자: "창고 같은 건 기본적으로 있는데 왜 팔아?") 설계도는 **새로 배워야 하는 건물** (Balance.MUST_LEARN)만:
@@ -115,8 +117,17 @@ const ITEMS := {
 	# v5 (사용자 2026-11-07): 하늘 낟알은 저절로 내리지 않는다 — 빵을 굽기 전까지 거인이 무료로 한 줌씩 (마을 반나절치)
 	"하늘 낟알 한 줌": {"tab": "먹을 것·재료", "price": 0, "giant": "빵가루 한 줌", "inside": "금빛 낟알 — 마을 반나절치. 곁의 사람들이 주워 먹고 창고로 날라요 (빵을 굽기 전까지 무료)",
 		"kind": "grain", "size": 1.4, "free": true, "day1": true},
-	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "조약돌 하나", "inside": "광장 장식", "lock": "곧"},
-	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "병 받침", "inside": "흔들림이 줄어요", "lock": "곧"},
+	# (Q32) 꾸미기 (SHOP 2.7 · sim/jar_deco.gd) — 조약돌은 손으로 떨어뜨림 (광장 장식), 받침 · 유리 빛깔 · 코르크 무늬는 사면 곧바로 병에 (kind jar)
+	"조약돌": {"tab": "꾸미기", "price": 200, "giant": "매끈한 조약돌 하나", "inside": "둥근 쉼돌 — 광장 곁이면 오가는 사람들이 조금 즐거워해요",
+		"kind": "pebble", "size": JarDeco.PEBBLE_SIZE},
+	"병 받침": {"tab": "꾸미기", "price": 800, "giant": "호두나무 병 받침", "inside": "땅이 울릴 때 병이 덜 흔들려요", "kind": "jar"},
+	"호박빛 유리": {"tab": "꾸미기", "price": 1200, "giant": "병 유리에 옅은 호박빛", "inside": "유리 너머 빛이 호박빛으로 물들어요", "kind": "jar", "icon": "유리 빛깔"},
+	"물빛 유리": {"tab": "꾸미기", "price": 1200, "giant": "병 유리에 옅은 물빛", "inside": "유리 너머 빛이 물빛으로 물들어요", "kind": "jar", "icon": "유리 빛깔"},
+	"이끼빛 유리": {"tab": "꾸미기", "price": 1200, "giant": "병 유리에 옅은 이끼빛", "inside": "유리 너머 빛이 이끼빛으로 물들어요", "kind": "jar", "icon": "유리 빛깔"},
+	"안개빛 유리": {"tab": "꾸미기", "price": 1200, "giant": "병 유리에 옅은 안개빛", "inside": "유리 너머 빛이 안개빛으로 물들어요", "kind": "jar", "icon": "유리 빛깔"},
+	"삼끈 코르크": {"tab": "꾸미기", "price": 600, "giant": "삼끈을 감아 묶은 코르크", "inside": "달라지는 건 없어요 — 별지기의 방에서 보여요", "kind": "jar", "icon": "코르크 무늬"},
+	"밀랍 코르크": {"tab": "꾸미기", "price": 600, "giant": "밀랍으로 봉한 코르크", "inside": "달라지는 건 없어요 — 별지기의 방에서 보여요", "kind": "jar", "icon": "코르크 무늬"},
+	"불도장 코르크": {"tab": "꾸미기", "price": 600, "giant": "불도장을 찍은 코르크", "inside": "달라지는 건 없어요 — 별지기의 방에서 보여요", "kind": "jar", "icon": "코르크 무늬"},
 }
 
 
@@ -147,6 +158,8 @@ static func update_unlocks(v: Village) -> PackedStringArray:
 
 
 static func tab_open(v: Village, tab: String) -> bool:
+	if tab == JarDeco.TAB:
+		return v.shop_open.has(tab) or JarDeco.tab_ready(v)     # (Q32) 그때그때 셈 — shop_open에 적지 않음 (도움 없는 마을의 저장이 그대로)
 	return v.shop_open.has(tab)
 
 
@@ -157,6 +170,8 @@ static func tab_hint(v: Village, tab: String) -> String:
 			return "누가 처음 앓거나 위기의 조짐이 보이면 열려요"
 		"땅":
 			return "첫 곡식을 거둔 다음 날 열려요" if v.first_harvest_t < 0.0 else "내일 열려요"
+		JarDeco.TAB:
+			return "%d일차나 첫 곡식을 거두면 열려요" % Balance.DECO_OPEN_DAY
 	return "새 물건이 들어오면 여기 진열돼요"
 
 
@@ -165,18 +180,18 @@ static func has_new(v: Village) -> bool:
 	for k: String in v.shop_open:
 		if not k in v.shop_seen:
 			return true
-	return false
+	return tab_open(v, JarDeco.TAB) and not JarDeco.TAB in v.shop_seen
 
 
 static func is_new(v: Village, tab: String) -> bool:
 	if tab == "먹을 것·재료" and v.shop_open.has(FOOD_FULL) and not FOOD_FULL in v.shop_seen:
 		return true
-	return v.shop_open.has(tab) and not tab in v.shop_seen
+	return tab_open(v, tab) and not tab in v.shop_seen
 
 
 static func mark_seen(v: Village, tab: String) -> void:
 	for k: String in [tab, FOOD_FULL if tab == "먹을 것·재료" and v.shop_open.has(FOOD_FULL) else ""]:
-		if k != "" and v.shop_open.has(k) and not k in v.shop_seen:
+		if k != "" and (v.shop_open.has(k) or tab_open(v, k)) and not k in v.shop_seen:
 			v.shop_seen.append(k)
 
 
@@ -246,11 +261,18 @@ static func card(v: Village, item: String) -> Dictionary:
 		lock2 = "일손이 남으면"            # (Q25) 일손이 연장보다 많아진 적이 없으면 쓸 데가 없다 — 모자람이 처음 켜지면 열림
 	if lock2 == "" and int(d.get("era", 0)) > v.era:
 		lock2 = "%s 시대에" % Balance.ERAS[mini(int(d["era"]), Balance.ERAS.size() - 1)]
+	if lock2 == "" and item == JarDeco.STAND and JarDeco.owns(v, item):
+		lock2 = "받쳐 두었어요"
 	var inside2 := String(d["inside"])
 	if String(d.get("wait", "")) != "":
 		inside2 += " (아직은 %s)" % d["wait"]
-	var out := {"name": item, "icon": item, "giant": String(d["giant"]), "inside": inside2, "price": price(v, item),
+	var out := {"name": item, "icon": String(d.get("icon", item)), "giant": String(d["giant"]), "inside": inside2, "price": price(v, item),
 		"lock": lock2, "building": false}
+	if JarDeco.TINTS.has(item) or JarDeco.CORKS.has(item):
+		out["owned"] = JarDeco.owns(v, item)         # (Q32) 산 빛깔 · 무늬는 [바꾸기] · [쓰는 중]
+		out["using"] = JarDeco.using(v, item)
+		if JarDeco.TINTS.has(item):
+			out["tint"] = JarDeco.TINTS[item]
 	if item == Immigrants.ITEM:
 		out["odds"] = true                   # 확률 공개 — 카드에 [확률 보기]
 		out["left"] = Immigrants.left_today()
@@ -295,8 +317,12 @@ static func can_buy(v: Village, item: String) -> Dictionary:
 	var c := card(v, item)
 	if String(c["lock"]) != "":
 		return {"ok": false, "why": String(c["lock"]), "need": 0.0}
-	if Market.hand.size() >= HAND_MAX:
+	if JarDeco.is_jar_item(item) and JarDeco.owns(v, item):
+		return {"ok": false, "why": "이미 있어요", "need": 0.0}
+	if Market.hand.size() >= HAND_MAX and not JarDeco.is_jar_item(item):     # (Q32) 병에 곧바로 붙는 꾸미기는 손에 들지 않음
 		return {"ok": false, "why": "손이 가득 찼어요 (%d개)" % HAND_MAX, "need": 0.0}
+	if item == JarDeco.PEBBLE and JarDeco.pebbles_used(v) >= Balance.DECO_PEBBLE_MAX:
+		return {"ok": false, "why": "조약돌은 한 마을에 %d개까지예요" % Balance.DECO_PEBBLE_MAX, "need": 0.0}
 	if item == AMPOULE and ampoules_used(v) >= AMPOULE_MAX:
 		return {"ok": false, "why": "탑은 한 병에 둘까지예요", "need": 0.0}
 	if is_vein(item) and veins_used(v, item) >= VEIN_MAX:
@@ -318,6 +344,15 @@ static func buy(v: Village, item: String) -> Dictionary:
 	if is_building(item):
 		v.shop_bought[item] = int(v.shop_bought.get(item, 0)) + 1
 	Market.hand_serial += 1
+	_applied = _applied.filter(func(a: Dictionary) -> bool: return int(a["id"]) != Market.hand_serial)     # 번호가 처음부터 다시 셀 때 (Market.reset · 불러오기) 옛 것과 엉키지 않게
+	if JarDeco.is_jar_item(item):                  # (Q32) 받침 · 유리 빛깔 · 코르크 무늬 — 손에 들지 않고 곧바로 병에 (되돌리기는 _applied)
+		var prev := JarDeco.attach(v, item)
+		_applied.append({"id": Market.hand_serial, "item": item, "paid": cost, "prev": prev, "v": v})
+		if _applied.size() > 8:
+			_applied.pop_front()
+		v.giant_acted()
+		Notebook.on(v, "buy")
+		return {"ok": true, "why": "", "hand_id": Market.hand_serial, "attached": true}
 	var h := {"id": Market.hand_serial, "item": item, "paid": cost}
 	if item == Immigrants.ITEM:
 		h["seed"] = Immigrants.note_bought()   # 누가 올지는 놓을 때 드러남 (같은 seed = 같은 사람들)
@@ -333,7 +368,7 @@ static func buy(v: Village, item: String) -> Dictionary:
 static func undo_buy(v: Village, hand_id: int, mig_serial := -1) -> bool:
 	var h := hand_item(hand_id)
 	if h.is_empty():
-		return false
+		return _undo_applied(hand_id)
 	var item := String(h["item"])
 	Market.notes += float(h.get("paid", 0.0))
 	hand_remove(hand_id)
@@ -350,6 +385,35 @@ static func undo_buy(v: Village, hand_id: int, mig_serial := -1) -> bool:
 	if v != null:
 		v.giant_acted()
 	return true
+
+
+## (Q32) 병에 곧바로 붙인 꾸미기를 되돌림 (지폐를 모두 돌려주고 떼어 냄 — 쓰던 빛깔 · 무늬로)
+static func _undo_applied(id: int) -> bool:
+	for i in _applied.size():
+		var a: Dictionary = _applied[i]
+		if int(a["id"]) == id:
+			_applied.remove_at(i)
+			var av: Village = a["v"]
+			Market.notes += float(a["paid"])
+			JarDeco.detach(av, String(a["item"]), a["prev"])
+			av.giant_acted()
+			return true
+	return false
+
+
+## 아직 되돌릴 수 있나 (손에 들려 있거나 · 방금 병에 붙인 꾸미기)
+static func can_undo(id: int) -> bool:
+	if not hand_item(id).is_empty():
+		return true
+	for a: Dictionary in _applied:
+		if int(a["id"]) == id:
+			return true
+	return false
+
+
+## (Q32) 산 유리 빛깔 · 코르크 무늬 가운데 골라 씀 (이미 쓰는 것을 다시 누르면 기본으로). 지금 쓰는 이름 ("" = 기본)
+static func choose(v: Village, item: String) -> String:
+	return JarDeco.choose(v, item)
 
 
 static func hand_item(id: int) -> Dictionary:
