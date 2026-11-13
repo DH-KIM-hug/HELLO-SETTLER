@@ -24,7 +24,7 @@ func all() -> void:
 		"test_assets_imported", "test_view_only", "test_switch", "test_body_types", "test_hat_follows_head", "test_hat_level",
 		"test_hat_seated", "test_two_feet", "test_walk_no_slip", "test_new_clips", "test_front_walk", "test_side_walk",
 		"test_outfit_shift", "test_swap_puff", "test_child_braids", "test_babies", "test_speed_cap", "test_frames_c", "test_frames_c_memory", "test_frames_man", "test_frames_woman2", "test_frames_c_skips_cutout",
-		"test_gene_look", "test_gene_look_family", "test_head_variants_lib", "test_head_faces_kept", "test_head_mask_packed", "test_look_save_free"])
+		"test_gene_look", "test_gene_look_family", "test_head_variants_lib", "test_head_faces_kept", "test_head_mask_packed", "test_look_save_free", "test_wave"])
 
 
 static func _resident(rng: RandomNumberGenerator, id: int) -> Resident:
@@ -161,7 +161,7 @@ func test_clip_map() -> void:
 		if st["clip"] != cs[3] or int(st["prop"]) != int(cs[4]) or m.doll.clip != cs[3] or int(_sel(m).w) != int(cs[4]):
 			reap_bad.append("%s → %s %d" % [cs, st["clip"], st["prop"]])
 	m.reaping = false
-	check(reap_bad.is_empty() and Lib.CLIPS.find("reap") == Lib.CLIPS.size() - 1 and Lib.CLIP_RATE.has("reap")
+	check(reap_bad.is_empty() and Lib.CLIPS.find("reap") == 12 and Lib.CLIP_RATE.has("reap")
 		and CutoutResident.REAP_PROP == Lib.PROPS.find("sickle"),
 		"익은 밭의 일꾼만 낫질 + 낫 (동작 표 끝에 덧붙임 — 앞 번호 그대로) %s" % [reap_bad])
 	# (Q8) 어깨에 멘 이삭: 뒤쪽 두 보기에서만 제 자리로 (뒤 보기는 좌우로 뒤집어 머리 옆으로) — 셰이더에 그 소품 번호·자리가 실림
@@ -1656,3 +1656,101 @@ func test_frames_c_skips_cutout() -> void:
 		check(var_to_str(r.to_dict()) == before, "주민 데이터 그대로 (화면만)")
 	m.free()
 	k.free()
+
+
+## (Q33, 2026-11-14) 손 흔들기 동작: 한 팔을 머리 옆으로 높이 들고 좌우로 흔듦 — 어른·아이 모두, 앞 보기로만,
+## 지팡이 쥔 팔은 그대로 (노인), 맞이·돌아옴·톡 반응이 부르는 길 (anim "wave" · react_hint "wave")
+func test_wave() -> void:
+	check(Lib.CLIPS.find("wave") == 13 and Lib.CLIPS.find("walkwave") == 14 and Lib.CLIPS.size() == 15 and Lib.CLIPS.find("reap") == 12
+		and Lib.CLIP_RATE.has("wave") and Lib.CLIP_RATE.has("walkwave") and not Lib.NO_CANE.has("wave") and CutoutResident.FRONT_ONLY.has("wave")
+		and int(Lib.material().get_shader_parameter("wave_clip")) == 13,
+		"wave · walkwave: 동작 표 끝에 덧붙임 (앞 번호 그대로, 셰이더의 흔드는 팔 번호) · 서서 흔들기는 앞 보기로만 · 지팡이는 짚은 채")
+	var L: Dictionary = Lib.lib()
+	var high := true
+	var wide := true
+	var cane := true
+	var note := ""
+	for sn: String in ["a", "e", "f", "g"]:
+		var so: Array = L["head_socket"][sn + "_front"]
+		var chin := Vector2(so[0], so[1])
+		var hk: float = L["head_k"][Lib.SETS.find(sn)]
+		var top := 0.0
+		for q: Dictionary in L["quads"]:
+			if q["set"] == sn and int(q["view"]) == 0 and q["part"] == "head":
+				top = maxf(top, float(q["rect"][3]))
+		var head_top := chin.y + top * hk
+		var lo := INF
+		var hi := -INF
+		var xmin := INF
+		var xmax := -INF
+		var flips := 0
+		var last := 0.0
+		var rest := Lib._hand_local(Lib._pose("idle", 0, 0.0), 0, "a", sn)
+		for f in Lib.FRAMES:
+			var a: Array = Lib._pose("wave", 0, float(f) / Lib.FRAMES)
+			var h: Vector2 = Lib._hand(a, 0, "b", sn) + Lib.WAVE_LIFT[sn]          # 셰이더가 몸마다 더 올리는 만큼 (아이)
+			lo = minf(lo, h.y)
+			hi = maxf(hi, h.y)
+			xmin = minf(xmin, h.x)
+			xmax = maxf(xmax, h.x)
+			var dx := h.x - Lib._hand(Lib._pose("wave", 0, float(f + 1) / Lib.FRAMES), 0, "b", sn).x
+			if last != 0.0 and signf(dx) != signf(last):
+				flips += 1
+			last = dx
+			cane = cane and Lib._hand_local(a, 0, "a", sn).distance_to(rest) < 30.0
+		# 손은 늘 머리 높이의 위쪽 반 (턱 → 머리 꼭대기의 반 넘게) · 가장 높을 땐 머리 꼭대기 언저리 (어른·아이 = 꼭대기 높이 — 아이는 WAVE_LIFT로 더 올림, 노인은 조금 아래), 흔드는 폭은 머리 폭의 반쯤
+		high = high and lo > chin.y + 0.5 * (head_top - chin.y) and hi > head_top - (0.3 if sn == "g" else 0.1) * (head_top - chin.y)
+		wide = wide and xmax - xmin > 85.0 and flips >= 2
+		note += "%s 손 %.0f~%.0f (턱 %.0f · 꼭대기 %.0f) 폭 %.0f · " % [sn, lo, hi, chin.y, head_top, xmax - xmin]
+	check(high, "wave 앞 보기: 손을 머리 옆으로 높이 (어른·아이·노인) %s" % note)
+	check(wide, "wave 앞 보기: 아래팔을 좌우로 크게 흔듦 (한 주기에 한 번 왔다 갔다) %s" % note)
+	check(cane, "wave: 다른 팔(노인은 지팡이 쥔 팔)은 쉬는 자리 그대로")
+	# 뒤쪽 보기(비스듬한 뒤 · 뒤)에선 든 팔이 몸에서 떨어져 보임 → 서서 흔들기 = 서 있기, 걸으며 흔들기 = 그냥 걸음 (2026-11-14 메인 검토)
+	var back_ok := true
+	for v in [2, 3]:
+		for f in Lib.FRAMES:
+			var t := float(f) / Lib.FRAMES
+			back_ok = back_ok and str(Lib._pose("wave", v, t)) == str(Lib._pose("idle", v, t)) and str(Lib._pose("walkwave", v, t)) == str(Lib._pose("walk", v, t))
+	var lift_ok := true
+	for sn: String in Lib.SETS:
+		lift_ok = lift_ok and Lib.WAVE_LIFT.has(sn)
+	check(back_ok and lift_ok, "wave · walkwave: 뒤쪽 보기에선 팔을 들지 않음 (서 있기 · 걸음 그대로) · 몸마다 올림 값")
+	# 인형 대응: 연출의 anim "wave" · 톡 반응의 react_hint "wave" → wave 동작, 짐은 그림에서 내려 둠 · 앉기·일은 그대로
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 33
+	var m := _model(_resident(rng, 33))
+	m.set_anim("wave")
+	m.tick(0.0)
+	var st: Vector4 = m.doll.get_instance_shader_parameter("st")
+	var ph := fposmod(st.w + CutoutResident._shader_time() * Lib.CLIP_RATE["wave"], 1.0)
+	check(m._d_clip == "wave" and int(st.z) == Lib.CLIPS.find("wave") and (ph < 0.05 or ph > 0.95), "연출 anim 'wave' → 손 흔들기 (처음부터 — 위상 %.2f)" % ph)
+	m.set_anim("idle")
+	m.set_item("밀")
+	m.set_react(Vector3.ZERO, Vector2.ONE, 0.0, 0.0, "wave")
+	m.tick(0.0)
+	check(m._d_clip == "wave" and m._d_prop == -1, "톡 반응 hint 'wave': 짐을 든 채 서 있어도 손 흔들기 · 짐 그림은 내려 둠")
+	m.set_anim("sit")
+	m.tick(0.0)
+	var sat := m._d_clip
+	m.set_anim("idle")
+	m.carry_baby = true
+	m.tick(0.0)
+	check(sat == "sit" and m._d_clip != "wave", "앉은 사람 · 아기를 안은 사람은 흔들지 않음 (%s · %s)" % [sat, m._d_clip])
+	m.carry_baby = false
+	m.set_item("")
+	m.set_react(Vector3.ZERO, Vector2.ONE, 0.0, 0.0, "")
+	m.tick(0.0)
+	check(m._d_clip == "idle", "반응이 끝나면 하던 동작으로")
+	# 걸어오던 사람 (돌아옴 반김의 아이): 걸으며 흔듦 — 걸음은 땅 빠르기에 맞춤, 팔은 wave와 같은 자리
+	m._ground = 1.0
+	m.set_anim("wave")
+	m.tick(0.0)
+	var walked := m._d_clip == "walkwave" and m._d_rate > 0.5
+	var a: Array = Lib._pose("walkwave", 0, 0.3)
+	var wv: Array = Lib._pose("wave", 0, 0.3)
+	var wk: Array = Lib._pose("walk", 0, 0.3)
+	check(walked and (a[7] as Vector4).is_equal_approx(wk[7]) and (a[4] as Vector4).is_equal_approx(wv[4]),
+		"연출 anim 'wave' + 걷는 중 → walkwave (다리는 걸음 · 팔은 흔들기, 빠르기 %.2f)" % m._d_rate)
+	m._ground = 0.0
+	m.set_anim("idle")
+	m.free()

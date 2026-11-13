@@ -147,7 +147,7 @@ func test_story_rule() -> void:
 			for kind: String in TapReact.candidates(ctx, streak):
 				var d: Dictionary = TapReact.DEFS[kind]
 				ok = ok and not TapReact.AWARE_ONLY.has(kind)
-				hint_ok = hint_ok and String(d.get("hint", "")) != "lookup"
+				hint_ok = hint_ok and String(d.get("hint", "")) != "lookup" and String(d.get("hint", "")) != "wave"
 				for b: String in d.get("bub", []):
 					bub_ok = bub_ok and not TapReact.AWARE_BUBS.has(b)
 				for i in 6:
@@ -160,7 +160,7 @@ func test_story_rule() -> void:
 	check(bub_ok, "깨닫기 전: 하트·발그레 말풍선 없음")
 	check(voice_ok, "깨닫기 전: 건네는 말 없이 혼잣말만 (응? · 앗!)")
 	# 깨달은 뒤: 어른은 올려다보며 손 흔듦, 아이는 두 번 폴짝, 노인은 천천히 끄덕
-	check(TapReact.candidates(_ctx("adult", true)).has("wave") and String(TapReact.DEFS["wave"]["hint"]) == "lookup", "깨달은 뒤 어른: 올려다보며 손 흔들기")
+	check(TapReact.candidates(_ctx("adult", true)).has("wave") and String(TapReact.DEFS["wave"]["hint"]) == "wave", "깨달은 뒤 어른: 팔을 들어 손 흔들기 (Q33 인형 동작)")
 	check(TapReact.candidates(_ctx("child", true))[0] == "jump2" and TapReact.candidates(_ctx("elder", true))[0] == "nod", "깨달은 뒤 아이 = 두 번 폴짝 · 노인 = 끄덕")
 	check(TapReact.candidates(_ctx("baby", true)) == ["giggle", "coo"] and TapReact.candidates(_ctx("baby", false)) == ["giggle", "coo"], "아기: 까르르·옹알 (깨달음과 무관)")
 	var sleepers := true
