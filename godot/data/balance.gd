@@ -1297,3 +1297,19 @@ const STONE_SHORT_OFF_HOURS := 6         # 이만큼 이어서 풀리면 꺼진�
 const STONE_WISH_EVERY := 4.0 * DAY      # 촌장의 '돌이 모자라요' 편지 간격 (연장 편지와 같음 · 열린 편지가 있으면 쓰지 않음 · 연장 편지와 같은 날엔 쓰지 않음)
 ## 들어주지 않은 돌 편지가 닫힌 뒤 다음 편지까지: STONE_WISH_EVERY × 2^(이어서 못 받은 수 − 1) — 4 → 8 → 16일, 이 값까지. 돌을 떨어뜨리면 처음으로 (2026-11-14 메인 판단 — 도움 없는 마을에 조르지 않게)
 const STONE_WISH_BACKOFF_MAX := 16.0 * DAY
+# Q39 (2026-11-14 사용자 결정 "주민이 계속 탐험"): 마을이 커질수록 탐험이 이어진다 (sim/village.gd '탐험' · sim/resident_ai.gd _explore · 측정 tools/measure_explore.gd).
+# 첫 EXPLORE_GOAL_DAY날은 예전 그대로 (한 명 · 안개 가장자리 아무 쪽 · EXPLORE_HOLD_FOOD_DAYS 막기) — 첫 고비 날짜 · 먹을 것이 흔들리지 않게.
+# 그 뒤: 목표를 갖고 (아직 못 본 큰 나무 · 물길 · 세상 끝 유리벽 · 안개 가장자리), 닿는 거리가 날마다 늘고, 식구가 늘면 둘 · 셋이 따로 나선다.
+const EXPLORE_GOAL_DAY := 20.0           # 이 날(도착부터 병 날)부터 목표를 갖고 나선다 · 둘째 · 셋째 탐험가도 이때부터
+const EXPLORE_REACH_DAY := 4.0           # 그 뒤 하루에 닿는 거리가 이만큼(칸) 늘어난다 (WorldCfg.EXPLORE_MAX에서 시작 — 세상 지름까지)
+const EXPLORE_PARTY_POP := [24, 40]      # 식구가 이만큼이면 탐험가 둘 · 셋 (동시에 나가 있는 수)
+const EXPLORE_GOAL_P := 0.6              # 목표(큰 나무 · 물길 · 유리벽)가 닿는 곳에 있으면 이 몫으로 그쪽 — 아니면 안개 가장자리 아무 쪽
+const EXPLORE_FIT_HEALTH := 0.6          # 멀리 가는 사람: 건강이 이만큼 넘고 앓거나 다치지 않았고 젖먹이의 부모가 아님 · 추위가 오는 철엔 가까운 안개 가장자리만
+const EXPLORE_TREE_SEE := 24.0           # 큰 나무: 걷는 탐험가가 줄기 둘레 + 이만큼 안에 들면 '보았다' (멀리서도 보이는 나무)
+## (2026-11-14 메인 결정) 유리벽 영웅은 진짜 위업 — '먼 벽'(마을에서 세상 반대편 쪽)만 치고, 목표로 삼는 날은 늦게 · 씨앗마다 흔들리게, 탐험가가 둘 이상일 때만
+const EXPLORE_WALL_DAY := 90.0           # 먼 세상 끝을 목표로 삼는 날 (가운데) — 마을 씨앗으로 ± EXPLORE_WALL_JITTER (Village.explore_wall_day)
+const EXPLORE_WALL_JITTER := 15          # 그 날의 흔들림 (병 날, ±)
+const EXPLORE_WALL_FAR := 0.6            # '먼 벽' = 마을 가운데에서 세상 지름의 이만큼 넘게 떨어진 벽 (반대편 벽이 그보다 가까운 세상이면 반대편 벽까지의 거리 × 0.95). 가까운 벽에 닿는 건 여느 나들이
+const EXPLORE_WALL_TOUCH := 6.0          # 세상 끝 유리벽에서 이만큼(칸) 안에 닿으면 '유리벽에 닿았다' (DISCOVERIES S1 — 걸음 끝 오차를 넉넉히)
+const EXPLORE_LOG_MAX := 60              # 탐험 기록(explore_log)은 최근 이만큼만 (저장 크기)
+const EXPLORE_NICK := "세상 끝에 닿은"   # 처음 유리벽에 닿은 탐험가의 별명 (주민 쪽 글 — 숫자 없음)

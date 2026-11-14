@@ -33,6 +33,7 @@ var speed_btn: Button
 var skip_btn: Button
 var notice_label: Label
 var slow_card: SlowdownCard          # 느려진 까닭 카드 (빠른 흐름 중 중요한 일 — 누구·어디 · [보러 가기] · [계속 빠르게])
+var explore_news: ExploreNews        # (Q39) 탐험의 발견 카드 (큰 나무를 처음 봄 · 세상 끝 유리벽에 닿음 — [보러 가기])
 var _toast_q: Array = []             # 멈추지 않은 자잘한 일의 짧은 알림 (차례로)
 var _sim_ms := 0.0                   # 이번 화면에 시뮬레이션이 쓴 시간 (표시용, 평균)
 var lineup: Node3D
@@ -713,6 +714,10 @@ func _setup_ui() -> void:
 	slow_card.see.connect(go_see)
 	slow_card.resume.connect(func() -> void: clock.resume_fast())
 	stack.add_child(slow_card)
+	explore_news = ExploreNews.new()
+	explore_news.sc = self
+	explore_news.see.connect(go_see)
+	stack.add_child(explore_news)
 	stack.add_child(notice_label)
 	skip_btn = _bar_button(stack, "밤 건너뛰기", func() -> void: clock.start_skip_night())
 	skip_btn.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
