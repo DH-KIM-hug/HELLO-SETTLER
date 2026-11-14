@@ -1646,9 +1646,7 @@ func earth_name() -> String:
 
 ## 다음 알림 한 줄 (없으면 "") — 넓은 세상은 모든 무리에서 (다른 무리면 이름을 앞에)
 func next_warning() -> String:
-	if village.warnings.is_empty():
-		return ""
-	return str(village.warnings.pop_front()["text"])
+	return str(village.take_warning().get("text", ""))
 
 
 func _update_ui() -> void:

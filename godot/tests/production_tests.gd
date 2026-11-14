@@ -17,7 +17,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	run.timed(self, ["test_consume_contract", "test_spoil_one_table", "test_refill", "test_direct_route", "test_haul_time",
-		"test_stall_events", "test_cat_cycle", "test_cat_hunt", "test_honey", "test_no_deer"])
+		"test_stall_events", "test_cat_cycle", "test_cat_hunt", "test_honey", "test_no_deer", "test_hunger_hint_stale"])
 
 
 static func lab(seed_v := 3) -> Village:
@@ -415,3 +415,61 @@ func test_no_deer() -> void:
 	d.erase("caterpillars")
 	var old := Village.from_dict(d)
 	check(old.caterpillars != null and old.caterpillars.patches.is_empty(), "옛 저장 (애벌레 없음) → 처음 걸음에서 놓음")
+
+
+## (Q43) 늦은 마을 알림 줄에 '배고파 보여요. 낟알을 곁에 내려 줘요'가 뜨던 일 — 첫날(빵 전) 안내가 화면이 가져가지 않은 채(헤드리스로 돌린
+## 세상 덤프·저장) 줄에 남아, 몇십 날 뒤 화면을 열면 맨 앞에서 떴다. 화면은 Village.take_warning()으로 가져가며 지난 안내를 버린다
+func test_hunger_hint_stale() -> void:
+	print("== 배고픔 안내 — 첫날엔 뜨고, 첫 빵 뒤·오래된 안내는 알림 줄에 안 뜸 (Q43)")
+	const HINT := "배고파 보여요. 낟알을 곁에 내려 줘요"
+	# 첫날: 빵 전에 배고프면 안내가 붙고 화면이 그대로 띄운다 (예전과 같음)
+	var v := lab(43)
+	v.aware = true
+	v.stats.erase("first_bread")
+	v.warnings.clear()
+	v.deficit = 1.0
+	v._hunger_hint_t = -1.0e9
+	Production.hunger_hint(v)
+	check(v.warnings.size() == 1 and String(v.warnings[0]["text"]) == HINT, "빵 전 배고픔 → 안내 한 줄 붙음")
+	check(String(v.take_warning().get("text", "")) == HINT and v.warnings.is_empty(), "첫날 안내는 화면이 그대로 가져감")
+	# 아직 안 가져간 안내가 남은 채 첫 빵 → 버림 · 새 안내 없음
+	v._hunger_hint_t = -1.0e9
+	Production.hunger_hint(v)
+	v.stats["first_bread"] = 1
+	v._hunger_hint_t = -1.0e9
+	Production.hunger_hint(v)
+	check(v.warnings.size() == 1, "첫 빵 뒤엔 배고파도 새 안내가 붙지 않음")
+	check(v.take_warning().is_empty() and v.warnings.is_empty(), "첫 빵 전 안내가 남아 있어도 첫 빵 뒤엔 알림 줄에 안 뜸")
+	# 빵 전이라도 안내 간격보다 오래된 안내는 버림 (아직 배고프면 새 안내가 다시 붙음) · 다른 예고는 WARN_STALE까지 살아 있음
+	v.stats.erase("first_bread")
+	v.t += Balance.WARN_STALE + Balance.DAY
+	v.warnings.append({"t": v.t - Balance.HUNGER_HINT_EVERY - 60.0, "kind": "hunger", "text": HINT})
+	v.warnings.append({"t": v.t - Balance.WARN_STALE - 60.0, "kind": "gnat", "text": "옛 예고"})
+	v.warnings.append({"t": v.t - 2.0 * Balance.DAY, "kind": "sick", "text": "이틀 전 예고"})
+	check(String(v.take_warning().get("text", "")) == "이틀 전 예고" and v.warnings.is_empty(),
+		"오래된 배고픔 안내·%d일 지난 예고는 버리고 이틀 전 예고는 띄움" % int(Balance.WARN_STALE / Balance.DAY))
+	# 넓은 세상 + 저장·불러오기: 첫날 안내가 남은 마을을 첫 빵 뒤 저장 → 불러온 화면 줄에 안 뜸
+	var jw := JarWorld.create_with_kit(43, WorldCfg.SIZE, Kits.make([]))
+	var q := jw.primary()
+	q.aware = true
+	jw.advance(600.0)
+	check(not Production.bread_made(q), "넓은 세상 첫날: 아직 빵 없음")
+	q.deficit = 1.0
+	q._hunger_hint_t = -1.0e9
+	Production.hunger_hint(q)
+	check(q.warnings.any(func(w: Dictionary) -> bool: return String(w["text"]) == HINT), "넓은 세상 첫날 배고픔 → 안내 붙음")
+	q.stats["first_bread"] = 1
+	var jw2 := JarWorld.from_dict(bytes_to_var(var_to_bytes(jw.to_dict())))
+	var q2 := jw2.primary()
+	check(Production.bread_made(q2) and q2.warnings.any(func(w: Dictionary) -> bool: return String(w["text"]) == HINT), "저장·불러오기: 첫 빵 표시와 못 가져간 안내가 그대로")
+	var shown: Array = []
+	for i in 30:
+		var w := q2.take_warning()
+		if w.is_empty():
+			break
+		shown.append(String(w["text"]))
+	check(not HINT in shown, "불러온 넓은 세상: 알림 줄에 배고픔 안내가 안 뜸 (뜬 것 %s)" % [shown])
+	q2.deficit = 1.0
+	q2._hunger_hint_t = -1.0e9
+	Production.hunger_hint(q2)
+	check(q2.warnings.is_empty(), "불러온 뒤 배고파도 첫 빵 뒤라 새 안내 없음")
