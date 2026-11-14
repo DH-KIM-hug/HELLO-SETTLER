@@ -305,6 +305,7 @@ func _init_health(seed_v: int) -> void:
 	pop_rng.seed = seed_v * 15485863 + 31
 	Social.lines()                        # 말 묶음을 미리 읽음 (첫 만남 걸음이 갑자기 느려지지 않게 — 빠른 흐름의 계산 예산)
 	disc_rng.seed = seed_v * 7919 + 13
+	explore_rng.seed = seed_v * 4421 + 71     # (Q39) 탐험 목표 고르기 전용
 	air = JarAir.new(seed_v)              # [곰팡이·뚜껑]
 	mold = Mold.new(seed_v)
 	smalls = SmallCrises.new(seed_v)     # [작은 위기]
@@ -3829,7 +3830,16 @@ func check_invariants() -> PackedStringArray:
 # ───────────────────────── 6단계 — 넓은 세상의 무리 (키트) ─────────────────────────
 var _fog_on := false
 var last_explore_t := -1.0e9
-var explorer := -1                    # 지금 탐험 중인 주민 id
+var explorer := -1                    # 지금 탐험 중인 주민 id (첫째 탐험가 — Q39 둘째 · 셋째는 explore_party)
+# (Q39 2026-11-14 "주민이 계속 탐험") — 저장은 이름 그대로 (옛 저장: 빈 값 · explore_v 0 → 처음 걸음에 이미 걷힌 큰 나무는 조용히 '본 것')
+var explore_rng := RandomNumberGenerator.new()   # 목표 고르기 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
+var explore_party: Array = []         # 둘째 · 셋째 탐험가 id
+var explore_more_t := -1.0e9          # 둘째 · 셋째가 마지막으로 떠난 병 시각
+var explore_goals: Dictionary = {}    # 나가 있는 탐험가 id(문자) → 목표 ("tree:<kind>" · "water:<번호>" · "wall" · "edge")
+var explore_seen: Dictionary = {}     # 처음 본 큰 나무 kind → 병 시각
+var explore_v := 0                    # 1 = explore_seen을 쓰는 판
+var explore_hero: Dictionary = {}     # 처음 세상 끝 유리벽에 닿은 탐험가 {id, name, t}
+var explore_log: Array = []           # 최근 탐험 [{t, goal, d}] (Balance.EXPLORE_LOG_MAX까지 — 측정 · 시험)
 var peers: Array = []                 # 같은 세상의 모든 무리 (자기 포함 — JarWorld가 채움)
 var kit: Dictionary = {}
 
@@ -3951,6 +3961,7 @@ func _init_world(ww: WorldWater, spot: Vector2, kit_def: Dictionary, seed_v: int
 		else:                             # 아직 거인을 모른다 (6.5) — 어떻게 왔는지 아무도 모른다
 			log_line("어느 아침, 우리 조상 %s 오두막 두 채 곁에서 눈을 떴다. 어떻게 이 땅에 왔는지 기억하는 사람은 없었다." % CatchUp.count_words(people.size(), "", "이", "가"))
 		log_line("사방은 하얀 안개다. 안개 너머가 어디까지 이어지는지 아무도 모른다. 하늘의 물방울이 똑, 똑 떨어지는 곳에는 마르지 않는 호수가 있다.")
+	explore_v = 1                         # (Q39) 새 무리 — 큰 나무 '본 것'을 처음부터 센다
 	_reveal_at(center, WorldCfg.REVEAL_KIT, null, true)
 
 
@@ -3980,6 +3991,8 @@ func _reveal_at(p: Vector2, rad: float, who: Resident, force := false) -> void:
 	if who != null:
 		rad *= who.f("fog")              # 혈통 '탐험가' 안개 반경 +50%
 	var ev: Array = water.reveal(sid, p.x, p.y, rad, force)
+	if _fog_on:
+		_see_trees(p, rad, who)           # (Q39) 큰 나무가 처음 보임
 	if ev.is_empty():
 		return
 	for e: Dictionary in ev:
@@ -4029,11 +4042,254 @@ func explore_target() -> Variant:
 	return water.fog_target(sid, center, rng, WorldCfg.EXPLORE_MAX)
 
 
+## 지금 떠날 수 있나. 첫째 탐험가(explorer)는 지난번에서 EXPLORE_EVERY 뒤 · (Q39) 둘째 · 셋째(explore_party)는 식구가 늘면 따로 같은 간격으로.
+## 첫 EXPLORE_GOAL_DAY날은 예전 그대로 (한 명 · 누구든). 그 뒤 멀리 가는 사람은 성해야 한다 (explore_fit)
 func can_explore(r: Resident = null) -> bool:
 	var every := WorldCfg.EXPLORE_EVERY
 	if r != null:
 		every /= r.f("explore")          # 혈통 '탐험가'는 더 자주 나선다
-	return explore_on and explorer < 0 and t - last_explore_t >= every and not explore_held()
+	if not explore_on or explorers_out() >= explore_cap():
+		return false
+	if explorer < 0:
+		if t - last_explore_t < every or explore_held():
+			return false
+		return r == null or not explore_goal_on() or explore_fit(r)
+	if t - explore_more_t < every or explore_held():
+		return false
+	return r == null or explore_fit(r)
+
+
+# ───────────────────────── (Q39 2026-11-14) 주민이 계속 탐험 — 목표 · 여럿 · 큰 나무 · 세상 끝 ─────────────────────────
+## 목표를 갖고 나서는 때 (도착하고 EXPLORE_GOAL_DAY날 뒤 — 그 전은 예전 그대로: 첫 고비 날짜 · 먹을 것이 흔들리지 않게)
+func explore_goal_on() -> bool:
+	return explore_on and t >= Balance.EXPLORE_GOAL_DAY * DAY
+
+
+## 지금 닿는 거리 (마을 가운데에서 칸) — WorldCfg.EXPLORE_MAX에서 날마다 EXPLORE_REACH_DAY씩 늘어 세상 지름까지
+func explore_reach() -> float:
+	var extra := maxf(0.0, t / DAY - Balance.EXPLORE_GOAL_DAY) * Balance.EXPLORE_REACH_DAY
+	return minf(WorldCfg.EXPLORE_MAX + extra, 2.0 * water.radius())
+
+
+## 동시에 나가 있을 수 있는 탐험가 수 (식구가 EXPLORE_PARTY_POP이면 둘 · 셋)
+func explore_cap() -> int:
+	var n := 1
+	if explore_goal_on():
+		for p: int in Balance.EXPLORE_PARTY_POP:
+			if people.size() >= p:
+				n += 1
+	return n
+
+
+func explorers_out() -> int:
+	return (1 if explorer >= 0 else 0) + explore_party.size()
+
+
+## 멀리 가도 되는 사람: 성하고 (건강 · 앓음 · 다침 · 밖에서 지니고 온 병) 젖먹이의 부모가 아님
+func explore_fit(r: Resident) -> bool:
+	if r.health < Balance.EXPLORE_FIT_HEALTH or r.sick_left > 0.0 or r.injured_left > 0.0 or r.latent != "":
+		return false
+	for q: Resident in people:
+		if q.is_baby() and r.id in q.parents:
+			return false
+	return true
+
+
+## 이번 탐험의 목표 {p: Vector2 또는 null, goal}. 첫 EXPLORE_GOAL_DAY날은 예전 그대로 (안개 가장자리 아무 쪽 — 마을 난수).
+## 그 뒤 (explore_rng): 닿는 곳(explore_reach — 추위가 오는 철 · 겨울엔 WorldCfg.EXPLORE_MAX)에 아직 못 본 큰 나무 · 물길(호수 · 강) ·
+## 아무도 닿지 않은 세상 끝이 있으면 EXPLORE_GOAL_P로 가장 가까운 것 (다른 탐험가가 가는 곳은 빼고) — 아니면 안개 가장자리 아무 쪽 (더 멀리까지)
+func explore_plan() -> Dictionary:
+	if not explore_goal_on() or not water is WorldWater:
+		return {"p": explore_target(), "goal": "edge"}
+	var ww := water as WorldWater
+	var reach := explore_reach()
+	if cold_season or jar_date()["season"] == "겨울":
+		reach = WorldCfg.EXPLORE_MAX
+	var taken := {}
+	for g: Variant in explore_goals.values():
+		taken[String(g)] = true
+	var best: Dictionary = {}
+	var bd := INF
+	for c: Dictionary in explore_goal_list(ww):
+		if taken.has(String(c["goal"])) or float(c["d"]) > reach:
+			continue
+		if float(c["d"]) < bd:
+			bd = float(c["d"])
+			best = c
+	var pick_goal := not best.is_empty() and explore_rng.randf() < Balance.EXPLORE_GOAL_P
+	if not pick_goal:
+		var fp: Variant = ww.fog_target(sid, center, explore_rng, reach)
+		if fp != null:
+			return {"p": fp, "goal": "edge"}
+	if best.is_empty():
+		return {"p": null, "goal": ""}
+	return {"p": best["p"], "goal": best["goal"]}
+
+
+## 목표 후보 [{goal, p, d}] — 아직 못 본 큰 나무 · 아직 못 본 호수 · 강 · (아무도 닿지 않았으면) 세상 끝 유리벽. 걸음이 끝나는 자리는 마른 땅
+func explore_goal_list(ww: WorldWater) -> Array:
+	var out: Array = []
+	_explore_trees_init()
+	for gt: Dictionary in ww.great_trees:
+		if explore_seen.has(String(gt["kind"])):
+			continue
+		var c := Vector2(gt["x"], gt["y"])
+		var dir := (center - c).normalized() if center.distance_to(c) > 1.0 else Vector2.RIGHT
+		var p: Variant = _dry_toward(ww, c + dir * (float(gt["r"]) + 4.0))
+		if p != null:
+			out.append({"goal": "tree:" + String(gt["kind"]), "p": p, "d": center.distance_to(p)})
+	var bit := 1 << sid
+	for i in ww.features.size():
+		var ft: Dictionary = ww.features[i]
+		var k := String(ft["kind"])
+		if (k != "lake" and k != "river") or int(ft["seen"]) & bit:
+			continue
+		var p: Variant = _dry_toward(ww, Vector2(ft["x"], ft["y"]))
+		if p != null:
+			out.append({"goal": "water:%d" % i, "p": p, "d": center.distance_to(p)})
+	if explore_hero.is_empty() and t >= explore_wall_day() * DAY and explore_cap() >= 2:
+		var p: Variant = _wall_spot(ww)
+		if p != null:
+			out.append({"goal": "wall", "p": p, "d": center.distance_to(p)})
+	return out
+
+
+## p에서 마을 쪽으로 물러나며 처음 나오는 마른 땅 (세상 안) — 없으면 null
+func _dry_toward(ww: WorldWater, p: Vector2) -> Variant:
+	var q := p
+	var dir := (center - p).normalized() if center.distance_to(p) > 1.0 else Vector2.ZERO
+	for i in 40:
+		if ww.inside(q.x, q.y, 3.0) and ww.depth(ww.idx(q.x, q.y)) < 0.01:
+			return q
+		if dir == Vector2.ZERO:
+			return null
+		q += dir * 3.0
+	return null
+
+
+## (메인 결정) 먼 세상 끝을 목표로 삼는 병 날 — EXPLORE_WALL_DAY ± EXPLORE_WALL_JITTER, 마을 씨앗(explore_rng.seed)으로 정함 (난수를 뽑지 않음)
+func explore_wall_day() -> float:
+	var j := Balance.EXPLORE_WALL_JITTER
+	var h := absi(hash(int(explore_rng.seed) * 2654435761 + 977)) % (2 * j + 1)
+	return Balance.EXPLORE_WALL_DAY + float(h - j)
+
+
+## '먼 벽'으로 치는 가장 가까운 거리 (마을 가운데에서 칸) — 세상 지름 × EXPLORE_WALL_FAR, 반대편 벽이 그보다 가까우면 그 거리 × 0.95
+func explore_far_wall() -> float:
+	var ww := water as WorldWater
+	return minf(Balance.EXPLORE_WALL_FAR * 2.0 * ww.rr, (center.length() + ww.rr) * 0.95)
+
+
+## 먼 세상 끝 (마을에서 세상 가운데를 지나 반대편 유리벽 바로 안의 마른 땅) — 물이면 옆으로 조금씩. '먼 벽'이 아니면 null
+func _wall_spot(ww: WorldWater) -> Variant:
+	var a0 := (-center).angle() if center.length() > 1.0 else 0.0
+	var far := explore_far_wall()
+	for k in 13:
+		var a := a0 + (0.0 if k == 0 else (0.12 * ceili(k / 2.0) * (1.0 if k % 2 == 1 else -1.0)))
+		var p := Vector2(cos(a), sin(a)) * (ww.rr - 0.4 - Balance.EXPLORE_WALL_TOUCH * 0.5)
+		if ww.depth(ww.idx(p.x, p.y)) < 0.01 and p.distance_to(center) >= far:
+			return p
+	return null
+
+
+## 탐험가가 떠남 — 목표와 기록 (explore_goals · explore_log만 — 다른 흐름은 건드리지 않음)
+func explore_started(r: Resident, plan: Dictionary, p: Vector2) -> void:
+	explore_goals[str(r.id)] = String(plan.get("goal", "edge"))
+	explore_log.append({"t": t, "goal": String(plan.get("goal", "edge")), "d": int(center.distance_to(p)), "who": r.id})
+	if explore_log.size() > Balance.EXPLORE_LOG_MAX:
+		explore_log = explore_log.slice(explore_log.size() - Balance.EXPLORE_LOG_MAX)
+
+
+## 탐험가가 돌아옴 (또는 그만둠)
+func explore_done(r: Resident) -> void:
+	if explorer == r.id:
+		explorer = -1
+	explore_party.erase(r.id)
+	explore_goals.erase(str(r.id))
+
+
+## 탐험가가 목표에 닿아 둘러봄 — 먼 세상 끝 유리벽 곁이면 (explore_far_wall 넘게 — 처음 한 번) 연대기의 영웅 + 별명 + 발견 S1 '세상의 끝'
+func explore_arrived(r: Resident) -> void:
+	if not water is WorldWater or not explore_hero.is_empty():
+		return
+	var ww := water as WorldWater
+	if Vector2(r.x, r.y).length() < ww.rr - 0.4 - Balance.EXPLORE_WALL_TOUCH:
+		return
+	if Vector2(r.x, r.y).distance_to(center) < explore_far_wall():
+		return                            # 가까운 벽에 닿은 건 여느 나들이 (메인 결정 — 영웅은 먼 벽만)
+	explore_hero = {"id": r.id, "name": r.name, "t": t}
+	var nick := ""
+	if r.nickname.is_empty():
+		r.nickname = Balance.EXPLORE_NICK
+		nick = r.nickname
+	var line := "%s 안개를 헤치고 끝까지 걸어갔다. 하늘이 땅에 닿는 곳에, 손이 닿는 빛나는 벽이 있었다."
+	var subj := "%s%s" % [r.name, josa(r.name, "이", "가")]
+	if not Discovery.make(self, "world_end", r, line):          # 발견 S1 (DISCOVERIES 3.4 — 주민이 유리벽에 처음 닿음). 망루에서 이미 보았으면 줄만
+		log_line(line % subj)
+	if nick != "":
+		log_line("사람들은 이제 그를 '%s'%s 부른다." % [Milestones.title_of(r), josa(r.name, "이라", "라")])
+	speak(r, "여기가 세상의 끝이야!", 8)
+	emit(&"explore_wall", {"who": r.id, "at": Vector2(r.x, r.y), "v": {"name": r.name, "nick": nick}})
+
+
+## 큰 나무 묘사 (주민 쪽 글 — 철과 상관없는 모습)
+const TREE_LOOK := {"cherry": "굽은 줄기가 하늘로 휘어 오른 큰 벚나무", "pine": "바늘잎이 층층이 얹힌 큰 소나무", "fruit": "가지가 땅까지 늘어진 큰 과일나무",
+	"ginkgo": "부채 같은 잎이 겹겹이 달린 큰 은행나무", "maple": "손바닥 같은 잎이 우거진 큰 단풍나무"}
+const TREE_SAY := "저기 커다란 나무가 있어요!"
+
+
+## 옛 저장 (explore_v 0): 이미 걷힌 큰 나무는 조용히 '본 것'으로 (연대기 · 사건 없음)
+func _explore_trees_init() -> void:
+	if explore_v >= 1 or not water is WorldWater:
+		return
+	explore_v = 1
+	for gt: Dictionary in (water as WorldWater).great_trees:
+		if _tree_in_fog_seen(gt):
+			explore_seen[String(gt["kind"])] = t
+
+
+func _tree_in_fog_seen(gt: Dictionary) -> bool:
+	var ww := water as WorldWater
+	var c := Vector2(gt["x"], gt["y"])
+	var r := float(gt["r"])
+	for k in 9:
+		var q := c if k == 0 else c + Vector2(cos(k * TAU / 8.0), sin(k * TAU / 8.0)) * r
+		if ww.revealed(q.x, q.y, sid):
+			return true
+	return false
+
+
+## 안개가 걷힐 때 (_reveal_at): 걷는 사람이 줄기 둘레 + EXPLORE_TREE_SEE 안에 들었거나 나무 자리의 안개가 걷혔으면 처음 본 것 —
+## 나무 둘레 안개를 걷고 연대기 한 줄 · 말풍선 · 사건 &"great_tree_seen" (화면이 짧은 알림 카드 — view/ui/explore_news.gd)
+func _see_trees(p: Vector2, rad: float, who: Resident) -> void:
+	if not water is WorldWater:
+		return
+	var ww := water as WorldWater
+	if explore_seen.size() >= ww.great_trees.size():
+		return
+	_explore_trees_init()
+	for gt: Dictionary in ww.great_trees:
+		var kind := String(gt["kind"])
+		if explore_seen.has(kind):
+			continue
+		var c := Vector2(gt["x"], gt["y"])
+		var near := who != null and Vector2(who.x, who.y).distance_to(c) <= float(gt["r"]) + Balance.EXPLORE_TREE_SEE
+		if not near and p.distance_to(c) > float(gt["r"]) + rad + 4.0:
+			continue
+		if not near and not _tree_in_fog_seen(gt):
+			continue
+		var first := explore_seen.is_empty()
+		explore_seen[kind] = t
+		var look := String(TREE_LOOK.get(kind, "큰 나무"))
+		var subj := ("%s%s " % [who.name, josa(who.name, "이", "가")]) if who != null else "우리는 "
+		if first:
+			log_line("%s안개 너머에서 %s%s 보았다. 마을의 어떤 집보다도, 어떤 나무보다도 컸다." % [subj, look, josa(look, "을", "를")])
+		else:
+			log_line("%s안개 너머에서 또 하나의 큰 나무, %s%s 보았다." % [subj, look, josa(look, "을", "를")])
+		if who != null and not who.sleeping:
+			speak(who, TREE_SAY, 8)
+		emit(&"great_tree_seen", {"who": who.id if who != null else -1, "at": c, "v": {"kind": kind, "name": String(gt["name"]), "first": first}})
+		_reveal_at(c, float(gt["r"]) + 8.0, null, true)     # 나무 둘레가 보이게 (곁의 호수 · 강도 그 자리에서 — 이 나무는 이미 '본 것')
 
 
 ## (2026-11-11 Q7-c) 첫 며칠 먹을 것이 바닥나 가면 안개 너머를 살피러 새로 떠나지 않는다 — 그 어른은 나르고 짓는다 (이미 떠난 사람은 다녀온다).
@@ -4317,6 +4573,8 @@ static func from_dict(d: Dictionary, water_obj: JarWater = null) -> Village:
 		if by_id.has(int(id)):
 			v._singers.append(by_id[int(id)])
 	v.book = SaveCodec.dec(d.get("book", []))
+	if not d.has("explore_rng"):
+		v.explore_rng.seed = int(v.rng.seed) * 4421 + 71     # (Q39) 옛 저장: 탐험 목표 난수를 마을 씨앗으로 (결정론)
 	if v.aware and v.watcher == "":
 		v.watcher = WatcherName.pick(WatcherName.key_of(v))     # N2: 옛 저장(부르는 말 칸 없음) — 마을 씨앗으로 정함
 	if v.altar_built and Awakening.altar_site(v) == null and not v.altar_spot_ok(v.altar_pos):

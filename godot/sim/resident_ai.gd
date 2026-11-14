@@ -82,11 +82,11 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 				r.carry = ""
 				r.carry_amt = 0.0
 		"explore_clear":
-			if v.explorer == r.id:
-				v.explorer = -1
+			v.explore_done(r)                  # (Q39) 첫째 · 둘째 · 셋째 탐험가 모두
 		"explore_look":
 			r.doing = "집으로 돌아가는 중"
 			v._reveal_at(Vector2(r.x, r.y), WorldCfg.REVEAL_LOOK, r, true)
+			v.explore_arrived(r)               # (Q39) 세상 끝 유리벽 곁이면 연대기의 영웅
 		"meal":
 			r.meal_done = int(d["mk"])
 		"pray":
@@ -616,16 +616,30 @@ static func _chores(v: Village, r: Resident) -> bool:
 	return true
 
 
+## (Q39) 탐험 목표마다 하는 일 (주민 쪽 글)
+const EXPLORE_DOING := {"edge": "안개 너머를 살피러 가는 중", "tree": "안개 속 커다란 그림자를 보러 가는 중", "water": "물소리를 따라 가는 중", "wall": "세상의 끝을 찾아 가는 중"}
+
+
 ## 탐험: 안개 가장자리까지 걸어가 둘러보고 돌아온다 (걷는 길과 둘러본 둘레의 안개가 걷힌다)
+## (Q39) 첫 EXPLORE_GOAL_DAY날 뒤엔 목표를 갖고 (Village.explore_plan) · 식구가 늘면 둘째 · 셋째도 (Village.explore_party)
 static func _explore(v: Village, r: Resident) -> bool:
-	var tg: Variant = v.explore_target()
-	v.last_explore_t = v.t
+	var more := v.explorer >= 0
+	var plan := v.explore_plan()
+	if more:
+		v.explore_more_t = v.t
+	else:
+		v.last_explore_t = v.t
+	var tg: Variant = plan["p"]
 	if tg == null:
 		return false
 	var p: Vector2 = tg
-	v.explorer = r.id
+	if more:
+		v.explore_party.append(r.id)
+	else:
+		v.explorer = r.id
 	v.stats["explore"] = int(v.stats.get("explore", 0)) + 1
-	r.doing = "안개 너머를 살피러 가는 중"
+	v.explore_started(r, plan, p)
+	r.doing = String(EXPLORE_DOING.get(String(plan["goal"]).get_slice(":", 0), "안개 너머를 살피러 가는 중"))
 	var clear := op("explore_clear")
 	var look := op("explore_look")
 	r.steps.append(walk(p.x, p.y))
