@@ -279,7 +279,7 @@ static func sprout(h: float) -> Array:
 const GREAT_PARTS := {
 	"pine": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage"], "겨울": ["foliage_winter"]},
 	"fruit": {"봄": ["foliage_bloom"], "여름": ["foliage", "fruit_green"], "가을": ["foliage_autumn", "fruit"], "겨울": ["fruit_dry"]},
-	"ginkgo": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn", "carpet"], "겨울": []},
+	"ginkgo": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": []},
 	"maple": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": ["seeds"]},
 	"cherry": {"봄": ["blossom"], "여름": ["foliage", "cherries"], "가을": ["foliage_autumn"], "겨울": []},
 }

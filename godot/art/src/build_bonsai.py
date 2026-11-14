@@ -1,21 +1,22 @@
 """The five great trees of the small world (GAME_DESIGN 3.0, ROADMAP E3-2 / E3-11 / A27; art bible 3.4, 4.3, 6.4, 8)
 + the great fallen fruit. Bonsai-shaped: thick bent trunks, exposed roots, layered foliage. One of each per world, never cut.
 Scale: 1 unit = one adult resident (the view scales trees by FloraLook.GREAT_SCALE 0.6).
-Heights: ginkgo ~90, cherry ~76, pine ~68, maple ~68, fruit tree ~62.
+Heights (model units): ginkgo ~90, pine ~57 (leaning), cherry ~55, maple ~45 (widest), fruit tree ~50 (broad).
 
-Silhouettes (art bible 6.4 - each must read on its own from the whole-world view):
-  pine   = flat horizontal needle cushions in tiers, fine comb teeth round every cushion rim (no star points)
-  fruit  = one round crown + hanging fruit dots; CREAM-WHITE blossom in spring (pink belongs to the cherry)
-  ginkgo = the only upright tree: straight trunk, branches and crown open upwards like a fan
-  maple  = wide dome of hand-shaped cushions: five big pointed lobes on every rim (star edge = maple only)
-  cherry = bent, leaning trunk with horizontal bark bands, puffy blossom clouds (spring), green + cherries (summer),
-           orange (autumn), bare banded trunk (winter)
+Silhouettes (art bible 6.4 + ROADMAP Q41 2026-11-14 "큰 나무 모양 ... 달랐으면" - each must read on its own from the whole world):
+  pine   = the only LEANING, windswept tree: S-bent craggy trunk, long thin dark blue-green pads streaming downwind,
+           comb rims, roots gripping a mossy boulder
+  fruit  = short stout trunk, one BROAD ROUND crown wider than tall, big fruits studded on it; CREAM-WHITE blossom in spring
+  ginkgo = the only upright tree: tall straight bare trunk, crown opening upwards like a fan (narrow V, widest at the top)
+  maple  = low and WIDE: a vase of smooth stems running out level, star-edged (five-lobed) layers (star edge = maple only)
+  cherry = WEEPING: banded trunk, soft cloud dome with long drooping twig curtains strung with blossom tassels (spring),
+           green + cherries (summer), orange (autumn), bare hanging twigs (winter)
 
 Output: godot/art/models/flora/tree_<kind>.glb, one part set per tree (read with Art.parts). Every part pivots at the
 trunk foot (0,0,0). Colour variants share the exact same geometry, so the view only picks which parts to show per season:
   tree_pine   trunk · foliage (summer/autumn) · foliage_spring (light-green new tips) · foliage_winter (frost on top)
   tree_fruit  trunk · foliage · foliage_bloom (cream-white) · foliage_autumn · fruit (ripe) · fruit_green · fruit_dry (one)
-  tree_ginkgo trunk · foliage_spring · foliage · foliage_autumn (yellow) · carpet (fallen yellow fans, autumn)
+  tree_ginkgo trunk · foliage_spring · foliage · foliage_autumn (yellow)  (the fallen yellow carpet = ring_ginkgo ground decal)
   tree_maple  trunk · foliage_spring (red-tinged) · foliage · foliage_autumn (red hands) · seeds (winged, winter)
   tree_cherry trunk · blossom (pink clouds + drifting petals) · foliage · foliage_autumn (orange) · cherries (summer)
   Winter = trunk only (+ frost / seeds / one dried fruit) - the bare branches carry the silhouette.
@@ -43,9 +44,9 @@ BUILT = []
 
 # palettes: (top, flank, belly) - two tones + a belly shade (smooth toon terminator does the rest)
 PAL = {
-    "pine": ("4f8f74", "3a755f", "2a5a4c"),
-    "pine_spring": ("9cc87a", "3f7a62", "2a5a4c"),            # light-green new tips on top
-    "pine_winter": ("e3eeea", "6f968a", "2c5a4c"),           # frost #E3EEEA (mint white, not pure white)
+    "pine": ("467a70", "33625c", "244a47"),                  # dark blue-green (Q41: darkest, bluest crown of the five)
+    "pine_spring": ("8fbf7c", "3a6a60", "244a47"),            # light-green new tips on top
+    "pine_winter": ("e3eeea", "62887e", "244a47"),           # frost #E3EEEA (mint white, not pure white)
     "fruit": ("86cf86", "58ad78", "3a8a6c"),
     "fruit_bloom": ("f8f0dc", "ece0c2", "a9c48e"),           # cream-white blossom over leaf-green belly
     "fruit_autumn": ("c6cf6c", "9cb45a", "6f9050"),
@@ -59,7 +60,7 @@ PAL = {
     "cherry_blossom": ("fad2dc", "f2b8c6", "d690a6"),         # 벚꽃 #F2B8C6
     "cherry_autumn": ("f4a654", "e27e3a", "b4582e"),
 }
-BARK = {"pine": "6e5240", "fruit": "7a5e4a", "ginkgo": "8e8070", "maple": "8c7a6c", "cherry": "7a4a46"}
+BARK = {"pine": "64463a", "fruit": "7a5e4a", "ginkgo": "8e8070", "maple": "8c7a6c", "cherry": "7a4a46"}
 FRUIT = ("f39a5a", "f6c065", "e0703f")       # peach skin, blush light, blush dark
 FRUIT_GREEN = ("a6cc62", "c4dc78", "86b452")
 CHERRY_RED = "7e2232"
@@ -210,6 +211,7 @@ class Tree:
         self.lumps = []          # dict(c, rx, ry, rz, rot, tilt, seed, seg, rings, rim_n, flat, lumps, far, rim_fn_far)
         self.extra = {}          # part name -> (near Model builder, far builder or None)
         self.leaves = None       # near-only leaf sprinkling: fn(model, pal)
+        self.trunk_extra = None  # fn(model, far) - extra always-shown geometry in the trunk part (pine boulder)
         import random
         self.rng = random.Random(seed)
 
@@ -310,6 +312,8 @@ class Tree:
             else:
                 w = (lambda i, k, ws=ws, wob=wob: 1.0 + wob * math.sin(k * 2.0 + i * 0.9 + ws) + wob * 0.6 * math.sin(k * 5.0 - i * 1.7 + ws * 2))
                 stube(m, pts, radii, seg=seg, group=grp, colfn=fn, wobble=w, twist=0.05)
+        if self.trunk_extra is not None:
+            self.trunk_extra(m, far)
         return m
 
     def render_crown(self, pal, far=False, tip=None, name="foliage"):
@@ -363,30 +367,43 @@ def tilt_out(az, ang):
     return Matrix.Rotation(ang, 3, axis)
 
 
-# ───────────── pine: flat tiered needle cushions with comb rims ─────────────
+# ───────────── pine: windswept, leaning, flat dark blue-green pads streaming downwind, roots gripping a boulder ─────────────
+# (Q41 2026-11-14: each great tree must read on its own - the pine is the only LEANING, ASYMMETRIC tree: wind from -x)
 def build_pine():
     t = Tree("tree_pine", "pine", 311)
-    t.trunk([(0, 0, 0), (10, 0, 12), (-12, 2, 22), (-5, 0, 32), (3, -1, 40), (10, 0, 48), (5, 0, 58)], 6.2, 1.5, n=9, seg=11,
-            flare=0.5)
-    t.roots(6, 8, 0.6, r_k=0.5)
-    tiers = ((0.30, 3.0, 26, -1, 15.0, 3.0), (0.42, 0.2, 24, 1, 14.0, 2.9), (0.55, 2.0, 19, 2, 12.0, 2.7),
-             (0.66, -1.0, 18, 2, 11.5, 2.6), (0.78, 4.0, 14, 3, 10.0, 2.5), (0.5, -2.6, 16, 0, 10.5, 2.6))
-    for (tt, az, ln, rise, rx, rz) in tiers:
-        e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.42, droop=0.18, seg=7)
-        t.lump(e + V(0, 0, 0.8), rx, rx * 0.86, rz, rot=az, seg=56, rings=5, rim=comb(56), rim_far=comb(16),
-               flat=0.3, lumps=0.07, far_seg=16, far_rings=4)
-        # a smaller step-pad beside the main one (layered look)
-        a2 = az + 1.1
-        c2 = e + V(math.cos(a2), math.sin(a2), 0) * rx * 0.8 + V(0, 0, -0.6)
-        t.lump(c2, rx * 0.55, rx * 0.5, rz * 0.85, rot=a2, seg=26, rings=4, rim=comb(26), flat=0.3, lumps=0.07,
-               far=False)
+    t.trunk([(-2, 0, 0), (-6, 0, 9), (2, 0, 16), (8, 0, 22), (14, 0, 28), (13, 0, 36), (22, 0, 42), (30, 1, 46), (36, 1, 50),
+             (40, 1, 53)], 6.4, 1.6, n=8, seg=11, flare=0.45)
+    t.roots(5, 7, 0.9, r_k=0.55)
+    # pads: long thin horizontal clouds, most on the lee (+x) side, a few short stubs to windward; stacked in tiers
+    tiers = ((0.28, 0.25, 22, 0, 15.5, 2.4, 1.0), (0.38, 2.75, 9, 1, 8.0, 2.2, 0.6), (0.47, -0.35, 20, 1, 14.0, 2.3, 0.9),
+             (0.58, 0.55, 17, 2, 12.5, 2.2, 0.9), (0.66, 3.3, 8, 2, 7.0, 2.0, 0.6), (0.76, -0.45, 15, 2, 11.0, 2.1, 0.85),
+             (0.86, 0.6, 12, 2, 10.0, 2.0, 0.8))
+    for (tt, az, ln, rise, rx, rz, stream) in tiers:
+        e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.42, droop=0.22, seg=7)
+        # a pad is stretched along the wind (+x) and sits a little downwind of its branch end
+        c = e + V(rx * 0.3 * stream, 0, 0.6)
+        t.lump(c, rx * (1.0 + 0.35 * stream), rx * 0.62, rz, rot=0.0, seg=48, rings=5, rim=comb(48), rim_far=comb(12),
+               flat=0.3, lumps=0.06, far_seg=12, far_rings=4)
+        if rx > 9:      # a step-pad tucked under the lee end (layered look)
+            c2 = c + V(rx * 0.75, (1 if az > 0 else -1) * rx * 0.25, -1.4)
+            t.lump(c2, rx * 0.5, rx * 0.36, rz * 0.8, seg=24, rings=4, rim=comb(24), flat=0.3, lumps=0.06, far=False)
     top, _ = t.at(1.0)
-    t.lump(top + V(0, 0, 2.2), 10.5, 9.0, 3.0, seg=48, rings=5, rim=comb(48), rim_far=comb(14), flat=0.3,
+    t.lump(top + V(3, 0, 1.6), 11.5, 7.0, 2.4, seg=44, rings=5, rim=comb(44), rim_far=comb(14), flat=0.3,
            far_seg=14, far_rings=4)
-    # jin: a dead silver-white branch stub (classic pine bonsai deadwood)
-    p, r = t.at(0.86)
-    t.tube(bezier(p, p + V(-5, 0, 3), p + V(-8, 1, 8), p + V(-10, 2, 10), 4), [r * 0.5, r * 0.4, r * 0.3, r * 0.2, r * 0.1],
+    # jin: a dead silver-white stub on the windward side (wind-stripped)
+    p, r = t.at(0.62)
+    t.tube(bezier(p, p + V(-4, 0, 2), p + V(-8, 1, 5), p + V(-11, 1, 6), 4), [r * 0.5, r * 0.4, r * 0.3, r * 0.2, r * 0.1],
            seg=6, minor=True, colfn=lambda i, k, N: "e2dccd" if k % 2 else "bcb3a3")
+
+    def boulder(m, far):                    # the roots grip a mossy grey boulder (pine = rock + wind)
+        g = "body_nl" if far else "body"
+        s = 0.6 if far else 1.0
+        sub = 1
+        m.ico(9.5, pos=(-6, -10, 1.0), scl=(1.3, 1.0, 0.62), color="9a968c", subdiv=sub, group=g, lumps=0.22 * s, seed=4,
+              colfn=lambda f: "7f9a62" if f.normal.z > 0.75 else ("aaa69a" if f.normal.x < 0 else "86827a"))
+        m.ico(5.0, pos=(6, -12, 0.2), scl=(1.2, 1.0, 0.7), color="9a968c", subdiv=sub, group=g, lumps=0.25 * s, seed=7,
+              colfn=lambda f: "7f9a62" if f.normal.z > 0.8 else ("aaa69a" if f.normal.x < 0 else "86827a"))
+    t.trunk_extra = boulder
     parts = [
         ("foliage", lambda: t.render_crown(PAL["pine"]), lambda: t.render_crown(PAL["pine"], far=True)),
         ("foliage_spring", lambda: t.render_crown(PAL["pine_spring"], name="foliage_spring"),
@@ -398,7 +415,7 @@ def build_pine():
              style="scales")
 
 
-# ───────────── fruit tree: round crown + hanging fruit dots ─────────────
+# ───────────── fruit tree: short stout trunk, one BROAD ROUND crown (wider than tall), big fruits on it ─────────────
 def fruit_ball(m, c, r, group="body", seg=14, rings=9, cols=FRUIT, leaf_on=True):
     """Round peach-like fruit with a blush (shared by the tree and the fallen prop)."""
     def col(f):
@@ -414,129 +431,120 @@ def fruit_ball(m, c, r, group="body", seg=14, rings=9, cols=FRUIT, leaf_on=True)
 
 def build_fruit():
     t = Tree("tree_fruit", "fruit", 321)
-    t.trunk([(0, 0, 0), (3, 0, 7), (-3, 0, 13), (0, 0, 19)], 6.8, 4.2, n=8, seg=12, flare=0.5)
-    t.roots(6, 7, 0.5, r_k=0.6)
-    # thick, short trunk splitting wide into four limbs
+    t.trunk([(0, 0, 0), (1.5, 0, 5), (-1.5, 0, 10), (0, 0, 14)], 7.2, 5.0, n=6, seg=12, flare=0.35)
+    t.roots(5, 3.5, 0.25, r_k=0.55, minor_from=5)          # no claw roots: a stout foot that just flares
     top, rt = t.at(1.0)
-    limb_ends = []
-    for i, (az, ln, rise) in enumerate(((0.3, 15, 16), (1.9, 14, 18), (3.5, 15, 15), (5.0, 13, 19))):
-        e, d, pts, rr = t.branch(1.0, az, ln, rise, r_k=0.72, droop=-0.1, seg=9, tip_k=0.4, base=(top - V(0, 0, 1.5), rt))
-        limb_ends.append((e, az))
+    for i, (az, ln, rise) in enumerate(((0.3, 17, 11), (1.55, 16, 12), (2.8, 17, 10), (4.0, 16, 12), (5.2, 17, 11))):
+        e, d, pts, rr = t.branch(1.0, az, ln, rise, r_k=0.66, droop=-0.08, seg=8, tip_k=0.4, base=(top - V(0, 0, 1.0), rt))
         p, r = t.at(0.6, pts, rr)
-        t.branch(0, az + 0.8, 9, 6, r_k=0.6, seg=6, base=(p, r), minor=True)
-    # round crown: a big central dome + a ring of lumps (round, not flat pads)
-    cz = 40.0
-    t.lump((0, 0, cz + 1), 22, 21, 13, seg=18, rings=8, flat=0.55, lumps=0.12, far_seg=12, far_rings=6)
-    for i in range(8):
-        a = i * math.tau / 8 + 0.2
-        rr = 18.5
-        z = cz - 3 + (i % 2) * 4
-        t.lump((math.cos(a) * rr, math.sin(a) * rr, z), 11.5, 10.5, 9, rot=a, seg=14, rings=7, flat=0.5, lumps=0.14,
-               far_seg=8, far_rings=5)
-    for i in range(3):
-        a = i * math.tau / 3 + 0.9
-        t.lump((math.cos(a) * 8, math.sin(a) * 8, cz + 9), 11, 10, 8, rot=a, seg=14, rings=7, flat=0.5, lumps=0.14,
-               far=False)
-    # hanging fruit (lower rim of the crown, all round so they read from every side)
+        t.branch(0, az + 0.7, 8, 4, r_k=0.55, seg=6, base=(p, r), minor=True)
+        for da, ln2, up in ((-0.5, 7, 6), (0.45, 6, 7)):          # thin twigs off the limb tip (bare winter crown, not stumps)
+            t.branch(0, az + da, ln2, up, r_k=0.5, seg=5, tip_k=0.2, base=(e, rr[-1] * 1.6), minor=True)
+    # one broad, smooth, round crown: wide low dome + a ring of rounded shoulders (reads as a single ball from afar)
+    cz = 31.0
+    t.lump((0, 0, cz + 2), 29, 28, 15, seg=20, rings=8, flat=0.55, lumps=0.06, far_seg=14, far_rings=6)
+    for i in range(9):
+        a = i * math.tau / 9 + 0.2
+        t.lump((math.cos(a) * 24, math.sin(a) * 24, cz - 1 + (i % 2) * 2), 11, 10.5, 8.5, rot=a, seg=12, rings=6,
+               flat=0.5, lumps=0.07, far=i % 3 == 0, far_seg=8, far_rings=4)
+    # fruits: big and many - studded over the crown's top and front (the camera looks down) + a few hanging under the rim
     spots = []
-    for i in range(12):
-        a = i * math.tau / 12 + (0.13 if i % 2 else -0.1)
-        rr = 23.5 + (i % 3) * 1.5
-        spots.append(V(math.cos(a) * rr, math.sin(a) * rr, cz - 9.5 - (i % 2) * 2.5))
+    for i in range(13):
+        a = i * 2.39996 + 0.5
+        u = (i + 0.5) / 13
+        rr = 26 * math.sqrt(u)
+        h = 15 * math.sqrt(max(0.0, 1 - (rr / 30) ** 2))
+        spots.append((V(math.cos(a) * rr, math.sin(a) * rr, cz + 2 + h * 0.98), False))
+    for i in range(7):
+        a = i * math.tau / 7 + 0.35
+        spots.append((V(math.cos(a) * 31, math.sin(a) * 31, cz - 7), True))
 
-    def fruits(cols, far=False, only=None):
-        m = Model("fruit_" + ("far" if far else "near"), 10)
-        for i, p in enumerate(spots):
-            if only is not None and i not in only:
-                continue
-            if far and i % 6 == 5:
-                continue
+    def fruits(cols, far=False, scale=1.0, name="fruit"):
+        m = Model(name + ("_far" if far else ""), 10)
+        for i, (p, hang) in enumerate(spots):
+            r = 3.6 * scale
             if far:
-                m.sphere(3.4, pos=p - V(0, 0, 3.6), color=cols[1], seg=5, rings=3, group="body_nl")
+                if i % 2:
+                    continue
+                m.sphere(r * 1.15, pos=p - V(0, 0, 3.6 if hang else 0.6), color=cols[1], seg=5, rings=3, group="body_nl")
                 continue
-            tube(m, [p + V(0, 0, 0.8), p - V(0, 0, 1.4)], [0.2, 0.16], seg=4, color="6a4a32", group="body_nl")
-            fruit_ball(m, p - V(0, 0, 4.0), 3.1, seg=8, rings=6, cols=cols, leaf_on=False, group="body_nl")
+            if hang:
+                tube(m, [p + V(0, 0, 0.8), p - V(0, 0, 1.4)], [0.25, 0.2], seg=4, color="6a4a32", group="body_nl")
+                fruit_ball(m, p - V(0, 0, 1.4 + r), r, seg=8, rings=6, cols=cols, leaf_on=False, group="body_nl")
+            else:
+                fruit_ball(m, p, r, seg=8, rings=6, cols=cols, leaf_on=False, group="body_nl")
+        return m
+
+    def blossom_dots(far=False):            # spring: cream blossom crown with soft pink-blush flower dots (still cream)
+        m = t.render_crown(PAL["fruit_bloom"], far=far, name="foliage_bloom")
+        if far:
+            return m
+        import random
+        rng = random.Random(77)
+        for i in range(40):
+            a = i * 2.39996
+            rr = 28 * math.sqrt((i + 0.5) / 40)
+            h = 15 * math.sqrt(max(0.0, 1 - (rr / 30) ** 2))
+            p = V(math.cos(a) * rr, math.sin(a) * rr, cz + 2.4 + h)
+            star_leaf(m, p, V(0, 0, 1), V(math.cos(a), math.sin(a), 0), 1.6, points=5, inner=0.7,
+                      color="fffaf0" if i % 3 else "f4dcc8", thick=0.25)
         return m
 
     def dry():
         m = Model("fruit_dry", 11)
-        p = spots[1] + V(-4, 0, 3)
+        p = V(20, -8, cz - 6)
         tube(m, [p + V(0, 0, 0.8), p - V(0, 0, 1.4)], [0.2, 0.16], seg=4, color="6a4a32", group="body_nl")
-        m.sphere(2.0, pos=p - V(0, 0, 3.2), scl=(1, 0.9, 1.1), color="9a6a44", seg=8, rings=6, group="body_nl",
+        m.sphere(2.4, pos=p - V(0, 0, 3.6), scl=(1, 0.9, 1.1), color="9a6a44", seg=8, rings=6, group="body_nl",
                  lumps=0.25, seed=3, colfn=lambda f: "a87850" if f.normal.z > 0 else "7a5034")
         return m
 
     parts = [
         ("foliage", lambda: t.render_crown(PAL["fruit"]), lambda: t.render_crown(PAL["fruit"], far=True)),
-        ("foliage_bloom", lambda: t.render_crown(PAL["fruit_bloom"], name="foliage_bloom"),
-         lambda: t.render_crown(PAL["fruit_bloom"], far=True, name="foliage_bloom")),
+        ("foliage_bloom", lambda: blossom_dots(), lambda: blossom_dots(True)),
         ("foliage_autumn", lambda: t.render_crown(PAL["fruit_autumn"], name="foliage_autumn"),
          lambda: t.render_crown(PAL["fruit_autumn"], far=True, name="foliage_autumn")),
         ("fruit", lambda: fruits(FRUIT), lambda: fruits(FRUIT, far=True)),
-        ("fruit_green", lambda: fruits(FRUIT_GREEN), lambda: fruits(FRUIT_GREEN, far=True)),
+        ("fruit_green", lambda: fruits(FRUIT_GREEN, scale=0.75, name="fruit_green"),
+         lambda: fruits(FRUIT_GREEN, far=True, scale=0.75, name="fruit_green")),
         ("fruit_dry", dry, None),
     ]
     t.export(parts, {"봄": ["foliage_bloom"], "여름": ["foliage", "fruit_green"], "가을": ["foliage_autumn", "fruit"],
                      "겨울": ["fruit_dry"]})
 
 
-# ───────────── ginkgo: straight trunk, crown opening upwards like a fan ─────────────
+# ───────────── ginkgo: the only upright tree - tall straight trunk, crown opening upwards like a fan ─────────────
 def build_ginkgo():
     t = Tree("tree_ginkgo", "ginkgo", 331)
-    t.trunk([(0, 0, 0), (2, 0, 18), (-2, 0, 36), (0, 0, 48), (1, 0, 56), (0, 0, 62), (0, 0, 68)], 6.0, 2.0, n=8, seg=11,
-            flare=0.5)
-    t.roots(7, 7, 0.5, r_k=0.55)
-    # the only upright tree: limbs leave the straight trunk high up and splay upwards and outwards like the ribs of an
-    # open fan (narrow at the bottom, widest at the top). The bare winter tree keeps the same fan.
+    t.trunk([(0, 0, 0), (1, 0, 20), (-1, 0, 40), (0, 0, 55), (0, 0, 64), (0, 0, 70)], 5.4, 1.8, n=8, seg=11, flare=0.6)
+    t.roots(5, 3.0, 0.25, r_k=0.55, minor_from=5)          # buttress flare only (no claw roots)
     ends = []
-    n = 9
+    n = 10
     for i in range(n):
-        u = i / (n - 1)
         az = i * 2.39996 + 0.4
-        th = 0.4 + 0.55 * (0.5 + 0.5 * math.sin(i * 1.7))       # angle from vertical 23..55 deg
-        L = 34 - 6 * abs(math.cos(i * 1.3))
-        tt = 0.55 + 0.4 * ((i * 0.37) % 1.0)
-        p0, r = t.at(tt)
-        e, d, pts, rr = t.branch(tt, az, L * math.sin(th), L * math.cos(th), r_k=0.5, droop=-0.04, seg=7, tip_k=0.3)
+        th = 0.22 + 0.5 * ((i * 0.618) % 1.0)                # 13..41 deg from vertical: a narrow V opening upward
+        L = 30 + 6 * ((i * 0.37) % 1.0)
+        tt = 0.42 + 0.45 * ((i * 0.53) % 1.0)
+        e, d, pts, rr = t.branch(tt, az, L * math.sin(th), L * math.cos(th), r_k=0.48, droop=-0.04, seg=7, tip_k=0.3)
         ends.append((e, az, th, pts, rr))
-        # a twig rising from the limb (fills the fan when bare; minor -> not in the far LOD)
         q, qr = t.at(0.55, pts, rr)
-        t.branch(0, az + 0.6, 4 + 4 * math.sin(th), 9, r_k=0.6, seg=5, tip_k=0.3, base=(q, qr), minor=True)
-    # crown: one long upright lump per limb end, leaning out along its limb (the fan's ribs), + a lower filler on the
-    # limb and a low dome over the trunk top
+        t.branch(0, az + 0.6, 3 + 4 * math.sin(th), 8, r_k=0.6, seg=5, tip_k=0.3, base=(q, qr), minor=True)
+    # the fan: tall upright lumps along each limb, widest at the top; the lowest third of the trunk stays bare
     for (e, az, th, pts, rr) in ends:
-        t.lump(e + V(math.sin(th) * math.cos(az), math.sin(th) * math.sin(az), math.cos(th)) * 3.0, 7.4, 6.6, 12.5,
-               rot=az, tilt=tilt_out(0.0, th + 0.12), seg=12, rings=6, flat=0.8, lumps=0.14, far_seg=8, far_rings=4)
-        q, _ = t.at(0.5, pts, rr)
-        t.lump(q + V(0, 0, 2), 6.0, 5.4, 8.0, rot=az, tilt=tilt_out(0.0, th), seg=10, rings=5, flat=0.8, lumps=0.14,
+        t.lump(e + V(math.sin(th) * math.cos(az), math.sin(th) * math.sin(az), math.cos(th)) * 2.0, 6.8, 6.0, 12.5,
+               rot=az, tilt=tilt_out(0.0, th + 0.1), seg=12, rings=6, flat=0.8, lumps=0.12, far_seg=7, far_rings=3)
+        q, _ = t.at(0.55, pts, rr)
+        t.lump(q + V(0, 0, 2), 5.0, 4.6, 7.5, rot=az, tilt=tilt_out(0.0, th), seg=10, rings=5, flat=0.8, lumps=0.12,
                far=False)
     top, _ = t.at(1.0)
-    t.lump(top + V(0, 0, 4), 9, 8.5, 8, seg=12, rings=6, flat=0.6, lumps=0.12, far_seg=8, far_rings=4)
+    t.lump(top + V(0, 0, 6), 7.5, 7.0, 10, seg=12, rings=6, flat=0.6, lumps=0.1, far_seg=8, far_rings=4)
 
-
-    def carpet(far=False):                  # the whole crown drops at once: a yellow carpet round the foot
-        m = Model("carpet", 12)
-        if far:
-            for i, (rr, n) in enumerate(((12, 2), (25, 4))):
-                for k in range(n):
-                    a = k * math.tau / n + i * 0.8
-                    m.sphere(11.0, pos=(math.cos(a) * rr, math.sin(a) * rr, -0.6), scl=(1, 1, 0.12),
-                             color=PAL["ginkgo_autumn"][1], seg=6, rings=3, group="body_nl")
-            return m
+    def leaves(m, pal):                     # fan leaves standing out of the rims (near only)
         import random
-        rng = random.Random(5)
-        for k in range(30):
-            a = k * 2.39996
-            rr = 8 + 26 * math.sqrt((k + 0.5) / 30)
-            p = V(math.cos(a) * rr, math.sin(a) * rr, 0.15)
-            fan_leaf(m, p, V(0.1 * math.sin(k), 0.1 * math.cos(k), 1), V(math.cos(k), math.sin(k), 0), 2.6,
-                     color=PAL["ginkgo_autumn"][0] if k % 3 else PAL["ginkgo_autumn"][1], thick=0.12, seg=5)
-        for i, (rr, n) in enumerate(((15, 6), (27, 9))):     # thin flat drifts under the single leaves
-            for k in range(n):
-                a = k * math.tau / n + i * 0.3 + rng.uniform(-0.2, 0.2)
-                m.sphere(7.0, pos=(math.cos(a) * rr, math.sin(a) * rr, -0.55), scl=(1, 1, 0.11),
-                         color=PAL["ginkgo_autumn"][1], seg=8, rings=3, group="body_nl")
-        return m
+        rng = random.Random(51)
+        for (p, d) in rim_pts(t.lumps, 2, rng, z_lo=0.0, z_hi=0.6, out=1.0):
+            up = (V(0, 0, 1) + d * 0.7).normalized()
+            fan_leaf(m, p, up, d, 2.2, color=shade(pal[0], 1.0 if rng.random() > 0.4 else 0.9), thick=0.15, seg=4)
+    t.leaves = leaves
 
     parts = [
         ("foliage_spring", lambda: t.render_crown(PAL["ginkgo_spring"], name="foliage_spring"),
@@ -544,51 +552,46 @@ def build_ginkgo():
         ("foliage", lambda: t.render_crown(PAL["ginkgo"]), lambda: t.render_crown(PAL["ginkgo"], far=True)),
         ("foliage_autumn", lambda: t.render_crown(PAL["ginkgo_autumn"], name="foliage_autumn"),
          lambda: t.render_crown(PAL["ginkgo_autumn"], far=True, name="foliage_autumn")),
-        ("carpet", lambda: carpet(), lambda: carpet(True)),
     ]
-    t.export(parts, {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn", "carpet"], "겨울": []},
+    t.export(parts, {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": []},
              style="streak")
 
 
-# ───────────── maple: dome of hand-shaped cushions (star edge) ─────────────
+# ───────────── maple: low, WIDE spreading umbrella of star-edged layers on a vase of smooth stems ─────────────
 def build_maple():
     t = Tree("tree_maple", "maple", 341)
-    # several smooth grey-brown stems from one foot
-    t.trunk([(0, 0, 0), (-3, 0, 14), (-9, 0, 26), (-7, 0, 38), (-5, 0, 46), (-2, 0, 52), (0, 0, 56)], 5.6, 1.5, n=8, seg=9,
-            flare=0.5)
-    main_pts, main_rad = t.tpts, t.trad
-    t.roots(7, 7, 0.5, r_k=0.6, minor_from=2)
-    stems = []
-    for (az, lean, h) in ((0.2, 14, 40), (2.4, 12, 36)):
-        p0, r = t.at(0.12)
-        d = V(math.cos(az), math.sin(az), 0)
-        pts = bezier(p0, p0 + d * lean * 0.4 + V(0, 0, h * 0.3), p0 + d * lean + V(0, 0, h * 0.65), p0 + d * lean * 1.1 + V(0, 0, h), 9)
-        rr = [r * 0.72 * (1 - 0.7 * j / 9) for j in range(10)]
-        t.tube(pts, rr, seg=8, wobble=0.06, wseed=az)
-        stems.append((pts, rr))
+    t.trunk([(0, 0, 0), (-1, 0, 8), (-3, 0, 16), (-4, 0, 22), (-3, 0, 28), (-1, 0, 32), (0, 0, 36)], 5.2, 1.6, n=7, seg=9,
+            flare=0.4)
+    t.roots(4, 4.5, 0.3, r_k=0.55, minor_from=2)
     pads = []
-    for (tt, az, ln, rise) in ((0.55, 2.8, 18, 3), (0.7, 1.3, 14, 5), (0.82, -1.3, 13, 5), (0.92, 3.9, 11, 6)):
+    # three more stems splay out from the foot like a vase, then run out nearly level (spreading crown)
+    for (az, lean, h) in ((0.3, 20, 28), (2.4, 19, 26), (4.3, 18, 27)):
+        p0, r = t.at(0.1)
+        d = V(math.cos(az), math.sin(az), 0)
+        pts = bezier(p0, p0 + d * lean * 0.25 + V(0, 0, h * 0.45), p0 + d * lean * 0.7 + V(0, 0, h * 0.9), p0 + d * lean * 1.3 + V(0, 0, h), 8)
+        rr = [r * 0.66 * (1 - 0.7 * j / 8) for j in range(9)]
+        t.tube(pts, rr, seg=8, wobble=0.06, wseed=az)
+        for (tt, da, ln, rise) in ((0.75, 0.9, 13, 3), (0.75, -0.9, 12, 3)):
+            e, _, _, _ = t.branch(tt, az + da, ln, rise, r_k=0.5, droop=0.12, seg=6, base=t.at(tt, pts, rr), minor=True)
+            pads.append((e, az + da, False))
+        pads.append((pts[-1], az, True))
+    for (tt, az, ln, rise) in ((0.75, 1.35, 16, 4), (0.8, 3.35, 15, 4), (0.85, 5.3, 15, 4)):
         e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.45, droop=0.1, seg=7)
-        pads.append((e, az))
-    for (pts, rr), brs in zip(stems, (((0.7, 0.1, 15, 3), (0.9, -0.9, 10, 5)), ((0.7, 2.2, 14, 3), (0.92, 1.4, 9, 5)))):
-        for (tt, az, ln, rise) in brs:
-            e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.5, droop=0.1, seg=7, base=t.at(tt, pts, rr), minor=True)
-            pads.append((e, az))
-        pads.append((pts[-1], 0.0))
+        pads.append((e, az, True))
     top, _ = t.at(1.0)
-    pads.append((top, 1.0))
-    for i, (e, az) in enumerate(pads):
-        big = i in (0, 4, 6)
-        rx = 12.5 if big else 10.5
-        t.lump(e + V(0, 0, 2.5), rx, rx * 0.92, 4.6, rot=az + i * 0.4, seg=30, rings=6, rim=lobes(5, 0.42),
-               rim_far=lobes(5, 0.42), flat=0.35, lumps=0.07, far_seg=15, far_rings=3)
+    pads.append((top + V(0, 0, 2), 1.0, True))
+    # wide, thin, star-rimmed layers: lower ring wide out, the top one smaller - an umbrella seen from above
+    for i, (e, az, big) in enumerate(pads):
+        rx = 13.5 if big else 10.5
+        t.lump(e + V(0, 0, 2.0), rx, rx * 0.92, 4.0, rot=az + i * 0.4, seg=30, rings=5, rim=lobes(5, 0.48),
+               rim_far=lobes(5, 0.48), flat=0.35, lumps=0.06, far=big, far_seg=15, far_rings=3)
 
-    def leaves(m, pal):                     # big hand leaves standing out of the rims (star edge, near only)
+    def leaves(m, pal):                     # big hand leaves standing out of the rims and lying on top (star edge, near only)
         import random
         rng = random.Random(41)
-        for (p, d) in rim_pts(t.lumps, 3, rng, z_lo=-0.1, z_hi=0.5, out=1.05):
+        for (p, d) in rim_pts(t.lumps, 3, rng, z_lo=0.0, z_hi=0.5, out=1.05):
             up = (V(0, 0, 1) + d * 0.9).normalized()
-            star_leaf(m, p, up, d, 2.8, points=5, inner=0.4, color=shade(pal[0], 1.0 if rng.random() > 0.35 else 0.88),
+            star_leaf(m, p, up, d, 3.0, points=5, inner=0.4, color=shade(pal[0], 1.0 if rng.random() > 0.35 else 0.88),
                       thick=0.18, cup_k=0.15)
     t.leaves = leaves
 
@@ -596,13 +599,12 @@ def build_maple():
         m = Model("seeds", 13)
         import random
         rng = random.Random(9)
-        for (e, az) in pads:
-            for k in range(2):
-                p = e + V(rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-1, 1))
-                for s in (-1, 1):
-                    d = V(math.cos(az + s * 0.9), math.sin(az + s * 0.9), -0.6).normalized()
-                    leaf(m, [p, p + d * 1.2, p + d * 2.6], [0.15, 0.5, 0.0], V(0, 0, 1), thick=0.08, color="c4a070",
-                         group="body_nl")
+        for (e, az, _b) in pads:
+            p = e + V(rng.uniform(-3, 3), rng.uniform(-3, 3), rng.uniform(-1, 1))
+            for s in (-1, 1):
+                d = V(math.cos(az + s * 0.9), math.sin(az + s * 0.9), -0.6).normalized()
+                leaf(m, [p, p + d * 1.2, p + d * 2.6], [0.15, 0.5, 0.0], V(0, 0, 1), thick=0.08, color="c4a070",
+                     group="body_nl")
         return m
 
     parts = [
@@ -616,41 +618,54 @@ def build_maple():
     t.export(parts, {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": ["seeds"]})
 
 
-# ───────────── cherry: bent leaning banded trunk, puffy blossom clouds ─────────────
+# ───────────── cherry: WEEPING - soft cloud dome with long drooping branch curtains, banded bark ─────────────
 def build_cherry():
     t = Tree("tree_cherry", "cherry", 361)
-    # curved trunk leaning far to one side, then lifting again at the end (bonsai "slanting" style)
-    t.trunk([(0, 0, 0), (4, 0, 12), (10, 0, 20), (19, 1, 27), (28, 2, 33), (36, 0, 40), (40, -1, 50)], 6.0, 2.0, n=10, seg=12,
+    t.trunk([(0, 0, 0), (3, 0, 10), (8, 0, 18), (11, 0, 26), (12, 0, 34), (10, 0, 42), (8, 0, 48)], 6.0, 2.0, n=8, seg=12,
             flare=0.4)
-    t.roots(6, 10, 0.4, r_k=0.42)
+    t.roots(5, 6, 0.4, r_k=0.45)
     bands = t.bark_fn(t.bark, "bands")
-    clouds = []
-    # wide horizontal limbs (the cherry spreads like an umbrella) + a leader going back over the foot (balance)
-    for (tt, az, ln, rise, sz) in ((0.4, 2.6, 26, 12, 1.0), (0.55, -1.7, 18, 10, 0.85), (0.62, 1.4, 18, 12, 0.9),
-                                     (0.75, 0.0, 20, 6, 1.0), (0.85, -0.8, 14, 8, 0.8), (0.9, 2.2, 14, 9, 0.8)):
-        e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.48, droop=0.12, seg=8, colfn=bands)
-        clouds.append((e, az, sz))
+    arch = []
+    # limbs arch up and out, then droop: the classic weeping umbrella
+    for (tt, az, ln, rise) in ((0.55, 2.7, 22, 9), (0.62, -1.6, 20, 9), (0.7, 1.2, 20, 10), (0.78, 0.0, 22, 7),
+                               (0.85, -0.6, 17, 9), (0.9, 3.9, 18, 8), (0.95, 2.0, 14, 10)):
+        e, d, _, _ = t.branch(tt, az, ln, rise, r_k=0.46, droop=0.25, seg=7, colfn=bands)
+        arch.append((e, az))
     top, _ = t.at(1.0)
-    clouds.append((top + V(0, 0, 2), 0.5, 1.1))
-    for i, (c, az, sz) in enumerate(clouds):
-        # a puffy cloud = one big round puff + two smaller ones bulging off it
-        t.lump(c + V(0, 0, 3), 11 * sz, 10 * sz, 8.5 * sz, rot=az, seg=14, rings=8, flat=0.65, lumps=0.2, far_seg=10,
-               far_rings=5, far_k=1.25)
-        for s in (-1, 1):
-            a = az + s * 1.4 + i * 0.2
-            off = V(math.cos(a), math.sin(a), 0) * 9 * sz + V(0, 0, (1.5 if s > 0 else -1.0) * sz)
-            t.lump(c + V(0, 0, 3) + off, 7.5 * sz, 7 * sz, 6.2 * sz, rot=a, seg=10, rings=6, flat=0.65, lumps=0.18,
-                   far=False)
+    arch.append((top + V(0, 0, 1), 0.5))
+    for i, (c, az) in enumerate(arch):      # soft clouds sitting on the arches
+        t.lump(c + V(0, 0, 2.5), 10, 9.5, 6.5, rot=az, seg=14, rings=7, flat=0.6, lumps=0.16, far_seg=8, far_rings=4,
+               far_k=1.15)
+    # weeping curtains: from each arch end hang 3 long thin twigs, blossom tassels strung down them
+    import random
+    rng = random.Random(17)
+    strands = []
+    for i, (c, az) in enumerate(arch[:-1]):
+        for k in range(2):
+            a = az + (k - 0.5) * 0.8 + rng.uniform(-0.15, 0.15)
+            o = c + V(math.cos(a), math.sin(a), 0) * rng.uniform(6.5, 9.5) + V(0, 0, 1)
+            ln = rng.uniform(17, 25)
+            out = V(math.cos(a), math.sin(a), 0)
+            t.tube(bezier(c, c + (o - c) * 0.35 + V(0, 0, 1.8), c + (o - c) * 0.75 + V(0, 0, 1.6), o, 3), [0.75, 0.68, 0.6, 0.55],
+                   seg=4, minor=True, colfn=lambda i, k, N: "6a4440", wobble=0.0)     # the twig the curtain hangs from
+            pts = bezier(o, o + out * 3 + V(0, 0, 1.5), o + out * 4.5 - V(0, 0, ln * 0.5), o + out * 4.2 - V(0, 0, ln), 5)
+            t.tube(pts, [0.55, 0.45, 0.38, 0.3, 0.24, 0.18], seg=4, minor=True, colfn=lambda i, k, N: "6a4440",
+                   wobble=0.0)
+            strands.append(pts)
+            for j, u in enumerate((0.3, 0.6, 0.9)):
+                f = u * (len(pts) - 1)
+                q = pts[int(f)].lerp(pts[min(len(pts) - 1, int(f) + 1)], f - int(f))
+                t.lump(q + out * 0.6, 2.6 - j * 0.4, 2.4 - j * 0.4, 5.2, rot=a, seg=6, rings=4, flat=1.0, lumps=0.15,
+                       far=(j == 0 and k == 0), far_seg=5, far_rings=3, far_k=1.3)
 
-    def petals(m):                          # drifting petals under the clouds + a few on the ground
-        import random
-        rng = random.Random(23)
-        for k in range(36):
-            c, az, sz = clouds[k % len(clouds)]
+    def petals(m):                          # drifting petals under the dome + a few on the ground
+        rng2 = random.Random(23)
+        for k in range(22):
+            c, az = arch[k % len(arch)]
             ground = k % 3 == 0
-            p = c + V(rng.uniform(-14, 14), rng.uniform(-14, 14), 0)
-            p.z = rng.uniform(0.1, 0.3) if ground else max(4.0, c.z - rng.uniform(6, 26))
-            up = V(rng.uniform(-0.6, 0.6), rng.uniform(-0.6, 0.6), 1).normalized()
+            p = c + V(rng2.uniform(-16, 16), rng2.uniform(-16, 16), 0)
+            p.z = rng2.uniform(0.1, 0.3) if ground else max(4.0, c.z - rng2.uniform(6, 28))
+            up = V(rng2.uniform(-0.6, 0.6), rng2.uniform(-0.6, 0.6), 1).normalized()
             fwd = V(math.cos(k * 1.7), math.sin(k * 1.7), 0)
             leaf(m, [p, p + fwd * 0.6, p + fwd * 1.3], [0.2, 0.55, 0.05], up, thick=0.08,
                  color=PAL["cherry_blossom"][0 if k % 2 else 1], group="body_nl")
@@ -663,17 +678,15 @@ def build_cherry():
 
     def cherries():
         m = Model("cherries", 14)
-        import random
-        rng = random.Random(31)
-        for i in range(10):
-            c, az, sz = clouds[i % len(clouds)]
-            a = rng.uniform(0, math.tau)
-            p = c + V(math.cos(a) * 10 * sz, math.sin(a) * 10 * sz, -3.5 * sz)
+        rng3 = random.Random(31)
+        for i in range(6):
+            pts = strands[(i * 2 + 1) % len(strands)]
+            q = pts[2] + V(rng3.uniform(-1, 1), rng3.uniform(-1, 1), 0)
             for s in (-1, 1):
-                q = p + V(s * 0.9, 0, -2.4)
-                tube(m, [p, p + V(s * 0.5, 0, -1.3), q + V(0, 0, 0.6)], [0.09, 0.08, 0.07], seg=3, color="5a7a3a",
+                p2 = q + V(s * 0.9, 0, -2.4)
+                tube(m, [q, q + V(s * 0.5, 0, -1.3), p2 + V(0, 0, 0.6)], [0.09, 0.08, 0.07], seg=3, color="5a7a3a",
                      group="body_nl")
-                m.sphere(0.9, pos=q, color=CHERRY_RED if (i + (s > 0)) % 3 else CHERRY_GREEN, seg=5, rings=4,
+                m.sphere(0.9, pos=p2, color=CHERRY_RED if (i + (s > 0)) % 3 else CHERRY_GREEN, seg=5, rings=4,
                          group="body_nl")
         return m
 
@@ -686,7 +699,6 @@ def build_cherry():
     ]
     t.export(parts, {"봄": ["blossom"], "여름": ["foliage", "cherries"], "가을": ["foliage_autumn"], "겨울": []},
              style="bands")
-
 
 # ───────────── the great fallen fruit ─────────────
 def build_fallen_fruit():
@@ -733,12 +745,149 @@ def build_fallen_fruit():
     BUILT.append(("great_fruit_cut", "-", n, 0, {}))
 
 
+# ───────────── Q41: ground round each great tree (view-only decals, GreatTreeView scatters them round the trunk) ─────────────
+# flat patches ~10 across at scale 1 (origin = patch centre on the ground), no outline (body_nh) like the gc_* ground cover.
+#   ring_needles  rust needle bed + cones (pine, all year)      ring_clover   clover carpet + white clover heads (fruit)
+#   ring_cream    cream blossom petals on the grass (fruit, spring)    ring_ginkgo   golden fan-leaf carpet (ginkgo, autumn)
+#   ring_maple    red hand-leaf litter (maple, autumn)          ring_litter   brown dry leaf litter (maple, other seasons)
+#   ring_petals   pink petal carpet (cherry, spring)            ring_softgrass lush soft grass with tiny flowers (cherry, summer/autumn)
+def _blob(m, r, n=12, z=0.03, wob=0.25, seed=0, col="7a9a5a", rim=None, ox=0.0, oy=0.0, sx=1.0, sy=1.0, group="body_nh"):
+    import random
+    rnd = random.Random(seed)
+    bm = m._bm(group)
+    radii = [r * (1 + rnd.uniform(-wob, wob)) for _ in range(n)]
+    radii = [(radii[i - 1] + 2 * radii[i] + radii[(i + 1) % n]) / 4 for i in range(n)]
+    c = bm.verts.new((ox, oy, z + 0.03))
+    mid = [bm.verts.new((ox + math.cos(i / n * math.tau) * radii[i] * 0.62 * sx,
+                         oy + math.sin(i / n * math.tau) * radii[i] * 0.62 * sy, z + 0.015)) for i in range(n)]
+    out = [bm.verts.new((ox + math.cos(i / n * math.tau) * radii[i] * sx,
+                         oy + math.sin(i / n * math.tau) * radii[i] * sy, z)) for i in range(n)]
+    inner = [bm.faces.new((c, mid[i], mid[(i + 1) % n])) for i in range(n)]
+    outer = [bm.faces.new((mid[i], out[i], out[(i + 1) % n], mid[(i + 1) % n])) for i in range(n)]
+    bm.normal_update()
+    m._finish(bm, inner, col, False)
+    m._finish(bm, outer, rim or col, False)
+
+
+def _flat(m, cx, cy, z, rz, pts, col, group="body_nh"):
+    """One flat polygon (local pts, rotated rz) lying on the ground at height z."""
+    bm = m._bm(group)
+    c, s = math.cos(rz), math.sin(rz)
+    vs = [bm.verts.new((cx + px * c - py * s, cy + px * s + py * c, z)) for px, py in pts]
+    f = bm.faces.new(vs)
+    if f.normal.z < 0:
+        f.normal_flip()
+    m._finish(bm, [f], col, False)
+
+
+def _scatter(rnd, n, r):
+    for k in range(n):
+        a = rnd.uniform(0, math.tau)
+        d = r * rnd.uniform(0.0, 1.0) ** 0.7
+        yield k, math.cos(a) * d, math.sin(a) * d, rnd.uniform(0, math.tau)
+
+
+def _star_pts(r, points=5, inner=0.45):
+    return [((r if i % 2 == 0 else r * inner) * math.cos(i * math.pi / points),
+             (r if i % 2 == 0 else r * inner) * math.sin(i * math.pi / points)) for i in range(points * 2)]
+
+
+def _fan_pts(r):
+    pts = [(0.0, 0.0)]
+    for i in range(6):
+        a = -0.95 + 1.9 * i / 5
+        rr = r * (0.8 if i in (2, 3) else 1.0)
+        pts.append((math.cos(a) * rr, math.sin(a) * rr))
+    return pts
+
+
+def _petal_pts(ln, w):
+    return [(-ln, 0), (-ln * 0.2, -w), (ln * 0.7, -w * 0.6), (ln, 0), (ln * 0.7, w * 0.6), (-ln * 0.2, w)]
+
+
+def build_rings():
+    import random
+    GRASS = "93b27a"
+    out = []
+
+    m = Model("ring_needles", 401)                     # pine: rust needle bed
+    rnd = random.Random(401)
+    for q, (ox, oy, rr) in enumerate(((-1.4, 0.6, 2.6), (1.5, -0.8, 2.3), (0.2, 1.9, 1.8))):     # loose bed, not one disc
+        _blob(m, rr, 9, seed=401 + q, wob=0.4, col=mix("a27a52", GRASS, 0.25), rim=mix("a27a52", GRASS, 0.6), ox=ox, oy=oy)
+    for k, x, y, rz in _scatter(rnd, 110, 4.8):
+        ln = rnd.uniform(0.5, 0.8)
+        _flat(m, x, y, 0.09 + 0.0005 * k, rz, [(-ln, -0.04), (ln, -0.04), (ln, 0.04), (-ln, 0.04)],
+              ("c09468", "7a5238", "b08458", "6b4a34")[k % 4])
+    for k in range(4):                                  # cones
+        a = k * 1.9 + 0.4
+        cc = (math.cos(a) * 3.0, math.sin(a) * 2.6, 0.32)
+        m.sphere(0.45, pos=cc, scl=(1.5, 0.95, 0.75), rot=(0, 0, a), color="7a5238", seg=6, rings=4, group="body_nl",
+                 colfn=lambda f: "9a6c48" if f.normal.z > 0.3 else "5e3e2a")
+    out.append(("ring_needles", m))
+
+    m = Model("ring_clover", 411)                      # fruit: clover carpet
+    rnd = random.Random(411)
+    for k, x, y, rz in _scatter(rnd, 30, 4.8):
+        col = ("7fb064", "5f9150", "8cbc6c")[k % 3]
+        for j in range(3):
+            a = rz + j * math.tau / 3
+            _flat(m, x + math.cos(a) * 0.36, y + math.sin(a) * 0.36, 0.08 + 0.001 * k, a,
+                  [(math.cos(q * math.tau / 5) * 0.42, math.sin(q * math.tau / 5) * 0.34) for q in range(5)], col)
+    for k, x, y, rz in _scatter(rnd, 7, 4.0):           # white clover heads
+        m.sphere(0.32, pos=(x, y, 0.35), scl=(1, 1, 0.8), color="f4f0e2", seg=6, rings=4, group="body_nl",
+                 colfn=lambda f: "f8f6ec" if f.normal.z > 0.2 else "e2d8c8")
+    out.append(("ring_clover", m))
+
+    m = Model("ring_cream", 421)                       # fruit spring: cream blossom petals
+    rnd = random.Random(421)
+    for k, x, y, rz in _scatter(rnd, 60, 5.0):
+        _flat(m, x, y, 0.08 + 0.0005 * k, rz, _petal_pts(0.34, 0.22), ("fbf4e2", "efe2c4", "f8ecd6")[k % 3])
+    out.append(("ring_cream", m))
+
+    m = Model("ring_ginkgo", 431)                      # ginkgo autumn: golden fan carpet
+    rnd = random.Random(431)
+    for k, x, y, rz in _scatter(rnd, 80, 5.2):
+        _flat(m, x, y, 0.08 + 0.0006 * k, rz, _fan_pts(rnd.uniform(0.7, 1.0)), ("f6d84a", "f1c93a", "e8b42e", "f9e27a")[k % 4])
+    out.append(("ring_ginkgo", m))
+
+    m = Model("ring_maple", 441)                       # maple autumn: red hand-leaf litter
+    rnd = random.Random(441)
+    for k, x, y, rz in _scatter(rnd, 58, 5.0):
+        _flat(m, x, y, 0.08 + 0.0006 * k, rz, _star_pts(rnd.uniform(0.7, 1.0)), ("e0664a", "c9452e", "d8823a", "b23a2c")[k % 4])
+    out.append(("ring_maple", m))
+
+    m = Model("ring_litter", 451)                      # maple other seasons: brown dry litter
+    rnd = random.Random(451)
+    for k, x, y, rz in _scatter(rnd, 30, 4.6):
+        _flat(m, x, y, 0.08 + 0.0006 * k, rz, _star_pts(rnd.uniform(0.6, 0.85)), ("b08a5e", "9a7650", "c49c66")[k % 3])
+    out.append(("ring_litter", m))
+
+    m = Model("ring_petals", 461)                      # cherry spring: pink petal carpet
+    rnd = random.Random(461)
+    for k, x, y, rz in _scatter(rnd, 95, 5.2):
+        _flat(m, x, y, 0.08 + 0.0005 * k, rz, _petal_pts(0.36, 0.24), ("fad2dc", "f2b8c6", "fde6ea", "e8a4b6")[k % 4])
+    out.append(("ring_petals", m))
+
+    m = Model("ring_softgrass", 471)                   # cherry summer/autumn: soft lush grass, tiny flowers
+    rnd = random.Random(471)
+    for k, x, y, rz in _scatter(rnd, 40, 4.8):                  # soft fresh leaves lying in the grass
+        _flat(m, x, y, 0.06 + 0.0005 * k, rz, _petal_pts(0.6, 0.3), ("a8d088", "b8dc96", "94c27a")[k % 3])
+    for k, x, y, rz in _scatter(rnd, 12, 4.2):
+        m.sphere(0.22, pos=(x, y, 0.22), scl=(1, 1, 0.7), color="fbf2f0" if k % 3 else "f2c8d2", seg=5, rings=3,
+                 group="body_nl")
+    out.append(("ring_softgrass", m))
+
+    for nm, m in out:
+        n = m.export(OUT)
+        BUILT.append((nm, "-", n, 0, {}))
+
+
 if __name__ == "__main__":
     os.makedirs(OUT, exist_ok=True)
     print("bonsai ->", OUT)
     only = sys.argv[sys.argv.index("--") + 2:] if "--" in sys.argv and len(sys.argv) > sys.argv.index("--") + 2 else []
     for nm, fn in (("pine", build_pine), ("fruit", build_fruit), ("ginkgo", build_ginkgo), ("maple", build_maple),
-                   ("cherry", build_cherry), ("great_fruit", build_fallen_fruit)):
+                   ("cherry", build_cherry), ("great_fruit", build_fallen_fruit), ("rings", build_rings)):
         if not only or nm in only:
             fn()
     print("  budget (art bible 8.7: near <= 6000 body, far <= 1200):")

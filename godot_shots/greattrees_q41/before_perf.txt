@@ -1,0 +1,4 @@
+before spring great_trees=on draw=191 prims=186099
+before spring great_trees=off draw=176 prims=175591
+before autumn great_trees=on draw=195 prims=194189
+before autumn great_trees=off draw=176 prims=182831
