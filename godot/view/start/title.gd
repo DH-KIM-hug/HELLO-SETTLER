@@ -74,7 +74,8 @@ static func shelf_items(inf: Dictionary) -> Array:
 	for i in list.size():
 		if i != ci:
 			var it: Dictionary = list[i]
-			out.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int(it.get("id", -1)), "era": int(it.get("era", 0)), "preview": it.get("preview", {})})
+			out.append({"x": (i - ci) * GiantRoom.SHELF_GAP, "id": int(it.get("id", -1)), "era": int(it.get("era", 0)), "preview": it.get("preview", {}),
+				"deco": it.get("deco", {})})          # (Q37) 그 병의 받침·빛깔·코르크
 	if bool(inf.get("pending", false)):
 		out.append({"x": (list.size() - ci) * GiantRoom.SHELF_GAP, "id": -1, "empty": true})
 	return out
@@ -104,6 +105,8 @@ func _build_room() -> void:
 		room.add_jar_contents(info.get("preview", {}), int(info.get("era", 0)))     # 미리보기가 없는 옛 저장은 시대에 맞춘 꾸민 마을
 	elif not fresh:
 		room.add_mini_village(false, 0)                                # 만들던 병: 풀과 나무만
+	if room.houses:
+		room.set_deco(GiantRoom.deco_look(info.get("deco", {})))         # (Q37) 이어하기: 지금 병의 받침·빛깔·코르크 (저장 요약 — 한 번)
 	room.set_shelf_jars(shelf_items(info))                            # (C1) 선반의 다른 병들 — 넓은 세상 장면의 방과 같은 자리
 	room.set_souvenirs(info.get("souvenirs", []))                     # [기념품 Q17] 주워 온 기념품이 선반에 서 있다
 	room.set_lamp(true, JarWater.LIGHT)

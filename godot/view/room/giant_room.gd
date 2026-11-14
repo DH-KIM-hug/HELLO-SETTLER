@@ -223,6 +223,7 @@ func set_tod(t: String) -> void:
 ## 유리 빛깔 (유리 색 · 병 안에서 볼 때 흐린 색 · 조금 더 짙은 바탕 — 맑은 유리면 처음 값) · 코르크 무늬 (코르크 위에 얹는 모델). 바뀐 것이 없으면 아무것도 안 함
 const GLASS_COL := Color(0.86, 0.95, 0.95)      # render/room_glass.gdshader 기본값과 같음
 const HAZE_COL := Color(0.84, 0.92, 0.93)
+const TINT_HAZE := 0.45                        # (Q37) 병 안(③)에서 본 유리 흐림의 빛깔 — 옅게 (Q32 0.75는 띠가 짙었다)
 const TINT_ALPHA := 0.11                        # 빛깔 유리의 바탕 (맑은 유리 0.03 — 빛깔이 보일 만큼만)
 var stand: Node3D
 var cork_mark: Node3D
@@ -238,23 +239,45 @@ func set_deco(look: Dictionary) -> void:
 		stand.queue_free()
 		stand = null
 	if bool(look.get("stand", false)):
-		stand = Art.instance(root, ROOM + "jar_stand")
-		stand.name = "JarStand"
-		_set_layers(stand)
+		stand = _deco_stand(root)
 	if cork_mark != null:
 		cork_mark.queue_free()
 		cork_mark = null
-	var ck := String(look.get("cork", ""))
-	if ck != "" and cork != null:
-		cork_mark = Art.instance(cork, ROOM + ck)
-		cork_mark.name = "CorkMark"
-		_set_layers(cork_mark)
-	var tint: Variant = look.get("tint")
+	cork_mark = _deco_cork(cork, String(look.get("cork", "")))
 	if glass_mat != null:
-		var tc: Color = tint if tint is Color else GLASS_COL
-		glass_mat.set_shader_parameter("glass_col", tc)
-		glass_mat.set_shader_parameter("haze_col", HAZE_COL.lerp(tc, 0.75) if tint is Color else HAZE_COL)
-		glass_mat.set_shader_parameter("base_alpha", TINT_ALPHA if tint is Color else 0.03)
+		paint_tint(glass_mat, look.get("tint"))
+
+
+## (Q37) 저장 요약의 꾸미기 {stand, tint: 이름, cork: 이름} (GameSave.jar_summary "deco") → JarDeco.look과 같은 꼴
+static func deco_look(d: Variant) -> Dictionary:
+	var dd: Dictionary = d if d is Dictionary else {}
+	var tn := String(dd.get("tint", ""))
+	return {"stand": bool(dd.get("stand", false)), "tint": JarDeco.TINTS.get(tn, null), "tint_name": tn,
+		"cork": String(JarDeco.CORKS.get(String(dd.get("cork", "")), ""))}
+
+
+## 유리 재질에 빛깔 (null = 맑은 유리 — 처음 값)
+static func paint_tint(m: ShaderMaterial, tint: Variant) -> void:
+	var tc: Color = tint if tint is Color else GLASS_COL
+	m.set_shader_parameter("glass_col", tc)
+	m.set_shader_parameter("haze_col", HAZE_COL.lerp(tc, TINT_HAZE) if tint is Color else HAZE_COL)
+	m.set_shader_parameter("base_alpha", TINT_ALPHA if tint is Color else 0.03)
+
+
+func _deco_stand(parent: Node3D) -> Node3D:
+	var n := Art.instance(parent, ROOM + "jar_stand")
+	n.name = "JarStand"
+	_set_layers(n)
+	return n
+
+
+func _deco_cork(cork_node: Node3D, model: String) -> Node3D:
+	if model == "" or cork_node == null:
+		return null
+	var n := Art.instance(cork_node, ROOM + model)
+	n.name = "CorkMark"
+	_set_layers(n)
+	return n
 
 
 ## 현실 달 → 계절 (북반구: 3~5 봄 · 6~8 여름 · 9~11 가을 · 12~2 겨울)
@@ -553,9 +576,15 @@ func set_shelf_jars(items: Array) -> void:
 		if not empty:                                   # 사 두고 아직 만들지 않은 병은 빈 유리병 (흙도 없이)
 			Art.instance(n, ROOM + "jar_soil")
 			contents = _make_contents(n, it.get("preview", {}), int(it.get("era", 0)))
-		Art.instance(n, ROOM + "jar_cork")
+		var ck := Art.instance(n, ROOM + "jar_cork")
 		var gm := _glass_material(JAR_BODY_TOP)
 		gm.set_shader_parameter("tint_mul", room_mul())
+		if not empty and it.get("deco") is Dictionary and not (it["deco"] as Dictionary).is_empty():     # (Q37) 그 병의 받침·빛깔·코르크 (만들 때 한 번)
+			var lk := deco_look(it["deco"])
+			if bool(lk["stand"]):
+				_deco_stand(n)
+			_deco_cork(ck, String(lk["cork"]))
+			paint_tint(gm, lk["tint"])
 		var g := _plain(ROOM + "jar_glass", Transform3D.IDENTITY, n)
 		g.material_override = gm
 		# (바닥 그림자 blob은 넣지 않음 — 옆 병 자리에서는 네모난 어두운 판으로 보였다. 원인은 아직 모름: 지금 병의 blob과 같은 재질·메시인데도)

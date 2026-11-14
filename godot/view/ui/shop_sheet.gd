@@ -445,11 +445,22 @@ func _state_sig() -> String:
 	return s
 
 
+## 아래 띠 한 줄 (Q37): 꾸미기 탭은 받침 · 빛깔 · 코르크가 곧바로 병에 붙고 조약돌만 손에 들린다
+static func hand_line(t: String, held: int) -> String:
+	if t == JarDeco.TAB:
+		if held > 0:
+			return "받침·빛깔·코르크는 병에 바로 붙어요\n손에 든 것 %d / %d — 아래 [손]에서 떨어뜨려요" % [held, Shop.HAND_MAX]
+		return "받침·빛깔·코르크는 병에 바로 붙어요\n조약돌은 아래 [손]에 들려요"
+	if held > 0:
+		return "손에 든 것 %d / %d — 아래 [손]에서 떨어뜨려요" % [held, Shop.HAND_MAX]
+	return "산 것은 아래 [손]에 들려요 (%d개까지)" % Shop.HAND_MAX
+
+
 func _refresh() -> void:
 	if village == null:
 		return
 	notes_l.text = Shop._num(Market.notes)
-	hand_l.text = "손에 든 것 %d / %d — 아래 [손]에서 떨어뜨려요" % [Market.hand.size(), Shop.HAND_MAX] if not Market.hand.is_empty() else "산 것은 아래 [손]에 들려요 (%d개까지)" % Shop.HAND_MAX
+	hand_l.text = hand_line(tab, Market.hand.size())
 	var sig := _state_sig()
 	if sig == _sig:
 		return
@@ -492,6 +503,13 @@ func _refresh() -> void:
 		_card(it)
 
 
+## (Q37) 카드 아이콘 이름: 병 받침 · 빛깔 넷 · 코르크 무늬 셋은 저마다의 아이콘 (art/icons/icons.json — 없으면 묶음 아이콘)
+static func card_icon(item: String, c: Dictionary) -> String:
+	if JarDeco.is_jar_item(item) and GameIcons.has(item):
+		return item
+	return String(c["icon"])
+
+
 func _card(item: String) -> void:
 	var c := Shop.card(village, item)
 	var lock := String(c["lock"])
@@ -508,7 +526,7 @@ func _card(item: String) -> void:
 	if bool(c["building"]):
 		ic = BuildingThumb.rect(item, ICON_PX)
 	else:
-		ic = GameIcons.rect(String(c["icon"]), ICON_PX)
+		ic = GameIcons.rect(card_icon(item, c), ICON_PX)
 	ic.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	if c.has("tint"):                                    # (Q32) 유리 빛깔 — 같은 그림을 그 빛으로 살짝 물들임
 		ic.self_modulate = (c["tint"] as Color).lerp(Color.WHITE, 0.15)

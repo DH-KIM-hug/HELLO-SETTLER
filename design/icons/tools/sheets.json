@@ -859,6 +859,57 @@
      "a pine cone"
     ]
    ]
+  },
+  {
+   "id": "shop_6",
+   "group": "shop",
+   "cols": 4,
+   "rows": 2,
+   "extra_ref": "design/icons/tools/ref_shop_deco.png",
+   "ref_note": "The second attached image shows three existing icons of this set (cork, glass chips, pebble): match their outline weight, colour softness and size exactly; do not copy them.",
+   "items": [
+    [
+     "jar_stand",
+     "병 받침",
+     "a low round turned walnut-wood stand for a jar, seen from the side at 3/4 height: a thick ring-shaped collar with a stepped profile, a carved groove around its side and a lighter bevelled top edge, the centre a shallow empty round hollow; plain smooth dark walnut-brown wood, no weave, no crust, no pattern on top"
+    ],
+    [
+     "tint_amber",
+     "호박빛 유리",
+     "a tiny empty round-shouldered glass jar with a short plain light-brown cork stopper, 3/4 view, the glass evenly tinted soft muted amber-honey (#E8BF84), translucent with the outline still dark brown, one small white highlight, nothing inside the jar"
+    ],
+    [
+     "tint_sea",
+     "물빛 유리",
+     "a tiny empty round-shouldered glass jar with a short plain light-brown cork stopper, 3/4 view, the glass evenly tinted soft muted aqua-teal (#8CCFD8), translucent with the outline still dark brown, one small white highlight, nothing inside the jar"
+    ],
+    [
+     "tint_moss",
+     "이끼빛 유리",
+     "a tiny empty round-shouldered glass jar with a short plain light-brown cork stopper, 3/4 view, the glass evenly tinted soft muted moss-green (#A6D292), translucent with the outline still dark brown, one small white highlight, nothing inside the jar"
+    ],
+    [
+     "tint_mist",
+     "안개빛 유리",
+     "a tiny empty round-shouldered glass jar with a short plain light-brown cork stopper, 3/4 view, the glass evenly tinted soft muted misty lavender-grey (#C4BEDF), translucent with the outline still dark brown, one small white highlight, nothing inside the jar"
+    ],
+    [
+     "cork_twine",
+     "삼끈 코르크",
+     "a plain cylindrical light-brown cork stopper wound twice with pale cream hemp twine tied in a small bow at the front with two short tails, 3/4 view"
+    ],
+    [
+     "cork_wax",
+     "밀랍 코르크",
+     "a plain cylindrical light-brown cork stopper whose top is sealed with muted brick-red wax, a few short wax drips running down its side and a round stamped wax disc on top, 3/4 view"
+    ],
+    [
+     "cork_brand",
+     "불도장 코르크",
+     "a plain cylindrical light-brown cork stopper with a dark burnt-brown branded mark on its flat top (a thin ring around a small four-leaf sprig) and a thin scorched band around its side, 3/4 view"
+    ]
+   ],
+   "note": "Q37: distinct deco icons (stand, four tints, three corks)"
   }
  ]
 }

@@ -80,7 +80,9 @@
 | 마른 약초 한 잎 | `shop/dried_herb_leaf.png` | shop_1 |
 | 밀 이삭 한 줄기 | `shop/wheat_ear.png` | shop_1 |
 | 반창고 조각 | `shop/bandage.png` | shop_1 |
-| 병 받침 | `shop/coaster.png` | shop_2 |
+| 병 받침 | `shop/jar_stand.png` (Q37 — 옛 `coaster.png`는 파이처럼 보여 안 씀) | shop_6 |
+| 호박빛 유리 · 물빛 유리 · 이끼빛 유리 · 안개빛 유리 | `shop/tint_amber.png` · `tint_sea.png` · `tint_moss.png` · `tint_mist.png` (Q37) | shop_6 |
+| 삼끈 코르크 · 밀랍 코르크 · 불도장 코르크 | `shop/cork_twine.png` · `cork_wax.png` · `cork_brand.png` (Q37) | shop_6 |
 | 붉은 돌멩이 | `shop/red_stone.png` | shop_2 |
 | 빵 부스러기 | `shop/bread_crumb.png` | shop_1 |
 | 성냥개비 | `shop/matchstick.png` | shop_2 |

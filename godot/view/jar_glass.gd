@@ -10,6 +10,13 @@ var radius := 32.0
 var ground_fn: Callable             # (x, z) -> 땅 끝 높이
 var top_y := 7.0
 var _mats: Array[ShaderMaterial] = []
+var _wall_m: ShaderMaterial          # (Q37) 유리 빛깔이 물드는 벽 · 땅 끝 테두리
+var _rim_m: ShaderMaterial
+var tint_name := ""                  # (Q37) 쓰는 유리 빛깔 ("" = 맑은 유리)
+## (Q37) 유리 빛깔 — 벽 색을 빛깔 쪽으로 (화면 한 장 더 그리지 않음: 이미 있는 반투명 벽의 색 값만 바꿈)
+const TINT_WALL := 0.7
+const TINT_WALL_ALPHA := 0.21
+const TINT_RIM := 0.35
 
 
 func _init(r: float, ground: Callable, top: float) -> void:
@@ -29,9 +36,14 @@ func rebuild() -> void:
 	var ground := func(x: float, z: float) -> float: return ground_fn.call(x, z)
 	var top := func(_x: float, _z: float) -> float: return top_y
 	# 벽 (먼 쪽 절반, 아주 옅게)
-	add_child(_wall(ground, top, Style.GLASS_WALL, Style.GLASS_WALL_ALPHA))
+	var wl := _wall(ground, top, Style.GLASS_WALL, Style.GLASS_WALL_ALPHA)
+	_wall_m = wl.material_override
+	add_child(wl)
 	# 땅 끝 테두리 (수평 띠 — 위에서 보면 얇은 곡선)
-	add_child(_band(ground, radius - 0.05, 0.22, 0.04, Style.GLASS_RIM, 0.85, false))
+	var rm := _band(ground, radius - 0.05, 0.22, 0.04, Style.GLASS_RIM, 0.85, false)
+	_rim_m = rm.material_override
+	add_child(rm)
+	_paint_tint()
 	# 벽 꼭대기 하이라이트 두 줄
 	add_child(_band(top, radius, 0.16, 0.0, Style.GLASS_LINE, 0.95, true))
 	add_child(_band(top, radius, 0.10, -0.45, Style.GLASS_LINE, 0.6, true))
@@ -89,6 +101,36 @@ func _wall(bottom_fn: Callable, top_fn: Callable, c: Color, a: float) -> MeshIns
 func set_night(amount: float) -> void:
 	for m in _mats:
 		m.set_shader_parameter("night_amount", amount)
+
+
+## (Q37) 유리 빛깔 (JarDeco.TINTS의 이름, "" = 맑은 유리) — 바뀔 때만 재질 값 두 개
+func set_tint(nm: String) -> void:
+	if nm == tint_name:
+		return
+	tint_name = nm
+	_paint_tint()
+
+
+## (Q37) 화면 가장자리 유리 두께 색 (render/outline_post.gdshader arc_col)
+const ARC_COL := Color(0.92, 0.98, 0.98)
+const TINT_ARC := 0.5
+static func arc_color(nm: String) -> Color:
+	var tc: Variant = JarDeco.TINTS.get(nm, null)
+	return ARC_COL.lerp(tc, TINT_ARC) if tc is Color else ARC_COL
+
+
+func _paint_tint() -> void:
+	if _wall_m == null:
+		return
+	var tc: Variant = JarDeco.TINTS.get(tint_name, null)
+	if tc is Color:
+		_wall_m.set_shader_parameter("color", Style.GLASS_WALL.lerp(tc, TINT_WALL))
+		_wall_m.set_shader_parameter("alpha", TINT_WALL_ALPHA)
+		_rim_m.set_shader_parameter("color", Style.GLASS_RIM.lerp(tc, TINT_RIM))
+	else:
+		_wall_m.set_shader_parameter("color", Style.GLASS_WALL)
+		_wall_m.set_shader_parameter("alpha", Style.GLASS_WALL_ALPHA)
+		_rim_m.set_shader_parameter("color", Style.GLASS_RIM)
 
 
 ## 1단계 호환 (도트 시절의 '1픽셀 아래 둘째 줄') — 이제 할 일 없음

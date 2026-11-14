@@ -153,8 +153,30 @@ func jar_summary(id: int) -> Dictionary:
 			"climate": _climate_of(id), "sim_unix": Time.get_unix_time_from_system(), "live": true}
 		if j.get("preview") is Dictionary and not (j["preview"] as Dictionary).is_empty():
 			s["preview"] = j["preview"]
+		var dc := _deco_of(id)
+		if not dc.is_empty():
+			s["deco"] = dc                      # (Q37) 타이틀·선반의 병에도 그 병의 받침·빛깔·코르크 (꾸미지 않은 병은 적지 않음 — 요약이 예전과 같음)
 		return s
 	return shelf_info.get(id, {})
+
+
+## (Q37) 병 꾸미기 요약 {stand, tint, cork} (이름 — 화면이 GiantRoom.deco_look으로 바꿈). 꾸미지 않은 병은 빈 사전
+func _deco_of(id: int) -> Dictionary:
+	var j: Dictionary = jars[id]
+	var v: Village = (j["world"] as JarWorld).primary() if j["kind"] == "world" and j["world"] != null else j["village"]
+	if v == null:
+		return {}
+	var d := JarDeco.home(v).deco
+	if d.is_empty():
+		return {}
+	var out := {}
+	if bool(d.get("stand", false)):
+		out["stand"] = true
+	if String(d.get("tint", "")) != "":
+		out["tint"] = String(d["tint"])
+	if String(d.get("cork", "")) != "":
+		out["cork"] = String(d["cork"])
+	return out
 
 
 ## 병 미리보기를 새로 (넓은 세상만 — force가 아니면 PREVIEW_EVERY에 한 번까지). 만들었으면 true
@@ -338,7 +360,7 @@ func peek() -> Dictionary:
 		if jr["ok"] and jr["payload"] is Dictionary and (jr["payload"] as Dictionary).has("village"):
 			day = int(float(jr["payload"]["village"].get("t", 0.0)) / Village.DAY) + 1
 	return {"name": String(pick.get("name", "")), "day": day, "kind": String(pick.get("kind", "jar")), "era": int(pick.get("era", 0)), "id": int(pick.get("id", 1)),
-		"preview": pick.get("preview", {}),
+		"preview": pick.get("preview", {}), "deco": pick.get("deco", {}) if pick.get("deco", {}) is Dictionary else {},
 		"shelf": jl.duplicate(true), "pending": gp.get("pending_jar") is Dictionary and not (gp["pending_jar"] as Dictionary).is_empty(),
 		"souvenirs": (gp.get("souvenirs", []) as Array).duplicate(true) if gp.get("souvenirs", []) is Array else []}     # [기념품 Q17] 타이틀의 선반에도 (옛 저장엔 없음 → 빈 선반)
 

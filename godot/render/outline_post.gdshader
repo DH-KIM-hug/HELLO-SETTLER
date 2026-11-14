@@ -27,6 +27,7 @@ uniform bool use_glass = true;
 uniform vec2 arc_center = vec2(0.4, 0.7);
 uniform float arc_radius = 0.755;
 uniform float arc_tint = 0.3;
+uniform vec3 arc_col = vec3(0.92, 0.98, 0.98);   // (Q37) 유리 두께 색 — 유리 빛깔을 쓰면 그 쪽으로 (view/test_village.gd)
 uniform bool room_mask = false;
 uniform vec3 jar_center = vec3(0.0);
 uniform float jar_radius = 512.0;
@@ -139,7 +140,7 @@ void fragment() {
 		float r = length(p - arc_center);
 		float pw = 1.0 / VIEWPORT_SIZE.y;
 		float outside = smoothstep(arc_radius - pw, arc_radius + pw, r);
-		col = mix(col, vec3(0.92, 0.98, 0.98), outside * arc_tint);
+		col = mix(col, arc_col, outside * arc_tint);
 		float l1 = 1.0 - smoothstep(pw * 1.2, pw * 2.4, abs(r - arc_radius));
 		float l2 = 1.0 - smoothstep(pw * 0.8, pw * 2.0, abs(r - arc_radius - 0.022));
 		col = mix(col, vec3(1.0), max(l1 * 0.9, l2 * 0.75));
