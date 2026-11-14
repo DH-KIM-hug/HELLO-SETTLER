@@ -265,16 +265,87 @@ static func plantable(v: Village, p: Vector2) -> bool:
 		return true
 	if blocks(v, p.x, p.y, 0.6):
 		return false
-	var core := 9.0                   # 마을 한가운데 (광장 둘레 집들) 안쪽은 숲으로 덮지 않는다
-	for b in v.buildings:
-		if b.type in STREET_TYPES:
-			core = maxf(core, Vector2(b.x, b.y).distance_to(v.fire) + 3.0)
-	if p.distance_to(v.fire) < core:
+	if p.distance_to(v.fire) < core_r(v):     # 마을 한가운데 (광장 둘레 집들) 안쪽은 숲으로 덮지 않는다
 		return false
 	for b in v.buildings:
 		if Vector2(b.x, b.y).distance_to(p) < b.size() + 1.6:
 			return false
 	return true
+
+
+## 마을 한가운데의 반지름 — 모닥불에서 가장 먼 집·길가 건물 + 3칸 (적어도 9칸). 이 안에는 묘목을 심지 않는다
+static func core_r(v: Village) -> float:
+	var core := 9.0
+	for b in v.buildings:
+		if b.type in STREET_TYPES:
+			core = maxf(core, Vector2(b.x, b.y).distance_to(v.fire) + 3.0)
+	return core
+
+
+## (Q38) 산림관이 실제로 묘목을 놓아도 되는 자리 — plantable + 땅 위 (물 · 병 벽 밖 아님) · 발길(흙길 · 오솔길) · 제단 둘레 ·
+## 바위 · 큰 나무 · 해바라기 줄기 · 다른 나무와 겹치지 않음
+static func plant_ok(v: Village, p: Vector2) -> bool:
+	if not v.water.inside(p.x, p.y, 2.0) or v.water_at(p.x, p.y) or not plantable(v, p):
+		return false
+	if not enabled:
+		return true
+	if v.is_road(p.x, p.y) or v.path_at(p.x, p.y) > 0.0:
+		return false
+	if p.distance_to(v.altar_pos) < Village.ALTAR_CLEAR + 0.6:
+		return false
+	for r: Dictionary in v.rocks:
+		if Vector2(float(r["x"]) - p.x, float(r["y"]) - p.y).length() < 1.0:
+			return false
+	for q: Dictionary in v.trees:
+		if Vector2(float(q["x"]) - p.x, float(q["y"]) - p.y).length() < Balance.PLANT_GAP:
+			return false
+	if GreatTrees.blocks(v.water, p.x, p.y, 0.0) or GiantPlants.blocks(v.water, p.x, p.y, 0.0):
+		return false
+	for o: Village in v.peers:             # 이웃 무리의 한가운데도 비운다
+		if o != v and p.distance_to(o.fire) < core_r(o):
+			return false
+	return true
+
+
+## (Q38) 묘목원 곁(2~7칸)이 마을 한가운데라 심을 데가 없으면: 마을 가 · 바깥 빈 땅에서 고른다 (산림관 걸음 FORESTER_WALK 안 —
+## 묘목원이 한가운데 깊숙하면 가까지 + 8칸, FORESTER_WALK_MAX까지).
+## 묘목원과 가깝고 벌목장(나무꾼이 GATHER_RANGE 안에서 벰)과 가까운 곳을 먼저 — 없으면 null. 난수는 v.rng (모닥불에서 묘목원 쪽을 중심으로)
+static func plant_spot(v: Village, b: Building) -> Variant:
+	var hut := Vector2(b.x, b.y)
+	var to := hut - v.fire
+	var hd := to.length()
+	var base := to.angle() if hd > 1e-3 else v.rng.randf() * TAU
+	var core := core_r(v) if enabled else 0.0
+	var r0 := maxf(core + 0.8, hd - 4.0)
+	var lim := clampf(core - hd + 8.0, Balance.FORESTER_WALK, Balance.FORESTER_WALK_MAX)     # 큰 마을 깊숙한 묘목원도 가에 닿게
+	var cutters: Array = []
+	var mate := hut                         # 가장 가까운 벌목장 — 묘목원과 그 사이 쪽으로도 굴린다
+	for c in v.buildings:
+		if c.built and c.type == "나무꾼":
+			cutters.append(Vector2(c.x, c.y))
+			if mate == hut or Vector2(c.x, c.y).distance_to(hut) < mate.distance_to(hut):
+				mate = Vector2(c.x, c.y)
+	var mid := (hut + mate) * 0.5 - v.fire
+	var bases := [base, mid.angle() if mid.length() > 1e-3 else base, (mate - v.fire).angle() if (mate - v.fire).length() > 1e-3 else base]
+	var best: Variant = null
+	var bs := INF
+	for i in Balance.PLANT_TRIES:
+		var a: float = float(bases[i % 3]) + v.rng.randf_range(-1.0, 1.0)
+		var p := v.fire + Vector2(cos(a), sin(a)) * (r0 + v.rng.randf() * 6.0)
+		var wd := p.distance_to(hut)
+		if wd > lim:
+			continue
+		var cd := 0.0
+		if not cutters.is_empty():
+			cd = INF
+			for c: Vector2 in cutters:
+				cd = minf(cd, c.distance_to(p))
+		var sc := wd + 0.6 * cd + (40.0 if cd > Balance.GATHER_RANGE - 2.0 else 0.0)
+		if sc >= bs or not plant_ok(v, p):
+			continue
+		bs = sc
+		best = p
+	return best
 
 
 # ───────────────────────── 자리 고르기 (촌장) ─────────────────────────
