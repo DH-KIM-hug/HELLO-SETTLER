@@ -726,6 +726,20 @@ func crisis(kind: String, text: String) -> void:
 	emit(&"crisis", {"v": kind})
 
 
+## (Q43) 알림 줄로 띄울 다음 위기 예고 (없으면 {}) — 지난 일은 버린다: 화면이 가져가지 않은 동안(헤드리스·덤프·저장) 쌓인 예고가
+## 몇십 날 뒤 알림 줄에 뜨지 않게. 배고픔 안내는 빵을 구운 뒤·안내 간격이 지난 뒤면 지난 일 (아직 배고프면 새 안내가 다시 붙는다)
+func take_warning() -> Dictionary:
+	while not warnings.is_empty():
+		var w: Dictionary = warnings.pop_front()
+		var age := t - float(w.get("t", t))
+		if String(w.get("kind", "")) == "hunger" and (Production.bread_made(self) or age > Balance.HUNGER_HINT_EVERY):
+			continue
+		if age > Balance.WARN_STALE:
+			continue
+		return w
+	return {}
+
+
 ## 지금 위기인가 — 작은 위기(날벌레 · 물덩이 · 먼지)가 마을에 있음 · 먹을 것이 모자람 · 털뭉치 괴물 떼가 돌아다님 · 돌림병이 도는 중. 읽기만
 ## crises는 '시작됨' 알림 줄이라 (화면의 JarClock이 가져가면 비고, 헤드리스에선 쌓이기만 함) 읽지 않는다 — 지켜보든 아니든 같게 (Q31 · Q34)
 func in_crisis() -> bool:

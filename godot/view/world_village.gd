@@ -1174,8 +1174,8 @@ func _on_return_all(away: float) -> Array:
 ## 알림 한 줄: 모든 무리에서 하나씩 (첫 무리가 아니면 무리 이름을 앞에)
 func next_warning() -> String:
 	for q in world.settlements:
-		if not q.warnings.is_empty():
-			var t := str(q.warnings.pop_front()["text"])
+		var t := str(q.take_warning().get("text", ""))
+		if t != "":
 			return t if q == village else "[%s] %s" % [q.settlement_name, t]
 	return ""
 

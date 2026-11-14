@@ -259,7 +259,8 @@ const FARM_DIST_W := 0.06
 const AUTO_MANNA := false
 const GRAIN_DAYS := 0.5                 # 거인이 내려 주는 낟알 한 줌 = 마을 반나절치 (무더기 셋 — 주민이 주워 창고로)
 const HUNGER_HINT_EVERY := 0.5 * DAY    # 배고픈데 빵이 아직 없으면 이만큼마다 안내 ("배고파 보여요. 낟알을 곁에 내려 줘요")
-const MANNA_DELAY := 3.0                # 도착 직후
+const WARN_STALE := 7.0 * DAY           # (Q43) 화면이 이보다 오래 가져가지 않은 위기 예고는 지난 일 — 알림 줄에 띄우지 않음 (비운 시간 상한 6일보다 길게)
+const MANNA_DELAY := 3.0               # 도착 직후
 const MANNA_PILES := 8
 const MANNA_SPOIL := DAY
 const DAWN_HOUR := 6.0
