@@ -21,7 +21,7 @@ func all() -> void:
 	print("== E3 소인의 세상: 큰 나무 다섯 · 꽃숲 · 나뭇가지")
 	var old_nav := StartFlow.navigate
 	StartFlow.navigate = false
-	run.timed(self, ["test_great_trees", "test_great_trees_save", "test_world_tree_is_cherry", "test_great_tree_budget", "test_giant_fruit", "test_carry_twigs", "test_camera_clears_trees", "test_view_flora"])
+	run.timed(self, ["test_great_trees", "test_great_trees_save", "test_world_tree_is_cherry", "test_great_tree_budget", "test_great_tree_rings", "test_giant_fruit", "test_carry_twigs", "test_camera_clears_trees", "test_view_flora"])
 	StartFlow.navigate = old_nav
 	GroundLook.month_override = 0
 
@@ -135,6 +135,38 @@ func test_great_tree_budget() -> void:
 			var w: Array = worst.get(k, [0, 0, 0])
 			worst[k] = [maxi(w[0], body), maxi(w[1], lines), maxi(w[2], far)]
 	check(bad.is_empty(), "큰 나무 예산 (가장 큰 철 [몸, 선, 멀리]) %s %s" % [worst, bad])
+
+
+## (Q41) 나무마다 다른 둘레 땅: 깔개·서 있는 것 모델이 다 있고, 깔개는 한 장 ≤ 600 삼각형, 다섯 나무의 둘레가 서로 다름 (봄·가을)
+func test_great_tree_rings() -> void:
+	var bad: Array = []
+	var seen := {}
+	for se: String in ["봄", "가을"]:
+		var sig := {}
+		for k: String in GreatTrees.KINDS:
+			var names: Array = []
+			for it: Array in GreatTreeView.ring_for(GreatTreeView.RING_MATS, k, se):
+				var m: Dictionary = Art.model(String(it[0]))
+				if m.get("mesh") == null:
+					bad.append("깔개 없음 " + String(it[0]))
+				elif _tris(m["mesh"]) > 600:
+					bad.append("%s %d" % [it[0], _tris(m["mesh"])])
+				names.append(String(it[0]))
+			for it: Array in GreatTreeView.ring_for(GreatTreeView.RING_ITEMS, k, se):
+				if Art.model(String(it[0])).get("mesh") == null:
+					bad.append("모델 없음 " + String(it[0]))
+				names.append(String(it[0]))
+			names.sort()
+			sig[k] = ",".join(names)
+		seen[se] = sig
+		var uniq := {}
+		for k: String in sig:
+			uniq[sig[k]] = true
+		if uniq.size() != GreatTrees.KINDS.size():
+			bad.append("%s 둘레가 겹침 %s" % [se, sig])
+	check(bad.is_empty() and String(seen["가을"]["ginkgo"]).contains("ring_ginkgo") and String(seen["봄"]["cherry"]).contains("ring_petals")
+		and String(seen["가을"]["maple"]).contains("ring_maple") and String(seen["봄"]["pine"]).contains("rocks"),
+		"큰 나무 둘레 땅 (소나무 바위·솔잎 · 은행 가을 노란 융단 · 단풍 가을 붉은 잎 · 벚 봄 꽃잎) %s" % [bad])
 
 
 static func _tris(m: Mesh) -> int:
@@ -258,14 +290,15 @@ func test_view_flora() -> void:
 		gv.sync(0.0, true)
 		seen[m] = gv.models.duplicate()
 	check(gv.n_trees == 5, "큰 나무 다섯을 그림 (%d)" % gv.n_trees)
-	check(seen[10]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage_autumn,carpet" and seen[7]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage"
+	check(gv.n_mats > 0 and gv.n_ring > 0, "(Q41) 큰 나무 둘레 땅 깔개 %d · 둘레 것 %d" % [gv.n_mats, gv.n_ring])
+	check(seen[10]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage_autumn" and seen[7]["ginkgo"] == "flora/tree_ginkgo:trunk,foliage"
 		and seen[10]["maple"] == "flora/tree_maple:trunk,foliage_autumn" and seen[7]["maple"] == "flora/tree_maple:trunk,foliage"
 		and seen[4]["fruit"] == "flora/tree_fruit:trunk,foliage_bloom" and seen[7]["fruit"] == "flora/tree_fruit:trunk,foliage,fruit_green"
 		and seen[10]["fruit"] == "flora/tree_fruit:trunk,foliage_autumn,fruit"
 		and seen[4]["cherry"] == "flora/tree_cherry:trunk,blossom" and seen[7]["cherry"] == "flora/tree_cherry:trunk,foliage,cherries"
 		and seen[1]["cherry"] == "flora/tree_cherry:trunk" and seen[1]["maple"] == "flora/tree_maple:trunk,seeds"
 		and seen[1]["pine"] == "flora/tree_pine:trunk,foliage_winter" and seen[7]["pine"] == "flora/tree_pine:trunk,foliage",
-		"철마다: 벚나무 봄 꽃구름/여름 버찌/겨울 맨가지 · 은행 가을 노랑+융단 · 단풍 가을 빨강 · 과일나무 봄 크림 꽃/여름 덜 익은 열매/가을 익은 열매 · 소나무 늘 푸름(겨울 서리) %s" % [seen])
+		"철마다: 벚나무 봄 꽃구름/여름 버찌/겨울 맨가지 · 은행 가을 노랑 (융단은 둘레 땅 ring_ginkgo) · 단풍 가을 빨강 · 과일나무 봄 크림 꽃/여름 덜 익은 열매/가을 익은 열매 · 소나무 늘 푸름(겨울 서리) %s" % [seen])
 	# 멀리 LOD: 축소하면 멀리 부품으로 바뀌고 사라지지 않음 (가까이 숨김 · 멀리 보임)
 	gv.force_lod = 1
 	gv.lod_check()

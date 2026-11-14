@@ -1,0 +1,4 @@
+after spring great_trees=on draw=192 prims=184991
+after spring great_trees=off draw=175 prims=175447
+after autumn great_trees=on draw=195 prims=192793
+after autumn great_trees=off draw=178 prims=183119

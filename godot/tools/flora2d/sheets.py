@@ -18,29 +18,37 @@ SQUARE = "1024x1024"
 GREAT = {
     "pine": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage"], "겨울": ["foliage_winter"]},
     "fruit": {"봄": ["foliage_bloom"], "여름": ["foliage", "fruit_green"], "가을": ["foliage_autumn", "fruit"], "겨울": ["fruit_dry"]},
-    "ginkgo": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn", "carpet"], "겨울": []},
+    "ginkgo": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": []},
     "maple": {"봄": ["foliage_spring"], "여름": ["foliage"], "가을": ["foliage_autumn"], "겨울": ["seeds"]},
     "cherry": {"봄": ["blossom"], "여름": ["foliage", "cherries"], "가을": ["foliage_autumn"], "겨울": []},
 }
 SEASON_EN = {"봄": "spring", "여름": "summer", "가을": "autumn", "겨울": "winter"}
-GREAT_DESC = {
-    "pine": "a huge old bonsai-shaped PINE tree: thick bent trunk with exposed roots, layered flat cushions of needles",
-    "fruit": "a huge old bonsai-shaped FRUIT tree: thick bent trunk with exposed roots, one big round crown",
-    "ginkgo": "a huge old GINKGO tree: tall straight-ish trunk with upward branches, fan-shaped leaves in cushions",
-    "maple": "a huge old bonsai-shaped MAPLE tree: bent trunk, wide layered crown of hand-shaped leaves",
-    "cherry": "a huge old bonsai-shaped CHERRY tree: bent leaning trunk with horizontal bark bands, puffy crown",
+GREAT_DESC = {   # ROADMAP Q41 (2026-11-14): five trees that read apart at a glance - each has ONE signature shape
+    "pine": "a huge old WINDSWEPT PINE tree: the craggy, scaly, S-bent trunk LEANS hard to one side and every branch streams "
+            "the same way, carrying long thin FLAT horizontal pads of dark blue-green needles in tiers (finely combed edges); "
+            "its roots grip a big grey mossy boulder at its foot",
+    "fruit": "a huge old FRUIT tree: a short, stout, smooth trunk (no claw roots, just a broad flared foot) under ONE BROAD, ROUND, "
+             "SMOOTH crown that is much WIDER than it is tall, like a big soft ball (any fruits sit nestled among the leaves, "
+             "varied in size, not evenly spaced polka dots)",
+    "ginkgo": "a huge old GINKGO tree, the only tall UPRIGHT tree: a long straight bare grey trunk, its branches rise steeply and "
+              "open upwards like a FAN (narrow low down, widest at the top), small clusters of fan-shaped leaves along them",
+    "maple": "a huge old MAPLE tree, low and very WIDE: several smooth grey-brown stems splay out from one foot like a vase and "
+             "carry a broad flat umbrella of layered leaf masses whose edges are made of big pointed five-lobed STAR-shaped leaves",
+    "cherry": "a huge old WEEPING CHERRY tree: a bent trunk with horizontal bark bands, a soft rounded cloud dome on arching limbs, "
+              "and long thin twigs HANGING DOWN in soft curtains all round it like a willow (the hanging twigs are soft continuous "
+              "streamers of foliage or blossom, never strings of beads or lanterns)",
 }
 GREAT_SEASON = {
-    ("pine", "봄"): "dark-teal needle cushions with light-green new tips", ("pine", "여름"): "deep blue-green needle cushions",
-    ("pine", "가을"): "deep blue-green needle cushions", ("pine", "겨울"): "needle cushions with white frost on top",
-    ("fruit", "봄"): "the crown covered in CREAM-WHITE blossom", ("fruit", "여름"): "green leafy crown with small unripe green fruits",
-    ("fruit", "가을"): "orange-brown autumn crown with ripe round red-orange fruits", ("fruit", "겨울"): "BARE branches only, one dried fruit hanging",
+    ("pine", "봄"): "dark blue-green needle pads with light-green new tips on top", ("pine", "여름"): "deep dark blue-green needle pads",
+    ("pine", "가을"): "deep dark blue-green needle pads", ("pine", "겨울"): "dark needle pads with white frost lying on top",
+    ("fruit", "봄"): "the round crown covered in CREAM-WHITE blossom with tiny pale blush flower dots", ("fruit", "여름"): "fresh green round crown dotted with small unripe green fruits",
+    ("fruit", "가을"): "yellow-green autumn crown STUDDED with many big ripe round orange fruits, some hanging under the rim", ("fruit", "겨울"): "BARE branches only, every limb tapering into thin twigs (no cut stumps), one dried fruit hanging",
     ("ginkgo", "봄"): "fresh light-green fan leaves", ("ginkgo", "여름"): "green fan leaves",
-    ("ginkgo", "가을"): "bright golden-YELLOW crown and a yellow carpet of fallen fan leaves around its foot", ("ginkgo", "겨울"): "BARE upward-reaching branches only",
-    ("maple", "봄"): "red-tinged fresh leaves", ("maple", "여름"): "green leaves", ("maple", "가을"): "flaming RED autumn leaves",
+    ("ginkgo", "가을"): "bright golden-YELLOW fan crown (NO leaves on the ground - the ground is not drawn)", ("ginkgo", "겨울"): "BARE steep upward-reaching branches only, a tall fan of twigs",
+    ("maple", "봄"): "red-tinged fresh leaves", ("maple", "여름"): "green leaves", ("maple", "가을"): "flaming RED star-shaped autumn leaves",
     ("maple", "겨울"): "BARE branches with a few winged seeds",
-    ("cherry", "봄"): "PINK blossom clouds with drifting petals", ("cherry", "여름"): "green crown with dark-red cherries",
-    ("cherry", "가을"): "ORANGE autumn crown", ("cherry", "겨울"): "BARE branches, striped bark",
+    ("cherry", "봄"): "soft PINK blossom clouds, the hanging twigs strung with pink blossom, a few drifting petals", ("cherry", "여름"): "green cloud dome and green leafy hanging twigs with a few dark-red cherries",
+    ("cherry", "가을"): "ORANGE autumn cloud dome; the hanging twigs are thin brown twigs with small orange leaves along them (not dripping blobs)", ("cherry", "겨울"): "BARE: arching banded limbs, and from their ends many thin bare twigs hang straight down, every twig attached to a branch (like a bare weeping willow), striped bark",
 }
 
 
@@ -52,7 +60,9 @@ def _great_sheets() -> dict:
             out[pic] = dict(size=PORTRAIT, grid=(1, 1), cells=[
                 (pic, {"model": f"flora/tree_{k}", "keep": ["trunk"] + keep, "parts_only": True},
                  f"{GREAT_DESC[k]}; {GREAT_SEASON[(k, se)]}. It is ENORMOUS (fifty times a villager), so draw it big and simple like a "
-                 "real tree seen up close, with large simple leaf masses, the whole tree from roots to crown top.")])
+                 "real tree seen up close, with large simple leaf masses, the whole tree from roots to crown top. Keep the model's OUTLINE "
+                 "exactly (lean, width, height, where the masses sit): that outline is what tells it apart from the other four great "
+                 "trees, so never turn it into a generic round bonsai, and draw roots only as the model shows them.")])
     return out
 
 

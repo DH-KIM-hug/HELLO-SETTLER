@@ -191,7 +191,7 @@ func test_great_trees() -> void:
 		if g.has_meta(&"pic"):
 			shown += 1
 		elif g.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_SHADOWS_ONLY and not g.has_meta(&"cards2d") \
-				and not String(g.name).begins_with("contact2d"):
+				and not String(g.name).begins_with("contact2d") and not g.has_meta(&"ground_decal"):      # (Q41) 둘레 깔개 = 3D 땅
 			leak += 1
 			leaks.append(String(g.get_path()).get_slice("GreatTrees/", 1))
 	check(gv.pics2d and gv.n_trees == 5 and shown >= 5 and leak == 0, "큰 나무 다섯 = 그림 한 장씩 (%d) · 3D는 그림자 대역만 (새는 것 %d %s)" % [shown, leak, leaks.slice(0, 4)])
