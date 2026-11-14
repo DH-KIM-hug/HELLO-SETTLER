@@ -1317,3 +1317,13 @@ const EXPLORE_WALL_FAR := 0.6            # '먼 벽' = 마을 가운데에서 �
 const EXPLORE_WALL_TOUCH := 6.0          # 세상 끝 유리벽에서 이만큼(칸) 안에 닿으면 '유리벽에 닿았다' (DISCOVERIES S1 — 걸음 끝 오차를 넉넉히)
 const EXPLORE_LOG_MAX := 60              # 탐험 기록(explore_log)은 최근 이만큼만 (저장 크기)
 const EXPLORE_NICK := "세상 끝에 닿은"   # 처음 유리벽에 닿은 탐험가의 별명 (주민 쪽 글 — 숫자 없음)
+
+# ───────────────────────── (Q42 2026-11-14) 탐험가의 밤 · 지나온 길 · 돌아와 들려주는 이야기 ─────────────────────────
+# 모두 EXPLORE_GOAL_DAY 뒤에 떠난 탐험만 (첫 20일은 예전 그대로 — 저장 지문이 한 비트도 바뀌지 않게).
+const EXPLORE_CAMP_FROM := 21.0          # 이 시각(병 시)부터 NIGHT_TO까지 집에서 먼 탐험가는 걸음을 멈추고 작은 모닥불을 피워 잔다 (새벽에 다시 걷는다)
+const EXPLORE_CAMP_FAR := 40.0           # 마을 가운데에서 이만큼(칸 — 걸음 네댓 시간) 넘게 나가 있을 때만 (그보다 가까우면 밤길을 마저 걸어 집에서 잔다)
+const EXPLORE_BAND := 6.0                # 큰 나무를 처음 보면 탐험가 자리 → 나무까지 띠(반지름, 칸)로 안개가 걷힌다 — 섬이 아니라 길로 읽히게
+const EXPLORE_TALE_DIST := 100.0         # 이만큼(칸) 넘게 멀리 다녀오면 모닥불 곁에서 잠깐 이야기 (이웃 한둘이 모인다)
+const EXPLORE_TALE_SECS := 2400.0        # 이야기 길이 (병 초 — 보통 빠르기에서 말풍선 네 줄쯤)
+const EXPLORE_TALE_NEAR := 30.0          # 모닥불에서 이만큼(칸) 안의 한가한 이웃이 모인다
+const EXPLORE_TALE_PICK := [1, 2]        # 모이는 이웃 수 (적어도 · 많아야)

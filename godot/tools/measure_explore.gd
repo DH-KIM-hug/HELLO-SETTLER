@@ -80,7 +80,7 @@ func _run(s: int, days: int) -> void:
 		if _cell_in(ww, q):
 			land += 1
 	var out := {"seed": s, "mode": mode, "days": days, "fog": {}, "rad": {}, "edge": {}, "trips": {}, "tries": {}, "trees": {}, "wall": -1.0,
-		"why": {}, "pop": {}, "food": {}, "ms": {}, "d20": ""}
+		"why": {}, "pop": {}, "food": {}, "ms": {}, "d20": "", "nightwalk": 0, "camphours": 0}
 	for t: Dictionary in ww.great_trees:
 		out["trees"][String(t["kind"])] = [-1.0, snappedf(Vector2(t["x"], t["y"]).distance_to(v.center), 1.0)]
 	var mi := 0
@@ -108,6 +108,17 @@ func _run(s: int, days: int) -> void:
 			w["go"] += 1
 		else:
 			w[_why(v, ww)] += 1
+		if day >= 20.0 and (hr >= 21 or hr < 6):      # (Q42) 병 21시 ~ 새벽 6시: 마을에서 EXPLORE_CAMP_FAR 넘게 나가 걷는 탐험가 · 야영 중인 탐험가 (시간 수)
+			var ids: Array = v.explore_party.duplicate()
+			if v.explorer >= 0:
+				ids.append(v.explorer)
+			for id: int in ids:
+				var er := v.person(id)
+				if er != null and Vector2(er.x, er.y).distance_to(v.center) > Balance.EXPLORE_CAMP_FAR:
+					if er.anim == "walk":
+						out["nightwalk"] += 1
+					elif er.anim == "sleep":
+						out["camphours"] += 1
 		for t: Dictionary in ww.great_trees:
 			var tr: Array = out["trees"][String(t["kind"])]
 			if float(tr[0]) < 0.0 and _tree_seen(ww, v.sid, t):
@@ -137,6 +148,8 @@ func _run(s: int, days: int) -> void:
 		out["ms"][id] = snappedf(float((passed[id] as Dictionary)["t"]) / D, 0.01) if passed.has(id) else -1.0
 	out["why"] = why
 	out["settlements"] = jw.settlements.size()
+	out["camps"] = int(v.stats.get("explore_camps", 0))     # (Q42) 밤 야영 수 · 돌아와 들려준 이야기 수
+	out["tales"] = int(v.stats.get("explore_tales", 0))
 	out["secs"] = int((Time.get_ticks_msec() - t0) / 1000.0)
 	var lg = v.get("explore_log")
 	if lg is Array:

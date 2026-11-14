@@ -23,7 +23,9 @@ func check(ok: bool, what: String) -> void:
 func all() -> void:
 	print("== 주민이 계속 탐험 (Q39)")
 	run.timed(self, ["test_before_goal_day_same", "test_party_grows", "test_goal_list", "test_plan_goals", "test_fit_and_cold", "test_tree_seen_once",
-		"test_wall_hero", "test_old_save_trees_silent", "test_save_round_trip", "test_news_card", "test_keeps_going_60_days"])
+		"test_wall_hero", "test_old_save_trees_silent", "test_save_round_trip", "test_news_card",
+		"test_q42_first_days_steps_same", "test_q42_camp_night", "test_q42_band_to_tree", "test_q42_tale", "test_q42_tale_not_when", "test_q42_camp_light",
+		"test_keeps_going_60_days"])
 
 
 var _jw: JarWorld = null
@@ -378,4 +380,252 @@ func test_keeps_going_60_days() -> void:
 	check(late.size() >= 3, "병 40~60일에도 탐험 %d번" % late.size())
 	check(not goals.is_empty(), "목표가 있는 길 %d번" % goals.size())
 	check(far > int(WorldCfg.EXPLORE_MAX), "예전 한계(EXPLORE_MAX)보다 멀리 (%d칸)" % far)
+	check(int(v.stats.get("explore_camps", 0)) > 0, "(Q42) 집에서 먼 탐험가가 밤에 야영 %d번" % int(v.stats.get("explore_camps", 0)))
 	check(v.check_invariants().is_empty(), "마을 불변식")
+
+
+# ───────────────────────── (Q42 2026-11-14) 밤 야영 · 나무까지 띠 · 돌아와 이야기 ─────────────────────────
+## v.t를 그 병 날의 h시로
+func _at_hour(v: Village, day: float, h: float) -> void:
+	v.t = day * D
+	v.t += fposmod(h * Balance.HOUR - v.clock(), D)
+
+
+func _out(v: Village, r: Resident, goal := "tree:ginkgo", d := 200) -> void:
+	v.explore_goals[str(r.id)] = goal
+	v.explore_log.append({"t": v.t - 2.0 * D, "goal": goal, "d": d, "who": r.id})
+
+
+func test_q42_first_days_steps_same() -> void:
+	var v := _world()
+	v.t = (Balance.EXPLORE_GOAL_DAY - 1.0) * D
+	var r := _adult(v)
+	v.last_explore_t = -1.0e9
+	r.steps.clear()
+	var ok := ResidentAI._explore(v, r)
+	var xp := r.steps.filter(func(s: Dictionary) -> bool: return s.has("xp"))
+	var last: Dictionary = r.steps[-1] if ok else {}
+	check(ok and xp.is_empty() and String((last.get("done", {}) as Dictionary).get("op", "")) == "explore_clear", "첫 20일 탐험 걸음은 예전 그대로 (야영 칸 없음 · 끝은 explore_clear)")
+	ResidentAI.cancel(v, r)
+	v.t = (Balance.EXPLORE_GOAL_DAY + 1.0) * D
+	v.last_explore_t = -1.0e9
+	ok = ResidentAI._explore(v, r)
+	xp = r.steps.filter(func(s: Dictionary) -> bool: return s.has("xp"))
+	last = r.steps[-1] if ok else {}
+	check(ok and xp.size() == 2 and String((last.get("done", {}) as Dictionary).get("op", "")) == "explore_home", "그 뒤: 가는 길 · 오는 길에 야영 칸, 끝은 explore_home")
+	ResidentAI.cancel(v, r)
+	check(v.explorers_out() == 0, "그만두면 자리가 빔")
+
+
+func test_q42_camp_night() -> void:
+	var v := _world()
+	_at_hour(v, 30.0, 21.5)
+	var r := _adult(v)
+	ResidentAI.cancel(v, r)
+	var far := v.center + Vector2(60.0, 0.0)
+	r.x = far.x
+	r.y = far.y
+	r.px = r.x
+	r.py = r.y
+	v.explorer = r.id
+	_out(v, r)
+	var go := ResidentAI.walk(far.x + 80.0, far.y)
+	go["xp"] = true
+	r.steps = [go, ResidentAI.act(1.0, "idle", ResidentAI.op("explore_clear"), false, ResidentAI.op("explore_clear"))]
+	r.doing = "안개 너머를 살피러 가는 중"
+	ResidentAI.update(v, r, 30.0)
+	check(ResidentAI.camping(r) and r.sleeping and r.doing == ResidentAI.CAMP_DOING, "밤 21시 반 · 마을에서 먼 탐험가: 걸음을 멈추고 야영 (%s)" % r.doing)
+	check(Vector2(r.x, r.y).distance_to(far) < 0.01, "야영하는 동안 걷지 않음")
+	check(bool(ResidentAI._trip_of(v, r).get("camp", false)), "이번 길 기록에 야영 표시 (이야깃거리)")
+	check(r.doing.contains("모닥불") and _clean(r.doing), "하는 일 글: 숫자 · 쓰지 않는 말 없음")
+	var moved_at := -1.0
+	for i in 2 * 60 * 12:
+		v.t += 30.0
+		ResidentAI.update(v, r, 30.0)
+		if Vector2(r.x, r.y).distance_to(far) > 0.5:
+			moved_at = v.hour_now()
+			break
+	check(moved_at >= Balance.NIGHT_TO and moved_at < Balance.NIGHT_TO + 0.5, "새벽에 다시 걷는다 (병 %.2f시)" % moved_at)
+	check(not r.sleeping and r.doing == "안개 너머를 살피러 가는 중", "깨면 하던 일 그대로")
+	# 마을 곁이면 야영 없이 집까지
+	_at_hour(v, 31.0, 22.0)
+	ResidentAI.cancel(v, r)
+	v.explorer = r.id
+	r.x = v.center.x + 10.0
+	r.y = v.center.y
+	var home := ResidentAI.walk(v.fire.x, v.fire.y)
+	home["xp"] = true
+	r.steps = [home]
+	ResidentAI.update(v, r, 30.0)
+	check(not ResidentAI.camping(r), "마을 곁(EXPLORE_CAMP_FAR 안)이면 야영하지 않고 집으로")
+	# 야영 칸이 없는 걸음(첫 20일 · 다른 일)은 밤에도 그대로
+	ResidentAI.cancel(v, r)
+	r.x = far.x
+	r.y = far.y
+	r.steps = [ResidentAI.walk(far.x + 80.0, far.y)]
+	ResidentAI.update(v, r, 30.0)
+	check(not ResidentAI.camping(r) and Vector2(r.x, r.y).distance_to(far) > 0.01, "야영 칸 없는 걸음은 예전 그대로 걷는다")
+	ResidentAI.cancel(v, r)
+	# 길을 따라 끼운 걸음("rt")이 앞에 있어도 뒤에 탐험 걸음이 있으면 야영
+	r.x = far.x
+	r.y = far.y
+	var back := ResidentAI.walk(v.fire.x, v.fire.y)
+	back["xp"] = true
+	r.steps = [{"k": "walk", "x": far.x - 30.0, "y": far.y, "rt": true}, back]
+	ResidentAI.update(v, r, 30.0)
+	check(ResidentAI.camping(r), "길 걸음(rt) 뒤에 탐험 걸음이 있으면 그 자리에서 야영")
+	ResidentAI.cancel(v, r)
+	v.explorer = -1
+
+
+## 큰 나무를 처음 보면 탐험가 자리에서 나무까지 띠로 걷힘 (첫 20일엔 예전처럼 나무 둘레만)
+func _band_gap(day: float) -> Array:
+	var v := _world()
+	v.t = day * D
+	var ww := v.water as WorldWater
+	var gt: Dictionary = ww.great_trees[0]
+	var c := Vector2(gt["x"], gt["y"])
+	var tr := float(gt["r"])
+	var r := _adult(v)
+	var dir := (v.center - c).normalized()
+	var at := c + dir * (tr + Balance.EXPLORE_TREE_SEE - 1.0)
+	r.x = at.x
+	r.y = at.y
+	v.explorer = r.id
+	_out(v, r, "edge")
+	v._reveal_at(at, WorldCfg.REVEAL_WALK, r, true)
+	var holes := 0
+	var n := 0
+	var p := at
+	while p.distance_to(c) > tr:
+		n += 1
+		if not ww.revealed(p.x, p.y, v.sid):
+			holes += 1
+		p += -dir * 2.0
+	return [holes, n, String(ResidentAI._trip_of(v, r).get("saw", "")), String(gt["kind"]), v.explore_seen.has(String(gt["kind"]))]
+
+
+func test_q42_band_to_tree() -> void:
+	var before := _band_gap(Balance.EXPLORE_GOAL_DAY - 5.0)
+	var after := _band_gap(Balance.EXPLORE_GOAL_DAY + 10.0)
+	check(bool(before[4]) and bool(after[4]), "둘 다 큰 나무를 보았다")
+	check(int(before[0]) > 0, "첫 20일: 예전처럼 탐험가와 나무 사이에 안개가 남음 (%d/%d 점)" % [before[0], before[1]])
+	check(int(after[0]) == 0, "그 뒤: 탐험가 자리에서 나무까지 띠로 걷힘 (남은 점 %d/%d)" % [after[0], after[1]])
+	check(String(after[2]) == String(after[3]) and String(before[2]) == "", "이번 길 기록에 본 나무 (그 뒤만): '%s'" % after[2])
+
+
+func _tale_world() -> Array:
+	var v := _world()
+	_at_hour(v, 30.0, 10.0)
+	v.deficit = 0.0
+	var r := _adult(v)
+	ResidentAI.cancel(v, r)
+	r.x = v.fire.x + 2.0
+	r.y = v.fire.y
+	v.explorer = r.id
+	_out(v, r, "tree:ginkgo", 220)
+	ResidentAI._trip_of(v, r)["saw"] = "ginkgo"
+	var nb: Array[Resident] = []
+	for q: Resident in v.people:
+		if q != r and not q.is_baby() and nb.size() < 3:
+			ResidentAI.cancel(v, q)
+			q.action = "idle"
+			q.sleeping = false
+			q.sick_left = 0.0
+			q.x = v.fire.x - 3.0 + nb.size()
+			q.y = v.fire.y + 2.0
+			nb.append(q)
+	return [v, r, nb]
+
+
+func test_q42_tale() -> void:
+	var w := _tale_world()
+	var v: Village = w[0]
+	var r: Resident = w[1]
+	var n0 := v.social_events.size()
+	ResidentAI.run_op(v, r, ResidentAI.op("explore_home"))
+	check(v.explorers_out() == 0 and not v.explore_goals.has(str(r.id)), "돌아오면 탐험 자리가 빔")
+	var evs := v.social_events.slice(n0).filter(func(e: Dictionary) -> bool: return e["kind"] == "tale")
+	check(evs.size() == 1, "모닥불 곁 이야기 장면 하나 (Social 사건 tale)")
+	if evs.is_empty():
+		return
+	var ev: Dictionary = evs[0]
+	var who: Array = ev["who"]
+	check(int(who[0]) == r.id and who.size() >= 2 and who.size() <= 3, "이야기하는 탐험가 + 이웃 %d명" % (who.size() - 1))
+	var ls: Array = ev["lines"]
+	var texts: Array = ls.map(func(l: Array) -> String: return String(l[1]))
+	check(texts.has(ResidentAI.TALE_TREE["ginkgo"]), "나무 이야기: %s" % " / ".join(texts))
+	check(texts.all(func(s: String) -> bool: return _clean(s)), "말에 숫자 · 쓰지 않는 말 없음")
+	check(String(ResidentAI.TALE_OPEN[0]) == "멀리까지 다녀왔어요.", "첫 말 묶음: 멀리까지 다녀왔어요.")
+	check(r.doing == ResidentAI.TALE_DOING and not r.steps.is_empty(), "탐험가는 모닥불 곁에 서서 이야기")
+	for i in range(1, who.size()):
+		var q := v.person(int(who[i]))
+		check(q != null and q.doing.contains(r.name) and q.steps.size() >= 2, "이웃이 다가와 듣는다: %s" % (q.doing if q != null else ""))
+	# 잠깐 뒤 모두 하던 대로 (이야기 걸음이 끝남)
+	for k in 200:
+		v.t += 30.0
+		for id: Variant in who:
+			ResidentAI.update(v, v.person(int(id)), 30.0)
+	check(r.doing != ResidentAI.TALE_DOING, "이야기가 끝나면 하던 대로 (%s)" % r.doing)
+	for k: String in ResidentAI.TALE_TREE:
+		check(_clean(String(ResidentAI.TALE_TREE[k])), "나무 말 %s" % k)
+	for s: String in ResidentAI.TALE_OPEN + ResidentAI.TALE_ASK + ResidentAI.TALE_WOW + [ResidentAI.TALE_WALL, ResidentAI.TALE_WATER, ResidentAI.TALE_NIGHT, ResidentAI.CAMP_DOING, ResidentAI.TALE_DOING]:
+		check(_clean(s), "말 묶음: %s" % s)
+
+
+func test_q42_tale_not_when() -> void:
+	var cases := {"밤": "night", "위기(먹을 것 모자람)": "crisis", "짧은 나들이": "short", "곁에 한가한 이웃 없음": "alone"}
+	for label: String in cases:
+		var w := _tale_world()
+		var v: Village = w[0]
+		var r: Resident = w[1]
+		var nb: Array = w[2]
+		match String(cases[label]):
+			"night":
+				_at_hour(v, 30.0, 23.0)
+			"crisis":
+				v.deficit = 0.5
+			"short":
+				ResidentAI._trip_of(v, r)["d"] = int(Balance.EXPLORE_TALE_DIST) - 10
+			"alone":
+				for q: Resident in v.people:
+					if q != r:
+						q.x = v.fire.x + Balance.EXPLORE_TALE_NEAR + 20.0
+		var n0 := v.social_events.size()
+		ResidentAI.run_op(v, r, ResidentAI.op("explore_home"))
+		check(v.social_events.slice(n0).filter(func(e: Dictionary) -> bool: return e["kind"] == "tale").is_empty() and v.explorers_out() == 0,
+			"%s: 이야기 없이 돌아옴" % label)
+
+
+class FlatView extends Node3D:
+	func gy(_x: float, _z: float) -> float:
+		return 0.0
+
+
+func test_q42_camp_light() -> void:
+	var v := _world()
+	_at_hour(v, 30.0, 23.0)
+	var r := _adult(v)
+	ResidentAI.cancel(v, r)
+	r.x = v.center.x + 80.0
+	r.y = v.center.y
+	v.explorer = r.id
+	_out(v, r)
+	var go := ResidentAI.walk(r.x + 50.0, r.y)
+	go["xp"] = true
+	r.steps = [go]
+	var fv := FlatView.new()
+	var cl := ExploreCamps.new(v, fv)
+	cl.sync(0.016)
+	check(cl.shown == 0 and not cl.visible, "걷는 중엔 불빛 없음")
+	ResidentAI.update(v, r, 30.0)
+	cl.sync(0.016)
+	check(cl.shown == 1 and cl.visible, "야영하면 안개 속 작은 불빛 하나")
+	var sp := cl.spots[0]
+	check(Vector2(sp.x, sp.z).distance_to(Vector2(r.x, r.y)) < 1.5, "불빛은 자는 탐험가 곁")
+	ResidentAI.cancel(v, r)
+	cl.sync(0.016)
+	check(cl.shown == 0 and not cl.visible, "깨면 (그만두면) 불빛도 꺼짐")
+	cl.free()
+	fv.free()
+	v.explorer = -1

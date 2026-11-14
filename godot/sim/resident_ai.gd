@@ -83,6 +83,12 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 				r.carry_amt = 0.0
 		"explore_clear":
 			v.explore_done(r)                  # (Q39) 첫째 · 둘째 · 셋째 탐험가 모두
+		"explore_wake":                        # (Q42) 밤 야영이 끝남 (새벽 · 그만둠) — 하던 걸음을 잇는다
+			r.sleeping = false
+			r.doing = String(d.get("was", r.doing))
+		"explore_home":                        # (Q42) 목표를 갖고 다녀온 탐험가가 모닥불 곁에 닿음 — 멀리 다녀왔으면 이야기
+			v.explore_done(r)
+			_explore_tale(v, r)
 		"explore_look":
 			r.doing = "집으로 돌아가는 중"
 			v._reveal_at(Vector2(r.x, r.y), WorldCfg.REVEAL_LOOK, r, true)
@@ -245,6 +251,8 @@ static func update(v: Village, r: Resident, dt: float) -> void:
 		var s: Dictionary = r.steps[0]
 		var used := 0.0
 		if s["k"] == "walk":
+			if (s.has("xp") or s.has("rt")) and camp_hour(v) and (s.has("xp") or _xp_ahead(r)) and _explore_camp(v, r):
+				continue                           # (Q42) 집에서 먼 탐험가: 해가 지면 걸음을 멈추고 작은 모닥불 곁에서 잔다 (길을 따라 끼운 걸음 "rt"도 — 뒤에 탐험 걸음이 있으면)
 			if not s.has("rt"):
 				VillageEra.route(v, r, s)          # 강 건너: 나루터로 돌아가는 게 빠르면 (A6) — 걸음이 늘면 첫 걸음부터 다시
 				if r.steps[0] != s:
@@ -642,12 +650,154 @@ static func _explore(v: Village, r: Resident) -> bool:
 	r.doing = String(EXPLORE_DOING.get(String(plan["goal"]).get_slice(":", 0), "안개 너머를 살피러 가는 중"))
 	var clear := op("explore_clear")
 	var look := op("explore_look")
-	r.steps.append(walk(p.x, p.y))
+	var q42 := v.explore_goal_on()          # (Q42) 목표를 갖고 떠난 길만: 밤 야영(걸음 칸 "xp") · 돌아와 이야기 — 첫 20일 걸음은 예전 그대로
+	var go := walk(p.x, p.y)
+	if q42:
+		go["xp"] = true
+	r.steps.append(go)
 	r.steps.append(act(WorldCfg.EXPLORE_LOOK_TIME, "idle", look, false, clear))
 	var hp := near(v, v.fire.x, v.fire.y, 2.5)
-	r.steps.append(walk(hp.x, hp.y))
-	r.steps.append(act(1.0, "idle", clear, false, clear))
+	var back := walk(hp.x, hp.y)
+	if q42:
+		back["xp"] = true
+	r.steps.append(back)
+	r.steps.append(act(1.0, "idle", op("explore_home") if q42 else clear, false, clear))
 	return true
+
+
+# ───────────────────────── (Q42 2026-11-14) 탐험가의 밤 · 돌아와 들려주는 이야기 ─────────────────────────
+const CAMP_DOING := "작은 모닥불을 피우고 자는 중"
+const TALE_DOING := "멀리 다녀온 이야기를 하는 중"
+const TALE_HEAR := "%s의 이야기를 듣는 중"
+const TALE_OPEN := ["멀리까지 다녀왔어요.", "아주 먼 데까지 걸어갔다 왔어요.", "안개 너머 먼 곳에 다녀왔어요."]
+const TALE_ASK := ["어땠어요?", "무엇을 봤어요?", "다녀왔구나!", "얼마나 멀리 갔어요?"]
+const TALE_WOW := ["우와!", "나도 가 보고 싶다.", "정말요?", "대단해요!"]
+const TALE_TREE := {"cherry": "하늘로 휘어 오른 커다란 벚나무가 있었어요.", "pine": "층층이 높은 커다란 소나무가 있었어요.",
+	"fruit": "열매가 주렁주렁한 커다란 과일나무가 있었어요.", "ginkgo": "커다란 은행나무가 있었어요.", "maple": "커다란 단풍나무가 있었어요."}
+const TALE_WALL := "세상 끝까지 갔어요. 더는 갈 수 없는 벽이 있었어요."
+const TALE_WATER := "물소리를 따라 큰 물가까지 갔어요."
+const TALE_NIGHT := "밤엔 작은 불을 피우고 별 아래서 잤어요."
+
+
+## 지금이 야영할 때인가 (EXPLORE_CAMP_FROM ~ NIGHT_TO)
+static func camp_hour(v: Village) -> bool:
+	var h := v.hour_now()
+	return h >= Balance.EXPLORE_CAMP_FROM or h < Balance.NIGHT_TO
+
+
+## 걸음 칸 "xp"가 붙은 탐험가의 걸음 앞: 밤이고 마을에서 멀면 그 자리에 야영 (새벽 NIGHT_TO까지 잠 — 끝나면 explore_wake, 걸음은 그대로 이어 감)
+static func _explore_camp(v: Village, r: Resident) -> bool:
+	if not camp_hour(v) or Vector2(r.x, r.y).distance_to(v.center) <= Balance.EXPLORE_CAMP_FAR:
+		return false
+	var until := fmod(Balance.NIGHT_TO * Balance.HOUR - v.clock() + Balance.DAY, Balance.DAY)
+	var w := op("explore_wake", {"was": r.doing})
+	r.steps.push_front(act(maxf(60.0, until), "sleep", w, false, w))
+	r.doing = CAMP_DOING
+	r.sleeping = true
+	v.stats["explore_camps"] = int(v.stats.get("explore_camps", 0)) + 1
+	var trip := _trip_of(v, r)
+	if not trip.is_empty():
+		trip["camp"] = true                   # 이야기 때 '밤엔 작은 불을 피우고…'
+	return true
+
+
+## 뒤에 탐험 걸음("xp")이 남아 있나 — 길을 따라 끼운 걸음(VillagePlan.route · VillageEra.route의 "rt")도 탐험 길의 일부
+static func _xp_ahead(r: Resident) -> bool:
+	for s: Dictionary in r.steps:
+		if s.has("xp"):
+			return true
+	return false
+
+
+## 지금 야영 중인가 (화면: 안개 속 작은 불빛 — view/explore_camps.gd). 읽기만
+static func camping(r: Resident) -> bool:
+	if r.steps.is_empty():
+		return false
+	var s: Dictionary = r.steps[0]
+	if String(s.get("k", "")) != "do":
+		return false
+	var dn: Variant = s.get("done")
+	return dn is Dictionary and String((dn as Dictionary).get("op", "")) == "explore_wake"
+
+
+## 이번 탐험 기록 (explore_log의 가장 최근 그 사람 줄 — 없으면 {})
+static func _trip_of(v: Village, r: Resident) -> Dictionary:
+	for i in range(v.explore_log.size() - 1, -1, -1):
+		var e: Dictionary = v.explore_log[i]
+		if int(e.get("who", -1)) == r.id:
+			return e
+	return {}
+
+
+## 멀리 다녀온 탐험가가 모닥불 곁에서 잠깐 이야기 — 곁의 한가한 이웃 한둘이 다가와 듣는다 (말풍선 장면 = Social 사건 "tale").
+## 밤 · 위기 · 잔치 · 첫 한 시간 대본 · 장면 중엔 없음. 이웃은 탐험 난수로 (다른 흐름의 난수를 건드리지 않게). 숫자 없는 말만
+static func _explore_tale(v: Village, r: Resident) -> bool:
+	var trip := _trip_of(v, r)
+	if trip.is_empty() or float(trip.get("d", 0.0)) < Balance.EXPLORE_TALE_DIST:
+		return false
+	if v.is_night() or v.in_crisis() or Milestones.feast_on(v) or v.in_opening() or v.staged() or r.dead:
+		return false
+	var busy: Dictionary = v.social.get("busy", {})
+	var cands: Array[Resident] = []
+	for q: Resident in v.people:
+		if q == r or q.dead or q.sleeping or q.is_baby() or not Social.FREE_ACTS.has(q.action):
+			continue
+		if q.sick_left > 0.0 or v.explore_goals.has(str(q.id)):
+			continue
+		if float(busy.get(str(q.id), -1.0e9)) > v.t or ChildPlay.in_story(v, q.id):
+			continue
+		if Vector2(q.x, q.y).distance_to(v.fire) > Balance.EXPLORE_TALE_NEAR:
+			continue
+		cands.append(q)
+	if cands.size() < int(Balance.EXPLORE_TALE_PICK[0]):
+		return false
+	var rg := v.explore_rng
+	var n := mini(cands.size(), rg.randi_range(int(Balance.EXPLORE_TALE_PICK[0]), int(Balance.EXPLORE_TALE_PICK[1])))
+	var who: Array[Resident] = [r]
+	for i in n:
+		var k := rg.randi() % cands.size()
+		who.append(cands[k])
+		cands.remove_at(k)
+	var secs := Balance.EXPLORE_TALE_SECS
+	var at := Vector2(r.x, r.y)
+	# 탐험가: 그 자리에 서서 이야기 · 이웃: 탐험가를 둘러싸고 선다
+	r.steps.push_front(act(secs, "idle", op("social_done", {"was": "모닥불 곁에서 쉬는 중"}), false, op("social_done", {"was": "모닥불 곁에서 쉬는 중"})))
+	r.doing = TALE_DOING
+	var face := (v.fire - at).normalized() if v.fire.distance_to(at) > 0.1 else Vector2(0, 1)
+	for i in range(1, who.size()):
+		var ang := atan2(face.y, face.x) + (float(i) - 0.5 * float(who.size())) * 0.9
+		var spot := at + Vector2(cos(ang), sin(ang)) * 1.1
+		Social._hold(v, who[i], secs, TALE_HEAR % r.name, spot)
+	if not v.social.has("busy"):
+		v.social["busy"] = {}
+	for q: Resident in who:
+		v.social["busy"][str(q.id)] = v.t + secs
+	var ls: Array = []
+	ls.append([0, String(TALE_OPEN[rg.randi() % TALE_OPEN.size()]), "cheer"])
+	ls.append([1, String(TALE_ASK[rg.randi() % TALE_ASK.size()]), ""])
+	ls.append([0, tale_line(v, r, trip), "cheer"])
+	if bool(trip.get("camp", false)) and rg.randf() < 0.5:
+		ls.append([0, TALE_NIGHT, ""])
+	ls.append([who.size() - 1, String(TALE_WOW[rg.randi() % TALE_WOW.size()]), "cheer"])
+	var ev := Social._ev(v, "tale", who, ls, "cheer")
+	ev["at"] = at
+	ev["secs"] = secs
+	Social._push(v, ev)
+	v.stats["explore_tales"] = int(v.stats.get("explore_tales", 0)) + 1
+	v.emit(&"talk_started", {"who": r.id, "at": at, "v": {"with": who[1].id, "kind": "tale", "secs": secs, "id": int(ev["id"])}})
+	return true
+
+
+## 이야기의 가운데 줄: 이번 길에 처음 본 큰 나무 (explore_log 줄의 "saw") · 세상 끝 · 물길 · 아니면 안개 너머 (숫자 없음)
+static func tale_line(v: Village, r: Resident, trip: Dictionary) -> String:
+	var saw := String(trip.get("saw", ""))
+	if saw != "" and TALE_TREE.has(saw):
+		return String(TALE_TREE[saw])
+	if not v.explore_hero.is_empty() and int(v.explore_hero.get("id", -1)) == r.id and float(v.explore_hero.get("t", -1.0)) >= float(trip.get("t", 0.0)):
+		return TALE_WALL
+	if String(trip.get("goal", "")).begins_with("water"):
+		return TALE_WATER
+	return "안개 너머에도 땅이 끝없이 이어져 있었어요."
 
 
 ## 방랑: 마을에서 먼 곳까지 걸어갔다가 돌아온다 (넓은 세상이면 지나는 길의 안개가 조금 걷힌다)

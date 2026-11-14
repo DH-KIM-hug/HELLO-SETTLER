@@ -294,6 +294,19 @@ func _play(sc: Dictionary) -> void:
 						"stomp": talking, "w": w})
 				else:                      # 서먹: 고개를 돌림
 					_pose(p, {"look": Vector2(p.x, p.y) * 2.0 - Vector2(other.x, other.y), "face": "sad", "anim": "idle", "w": w})
+		"tale":                         # (Q42) 멀리 다녀온 탐험가 둘레에 이웃 한둘 — 모두 말하는 이를 봄 (sim: ResidentAI._explore_tale)
+			var mid := Vector2.ZERO
+			for i in range(1, ppl.size()):
+				mid += Vector2(ppl[i].x, ppl[i].y)
+			mid /= maxf(1.0, float(ppl.size() - 1))
+			for i in ppl.size():
+				var p := ppl[i]
+				var talking: bool = not cur.is_empty() and int(cur[0]) == i
+				var dp := {"look": mid if i == 0 else Vector2(a.x, a.y), "face": "talking" if talking else ("happy" if i > 0 else ""),
+					"anim": "chat" if talking else "idle", "w": w}
+				if i > 0 and not talking and not cur.is_empty() and int(cur[0]) == 0 and _says.has(a.id):
+					_listen(dp, a, lt, String(cur[2]) if cur.size() > 2 else "")
+				_pose(p, dp)
 		"sulk":
 			_pose(a, {"look": Vector2(a.x, a.y) * 2.0 - Vector2(b.x, b.y), "face": "sad", "anim": "idle", "w": w})
 			_pose(b, {"look": Vector2(b.x, b.y) * 2.0 - Vector2(a.x, a.y), "face": "sad", "anim": "idle", "w": w})

@@ -81,6 +81,7 @@ var altar_view: AltarView       # 모닥불 곁 돌 제단 (기획서 11.1 · 6.
 var manna_fx: MannaFx           # 하늘 낟알이 쏟아지는 연출 (view/manna_fx.gd)
 var tremor_fx: TremorFx         # (A28b) 땅 흔들림 — 먼지·달그락·깨진 항아리 (view/tremor_fx.gd)
 var fireflies: Fireflies        # (E3-17) 여름밤 반딧불이 (view/fireflies.gd)
+var explore_camps: ExploreCamps  # (Q42) 집에서 먼 탐험가의 밤 야영 불빛 (view/explore_camps.gd)
 var _props: Node3D
 var _prop_key := ""
 var _lily_node: Node3D          # 수련·연꽃 (따로 — 수면이 오르내리면 높이만 다시)
@@ -326,6 +327,8 @@ func sync(dt: float, force := false) -> void:
 			_yard.position = tremor_fx.wobble()
 	if fireflies != null:
 		fireflies.sync(dt)
+	if explore_camps != null:
+		explore_camps.sync(dt)
 	sync_prof["frame"] = Engine.get_process_frames()
 	sync_prof["all"] = (Time.get_ticks_usec() - s0) / 1000.0
 	sync_prof["flora_lod"] = (s2 - s1) / 1000.0
@@ -2839,6 +2842,8 @@ func _build_fire() -> void:
 	add_child(tremor_fx)
 	fireflies = Fireflies.new(v, self)
 	add_child(fireflies)
+	explore_camps = ExploreCamps.new(v, self)
+	add_child(explore_camps)
 
 
 func _animate_fire() -> void:

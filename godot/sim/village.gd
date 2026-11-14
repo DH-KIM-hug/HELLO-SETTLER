@@ -4292,6 +4292,25 @@ func _see_trees(p: Vector2, rad: float, who: Resident) -> void:
 			speak(who, TREE_SAY, 8)
 		emit(&"great_tree_seen", {"who": who.id if who != null else -1, "at": c, "v": {"kind": kind, "name": String(gt["name"]), "first": first}})
 		_reveal_at(c, float(gt["r"]) + 8.0, null, true)     # 나무 둘레가 보이게 (곁의 호수 · 강도 그 자리에서 — 이 나무는 이미 '본 것')
+		if who != null and explore_goal_on():
+			_explore_saw(who, kind, c, float(gt["r"]))       # (Q42) 탐험가 자리 → 나무까지 띠 · 이번 길의 이야깃거리
+
+
+## (Q42 2026-11-14) 큰 나무를 처음 본 탐험가: 그 자리에서 나무 줄기 둘레까지 EXPLORE_BAND 띠로 안개를 걷는다 (섬이 아니라 지나온 길로 읽히게) ·
+## 이번 탐험 기록 줄(explore_log)에 "saw" — 돌아와 모닥불 곁에서 들려줄 나무 (ResidentAI.tale_line). 목표를 갖고 나서는 때(첫 20일 뒤)만
+func _explore_saw(who: Resident, kind: String, c: Vector2, tr: float) -> void:
+	if explore_goals.has(str(who.id)):
+		for i in range(explore_log.size() - 1, -1, -1):
+			var e: Dictionary = explore_log[i]
+			if int(e.get("who", -1)) == who.id:
+				if String(e.get("saw", "")) == "":
+					e["saw"] = kind
+				break
+	var from := Vector2(who.x, who.y)
+	var to := c + (from - c).normalized() * tr * 0.5 if from.distance_to(c) > tr else c
+	var n := int(from.distance_to(to) / WorldWater.FOG)
+	for i in n + 1:
+		_reveal_at(from.lerp(to, float(i) / maxf(1.0, float(n))), Balance.EXPLORE_BAND, who, true)
 
 
 ## (2026-11-11 Q7-c) 첫 며칠 먹을 것이 바닥나 가면 안개 너머를 살피러 새로 떠나지 않는다 — 그 어른은 나르고 짓는다 (이미 떠난 사람은 다녀온다).
