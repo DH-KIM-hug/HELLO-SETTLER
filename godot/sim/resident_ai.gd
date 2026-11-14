@@ -57,6 +57,9 @@ static func run_op(v: Village, r: Resident, o: Variant) -> void:
 	if n.begins_with("fruit_"):          # (E3-3) 거대한 열매 자르기·나르기 (sim/great_trees.gd)
 		GreatTrees.run_op(v, r, d)
 		return
+	if n.begins_with("tuse_"):           # (Q40) 큰 나무 나들이 — 닿음 · 긁기 · 줍기 · 내려놓기 (sim/tree_uses.gd)
+		TreeUses.run_op(v, r, d)
+		return
 	if n.begins_with("kit_"):            # 진딧물 목장 톡톡·큰 알 굴리기 (sim/kitchen.gd — E3-14)
 		Kitchen.run_op(v, r, d)
 		return

@@ -109,7 +109,7 @@ const FEAST_LINE := {
 }
 ## 잔치에 부르지 않는 행동 (위기·곰팡이 대응, 앓는 중, 아기 돌봄 밖 연출)
 const BUSY_PREFIX := ["crisis_", "mold_", "skywatch"]
-const BUSY := ["sick", "baby", "dand_ride"]
+const BUSY := ["sick", "baby", "dand_ride", "tree_trip"]     # (Q40) 큰 나무 나들이 중인 사람은 잔치가 데려가지 않음 (돌아와 내려놓기 전)
 
 
 # ───────────────────────── 한 걸음 ─────────────────────────

@@ -1197,8 +1197,9 @@ func run_op(v: Village, r: Resident, o: Dictionary) -> void:
 		"crisis_smoke":
 			if float(v.stock.get("통나무", 0.0)) < Balance.GNAT_SMOKE_LOG:
 				return
-			v.stock["통나무"] = float(v.stock["통나무"]) - Balance.GNAT_SMOKE_LOG
-			smokes.append({"x": float(o["x"]), "y": float(o["y"]), "until": v.t + Balance.GNAT_SMOKE_TIME})
+			var resin := TreeUses.use_resin(v)   # (Q40) 송진을 섞은 모깃불 — 연기가 오래 머물고 통나무를 덜 씀 (송진이 없으면 예전 그대로)
+			v.stock["통나무"] = float(v.stock["통나무"]) - Balance.GNAT_SMOKE_LOG * (Balance.RESIN_SMOKE_LOG if resin else 1.0)
+			smokes.append({"x": float(o["x"]), "y": float(o["y"]), "until": v.t + Balance.GNAT_SMOKE_TIME * (Balance.RESIN_SMOKE if resin else 1.0)})
 			v.air.smoke = minf(1.0, v.air.smoke + Balance.GNAT_SMOKE_AIR)      # 연기는 닫힌 병에 갇힌다
 			stats["smokes"] += 1
 			r.skills["연기 피우기"] = minf(Balance.SKILL_MAX, float(r.skills.get("연기 피우기", 0.0)) + 0.15 * r.talent)

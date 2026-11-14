@@ -23,6 +23,7 @@ const LOAD_OF := {
 	"돌": "stone", "철광석": "stone", "석탄": "stone", "철": "stone", "도구": "tools", "물": "water",
 	"낟알": "grain", "건량": "grain", "소금": "grain", "씨앗": "grain", "과일": "fruit", "생선": "fish", "고기": "meat",
 	"솜": "cotton", "비단 실": "silk", "단물": "jar", "꿀": "jar", "죽": "jar",
+	"송진": "jar", "단풍 단물": "jar",     # (Q40) 큰 소나무 송진 · 큰 단풍나무 단물은 단지에 (은행알은 바구니 — 표에 없음)
 }
 const LOAD_ELSE := "basket"
 ## 품에 안은 아기 (v13, 2026-11-10): 짐 이름 자리에 이 표시를 넣으면 아기 그림 (frames.json loads의 "baby" — 보기마다 한 장).

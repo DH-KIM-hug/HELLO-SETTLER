@@ -1044,6 +1044,7 @@ func step(dt: float) -> void:
 		if owns_water:
 			GreatTrees.hourly(self)   # 과일나무의 거대한 열매 (GD 3.0 — 병 하나에 한 번)
 		GreatTrees.fetch(self)        # (E3-3) 닿는 곳의 열매를 여럿이 주우러 감
+		TreeUses.hourly(self)         # (Q40) 본 큰 나무 넷까지 나들이 · 단풍 엿 잔치 (sim/tree_uses.gd — 첫 20일은 아무것도 안 함)
 		GiantPlants.hourly(self)      # 해바라기 철·씨앗비 날·목화 (flower-forest R3·R4)
 		LeanSeasons.hourly(self)      # 빠듯한 철이 오고 감을 알림 · 애벌레 떼 (BALANCE B-1)
 		Kitchen.hourly(self)          # 우유·계란 없는 부엌 — 진딧물 목장·큰 알·씨앗 방앗간 (E3-14 — sim/kitchen.gd)
@@ -1366,6 +1367,7 @@ func _update_happiness() -> void:
 	var gm := Balance.GRIEF_GRAVE if gyd != null else 1.0
 	var cheer := {}               # 집 → 그 집 '명랑' 식구 몫의 합
 	var pebble := JarDeco.plaza_bonus(self)              # (Q32) 광장 조약돌 (없으면 0)
+	var tuse_h := TreeUses.happy(self)                   # (Q40) 큰 나무 나들이 (없으면 0)
 	for p in people:
 		var hh := p.f("house_happy", 0.0)
 		if hh != 0.0 and p.home >= 0:
@@ -1390,6 +1392,7 @@ func _update_happiness() -> void:
 		h += Wildlife.happy(self, p)                      # [들짐승] 물가에서 낚싯대를 드리운 날 (WILDLIFE 2)
 		h += FoundObjects.happy(self, p)                  # [떨어진 물건] 잔치 각설탕이 있는 동안 아이들 (E3-16)
 		h += Immigrants.mood(self)                        # [이주민] 축제처럼 맞이 ↑ · 경계 ↓ (기획서 11.2 — 하루 동안)
+		h += tuse_h                                       # (Q40) 벚꽃 나들이 뒤 · 단풍 엿 잔치 (sim/tree_uses.gd — 없으면 0)
 		if pebble > 0.0 and JarDeco.near_plaza(self, p):
 			h += pebble                                   # (Q32) 광장 조약돌 — 집이 광장 곁인 사람만, 아주 조금 (Balance.DECO_PEBBLE_HAPPY 상한)
 		h += Balance.FEAR_HAPPY * p.fear                  # 행복 −0.1 × 두려움 (HEALTH.md 4)
@@ -3840,6 +3843,7 @@ var explore_seen: Dictionary = {}     # 처음 본 큰 나무 kind → 병 시�
 var explore_v := 0                    # 1 = explore_seen을 쓰는 판
 var explore_hero: Dictionary = {}     # 처음 세상 끝 유리벽에 닿은 탐험가 {id, name, t}
 var explore_log: Array = []           # 최근 탐험 [{t, goal, d}] (Balance.EXPLORE_LOG_MAX까지 — 측정 · 시험)
+var tree_use: Dictionary = {}         # (Q40) 큰 나무 넷의 쓰임 — 나들이 상태 · 처음 쓴 때 · 철마다 횟수 · 기록 (sim/tree_uses.gd · 저장은 이름 그대로)
 var peers: Array = []                 # 같은 세상의 모든 무리 (자기 포함 — JarWorld가 채움)
 var kit: Dictionary = {}
 
