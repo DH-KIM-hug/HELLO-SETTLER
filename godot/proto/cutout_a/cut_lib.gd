@@ -19,7 +19,7 @@ const NSLOT := 11
 ## 걸음을 멈춘 큰 보폭 자세에 작은 들썩임만 (CutoutResident.walk_rate가 고름)
 ## lookup = 서서 하늘을 올려다보고 한 팔로 위를 가리킴 (2026-11-08 수첩 쪽지 7 "아이들이 자꾸 하늘을 올려다보네" — 끝에 덧붙여 앞 번호는 그대로)
 ## reap = 낫질 (Q8 밀 거두기, 2026-11-11): 허리를 숙이고 작은 낫을 앞으로 내밀었다 당겨 벰 — 끝에 덧붙여 앞 번호는 그대로
-## wave = 한 팔을 머리 옆으로 높이 들고 좌우로 흔듦 (Q33, 2026-11-14 — 맞이 · 돌아옴 반김 · 깨달은 뒤 톡 반응. 끝에 덧붙여 앞 번호는 그대로)
+## wave = 한 팔을 옆으로 들어 손을 머리 옆에서 좌우로 흔듦 (Q33 · Q33b 제 길이 팔, 2026-11-14 — 맞이 · 돌아옴 반김 · 깨달은 뒤 톡 반응. 끝에 덧붙여 앞 번호는 그대로)
 ## walkwave = 걸으며 손 흔들기 (wave 바로 뒤 — 셰이더는 wave_clip과 그다음 번호를 흔드는 팔로 봄). 빠르기는 걷기처럼 땅 빠르기에 맞춤
 const CLIPS := ["idle", "walk", "carry", "hoe", "hold", "sit", "eat", "sleep", "kneel", "gather", "travel", "lookup", "reap", "wave", "walkwave"]
 const CLIP_RATE := {"idle": 0.35, "walk": 0.9, "carry": 0.75, "hoe": 0.6, "hold": 0.35, "sit": 0.3, "eat": 0.4, "sleep": 0.22,
@@ -737,46 +737,34 @@ static func _pose(clip: String, v: int, t: float) -> Array:
 	return a
 
 
-## (Q33, 2026-11-14) 손 흔들기: 한 팔을 머리 옆으로 높이 들고 (팔꿈치는 머리 옆 · 손은 머리 꼭대기 높이) 아래팔을 팔꿈치에서
-## 좌우로 크게 흔듦 — 한 주기 = 한 번 왔다 갔다 (CLIP_RATE: 2초에 세 번 가까이). 기본 확대(어른 키 ≈ 폰 화면 50px)에서도 읽히게 과장:
-## 아래팔을 조금 늘이고(WAVE_REACH), 흔드는 폭이 큼. 큰 머리 뒤로 숨지 않게 팔꿈치를 머리 옆선 밖으로 (어깨는 머리에 가려 있으므로
-## 소매를 옮겨도 떨어져 보이지 않음). 흔드는 팔 = 지팡이를 쥐지 않은 팔 (노인 몸 g의 지팡이는 앞·뒤 보기에서 팔 a, 비스듬한 뒤에서 b).
-## 몸은 흔드는 쪽 반대로 살짝 기울고 조금 들썩임 — 차분하게 (뛰지 않음). 서서 흔들기는 앞 보기로만 (CutoutResident.FRONT_ONLY),
-## 걸으며 흔들기(walkwave)는 비스듬한 보기에서 소매를 어깨에 둔 채 아래팔만 늘여 머리 옆으로.
-const WAVE_ELBOW := Vector2(145.0, 640.0)     # 묶음 a 앞 보기의 팔꿈치 자리 (바깥쪽 = +, rig)
-const WAVE_REACH := 220.0                     # 팔꿈치 → 손 (rig — 그린 아래팔의 약 1.5배)
-const WAVE_TILT := 0.6                       # 세운 아래팔이 바깥으로 기운 가운데 각 (rad)
-const WAVE_SWING := 0.45                      # 흔드는 폭 (± rad)
-## 몸마다 흔드는 아래팔을 더 올리는 만큼 (rig, 앞 보기만 — 동작 표의 묶음 칸 소품 자리에 실어 셰이더가 더함).
-## 아이 몸 f는 어깨가 낮고 머리가 커서 그대로면 손이 귀 높이에 머묾 → 크게 올림 (2026-11-14 메인 검토 "아이 손이 머리 위로")
-const WAVE_LIFT := {"a": Vector2(0, 0), "b": Vector2(0, 0), "c": Vector2(0, 0), "d": Vector2(0, 0), "e": Vector2(0, 0), "f": Vector2(0, 100), "g": Vector2(0, 0)}
-const WAVE_SLEEVE := 2.4                      # 소매(위팔) 돌림 — 바깥 위로
+## (Q33, 2026-11-14 · Q33b 다시) 손 흔들기: 한 팔을 옆으로 들어 (어깨 → 소매가 바깥 위로 → 팔꿈치에서 아래팔을 세워 손이 귀·관자놀이 높이)
+## 아래팔을 팔꿈치에서 좌우로 흔듦 — 한 주기 = 한 번 왔다 갔다 (CLIP_RATE: 2초에 세 번 가까이).
+## Q33b (2026-11-14 사용자 "팔이 길쭉 · 어색함, 잘린것처럼 보임"): 아래팔 늘이기·소매 옮기기를 없애고 그린 조각을 제 어깨·팔꿈치에서
+## 돌리기만 함 → 몸마다 소매 · 아래팔 · 손이 한 줄로 이어지고 길이는 다른 동작과 같음. 손은 머리 뒤가 아니라 머리 옆선 바깥에.
+## 흔드는 팔 = 지팡이를 쥐지 않은 팔 (노인 몸 g의 지팡이는 앞·뒤 보기에서 팔 a, 비스듬한 뒤에서 b).
+## 몸은 흔드는 쪽 반대로 살짝 기울고 조금 들썩임 — 차분하게 (뛰지 않음). 서서 흔들기는 앞 보기로만 (CutoutResident.FRONT_ONLY).
+const WAVE_SLEEVE := 2.5                     # 소매(위팔) 돌림 — 바깥으로 거의 가로 (조금 위)
+const WAVE_SLEEVE_SIDE := 1.7                 # 비스듬한 앞 보기의 소매 돌림 (걸으며 흔들기)
+const WAVE_TILT := 0.72                        # 세운 아래팔이 세로에서 바깥으로 기운 가운데 각 (rad)
+const WAVE_TILT_SIDE := 1.05                  # 비스듬한 앞 보기: 바깥(= 얼굴이 향한 쪽)으로 더 눕혀 손이 얼굴 앞을 지나 바깥에 (덜 눕히면 얼굴을 가로지름)
+const WAVE_SWING := 0.33                      # 흔드는 폭 (± rad, 팔꿈치에서)
+## 몸마다 흔드는 아래팔을 더 올리는 만큼 — Q33b부터 모두 0 (올리면 소매에서 떨어져 보임). 동작 표의 묶음 칸 소품 자리라 표만 남김
+const WAVE_LIFT := {"a": Vector2.ZERO, "b": Vector2.ZERO, "c": Vector2.ZERO, "d": Vector2.ZERO, "e": Vector2.ZERO, "f": Vector2.ZERO, "g": Vector2.ZERO}
 
 
 static func _wave(a: Array, v: int, side: bool, w: float, s: float, body := true) -> void:
 	# 앞·뒤·비스듬한 앞: 그림 오른쪽 팔(b) · 비스듬한 뒤: a — 지팡이를 쥐지 않은 팔, 그림에서 머리 오른쪽(바라보는 앞) 어깨.
-	# (비스듬한 보기의 가까운 팔 a는 어깨가 머리 뒤쪽이라 들면 얼굴을 가로지름 — 2026-11-14 캡처 walk3)
 	var arm := "a" if v == 2 else "b"
 	var out := -1.0 if v == 2 else 1.0                 # 화면에서 바깥쪽
-	var rot := (WAVE_SLEEVE if not side else 1.5) * out
+	var rot := (WAVE_SLEEVE if not side else WAVE_SLEEVE_SIDE) * out
 	var g: Array = _arm_geo(v, "a")[arm]
-	var sh: Vector2 = g[0]
-	var el: Vector2 = g[1]
-	var hd: Vector2 = g[2]
-	var et := Vector2(WAVE_ELBOW.x * out, WAVE_ELBOW.y)
-	var tr := et - (sh + (el - sh).rotated(rot))
-	if side:
-		tr = Vector2.ZERO          # 비스듬한 보기: 소매는 어깨에 그대로 (옮기면 노인의 큰 소매가 떠 보임) — 아래팔을 늘여 머리 옆으로
-		et = sh + (el - sh).rotated(rot)
-	var d := hd - el
-	var wf := sqrt(maxf(WAVE_REACH * WAVE_REACH - d.x * d.x, 1.0)) / maxf(absf(d.y), 1.0)
-	var dw := Vector2(d.x, d.y * wf)
-	var ang := WAVE_TILT + WAVE_SWING * s                  # 세로에서 바깥으로
+	var d: Vector2 = g[2] - g[1]                       # 그린 아래팔 (팔꿈치 → 손)
+	var ang := (WAVE_TILT_SIDE if side else WAVE_TILT) + WAVE_SWING * s      # 세로에서 바깥으로
 	var want := Vector2(sin(ang) * out, cos(ang))
-	var tot := want.angle() - dw.angle()
+	var tot := want.angle() - d.angle()
 	var si := 3 if arm == "a" else 4
-	a[si] = Vector4(rot, tr.x, tr.y, 1)
-	a[si + 2] = Vector4(wrapf(tot - rot, -PI, PI), 0, 0, wf)
+	a[si] = Vector4(rot, 0, 0, 1)
+	a[si + 2] = Vector4(wrapf(tot - rot, -PI, PI), 0, 0, 1)
 	if not body:
 		return                                             # (walkwave) 몸·다리·다른 팔은 걸음 그대로
 	a[1] = Vector4(-0.03 * out + 0.012 * s * out, 0, 2.5 * absf(sin(w)), 1)      # 흔드는 쪽 반대로 살짝 · 작은 들썩임

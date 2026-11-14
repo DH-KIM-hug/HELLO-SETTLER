@@ -1669,41 +1669,64 @@ func test_wave() -> void:
 	var high := true
 	var wide := true
 	var cane := true
+	var reach := true
+	var joint := true
 	var note := ""
-	for sn: String in ["a", "e", "f", "g"]:
+	# (Q33b, 2026-11-14 사용자 "팔이 길쭉 · 어색함, 잘린것처럼 보임") 늘이지 않은 제 길이 팔을 어깨에서 옆으로 들어 —
+	# 손은 머리 옆선 바깥 · 귀/뺨~관자놀이 높이, 팔 길이(어깨 → 손)는 서 있기와 ±10% 안, 소매 · 아래팔은 옮기거나 늘이지 않음 (이음매 그대로)
+	for sn: String in Lib.SETS:
 		var so: Array = L["head_socket"][sn + "_front"]
 		var chin := Vector2(so[0], so[1])
 		var hk: float = L["head_k"][Lib.SETS.find(sn)]
 		var top := 0.0
+		var side_x := 0.0
 		for q: Dictionary in L["quads"]:
 			if q["set"] == sn and int(q["view"]) == 0 and q["part"] == "head":
 				top = maxf(top, float(q["rect"][3]))
-		var head_top := chin.y + top * hk
+				side_x = maxf(side_x, float(q["rect"][2]))
+		var head_h := top * hk
+		side_x = chin.x + side_x * hk                        # 머리 옆선 (그림 오른쪽)
+		var shoulder: Vector2 = Lib._arm_geo(0, sn)["b"][0]
+		var rest_len := Lib._hand_local(Lib._pose("idle", 0, 0.0), 0, "b", sn).distance_to(shoulder)
 		var lo := INF
 		var hi := -INF
 		var xmin := INF
 		var xmax := -INF
+		var rmin := INF
+		var rmax := -INF
 		var flips := 0
 		var last := 0.0
 		var rest := Lib._hand_local(Lib._pose("idle", 0, 0.0), 0, "a", sn)
 		for f in Lib.FRAMES:
 			var a: Array = Lib._pose("wave", 0, float(f) / Lib.FRAMES)
-			var h: Vector2 = Lib._hand(a, 0, "b", sn) + Lib.WAVE_LIFT[sn]          # 셰이더가 몸마다 더 올리는 만큼 (아이)
+			var h: Vector2 = Lib._hand_local(a, 0, "b", sn)
 			lo = minf(lo, h.y)
 			hi = maxf(hi, h.y)
 			xmin = minf(xmin, h.x)
 			xmax = maxf(xmax, h.x)
-			var dx := h.x - Lib._hand(Lib._pose("wave", 0, float(f + 1) / Lib.FRAMES), 0, "b", sn).x
+			var r := h.distance_to(shoulder) / rest_len
+			rmin = minf(rmin, r)
+			rmax = maxf(rmax, r)
+			var dx := h.x - Lib._hand_local(Lib._pose("wave", 0, float(f + 1) / Lib.FRAMES), 0, "b", sn).x
 			if last != 0.0 and signf(dx) != signf(last):
 				flips += 1
 			last = dx
 			cane = cane and Lib._hand_local(a, 0, "a", sn).distance_to(rest) < 30.0
-		# 손은 늘 머리 높이의 위쪽 반 (턱 → 머리 꼭대기의 반 넘게) · 가장 높을 땐 머리 꼭대기 언저리 (어른·아이 = 꼭대기 높이 — 아이는 WAVE_LIFT로 더 올림, 노인은 조금 아래), 흔드는 폭은 머리 폭의 반쯤
-		high = high and lo > chin.y + 0.5 * (head_top - chin.y) and hi > head_top - (0.3 if sn == "g" else 0.1) * (head_top - chin.y)
-		wide = wide and xmax - xmin > 85.0 and flips >= 2
-		note += "%s 손 %.0f~%.0f (턱 %.0f · 꼭대기 %.0f) 폭 %.0f · " % [sn, lo, hi, chin.y, head_top, xmax - xmin]
-	check(high, "wave 앞 보기: 손을 머리 옆으로 높이 (어른·아이·노인) %s" % note)
-	check(wide, "wave 앞 보기: 아래팔을 좌우로 크게 흔듦 (한 주기에 한 번 왔다 갔다) %s" % note)
+		high = high and lo > chin.y + 0.05 * head_h and hi > chin.y + 0.2 * head_h and hi < chin.y + 0.7 * head_h and xmax > side_x
+		wide = wide and xmax - xmin > 30.0 and flips >= 2          # 노인(g)은 큰 소매라 폭이 가장 작음 (≈ 39)
+		reach = reach and rmin > 0.9 and rmax < 1.1
+		note += "%s 손 높이 %.2f~%.2f (머리 높이 비) · 바깥 %.0f (옆선 %.0f) · 폭 %.0f · 길이 %.2f~%.2f / " % [sn, (lo - chin.y) / head_h, (hi - chin.y) / head_h, xmax, side_x, xmax - xmin, rmin, rmax]
+	for clip: String in ["wave", "walkwave"]:
+		for v in 2:
+			for f in Lib.FRAMES:
+				var a: Array = Lib._pose(clip, v, float(f) / Lib.FRAMES)
+				for si in [4, 6]:
+					var q: Vector4 = a[si]
+					joint = joint and is_zero_approx(q.y) and is_zero_approx(q.z) and is_equal_approx(q.w, 1.0)
+	check(high, "wave 앞 보기: 손을 머리 옆선 바깥, 귀·뺨~관자놀이 높이로 (어른·아이·노인) %s" % note)
+	check(wide, "wave 앞 보기: 아래팔을 팔꿈치에서 좌우로 흔듦 (한 주기에 한 번 왔다 갔다 · 폭은 위 기록)")
+	check(reach, "wave 앞 보기: 팔 길이(어깨 → 손)가 서 있기와 ±10% 안 (늘이지 않음)")
+	check(joint, "wave · walkwave: 소매 · 아래팔은 돌리기만 (옮기거나 늘이지 않음 → 어깨 · 팔꿈치 이음매가 떨어지지 않음)")
 	check(cane, "wave: 다른 팔(노인은 지팡이 쥔 팔)은 쉬는 자리 그대로")
 	# 뒤쪽 보기(비스듬한 뒤 · 뒤)에선 든 팔이 몸에서 떨어져 보임 → 서서 흔들기 = 서 있기, 걸으며 흔들기 = 그냥 걸음 (2026-11-14 메인 검토)
 	var back_ok := true
@@ -1713,8 +1736,8 @@ func test_wave() -> void:
 			back_ok = back_ok and str(Lib._pose("wave", v, t)) == str(Lib._pose("idle", v, t)) and str(Lib._pose("walkwave", v, t)) == str(Lib._pose("walk", v, t))
 	var lift_ok := true
 	for sn: String in Lib.SETS:
-		lift_ok = lift_ok and Lib.WAVE_LIFT.has(sn)
-	check(back_ok and lift_ok, "wave · walkwave: 뒤쪽 보기에선 팔을 들지 않음 (서 있기 · 걸음 그대로) · 몸마다 올림 값")
+		lift_ok = lift_ok and Lib.WAVE_LIFT.has(sn) and (Lib.WAVE_LIFT[sn] as Vector2).is_zero_approx()
+	check(back_ok and lift_ok, "wave · walkwave: 뒤쪽 보기에선 팔을 들지 않음 (서 있기 · 걸음 그대로) · 몸마다 더 올리지 않음 (Q33b — 올리면 소매에서 떨어짐)")
 	# 인형 대응: 연출의 anim "wave" · 톡 반응의 react_hint "wave" → wave 동작, 짐은 그림에서 내려 둠 · 앉기·일은 그대로
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 33
