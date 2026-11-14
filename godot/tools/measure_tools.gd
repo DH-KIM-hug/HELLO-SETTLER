@@ -35,6 +35,8 @@ var helps := 0
 var gravel: Array = []        # (Q26 stone) [병 날, 값] — 자갈 한 알
 var last_gravel := -1.0e9
 var digests := {}
+var dump_mid := ""           # (Q36) 덤프 파일을 주면 병 150일에도 <덤프>.d150 에 (한 번)
+var diag := {}               # (Q36) 날 → 일손이 남을 때 규칙이 무엇에 막혔나 · 자원 (읽기만)
 var extra := {}              # (Q26) 날 → [판자, 돌, 짓는 터, 땅이 품는 인구, 영역 반지름, 일터 종류별 수]
 
 
@@ -48,6 +50,7 @@ func _initialize() -> void:
 	var days := int(args[4]) if args.size() > 4 else 200
 	step = float(args[5]) if args.size() > 5 else 30.0
 	var dump := args[6] if args.size() > 6 else ""       # (Q26) 끝난 세상을 이 파일에 (var_to_bytes) — tools/shot_spare_hands.gd가 읽음
+	dump_mid = dump
 	for s in range(s0, s1 + 1):
 		_run(s, days)
 		if dump != "":
@@ -77,6 +80,7 @@ func _run(s: int, days: int) -> void:
 	last_gravel = -1.0e9
 	digests = {}
 	extra = {}
+	diag = {}
 	var tapped := 0
 	var dropped := false
 	while v.t < 23.0 * H:                  # 창세의 날 (measure_growth와 같음)
@@ -105,13 +109,18 @@ func _run(s: int, days: int) -> void:
 		if hr == 12:
 			_sample(v)
 		var dn := int(v.t / D + 0.001)
+		if dump_mid != "" and dn == 150 and absf(v.t - dn * D) < 1800.0:
+			var mf := FileAccess.open(dump_mid + ".d150", FileAccess.WRITE)
+			mf.store_buffer(var_to_bytes(jw.to_dict()))
+			mf.close()
+			print("DUMP %s.d150" % dump_mid)
 		if (dn == 20 or dn == 60 or dn == 120) and not digests.has(dn) and absf(v.t - dn * D) < 1800.0:
 			digests[dn] = _digest()
 	_set_step(sdt0)
 	digests[days] = _digest()
 	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "stone_at": stone_at, "helps": helps,
 		"end_pop": v.people.size(), "settlements": jw.settlements.size(), "era": v.era, "notes": int(Market.notes),
-		"starved": int(v.stats["starved"]), "extra": extra, "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
+		"starved": int(v.stats["starved"]), "extra": extra, "diag": diag, "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
 	print("TOOLS " + JSON.stringify(out))
 	for k: int in digests:
 		print("DIGEST seed %d mode %s day %d %s" % [s, mode, k, digests[k]])
@@ -220,7 +229,59 @@ func _sample(v: Village) -> void:
 			types[b.type] = int(types.get(b.type, 0)) + 1
 	extra[int(v.t / D)] = [snappedf(float(v.stock.get("판자", 0.0)), 0.1), snappedf(float(v.stock.get("돌", 0.0)), 0.1), sites,
 		snappedf(v.land_capacity(), 0.1), snappedf(v.territory_r(), 0.1), types]
+	diag[int(v.t / D)] = _diag(v)
 	daily[int(v.t / D)] = [v.people.size(), adults, idle, snappedf(float(v.stock.get("도구", 0.0)), 0.1), jobs, empty, snappedf(fd, 0.01), int(Market.notes), total]
+
+
+## (Q36) 일손이 남을 때 규칙(Village.spare_want)이 오늘 무엇에 막혔나 + 자원 — 읽기만 (난수 · 상태 변경 없음)
+func _diag(v: Village) -> Dictionary:
+	var hands := 0
+	for p in v.people:
+		if ToolShort.idle_hand(v, p):
+			hands += 1
+	var empty := 0
+	for b in v.buildings:
+		if not b.def().get("job", false) or (b.built and b.worker >= 0):
+			continue
+		if b.type == "채석장" and v.quarry_no_rock(b):
+			continue
+		empty += 1
+	var tools := floori(float(v.stock.get("도구", 0.0)))
+	var gate := ""
+	if v.t < Balance.SPARE_FROM_DAY * D:
+		gate = "early"
+	elif hands < Balance.SPARE_IDLE:
+		gate = "hands"
+	elif empty >= maxi(1, tools):
+		gate = "empty>=tools"
+	var why := {}
+	for ty: String in Balance.SPARE_ORDER:
+		var r := "ok"
+		if not VillageEra.can_build(v, ty):
+			r = "era"
+		elif not v._affordable(ty):
+			r = "afford"
+		elif v.has_method("spare_cap") and v.count_type(ty) >= int(v.call("spare_cap", ty)):
+			r = "cap"
+		elif not v.has_method("spare_cap") and Balance.SPARE_CAP.has(ty) and v.count_type(ty) >= int(Balance.SPARE_CAP[ty]):
+			r = "cap"
+		elif not v._spare_useful(ty):
+			r = "useless"
+		why[ty] = r
+	var fish := 0
+	if v.wild != null:
+		for h: Dictionary in v.wild.herds:
+			if h["kind"] == "fish" and not h["gone"]:
+				fish += int(h["n"])
+	var fd := v.food_total() / maxf(1.0, Production.day_need(v))
+	var sap := 0
+	for tr: Dictionary in v.trees:
+		if tr["s"] == "sapling":
+			sap += 1
+	return {"sap": sap, "hands": hands, "empty": empty, "tools": tools, "gate": gate, "why": why, "want": v.spare_want(),
+		"log": snappedf(float(v.stock.get("통나무", 0.0)), 0.1), "plank": snappedf(float(v.stock.get("판자", 0.0)), 0.1),
+		"stone": snappedf(float(v.stock.get("돌", 0.0)), 0.1), "fish": fish, "trees": v._standing_trees(), "fd": snappedf(fd, 0.01),
+		"wild": snappedf(v.wild_food, 1.0), "pop": v.people.size()}
 
 
 ## 경제 지문 — 창고 · 사람(자리 · 일 · 집 · 나이 · 배고픔) · 건물 · 난수 흐름 · 지폐 · 통계(새 신호 값 빼고). 편지 · 연대기 · 말은 넣지 않는다

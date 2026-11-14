@@ -1255,6 +1255,12 @@ const SPARE_IDLE := 4                    # 일터 없는 성한 어른이 이만
 const SPARE_FOOD_DAYS := 3.0             # 밭은 창고 먹을 것이 이 날치 아래일 때만 더
 ## 일손이 남아 더 지을 때 종류마다 마을 전체 수가 이만큼까지 (예전 규칙이 지은 것도 셈). 밭은 SPARE_FOOD_DAYS와 식구 ÷ FARM_FEEDS(6)가 막는다
 const SPARE_CAP := {"어부": 2, "버섯꾼": 2, "나무꾼": 4, "제재소": 3, "산림관": 2}
+## (2026-11-14 Q36) 위 상한은 식구가 SPARE_GROW_FROM 명을 넘으면 SPARE_GROW_PER 명마다 종류마다 하나씩 는다 (Village.spare_cap)
+const SPARE_GROW_FROM := 40
+const SPARE_GROW_PER := 12
+## (Q36) 일손이 남아 예전 상한(SPARE_CAP 나무꾼 4)을 넘어 벌목장을 더 지을 때: 넘는 하나마다 서 있는 나무가 FOREST_MIN에 이만큼 더 (다섯째 55 · 여섯째 70그루).
+## 숲은 마을 가의 바깥 숲뿐이라 (마을 한가운데는 심지 않음 — VillagePlan.plantable) 벌목장이 몰리면 숲이 바닥남 (Q36 측정)
+const SPARE_TREES_PER_CUTTER := 15
 ## 차례 (먹을 것 → 땔감 → 재료)
 const SPARE_ORDER := ["농장", "어부", "버섯꾼", "나무꾼", "제재소", "산림관"]
 # Q27 (2026-11-13 메인 판단 — 사용자 위임): 4~7일차(병 36~84일) 고비 넷 — 일터 스물 · 첫 돌집 · 삼대가 한집에 · 큰 마을 (sim/milestones.gd · 측정 tools/measure_milestones.gd — 서른두 씨앗)

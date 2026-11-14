@@ -2658,11 +2658,19 @@ func spare_want(skip := {}) -> String:
 	for ty: String in Balance.SPARE_ORDER:
 		if skip.has(ty) or not VillageEra.can_build(self, ty) or not _affordable(ty):
 			continue
-		if Balance.SPARE_CAP.has(ty) and count_type(ty) >= int(Balance.SPARE_CAP[ty]):
+		if count_type(ty) >= spare_cap(ty):
 			continue
 		if _spare_useful(ty):
 			return ty
 	return ""
+
+
+## (2026-11-14 Q36) 일손이 남을 때 더 지을 수 있는 그 종류의 마을 전체 수 — 식구가 늘면 같이 는다:
+## SPARE_CAP + (식구 − SPARE_GROW_FROM) ÷ SPARE_GROW_PER (내림 · 0 아래면 0). 상한이 없는 종류(밭)는 아주 큰 수
+func spare_cap(ty: String) -> int:
+	if not Balance.SPARE_CAP.has(ty):
+		return 1 << 30
+	return int(Balance.SPARE_CAP[ty]) + maxi(0, people.size() - Balance.SPARE_GROW_FROM) / Balance.SPARE_GROW_PER
 
 
 ## 일손이 남을 때 이 일터가 쓸모 있나 (spare_want)
@@ -2676,12 +2684,20 @@ func _spare_useful(ty: String) -> bool:
 		"버섯꾼":
 			return flora != null and flora.trust and flora.edible_mature() >= 2
 		"나무꾼":
-			return _standing_trees() >= Balance.FOREST_MIN     # 벨 갈대 · 꽃대가 넉넉할 때만 (모자라면 산림관부터 — 예전 차례)
+			# 벨 갈대 · 꽃대가 넉넉할 때만 (모자라면 산림관부터 — 예전 차례). (Q36) 예전 상한(SPARE_CAP)을 넘는 벌목장은 하나마다 서 있는 나무
+			# SPARE_TREES_PER_CUTTER 그루를 더 (숲이 잠깐 FOREST_MIN을 넘은 틈에 벌목장이 몰려 서서 숲을 베어 버리지 않게 — 예전 상한까지는 그대로)
+			var over := maxi(0, count_type("나무꾼") + 1 - int(Balance.SPARE_CAP["나무꾼"]))
+			return _standing_trees() >= Balance.FOREST_MIN + Balance.SPARE_TREES_PER_CUTTER * over
 		"제재소":             # 켤 통나무가 쌓여 있고 돌이 넉넉할 때만 (병의 돌은 끝이 있다 — 일손 때문에 밭 · 집 몫의 돌을 쓰지 않게)
+			# (Q36) 벌목장보다 적게 · 벨 나무가 서 있을 때만 (숲이 바닥나 통나무가 더 들어오지 않는데 쌓인 통나무만 보고 제재소가 늘지 않게 —
+			# 제재소는 벌목장 곁에 서서 묘목 심을 땅을 줄인다)
 			return float(stock.get("통나무", 0.0)) >= float(Balance.ENOUGH["통나무"]) \
-				and float(stock.get("돌", 0.0)) - _owed("돌") >= float(Balance.ENOUGH["돌"])
+				and float(stock.get("돌", 0.0)) - _owed("돌") >= float(Balance.ENOUGH["돌"]) \
+				and count_type("제재소") < count_type("나무꾼") and _standing_trees() >= Balance.FOREST_MIN
 		"산림관":
-			return count_type("나무꾼") >= 3                  # 벌목장이 늘었으면 묘목원도 하나 더
+			# 벌목장이 늘었으면 묘목원도 하나 더 — (Q36) 벌목장 둘에 묘목원 하나까지 (상한이 식구 따라 늘어도 쉬는 묘목원이 쌓이지 않게),
+			# 숲이 FOREST_MIN 아래로 줄었으면 그 둘을 넘어도 (상한까지 — 심는 손을 늘려 숲을 되살림)
+			return count_type("나무꾼") >= 3 and (count_type("산림관") * 2 < count_type("나무꾼") or _standing_trees() < Balance.FOREST_MIN)
 	return false
 
 
