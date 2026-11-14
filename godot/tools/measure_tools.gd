@@ -81,6 +81,8 @@ func _run(s: int, days: int) -> void:
 	digests = {}
 	extra = {}
 	diag = {}
+	ResidentAI.plant_tries = 0
+	ResidentAI.plant_fails = 0
 	var tapped := 0
 	var dropped := false
 	while v.t < 23.0 * H:                  # 창세의 날 (measure_growth와 같음)
@@ -120,7 +122,8 @@ func _run(s: int, days: int) -> void:
 	digests[days] = _digest()
 	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "stone_at": stone_at, "helps": helps,
 		"end_pop": v.people.size(), "settlements": jw.settlements.size(), "era": v.era, "notes": int(Market.notes),
-		"starved": int(v.stats["starved"]), "extra": extra, "diag": diag, "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
+		"starved": int(v.stats["starved"]), "extra": extra, "diag": diag, "ms": _ms(v),
+		"plant": [ResidentAI.plant_tries, ResidentAI.plant_fails], "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
 	print("TOOLS " + JSON.stringify(out))
 	for k: int in digests:
 		print("DIGEST seed %d mode %s day %d %s" % [s, mode, k, digests[k]])
@@ -281,7 +284,36 @@ func _diag(v: Village) -> Dictionary:
 	return {"sap": sap, "hands": hands, "empty": empty, "tools": tools, "gate": gate, "why": why, "want": v.spare_want(),
 		"log": snappedf(float(v.stock.get("통나무", 0.0)), 0.1), "plank": snappedf(float(v.stock.get("판자", 0.0)), 0.1),
 		"stone": snappedf(float(v.stock.get("돌", 0.0)), 0.1), "fish": fish, "trees": v._standing_trees(), "fd": snappedf(fd, 0.01),
-		"wild": snappedf(v.wild_food, 1.0), "pop": v.people.size()}
+		"wild": snappedf(v.wild_food, 1.0), "pop": v.people.size(), "forest": _forest(v)}
+
+
+## (Q38) 산림관 곁 (2~7칸, 600곳) 중 심을 수 있는 곳 (옛 규칙: 땅 위 · VillagePlan.plantable) · 마을 한가운데 반지름 · 산림관 셈 (누적) — 읽기만 (난수 없음)
+func _forest(v: Village) -> Dictionary:
+	var core := 9.0
+	for b in v.buildings:
+		if b.type in VillagePlan.STREET_TYPES:
+			core = maxf(core, Vector2(b.x, b.y).distance_to(v.fire) + 3.0)
+	var huts: Array = []
+	for b in v.buildings:
+		if b.built and b.type == "산림관":
+			var ok := 0
+			for i in 600:
+				var a := float(i) * 2.399
+				var rr := 2.0 + 5.0 * fmod(float(i) * 0.618034, 1.0)
+				var sp := Vector2(b.x + cos(a) * rr, b.y + sin(a) * rr)
+				if v.water.inside(sp.x, sp.y, 2.0) and not v.water_at(sp.x, sp.y) and VillagePlan.plantable(v, sp):
+					ok += 1
+			huts.append([snappedf(Vector2(b.x, b.y).distance_to(v.fire), 0.1), ok, b.worker >= 0])
+	return {"core": snappedf(core, 0.1), "huts": huts, "tries": ResidentAI.plant_tries, "fails": ResidentAI.plant_fails}
+
+
+## (Q38) 고비 id → 넘은 병 날 (못 넘었으면 -1) — tools/measure_milestones.gd와 같은 셈
+func _ms(v: Village) -> Dictionary:
+	var out := {}
+	var passed: Dictionary = v.milestones.get("passed", {})
+	for id: String in Milestones.ORDER:
+		out[id] = snappedf(float((passed[id] as Dictionary)["t"]) / D, 0.01) if passed.has(id) else -1.0
+	return out
 
 
 ## 경제 지문 — 창고 · 사람(자리 · 일 · 집 · 나이 · 배고픔) · 건물 · 난수 흐름 · 지폐 · 통계(새 신호 값 빼고). 편지 · 연대기 · 말은 넣지 않는다

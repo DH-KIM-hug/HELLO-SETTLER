@@ -18,7 +18,7 @@ func check(ok: bool, what: String) -> void:
 
 func all() -> void:
 	run.timed(self, ["test_plan_layout", "test_graph_connects", "test_route_follows_roads", "test_roads_wear_and_fade", "test_plan_determinism", "test_plan_save_roundtrip",
-		"test_layout_per_world", "test_layout_save_and_legacy"])
+		"test_layout_per_world", "test_layout_save_and_legacy", "test_forester_walks_out"])
 
 
 ## 작은 넓은 세상 + 키트 하나를 n시간 흘린 마을
@@ -371,3 +371,95 @@ func test_layout_save_and_legacy() -> void:
 	check(sp != null and not VillagePlan.blocks(o2, (sp as Vector2).x, (sp as Vector2).y, 1.0), "옛 저장의 새 집도 옛 길 밖 자리")
 	# 작은 시험 병(개발 장면 · 첫 10분 대본 시험)은 옛 모양
 	check(Village.new_prototype().layout_seed == -1, "작은 시험 병은 옛 4갈래 (대본 시험 그대로)")
+
+
+## (Q38) 묘목원이 마을 한가운데(가장 먼 집 + 3칸)에 서 있으면 곁 2~7칸엔 심을 데가 없다 → 산림관이 마을 가 · 바깥 빈 땅으로 걸어가 심는다.
+## 한가운데에는 새 나무가 없고, 길 · 발길 · 집터 · 밭 · 물 · 다른 나무 위가 아니며, 묘목원에서 FORESTER_WALK 안 · 벌목장 쪽
+func test_forester_walks_out() -> void:
+	print("== 산림관: 마을 한가운데면 마을 가로 나가 심음 (Q38)")
+	var v := world_village(3, 0.0)
+	v.chief_off = true
+	for k in ["판자", "돌"]:
+		v.stock[k] = 900.0
+	for i in 16:
+		var ty := "농장" if i % 5 == 4 else "오두막"
+		var sp: Variant = v.find_spot(ty)
+		if sp != null:
+			v.add_building(ty, (sp as Vector2).x, (sp as Vector2).y, true)
+	var core := VillagePlan.core_r(v)
+	# 묘목원 · 벌목장: 한가운데 안쪽 (곁 7칸까지 모두 한가운데)
+	var fb: Building = null
+	var cb: Building = null
+	for i in 400:
+		var a := float(i) * 2.399
+		var rr := 6.0 + float(i % 7)
+		var p := v.fire + Vector2(cos(a), sin(a)) * rr
+		if rr + 7.0 < core and v.is_free(p.x, p.y, 0.9) and not VillagePlan.blocks(v, p.x, p.y, 0.9):
+			if fb == null:
+				fb = v.add_building("산림관", p.x, p.y, true)
+			elif cb == null and p.distance_to(Vector2(fb.x, fb.y)) > 3.0:
+				cb = v.add_building("나무꾼", p.x, p.y, true)
+				break
+	check(fb != null and cb != null, "한가운데(%.1f칸) 안에 묘목원 · 벌목장 (%s · %s)" % [core, fb != null, cb != null])
+	if fb == null or cb == null:
+		return
+	core = VillagePlan.core_r(v)
+	var near_ok := 0
+	for i in 200:
+		var a := float(i) * 2.399
+		var p := Vector2(fb.x, fb.y) + Vector2(cos(a), sin(a)) * (2.0 + 5.0 * fmod(float(i) * 0.618034, 1.0))
+		if VillagePlan.plant_ok(v, p):
+			near_ok += 1
+	check(near_ok == 0, "묘목원 곁 2~7칸에 심을 데 없음 (옛 규칙이면 늘 쉼 — %d/200)" % near_ok)
+	for tr: Dictionary in v.trees:              # 숲이 줄었다 (산림관이 쉬지 않게)
+		tr["s"] = "stump"
+	var wk: Resident = v.people.filter(func(r: Resident) -> bool: return r.is_adult())[0]
+	ResidentAI.cancel(v, wk)
+	fb.worker = wk.id
+	wk.job = fb.id
+	var spots: Array = []
+	var idle := 0
+	for tries in 40:
+		wk.steps.clear()
+		ResidentAI.work_task(v, wk, false)
+		var got := false
+		for st: Dictionary in wk.steps:
+			var dn: Variant = st.get("done")
+			if st["k"] == "do" and dn is Dictionary and String((dn as Dictionary).get("op", "")) == "plant":
+				ResidentAI.run_op(v, wk, dn)          # 심었다 치고 다음 자리를 고른다 (겹치지 않게)
+				spots.append(Vector2(float(dn["x"]), float(dn["y"])))
+				got = true
+		if not got:
+			idle += 1
+	check(spots.size() >= 30, "40번 중 %d번 심음 (쉼 %d)" % [spots.size(), idle])
+	var hut := Vector2(fb.x, fb.y)
+	var cut := Vector2(cb.x, cb.y)
+	var bad := 0
+	var far := 0.0
+	var cd := 0.0
+	var reach := 0
+	for p: Vector2 in spots:
+		if p.distance_to(cut) <= Balance.GATHER_RANGE:
+			reach += 1
+		if p.distance_to(v.fire) < core or v.is_road(p.x, p.y) or v.path_at(p.x, p.y) > 0.0 or VillagePlan.blocks(v, p.x, p.y, 0.6) or v.water_at(p.x, p.y):
+			bad += 1
+		for b in v.buildings:
+			if Vector2(b.x, b.y).distance_to(p) < b.size() + 1.6:
+				bad += 1
+		far = maxf(far, p.distance_to(hut))
+		cd = maxf(cd, p.distance_to(cut))
+	check(bad == 0, "심은 자리 모두 한가운데 밖 · 길 · 발길 · 집터 · 밭 · 물 위가 아님 (어긋남 %d)" % bad)
+	var lim := clampf(core - hut.distance_to(v.fire) + 8.0, Balance.FORESTER_WALK, Balance.FORESTER_WALK_MAX)
+	check(far <= lim + 1e-3, "묘목원에서 %.1f칸까지 (상한 %.0f)" % [far, lim])
+	check(reach * 10 >= spots.size() * 8, "%d/%d그루가 벌목장에서 %.0f칸 안 (나무꾼이 벰 · 가장 먼 것 %.1f칸) — 묘목원 %.1f · 벌목장 %.1f칸 (모닥불에서 · 사이 %.1f칸)" % [reach, spots.size(), Balance.GATHER_RANGE, cd,
+		hut.distance_to(v.fire), cut.distance_to(v.fire), hut.distance_to(cut)])
+	var gap := INF
+	for i in spots.size():
+		for j in range(i + 1, spots.size()):
+			gap = minf(gap, (spots[i] as Vector2).distance_to(spots[j]))
+	check(gap >= Balance.PLANT_GAP - 1e-3, "묘목끼리 %.2f칸 이상 떨어짐" % gap)
+	var in_core := 0
+	for tr: Dictionary in v.trees:
+		if tr["s"] == "sapling" and Vector2(float(tr["x"]), float(tr["y"])).distance_to(v.fire) < core:
+			in_core += 1
+	check(in_core == 0, "한가운데에 새 묘목 없음 (%d)" % in_core)

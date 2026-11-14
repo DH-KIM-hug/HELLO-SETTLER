@@ -10,6 +10,9 @@ class_name ResidentAI
 extends RefCounted
 
 const WORKISH := {"work": true, "haul": true, "build": true, "forage": true}
+## (Q38) 측정용 셈 — 산림관이 심으러 나선 번 · 심을 자리를 못 찾아 쉰 번 (저장 · 지문에 안 들어감, tools/measure_tools.gd가 읽음)
+static var plant_tries := 0
+static var plant_fails := 0
 
 
 static func walk(x: float, y: float) -> Dictionary:
@@ -874,10 +877,15 @@ static func work_task(v: Village, r: Resident, dry: bool) -> bool:
 		r.steps.append(act(120.0, "idle"))
 		return true
 	if b.type == "산림관":
+		plant_tries += 1
 		var sp := near(v, b.x, b.y, 2.0 + v.rng.randf() * 5.0)
-		if not v.water.inside(sp.x, sp.y, 2.0) or v.water_at(sp.x, sp.y) or not VillagePlan.plantable(v, sp):     # [배치] 길·광장·집 앞은 비움
-			r.steps.append(act(45.0, "idle"))
-			return true
+		if not VillagePlan.plant_ok(v, sp):     # [배치] 길·광장·집 앞 · 발길 · 다른 나무 곁은 비움
+			var far: Variant = VillagePlan.plant_spot(v, b)     # (Q38) 곁이 마을 한가운데면 마을 가 · 바깥 빈 땅으로 걸어가 심는다
+			if far == null:
+				plant_fails += 1
+				r.steps.append(act(45.0, "idle"))
+				return true
+			sp = far
 		r.steps.append(walk(sp.x, sp.y))
 		var plant := op("plant", {"x": sp.x, "y": sp.y})
 		r.steps.append(act(float(d["plant"]) / Discovery.plant_mult(v), "work", plant, true))     # 발견 F3 씨앗을 심다 — 두 배 빨리 심음
