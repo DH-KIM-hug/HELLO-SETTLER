@@ -258,6 +258,7 @@ func _ready() -> void:
 	rng.randomize()
 	_setup()
 	GameSettings.get_current().apply()
+	PerfLog.attach(self)             # 폰 성능 기록 (디버그 빌드 + user://perf_log_on 있을 때만)
 
 
 ## 버스·플레이어 (한 번만 — 트리에 들어가기 전에 불려도 되게 처음 쓸 때도 부른다)

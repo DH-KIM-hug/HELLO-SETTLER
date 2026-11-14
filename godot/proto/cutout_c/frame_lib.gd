@@ -52,11 +52,17 @@ static func enabled() -> bool:
 	if spike >= 0:
 		return spike == 1
 	if _env < 0:                     # (Q22 ⑤ X) 환경 변수는 한 번만 읽음 (주민마다 장면마다 불림)
-		_env = 1 if OS.get_environment("NAZAKJI_FRAMES") == "1" else 0
+		_env = 1 if OS.get_environment("NAZAKJI_FRAMES") == "1" or file_flag() else 0
 	return _env == 1
 
 
 static var _env := -1
+## 폰에서 켜고 끄기 (2026-11-15 — 안드로이드 앱엔 환경 변수를 못 줌): 디버그 빌드에서만 이 파일이 있으면 켬, 릴리스는 무시
+const FLAG_FILE := "user://frames_on"
+
+
+static func file_flag(debug := OS.is_debug_build()) -> bool:
+	return debug and FileAccess.file_exists(FLAG_FILE)
 static var _has := {}            # 몸 폴더 → 장면 그림이 있나 (has_body — 파일 찾기를 한 번만)
 
 

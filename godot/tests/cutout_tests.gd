@@ -817,6 +817,11 @@ func test_frames_c() -> void:
 		mapped = mapped and Lib.CLIPS.has(c) and FL.clip_index(CutoutResident.FRAME_CLIPS[c]) >= 0
 	check(mapped, "방식 C: 앉기·먹기·올려다보기·무릎·괭이질·줍기가 장면 그림으로 이어짐 (없는 동작은 컷아웃 그대로)")
 	check(FL.spike != 1 and (OS.get_environment("NAZAKJI_FRAMES") == "1" or not FL.enabled()), "방식 C는 기본 꺼짐")
+	# (2026-11-15) 폰 스위치 파일: 없으면 꺼짐 · 릴리스 빌드는 무시 · 성능 기록도 파일 없으면 안 붙음 · 릴리스 무시
+	check(not FileAccess.file_exists(FL.FLAG_FILE) and not FL.file_flag() and not FL.file_flag(false),
+		"방식 C 폰 스위치 user://frames_on 기본 없음 · 릴리스 무시")
+	check(not FileAccess.file_exists(PerfLog.FLAG) and not PerfLog.wanted() and not PerfLog.wanted(false),
+		"성능 기록 user://perf_log_on 기본 꺼짐 · 릴리스 무시")
 	# (Q16, 2026-11-11) 낫질도 장면 그림: 네 보기 모두 · 장면마다 낫 자리 (한 손 — 쥐는 자리 0) · 비스듬한 보기와 뒤 보기는 낫 그림을 뒤집음 (배율 음수),
 	# 디딘 발은 괭이질과 같은 자리 (걷다가 낫질로 바뀔 때 발·키가 튀지 않게: 신 자리 · 그림 배율은 모든 동작이 한 틀)
 	check(CutoutResident.FRAME_CLIPS.get("reap", "") == "reap" and FL.clip_index("reap") >= 0 and Lib.CLIP_RATE.has("reap")
