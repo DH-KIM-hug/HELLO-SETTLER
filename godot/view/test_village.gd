@@ -523,6 +523,10 @@ func update_night() -> void:
 	ToonFade.set_night(night)          # 엷어지는 윗부분 (반투명 — 화면 셰이더 뒤)
 	Campfire.apply_glow(post_mat, night)   # [모닥불] 불빛 웅덩이 (view/campfire.gd)
 	glass.set_night(night)
+	var tn := String(JarDeco.home(village).deco.get("tint", ""))     # (Q37) 유리 빛깔 — 병 안에서도 벽 · 화면 가장자리 유리가 옅게 물듦 (바뀔 때만 재질 값 — 화면 한 장 더 없음)
+	if tn != glass.tint_name:
+		glass.set_tint(tn)
+		post_mat.set_shader_parameter("arc_col", JarGlass.arc_color(tn))
 	terrain.set_night(night)          # 폭포·물안개 (반투명 — 화면 셰이더 뒤)
 
 

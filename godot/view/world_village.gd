@@ -661,7 +661,7 @@ func refresh_shelf() -> void:
 		hi = maxf(hi, float(s["x"]))
 		if float(s["x"]) != 0.0:
 			others.append({"x": s["x"], "id": s["id"], "empty": s["empty"], "era": int((s["info"] as Dictionary).get("era", 0)),
-				"preview": (s["info"] as Dictionary).get("preview", {})})
+				"preview": (s["info"] as Dictionary).get("preview", {}), "deco": (s["info"] as Dictionary).get("deco", {})})     # (Q37) 옆 병의 꾸미기
 	if room_zoom != null:
 		room_zoom.room.set_shelf_jars(others)
 		room_zoom.room.set_souvenirs(shelf_souvenirs())        # [기념품 Q17] 옆 병이 바뀌면 기념품 자리도 다시

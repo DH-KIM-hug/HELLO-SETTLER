@@ -26,7 +26,7 @@ func all() -> void:
 	var old_aware := Village.start_aware
 	Village.start_aware = true
 	run.timed(self, ["test_unlock", "test_pebble", "test_pebble_happy", "test_jar_items", "test_undo", "test_save", "test_sheet",
-		"test_room_look", "test_words", "test_unhelped_same"])
+		"test_room_look", "test_words", "test_unhelped_same", "test_q37_icons", "test_q37_hand_line", "test_q37_summary", "test_q37_shelf", "test_q37_glass"])
 	Village.start_aware = old_aware
 	Market.reset(old_notes)
 	Market.hand = old_hand
@@ -368,3 +368,84 @@ func test_unhelped_same() -> void:
 	check(d.has("deco") and (d["deco"] as Dictionary).is_empty() and not v.shop_open.has("꾸미기"),
 		"아무것도 안 산 마을: 꾸미기 칸은 비어 있고 shop_open도 그대로 (60일 지문은 tools/sim_digest.gd drop=deco)")
 	check(is_equal_approx(JarDeco.plaza_bonus(v), 0.0) and not JarDeco.blocks(v, v.fire.x + 4.0, v.fire.y, 1.0), "조약돌이 없으면 행복 · 짓는 자리에 아무 영향 없음")
+
+
+# ───────────────────────── Q37 — 아이콘 · 아래 띠 · 타이틀/선반의 병 · 병 안 유리벽 ─────────────────────────
+func test_q37_icons() -> void:
+	var items: Array = [JarDeco.STAND] + JarDeco.TINTS.keys() + JarDeco.CORKS.keys()
+	var paths := {}
+	var ok := true
+	var v := lab(54)
+	for it: String in items:
+		var nm := ShopSheet.card_icon(it, Shop.card(v, it))
+		ok = ok and nm == it and GameIcons.has(it) and GameIcons.tex(it) != null
+		paths[String(GameIcons._map.get(it, ""))] = true
+	check(ok, "받침 · 빛깔 넷 · 코르크 셋: 카드마다 제 아이콘 (그림이 있음)")
+	check(paths.size() == items.size() and not paths.has("res://art/icons/shop/coaster.png"), "아이콘 %d장이 모두 다름 (받침은 파이 모양 고리 그림이 아님)" % paths.size())
+	check(ShopSheet.card_icon("조약돌", Shop.card(v, "조약돌")) == "조약돌", "조약돌은 그대로")
+
+
+func test_q37_hand_line() -> void:
+	var deco0 := ShopSheet.hand_line(JarDeco.TAB, 0)
+	var deco1 := ShopSheet.hand_line(JarDeco.TAB, 1)
+	check(not deco0.begins_with("산 것은 아래 [손]에") and deco0.contains("병에 바로") and deco0.contains("조약돌"), "꾸미기 탭 아래 줄: 받침·빛깔·코르크는 곧바로 병에 · 조약돌만 손 (%s)" % deco0)
+	check(deco1.contains("손에 든 것") and deco1.contains("병에 바로"), "꾸미기 탭 · 손에 든 게 있을 때 (%s)" % deco1)
+	check(ShopSheet.hand_line("건물", 0).begins_with("산 것은 아래 [손]에 들려요"), "다른 탭은 그대로")
+
+
+func test_q37_summary() -> void:
+	Market.reset(10000.0)
+	var sm := GameSave.new()
+	var v := lab(55)
+	sm.jars[7] = {"kind": "jar", "village": v, "world": null}
+	check(sm._deco_of(7).is_empty(), "꾸미지 않은 병: 요약에 꾸미기 없음 (예전 요약 그대로)")
+	v.first_harvest_t = v.t
+	Shop.buy(v, JarDeco.STAND)
+	Shop.buy(v, "물빛 유리")
+	Shop.buy(v, "밀랍 코르크")
+	var d := sm._deco_of(7)
+	check(d == {"stand": true, "tint": "물빛 유리", "cork": "밀랍 코르크"}, "꾸민 병: 요약에 이름만 (%s)" % str(d))
+	check(GiantRoom.deco_look(d) == JarDeco.look(v), "요약 → 화면 모양 = 병 안의 모양 그대로")
+	check(GiantRoom.deco_look(bytes_to_var(var_to_bytes(d))) == JarDeco.look(v) and GiantRoom.deco_look(null)["stand"] == false
+		and GiantRoom.deco_look({"tint": "없는 빛깔"})["tint"] == null, "저장을 거쳐도 · 옛 요약(없음) · 모르는 이름은 맑은 병")
+	var it := {"id": 2, "era": 1, "preview": {}, "deco": d}
+	var shelf: Array = load("res://view/start/title.gd").shelf_items({"id": 1, "shelf": [{"id": 1}, it]})
+	check(shelf.size() == 1 and (shelf[0] as Dictionary).get("deco") == d, "타이틀 선반: 옆 병에 그 병의 꾸미기를 넘김")
+	sm.free()
+	Market.reset(0.0)
+
+
+func test_q37_shelf() -> void:
+	var room := GiantRoom.new()
+	run.root.add_child(room)
+	room.setup(1.0, "morning", true)
+	room.set_shelf_jars([{"x": 26.0, "id": 2, "era": 0, "preview": {}, "deco": {"stand": true, "tint": "이끼빛 유리", "cork": "삼끈 코르크"}},
+		{"x": -26.0, "id": 3, "era": 0, "preview": {}}])
+	var a: Node = room.shelf_jars[0]["node"]
+	var b: Node = room.shelf_jars[1]["node"]
+	var ga: Color = (room.shelf_jars[0]["glass"] as ShaderMaterial).get_shader_parameter("glass_col")
+	var gb: Variant = (room.shelf_jars[1]["glass"] as ShaderMaterial).get_shader_parameter("glass_col")     # 꾸미지 않은 병은 값을 건드리지 않음 (셰이더 기본값)
+	check(a.find_child("JarStand", false, false) != null and a.find_child("CorkMark", true, false) != null and ga.is_equal_approx(JarDeco.TINTS["이끼빛 유리"]),
+		"선반의 꾸민 병: 받침 · 코르크 무늬 · 유리 빛깔")
+	check(b.find_child("JarStand", false, false) == null and b.find_child("CorkMark", true, false) == null and (gb == null or (gb as Color).is_equal_approx(GiantRoom.GLASS_COL)),
+		"꾸미지 않은 옆 병은 예전 그대로")
+	room.queue_free()
+
+
+func test_q37_glass() -> void:
+	var g := JarGlass.new(10.0, func(_x: float, _z: float) -> float: return 0.0, 5.0)
+	run.root.add_child(g)
+	var c0: Color = g._wall_m.get_shader_parameter("color")
+	g.set_tint("안개빛 유리")
+	var c1: Color = g._wall_m.get_shader_parameter("color")
+	var r1: Color = g._rim_m.get_shader_parameter("color")
+	check(c0.is_equal_approx(Style.GLASS_WALL) and not c1.is_equal_approx(c0) and not r1.is_equal_approx(Style.GLASS_RIM)
+		and float(g._wall_m.get_shader_parameter("alpha")) < 0.3, "병 안 유리벽: 빛깔이 옅게 (벽 %s)" % c1.to_html(false))
+	g.rebuild()
+	var c2: Color = g._wall_m.get_shader_parameter("color")
+	check(c2.is_equal_approx(c1), "벽을 다시 지어도 빛깔 그대로")
+	g.set_tint("")
+	check((g._wall_m.get_shader_parameter("color") as Color).is_equal_approx(Style.GLASS_WALL) and is_equal_approx(float(g._wall_m.get_shader_parameter("alpha")), Style.GLASS_WALL_ALPHA),
+		"맑은 유리로 돌아가면 처음 값")
+	check(JarGlass.arc_color("") == JarGlass.ARC_COL and JarGlass.arc_color("호박빛 유리") != JarGlass.ARC_COL, "화면 가장자리 유리 두께 색 (화면 한 장 더 없음 — 값만)")
+	g.queue_free()
