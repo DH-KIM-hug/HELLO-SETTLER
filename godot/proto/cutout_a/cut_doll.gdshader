@@ -149,10 +149,6 @@ void vertex() {
 		if ((slot == 5 || slot == 6) && CUSTOM3.z < 0.5) {
 			p = xf(p, CUSTOM2.yz, anim(slot - 2, row0, f));   // 아래팔은 소매(어깨)를 따라
 		}
-		int wz = int(st.z + 0.5);
-		if (group == 0 && cur_view == 0 && slot == 6 && CUSTOM3.z < 0.5 && wave_clip >= 0 && (wz == wave_clip || wz == wave_clip + 1)) {
-			p += ps.xy;     // (Q33) 흔드는 아래팔(앞 보기 = 팔 b)만 몸마다 더 올림 (소매는 머리 뒤에 숨은 채 — 옮기면 소매 끝이 머리 옆에 떠 보임) — 묶음 칸의 소품 자리 (흔드는 동안 소품 없음, cut_lib.WAVE_LIFT)
-		}
 		if (group == 1 || group == 2 || group == 7) {
 			if (group == 2) {
 				// 모자 = 머리와 한 덩어리: 고른 머리의 정수리에 놓은 뒤 머리와 똑같이 (턱 기준) 돌림 — 제 꼭대기 기준으로 돌면 머리에서 떨어짐
