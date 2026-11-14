@@ -432,6 +432,8 @@ func test_forester_walks_out() -> void:
 		if not got:
 			idle += 1
 	check(spots.size() >= 30, "40번 중 %d번 심음 (쉼 %d)" % [spots.size(), idle])
+	check(v.plant_tries == 40 and v.plant_fails == idle and not v.to_dict().has("plant_tries") and not v.to_dict().has("plant_fails"),
+		"산림관 셈 (마을 칸 · 저장 안 함): 나섬 %d · 쉼 %d" % [v.plant_tries, v.plant_fails])
 	var hut := Vector2(fb.x, fb.y)
 	var cut := Vector2(cb.x, cb.y)
 	var bad := 0

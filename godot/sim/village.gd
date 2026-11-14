@@ -91,6 +91,8 @@ var disc: Dictionary = {}             # 발견 조건의 상태 {trees0, bake_t,
 var disc_rng := RandomNumberGenerator.new()   # 발견할 사람 고르기 전용 (다른 흐름의 난수 순서를 바꾸지 않게)
 var faith := 50.0
 var doubt_said := 0                   # (측정·시험 — 저장 안 함) 의심하는 말(LINES_DOUBT)을 한 횟수 (Q28)
+var plant_tries := 0                  # (Q38 측정·시험 — 저장 안 함) 산림관이 심으러 나선 번 (ResidentAI.work_task · tools/measure_tools.gd)
+var plant_fails := 0                  # (Q38 측정·시험 — 저장 안 함) 그중 심을 자리를 못 찾아 쉰 번
 var away_floor: Dictionary = {}       # (Q28) 비운 동안 사람 id → 믿음의 바닥 (떠날 때 믿음 × Balance.AWAY_FAITH_FLOOR). 지켜보면 비움. 저장 안 함 (따라잡기는 저장 없이 한 번에)
 var q28_legacy := false               # (측정·시험만 — 저장 안 함, 마을마다) true면 Q28 이전 규칙 — 바닥 없음 · 등불 안의 비움에도 의심 (tools/q28_absence.gd 전후 비교)
 var away_doubt := ""                  # (Q28) 마지막 비움: "" 비운 적 없음(예전 규칙) · "short" 등불 안에 돌아옴 — 의심하는 말 없음 · "long" 등불 상한을 넘김 — 의심해도 됨 (to_dict가 빈 값이 아닐 때만 저장)
@@ -4219,7 +4221,7 @@ func on_house_flooded(x: float, y: float, radius: float) -> void:
 # ───────────────────────── 저장 (docs/SAVE.md 1 · 6) ─────────────────────────
 ## 객체를 가리키는 변수 — 아래에서 직접 다룬다 (나머지 스크립트 변수는 SaveCodec이 이름 그대로)
 const SAVE_SKIP := ["social_events", "water", "buildings", "people", "dead", "air", "mold", "smalls", "hand", "flora", "wild", "dogs", "caterpillars", "kitchen", "lean", "warmth", "direct_route", "_stall", "_walker", "_singers", "others", "peers",
-	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off", "doubt_said", "away_floor", "away_doubt", "q28_legacy", "stone_signal_off"]
+	"_people_by_id", "_bld_by_id", "book", "_homes_sig", "_homes_types", "_fp_val", "_fp_n", "_fp_t", "_fg_t", "_fg_ok", "_pnz", "_pnz_in", "_pnz_ok", "_tr_fix", "events", "tools_signal_off", "doubt_said", "away_floor", "away_doubt", "q28_legacy", "stone_signal_off", "plant_tries", "plant_fails"]
 
 
 ## 이 마을 전부 → 사전. with_book = 연대기 포함 (저장 파일은 연대기를 따로 쓴다), with_water = 물 격자 포함 (넓은 세상은 JarWorld가 한 번만)

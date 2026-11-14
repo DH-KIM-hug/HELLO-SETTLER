@@ -81,8 +81,6 @@ func _run(s: int, days: int) -> void:
 	digests = {}
 	extra = {}
 	diag = {}
-	ResidentAI.plant_tries = 0
-	ResidentAI.plant_fails = 0
 	var tapped := 0
 	var dropped := false
 	while v.t < 23.0 * H:                  # 창세의 날 (measure_growth와 같음)
@@ -123,7 +121,7 @@ func _run(s: int, days: int) -> void:
 	var out := {"mode": mode, "seed": s, "days": days, "daily": daily, "bought": bought, "gravel": gravel, "wish_at": wish_at, "stone_at": stone_at, "helps": helps,
 		"end_pop": v.people.size(), "settlements": jw.settlements.size(), "era": v.era, "notes": int(Market.notes),
 		"starved": int(v.stats["starved"]), "extra": extra, "diag": diag, "ms": _ms(v),
-		"plant": [ResidentAI.plant_tries, ResidentAI.plant_fails], "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
+		"plant": _plant_counts(), "secs": int((Time.get_ticks_msec() - t0) / 1000.0)}
 	print("TOOLS " + JSON.stringify(out))
 	for k: int in digests:
 		print("DIGEST seed %d mode %s day %d %s" % [s, mode, k, digests[k]])
@@ -304,7 +302,16 @@ func _forest(v: Village) -> Dictionary:
 				if v.water.inside(sp.x, sp.y, 2.0) and not v.water_at(sp.x, sp.y) and VillagePlan.plantable(v, sp):
 					ok += 1
 			huts.append([snappedf(Vector2(b.x, b.y).distance_to(v.fire), 0.1), ok, b.worker >= 0])
-	return {"core": snappedf(core, 0.1), "huts": huts, "tries": ResidentAI.plant_tries, "fails": ResidentAI.plant_fails}
+	return {"core": snappedf(core, 0.1), "huts": huts, "tries": _plant_counts()[0], "fails": _plant_counts()[1]}
+
+
+## (Q38) 병의 모든 무리 산림관 셈 [나선 번, 쉰 번] (Village.plant_tries · plant_fails — 저장 안 함)
+func _plant_counts() -> Array:
+	var n := [0, 0]
+	for q: Village in jw.settlements:
+		n[0] += q.plant_tries
+		n[1] += q.plant_fails
+	return n
 
 
 ## (Q38) 고비 id → 넘은 병 날 (못 넘었으면 -1) — tools/measure_milestones.gd와 같은 셈
