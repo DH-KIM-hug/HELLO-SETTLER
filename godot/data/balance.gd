@@ -278,7 +278,7 @@ const START_STOCK := {"건량": 1000.0,     # v5: 240 → 1,000 (열 명의 약 
 ## v5: 밀은 날로 먹지 않는다 — 모닥불에서 죽으로 끓여야 먹는다 (PORRIDGE_YIELD, 손실). 빵이 낫다 (밀 1 → 가루 1 → 빵 1.5).
 ## 설탕·쌀은 하늘에서 내려온 것 (거인이 준 것 — 제물로 되돌아가지 않는다)
 ## (2026-11-08 production-chain R2) 꿀은 상하지 않으므로 말린 버섯 뒤 (꿀방울 하나 = HONEY_FOOD 식량 단위로 쌓임)
-const FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "꿀", "민들레 잎", "해바라기씨"]
+const FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "꿀", "민들레 잎", "해바라기씨", "은행알"]   # (Q40) 은행알 = 큰 은행나무 나들이 (sim/tree_uses.gd) — 맨 끝: 다른 것이 떨어지면 먹음 (겨울 먹을 것)
 ## 창고의 먹을거리 전부 (날벌레·곰팡이·물난리·진흙 항아리가 보는 것 — 밀·밀가루도 곡식)
 const STORE_FOODS := ["버섯", "생선", "고기", "과일", "쌀", "설탕", "빵", "건량", "말린 버섯", "민들레 잎", "해바라기씨", "밀", "밀가루"]
 const PORRIDGE := "밀"                  # 다른 먹을 것이 모자라면 창고 밀을 죽으로 끓여 먹는다
@@ -1328,3 +1328,45 @@ const EXPLORE_TALE_DIST := 100.0         # 이만큼(칸) 넘게 멀리 다녀�
 const EXPLORE_TALE_SECS := 2400.0        # 이야기 길이 (병 초 — 보통 빠르기에서 말풍선 네 줄쯤)
 const EXPLORE_TALE_NEAR := 30.0          # 모닥불에서 이만큼(칸) 안의 한가한 이웃이 모인다
 const EXPLORE_TALE_PICK := [1, 2]        # 모이는 이웃 수 (적어도 · 많아야)
+# Q40 (2026-11-14 사용자 결정 "큰 나무 넷의 쓰임 — 탐험하면 좋은 까닭"): 탐험가가 본 큰 나무(Village.explore_seen)까지 한가한 어른 두셋이 나들이 (sim/tree_uses.gd · 측정 tools/measure_treeuse.gd).
+# 과일나무는 예전 그대로 (FRUIT_* — 영역 + 30칸 안 열매). 첫 TUSE_FROM_DAY날은 아무것도 바뀌지 않음 (첫 고비 · 첫 20일 지문 그대로). 주민 쪽에는 숫자가 보이지 않는다.
+const TUSE_FROM_DAY := 20.0              # 도착하고 이 날(병 날) 뒤부터 (= EXPLORE_GOAL_DAY — 그 전엔 나들이 없음)
+const TUSE_HOURS := Vector2(7.0, 10.0)   # 이 시각 사이 아침에 하루 한 번 주사위 (병 시각)
+const TUSE_GAP := 3.0 * DAY              # 한 무리의 나들이는 떠난 때부터 이만큼 띄움 · 한 번에 한 나들이만
+const TUSE_NEAR := 160.0                 # 이 거리(마을 가운데에서 칸) 안의 나무는 TUSE_DAY_P 그대로 — 멀면 TUSE_NEAR / 거리 배 (먼 나무일수록 드물게)
+const TUSE_FAR_MIN := 0.25               # 아무리 멀어도 이 배까지만 줄어듦
+const TUSE_DAY_P := {"cherry": 0.5, "pine": 0.25, "ginkgo": 0.35, "maple": 0.4}      # 철 · 조건이 맞는 아침에 떠날 몫 (가까운 나무)
+const TUSE_SEASON := {                   # 철 [시작 (월, 일), 끝 (월, 일)] — 벚꽃 · 송진이 흐르는 따뜻한 철 · 은행 떨어지는 가을 · 단물 오르는 이른 봄
+	"cherry": [Vector2i(3, 25), Vector2i(5, 10)], "pine": [Vector2i(5, 1), Vector2i(10, 15)],
+	"ginkgo": [Vector2i(10, 1), Vector2i(11, 30)], "maple": [Vector2i(2, 15), Vector2i(3, 31)]}
+const TUSE_SEASON_MAX := {"cherry": 2, "pine": 4, "ginkgo": 3, "maple": 2}           # 한 해 그 철에 이만큼까지 (행복 · 얻는 것의 상한)
+const TUSE_COLD_MAX := 0.3               # 오늘 밤(새벽 두 시) 바깥 추위(Health.cold_of)가 이보다 크면 떠나지 않음 (NAMES_COLD_MAX와 같은 금) · 추위가 오는 철(cold_season)에도
+const TUSE_COLD_MAX_KIND := {"maple": 0.6}   # 나무마다 다른 추위 금 — 단풍 단물은 밤에 얼고 낮에 녹는 이른 봄에 오른다 (재 보니 0.3 · 추위가 오는 철 금이면 단물 철에 한 번도 못 갔다). 이 나무는 추위가 오는 철 금도 보지 않음
+const TUSE_FOOD_DAYS := 0.5              # 먹을 것이 이만큼 날치 아래면 떠나지 않음 (돕지 않는 마을은 늘 하루 반치쯤 — 위기(모자람)면 어차피 막힘)
+const TUSE_IDLE := ["", "idle", "rest", "social", "play", "chores", "wander"]       # '한가한' 어른의 하는 일 (일터 일 · 짓기 · 나르기 · 위기 일은 빼고)
+const TUSE_IDLE_JOBLESS := ["forage", "haul"]   # 일터 없는 어른은 맨손 채집 · 나르기 중이어도 (빈손일 때만) 함께 감 — 재 보니 아침 쉼 · 어울림 중인 어른이 거의 없었다
+const TUSE_TEAM_MIN := 2                 # 함께 가는 어른 (한가한 사람의 절반쯤 · 이 사이)
+const TUSE_TEAM_MAX := 4
+const TUSE_SPREAD := 0.09                # 나무 아래 앉는 자리 사이 (라디안 — 줄기 둘레를 따라)
+const TUSE_SIT_K := 1.2                  # 줄기 둘레(TRUNK_R) × 이만큼 + TUSE_SIT_R 바깥, 나무 앞쪽(화면 쪽)에 앉음 — 잎에 가리지 않게 (캡처로 정함)
+const TUSE_SIT_R := 2.0
+const TUSE_REST := {"cherry": 3.0 * HOUR, "pine": 1.0 * HOUR, "ginkgo": 1.0 * HOUR, "maple": 1.0 * HOUR}   # 나무 아래에서 쉬는 장면 (밤에 닿으면 그 아래에서 아침까지 자고)
+const TUSE_WORK := 1200.0                # 긁기 · 줍기 · 단물 받기 (병 초)
+const TUSE_STALE := 8.0 * DAY            # 이보다 오래된 나들이 기록은 정리 (걸음이 끊긴 경우)
+const TUSE_LOG_MAX := 40                 # 나들이 기록(tree_use.log)은 최근 이만큼만 (측정 · 시험)
+const CHERRY_HAPPY := 0.04               # 벚꽃 나들이에서 돌아오면 온 마을 행복 + (겹치지 않음 — 늘어날 뿐)
+const CHERRY_HAPPY_DAYS := 3.0           # … 이 날 동안
+const RESIN_LOAD := 2.0                  # 한 사람이 지고 오는 송진
+const RESIN_WANT := 4.0                  # 창고 송진이 이보다 적을 때만 소나무로
+const RESIN_PER_FIRE := 0.5              # 횃불 한 번 · 모깃불 하나에 섞는 송진
+const RESIN_TORCH := 1.4                 # 송진 횃불: 털뭉치가 쪼그라드는 몫 × (MOLD_TORCH) · 통나무는 쓰지 않음
+const RESIN_SMOKE := 1.5                 # 송진 모깃불: 연기가 머무는 시간 × (GNAT_SMOKE_TIME) · 통나무 × RESIN_SMOKE_LOG
+const RESIN_SMOKE_LOG := 0.5
+const NUTS_LOAD := 3.0 * DAY / FOOD_IV   # 한 사람이 지고 오는 은행알 (= 한 사람 사흘치) — 먹을 것 FOODS 맨 끝 (다른 것이 떨어지면 먹음)
+const NUTS_WANT_DAYS := 6.0              # 창고 은행알이 마을 이만큼 날치 아래일 때만 은행나무로
+const SAP_LOAD := 1.0                    # 한 사람이 지고 오는 단풍 단물 (졸이면 단풍 엿 × SAP_TO_SWEETS)
+const SAP_TO_SWEETS := 1.0
+const SWEETS_WANT := 6.0                 # 창고 단풍 엿이 이보다 적을 때만 단풍나무로
+const SWEETS_FEAST_USE := 1.0            # 잔치 하나에 꺼내는 엿
+const SWEETS_HAPPY := 0.03               # 엿이 도는 잔치: 온 마을 행복 + (HAPPY_FESTIVAL 0.1에 조금 더)
+const SWEETS_HAPPY_DAYS := 1.0           # … 잔치가 열린 때부터 이 날 동안

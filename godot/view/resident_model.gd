@@ -92,6 +92,7 @@ const CARRY := {
 	"생선": ["medaka", "front"],           # (E3-6 GD 3.0 · 2026-11-07 사용자) 잡는 물고기 = 송사리 (주민만 함) — 혼자면 두 팔로 안고, 같은 길을 가는 둘이면 큰 놈을 장대에 메고 (village_view 짝짓기)
 	"생선:앞": ["fish_pole", "pole"], "생선:뒤": ["pole_half", "pole"],
 	"과일": ["fruit_piece", "head"],        # (E3-3) 거대한 열매를 잘라 조각을 머리에 이고 (위에서 보는 카메라에 잘 보이게)
+	"송진": ["water_bucket", "hand"], "단풍 단물": ["water_bucket", "hand"], "은행알": ["mushroom_basket", "front"],   # (Q40) 큰 나무 나들이에서 지고 오는 것
 	"약초": ["herb_bundle", "hand"], "민들레 잎": ["herb_bundle", "hand"], "꽃잎": ["herb_bundle", "hand"],
 	"버섯": ["mushroom_basket", "front"], "빛버섯": ["mushroom_basket", "front"], "말린 버섯": ["mushroom_basket", "front"],
 	"유모차": ["pram", "push"],          # v5 (GD 7.3) 아기 산책: 땅 위를 굴러가는 나무 유모차를 두 손으로 민다 (art/src/build_pioneer.py)

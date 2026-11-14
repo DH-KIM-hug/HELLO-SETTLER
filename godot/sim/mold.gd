@@ -582,10 +582,12 @@ func _strike(v: Village, r: Resident, id: int) -> void:
 		if rng.randf() < 0.4:
 			v.speak(r, "소금이 닿자 녹아 버렸어!", 4)
 		return
-	v.stock["통나무"] = maxf(0.0, float(v.stock.get("통나무", 0.0)) - Balance.MOLD_TORCH_LOG / 3.0)   # 횃불 한 자루로 세 번
+	var resin := TreeUses.use_resin(v)       # (Q40) 큰 소나무 송진을 바른 횃불 — 더 세게 · 통나무를 쓰지 않음 (송진이 없으면 예전 그대로)
+	if not resin:
+		v.stock["통나무"] = maxf(0.0, float(v.stock.get("통나무", 0.0)) - Balance.MOLD_TORCH_LOG / 3.0)   # 횃불 한 자루로 세 번
 	stats["torch"] += 1
 	b.burnt = 2.0
-	b.size -= Balance.MOLD_TORCH * (1.0 + 0.08 * sk)
+	b.size -= Balance.MOLD_TORCH * (1.0 + 0.08 * sk) * (Balance.RESIN_TORCH if resin else 1.0)
 	if b.size < Balance.MOLD_SIZE_MIN:
 		_defeat(v, r, b)
 	else:
