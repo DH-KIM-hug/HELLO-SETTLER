@@ -1,0 +1,98 @@
+{
+ "meta": {
+  "genre": "방치형 수집 (네코아츠메류) + 가벼운 꾸미기",
+  "engine": "Godot 4.7.2 2D / GDScript / Mobile(Android 우선)",
+  "online": "일부 (클라우드 저장·기기 옮기기)",
+  "combat": "없음",
+  "growth": "예 (해금·친밀도)",
+  "items": "예",
+  "shop": "예",
+  "stage": "없음 (마당 확장 해금)",
+  "narrative": "캐릭터 프로필·작은 세계관만 (X1)",
+  "random": "예",
+  "monetization": "무료 + 광고 보상/유료 재화 (2026-11-16 사용자)",
+  "title": "보류 (나의 작은 지구 대체 예정)"
+ },
+ "steps": {
+  "D1": {
+   "status": "done",
+   "file": "docs/gdd/D1-한-문장-콘셉트.md",
+   "date": "2026-11-16",
+   "reason": "사용자: 사람 손님 없이 정령만, 무대는 작은 지구 대신 사람 크기의 집 (작은 사람 같은 정령이 찾아옴)"
+  },
+  "D2": {
+   "status": "done",
+   "file": "docs/gdd/D2-타깃-유저.md",
+   "date": "2026-11-16"
+  },
+  "D3": {
+   "status": "done",
+   "file": "docs/gdd/D3-장르.md",
+   "date": "2026-11-16"
+  },
+  "D4": {
+   "status": "done",
+   "file": "docs/gdd/D4-참고-게임-분석.md",
+   "date": "2026-11-16"
+  },
+  "D5": {
+   "status": "done",
+   "file": "docs/gdd/D5-핵심-재미-분해.md",
+   "date": "2026-11-16"
+  },
+  "D6": {
+   "status": "done",
+   "file": "docs/gdd/D6-범위-판정.md",
+   "date": "2026-11-16"
+  },
+  "D7": {
+   "status": "done",
+   "file": "docs/gdd/D7-MVP-정의.md",
+   "date": "2026-11-16"
+  },
+  "D8": {
+   "status": "done",
+   "file": "docs/gdd/D8-디자인-필러-플레이어-경험-목표.md",
+   "date": "2026-11-16"
+  }
+ },
+ "history": [
+  "2026-11-16 init",
+  "2026-11-16 meta genre=방치형 수집 (네코아츠메류) + 가벼운 꾸미기",
+  "2026-11-16 meta engine=Godot 4.7.2 2D / GDScript / Mobile(Android 우선)",
+  "2026-11-16 meta online=일부 (클라우드 저장·기기 옮기기)",
+  "2026-11-16 meta combat=없음",
+  "2026-11-16 meta growth=예 (해금·친밀도)",
+  "2026-11-16 meta items=예",
+  "2026-11-16 meta shop=예",
+  "2026-11-16 meta stage=없음 (마당 확장 해금)",
+  "2026-11-16 meta narrative=미정",
+  "2026-11-16 meta random=예",
+  "2026-11-16 meta monetization=무료 + 광고 보상/유료 재화 (2026-11-16 사용자)",
+  "2026-11-16 meta narrative=캐릭터 프로필·작은 세계관만 (X1)",
+  "2026-11-16 start D1",
+  "2026-11-16 done D1 docs/gdd/D1-한-문장-콘셉트.md",
+  "2026-11-16 start D2",
+  "2026-11-16 done D2 docs/gdd/D2-타깃-유저.md",
+  "2026-11-16 start D3",
+  "2026-11-16 done D3 docs/gdd/D3-장르.md",
+  "2026-11-16 start D4",
+  "2026-11-16 done D4 docs/gdd/D4-참고-게임-분석.md",
+  "2026-11-16 start D5",
+  "2026-11-16 done D5 docs/gdd/D5-핵심-재미-분해.md",
+  "2026-11-16 start D6",
+  "2026-11-16 done D6 docs/gdd/D6-범위-판정.md",
+  "2026-11-16 start D7",
+  "2026-11-16 reopen D1: 사용자: 사람 손님 없이 정령만, 무대는 작은 지구 대신 사람 크기의 집 (작은 사람 같은 정령이 찾아옴); stale=['D2', 'D3', 'D4', 'D5', 'D6', 'D7']",
+  "2026-11-16 done D1 docs/gdd/D1-한-문장-콘셉트.md",
+  "2026-11-16 done D2 docs/gdd/D2-타깃-유저.md",
+  "2026-11-16 done D3 docs/gdd/D3-장르.md",
+  "2026-11-16 done D4 docs/gdd/D4-참고-게임-분석.md",
+  "2026-11-16 done D5 docs/gdd/D5-핵심-재미-분해.md",
+  "2026-11-16 done D6 docs/gdd/D6-범위-판정.md",
+  "2026-11-16 done D7 docs/gdd/D7-MVP-정의.md",
+  "2026-11-16 meta title=보류 (나의 작은 지구 대체 예정)",
+  "2026-11-16 start D8",
+  "2026-11-16 done D8 docs/gdd/D8-디자인-필러-플레이어-경험-목표.md"
+ ]
+}
