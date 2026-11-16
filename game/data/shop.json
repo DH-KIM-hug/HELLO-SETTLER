@@ -1,0 +1,50 @@
+[
+  {
+    "product_id": "shop_toy_bottlecap",
+    "target": "toy_bottlecap_pool",
+    "qty": 1,
+    "price": 80,
+    "limit": 1,
+    "requires": null
+  },
+  {
+    "product_id": "shop_toy_matchbox",
+    "target": "toy_matchbox_bed",
+    "qty": 1,
+    "price": 150,
+    "limit": 1,
+    "requires": null
+  },
+  {
+    "product_id": "shop_toy_ribbon",
+    "target": "toy_ribbon_hammock",
+    "qty": 1,
+    "price": 250,
+    "limit": 1,
+    "requires": {"owned_toys_min": 3}
+  },
+  {
+    "product_id": "shop_toy_button",
+    "target": "toy_button_drum",
+    "qty": 1,
+    "price": 400,
+    "limit": 1,
+    "requires": {"owned_toys_min": 4}
+  },
+  {
+    "product_id": "shop_room_attic",
+    "target": "room_attic",
+    "qty": 1,
+    "price": 800,
+    "limit": 1,
+    "requires": {"owned_toys_min": 4}
+  },
+  {
+    "product_id": "shop_food_nectar3",
+    "target": "food_nectar",
+    "qty": 3,
+    "price": 30,
+    "limit": null,
+    "requires": null
+  }
+]

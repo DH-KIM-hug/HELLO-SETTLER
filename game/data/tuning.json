@@ -1,0 +1,19 @@
+{
+  "check_s": 600,
+  "p_any": 0.6,
+  "revisit_cooldown_s": 3600,
+  "fresh_place_check_s": 8,
+  "fresh_place_cooldown_s": 600,
+  "eat_rate_per_hour": 0.01,
+  "pity_n": 8,
+  "offline_cap_s": 43200,
+  "tutorial_coins": 100,
+  "coin_cap": 99999,
+  "nectar_cap": 99,
+  "nectar_overflow_coin": 5,
+  "pending_per_slot": 3,
+  "pending_total": 50,
+  "day_start_hour": 6,
+  "night_start_hour": 19,
+  "weather_refresh_s": 1800
+}

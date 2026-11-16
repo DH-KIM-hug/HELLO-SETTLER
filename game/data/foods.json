@@ -1,0 +1,22 @@
+[
+  {
+    "item_id": "food_basic",
+    "type": "Food",
+    "name": "food.basic.name",
+    "icon_key": "food_basic_icon",
+    "max_stack": 99,
+    "infinite": true,
+    "duration_s": 86400,
+    "attract": 1.0
+  },
+  {
+    "item_id": "food_nectar",
+    "type": "Food",
+    "name": "food.nectar.name",
+    "icon_key": "food_nectar_icon",
+    "max_stack": 99,
+    "infinite": false,
+    "duration_s": 57600,
+    "attract": 1.5
+  }
+]

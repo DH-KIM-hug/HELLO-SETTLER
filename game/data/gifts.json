@@ -1,0 +1,16 @@
+[
+  {
+    "gift_id": "gift_common",
+    "coins_min": 5,
+    "coins_max": 9,
+    "nectar_item": "food_nectar",
+    "nectar_chance": 0.01
+  },
+  {
+    "gift_id": "gift_rare",
+    "coins_min": 25,
+    "coins_max": 35,
+    "nectar_item": "food_nectar",
+    "nectar_chance": 0.2
+  }
+]

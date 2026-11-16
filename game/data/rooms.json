@@ -1,0 +1,23 @@
+[
+  {
+    "room_id": "room_window",
+    "order": 0,
+    "slots": [
+      {"slot_id": "room_window/slot_0", "accepts": "toy", "size": "small", "position": [200, 700]},
+      {"slot_id": "room_window/slot_1", "accepts": "toy", "size": "small", "position": [540, 700]},
+      {"slot_id": "room_window/slot_2", "accepts": "toy", "size": "small", "position": [880, 700]},
+      {"slot_id": "room_window/slot_3", "accepts": "toy", "size": "small", "position": [200, 1200]},
+      {"slot_id": "room_window/slot_4", "accepts": "bowl", "size": "small", "position": [700, 1200]}
+    ]
+  },
+  {
+    "room_id": "room_attic",
+    "order": 1,
+    "slots": [
+      {"slot_id": "room_attic/slot_0", "accepts": "toy", "size": "small", "position": [240, 640]},
+      {"slot_id": "room_attic/slot_1", "accepts": "toy", "size": "small", "position": [540, 640]},
+      {"slot_id": "room_attic/slot_2", "accepts": "toy", "size": "small", "position": [840, 640]},
+      {"slot_id": "room_attic/slot_3", "accepts": "bowl", "size": "small", "position": [540, 1300]}
+    ]
+  }
+]

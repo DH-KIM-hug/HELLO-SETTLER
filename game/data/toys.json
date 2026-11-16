@@ -1,0 +1,74 @@
+[
+  {
+    "item_id": "toy_thimble_swing",
+    "type": "Toy",
+    "name": "toy.thimble_swing.name",
+    "icon_key": "toy_thimble_swing_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_thimble_swing",
+    "art_night": null,
+    "starter": true
+  },
+  {
+    "item_id": "toy_spool_slide",
+    "type": "Toy",
+    "name": "toy.spool_slide.name",
+    "icon_key": "toy_spool_slide_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_spool_slide",
+    "art_night": null,
+    "starter": true
+  },
+  {
+    "item_id": "toy_bottlecap_pool",
+    "type": "Toy",
+    "name": "toy.bottlecap_pool.name",
+    "icon_key": "toy_bottlecap_pool_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_bottlecap_pool",
+    "art_night": null,
+    "starter": false
+  },
+  {
+    "item_id": "toy_matchbox_bed",
+    "type": "Toy",
+    "name": "toy.matchbox_bed.name",
+    "icon_key": "toy_matchbox_bed_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_matchbox_bed",
+    "art_night": null,
+    "starter": false
+  },
+  {
+    "item_id": "toy_ribbon_hammock",
+    "type": "Toy",
+    "name": "toy.ribbon_hammock.name",
+    "icon_key": "toy_ribbon_hammock_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_ribbon_hammock",
+    "art_night": null,
+    "starter": false
+  },
+  {
+    "item_id": "toy_button_drum",
+    "type": "Toy",
+    "name": "toy.button_drum.name",
+    "icon_key": "toy_button_drum_icon",
+    "max_stack": 1,
+    "size": "small",
+    "pose_slots": 1,
+    "art": "toy_button_drum",
+    "art_night": null,
+    "starter": false
+  }
+]

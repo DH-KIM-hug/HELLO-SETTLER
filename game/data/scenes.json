@@ -1,0 +1,23 @@
+[
+  {
+    "scene_id": "scene_sunny_pair",
+    "spirits": ["spirit_petal", "spirit_breeze"],
+    "weather": ["clear"],
+    "time": "day",
+    "hint": "scene.sunny_pair.hint"
+  },
+  {
+    "scene_id": "scene_rainy_pool",
+    "spirits": ["spirit_drop", "spirit_moss"],
+    "weather": ["cloudy", "rain"],
+    "time": "any",
+    "hint": "scene.rainy_pool.hint"
+  },
+  {
+    "scene_id": "scene_star_night",
+    "spirits": ["spirit_star", "spirit_ember"],
+    "weather": ["clear"],
+    "time": "night",
+    "hint": "scene.star_night.hint"
+  }
+]
