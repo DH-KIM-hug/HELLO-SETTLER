@@ -176,6 +176,54 @@
    "status": "na",
    "reason": "전투 없음 (2026-11-16 사용자 확인, na-plan)",
    "date": "2026-11-16"
+  },
+  "G1": {
+   "status": "done",
+   "file": "docs/gdd/G1-성장-필요성-판정.md",
+   "date": "2026-11-16"
+  },
+  "G2": {
+   "status": "done",
+   "file": "docs/gdd/G2-경험치-레벨업.md",
+   "date": "2026-11-16"
+  },
+  "G3": {
+   "status": "na",
+   "reason": "능력치 성장 없음 (2026-11-16 사용자 확인, na-plan). 수치표는 K7 하나뿐",
+   "date": "2026-11-16"
+  },
+  "G4": {
+   "status": "done",
+   "file": "docs/gdd/G4-아이템-종류-속성.md",
+   "date": "2026-11-16"
+  },
+  "G5": {
+   "status": "done",
+   "file": "docs/gdd/G5-장비-소비-재료.md",
+   "date": "2026-11-16"
+  },
+  "G6": {
+   "status": "done",
+   "file": "docs/gdd/G6-보상-테이블.md",
+   "date": "2026-11-16"
+  },
+  "G7": {
+   "status": "done",
+   "file": "docs/gdd/G7-드랍-확률-획득-조건.md",
+   "date": "2026-11-16"
+  },
+  "G8": {
+   "status": "done",
+   "file": "docs/gdd/G8-재화.md",
+   "date": "2026-11-16"
+  },
+  "G9": {
+   "status": "done",
+   "file": "docs/gdd/G9-상점.md",
+   "date": "2026-11-16"
+  },
+  "G10": {
+   "status": "doing"
   }
  },
  "history": [
@@ -260,6 +308,24 @@
   "2026-11-16 na B6: 전투 없음 (2026-11-16 사용자 확인, na-plan)",
   "2026-11-16 na B7: 전투 없음 (2026-11-16 사용자 확인, na-plan)",
   "2026-11-16 na B8: 전투 없음 (2026-11-16 사용자 확인, na-plan)",
-  "2026-11-16 na B9: 전투 없음 (2026-11-16 사용자 확인, na-plan)"
+  "2026-11-16 na B9: 전투 없음 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 start G1",
+  "2026-11-16 done G1 docs/gdd/G1-성장-필요성-판정.md",
+  "2026-11-16 start G2",
+  "2026-11-16 done G2 docs/gdd/G2-경험치-레벨업.md",
+  "2026-11-16 na G3: 능력치 성장 없음 (2026-11-16 사용자 확인, na-plan). 수치표는 K7 하나뿐",
+  "2026-11-16 start G4",
+  "2026-11-16 done G4 docs/gdd/G4-아이템-종류-속성.md",
+  "2026-11-16 start G5",
+  "2026-11-16 done G5 docs/gdd/G5-장비-소비-재료.md",
+  "2026-11-16 start G6",
+  "2026-11-16 done G6 docs/gdd/G6-보상-테이블.md",
+  "2026-11-16 start G7",
+  "2026-11-16 done G7 docs/gdd/G7-드랍-확률-획득-조건.md",
+  "2026-11-16 start G8",
+  "2026-11-16 done G8 docs/gdd/G8-재화.md",
+  "2026-11-16 start G9",
+  "2026-11-16 done G9 docs/gdd/G9-상점.md",
+  "2026-11-16 start G10"
  ]
 }
