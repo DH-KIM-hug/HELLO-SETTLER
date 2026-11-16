@@ -5,6 +5,7 @@ extends RefCounted
 ## another slot (one per kind, one slot). A spirit visiting the slot is not handled here: the result
 ## carries force_leave_slot and the caller (Visits) makes the spirit leave. visits_now is never touched.
 ## Keeps state.slot_checkable_at up to date (see FoodBowls.sync_checkable_in_room).
+## Every successful place (a swap too) records state.slot_placed_at[slot] = now (R1 in Visits).
 
 enum Code { Ok, NoChange, InvalidSlot, WrongSlotType, NotAvailable }
 
@@ -43,6 +44,7 @@ func place(state: Dictionary, slot_id: String, toy_id: String, now: int) -> Resu
 		return Result.new(Code.NotAvailable)
 	placement[slot_id] = toy_id
 	_bowls.sync_checkable_in_room(state, str(slot["room_id"]), now)
+	_record_placed(state, slot_id, now)
 	return Result.new(Code.Ok, _visited(state, slot_id))
 
 
@@ -77,6 +79,14 @@ func _available(state: Dictionary, slot_id: String, toy_id: String) -> bool:
 		if placement[other_slot] == toy_id and str(other_slot) != slot_id:
 			return false
 	return true
+
+
+## R1 input: the time of the last successful place on this slot.
+func _record_placed(state: Dictionary, slot_id: String, now: int) -> void:
+	if not state.has("slot_placed_at"):
+		state["slot_placed_at"] = {}
+	var placed_at: Dictionary = state["slot_placed_at"]
+	placed_at[slot_id] = now
 
 
 func _visited(state: Dictionary, slot_id: String) -> bool:

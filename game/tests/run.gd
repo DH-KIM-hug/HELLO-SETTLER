@@ -1,9 +1,9 @@
 extends SceneTree
 ## Test runner for the spirit-guests prototype.
 ## Usage: godot --headless --path game -s tests/run.gd -- <suite|all>
-## Suites: data, save, env, static, place, food. Prints each failure, then PASS or FAIL, and exits 0 or 1.
+## Suites: data, save, env, static, place, food, visits. Prints each failure, then PASS or FAIL, and exits 0 or 1.
 
-const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food"]
+const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits"]
 const DATA_DIR: String = "res://data"
 
 var _suite: String = ""
@@ -323,6 +323,17 @@ func _suite_place() -> void:
 	_check(s_ok["placement"] == {slot_a: swing} and s_ok["inventory"] == {"toy_thimble_swing": 1, "toy_spool_slide": 1}, "place: placement updated, stock unchanged")
 	_check(placement.place(s_ok, slot_b, swing, now).code == Placement.Code.NotAvailable, "a placed toy is not available for a second slot")
 
+	# R1 input: every successful place records its time (a swap too); NoChange and refusals record nothing.
+	var s_pa: Dictionary = _new_state(defs)
+	placement.place(s_pa, slot_a, swing, now)
+	_check(s_pa["slot_placed_at"] == {slot_a: now}, "place records slot_placed_at on a successful place")
+	placement.place(s_pa, slot_a, swing, now + 5)
+	_check((s_pa["slot_placed_at"] as Dictionary)[slot_a] == now, "NoChange does not record a new time")
+	placement.place(s_pa, slot_a, slide, now + 30)
+	_check((s_pa["slot_placed_at"] as Dictionary)[slot_a] == now + 30, "a swap records the new time")
+	var b_pa: Dictionary = s_pa.duplicate(true)
+	_check(placement.place(s_pa, slot_b, slide, now + 40).code == Placement.Code.NotAvailable and s_pa == b_pa, "a refused place records no time, no change")
+
 	# A spirit visits the empty slot: Ok with force_leave_slot, visits_now is not touched.
 	var s_visit: Dictionary = _new_state(defs)
 	s_visit["visits_now"] = {slot_a: _visit(now)}
@@ -516,6 +527,324 @@ func _suite_static() -> void:
 	for path: String in scanned:
 		var at: int = _first_hangul(FileAccess.get_file_as_string(path))
 		_check(at < 0, "no Hangul characters in %s (first at index %d)" % [path, at])
+
+
+# ---------------------------------------------------------------- visits
+
+func _suite_visits() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var t0: int = 1700000000
+	var room: String = "room_window"
+	var slot_a: String = "room_window/slot_0"
+	var bowl: String = "room_window/slot_4"
+	var spool: String = "toy_spool_slide"
+	var ribbon: String = "toy_ribbon_hammock"
+	var bottlecap: String = "toy_bottlecap_pool"
+	var day_rain: Dictionary = {"is_night": false, "weather": "rain"}
+	var day_clear: Dictionary = {"is_night": false, "weather": "clear"}
+	var night_clear: Dictionary = {"is_night": true, "weather": "clear"}
+	var night_cloudy: Dictionary = {"is_night": true, "weather": "cloudy"}
+
+	# TC-V1 (R2): empty collection, one candidate (spool slide in rain: only spirit_leaf) -> somebody comes.
+	var w1: Dictionary = _visit_world(defs, 1)
+	var vis1: Visits = Visits.new(defs)
+	Placement.new(defs).place(w1, slot_a, spool, t0)
+	FoodBowls.new(defs).fill(w1, bowl, "food_basic", t0)
+	vis1.tick(w1, t0, day_rain, room, true)
+	var ev1: Array[Dictionary] = vis1.tick(w1, t0 + 8, day_rain, room, true)
+	_check(_count_events(ev1, "arrived", "spirit_leaf") == 1, "TC-V1: empty collection, one candidate: somebody comes (R2)")
+	var visits1: Dictionary = w1["visits_now"]
+	_check(str(visits1[slot_a]["state"]) == "arriving", "a visit in the visible room with the app open starts as arriving")
+	_check((w1["collection"] as Dictionary).is_empty(), "visits never write the collection (settled is only an event)")
+	var mid1: Array[Dictionary] = vis1.tick(w1, t0 + 9, day_rain, room, true)
+	_check(mid1.is_empty() and str(visits1[slot_a]["state"]) == "arriving", "arriving holds for less than 1.5 s")
+	var settle1: Array[Dictionary] = vis1.tick(w1, t0 + 10, day_rain, room, true)
+	var settled1: Dictionary = _find_event(settle1, "settled")
+	_check(str(visits1[slot_a]["state"]) == "playing" and settled1.get("is_new") == true, "after 1.5 s the visit plays and settled says is_new")
+
+	# Same, with the app closed: the visit plays at once and settled comes in the same tick.
+	var w1c: Dictionary = _visit_world(defs, 11)
+	var vis1c: Visits = Visits.new(defs)
+	Placement.new(defs).place(w1c, slot_a, spool, t0)
+	FoodBowls.new(defs).fill(w1c, bowl, "food_basic", t0)
+	vis1c.tick(w1c, t0, day_rain, room, false)
+	var ev1c: Array[Dictionary] = vis1c.tick(w1c, t0 + 8, day_rain, room, false)
+	var types1c: Array = []
+	for ev1c_item: Dictionary in ev1c:
+		types1c.append(str(ev1c_item["type"]))
+	_check(types1c == ["arrived", "settled"] and str((w1c["visits_now"] as Dictionary)[slot_a]["state"]) == "playing", "app closed: arrived then settled in one tick, state playing")
+	# A spirit already in the collection is not new. The collection is not empty here, so somebody
+	# comes only with probability p_any: run several seeds and require that some visits happened.
+	var met_visits: int = 0
+	var met_all_old: bool = true
+	for seed_value: int in range(12, 32):
+		var w1m: Dictionary = _visit_world(defs, seed_value)
+		w1m["collection"] = {"spirit_leaf": {"first_seen_at": t0 - 100}}
+		var vis1m: Visits = Visits.new(defs)
+		Placement.new(defs).place(w1m, slot_a, spool, t0)
+		FoodBowls.new(defs).fill(w1m, bowl, "food_basic", t0)
+		vis1m.tick(w1m, t0, day_rain, room, false)
+		var met_settle: Dictionary = _find_event(vis1m.tick(w1m, t0 + 8, day_rain, room, false), "settled")
+		if not met_settle.is_empty():
+			met_visits += 1
+			met_all_old = met_all_old and met_settle.get("is_new") == false
+	_check(met_visits > 0 and met_all_old, "a spirit already in the collection gives is_new false")
+
+	# TC-V2 (R1): a toy placed on a full bowl gets its check at now + 8 s.
+	var w2: Dictionary = _visit_world(defs, 2)
+	var vis2: Visits = Visits.new(defs)
+	FoodBowls.new(defs).fill(w2, bowl, "food_basic", t0)
+	Placement.new(defs).place(w2, slot_a, ribbon, t0)
+	vis2.tick(w2, t0, night_clear, room, true)
+	var next2: Dictionary = w2["next_check_at"]
+	_check(int(next2[slot_a]) == t0 + 8, "TC-V2: a toy placed on a full bowl gets a check at now + 8 s")
+	# Nobody likes ribbon at night with basic food: the check runs, nobody comes, next check in 600 s.
+	var ev2: Array[Dictionary] = vis2.tick(w2, t0 + 8, night_clear, room, true)
+	_check(ev2.is_empty() and int((w2["check_seq"] as Dictionary)[slot_a]) == 1 and int(next2[slot_a]) == t0 + 608, "the check at +8 s runs once and schedules +600 s")
+	# A swap 100 s after that R1 (within 600 s) does not pull the check again.
+	Placement.new(defs).place(w2, slot_a, spool, t0 + 100)
+	vis2.tick(w2, t0 + 100, night_clear, room, true)
+	_check(int(next2[slot_a]) == t0 + 608, "TC-V2: a swap within 600 s of the last R1 does not pull the check")
+	# A swap 700 s after that R1 does pull it: now + 8 s.
+	var w2b: Dictionary = _visit_world(defs, 3)
+	var vis2b: Visits = Visits.new(defs)
+	FoodBowls.new(defs).fill(w2b, bowl, "food_basic", t0)
+	Placement.new(defs).place(w2b, slot_a, ribbon, t0)
+	vis2b.tick(w2b, t0, night_clear, room, true)
+	vis2b.tick(w2b, t0 + 8, night_clear, room, true)
+	Placement.new(defs).place(w2b, slot_a, spool, t0 + 700)
+	vis2b.tick(w2b, t0 + 700, night_clear, room, true)
+	_check(int((w2b["next_check_at"] as Dictionary)[slot_a]) == t0 + 708, "TC-V2: a swap more than 600 s after the last R1 gets a check at now + 8 s")
+
+	# TC-V3: an unmet rare candidate at pity 8 is chosen (first-meet guarantee). Rain is real, so spirit_rain is a candidate.
+	var w3: Dictionary = _visit_world(defs, 4)
+	w3["collection"] = {"spirit_petal": {"first_seen_at": t0 - 500}}
+	w3["pity"] = {"spirit_rain": 8}
+	FoodBowls.new(defs).fill(w3, bowl, "food_basic", t0)
+	Placement.new(defs).place(w3, slot_a, bottlecap, t0)
+	var vis3: Visits = Visits.new(defs)
+	vis3.tick(w3, t0, day_rain, room, true)
+	var ev3: Array[Dictionary] = vis3.tick(w3, t0 + 8, day_rain, room, true)
+	_check(_count_events(ev3, "arrived", "spirit_rain") == 1, "TC-V3: an unmet rare candidate with pity 8 is chosen")
+	# At pity 7 there is no guarantee; pity goes up by one only when somebody else comes.
+	var w3b: Dictionary = _visit_world(defs, 5)
+	w3b["collection"] = {"spirit_petal": {"first_seen_at": t0 - 500}}
+	w3b["pity"] = {"spirit_rain": 7}
+	FoodBowls.new(defs).fill(w3b, bowl, "food_basic", t0)
+	Placement.new(defs).place(w3b, slot_a, bottlecap, t0)
+	var vis3b: Visits = Visits.new(defs)
+	vis3b.tick(w3b, t0, day_rain, room, true)
+	var who3b: String = _first_arrival(vis3b.tick(w3b, t0 + 8, day_rain, room, true))
+	var pity_expect: int = 7 if (who3b == "" or who3b == "spirit_rain") else 8
+	_check(int((w3b["pity"] as Dictionary)["spirit_rain"]) == pity_expect, "TC-V3: pity rises by one only when another spirit comes")
+
+	# TC-V4: no real rain for 72 h (432 checks at 600 s), clear weather: spirit_rain is never a candidate, even at pity 100.
+	var w4: Dictionary = _visit_world(defs, 6)
+	w4["collection"] = {"spirit_petal": {"first_seen_at": t0 - 500}}
+	w4["pity"] = {"spirit_rain": 100}
+	FoodBowls.new(defs).fill(w4, bowl, "food_basic", t0)
+	Placement.new(defs).place(w4, slot_a, bottlecap, t0)
+	var vis4: Visits = Visits.new(defs)
+	vis4.tick(w4, t0, day_clear, room, true)
+	var rain_seen: int = 0
+	var any_seen: int = 0
+	for k: int in range(432):
+		var tk: int = t0 + 8 + k * 600
+		var ev4: Array[Dictionary] = vis4.tick(w4, tk, day_clear, room, true)
+		rain_seen += _count_events(ev4, "arrived", "spirit_rain")
+		any_seen += _count_events(ev4, "arrived", "")
+		if (w4["visits_now"] as Dictionary).has(slot_a):
+			vis4.force_leave(w4, slot_a, tk)
+	_check(rain_seen == 0 and any_seen > 0 and int((w4["pity"] as Dictionary)["spirit_rain"]) == 100, "TC-V4: no rain for 72 h, clear judgments: spirit_rain is never a candidate")
+
+	# TC-V5: force_leave on Away gives no event and changes nothing (no gift for a spirit that never came).
+	var w5: Dictionary = _visit_world(defs, 7)
+	FoodBowls.new(defs).fill(w5, bowl, "food_basic", t0)
+	Placement.new(defs).place(w5, slot_a, bottlecap, t0)
+	var before5: Dictionary = w5.duplicate(true)
+	var ev5: Array[Dictionary] = Visits.new(defs).force_leave(w5, slot_a, t0)
+	_check(ev5.is_empty() and w5 == before5, "TC-V5: force_leave on Away gives no event and changes nothing")
+
+	# TC-V6: leave_at reached gives exactly one left event, even when tick runs twice at the same now.
+	var w6: Dictionary = _visit_world(defs, 8)
+	var vis6: Visits = Visits.new(defs)
+	FoodBowls.new(defs).fill(w6, bowl, "food_basic", t0)
+	Placement.new(defs).place(w6, slot_a, spool, t0)
+	vis6.tick(w6, t0, day_rain, room, true)
+	vis6.tick(w6, t0 + 8, day_rain, room, true)
+	var visit6: Dictionary = (w6["visits_now"] as Dictionary)[slot_a]
+	var leave_at: int = int(visit6["leave_at"])
+	var stay6: int = leave_at - int(visit6["arrived_at"])
+	_check(stay6 >= 1800 and stay6 <= 5400, "the stay is within stay_min_s..stay_max_s of spirit_leaf")
+	var left_a: Array[Dictionary] = vis6.tick(w6, leave_at, day_rain, room, true)
+	var left_b: Array[Dictionary] = vis6.tick(w6, leave_at, day_rain, room, true)
+	_check(_count_events(left_a, "left", "") == 1 and _count_events(left_b, "left", "") == 0, "TC-V6: leave_at reached gives exactly one left event, even when ticked twice")
+	var left6: Dictionary = _find_event(left_a, "left")
+	_check(left6.get("spirit_id") == "spirit_leaf" and left6.get("rarity") == "common" and left6.get("visit_seq") == 1 and left6.get("slot") == slot_a, "the left event carries spirit, rarity, visit_seq and slot")
+	_check(int((w6["cooldown_until"] as Dictionary)["spirit_leaf"]) == leave_at + 3600 and int((w6["next_check_at"] as Dictionary)[slot_a]) == leave_at + 600 and (w6["visits_now"] as Dictionary).is_empty(), "after leaving: cooldown 3600 s, next check in 600 s, slot is Away")
+	# A spirit that left is not chosen until the cooldown ends (its only candidate here is spirit_leaf).
+	var first_back: int = -1
+	for k: int in range(1, 7):
+		var tc: int = leave_at + 600 * k
+		var evc: Array[Dictionary] = vis6.tick(w6, tc, day_rain, room, true)
+		if first_back < 0 and _count_events(evc, "arrived", "spirit_leaf") == 1:
+			first_back = tc
+	_check(first_back == leave_at + 3600, "cooldown: a spirit that left is not chosen until the cooldown ends")
+
+	# The star spirit: only at night, in clear weather, with nectar in the bowl of its room.
+	_check(_count_events(_judge_once(defs, 21, night_clear, "food_nectar"), "arrived", "spirit_star") == 1, "star comes at night, clear, with nectar in the bowl")
+	var star_bad: int = 0
+	var day_arrivals: int = 0
+	for seed_value: int in range(1, 21):
+		var by_day: Array[Dictionary] = _judge_once(defs, seed_value, day_clear, "food_nectar")
+		star_bad += _count_events(by_day, "arrived", "spirit_star")
+		day_arrivals += _count_events(by_day, "arrived", "")
+		star_bad += _count_events(_judge_once(defs, seed_value, night_cloudy, "food_nectar"), "arrived", "")
+		star_bad += _count_events(_judge_once(defs, seed_value, night_clear, "food_basic"), "arrived", "")
+	_check(star_bad == 0 and day_arrivals > 0, "star never comes by day, in cloudy weather, or with basic food (day with nectar still brings others)")
+
+	# TC-V7: stacked multipliers are capped at weight x 10 (a test copy of the data with big bonuses).
+	var v7_plain: Visits = Visits.new(defs)
+	_check(is_equal_approx(v7_plain.weight_of("spirit_drop", "toy_button_drum", "food_basic", "clear"), 10.0), "weight: base weight with no multiplier")
+	_check(is_equal_approx(v7_plain.weight_of("spirit_drop", "toy_button_drum", "food_basic", "rain"), 20.0), "weight: weather_boost doubles the weight")
+	var raw7: Dictionary = Defs.read_files(DATA_DIR)["raw"]
+	for sp7: Variant in raw7["spirits"]:
+		var sp7_rec: Dictionary = sp7
+		if sp7_rec["spirit_id"] == "spirit_drop":
+			sp7_rec["toy_bonus"] = {"toy_bottlecap_pool": 3.0}
+			sp7_rec["likes_food"] = ["food_nectar"]
+			sp7_rec["weather_bonus"] = 5.0
+	var defs7: Defs = Defs.new().load_raw(raw7)
+	_check((defs7.validate()["errors"] as Array).is_empty(), "the test copy of the data still validates")
+	var v7: Visits = Visits.new(defs7)
+	_check(is_equal_approx(v7.weight_of("spirit_drop", "toy_bottlecap_pool", "food_nectar", "rain"), 100.0), "TC-V7: stacked multipliers (3 x 1.2 x 1.5 x 5) are capped at weight x 10")
+	_check(is_equal_approx(v7.weight_of("spirit_drop", "toy_bottlecap_pool", "food_basic", "clear"), 30.0), "TC-V7: toy_bonus alone (10 x 3) is below the cap")
+
+	# Random driver: 1000 ticks with placements, swaps, removals, fills, weather and app changes.
+	var run_a: Dictionary = _drive_visits(defs, 9001, 1000)
+	var run_b: Dictionary = _drive_visits(defs, 9001, 1000)
+	_check(int(run_a["violations"]) == 0 and int(run_a["arrivals"]) > 0, "1000 random ticks: no spirit in two slots, no visit past leave_at (arrivals %d)" % int(run_a["arrivals"]))
+	_check(run_a["events"] == run_b["events"] and run_a["state"] == run_b["state"], "determinism: the same inputs give the same events and state")
+	var run_c: Dictionary = _drive_visits(defs, 9002, 1000)
+	_check(int(run_c["violations"]) == 0, "1000 random ticks (second seed): the same invariants hold")
+
+	# Two copies of one state, ticked with the same inputs, stay identical.
+	var copy_a: Dictionary = _visit_world(defs, 13)
+	FoodBowls.new(defs).fill(copy_a, bowl, "food_basic", t0)
+	Placement.new(defs).place(copy_a, slot_a, spool, t0)
+	var copy_b: Dictionary = copy_a.duplicate(true)
+	var vis_a: Visits = Visits.new(defs)
+	var vis_b: Visits = Visits.new(defs)
+	var same_copies: bool = true
+	for k: int in range(40):
+		var tt: int = t0 + k * 300
+		var env_k: Dictionary = day_rain if k % 2 == 0 else night_clear
+		var events_a: Array[Dictionary] = vis_a.tick(copy_a, tt, env_k, room, true)
+		var events_b: Array[Dictionary] = vis_b.tick(copy_b, tt, env_k, room, true)
+		same_copies = same_copies and events_a == events_b
+	_check(same_copies and copy_a == copy_b, "two copies of one state, same inputs: identical events and state")
+
+
+func _visit_world(defs: Defs, seed_value: int) -> Dictionary:
+	var state: Dictionary = SaveStore.new("", defs).new_game_state(seed_value)
+	var stock: Dictionary = state["inventory"]
+	for toy_id: String in defs.ids("toys"):
+		stock[toy_id] = 1
+	stock["food_nectar"] = 50
+	state["rooms_owned"] = ["room_window", "room_attic"]
+	return state
+
+
+## One judgment in room_window: ribbon hammock on slot 0, the given food in the bowl, empty collection.
+## Returns the events of the judgment (the tick at +8 s).
+func _judge_once(defs: Defs, seed_value: int, env: Dictionary, food_id: String) -> Array[Dictionary]:
+	var t0: int = 1700000000
+	var state: Dictionary = _visit_world(defs, seed_value)
+	var visits: Visits = Visits.new(defs)
+	FoodBowls.new(defs).fill(state, "room_window/slot_4", food_id, t0)
+	Placement.new(defs).place(state, "room_window/slot_0", "toy_ribbon_hammock", t0)
+	visits.tick(state, t0, env, "room_window", true)
+	return visits.tick(state, t0 + 8, env, "room_window", true)
+
+
+## Seeded mix of placements, removals, fills and ticks. Returns events, final state, arrivals and
+## invariant violations (a spirit in two slots, or a visit still running at or after its leave_at).
+func _drive_visits(defs: Defs, seed_value: int, steps: int) -> Dictionary:
+	var state: Dictionary = _visit_world(defs, seed_value)
+	var visits: Visits = Visits.new(defs)
+	var placement: Placement = Placement.new(defs)
+	var bowls: FoodBowls = FoodBowls.new(defs)
+	var toys: Array[String] = defs.ids("toys")
+	var toy_slots: Array[String] = ["room_window/slot_0", "room_window/slot_1", "room_window/slot_2", "room_window/slot_3", "room_attic/slot_0", "room_attic/slot_1", "room_attic/slot_2"]
+	var bowl_slots: Array[String] = ["room_window/slot_4", "room_attic/slot_3"]
+	var foods: Array[String] = ["food_basic", "food_nectar"]
+	var weathers: Array[String] = ["clear", "cloudy", "rain"]
+	var rooms: Array[String] = ["room_window", "room_attic", ""]
+	var now: int = 1700000000
+	var log: Array[Dictionary] = []
+	var arrivals: int = 0
+	var violations: int = 0
+	for i: int in range(steps):
+		now += 1 + floori(DetRng.unit(seed_value, "drive:dt", i) * 900.0)
+		var act: float = DetRng.unit(seed_value, "drive:act", i)
+		if act < 0.2:
+			var place_slot: String = toy_slots[floori(DetRng.unit(seed_value, "drive:slot", i) * float(toy_slots.size()))]
+			var toy_id: String = toys[floori(DetRng.unit(seed_value, "drive:toy", i) * float(toys.size()))]
+			if placement.place(state, place_slot, toy_id, now).force_leave_slot:
+				log.append_array(visits.force_leave(state, place_slot, now))
+		elif act < 0.3:
+			var remove_slot: String = toy_slots[floori(DetRng.unit(seed_value, "drive:rslot", i) * float(toy_slots.size()))]
+			if placement.remove(state, remove_slot, now).force_leave_slot:
+				log.append_array(visits.force_leave(state, remove_slot, now))
+		elif act < 0.4:
+			var bowl_slot: String = bowl_slots[floori(DetRng.unit(seed_value, "drive:bowl", i) * float(bowl_slots.size()))]
+			var food_id: String = foods[floori(DetRng.unit(seed_value, "drive:food", i) * float(foods.size()))]
+			bowls.fill(state, bowl_slot, food_id, now)
+		var env: Dictionary = {
+			"is_night": DetRng.unit(seed_value, "drive:night", i) < 0.5,
+			"weather": weathers[floori(DetRng.unit(seed_value, "drive:wx", i) * float(weathers.size()))],
+		}
+		var room: String = rooms[floori(DetRng.unit(seed_value, "drive:room", i) * float(rooms.size()))]
+		var app_open: bool = DetRng.unit(seed_value, "drive:app", i) < 0.7
+		var events: Array[Dictionary] = visits.tick(state, now, env, room, app_open)
+		log.append_array(events)
+		for ev: Dictionary in events:
+			if ev["type"] == "arrived":
+				arrivals += 1
+			if ev["type"] == "settled" and ev["is_new"] == true:
+				var collection: Dictionary = state["collection"]
+				collection[ev["spirit_id"]] = {"first_seen_at": now}
+		var seen: Dictionary = {}
+		var visits_now: Dictionary = state["visits_now"]
+		for slot_key: Variant in visits_now:
+			var visit: Dictionary = visits_now[slot_key]
+			if seen.has(visit["spirit_id"]):
+				violations += 1
+			seen[visit["spirit_id"]] = true
+			if int(visit["leave_at"]) <= now:
+				violations += 1
+	return {"events": log, "state": state, "arrivals": arrivals, "violations": violations}
+
+
+func _count_events(events: Array, type_name: String, spirit_id: String) -> int:
+	var count: int = 0
+	for ev: Variant in events:
+		var found: Dictionary = ev
+		if str(found["type"]) == type_name and (spirit_id == "" or str(found.get("spirit_id", "")) == spirit_id):
+			count += 1
+	return count
+
+
+func _find_event(events: Array, type_name: String) -> Dictionary:
+	for ev: Variant in events:
+		var found: Dictionary = ev
+		if str(found["type"]) == type_name:
+			return found
+	return {}
+
+
+func _first_arrival(events: Array) -> String:
+	return str(_find_event(events, "arrived").get("spirit_id", ""))
 
 
 # ---------------------------------------------------------------- helpers
