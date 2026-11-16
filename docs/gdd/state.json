@@ -507,6 +507,21 @@
    "status": "done",
    "file": "docs/gdd/A6-테스트-요청-변환.md",
    "date": "2026-11-16"
+  },
+  "A7": {
+   "status": "done",
+   "file": "docs/gdd/A7-AI-결과-검토.md",
+   "date": "2026-11-16"
+  },
+  "A8": {
+   "status": "done",
+   "file": "docs/gdd/A8-재요청.md",
+   "date": "2026-11-16"
+  },
+  "A9": {
+   "status": "done",
+   "file": "docs/gdd/A9-프롬프트-수정-이력.md",
+   "date": "2026-11-16"
   }
  },
  "history": [
@@ -667,6 +682,12 @@
   "2026-11-16 done A4 docs/gdd/A4-클래스-설계-요청-변환.md",
   "2026-11-16 done A5 docs/gdd/A5-UI-구현-요청-변환.md",
   "2026-11-16 done A6 docs/gdd/A6-테스트-요청-변환.md",
-  "2026-11-16 meta final_doc=docs/gdd/final/game-design-doc.md"
+  "2026-11-16 meta final_doc=docs/gdd/final/game-design-doc.md",
+  "2026-11-16 start A7",
+  "2026-11-16 done A7 docs/gdd/A7-AI-결과-검토.md",
+  "2026-11-16 start A8",
+  "2026-11-16 done A8 docs/gdd/A8-재요청.md",
+  "2026-11-16 start A9",
+  "2026-11-16 done A9 docs/gdd/A9-프롬프트-수정-이력.md"
  ]
 }
