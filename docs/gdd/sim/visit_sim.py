@@ -16,7 +16,7 @@ P = {
     "tutorial_coins": 100,
     "prices": [("toy_bottlecap", 80), ("toy_matchbox", 150), ("toy_ribbon", 250), ("toy_button", 400), ("room_attic", 800)],
     "nectar_pack": (3, 30),
-    "pity_n": 8, "weather_relax_s": 72 * 3600,
+    "pity_n": 8, "weather_relax_s": None,  # user 2026-11-16: real weather only (no relax)
     "rooms": {"room_window": 4, "room_attic": 3},
     "day_hours": (8, 23), "night_hours": (19, 6),
     "fresh_place_check_s": 8,
@@ -173,7 +173,7 @@ def run(per_day=4, wkind="normal", seed=0, days=7):
                     continue
                 if (tm == "day" and night) or (tm == "night" and not night):
                     continue
-                if gate and weather not in gate and not (relax and t - last_met[sp] >= P["weather_relax_s"]):
+                if gate and weather not in gate and not (relax and P["weather_relax_s"] and t - last_met[sp] >= P["weather_relax_s"]):
                     continue
                 if req and b["food"] != req:
                     continue
