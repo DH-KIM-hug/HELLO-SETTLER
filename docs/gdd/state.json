@@ -223,7 +223,9 @@
    "date": "2026-11-16"
   },
   "G10": {
-   "status": "doing"
+   "status": "done",
+   "file": "docs/gdd/G10-성장→데이터-구조.md",
+   "date": "2026-11-16"
   }
  },
  "history": [
@@ -326,6 +328,7 @@
   "2026-11-16 done G8 docs/gdd/G8-재화.md",
   "2026-11-16 start G9",
   "2026-11-16 done G9 docs/gdd/G9-상점.md",
-  "2026-11-16 start G10"
+  "2026-11-16 start G10",
+  "2026-11-16 done G10 docs/gdd/G10-성장→데이터-구조.md"
  ]
 }

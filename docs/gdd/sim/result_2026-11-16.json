@@ -1,0 +1,476 @@
+{
+ "s3_dry": {
+  "empty_rate": 0.005,
+  "morning_empty": 0.0,
+  "coins_day": [
+   164,
+   264,
+   314,
+   505,
+   591,
+   671,
+   666
+  ],
+  "all8_by_d7": 0.98,
+  "scenes3_by_d7": 0.98,
+  "meet_petal": [
+   0.26,
+   0.31
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.47,
+   0.66
+  ],
+  "meet_ember": [
+   0.84,
+   1.8
+  ],
+  "meet_breeze": [
+   0.26,
+   0.31
+  ],
+  "meet_moss": [
+   0.89,
+   1.84
+  ],
+  "meet_rain": [
+   3.03,
+   3.07
+  ],
+  "meet_star": [
+   2.87,
+   4.01
+  ],
+  "scene_sunny_pair": [
+   0.29,
+   0.57
+  ],
+  "scene_rainy_pool": [
+   1.56,
+   3.21
+  ],
+  "scene_star_night": [
+   2.9,
+   4.01
+  ],
+  "buy_toy_bottlecap": [
+   0.47,
+   0.65
+  ],
+  "buy_toy_matchbox": [
+   0.83,
+   1.41
+  ],
+  "buy_toy_ribbon": [
+   1.79,
+   2.48
+  ],
+  "buy_toy_button": [
+   3.43,
+   3.66
+  ],
+  "buy_room_attic": [
+   4.6,
+   4.94
+  ]
+ },
+ "s3_normal": {
+  "empty_rate": 0.004,
+  "morning_empty": 0.0,
+  "coins_day": [
+   167,
+   291,
+   340,
+   335,
+   325,
+   354,
+   405
+  ],
+  "all8_by_d7": 0.97,
+  "scenes3_by_d7": 0.95,
+  "meet_petal": [
+   0.26,
+   0.3
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.48,
+   0.66
+  ],
+  "meet_ember": [
+   0.85,
+   1.8
+  ],
+  "meet_breeze": [
+   0.26,
+   0.34
+  ],
+  "meet_moss": [
+   0.65,
+   1.13
+  ],
+  "meet_rain": [
+   2.14,
+   3.86
+  ],
+  "meet_star": [
+   2.88,
+   4.13
+  ],
+  "scene_sunny_pair": [
+   0.34,
+   0.73
+  ],
+  "scene_rainy_pool": [
+   1.24,
+   2.04
+  ],
+  "scene_star_night": [
+   2.9,
+   4.22
+  ],
+  "buy_toy_bottlecap": [
+   0.47,
+   0.65
+  ],
+  "buy_toy_matchbox": [
+   0.83,
+   1.41
+  ],
+  "buy_toy_ribbon": [
+   1.7,
+   2.36
+  ],
+  "buy_toy_button": [
+   3.34,
+   3.65
+  ],
+  "buy_room_attic": [
+   5.55,
+   6.53
+  ]
+ },
+ "s3_wet": {
+  "empty_rate": 0.005,
+  "morning_empty": 0.0,
+  "coins_day": [
+   169,
+   346,
+   374,
+   348,
+   351,
+   411,
+   442
+  ],
+  "all8_by_d7": 0.93,
+  "scenes3_by_d7": 0.89,
+  "meet_petal": [
+   0.26,
+   0.3
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.48,
+   0.68
+  ],
+  "meet_ember": [
+   0.85,
+   1.8
+  ],
+  "meet_breeze": [
+   0.28,
+   0.57
+  ],
+  "meet_moss": [
+   0.56,
+   0.8
+  ],
+  "meet_rain": [
+   1.01,
+   2.1
+  ],
+  "meet_star": [
+   2.99,
+   6.12
+  ],
+  "scene_sunny_pair": [
+   0.53,
+   2.49
+  ],
+  "scene_rainy_pool": [
+   1.04,
+   1.56
+  ],
+  "scene_star_night": [
+   3.11,
+   6.88
+  ],
+  "buy_toy_bottlecap": [
+   0.47,
+   0.65
+  ],
+  "buy_toy_matchbox": [
+   0.83,
+   1.42
+  ],
+  "buy_toy_ribbon": [
+   1.59,
+   1.9
+  ],
+  "buy_toy_button": [
+   2.74,
+   3.5
+  ],
+  "buy_room_attic": [
+   5.38,
+   5.71
+  ]
+ },
+ "s6_dry": {
+  "empty_rate": 0.007,
+  "morning_empty": 0.0,
+  "coins_day": [
+   189,
+   296,
+   371,
+   603,
+   688,
+   742,
+   741
+  ],
+  "all8_by_d7": 1.0,
+  "scenes3_by_d7": 1.0,
+  "meet_petal": [
+   0.26,
+   0.31
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.42,
+   0.53
+  ],
+  "meet_ember": [
+   0.8,
+   0.88
+  ],
+  "meet_breeze": [
+   0.26,
+   0.3
+  ],
+  "meet_moss": [
+   0.75,
+   1.84
+  ],
+  "meet_rain": [
+   3.02,
+   3.06
+  ],
+  "meet_star": [
+   1.9,
+   2.91
+  ],
+  "scene_sunny_pair": [
+   0.29,
+   0.55
+  ],
+  "scene_rainy_pool": [
+   1.38,
+   3.04
+  ],
+  "scene_star_night": [
+   1.93,
+   2.91
+  ],
+  "buy_toy_bottlecap": [
+   0.4,
+   0.53
+  ],
+  "buy_toy_matchbox": [
+   0.76,
+   0.87
+  ],
+  "buy_toy_ribbon": [
+   1.64,
+   1.82
+  ],
+  "buy_toy_button": [
+   2.74,
+   3.45
+  ],
+  "buy_room_attic": [
+   4.39,
+   4.58
+  ]
+ },
+ "s6_normal": {
+  "empty_rate": 0.009,
+  "morning_empty": 0.0,
+  "coins_day": [
+   194,
+   328,
+   373,
+   378,
+   371,
+   436,
+   473
+  ],
+  "all8_by_d7": 1.0,
+  "scenes3_by_d7": 1.0,
+  "meet_petal": [
+   0.26,
+   0.3
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.43,
+   0.54
+  ],
+  "meet_ember": [
+   0.81,
+   0.89
+  ],
+  "meet_breeze": [
+   0.26,
+   0.34
+  ],
+  "meet_moss": [
+   0.56,
+   1.06
+  ],
+  "meet_rain": [
+   2.02,
+   3.25
+  ],
+  "meet_star": [
+   1.95,
+   3.18
+  ],
+  "scene_sunny_pair": [
+   0.33,
+   0.69
+  ],
+  "scene_rainy_pool": [
+   1.09,
+   2.04
+  ],
+  "scene_star_night": [
+   2.0,
+   3.82
+  ],
+  "buy_toy_bottlecap": [
+   0.4,
+   0.53
+  ],
+  "buy_toy_matchbox": [
+   0.76,
+   0.88
+  ],
+  "buy_toy_ribbon": [
+   1.57,
+   1.75
+  ],
+  "buy_toy_button": [
+   2.69,
+   3.36
+  ],
+  "buy_room_attic": [
+   5.34,
+   5.62
+  ]
+ },
+ "s6_wet": {
+  "empty_rate": 0.007,
+  "morning_empty": 0.0,
+  "coins_day": [
+   205,
+   386,
+   397,
+   380,
+   407,
+   474,
+   479
+  ],
+  "all8_by_d7": 0.99,
+  "scenes3_by_d7": 0.93,
+  "meet_petal": [
+   0.26,
+   0.31
+  ],
+  "meet_leaf": [
+   0.0,
+   0.0
+  ],
+  "meet_drop": [
+   0.43,
+   0.56
+  ],
+  "meet_ember": [
+   0.81,
+   0.89
+  ],
+  "meet_breeze": [
+   0.26,
+   0.57
+  ],
+  "meet_moss": [
+   0.5,
+   0.74
+  ],
+  "meet_rain": [
+   0.92,
+   1.97
+  ],
+  "meet_star": [
+   2.13,
+   4.05
+  ],
+  "scene_sunny_pair": [
+   0.51,
+   4.51
+  ],
+  "scene_rainy_pool": [
+   0.92,
+   1.43
+  ],
+  "scene_star_night": [
+   2.22,
+   4.82
+  ],
+  "buy_toy_bottlecap": [
+   0.4,
+   0.53
+  ],
+  "buy_toy_matchbox": [
+   0.74,
+   0.87
+  ],
+  "buy_toy_ribbon": [
+   1.49,
+   1.69
+  ],
+  "buy_toy_button": [
+   2.48,
+   2.83
+  ],
+  "buy_room_attic": [
+   4.65,
+   5.4
+  ]
+ }
+}
