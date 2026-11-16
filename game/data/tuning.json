@@ -6,7 +6,7 @@
   "fresh_place_cooldown_s": 600,
   "eat_rate_per_hour": 0.01,
   "pity_n": 8,
-  "offline_cap_s": 43200,
+  "offline_cap_s": 86400,
   "tutorial_coins": 100,
   "coin_cap": 99999,
   "nectar_cap": 99,

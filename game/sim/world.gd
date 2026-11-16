@@ -11,6 +11,8 @@ extends RefCounted
 ##
 ## Routing: every Visits event (tick, catch-up, forced leave) goes through _route(). A 'left' event
 ## creates the gift (Wallet) and counts the visit (Collection). A 'settled' event goes to Collection.
+## Catch-up calls _route() once per replay round, at the round's own time (CatchUp on_round), so
+## first_seen_at and the scene checks see the state at that time. Nothing is routed a second time.
 ## Wallet changes (coins, pending gifts per slot) are compared before and after and emitted as signals.
 
 signal visit_changed(slot: String)
@@ -56,7 +58,8 @@ func _init(defs: Defs, save_store: SaveStore) -> void:
 	_collection = Collection.new(defs)
 
 
-## Loads (or creates) the game, builds the EnvClock from tuning, runs CatchUp, routes its events, saves.
+## Loads (or creates) the game, builds the EnvClock from tuning, runs CatchUp (which routes its events
+## round by round), saves.
 ## Returns {load_kind: SaveStore.LoadKind, load_reason: String, catch_up: {elapsed_s, capped, clock_back, event_count}, saved: bool}.
 func start(now: int, utc_offset_s: int, fresh_seed: int) -> Dictionary:
 	var loaded: SaveStore.LoadResult = _store.load_game(fresh_seed, now)
@@ -65,8 +68,7 @@ func start(now: int, utc_offset_s: int, fresh_seed: int) -> Dictionary:
 	_env = _build_env()
 	_started = true
 	_last_t = now
-	var report: Dictionary = _catch_up.run(_state, now, _env, utc_offset_s)
-	_route(report["events"], now, _env.at(now, utc_offset_s))
+	var report: Dictionary = _catch_up.run(_state, now, _env, utc_offset_s, _route)
 	var summary: Dictionary = _catch_up_summary(report)
 	var saved: bool = _save(now)
 	catch_up_done.emit(summary)
@@ -219,15 +221,14 @@ func on_app_paused(now: int) -> bool:
 	return _save(now)
 
 
-## The app came back. Runs CatchUp in both cases (it handles short gaps too), routes the events, saves.
-## Returns {full: bool}, where full is true when the app was away for FULL_CATCH_UP_S or more.
+## The app came back. Runs CatchUp in both cases (it handles short gaps too; it routes the events round
+## by round), saves. Returns {full: bool}, where full is true when the app was away for FULL_CATCH_UP_S or more.
 func on_app_resumed(now: int) -> Dictionary:
 	if not _started:
 		return {"full": false}
 	var away: int = now - int(_state.get("last_seen", 0))
 	_last_t = now
-	var report: Dictionary = _catch_up.run(_state, now, _env, _utc_offset_s)
-	_route(report["events"], now, _env.at(now, _utc_offset_s))
+	var report: Dictionary = _catch_up.run(_state, now, _env, _utc_offset_s, _route)
 	_save(now)
 	catch_up_done.emit(_catch_up_summary(report))
 	return {"full": away >= FULL_CATCH_UP_S}

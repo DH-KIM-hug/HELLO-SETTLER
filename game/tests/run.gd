@@ -753,6 +753,8 @@ func _suite_catchup() -> void:
 	var offset: int = 32400  # UTC+9
 	var t0: int = 1700000000
 	var half_day: int = 43200
+	var day: int = 86400  # the offline cap (tuning offline_cap_s, 24 h)
+	_check(int(defs.tuning()["offline_cap_s"]) == day, "catchup: tuning offline_cap_s is 24 h (86400 s)")
 	var bowl: String = "room_window/slot_4"
 	var slot_0: String = "room_window/slot_0"
 	var slot_1: String = "room_window/slot_1"
@@ -771,18 +773,18 @@ func _suite_catchup() -> void:
 	var r_c1: Dictionary = CatchUp.new(defs).run(c1, t0, clock, offset)
 	_check(bool(r_c1["clock_back"]) and (r_c1["events"] as Array).is_empty() and int(r_c1["elapsed_s"]) == 0 and c1 == c1_expect, "TC-C1: clock 1 day back: nothing changes except last_seen = now, clock_back true")
 
-	# TC-C2: 12 h + 1 s is capped to 12 h, so it gives the same result as exactly 12 h (same window start).
+	# TC-C2: 24 h + 1 s is capped to 24 h, so it gives the same result as exactly 24 h (same window start).
 	var start_c2: int = t0 + 3600
-	var now_c2: int = start_c2 + half_day
+	var now_c2: int = start_c2 + day
 	var c2_a: Dictionary = _catchup_full(defs, 22, t0)
-	c2_a["last_seen"] = now_c2 - half_day - 1
+	c2_a["last_seen"] = now_c2 - day - 1
 	var c2_b: Dictionary = c2_a.duplicate(true)
-	c2_b["last_seen"] = now_c2 - half_day
+	c2_b["last_seen"] = now_c2 - day
 	var cu_c2: CatchUp = CatchUp.new(defs)
 	var r_c2a: Dictionary = cu_c2.run(c2_a, now_c2, clock, offset)
 	var r_c2b: Dictionary = cu_c2.run(c2_b, now_c2, clock, offset)
-	_check(bool(r_c2a["capped"]) and not bool(r_c2b["capped"]), "TC-C2: 12 h + 1 s is capped, exactly 12 h is not")
-	_check(r_c2a["events"] == r_c2b["events"] and c2_a == c2_b, "TC-C2: 12 h + 1 s and exactly 12 h give identical events and states")
+	_check(bool(r_c2a["capped"]) and not bool(r_c2b["capped"]), "TC-C2: 24 h + 1 s is capped, exactly 24 h is not")
+	_check(r_c2a["events"] == r_c2b["events"] and c2_a == c2_b, "TC-C2: 24 h + 1 s and exactly 24 h give identical events and states")
 
 	# TC-C3: the same state and the same now, run on deep copies, give the same result (determinism).
 	var c3_a: Dictionary = _catchup_full(defs, 23, t0)
@@ -822,16 +824,40 @@ func _suite_catchup() -> void:
 	_check(amount_after < amount_before, "6 h close: the bowl amount is lower (%.4f -> %.4f)" % [amount_before, amount_after])
 	_check(_one_visit_per_spirit(ev_close), "6 h close: the same spirit is never in two slots (checked along the events)")
 
-	# Performance: 12 h with 7 toy slots (both rooms, 6 toys placed, both bowls full).
+	# Performance: 24 h with 7 toy slots (both rooms, 6 toys placed, both bowls full).
 	var perf_state: Dictionary = _catchup_full(defs, 24, t0)
 	_check((perf_state["placement"] as Dictionary).size() == 6, "perf setup: 6 toys placed on 7 toy slots")
 	perf_state["last_seen"] = t0
 	var cu_perf: CatchUp = CatchUp.new(defs)
 	var started: int = Time.get_ticks_msec()
-	var r_perf: Dictionary = cu_perf.run(perf_state, t0 + half_day, clock, offset)
+	var r_perf: Dictionary = cu_perf.run(perf_state, t0 + day, clock, offset)
 	var perf_ms: int = Time.get_ticks_msec() - started
-	print("  catch-up 12 h, 7 toy slots: %d ms, %d events (target < 200 ms, assert < 400 ms)" % [perf_ms, (r_perf["events"] as Array).size()])
-	_check(int(r_perf["elapsed_s"]) == half_day and perf_ms < 400, "catch-up 12 h with 7 toy slots takes under 400 ms (got %d ms)" % perf_ms)
+	print("  catch-up 24 h, 7 toy slots: %d ms, %d events (target < 200 ms, assert < 400 ms)" % [perf_ms, (r_perf["events"] as Array).size()])
+	_check(int(r_perf["elapsed_s"]) == day and perf_ms < 400, "catch-up 24 h with 7 toy slots takes under 400 ms (got %d ms)" % perf_ms)
+
+	# Routing in time order (chunk 7): on_round gets each round at its own time, in increasing order, with
+	# the environment at that time. The events it gets are the returned events, and the callback changes
+	# nothing (same events and state as a run without it).
+	var rec_state: Dictionary = _catchup_full(defs, 25, t0)
+	rec_state["last_seen"] = t0
+	var plain_state: Dictionary = rec_state.duplicate(true)
+	var rec: Dictionary = {"times": [], "events": [], "env_ok": true}
+	var on_round: Callable = func(round_events: Array, t: int, env: Dictionary) -> void:
+		(rec["times"] as Array).append(t)
+		(rec["events"] as Array).append_array(round_events)
+		if env != clock.at(t, offset):
+			rec["env_ok"] = false
+	var r_rec: Dictionary = CatchUp.new(defs).run(rec_state, t0 + half_day, clock, offset, on_round)
+	var r_plain: Dictionary = CatchUp.new(defs).run(plain_state, t0 + half_day, clock, offset)
+	var times: Array = rec["times"]
+	var in_order: bool = not times.is_empty() and int(times[0]) == t0 and int(times[times.size() - 1]) == t0 + half_day
+	for i: int in range(1, times.size()):
+		if int(times[i]) <= int(times[i - 1]):
+			in_order = false
+	_check(in_order, "on_round: rounds run in increasing time, from the window start to now (%d rounds)" % times.size())
+	_check(rec["events"] == r_rec["events"] and not (r_rec["events"] as Array).is_empty(), "on_round: the events it gets are the returned events, in order")
+	_check(bool(rec["env_ok"]), "on_round: each round gets the environment at its own time")
+	_check(rec_state == plain_state and r_rec["events"] == r_plain["events"], "on_round: the callback changes nothing (same events and state as a run without it)")
 
 
 ## Both rooms owned, all toys owned, both bowls full of basic food, six toys placed on seven toy slots
@@ -1573,6 +1599,127 @@ func _suite_world() -> void:
 	var reloaded6: SaveStore.LoadResult = SaveStore.new(base_w6, defs).load_game(1, t0)
 	_check(reloaded6.state == st6, "world: the reset game is on disk and loads back equal")
 
+	# Routing in time order (chunk 7): World routes each replay round at its own time, so a spirit met inside
+	# the replay keeps its meeting time, and each event is routed once. Checked against a hand-routed replay
+	# of the same saved state.
+	var half_day: int = 43200
+	var base_rt: String = _temp_dir("routed")
+	var seeded_rt: Dictionary = _catchup_full(defs, 61, t0)
+	seeded_rt["last_seen"] = t0
+	SaveStore.new(base_rt, defs).save(seeded_rt)
+	var ref_state: Dictionary = SaveStore.new(base_rt, defs).load_game(61, t0).state
+	var rt_now: int = t0 + half_day
+	var ref: Dictionary = _replay_routed(defs, ref_state, rt_now, _clock(61, defs.tuning()), offset)
+	var rt_world: World = World.new(defs, SaveStore.new(base_rt, defs))
+	var rt_counts: Dictionary = {"left": 0, "settled": 0}
+	rt_world.spirit_left.connect(func(_slot: String, _spirit: String) -> void:
+		rt_counts["left"] = int(rt_counts["left"]) + 1)
+	rt_world.spirit_settled.connect(func(_slot: String, _spirit: String, _is_new: bool) -> void:
+		rt_counts["settled"] = int(rt_counts["settled"]) + 1)
+	rt_world.start(rt_now, offset, 61)
+	var rt_st: Dictionary = rt_world.state_copy()
+	var rt_book: Dictionary = rt_st["collection"]
+	var first_settle: Dictionary = ref["first_settle"]
+	var inside: int = 0
+	var stamped_ok: bool = true
+	for spirit_key: Variant in first_settle:
+		var t1: int = int(first_settle[spirit_key])
+		if t1 < rt_now:
+			inside += 1
+		if int((rt_book.get(str(spirit_key), {}) as Dictionary).get("first_seen_at", -1)) != t1:
+			stamped_ok = false
+	_check(inside >= 1 and stamped_ok, "world routing: %d spirits met inside the replay, each keeps its meeting time as first_seen_at" % inside)
+	_check(int(rt_counts["settled"]) == int(ref["settled"]) and int(rt_counts["left"]) == int(ref["left"]), "world routing: each settled and left event is routed once (settled %d, left %d)" % [int(ref["settled"]), int(ref["left"])])
+	var visit_sum: int = 0
+	for entry_value: Variant in rt_book.values():
+		visit_sum += int((entry_value as Dictionary).get("visit_count", 0))
+	_check(visit_sum == int(ref["counted"]), "world routing: the visit counts add up to the counted leaves (%d)" % visit_sum)
+	var gifts_now: int = (rt_st["pending_gifts"] as Array).size()
+	_check(int(ref["left"]) >= 1 and gifts_now + int(ref["auto_claimed"]) == int(ref["left"]), "world routing: pending gifts + claimed = left events (%d + %d = %d)" % [gifts_now, int(ref["auto_claimed"]), int(ref["left"])])
+	_check(rt_st == ref_state, "world routing: the state after start equals the hand-routed replay (no double routing)")
+
+	# A scene whose two spirits are both playing inside the replay unlocks at that time, with its conditions met
+	# there. Seed 24: petal and breeze play in room_window at about +11 h 27 min (clear, day). At the end of the
+	# replay petal is no longer playing, so the old end-state check could not unlock it; the round check does.
+	var base_sc: String = _temp_dir("scene")
+	var seeded_sc: Dictionary = _catchup_full(defs, 24, t0)
+	seeded_sc["last_seen"] = t0
+	SaveStore.new(base_sc, defs).save(seeded_sc)
+	var sc_ref_state: Dictionary = SaveStore.new(base_sc, defs).load_game(24, t0).state
+	var sc_ref: Dictionary = _replay_routed(defs, sc_ref_state, t0 + half_day, _clock(24, defs.tuning()), offset)
+	var sc_at: Dictionary = (sc_ref["scene_at"] as Dictionary).get("scene_sunny_pair", {})
+	_check(not sc_at.is_empty(), "scene: the sunny pair unlocks during the replay")
+	if not sc_at.is_empty():
+		var sc_t: int = int(sc_at["t"])
+		var sc_env: Dictionary = sc_at["env"]
+		var sc_vis: Dictionary = sc_at["visits"]
+		var sc_def: Dictionary = defs.scene("scene_sunny_pair")
+		var playing_room: Dictionary = {}  # spirit -> room of its playing visit, at the unlock time
+		for slot_key: Variant in sc_vis:
+			var visit: Dictionary = sc_vis[slot_key]
+			if str(visit["state"]) == Visits.STATE_PLAYING:
+				playing_room[str(visit["spirit_id"])] = str(defs.slot(str(slot_key))["room_id"])
+		var same_room: bool = playing_room.has("spirit_petal") and playing_room.has("spirit_breeze") and playing_room["spirit_petal"] == playing_room["spirit_breeze"]
+		_check(same_room, "scene: petal and breeze both play in one room at the unlock time (+%d s)" % (sc_t - t0))
+		var weather_fits: bool = (sc_def["weather"] as Array).has(str(sc_env["weather"]))
+		var time_fits: bool = str(sc_def["time"]) == "any" or (str(sc_def["time"]) == "day") != bool(sc_env["is_night"])
+		_check(sc_t > t0 and sc_t < t0 + half_day and weather_fits and time_fits, "scene: the unlock is inside the replay and its weather and time fit (%s, night %s)" % [str(sc_env["weather"]), str(sc_env["is_night"])])
+		var end_playing: Array = []
+		for end_key: Variant in sc_ref_state["visits_now"]:
+			var end_visit: Dictionary = (sc_ref_state["visits_now"] as Dictionary)[end_key]
+			if str(end_visit["state"]) == Visits.STATE_PLAYING:
+				end_playing.append(str(end_visit["spirit_id"]))
+		_check(not (end_playing.has("spirit_petal") and end_playing.has("spirit_breeze")), "scene: at the end of the replay the pair is not both playing (the unlock comes from the replay)")
+	var sc_world: World = World.new(defs, SaveStore.new(base_sc, defs))
+	var sc_unlocks: Array = []
+	sc_world.unlocked.connect(func(kind: String, id: String) -> void:
+		if kind == "scene":
+			sc_unlocks.append(id))
+	sc_world.start(t0 + half_day, offset, 24)
+	var sc_st: Dictionary = sc_world.state_copy()
+	_check((sc_st["scenes_unlocked"] as Array).has("scene_sunny_pair") and sc_unlocks.count("scene_sunny_pair") == 1, "scene: World unlocks the sunny pair once, during the replay")
+	_check(sc_world.pending_reveals().has("scene:scene_sunny_pair"), "scene: the unlock is waiting to be shown as a reveal")
+
+
+## Replays the state like World does, but routes by hand round by round (Collection and Wallet only).
+## Returns what the routing saw: the first settle time of each spirit, the settled and left counts, the left
+## events whose visit was counted (on_left true), the gifts the caps claimed on their own, and for each scene
+## unlocked in the replay its time, the environment and a copy of the visits at that time.
+func _replay_routed(defs: Defs, state: Dictionary, now: int, clock: EnvClock, offset: int) -> Dictionary:
+	var collection: Collection = Collection.new(defs)
+	var wallet: Wallet = Wallet.new(defs)
+	var seen: Dictionary = {"first_settle": {}, "scene_at": {}, "settled": 0, "left": 0, "counted": 0, "auto_claimed": 0}
+	var on_round: Callable = func(round_events: Array, t: int, env: Dictionary) -> void:
+		var placement: Dictionary = state["placement"]
+		for ev_value: Variant in round_events:
+			var ev: Dictionary = ev_value
+			var slot: String = str(ev.get("slot", ""))
+			var spirit: String = str(ev.get("spirit_id", ""))
+			if str(ev["type"]) == "settled":
+				seen["settled"] = int(seen["settled"]) + 1
+				var first: Dictionary = seen["first_settle"]
+				if not first.has(spirit):
+					first[spirit] = t
+				var unlocks: Array = collection.on_settled(state, slot, spirit, str(placement.get(slot, "")), t, env)
+				for unlock_value: Variant in unlocks:
+					var unlock: Dictionary = unlock_value
+					if str(unlock["kind"]) == "scene":
+						var scene_map: Dictionary = seen["scene_at"]
+						scene_map[str(unlock["id"])] = {"t": t, "env": env.duplicate(), "visits": (state["visits_now"] as Dictionary).duplicate(true)}
+			elif str(ev["type"]) == "left":
+				seen["left"] = int(seen["left"]) + 1
+				var seq: int = int(ev["visit_seq"])
+				var pending_before: int = (state.get("pending_gifts", []) as Array).size()
+				var gifted_before: bool = (state.get("gifted_seqs", []) as Array).has(seq)
+				wallet.create_gift(state, slot, spirit, seq, str(ev["rarity"]))
+				var created: bool = not gifted_before and (state.get("gifted_seqs", []) as Array).has(seq)
+				var pending_after: int = (state.get("pending_gifts", []) as Array).size()
+				seen["auto_claimed"] = int(seen["auto_claimed"]) + pending_before + (1 if created else 0) - pending_after
+				if collection.on_left(state, spirit):
+					seen["counted"] = int(seen["counted"]) + 1
+	CatchUp.new(defs).run(state, now, clock, offset, on_round)
+	return seen
+
 
 # ---------------------------------------------------------------- seven_days
 
@@ -1638,19 +1785,13 @@ func _suite_seven_days() -> void:
 
 	_check(mean_empty <= 0.02, "seven_days: mean empty-room rate %.4f is at most 0.02" % mean_empty)
 	_check(all_commons >= WEEK_MIN_ALL_COMMONS, "seven_days: at least %d of %d seeds met all commons by day 7 (got %d)" % [WEEK_MIN_ALL_COMMONS, WEEK_SEEDS, all_commons])
-	# Report only: the attic assert missed (6.52 > 6.5) with the 12 h offline cap in place. Balance is the main session's call.
-	_note(attic_median >= 4.5 and attic_median <= 6.5, "seven_days: median attic-buy day %.2f is in [4.5, 6.5] (report only)" % attic_median)
+	_check(attic_median >= 4.5 and attic_median <= 6.5, "seven_days: median attic-buy day %.2f is in [4.5, 6.5]" % attic_median)
 
 
 ## One simulated week for one seed. The app is closed between sessions; the catch-up on resume does the time.
 func _sim_week(defs: Defs, seed_value: int, midnight: int, offset: int) -> Dictionary:
 	var base: String = _temp_dir("week")
 	var world: World = World.new(defs, SaveStore.new(base, defs))
-	var clock: Dictionary = {"now": midnight}
-	var first_met: Dictionary = {}
-	world.spirit_settled.connect(func(_slot: String, spirit_id: String, _is_new: bool) -> void:
-		if not first_met.has(spirit_id):
-			first_met[spirit_id] = _day_of(int(clock["now"]), midnight))
 	var opens: int = 0
 	var empty: int = 0
 	var attic_day: float = 99.0
@@ -1667,7 +1808,6 @@ func _sim_week(defs: Defs, seed_value: int, midnight: int, offset: int) -> Dicti
 		for planned: int in _session_times(seed_value, day, midnight):
 			var session_t: int = maxi(planned, last_end + 1)
 			last_end = session_t + 120
-			clock["now"] = session_t
 			world.on_app_resumed(session_t)
 			opens += 1
 			if _room_empty(world.state_copy(), "room_window"):
@@ -1679,10 +1819,14 @@ func _sim_week(defs: Defs, seed_value: int, midnight: int, offset: int) -> Dicti
 			_player_place_newest(world, defs, session_t)
 			_player_fill(world, defs, session_t)
 			for k: int in range(1, 121):
-				clock["now"] = session_t + k
 				world.tick(session_t + k, "room_window", true)
-			clock["now"] = session_t + 120
 			world.on_app_paused(session_t + 120)
+	# First meeting day per spirit, from the collection: first_seen_at is the time of the meeting, also for a
+	# meeting inside a catch-up replay (the replay routes each round at its own time).
+	var first_met: Dictionary = {}
+	var book: Dictionary = world.state_copy()["collection"]
+	for spirit_key: Variant in book:
+		first_met[str(spirit_key)] = _day_of(int((book[spirit_key] as Dictionary)["first_seen_at"]), midnight)
 	return {"opens": opens, "empty": empty, "attic_day": attic_day, "first_met": first_met}
 
 
@@ -1831,14 +1975,6 @@ func _percentile(values: Array, q: float) -> float:
 
 
 # ---------------------------------------------------------------- helpers
-
-## Report-only check: prints NOTE when the condition is false, and never counts as a failure.
-func _note(condition: bool, message: String) -> void:
-	if condition:
-		print("  OK   [%s] %s" % [_suite, message])
-	else:
-		print("  NOTE [%s] %s" % [_suite, message])
-
 
 func _contains(messages: Array, needle: String) -> bool:
 	for message: Variant in messages:

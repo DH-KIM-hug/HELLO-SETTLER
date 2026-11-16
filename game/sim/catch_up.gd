@@ -13,6 +13,8 @@ extends RefCounted
 ##   3. Replay from the window start to now. Before each tick at t, every owned bowl is advanced
 ##      from cur to t (spirits present at cur, app closed), then Visits.tick runs at t.
 ##      Event times: the smallest next_check_at or leave_at after cur, and now.
+##      After each tick, on_round (optional) gets that round's events at t, so the caller can route
+##      them (first_seen_at, scene checks) at their own time, before the next round starts.
 ##
 ## Due times (at or before the window start) are handled by one tick at the window start. Later due
 ## times are not event times: a due check that Visits does not act on (the slot is visited, or it is
@@ -36,7 +38,9 @@ func _init(p_defs: Defs) -> void:
 ## Brings the state up to now. Returns {events: Array[Dictionary], elapsed_s: int, capped: bool, clock_back: bool}.
 ## elapsed_s is the replayed length (after the cap), 0 for a new game or a clock set back.
 ## A null env_clock replays nothing and writes nothing.
-func run(state: Dictionary, now: int, env_clock: EnvClock, utc_offset_s: int) -> Dictionary:
+## on_round, when valid, is called after every round as on_round.call(round_events, t, env) with
+## env = env_clock.at(t, utc_offset_s). The events are still all returned in the result.
+func run(state: Dictionary, now: int, env_clock: EnvClock, utc_offset_s: int, on_round: Callable = Callable()) -> Dictionary:
 	var events: Array[Dictionary] = []
 	if env_clock == null:
 		return _report(events, 0, false, false)
@@ -54,13 +58,13 @@ func run(state: Dictionary, now: int, env_clock: EnvClock, utc_offset_s: int) ->
 
 	var rooms: Array[Dictionary] = _owned_rooms(state)
 	var cur: int = now - span
-	_round(state, rooms, cur, cur, env_clock, utc_offset_s, events)
+	_round(state, rooms, cur, cur, env_clock, utc_offset_s, on_round, events)
 	while cur < now:
 		var t: int = _next_event_time(state, cur, now)
 		if t <= cur:
 			# Guard: no time moves forward. Not reachable while now is a candidate, kept as a backstop.
 			t = mini(cur + maxi(_tuning_int("check_s"), 1), now)
-		_round(state, rooms, cur, t, env_clock, utc_offset_s, events)
+		_round(state, rooms, cur, t, env_clock, utc_offset_s, on_round, events)
 		cur = t
 	return _report(events, span, elapsed > cap, false)
 
@@ -70,10 +74,15 @@ func _report(events: Array[Dictionary], elapsed_s: int, capped: bool, clock_back
 
 
 ## One round: every owned bowl advances from cur to t (app closed), then Visits ticks at t.
-func _round(state: Dictionary, rooms: Array[Dictionary], cur: int, t: int, env_clock: EnvClock, utc_offset_s: int, events: Array[Dictionary]) -> void:
+## The round's events go to on_round (when valid) with t and the environment at t, before the next round.
+func _round(state: Dictionary, rooms: Array[Dictionary], cur: int, t: int, env_clock: EnvClock, utc_offset_s: int, on_round: Callable, events: Array[Dictionary]) -> void:
 	for room: Dictionary in rooms:
 		_bowls.advance(state, str(room["bowl_slot"]), cur, t, false, _spirits_in(state, room["toy_slots"]))
-	events.append_array(_visits.tick(state, t, env_clock.at(t, utc_offset_s), "", false))
+	var env: Dictionary = env_clock.at(t, utc_offset_s)
+	var round_events: Array[Dictionary] = _visits.tick(state, t, env, "", false)
+	events.append_array(round_events)
+	if on_round.is_valid():
+		on_round.call(round_events, t, env)
 
 
 ## The smallest next_check_at or leave_at after cur, or now when none comes earlier.
