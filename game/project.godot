@@ -34,3 +34,4 @@ locale/translations=PackedStringArray("res://data/text/ko.ko.translation")
 [rendering]
 
 renderer/rendering_method="mobile"
+textures/vram_compression/import_etc2_astc=true

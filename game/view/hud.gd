@@ -11,6 +11,7 @@ const BUTTON_GAP: float = 20.0
 const BUTTON_X0: float = 40.0
 const TOP_BAR: Rect2 = Rect2(0, 0, 1080, 150)
 const DEBUG_RECT: Rect2 = Rect2(800, 110, 240, 80)
+const FALLBACK_MARK: String = " ·•"
 
 var _coins: Label
 var _env: Label
@@ -38,7 +39,11 @@ func set_state(coins: int, env: Dictionary) -> void:
 		_env.text = ""
 	else:
 		var night: String = "night" if bool(env.get("is_night", false)) else "day"
-		_env.text = "%s · %s" % [str(env.get("weather", "")), night]
+		var text: String = "%s · %s" % [tr("weather." + str(env.get("weather", ""))), tr("time." + night)]
+		# U4: the fallback weather (no real weather yet) gets a small mark. Debug builds only for now.
+		if _debug_on and str(env.get("source", "")) == "seed":
+			text += FALLBACK_MARK
+		_env.text = text
 
 
 func hit_targets() -> Array:

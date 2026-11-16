@@ -1,5 +1,10 @@
 keys,ko
-hud.coins,"주화 %d"
+hud.coins,"구슬 %d"
+weather.clear,맑음
+weather.cloudy,흐림
+weather.rain,비
+time.day,낮
+time.night,밤
 btn.shop,상점
 btn.book,도감
 btn.items,소지품
@@ -23,14 +28,14 @@ state.locked,잠김
 state.owned,가짐
 state.limit,더는 없어요
 shop.title,상점
-shop.price,"%d 주화"
+shop.price,"%d 구슬"
 confirm.buy,이걸 사 볼까요?
 slot.empty,빈 칸
 msg.retry,"잠시 뒤에 다시 해 주세요"
 msg.place_unavailable,"이미 다른 칸에 놓여 있어요"
 msg.need_slot,"칸으로 끌어 주세요"
 msg.food_short,간식이 없어요
-msg.food_remaining,"그릇에 간식이 남아 있어요"
+msg.food_remaining,"꽃꿀이 아직 남아 있어요"
 msg.buy_ok,들였어요
 msg.buy_room,새 방이 열렸어요
 msg.buy_short,"조금 더 모으면 살 수 있어요"
@@ -40,4 +45,4 @@ msg.buy_full,가득 찼어요
 msg.back_again,"한 번 더 누르면 나가요"
 toast.coming_soon,곧 열려요
 toast.gift,"+%d"
-toast.nectar,"꿀 +%d"
+toast.nectar,"꽃꿀 +%d"
