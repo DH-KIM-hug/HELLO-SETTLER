@@ -11,7 +11,8 @@
   "narrative": "캐릭터 프로필·작은 세계관만 (X1)",
   "random": "예",
   "monetization": "무료 + 광고 보상/유료 재화 (2026-11-16 사용자)",
-  "title": "보류 (나의 작은 지구 대체 예정)"
+  "title": "보류 (나의 작은 지구 대체 예정)",
+  "final_doc": "docs/gdd/final/game-design-doc.md"
  },
  "steps": {
   "D1": {
@@ -226,6 +227,286 @@
    "status": "done",
    "file": "docs/gdd/G10-성장→데이터-구조.md",
    "date": "2026-11-16"
+  },
+  "U1": {
+   "status": "done",
+   "file": "docs/gdd/U1-화면-목록-확정.md",
+   "date": "2026-11-16"
+  },
+  "U2": {
+   "status": "done",
+   "file": "docs/gdd/U2-타이틀.md",
+   "date": "2026-11-16"
+  },
+  "U3": {
+   "status": "done",
+   "file": "docs/gdd/U3-로비-허브.md",
+   "date": "2026-11-16"
+  },
+  "U4": {
+   "status": "done",
+   "file": "docs/gdd/U4-HUD.md",
+   "date": "2026-11-16"
+  },
+  "U5": {
+   "status": "done",
+   "file": "docs/gdd/U5-인벤토리-화면.md",
+   "date": "2026-11-16"
+  },
+  "U6": {
+   "status": "done",
+   "file": "docs/gdd/U6-상점-화면.md",
+   "date": "2026-11-16"
+  },
+  "U7": {
+   "status": "done",
+   "file": "docs/gdd/U7-설정.md",
+   "date": "2026-11-16"
+  },
+  "U8": {
+   "status": "done",
+   "file": "docs/gdd/U8-팝업-토스트-확인창.md",
+   "date": "2026-11-16"
+  },
+  "U9": {
+   "status": "done",
+   "file": "docs/gdd/U9-화면-전환-흐름도.md",
+   "date": "2026-11-16"
+  },
+  "U10": {
+   "status": "done",
+   "file": "docs/gdd/U10-UI-구현-프롬프트.md",
+   "date": "2026-11-16"
+  },
+  "L1": {
+   "status": "na",
+   "reason": "스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+   "date": "2026-11-16"
+  },
+  "L2": {
+   "status": "na",
+   "reason": "스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+   "date": "2026-11-16"
+  },
+  "L3": {
+   "status": "na",
+   "reason": "스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+   "date": "2026-11-16"
+  },
+  "L4": {
+   "status": "na",
+   "reason": "스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+   "date": "2026-11-16"
+  },
+  "L5": {
+   "status": "na",
+   "reason": "스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+   "date": "2026-11-16"
+  },
+  "L6": {
+   "status": "done",
+   "file": "docs/gdd/L6-튜토리얼.md",
+   "date": "2026-11-16"
+  },
+  "L7": {
+   "status": "na",
+   "reason": "스테이지 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "L8": {
+   "status": "na",
+   "reason": "스테이지 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "L9": {
+   "status": "na",
+   "reason": "스테이지 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "T1": {
+   "status": "done",
+   "file": "docs/gdd/T1-데이터화-원칙.md",
+   "date": "2026-11-16"
+  },
+  "T2": {
+   "status": "done",
+   "file": "docs/gdd/T2-캐릭터-테이블.md",
+   "date": "2026-11-16"
+  },
+  "T3": {
+   "status": "done",
+   "file": "docs/gdd/T3-아이템-테이블.md",
+   "date": "2026-11-16"
+  },
+  "T4": {
+   "status": "na",
+   "reason": "스킬 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "T5": {
+   "status": "na",
+   "reason": "스테이지 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "T6": {
+   "status": "na",
+   "reason": "퀘스트 없음 — 도감이 목표 (사용자, na-plan)",
+   "date": "2026-11-16"
+  },
+  "T7": {
+   "status": "done",
+   "file": "docs/gdd/T7-밸런싱-표.md",
+   "date": "2026-11-16"
+  },
+  "T8": {
+   "status": "done",
+   "file": "docs/gdd/T8-엔진-데이터-연결.md",
+   "date": "2026-11-16"
+  },
+  "F1": {
+   "status": "done",
+   "file": "docs/gdd/F1-예외-조건.md",
+   "date": "2026-11-16"
+  },
+  "F2": {
+   "status": "done",
+   "file": "docs/gdd/F2-시작-종료-흐름.md",
+   "date": "2026-11-16"
+  },
+  "F3": {
+   "status": "na",
+   "reason": "승패 없음 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "F4": {
+   "status": "done",
+   "file": "docs/gdd/F4-저장-불러오기.md",
+   "date": "2026-11-16"
+  },
+  "F5": {
+   "status": "done",
+   "file": "docs/gdd/F5-네트워크-단절-처리.md",
+   "date": "2026-11-16"
+  },
+  "F6": {
+   "status": "done",
+   "file": "docs/gdd/F6-보상-중복-방지.md",
+   "date": "2026-11-16"
+  },
+  "F7": {
+   "status": "done",
+   "file": "docs/gdd/F7-비정상-입력-악용.md",
+   "date": "2026-11-16"
+  },
+  "F8": {
+   "status": "done",
+   "file": "docs/gdd/F8-상태-전환표.md",
+   "date": "2026-11-16"
+  },
+  "F9": {
+   "status": "done",
+   "file": "docs/gdd/F9-플로우차트.md",
+   "date": "2026-11-16"
+  },
+  "X1": {
+   "status": "done",
+   "file": "docs/gdd/X1-서사-세계관-캐릭터-설정.md",
+   "date": "2026-11-16"
+  },
+  "X3": {
+   "status": "done",
+   "file": "docs/gdd/X3-랜덤-절차-생성-시드.md",
+   "date": "2026-11-16"
+  },
+  "X4": {
+   "status": "done",
+   "file": "docs/gdd/X4-사운드-VFX-게임-필.md",
+   "date": "2026-11-16"
+  },
+  "X5": {
+   "status": "done",
+   "file": "docs/gdd/X5-접근성-현지화.md",
+   "date": "2026-11-16"
+  },
+  "X6": {
+   "status": "done",
+   "file": "docs/gdd/X6-수익화-라이브옵스-분석-지표.md",
+   "date": "2026-11-16"
+  },
+  "X7": {
+   "status": "done",
+   "file": "docs/gdd/X7-플레이테스트-검증-밸런스-반복-계획.md",
+   "date": "2026-11-16"
+  },
+  "X8": {
+   "status": "done",
+   "file": "docs/gdd/X8-비기능-요구.md",
+   "date": "2026-11-16"
+  },
+  "X9": {
+   "status": "done",
+   "file": "docs/gdd/X9-방치형-경제-모델.md",
+   "date": "2026-11-16"
+  },
+  "X11": {
+   "status": "done",
+   "file": "docs/gdd/X11-오프라인-진행-시간-처리-큰-수.md",
+   "date": "2026-11-16"
+  },
+  "X2": {
+   "status": "na",
+   "reason": "싱글 전용, 온라인은 날씨 조회와 클라우드 저장만 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "X10": {
+   "status": "na",
+   "reason": "리셋형 메타 진행 없음 (사용자, na-plan)",
+   "date": "2026-11-16"
+  },
+  "X12": {
+   "status": "na",
+   "reason": "규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "X13": {
+   "status": "na",
+   "reason": "규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "X14": {
+   "status": "na",
+   "reason": "규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+   "date": "2026-11-16"
+  },
+  "A1": {
+   "status": "done",
+   "file": "docs/gdd/A1-모호성-검사-[TBD]-해소.md",
+   "date": "2026-11-16"
+  },
+  "A2": {
+   "status": "done",
+   "file": "docs/gdd/A2-프롬프트-구조-공통-규칙.md",
+   "date": "2026-11-16"
+  },
+  "A3": {
+   "status": "done",
+   "file": "docs/gdd/A3-기능-구현-요청-변환.md",
+   "date": "2026-11-16"
+  },
+  "A4": {
+   "status": "done",
+   "file": "docs/gdd/A4-클래스-설계-요청-변환.md",
+   "date": "2026-11-16"
+  },
+  "A5": {
+   "status": "done",
+   "file": "docs/gdd/A5-UI-구현-요청-변환.md",
+   "date": "2026-11-16"
+  },
+  "A6": {
+   "status": "done",
+   "file": "docs/gdd/A6-테스트-요청-변환.md",
+   "date": "2026-11-16"
   }
  },
  "history": [
@@ -329,6 +610,63 @@
   "2026-11-16 start G9",
   "2026-11-16 done G9 docs/gdd/G9-상점.md",
   "2026-11-16 start G10",
-  "2026-11-16 done G10 docs/gdd/G10-성장→데이터-구조.md"
+  "2026-11-16 done G10 docs/gdd/G10-성장→데이터-구조.md",
+  "2026-11-16 done U1 docs/gdd/U1-화면-목록-확정.md",
+  "2026-11-16 done U2 docs/gdd/U2-타이틀.md",
+  "2026-11-16 done U3 docs/gdd/U3-로비-허브.md",
+  "2026-11-16 done U4 docs/gdd/U4-HUD.md",
+  "2026-11-16 done U5 docs/gdd/U5-인벤토리-화면.md",
+  "2026-11-16 done U6 docs/gdd/U6-상점-화면.md",
+  "2026-11-16 done U7 docs/gdd/U7-설정.md",
+  "2026-11-16 done U8 docs/gdd/U8-팝업-토스트-확인창.md",
+  "2026-11-16 done U9 docs/gdd/U9-화면-전환-흐름도.md",
+  "2026-11-16 done U10 docs/gdd/U10-UI-구현-프롬프트.md",
+  "2026-11-16 na L1: 스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 na L2: 스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 na L3: 스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 na L4: 스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 na L5: 스테이지 없음 — 진행은 X9 해금 표 (2026-11-16 사용자 확인, na-plan)",
+  "2026-11-16 done L6 docs/gdd/L6-튜토리얼.md",
+  "2026-11-16 na L7: 스테이지 없음 (na-plan)",
+  "2026-11-16 na L8: 스테이지 없음 (na-plan)",
+  "2026-11-16 na L9: 스테이지 없음 (na-plan)",
+  "2026-11-16 done T1 docs/gdd/T1-데이터화-원칙.md",
+  "2026-11-16 done T2 docs/gdd/T2-캐릭터-테이블.md",
+  "2026-11-16 done T3 docs/gdd/T3-아이템-테이블.md",
+  "2026-11-16 na T4: 스킬 없음 (na-plan)",
+  "2026-11-16 na T5: 스테이지 없음 (na-plan)",
+  "2026-11-16 na T6: 퀘스트 없음 — 도감이 목표 (사용자, na-plan)",
+  "2026-11-16 done T7 docs/gdd/T7-밸런싱-표.md",
+  "2026-11-16 done T8 docs/gdd/T8-엔진-데이터-연결.md",
+  "2026-11-16 done F1 docs/gdd/F1-예외-조건.md",
+  "2026-11-16 done F2 docs/gdd/F2-시작-종료-흐름.md",
+  "2026-11-16 na F3: 승패 없음 (na-plan)",
+  "2026-11-16 done F4 docs/gdd/F4-저장-불러오기.md",
+  "2026-11-16 done F5 docs/gdd/F5-네트워크-단절-처리.md",
+  "2026-11-16 done F6 docs/gdd/F6-보상-중복-방지.md",
+  "2026-11-16 done F7 docs/gdd/F7-비정상-입력-악용.md",
+  "2026-11-16 done F8 docs/gdd/F8-상태-전환표.md",
+  "2026-11-16 done F9 docs/gdd/F9-플로우차트.md",
+  "2026-11-16 done X1 docs/gdd/X1-서사-세계관-캐릭터-설정.md",
+  "2026-11-16 done X3 docs/gdd/X3-랜덤-절차-생성-시드.md",
+  "2026-11-16 done X4 docs/gdd/X4-사운드-VFX-게임-필.md",
+  "2026-11-16 done X5 docs/gdd/X5-접근성-현지화.md",
+  "2026-11-16 done X6 docs/gdd/X6-수익화-라이브옵스-분석-지표.md",
+  "2026-11-16 done X7 docs/gdd/X7-플레이테스트-검증-밸런스-반복-계획.md",
+  "2026-11-16 done X8 docs/gdd/X8-비기능-요구.md",
+  "2026-11-16 done X9 docs/gdd/X9-방치형-경제-모델.md",
+  "2026-11-16 done X11 docs/gdd/X11-오프라인-진행-시간-처리-큰-수.md",
+  "2026-11-16 na X2: 싱글 전용, 온라인은 날씨 조회와 클라우드 저장만 (na-plan)",
+  "2026-11-16 na X10: 리셋형 메타 진행 없음 (사용자, na-plan)",
+  "2026-11-16 na X12: 규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+  "2026-11-16 na X13: 규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+  "2026-11-16 na X14: 규칙 기반(퍼즐·보드) 게임 아님 (na-plan)",
+  "2026-11-16 done A1 docs/gdd/A1-모호성-검사-[TBD]-해소.md",
+  "2026-11-16 done A2 docs/gdd/A2-프롬프트-구조-공통-규칙.md",
+  "2026-11-16 done A3 docs/gdd/A3-기능-구현-요청-변환.md",
+  "2026-11-16 done A4 docs/gdd/A4-클래스-설계-요청-변환.md",
+  "2026-11-16 done A5 docs/gdd/A5-UI-구현-요청-변환.md",
+  "2026-11-16 done A6 docs/gdd/A6-테스트-요청-변환.md",
+  "2026-11-16 meta final_doc=docs/gdd/final/game-design-doc.md"
  ]
 }

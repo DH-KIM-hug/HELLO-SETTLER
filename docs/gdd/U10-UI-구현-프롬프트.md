@@ -1,6 +1,6 @@
 # U10 UI 구현 프롬프트 (초안 — A5에서 최종화)
 
-> 2026-11-16 · 초안. 설계 결정은 위임하지 않는다. 프롬프트는 기획서의 결정만 옮긴다. 최종 형식은 gdd-ai-handoff A5 템플릿을 따른다.
+> 2026-11-16 · 확정 (위임 결정 1·2 반영). 설계 결정은 위임하지 않는다. 프롬프트는 기획서의 결정만 옮긴다. 최종 형식은 gdd-ai-handoff A5 템플릿을 따른다.
 
 ## 공통 머리 (모든 UI 프롬프트 앞에 붙임)
 - **개발 환경:** Godot 4.7.2, 2D, Mobile 렌더러, GDScript (정적 타입). 세로 1080×2340 기준이며 다른 화면비에 맞춰 늘어난다. 터치만 쓴다.
@@ -18,7 +18,7 @@
 | P2 | 놓기 | Overlay | 탭 2개, 카드 줄, 빼기, 상점 카드 | inventory, placement, food_bowls | 탭/끌기 → `World.place/fill/remove` | P1, P3 | U5 표 | 열 때 | 팔기 | U5 표 전부 시험 |
 | P3+Q4 | 사기 | Full+Popup | 재화, 카드 2열, 확인 창 | ShopItemDef, `Shop.state_of()` | `World.buy` | U9 | 결과 코드 7종 | 열 때, 구매 후 | 수량 선택 | U6 1:1 표 시험 |
 | P4/P5/P6/P6z | 도감·일러 | Full | 탭, 칸, 실루엣, 힌트, 카드, 확대 | collection, SpiritDef, SceneArtDef | 탭 → 화면 이동 · `Book.mark_seen` | U9 | 잠긴 일러 흐림 | 열 때 | 일러 편집 | 배지 해제 시험 |
-| P7/P7z/P8 | 사진 | Full/Overlay | 셔터, 미리보기, 목록, 지우기, 기기에 저장 | photos | `Photos.capture/delete/export` | U9 | 저장 공간 부족 | 열 때 | 필터, 꾸미기 | 캡처 파일 생김, 앨범 반영 |
+| P7(도감 사진 탭)/P7z/P8 | 사진 | Full/Overlay | 셔터, 미리보기, 목록, 지우기, 기기에 저장 | photos | `Photos.capture/delete/export` | U9 | 저장 공간 부족 | 열 때 | 필터, 꾸미기 | 캡처 파일 생김, 앨범 반영 |
 | P9/P10 | 설정 | Full | 밀대, 켜기·끄기, 버튼 | settings | `Settings.set` · `World.reset` (Q8 두 번) | U9 | 권한 거절 | 열 때 | 계정 | U7 3값 시험 |
 | Q2 | 일러 해금 | Popup | 큰 일러, 이름, 닫기, 자세히 | collection 이벤트 | 닫기/자세히 | U8 대기열 | 연속 3개 제한 | - | 공유 | 대기열 시험 |
 
