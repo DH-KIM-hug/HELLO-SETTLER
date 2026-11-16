@@ -1,9 +1,9 @@
 extends SceneTree
 ## Test runner for the spirit-guests prototype.
 ## Usage: godot --headless --path game -s tests/run.gd -- <suite|all>
-## Suites: data, save, env, static, place, food, visits, catchup, wallet, shop, collection, world, seven_days. Prints each failure, then PASS or FAIL, and exits 0 or 1.
+## Suites: data, save, env, static, place, food, visits, catchup, wallet, shop, collection, world, seven_days, input. Prints each failure, then PASS or FAIL, and exits 0 or 1.
 
-const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits", "catchup", "wallet", "shop", "collection", "world", "seven_days"]
+const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits", "catchup", "wallet", "shop", "collection", "world", "seven_days", "input"]
 const DATA_DIR: String = "res://data"
 
 var _suite: String = ""
@@ -527,6 +527,82 @@ func _suite_static() -> void:
 	for path: String in scanned:
 		var at: int = _first_hangul(FileAccess.get_file_as_string(path))
 		_check(at < 0, "no Hangul characters in %s (first at index %d)" % [path, at])
+	# A5: view/ never assigns domain state (wallet., inventory., placement., collection.). The regex must
+	# match a sample assignment, so an empty scan cannot pass by accident.
+	var assign: RegEx = RegEx.new()
+	assign.compile("\\b(wallet|inventory|placement|collection)\\.[A-Za-z_]+(\\[[^\\]]*\\])?\\s*=[^=]")
+	_check(assign.search("\twallet.coins = 5") != null, "static: the view-assignment regex matches a sample assignment")
+	var view_files: Array[String] = _list_files("res://view", [".gd"])
+	_check(view_files.size() >= 10, "static: found the view scripts (%d)" % view_files.size())
+	for path: String in view_files:
+		_check(assign.search(FileAccess.get_file_as_string(path)) == null, "view never assigns domain state in %s" % path)
+
+
+# ---------------------------------------------------------------- input
+
+## TapRules is pure (no Node), so every K1 rule can be checked here: thresholds, hit priority,
+## debounce, and the context stack.
+func _suite_input() -> void:
+	var w: float = TapRules.BASE_WIDTH
+	var px12: float = TapRules.dp_to_px(12.0, w)
+	var tap: int = TapRules.Gesture.TAP
+	var none: int = TapRules.Gesture.NONE
+	var left: int = TapRules.Gesture.SWIPE_LEFT
+	var right: int = TapRules.Gesture.SWIPE_RIGHT
+
+	_check(TapRules.dp_to_px(48.0, w) == 126.0, "input: 48 dp is 126 px at 1080 wide (U4 button rule)")
+	_check(TapRules.gesture(3.0, 2.0, 3.0, 0.2, w) == tap, "tap: a 3 px move held 0.2 s is a tap")
+	_check(TapRules.gesture(0.0, 0.0, px12 - 1.0, 0.3, w) == tap, "tap: a move just under 12 dp is still a tap")
+	_check(TapRules.gesture(0.0, 0.0, px12 + 1.0, 0.3, w) == none, "tap: a move of 12 dp or more is not a tap")
+	_check(TapRules.gesture(0.0, 0.0, 0.0, 0.99, w) == tap, "tap: a 0.99 s hold is still a tap")
+	_check(TapRules.gesture(0.0, 0.0, 0.0, 1.0, w) == none, "tap: a hold of 1.0 s is not a tap")
+	_check(TapRules.gesture(0.0, 0.0, 0.0, 1.5, w) == none, "tap: a 1.5 s hold is not a tap")
+	_check(TapRules.gesture(0.0, 0.0, 200.0, 0.2, w) == none, "tap: a move that went out and came back is not a tap")
+
+	# Swipe: 15% of 1080 is 162 px; speed 0.8 widths/s is 864 px/s.
+	_check(TapRules.gesture(-170.0, 5.0, 170.0, 0.5, w) == left, "swipe: 170 px left (over 15%) changes room")
+	_check(TapRules.gesture(170.0, -5.0, 170.0, 0.5, w) == right, "swipe: 170 px right (over 15%) changes room")
+	_check(TapRules.gesture(-150.0, 0.0, 150.0, 0.5, w) == none, "swipe: 150 px in 0.5 s is under both limits")
+	_check(TapRules.gesture(-100.0, 0.0, 100.0, 0.1, w) == left, "swipe: 100 px in 0.1 s is fast enough (over 0.8 W/s)")
+	_check(TapRules.gesture(-20.0, 0.0, 20.0, 0.01, w) == tap, "swipe: a fast 20 px flick is too short, so it stays a tap")
+	_check(TapRules.gesture(5.0, -200.0, 200.0, 0.2, w) == none, "swipe: a vertical move is not a swipe")
+	_check(TapRules.gesture(-40.0, 0.0, 40.0, 0.3, w) == none, "swipe: a 40 px drag is past 12 dp, so not a tap, and too slow to swipe")
+
+	# Hit priority: spirit > gift > bowl > slot (K1 3). Each hit is a rect or a circle.
+	var slot_hit: Dictionary = {"kind": "slot", "id": "s", "rect": Rect2(0, 0, 100, 100)}
+	var gift_hit: Dictionary = {"kind": "gift", "id": "g", "rect": Rect2(0, 0, 100, 100)}
+	var bowl_hit: Dictionary = {"kind": "bowl", "id": "b", "center": Vector2(50, 50), "radius": 40.0}
+	var spirit_hit: Dictionary = {"kind": "spirit", "id": "sp", "center": Vector2(50, 50), "radius": 30.0}
+	var all_hits: Array = [slot_hit, bowl_hit, gift_hit, spirit_hit]
+	_check(str(TapRules.pick_hit(all_hits, Vector2(50, 50)).get("kind", "")) == "spirit", "priority: spirit wins over gift, bowl and slot")
+	_check(str(TapRules.pick_hit([slot_hit, bowl_hit, gift_hit], Vector2(50, 50)).get("kind", "")) == "gift", "priority: gift wins over bowl and slot")
+	_check(str(TapRules.pick_hit([slot_hit, bowl_hit], Vector2(50, 50)).get("kind", "")) == "bowl", "priority: bowl wins over slot")
+	_check(str(TapRules.pick_hit([slot_hit, bowl_hit], Vector2(95, 95)).get("kind", "")) == "slot", "priority: a point only in the slot rect gives the slot")
+	_check(str(TapRules.pick_hit([spirit_hit, slot_hit], Vector2(50, 50)).get("kind", "")) == "spirit", "priority: list order does not change the winner")
+	_check(str(TapRules.pick_hit([slot_hit, gift_hit], Vector2(20, 20)).get("kind", "")) == "gift", "priority: a gift over the slot at the same point")
+	_check(TapRules.pick_hit(all_hits, Vector2(300, 300)).is_empty(), "priority: no hit gives an empty result")
+	_check(str(TapRules.pick_hit([bowl_hit], Vector2(50, 50)).get("id", "")) == "b", "priority: a circle hit reports its id")
+
+	# Same-target debounce: 0.3 s per kind:id.
+	_check(TapRules.debounce_pass("", 0.0, "slot:a", 10.0), "debounce: the first tap passes")
+	_check(not TapRules.debounce_pass("slot:a", 10.0, "slot:a", 10.2), "debounce: the same target within 0.3 s is refused")
+	_check(TapRules.debounce_pass("slot:a", 10.0, "slot:a", 10.31), "debounce: the same target after 0.3 s passes")
+	_check(TapRules.debounce_pass("slot:a", 10.0, "slot:b", 10.1), "debounce: another target passes at once")
+
+	# Context stack: only the top context gets input.
+	var stack: TapRules.Stack = TapRules.Stack.new()
+	_check(stack.top() == "" and not stack.is_top("Room"), "stack: an empty stack has no top")
+	_check(stack.push("Room") and stack.is_top("Room"), "stack: Room is the top after push")
+	_check(stack.push("Sheet") and stack.is_top("Sheet") and not stack.is_top("Room"), "stack: only the newest context is the top")
+	_check(not stack.push("Tutorial"), "stack: an unknown context name is refused")
+	_check(stack.push("Modal") and stack.depth() == 3, "stack: three contexts on the stack")
+	_check(stack.pop() == "Modal" and stack.is_top("Sheet"), "stack: pop returns Modal and Sheet is the top again")
+	_check(stack.remove("Room") and stack.is_top("Sheet") and stack.depth() == 1, "stack: remove takes a context out from under the top")
+	_check(not stack.remove("Room"), "stack: removing an absent context changes nothing")
+	_check(stack.pop() == "Sheet" and stack.pop() == "" and stack.depth() == 0, "stack: pop of an empty stack gives an empty name")
+
+	# UserPaths: the one place that builds user:// paths.
+	_check(UserPaths.of("save") == "user://save", "user paths: of(\"save\") is user://save")
 
 
 # ---------------------------------------------------------------- visits
