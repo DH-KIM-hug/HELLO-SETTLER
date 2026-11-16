@@ -8,19 +8,21 @@ const SECONDS_PER_HOUR: int = 3600
 const SECONDS_PER_DAY: int = 86400
 const WEATHER_BLOCK_S: int = 14400  # 4 hours
 const BLOCKS_PER_DAY: int = 6
-const SEED_CLEAR_P: float = 0.55
-const SEED_CLOUDY_P: float = 0.33  # rain takes the rest (0.12)
 
 var _save_seed: int
 var _day_start_hour: int
 var _night_start_hour: int
+var _seed_clear_p: float      # from tuning.json seed_weather_clear_p
+var _seed_cloudy_p: float     # from tuning.json seed_weather_cloudy_p (rain takes the rest)
 var _forecast: Dictionary = {}  # hour start (unix seconds, int) -> weather String
 
 
-func _init(save_seed: int, day_start_hour: int, night_start_hour: int) -> void:
+func _init(save_seed: int, day_start_hour: int, night_start_hour: int, seed_clear_p: float, seed_cloudy_p: float) -> void:
 	_save_seed = save_seed
 	_day_start_hour = day_start_hour
 	_night_start_hour = night_start_hour
+	_seed_clear_p = seed_clear_p
+	_seed_cloudy_p = seed_cloudy_p
 
 
 ## WMO weather code -> "clear" | "cloudy" | "rain". Returns "" for codes not in the table.
@@ -71,9 +73,9 @@ func _seed_weather(local_t: int) -> String:
 	var block: int = _floor_div(posmod(local_t, SECONDS_PER_DAY), WEATHER_BLOCK_S)
 	var number: int = day_index * BLOCKS_PER_DAY + block
 	var roll: float = DetRng.unit(_save_seed, "wx", number)
-	if roll < SEED_CLEAR_P:
+	if roll < _seed_clear_p:
 		return "clear"
-	if roll < SEED_CLEAR_P + SEED_CLOUDY_P:
+	if roll < _seed_clear_p + _seed_cloudy_p:
 		return "cloudy"
 	return "rain"
 

@@ -15,5 +15,7 @@
   "pending_total": 50,
   "day_start_hour": 6,
   "night_start_hour": 19,
-  "weather_refresh_s": 1800
+  "weather_refresh_s": 1800,
+  "seed_weather_clear_p": 0.55,
+  "seed_weather_cloudy_p": 0.33
 }

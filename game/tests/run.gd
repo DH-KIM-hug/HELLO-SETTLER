@@ -1,9 +1,9 @@
 extends SceneTree
 ## Test runner for the spirit-guests prototype.
 ## Usage: godot --headless --path game -s tests/run.gd -- <suite|all>
-## Suites: data, save, env, static. Prints each failure, then PASS or FAIL, and exits 0 or 1.
+## Suites: data, save, env, static, place, food. Prints each failure, then PASS or FAIL, and exits 0 or 1.
 
-const SUITES: PackedStringArray = ["data", "save", "env", "static"]
+const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food"]
 const DATA_DIR: String = "res://data"
 
 var _suite: String = ""
@@ -93,6 +93,11 @@ func _suite_data() -> void:
 	((raw_enum["spirits"] as Array)[0] as Dictionary)["element"] = "fire"
 	_check(_contains(Defs.new().load_raw(raw_enum).validate()["errors"], "is not in the enum"), "unknown element gives an error")
 
+	# Seed weather shares: clear + cloudy must not pass 1.
+	var raw_seed: Dictionary = Defs.read_files(DATA_DIR)["raw"]
+	(raw_seed["tuning"] as Dictionary)["seed_weather_cloudy_p"] = 0.6
+	_check(_contains(Defs.new().load_raw(raw_seed).validate()["errors"], "seed_weather_clear_p + seed_weather_cloudy_p"), "seed weather shares above 1 give an error")
+
 
 # ---------------------------------------------------------------- save
 
@@ -107,6 +112,10 @@ func _suite_save() -> void:
 	_check(fresh["rooms_owned"] == ["room_window"], "new game: rooms_owned is room_window")
 	_check(fresh["visit_seq"] == 1, "new game: visit_seq is 1")
 	_check(fresh["save_seed"] == seed_value and fresh["save_version"] == 1, "new game: save_seed kept, save_version 1")
+	_check(fresh["last_seen"] == 0, "new game: last_seen is 0")
+	_check(fresh["visits_now"] == {} and fresh["photos"] == [] and fresh["weather_cache"] == {}, "new game: visits_now, photos and weather_cache start empty")
+	_check(fresh["tutorial"] == {"step": 1, "done": false}, "new game: tutorial starts at step 1, not done")
+	_check(not fresh.has("coins_overflow_note"), "new game: coins_overflow_note is not a save key")
 
 	# TC-S3: save, then load gives equal dictionaries.
 	var base_s3: String = _temp_dir("s3")
@@ -174,6 +183,9 @@ func _suite_save() -> void:
 # ---------------------------------------------------------------- env
 
 func _suite_env() -> void:
+	# The caller passes the tuning values (day/night hours, seed weather shares) in.
+	var tuning: Dictionary = Defs.new().load_dir(DATA_DIR).tuning()
+
 	# DetRng: a pure function of (seed, purpose, number), in [0, 1).
 	var u1: float = DetRng.unit(42, "wx", 7)
 	_check(u1 == DetRng.unit(42, "wx", 7), "DetRng: same inputs give the same output")
@@ -192,15 +204,15 @@ func _suite_env() -> void:
 	_check(absf(sum / 10000.0 - 0.5) < 0.02, "DetRng: mean of 10000 draws is near 0.5")
 
 	# Same seed -> same weather.
-	var clock_a: EnvClock = EnvClock.new(12345, 6, 19)
-	var clock_b: EnvClock = EnvClock.new(12345, 6, 19)
+	var clock_a: EnvClock = _clock(12345, tuning)
+	var clock_b: EnvClock = _clock(12345, tuning)
 	var same: bool = true
 	for i: int in range(500):
 		var t: int = 1700000000 + i * 1777
 		if clock_a.at(t, 32400) != clock_b.at(t, 32400):
 			same = false
 	_check(same, "same seed -> same weather (500 samples)")
-	var clock_c: EnvClock = EnvClock.new(54321, 6, 19)
+	var clock_c: EnvClock = _clock(54321, tuning)
 	var differs: bool = false
 	for i: int in range(500):
 		var t2: int = 1700000000 + i * 1777
@@ -208,17 +220,19 @@ func _suite_env() -> void:
 			differs = true
 	_check(differs, "different seed -> different weather somewhere")
 
-	# Seed weather shares: clear 55%, cloudy 33%, rain 12% (4000 blocks of 4 hours).
+	# Seed weather shares from tuning (clear 0.55, cloudy 0.33, rain = the rest 0.12): 4000 blocks of 4 hours.
+	var clear_p: float = float(tuning["seed_weather_clear_p"])
+	var cloudy_p: float = float(tuning["seed_weather_cloudy_p"])
 	var counts: Dictionary = {"clear": 0, "cloudy": 0, "rain": 0}
 	for i: int in range(4000):
 		var w: String = clock_a.at(1700000000 + i * 14400, 0)["weather"]
 		counts[w] = int(counts[w]) + 1
-	_check(absf(int(counts["clear"]) / 4000.0 - 0.55) < 0.03, "seed weather: clear near 55%% (got %d of 4000)" % int(counts["clear"]))
-	_check(absf(int(counts["cloudy"]) / 4000.0 - 0.33) < 0.03, "seed weather: cloudy near 33%% (got %d of 4000)" % int(counts["cloudy"]))
-	_check(absf(int(counts["rain"]) / 4000.0 - 0.12) < 0.03, "seed weather: rain near 12%% (got %d of 4000)" % int(counts["rain"]))
+	_check(absf(int(counts["clear"]) / 4000.0 - clear_p) < 0.03, "seed weather: clear near tuning value (got %d of 4000)" % int(counts["clear"]))
+	_check(absf(int(counts["cloudy"]) / 4000.0 - cloudy_p) < 0.03, "seed weather: cloudy near tuning value (got %d of 4000)" % int(counts["cloudy"]))
+	_check(absf(int(counts["rain"]) / 4000.0 - (1.0 - clear_p - cloudy_p)) < 0.03, "seed weather: rain near the remainder (got %d of 4000)" % int(counts["rain"]))
 
 	# Night boundaries: night is local hour >= 19 or < 6.
-	var night: EnvClock = EnvClock.new(1, 6, 19)
+	var night: EnvClock = _clock(1, tuning)
 	_check(night.at(19 * 3600, 0)["is_night"] == true, "night: 19:00 is night")
 	_check(night.at(19 * 3600 - 1, 0)["is_night"] == false, "night: 18:59:59 is day")
 	_check(night.at(6 * 3600 - 1, 0)["is_night"] == true, "night: 05:59:59 is night")
@@ -227,7 +241,7 @@ func _suite_env() -> void:
 	_check(night.at(19 * 3600 + 18000 - 1, -18000)["is_night"] == false, "night: UTC-5 local 18:59:59 is day")
 
 	# Forecast overrides the seed.
-	var fc: EnvClock = EnvClock.new(12345, 6, 19)
+	var fc: EnvClock = _clock(12345, tuning)
 	var t0: int = 1700000000
 	var hour_start: int = floori(float(t0) / 3600.0) * 3600
 	var seed_weather: String = fc.at(t0, 0)["weather"]
@@ -253,6 +267,239 @@ func _suite_env() -> void:
 	for pair: Array in table:
 		var got: String = EnvClock.wmo_to_weather(pair[0])
 		_check(got == pair[1], "WMO %d -> '%s' (got '%s')" % [pair[0], pair[1], got])
+
+
+# ---------------------------------------------------------------- place
+
+func _suite_place() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var placement: Placement = Placement.new(defs)
+	var now: int = 1700000000
+	var slot_a: String = "room_window/slot_0"
+	var slot_b: String = "room_window/slot_1"
+	var bowl: String = "room_window/slot_4"
+	var swing: String = "toy_thimble_swing"
+	var slide: String = "toy_spool_slide"
+
+	# TC-P1: no available toy -> NotAvailable, nothing changes.
+	var s_p1: Dictionary = _new_state(defs)
+	s_p1["inventory"] = {}
+	var b_p1: Dictionary = s_p1.duplicate(true)
+	var r_p1: Placement.Result = placement.place(s_p1, slot_a, swing, now)
+	_check(r_p1.code == Placement.Code.NotAvailable and s_p1 == b_p1, "TC-P1: no owned toy gives NotAvailable, no change")
+
+	# TC-P3: the toy already sits on slot B -> refused on slot A (one per kind, one slot).
+	var s_p3: Dictionary = _new_state(defs)
+	s_p3["placement"] = {slot_b: swing}
+	var b_p3: Dictionary = s_p3.duplicate(true)
+	var r_p3: Placement.Result = placement.place(s_p3, slot_a, swing, now)
+	_check(r_p3.code == Placement.Code.NotAvailable and s_p3 == b_p3, "TC-P3: a toy on slot B is refused on slot A, no change")
+
+	# A slot of an unowned room, or an unknown slot -> InvalidSlot.
+	var s_inv: Dictionary = _new_state(defs)
+	var b_inv: Dictionary = s_inv.duplicate(true)
+	var r_attic: Placement.Result = placement.place(s_inv, "room_attic/slot_0", swing, now)
+	var r_unknown: Placement.Result = placement.place(s_inv, "room_window/slot_99", swing, now)
+	_check(r_attic.code == Placement.Code.InvalidSlot and r_unknown.code == Placement.Code.InvalidSlot, "unowned room or unknown slot gives InvalidSlot")
+	_check(s_inv == b_inv, "InvalidSlot: no change")
+
+	# The bowl slot -> WrongSlotType.
+	var s_wrong: Dictionary = _new_state(defs)
+	var b_wrong: Dictionary = s_wrong.duplicate(true)
+	var r_wrong: Placement.Result = placement.place(s_wrong, bowl, swing, now)
+	_check(r_wrong.code == Placement.Code.WrongSlotType and s_wrong == b_wrong, "bowl slot gives WrongSlotType, no change")
+
+	# The same toy again on the same slot -> NoChange.
+	var s_same: Dictionary = _new_state(defs)
+	placement.place(s_same, slot_a, swing, now)
+	var b_same: Dictionary = s_same.duplicate(true)
+	var r_same: Placement.Result = placement.place(s_same, slot_a, swing, now)
+	_check(r_same.code == Placement.Code.NoChange and s_same == b_same, "same toy on the same slot gives NoChange, no change")
+
+	# Plain place on an empty slot: Ok, no force, the stock is not changed.
+	var s_ok: Dictionary = _new_state(defs)
+	var r_ok: Placement.Result = placement.place(s_ok, slot_a, swing, now)
+	_check(r_ok.code == Placement.Code.Ok and not r_ok.force_leave_slot, "empty slot, no visit: Ok without force_leave_slot")
+	_check(s_ok["placement"] == {slot_a: swing} and s_ok["inventory"] == {"toy_thimble_swing": 1, "toy_spool_slide": 1}, "place: placement updated, stock unchanged")
+	_check(placement.place(s_ok, slot_b, swing, now).code == Placement.Code.NotAvailable, "a placed toy is not available for a second slot")
+
+	# A spirit visits the empty slot: Ok with force_leave_slot, visits_now is not touched.
+	var s_visit: Dictionary = _new_state(defs)
+	s_visit["visits_now"] = {slot_a: _visit(now)}
+	var visits_before: Dictionary = (s_visit["visits_now"] as Dictionary).duplicate(true)
+	var r_visit: Placement.Result = placement.place(s_visit, slot_a, swing, now)
+	_check(r_visit.code == Placement.Code.Ok and r_visit.force_leave_slot, "visited slot: place gives Ok with force_leave_slot")
+	_check(s_visit["placement"] == {slot_a: swing} and s_visit["visits_now"] == visits_before, "visited slot: toy placed, visits_now untouched")
+
+	# Replacing a toy on a visited slot: Ok with force_leave_slot, and the old toy is free again.
+	var s_swap: Dictionary = _new_state(defs)
+	s_swap["placement"] = {slot_a: swing}
+	s_swap["visits_now"] = {slot_a: _visit(now)}
+	var r_swap: Placement.Result = placement.place(s_swap, slot_a, slide, now)
+	_check(r_swap.code == Placement.Code.Ok and r_swap.force_leave_slot, "visited slot, swap: Ok with force_leave_slot")
+	_check(placement.place(s_swap, slot_b, swing, now).code == Placement.Code.Ok, "swap: the old toy is available again")
+
+	# remove: an empty slot -> NoChange, nothing changes.
+	var s_rm: Dictionary = _new_state(defs)
+	var b_rm: Dictionary = s_rm.duplicate(true)
+	var r_rm_empty: Placement.Result = placement.remove(s_rm, slot_a, now)
+	_check(r_rm_empty.code == Placement.Code.NoChange and s_rm == b_rm, "remove on an empty slot gives NoChange, no change")
+
+	# remove with a toy -> Ok, the slot is empty, and the toy can be placed again.
+	placement.place(s_rm, slot_a, swing, now)
+	var r_rm: Placement.Result = placement.remove(s_rm, slot_a, now)
+	_check(r_rm.code == Placement.Code.Ok and not r_rm.force_leave_slot and s_rm["placement"] == {}, "remove with a toy gives Ok and empties the slot")
+	_check(placement.place(s_rm, slot_b, swing, now).code == Placement.Code.Ok, "remove: the toy is available again")
+
+	# remove on a visited slot -> Ok with force_leave_slot, visits_now untouched.
+	var s_rv: Dictionary = _new_state(defs)
+	s_rv["placement"] = {slot_a: swing}
+	s_rv["visits_now"] = {slot_a: _visit(now)}
+	var r_rv: Placement.Result = placement.remove(s_rv, slot_a, now)
+	_check(r_rv.code == Placement.Code.Ok and r_rv.force_leave_slot and (s_rv["visits_now"] as Dictionary).has(slot_a), "remove on a visited slot: Ok with force_leave_slot, visits_now kept")
+
+	# R1 bookkeeping: a toy slot is checkable when it holds a toy and its room's bowl is not empty.
+	var s_cb: Dictionary = _new_state(defs)
+	placement.place(s_cb, slot_a, swing, now)
+	var checkable_at: Dictionary = s_cb.get("slot_checkable_at", {})
+	_check(not placement.is_checkable(s_cb, slot_a) and not checkable_at.has(slot_a), "toy with an empty bowl is not checkable")
+	FoodBowls.new(defs).fill(s_cb, bowl, "food_basic", now + 10)
+	checkable_at = s_cb["slot_checkable_at"]
+	_check(placement.is_checkable(s_cb, slot_a) and checkable_at[slot_a] == now + 10, "filled bowl: the toy slot is checkable since the fill")
+	(s_cb["inventory"] as Dictionary)["toy_bottlecap_pool"] = 1
+	placement.place(s_cb, slot_a, "toy_bottlecap_pool", now + 30)
+	checkable_at = s_cb["slot_checkable_at"]
+	_check(checkable_at[slot_a] == now + 10, "a toy swap on a checkable slot keeps the time")
+	placement.remove(s_cb, slot_a, now + 40)
+	checkable_at = s_cb["slot_checkable_at"]
+	_check(not checkable_at.has(slot_a), "remove: the slot is no longer checkable")
+
+
+# ---------------------------------------------------------------- food
+
+func _suite_food() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var bowls: FoodBowls = FoodBowls.new(defs)
+	var inventory: Inventory = Inventory.new(defs)
+	var now: int = 1700000000
+	var bowl: String = "room_window/slot_4"
+	var toy_slot: String = "room_window/slot_0"
+
+	_check(bowls.bowl_slot_of_room("room_window") == bowl, "bowl_slot_of_room: room_window -> room_window/slot_4")
+	_check(bowls.bowl_slot_of_room("room_attic") == "room_attic/slot_3", "bowl_slot_of_room: room_attic -> room_attic/slot_3")
+	_check(bowls.bowl_slot_of_room("room_missing") == "", "bowl_slot_of_room: unknown room gives an empty id")
+
+	# Inventory: toys are 1 per kind, food stacks to max_stack 99.
+	var s_stock: Dictionary = _new_state(defs)
+	_check(not inventory.add(s_stock, "toy_thimble_swing", 1) and inventory.count(s_stock, "toy_thimble_swing") == 1, "inventory: a second toy of a kind is refused")
+	_check(inventory.add(s_stock, "food_nectar", 99) and not inventory.add(s_stock, "food_nectar", 1), "inventory: food stacks to 99, not beyond")
+	_check(not inventory.remove(s_stock, "food_nectar", 100) and inventory.count(s_stock, "food_nectar") == 99, "inventory: remove more than owned is refused")
+	_check(inventory.remove(s_stock, "food_nectar", 99) and not s_stock["inventory"].has("food_nectar"), "inventory: removing the whole stack drops the key")
+	_check(not inventory.add(s_stock, "toy_missing", 1), "inventory: unknown id is refused")
+
+	# TC-F1: app closed 12 h, no spirits -> basic amount drops by 0.5.
+	var s_f1: Dictionary = _new_state(defs)
+	_set_bowl(s_f1, bowl, "food_basic", 1.0, 0)
+	bowls.advance(s_f1, bowl, 0, 43200, false, 0)
+	_check(absf(bowls.amount(s_f1, bowl) - 0.5) < 0.001, "TC-F1: app closed 12 h, no spirits: basic drops by 0.5 (got %.4f)" % bowls.amount(s_f1, bowl))
+
+	# TC-F2: app open 1 h, no spirits -> no change.
+	var s_f2: Dictionary = _new_state(defs)
+	_set_bowl(s_f2, bowl, "food_basic", 1.0, 0)
+	bowls.advance(s_f2, bowl, 0, 3600, true, 0)
+	_check(absf(bowls.amount(s_f2, bowl) - 1.0) < 0.001, "TC-F2: app open 1 h, no spirits: no change (got %.4f)" % bowls.amount(s_f2, bowl))
+
+	# 3 spirits for 2 h while the app is open -> -0.06.
+	var s_f3: Dictionary = _new_state(defs)
+	_set_bowl(s_f3, bowl, "food_basic", 1.0, 0)
+	bowls.advance(s_f3, bowl, 0, 7200, true, 3)
+	_check(absf(bowls.amount(s_f3, bowl) - 0.94) < 0.001, "3 spirits for 2 h while open: -0.06 (got %.4f)" % bowls.amount(s_f3, bowl))
+
+	# Both shares together: app closed 1 h with 2 spirits -> 1/24 + 0.02.
+	var s_f4: Dictionary = _new_state(defs)
+	_set_bowl(s_f4, bowl, "food_basic", 1.0, 0)
+	bowls.advance(s_f4, bowl, 0, 3600, false, 2)
+	_check(absf(bowls.amount(s_f4, bowl) - (1.0 - 1.0 / 24.0 - 0.02)) < 0.001, "app closed 1 h with 2 spirits: both shares apply (got %.4f)" % bowls.amount(s_f4, bowl))
+
+	# A nectar bowl runs out: the amount clamps at 0 and food_id stays.
+	var s_f5: Dictionary = _new_state(defs)
+	_set_bowl(s_f5, bowl, "food_nectar", 0.01, 0)
+	bowls.advance(s_f5, bowl, 0, 57600, false, 0)
+	_check(bowls.amount(s_f5, bowl) == 0.0 and bowls.is_empty(s_f5, bowl), "finished nectar bowl: amount 0 and is_empty")
+	_check(s_f5["food_bowls"][bowl]["food_id"] == "food_nectar", "finished nectar bowl keeps its food_id")
+
+	# TC-F3: basic onto a bowl with nectar left -> FoodRemaining, no change.
+	var s_f6: Dictionary = _new_state(defs)
+	_set_bowl(s_f6, bowl, "food_nectar", 0.5, 0)
+	var b_f6: Dictionary = s_f6.duplicate(true)
+	var r_f6: FoodBowls.Result = bowls.fill(s_f6, bowl, "food_basic", now)
+	_check(r_f6.code == FoodBowls.Code.FoodRemaining and s_f6 == b_f6, "TC-F3: basic onto a bowl with nectar left gives FoodRemaining, no change")
+
+	# TC-F4: nectar 1 onto an empty bowl -> full nectar, inventory 0 (the bowl first, then the stock).
+	var s_f7: Dictionary = _new_state(defs)
+	(s_f7["inventory"] as Dictionary)["food_nectar"] = 1
+	var r_f7: FoodBowls.Result = bowls.fill(s_f7, bowl, "food_nectar", now)
+	_check(r_f7.code == FoodBowls.Code.Ok and bowls.amount(s_f7, bowl) == 1.0 and s_f7["food_bowls"][bowl]["food_id"] == "food_nectar", "TC-F4: nectar onto an empty bowl: full nectar")
+	_check(inventory.count(s_f7, "food_nectar") == 0, "TC-F4: nectar stock is 0 after the fill")
+
+	# Nectar 0 -> NotEnough, no change.
+	var s_f8: Dictionary = _new_state(defs)
+	var b_f8: Dictionary = s_f8.duplicate(true)
+	var r_f8: FoodBowls.Result = bowls.fill(s_f8, bowl, "food_nectar", now)
+	_check(r_f8.code == FoodBowls.Code.NotEnough and s_f8 == b_f8, "nectar 0: NotEnough, no change")
+
+	# Same full food -> NoChange (basic, and nectar with stock kept).
+	var s_f9: Dictionary = _new_state(defs)
+	_set_bowl(s_f9, bowl, "food_basic", 1.0, 0)
+	var b_f9: Dictionary = s_f9.duplicate(true)
+	var r_f9: FoodBowls.Result = bowls.fill(s_f9, bowl, "food_basic", now)
+	_check(r_f9.code == FoodBowls.Code.NoChange and s_f9 == b_f9, "same full basic food: NoChange, no change")
+	var s_f10: Dictionary = _new_state(defs)
+	_set_bowl(s_f10, bowl, "food_nectar", 1.0, 0)
+	(s_f10["inventory"] as Dictionary)["food_nectar"] = 1
+	var b_f10: Dictionary = s_f10.duplicate(true)
+	var r_f10: FoodBowls.Result = bowls.fill(s_f10, bowl, "food_nectar", now)
+	_check(r_f10.code == FoodBowls.Code.NoChange and s_f10 == b_f10, "same full nectar: NoChange, stock kept")
+
+	# Nectar onto a basic bowl is allowed; nectar on a half-full nectar bowl refills it and costs 1.
+	var s_f11: Dictionary = _new_state(defs)
+	_set_bowl(s_f11, bowl, "food_basic", 1.0, 0)
+	(s_f11["inventory"] as Dictionary)["food_nectar"] = 1
+	_check(bowls.fill(s_f11, bowl, "food_nectar", now).code == FoodBowls.Code.Ok and inventory.count(s_f11, "food_nectar") == 0, "nectar onto a basic bowl: Ok, stock -1")
+
+	# A toy slot is not a bowl -> WrongSlotType, no change.
+	var s_f12: Dictionary = _new_state(defs)
+	var b_f12: Dictionary = s_f12.duplicate(true)
+	_check(bowls.fill(s_f12, toy_slot, "food_basic", now).code == FoodBowls.Code.WrongSlotType and s_f12 == b_f12, "toy slot gives WrongSlotType, no change")
+
+	# Basic food refills a bowl whose basic food is half gone -> Ok, amount 1.0, no stock used.
+	var s_f13: Dictionary = _new_state(defs)
+	_set_bowl(s_f13, bowl, "food_basic", 0.4, 0)
+	_check(bowls.fill(s_f13, bowl, "food_basic", now).code == FoodBowls.Code.Ok and bowls.amount(s_f13, bowl) == 1.0, "basic refill of a half bowl: Ok, amount 1.0")
+
+	# R1 bookkeeping: an emptied bowl makes its toy slots not checkable again.
+	var s_f14: Dictionary = _new_state(defs)
+	Placement.new(defs).place(s_f14, toy_slot, "toy_thimble_swing", now)
+	bowls.fill(s_f14, bowl, "food_basic", now)
+	_check((s_f14["slot_checkable_at"] as Dictionary).has(toy_slot), "fill: the toy slot becomes checkable")
+	bowls.advance(s_f14, bowl, now, now + 2 * 86400, false, 0)
+	_check(bowls.is_empty(s_f14, bowl) and not (s_f14["slot_checkable_at"] as Dictionary).has(toy_slot), "bowl emptied: the toy slot is no longer checkable")
+
+
+func _new_state(defs: Defs) -> Dictionary:
+	return SaveStore.new("", defs).new_game_state(1)
+
+
+func _visit(now: int) -> Dictionary:
+	return {"spirit_id": "spirit_petal", "arrived_at": now, "leave_at": now + 300}
+
+
+func _set_bowl(state: Dictionary, slot_id: String, food_id: String, amount_value: float, last_t: int) -> void:
+	(state["food_bowls"] as Dictionary)[slot_id] = {"food_id": food_id, "amount": amount_value, "last_t": last_t}
+
+
+func _clock(seed_value: int, tuning: Dictionary) -> EnvClock:
+	return EnvClock.new(seed_value, int(tuning["day_start_hour"]), int(tuning["night_start_hour"]), float(tuning["seed_weather_clear_p"]), float(tuning["seed_weather_cloudy_p"]))
 
 
 # ---------------------------------------------------------------- static
