@@ -1,9 +1,9 @@
 extends SceneTree
 ## Test runner for the spirit-guests prototype.
 ## Usage: godot --headless --path game -s tests/run.gd -- <suite|all>
-## Suites: data, save, env, static, place, food, visits. Prints each failure, then PASS or FAIL, and exits 0 or 1.
+## Suites: data, save, env, static, place, food, visits, catchup. Prints each failure, then PASS or FAIL, and exits 0 or 1.
 
-const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits"]
+const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits", "catchup"]
 const DATA_DIR: String = "res://data"
 
 var _suite: String = ""
@@ -743,6 +743,134 @@ func _suite_visits() -> void:
 		var events_b: Array[Dictionary] = vis_b.tick(copy_b, tt, env_k, room, true)
 		same_copies = same_copies and events_a == events_b
 	_check(same_copies and copy_a == copy_b, "two copies of one state, same inputs: identical events and state")
+
+
+# ---------------------------------------------------------------- catchup
+
+func _suite_catchup() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var clock: EnvClock = _clock(12345, defs.tuning())
+	var offset: int = 32400  # UTC+9
+	var t0: int = 1700000000
+	var half_day: int = 43200
+	var bowl: String = "room_window/slot_4"
+	var slot_0: String = "room_window/slot_0"
+	var slot_1: String = "room_window/slot_1"
+
+	# New game: last_seen 0 gives no events and sets last_seen.
+	var fresh: Dictionary = _new_state(defs)
+	var r_fresh: Dictionary = CatchUp.new(defs).run(fresh, t0, clock, offset)
+	_check((r_fresh["events"] as Array).is_empty() and int(fresh["last_seen"]) == t0, "catchup: new game (last_seen 0) gives no events and sets last_seen")
+	_check(int(r_fresh["elapsed_s"]) == 0 and not bool(r_fresh["capped"]) and not bool(r_fresh["clock_back"]), "catchup: new game reports elapsed 0, not capped, not clock_back")
+
+	# TC-C1: last_seen one day in the future (the clock went back): only last_seen changes.
+	var c1: Dictionary = _catchup_full(defs, 21, t0)
+	c1["last_seen"] = t0 + 86400
+	var c1_expect: Dictionary = c1.duplicate(true)
+	c1_expect["last_seen"] = t0
+	var r_c1: Dictionary = CatchUp.new(defs).run(c1, t0, clock, offset)
+	_check(bool(r_c1["clock_back"]) and (r_c1["events"] as Array).is_empty() and int(r_c1["elapsed_s"]) == 0 and c1 == c1_expect, "TC-C1: clock 1 day back: nothing changes except last_seen = now, clock_back true")
+
+	# TC-C2: 12 h + 1 s is capped to 12 h, so it gives the same result as exactly 12 h (same window start).
+	var start_c2: int = t0 + 3600
+	var now_c2: int = start_c2 + half_day
+	var c2_a: Dictionary = _catchup_full(defs, 22, t0)
+	c2_a["last_seen"] = now_c2 - half_day - 1
+	var c2_b: Dictionary = c2_a.duplicate(true)
+	c2_b["last_seen"] = now_c2 - half_day
+	var cu_c2: CatchUp = CatchUp.new(defs)
+	var r_c2a: Dictionary = cu_c2.run(c2_a, now_c2, clock, offset)
+	var r_c2b: Dictionary = cu_c2.run(c2_b, now_c2, clock, offset)
+	_check(bool(r_c2a["capped"]) and not bool(r_c2b["capped"]), "TC-C2: 12 h + 1 s is capped, exactly 12 h is not")
+	_check(r_c2a["events"] == r_c2b["events"] and c2_a == c2_b, "TC-C2: 12 h + 1 s and exactly 12 h give identical events and states")
+
+	# TC-C3: the same state and the same now, run on deep copies, give the same result (determinism).
+	var c3_a: Dictionary = _catchup_full(defs, 23, t0)
+	c3_a["last_seen"] = t0
+	var c3_b: Dictionary = c3_a.duplicate(true)
+	var cu_c3: CatchUp = CatchUp.new(defs)
+	var r_c3a: Dictionary = cu_c3.run(c3_a, t0 + half_day, clock, offset)
+	var r_c3b: Dictionary = cu_c3.run(c3_b, t0 + half_day, clock, offset)
+	_check((r_c3a["events"] as Array).size() > 0 and r_c3a == r_c3b and c3_a == c3_b, "TC-C3: same state and same now on deep copies give identical results")
+	# The same run again (last_seen now equals now): nothing more happens.
+	var c3_mid: Dictionary = c3_a.duplicate(true)
+	var r_again: Dictionary = cu_c3.run(c3_a, t0 + half_day, clock, offset)
+	_check((r_again["events"] as Array).is_empty() and c3_a == c3_mid, "a second run at the same now adds no events and changes nothing")
+
+	# Basic food over 12 h with nobody visiting (no toy placed): the bowl drops by the shy share only, 12 h / 24 h = 0.5.
+	var quiet: Dictionary = SaveStore.new("", defs).new_game_state(78)
+	FoodBowls.new(defs).fill(quiet, bowl, "food_basic", t0)
+	quiet["last_seen"] = t0
+	var r_quiet: Dictionary = CatchUp.new(defs).run(quiet, t0 + half_day, clock, offset)
+	var amount_quiet: float = FoodBowls.new(defs).amount(quiet, bowl)
+	_check((r_quiet["events"] as Array).is_empty() and is_equal_approx(amount_quiet, 0.5), "basic food, 12 h, nobody visiting: no events, bowl 1.0 -> 0.5 (got %.4f)" % amount_quiet)
+
+	# Realistic 6 h close: new game, 2 starter toys placed in room_window, full basic bowl.
+	var close: Dictionary = SaveStore.new("", defs).new_game_state(77)
+	FoodBowls.new(defs).fill(close, bowl, "food_basic", t0)
+	Placement.new(defs).place(close, slot_0, "toy_thimble_swing", t0)
+	Placement.new(defs).place(close, slot_1, "toy_spool_slide", t0)
+	close["last_seen"] = t0
+	var visit_seq_before: int = int(close["visit_seq"])
+	var amount_before: float = FoodBowls.new(defs).amount(close, bowl)
+	var r_close: Dictionary = CatchUp.new(defs).run(close, t0 + 6 * 3600, clock, offset)
+	var ev_close: Array = r_close["events"]
+	var lefts: int = _count_events(ev_close, "left", "")
+	_check(lefts >= 1, "6 h close: at least one 'left' event (got %d)" % lefts)
+	_check(int(close["visit_seq"]) > visit_seq_before, "6 h close: visit_seq increased (%d -> %d)" % [visit_seq_before, int(close["visit_seq"])])
+	var amount_after: float = FoodBowls.new(defs).amount(close, bowl)
+	_check(amount_after < amount_before, "6 h close: the bowl amount is lower (%.4f -> %.4f)" % [amount_before, amount_after])
+	_check(_one_visit_per_spirit(ev_close), "6 h close: the same spirit is never in two slots (checked along the events)")
+
+	# Performance: 12 h with 7 toy slots (both rooms, 6 toys placed, both bowls full).
+	var perf_state: Dictionary = _catchup_full(defs, 24, t0)
+	_check((perf_state["placement"] as Dictionary).size() == 6, "perf setup: 6 toys placed on 7 toy slots")
+	perf_state["last_seen"] = t0
+	var cu_perf: CatchUp = CatchUp.new(defs)
+	var started: int = Time.get_ticks_msec()
+	var r_perf: Dictionary = cu_perf.run(perf_state, t0 + half_day, clock, offset)
+	var perf_ms: int = Time.get_ticks_msec() - started
+	print("  catch-up 12 h, 7 toy slots: %d ms, %d events (target < 200 ms, assert < 400 ms)" % [perf_ms, (r_perf["events"] as Array).size()])
+	_check(int(r_perf["elapsed_s"]) == half_day and perf_ms < 400, "catch-up 12 h with 7 toy slots takes under 400 ms (got %d ms)" % perf_ms)
+
+
+## Both rooms owned, all toys owned, both bowls full of basic food, six toys placed on seven toy slots
+## (one slot left empty). Placements and fills happen at time t. last_seen is left for the caller.
+func _catchup_full(defs: Defs, seed_value: int, t: int) -> Dictionary:
+	var state: Dictionary = _visit_world(defs, seed_value)
+	FoodBowls.new(defs).fill(state, "room_window/slot_4", "food_basic", t)
+	FoodBowls.new(defs).fill(state, "room_attic/slot_3", "food_basic", t)
+	var placements: Array = [
+		["room_window/slot_0", "toy_thimble_swing"],
+		["room_window/slot_1", "toy_spool_slide"],
+		["room_window/slot_2", "toy_bottlecap_pool"],
+		["room_window/slot_3", "toy_matchbox_bed"],
+		["room_attic/slot_0", "toy_ribbon_hammock"],
+		["room_attic/slot_1", "toy_button_drum"],
+	]
+	var placer: Placement = Placement.new(defs)
+	for pair: Variant in placements:
+		var item: Array = pair
+		placer.place(state, str(item[0]), str(item[1]), t)
+	return state
+
+
+## True when, along the event list, no spirit is in two visits at once and every 'left' matches its 'arrived' slot.
+func _one_visit_per_spirit(events: Array) -> bool:
+	var active: Dictionary = {}
+	for ev_value: Variant in events:
+		var ev: Dictionary = ev_value
+		var spirit_id: String = str(ev.get("spirit_id", ""))
+		var slot_id: String = str(ev.get("slot", ""))
+		if str(ev["type"]) == "arrived":
+			if active.has(spirit_id):
+				return false
+			active[spirit_id] = slot_id
+		elif str(ev["type"]) == "left":
+			if str(active.get(spirit_id, "")) != slot_id:
+				return false
+			active.erase(spirit_id)
+	return true
 
 
 func _visit_world(defs: Defs, seed_value: int) -> Dictionary:
