@@ -18,6 +18,19 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=1
 
+[gui]
+
+theme/custom_font="res://assets/fonts/NanumSquareRoundR.ttf"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[internationalization]
+
+locale/fallback="ko"
+locale/translations=PackedStringArray("res://data/text/ko.ko.translation")
+
 [rendering]
 
 renderer/rendering_method="mobile"
