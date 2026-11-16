@@ -42,11 +42,13 @@ func new_game_state(seed_value: int) -> Dictionary:
 	return {
 		"save_version": SAVE_VERSION,
 		"save_seed": seed_value,
+		"last_seen": 0,
 		"coins": 0,
 		"inventory": inventory,
 		"rooms_owned": [_defs.first_room_id()],
 		"placement": {},
 		"food_bowls": {},
+		"visits_now": {},
 		"purchase_count": {},
 		"pending_gifts": [],
 		"visit_seq": 1,
@@ -58,6 +60,9 @@ func new_game_state(seed_value: int) -> Dictionary:
 		"collection": {},
 		"scenes_unlocked": [],
 		"shop_seen": [],
+		"tutorial": {"step": 1, "done": false},
+		"photos": [],
+		"weather_cache": {},
 	}
 
 

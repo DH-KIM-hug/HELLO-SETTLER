@@ -63,7 +63,7 @@ const TUNING_KEYS: Array = [
 	"check_s", "p_any", "revisit_cooldown_s", "fresh_place_check_s", "fresh_place_cooldown_s",
 	"eat_rate_per_hour", "pity_n", "offline_cap_s", "tutorial_coins", "coin_cap", "nectar_cap",
 	"nectar_overflow_coin", "pending_per_slot", "pending_total", "day_start_hour", "night_start_hour",
-	"weather_refresh_s",
+	"weather_refresh_s", "seed_weather_clear_p", "seed_weather_cloudy_p",
 ]
 const ELEMENTS: Array = ["flower", "leaf", "water", "ember", "wind", "moss", "rain", "star"]
 const RARITIES: Array = ["common", "rare"]
@@ -159,6 +159,24 @@ func food(id: String) -> Dictionary:
 
 func room(id: String) -> Dictionary:
 	return _lookup("rooms", id)
+
+
+## The slot record (slot_id, accepts, size, position) with room_id added, or {} when no room has this slot.
+func slot(slot_id: String) -> Dictionary:
+	for rec: Variant in _rows_of("rooms"):
+		var room_rec: Dictionary = rec
+		var slots: Variant = room_rec.get("slots")
+		if typeof(slots) != TYPE_ARRAY:
+			continue
+		for slot_value: Variant in slots:
+			if typeof(slot_value) != TYPE_DICTIONARY:
+				continue
+			var found: Dictionary = slot_value
+			if str(found.get("slot_id", "")) == slot_id:
+				var out: Dictionary = found.duplicate(true)
+				out["room_id"] = str(room_rec.get("room_id", ""))
+				return out
+	return {}
 
 
 func gift(id: String) -> Dictionary:
@@ -482,6 +500,12 @@ func _validate_tuning(errors: Array[String]) -> void:
 			errors.append("tuning[%s]: must be a number >= 0" % key)
 	if _tuning.has("p_any") and not _in_range(_tuning["p_any"], 0.0, 1.0):
 		errors.append("tuning[p_any]: must be 0~1")
+	for key: String in ["seed_weather_clear_p", "seed_weather_cloudy_p"]:
+		if _tuning.has(key) and not _in_range(_tuning[key], 0.0, 1.0):
+			errors.append("tuning[%s]: must be 0~1" % key)
+	if _is_num(_tuning.get("seed_weather_clear_p")) and _is_num(_tuning.get("seed_weather_cloudy_p")):
+		if float(_tuning["seed_weather_clear_p"]) + float(_tuning["seed_weather_cloudy_p"]) > 1.0:
+			errors.append("tuning: seed_weather_clear_p + seed_weather_cloudy_p must be <= 1")
 	for key: String in ["day_start_hour", "night_start_hour"]:
 		if _tuning.has(key) and not (_is_whole_at_least(_tuning[key], 0.0) and float(_tuning[key]) <= 23.0):
 			errors.append("tuning[%s]: must be an hour 0~23" % key)
