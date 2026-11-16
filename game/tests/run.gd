@@ -1,9 +1,9 @@
 extends SceneTree
 ## Test runner for the spirit-guests prototype.
 ## Usage: godot --headless --path game -s tests/run.gd -- <suite|all>
-## Suites: data, save, env, static, place, food, visits, catchup. Prints each failure, then PASS or FAIL, and exits 0 or 1.
+## Suites: data, save, env, static, place, food, visits, catchup, wallet, shop, collection. Prints each failure, then PASS or FAIL, and exits 0 or 1.
 
-const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits", "catchup"]
+const SUITES: PackedStringArray = ["data", "save", "env", "static", "place", "food", "visits", "catchup", "wallet", "shop", "collection"]
 const DATA_DIR: String = "res://data"
 
 var _suite: String = ""
@@ -973,6 +973,418 @@ func _find_event(events: Array, type_name: String) -> Dictionary:
 
 func _first_arrival(events: Array) -> String:
 	return str(_find_event(events, "arrived").get("spirit_id", ""))
+
+
+# ---------------------------------------------------------------- wallet
+
+func _suite_wallet() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var wallet: Wallet = Wallet.new(defs)
+	var slot_a: String = "room_window/slot_0"
+	var slot_b: String = "room_window/slot_1"
+
+	# Gift rolls are deterministic: the same visit_seq gives the same gift.
+	var roll_one: Dictionary = _new_state(defs)
+	var roll_two: Dictionary = _new_state(defs)
+	wallet.create_gift(roll_one, slot_a, "spirit_petal", 5, "common")
+	wallet.create_gift(roll_two, slot_a, "spirit_petal", 5, "common")
+	_check(roll_one == roll_two and wallet.pending_count(roll_one, slot_a) == 1, "gift rolls: the same visit_seq gives the same gift")
+
+	# Gift coins over 1000 seeds: common 5..9, rare 25..35, both ends reached.
+	var common_low: int = 999
+	var common_high: int = 0
+	var rare_low: int = 999
+	var rare_high: int = 0
+	var nectar_rolls: int = 0
+	for seed_value: int in range(1000):
+		var common_state: Dictionary = _new_state(defs)
+		common_state["save_seed"] = seed_value
+		wallet.create_gift(common_state, slot_a, "spirit_petal", 1, "common")
+		var common_coins: int = int(_first_gift(common_state)["coins"])
+		common_low = mini(common_low, common_coins)
+		common_high = maxi(common_high, common_coins)
+		var rare_state: Dictionary = _new_state(defs)
+		rare_state["save_seed"] = seed_value
+		wallet.create_gift(rare_state, slot_a, "spirit_star", 1, "rare")
+		var rare_gift: Dictionary = _first_gift(rare_state)
+		rare_low = mini(rare_low, int(rare_gift["coins"]))
+		rare_high = maxi(rare_high, int(rare_gift["coins"]))
+		nectar_rolls += (rare_gift["items"] as Array).size()
+	_check(common_low == 5 and common_high == 9, "gift coins: common is 5..9 over 1000 seeds (got %d..%d)" % [common_low, common_high])
+	_check(rare_low == 25 and rare_high == 35, "gift coins: rare is 25..35 over 1000 seeds (got %d..%d)" % [rare_low, rare_high])
+	_check(nectar_rolls > 0 and nectar_rolls < 1000, "gift nectar: the rare chance (0.2) rolls some but not all (got %d of 1000)" % nectar_rolls)
+
+	# Visits leave out of seq order: seq 6 leaves before seq 5. Both gifts are created; a repeat of 6 is ignored.
+	var ooo: Dictionary = _new_state(defs)
+	wallet.create_gift(ooo, slot_a, "spirit_petal", 6, "common")
+	wallet.create_gift(ooo, slot_a, "spirit_petal", 5, "common")
+	_check((ooo["pending_gifts"] as Array).size() == 2 and _visit_seqs(ooo, slot_a) == [6, 5], "out of order: the gift for seq 6 and the later gift for seq 5 are both created")
+	var ooo_before: Dictionary = ooo.duplicate(true)
+	var repeat_notes: Array = wallet.create_gift(ooo, slot_a, "spirit_petal", 6, "common")
+	_check(ooo == ooo_before and repeat_notes.is_empty(), "out of order: seq 6 again is ignored and changes nothing")
+	wallet.claim(ooo, slot_a)
+	var claimed_before: Dictionary = ooo.duplicate(true)
+	wallet.create_gift(ooo, slot_a, "spirit_petal", 6, "common")
+	_check(ooo == claimed_before, "seq 6 is still ignored after its gift was claimed (gifted_seqs)")
+	_check(int(ooo["last_processed_visit_seq"]) == 6 and ooo["gifted_seqs"] == [6, 5], "last_processed_visit_seq is the max (6); gifted_seqs keeps creation order")
+
+	# The window keeps the last 64 gifted seqs: after 70 gifts (each claimed) it holds 7..70.
+	var window: Dictionary = _new_state(defs)
+	for seq: int in range(1, 71):
+		wallet.create_gift(window, slot_a, "spirit_petal", seq, "common")
+		wallet.claim(window, slot_a)
+	var window_seqs: Array = window["gifted_seqs"]
+	_check(window_seqs.size() == 64 and int(window_seqs[0]) == 7 and int(window_seqs[63]) == 70, "gifted_seqs keeps only the last 64 seqs (7..70)")
+	_check(int(window["last_processed_visit_seq"]) == 70, "last_processed_visit_seq is 70 after 70 gifts")
+
+	# A seq that has left the window is still ignored while its gift is pending.
+	var kept: Dictionary = _new_state(defs)
+	wallet.create_gift(kept, slot_a, "spirit_petal", 1, "common")
+	for seq: int in range(2, 67):
+		wallet.create_gift(kept, slot_b, "spirit_petal", seq, "common")
+		wallet.claim(kept, slot_b)
+	var kept_before: Dictionary = kept.duplicate(true)
+	wallet.create_gift(kept, slot_a, "spirit_petal", 1, "common")
+	_check(not ((kept["gifted_seqs"] as Array).has(1)) and kept == kept_before, "seq 1 left the window but its pending gift still blocks a second gift")
+
+	var bad: Dictionary = _new_state(defs)
+	var bad_before: Dictionary = bad.duplicate(true)
+	wallet.create_gift(bad, slot_a, "spirit_missing", 1, "common")
+	wallet.create_gift(bad, "room_nowhere/slot_0", "spirit_petal", 1, "common")
+	wallet.create_gift(bad, slot_a, "spirit_petal", 1, "rare")
+	_check(bad == bad_before, "create_gift: unknown spirit, unknown slot or wrong rarity changes nothing")
+
+	# TC-G1: two claims in a row pay once; the second is AlreadyClaimed and changes nothing.
+	var once: Dictionary = _new_state(defs)
+	wallet.create_gift(once, slot_a, "spirit_petal", 1, "common")
+	var gift_coins: int = int(_first_gift(once)["coins"])
+	var first_claim: Wallet.Result = wallet.claim(once, slot_a)
+	var paid_once: Dictionary = once.duplicate(true)
+	var second_claim: Wallet.Result = wallet.claim(once, slot_a)
+	_check(first_claim.code == Wallet.Code.Ok and int(once["coins"]) == gift_coins, "TC-G1: the first claim pays the gift once")
+	_check(second_claim.code == Wallet.Code.AlreadyClaimed and once == paid_once, "TC-G1: the second claim is AlreadyClaimed and changes nothing")
+	_check(wallet.claim(_new_state(defs), slot_a).code == Wallet.Code.AlreadyClaimed, "claim with nothing pending is AlreadyClaimed")
+
+	# A claim pays every pending gift of its slot at once; other slots stay pending. claim_all takes the rest.
+	var both: Dictionary = _new_state(defs)
+	wallet.create_gift(both, slot_a, "spirit_petal", 1, "common")
+	wallet.create_gift(both, slot_a, "spirit_petal", 2, "common")
+	wallet.create_gift(both, slot_b, "spirit_petal", 3, "common")
+	var slot_a_coins: int = _slot_coins(both, slot_a)
+	wallet.claim(both, slot_a)
+	_check(int(both["coins"]) == slot_a_coins and wallet.pending_count(both, slot_a) == 0 and wallet.pending_count(both, slot_b) == 1, "claim: pays all gifts of one slot, the other slot stays pending")
+	var rest: Wallet.Result = wallet.claim_all(both)
+	_check(rest.code == Wallet.Code.Ok and (both["pending_gifts"] as Array).is_empty(), "claim_all: pays the rest")
+	_check(wallet.claim_all(both).code == Wallet.Code.AlreadyClaimed, "claim_all with nothing pending is AlreadyClaimed")
+
+	# TC-G2: slot A holds 3 pending gifts; a 4th auto-claims the oldest and keeps the newest.
+	var capped: Dictionary = _new_state(defs)
+	for seq: int in range(1, 4):
+		wallet.create_gift(capped, slot_a, "spirit_petal", seq, "common")
+	var oldest_coins: int = int(_first_gift(capped)["coins"])
+	var oldest_nectar: int = (_first_gift(capped)["items"] as Array).size()
+	var notes_fourth: Array = wallet.create_gift(capped, slot_a, "spirit_petal", 4, "common")
+	_check(wallet.pending_count(capped, slot_a) == 3, "TC-G2: slot A has 3 pending gifts after the 4th")
+	_check(_visit_seqs(capped, slot_a) == [2, 3, 4], "TC-G2: the oldest (visit 1) was auto-claimed, the newest (visit 4) stays")
+	_check(int(capped["coins"]) == oldest_coins, "TC-G2: the auto-claimed gift paid its coins")
+	_check((notes_fourth.size() == 1) == (oldest_nectar == 1), "TC-G2: a note comes only when the auto-claimed gift carries nectar")
+
+	# An auto-claim that carries nectar reports a note, and the nectar goes to the inventory.
+	var nectar_seq: int = 0
+	for seq: int in range(1, 500):
+		if DetRng.unit(1, "gift_item", seq) < 0.2:
+			nectar_seq = seq
+			break
+	_check(nectar_seq > 0, "found a visit whose rare gift carries nectar (visit %d)" % nectar_seq)
+	var rare_cap: Dictionary = _new_state(defs)
+	wallet.create_gift(rare_cap, slot_a, "spirit_star", nectar_seq, "rare")
+	wallet.create_gift(rare_cap, slot_a, "spirit_star", nectar_seq + 1, "rare")
+	wallet.create_gift(rare_cap, slot_a, "spirit_star", nectar_seq + 2, "rare")
+	var nectar_notes: Array = wallet.create_gift(rare_cap, slot_a, "spirit_star", nectar_seq + 3, "rare")
+	_check(nectar_notes.size() == 1 and str((nectar_notes[0] as Dictionary)["type"]) == "auto_claim_nectar", "auto-claim with nectar gives one auto_claim_nectar note")
+	_check(int(((nectar_notes[0] as Dictionary))["nectar"]) == 1 and _count_of(rare_cap, "food_nectar") == 1, "the auto-claimed nectar reaches the inventory")
+	_check(_visit_seqs(rare_cap, slot_a) == [nectar_seq + 1, nectar_seq + 2, nectar_seq + 3], "the oldest nectar gift left pending; the three newest stay")
+
+	# Total cap (pending_total): with the real data 7 toy slots cannot reach 50, so a copy with a lower cap is used.
+	# Over the cap, the oldest gift that is not the newest of its slot is claimed (A1 here); the newest of each slot stays.
+	var raw_total: Dictionary = Defs.read_files(DATA_DIR)["raw"]
+	(raw_total["tuning"] as Dictionary)["pending_total"] = 3
+	var total_defs: Defs = Defs.new().load_raw(raw_total)
+	var total_wallet: Wallet = Wallet.new(total_defs)
+	var total_state: Dictionary = _new_state(total_defs)
+	total_wallet.create_gift(total_state, slot_a, "spirit_petal", 1, "common")
+	total_wallet.create_gift(total_state, slot_a, "spirit_petal", 2, "common")
+	total_wallet.create_gift(total_state, slot_b, "spirit_petal", 3, "common")
+	total_wallet.create_gift(total_state, slot_a, "spirit_petal", 4, "common")
+	_check((total_state["pending_gifts"] as Array).size() == 3 and _visit_seqs(total_state, slot_a) == [2, 4] and _visit_seqs(total_state, slot_b) == [3], "total cap: over pending_total the oldest non-newest gift is claimed (A1), 3 remain")
+	var raw_one: Dictionary = Defs.read_files(DATA_DIR)["raw"]
+	(raw_one["tuning"] as Dictionary)["pending_total"] = 1
+	var protect_wallet: Wallet = Wallet.new(Defs.new().load_raw(raw_one))
+	var protect: Dictionary = _new_state(Defs.new().load_raw(raw_one))
+	protect_wallet.create_gift(protect, slot_a, "spirit_petal", 1, "common")
+	protect_wallet.create_gift(protect, slot_b, "spirit_petal", 2, "common")
+	_check((protect["pending_gifts"] as Array).size() == 2 and int(protect["coins"]) == 0, "total cap: when every gift is the newest of its slot, nothing is auto-claimed")
+
+	# TC-G3: 99995 + 9 gives 99999; the 5 over the cap are dropped (Overflowed). At the cap all 9 are dropped.
+	var rich: Dictionary = _new_state(defs)
+	rich["coins"] = 99995
+	rich["pending_gifts"] = [_gift(slot_a, 9, [])]
+	var r_g3: Wallet.Result = wallet.claim(rich, slot_a)
+	_check(int(rich["coins"]) == 99999 and r_g3.code == Wallet.Code.Overflowed and r_g3.coins_added == 4 and r_g3.coins_dropped == 5, "TC-G3: 99995 + 9 gives 99999 (4 added, 5 dropped)")
+	rich["pending_gifts"] = [_gift(slot_a, 9, [])]
+	var r_full: Wallet.Result = wallet.claim(rich, slot_a)
+	_check(int(rich["coins"]) == 99999 and r_full.code == Wallet.Code.Overflowed and r_full.coins_dropped == 9, "TC-G3: at the cap the 9 coins are dropped (Overflowed)")
+
+	# Nectar over nectar_cap (99) is paid as coins at nectar_overflow_coin (5) each.
+	var honey: Dictionary = _new_state(defs)
+	(honey["inventory"] as Dictionary)["food_nectar"] = 98
+	honey["pending_gifts"] = [_gift(slot_a, 0, ["food_nectar", "food_nectar", "food_nectar"])]
+	var r_honey: Wallet.Result = wallet.claim(honey, slot_a)
+	_check(r_honey.code == Wallet.Code.Overflowed and r_honey.nectar_added == 1 and r_honey.nectar_converted == 2, "nectar over the cap: 1 kept, 2 converted (Overflowed)")
+	_check(int(honey["coins"]) == 10 and _count_of(honey, "food_nectar") == 99, "nectar over the cap: 2 x 5 = 10 coins, stock 99")
+	var honey_fit: Dictionary = _new_state(defs)
+	honey_fit["pending_gifts"] = [_gift(slot_a, 0, ["food_nectar", "food_nectar"])]
+	var r_fit: Wallet.Result = wallet.claim(honey_fit, slot_a)
+	_check(r_fit.code == Wallet.Code.Ok and _count_of(honey_fit, "food_nectar") == 2 and int(honey_fit["coins"]) == 0, "nectar within the cap: Ok, no conversion")
+
+	# Plain coin operations: spend is exact and never negative; add is clamped at coin_cap.
+	var purse: Dictionary = _new_state(defs)
+	purse["coins"] = 50
+	_check(wallet.can_spend(purse, 50) and not wallet.can_spend(purse, 51) and not wallet.can_spend(purse, -1), "can_spend: exact amount yes, more or negative no")
+	var purse_before: Dictionary = purse.duplicate(true)
+	_check(not wallet.spend(purse, 60) and purse == purse_before, "spend: refused, nothing changes")
+	_check(wallet.spend(purse, 20) and int(purse["coins"]) == 30, "spend: takes the amount")
+	_check(wallet.add(purse, 99999) == 99969 and int(purse["coins"]) == 99999, "add: clamped at coin_cap, returns the amount added")
+
+	# Tutorial reward: +tutorial_coins once.
+	var tutorial: Dictionary = _new_state(defs)
+	_check(wallet.tutorial_reward(tutorial) and int(tutorial["coins"]) == 100, "tutorial_reward: +100 the first time")
+	_check(not wallet.tutorial_reward(tutorial) and int(tutorial["coins"]) == 100, "tutorial_reward: nothing the second time")
+
+
+# ---------------------------------------------------------------- shop
+
+func _suite_shop() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var shop: Shop = Shop.new(defs)
+	var inv: Inventory = Inventory.new(defs)
+	var t0: int = 1700000000
+	var bottlecap: String = "shop_toy_bottlecap"
+	var ribbon: String = "shop_toy_ribbon"
+	var nectar3: String = "shop_food_nectar3"
+	var attic: String = "shop_room_attic"
+
+	# TC-B1: one coin short gives NotEnoughCurrency and changes nothing.
+	var short: Dictionary = _new_state(defs)
+	short["coins"] = 79
+	var short_before: Dictionary = short.duplicate(true)
+	_check(shop.buy(short, bottlecap, t0).code == Shop.Code.NotEnoughCurrency and short == short_before, "TC-B1: price minus 1 gives NotEnoughCurrency, nothing changes")
+
+	# TC-B2: exactly the price gives Success, coins 0, the toy is owned, purchase_count 1.
+	var exact: Dictionary = _new_state(defs)
+	exact["coins"] = 80
+	_check(shop.buy(exact, bottlecap, t0).code == Shop.Code.Success, "TC-B2: exact price gives Success")
+	_check(int(exact["coins"]) == 0 and inv.count(exact, "toy_bottlecap_pool") == 1 and int((exact["purchase_count"] as Dictionary)[bottlecap]) == 1, "TC-B2: coins 0, toy added, purchase_count 1")
+
+	# TC-B3: nectar 98 and the 3-pack needs 3 more: InventoryFull, no change (no partial buy).
+	var stocked: Dictionary = _new_state(defs)
+	stocked["coins"] = 30
+	(stocked["inventory"] as Dictionary)["food_nectar"] = 98
+	var stocked_before: Dictionary = stocked.duplicate(true)
+	_check(shop.buy(stocked, nectar3, t0).code == Shop.Code.InventoryFull and stocked == stocked_before, "TC-B3: 98 + 3 gives InventoryFull, nothing changes")
+	var fits: Dictionary = _new_state(defs)
+	fits["coins"] = 30
+	(fits["inventory"] as Dictionary)["food_nectar"] = 96
+	_check(shop.buy(fits, nectar3, t0).code == Shop.Code.Success and inv.count(fits, "food_nectar") == 99 and int(fits["coins"]) == 0, "96 + 3 = 99 fits exactly: Success")
+
+	# TC-B4: the ribbon needs 3 owned toy kinds. Two starters give Locked.
+	var young: Dictionary = _new_state(defs)
+	young["coins"] = 1000
+	var young_before: Dictionary = young.duplicate(true)
+	_check(shop.buy(young, ribbon, t0).code == Shop.Code.Locked and young == young_before, "TC-B4: two toy kinds gives Locked, nothing changes")
+	_check(shop.buy(young, bottlecap, t0).code == Shop.Code.Success, "TC-B4 setup: a third toy kind (bottlecap)")
+	_check(shop.buy(young, ribbon, t0).code == Shop.Code.Success, "TC-B4: with three toy kinds the ribbon opens")
+	_check(shop.buy(young, bottlecap, t0).code == Shop.Code.AlreadyOwned, "a toy already owned gives AlreadyOwned (before the limit check)")
+
+	# LimitReached: bought once, then the toy is gone from the inventory: the limit blocks it.
+	var limited: Dictionary = _new_state(defs)
+	limited["coins"] = 1000
+	(limited["purchase_count"] as Dictionary)[bottlecap] = 1
+	var limited_before: Dictionary = limited.duplicate(true)
+	_check(shop.buy(limited, bottlecap, t0).code == Shop.Code.LimitReached and limited == limited_before, "LimitReached: limit reached and not owned, nothing changes")
+	_check(shop.buy(_new_state(defs), "shop_missing", t0).code == Shop.Code.InvalidProduct, "unknown product gives InvalidProduct")
+
+	# Room: the attic opens with 4 toy kinds. It joins rooms_owned, and Visits ticks its toy slots.
+	var house: Dictionary = _new_state(defs)
+	house["coins"] = 1030
+	_check(shop.buy(house, bottlecap, t0).code == Shop.Code.Success, "room setup: bottlecap bought")
+	_check(shop.buy(house, "shop_toy_matchbox", t0).code == Shop.Code.Success, "room setup: matchbox bed bought (4 toy kinds)")
+	_check(shop.buy(house, attic, t0).code == Shop.Code.Success and int(house["coins"]) == 0, "the attic costs 800 and gives Success")
+	_check((house["rooms_owned"] as Array).has("room_attic") and (house["rooms_owned"] as Array).size() == 2, "room purchase: rooms_owned gains room_attic")
+	_check(shop.buy(house, attic, t0).code == Shop.Code.AlreadyOwned, "room already owned gives AlreadyOwned")
+	_check(Placement.new(defs).place(house, "room_attic/slot_0", "toy_spool_slide", t0).code == Placement.Code.Ok, "room: a toy can go on an attic slot")
+	FoodBowls.new(defs).fill(house, "room_attic/slot_3", "food_basic", t0)
+	# A fresh toy is first judged 8 s after it was placed (R1), so tick a minute later.
+	Visits.new(defs).tick(house, t0 + 60, {"is_night": false, "weather": "clear"}, "room_window", true)
+	_check(int((house["check_seq"] as Dictionary).get("room_attic/slot_0", 0)) == 1, "room purchase: Visits ticks the attic toy slot")
+
+	# state_of: the six U6 states, read only.
+	var view: Dictionary = _new_state(defs)
+	_check(shop.state_of(view, bottlecap) == "not_enough", "state_of: too few coins gives not_enough")
+	view["coins"] = 80
+	_check(shop.state_of(view, bottlecap) == "available", "state_of: affordable gives available")
+	_check(shop.state_of(view, ribbon) == "locked", "state_of: ribbon is locked with two toy kinds (even when not affordable)")
+	var view_before: Dictionary = view.duplicate(true)
+	var stocked_view: Dictionary = _new_state(defs)
+	stocked_view["coins"] = 30
+	(stocked_view["inventory"] as Dictionary)["food_nectar"] = 98
+	_check(shop.state_of(stocked_view, nectar3) == "inventory_full", "state_of: no room for the 3-pack gives inventory_full")
+	var limit_view: Dictionary = _new_state(defs)
+	limit_view["coins"] = 80
+	(limit_view["purchase_count"] as Dictionary)[bottlecap] = 1
+	_check(shop.state_of(limit_view, bottlecap) == "limit", "state_of: limit reached and not owned gives limit")
+	_check(shop.state_of(house, bottlecap) == "owned" and shop.state_of(house, attic) == "owned", "state_of: owned toy and room give owned")
+	_check(shop.state_of(view, "shop_missing") == "locked" and view == view_before, "state_of: unknown product is locked, and state_of changes nothing")
+
+
+# ---------------------------------------------------------------- collection
+
+func _suite_collection() -> void:
+	var defs: Defs = Defs.new().load_dir(DATA_DIR)
+	var book: Collection = Collection.new(defs)
+	var t0: int = 1700000000
+	var win0: String = "room_window/slot_0"
+	var win1: String = "room_window/slot_1"
+	var win2: String = "room_window/slot_2"
+	var attic0: String = "room_attic/slot_0"
+	var day_clear: Dictionary = {"is_night": false, "weather": "clear"}
+	var night_clear: Dictionary = {"is_night": true, "weather": "clear"}
+	var day_rain: Dictionary = {"is_night": false, "weather": "rain"}
+	var night_rain: Dictionary = {"is_night": true, "weather": "rain"}
+
+	# First meeting: the card unlocks and the record is created. One spirit alone gives no scene.
+	var state: Dictionary = _new_state(defs)
+	_playing_visit(state, win0, "spirit_petal", t0)
+	var first_meet: Array = book.on_settled(state, win0, "spirit_petal", "toy_thimble_swing", t0, day_clear)
+	_check(_unlocks(first_meet, "card") == ["spirit_petal"] and _unlocks(first_meet, "scene").is_empty(), "first meeting: the card unlocks, no scene with one spirit")
+	_check((state["collection"] as Dictionary)["spirit_petal"] == {"first_seen_at": t0, "visit_count": 0, "poses_seen": ["spirit_petal@toy_thimble_swing"], "seen_in_book": false}, "first meeting: the collection record has the G10 fields")
+	_check(bool((state["reveal_shown"] as Dictionary)["card:spirit_petal"]) == false, "first meeting: reveal_shown card:spirit_petal is false")
+
+	# TC-K1: petal Playing, clear day, breeze settles in the same room: scene_sunny_pair unlocks once.
+	_playing_visit(state, win1, "spirit_breeze", t0 + 60)
+	var pair: Array = book.on_settled(state, win1, "spirit_breeze", "toy_spool_slide", t0 + 60, day_clear)
+	_check(_unlocks(pair, "scene") == ["scene_sunny_pair"] and _unlocks(pair, "card") == ["spirit_breeze"], "TC-K1: breeze in the same room on a clear day unlocks scene_sunny_pair once")
+	_check((state["scenes_unlocked"] as Array) == ["scene_sunny_pair"] and bool((state["reveal_shown"] as Dictionary)["scene:scene_sunny_pair"]) == false, "TC-K1: scenes_unlocked and reveal_shown updated")
+
+	# TC-K2: the scene is already unlocked: the same spirits again give no event and no change.
+	var before_again: Dictionary = state.duplicate(true)
+	var again: Array = book.on_settled(state, win1, "spirit_breeze", "toy_spool_slide", t0 + 120, day_clear)
+	_check(again.is_empty() and state == before_again, "TC-K2: an unlocked scene gives no event and no change")
+
+	# The reveal queue: oldest unlock first; mark_revealed removes a key from it.
+	_check(book.pending_reveals(state) == ["card:spirit_petal", "card:spirit_breeze", "scene:scene_sunny_pair"], "pending_reveals: oldest unlock first")
+	_check(book.mark_revealed(state, "card:spirit_petal") and not book.mark_revealed(state, "card:spirit_nobody"), "mark_revealed: a known key gives true, an unknown key false")
+	_check(book.pending_reveals(state) == ["card:spirit_breeze", "scene:scene_sunny_pair"], "pending_reveals: a shown key leaves the queue")
+
+	# Poses: a new toy adds a pose with no event; the same toy again adds nothing.
+	var petal_again: Array = book.on_settled(state, win0, "spirit_petal", "toy_ribbon_hammock", t0 + 300, day_clear)
+	_check(petal_again.is_empty() and ((state["collection"] as Dictionary)["spirit_petal"] as Dictionary)["poses_seen"] == ["spirit_petal@toy_thimble_swing", "spirit_petal@toy_ribbon_hammock"], "a new pose is recorded with no event")
+	var poses_before: Dictionary = state.duplicate(true)
+	book.on_settled(state, win0, "spirit_petal", "toy_ribbon_hammock", t0 + 360, day_clear)
+	_check(state == poses_before, "a repeated pose changes nothing")
+
+	# Visits: on_left counts up; a spirit not yet met gives false and is not added.
+	_check(book.on_left(state, "spirit_petal") and book.on_left(state, "spirit_petal") and int(((state["collection"] as Dictionary)["spirit_petal"] as Dictionary)["visit_count"]) == 2, "on_left: visit_count counts each visit")
+	var unmet_before: Dictionary = state.duplicate(true)
+	_check(not book.on_left(state, "spirit_rain") and state == unmet_before, "on_left: a spirit not yet met gives false and changes nothing")
+
+	# Book badges: the card badge clears; scenes have no badge; unmet cards give false.
+	_check(book.mark_seen(state, "card", "spirit_petal") and bool(((state["collection"] as Dictionary)["spirit_petal"] as Dictionary)["seen_in_book"]), "mark_seen: the card badge is cleared")
+	_check(not book.mark_seen(state, "scene", "scene_sunny_pair") and not book.mark_seen(state, "card", "spirit_rain"), "mark_seen: scenes have no badge and unmet cards give false")
+
+	# The time and the weather must fit: at night or in rain, the sunny pair stays locked.
+	for env: Dictionary in [night_clear, day_rain]:
+		var gated: Dictionary = _new_state(defs)
+		_playing_visit(gated, win0, "spirit_petal", t0)
+		book.on_settled(gated, win0, "spirit_petal", "toy_thimble_swing", t0, env)
+		_playing_visit(gated, win1, "spirit_breeze", t0)
+		var gated_events: Array = book.on_settled(gated, win1, "spirit_breeze", "toy_spool_slide", t0, env)
+		_check(_unlocks(gated_events, "scene").is_empty(), "scene gate: sunny pair needs clear and day (env %s)" % str(env))
+
+	# Not the same room: one spirit in each room gives no scene.
+	var apart: Dictionary = _new_state(defs)
+	_playing_visit(apart, win0, "spirit_petal", t0)
+	_playing_visit(apart, attic0, "spirit_breeze", t0)
+	book.on_settled(apart, win0, "spirit_petal", "toy_thimble_swing", t0, day_clear)
+	var apart_events: Array = book.on_settled(apart, attic0, "spirit_breeze", "toy_spool_slide", t0, day_clear)
+	_check(_unlocks(apart_events, "scene").is_empty() and (apart["scenes_unlocked"] as Array).is_empty(), "two spirits in different rooms: no scene")
+
+	# Other scenes: star and ember on a clear night; drop and moss in rain at any time.
+	# Each spirit settles after the previous one is already Playing, so the scene completes on the second settle.
+	var star: Dictionary = _new_state(defs)
+	_playing_visit(star, win2, "spirit_star", t0)
+	book.on_settled(star, win2, "spirit_star", "toy_ribbon_hammock", t0, night_clear)
+	_playing_visit(star, win1, "spirit_ember", t0)
+	var star_events: Array = book.on_settled(star, win1, "spirit_ember", "toy_matchbox_bed", t0, night_clear)
+	_check(_unlocks(star_events, "scene") == ["scene_star_night"], "scene_star_night: star and ember on a clear night")
+	var wet: Dictionary = _new_state(defs)
+	_playing_visit(wet, win0, "spirit_drop", t0)
+	book.on_settled(wet, win0, "spirit_drop", "toy_bottlecap_pool", t0, night_rain)
+	_playing_visit(wet, win1, "spirit_moss", t0)
+	var wet_events: Array = book.on_settled(wet, win1, "spirit_moss", "toy_matchbox_bed", t0, night_rain)
+	_check(_unlocks(wet_events, "scene") == ["scene_rainy_pool"], "scene_rainy_pool: drop and moss in rain, any time of day")
+
+	# Unknown spirit or slot: no events and no change.
+	var unknown: Dictionary = _new_state(defs)
+	var unknown_before: Dictionary = unknown.duplicate(true)
+	_check(book.on_settled(unknown, win0, "spirit_missing", "toy_thimble_swing", t0, day_clear).is_empty() and unknown == unknown_before, "unknown spirit: no events, no change")
+	_check(book.on_settled(unknown, "room_nowhere/slot_0", "spirit_petal", "toy_thimble_swing", t0, day_clear).is_empty() and unknown == unknown_before, "unknown slot: no events, no change")
+
+
+# ---------------------------------------------------------------- collection and wallet helpers
+
+func _playing_visit(state: Dictionary, slot_id: String, spirit_id: String, now: int) -> void:
+	(state["visits_now"] as Dictionary)[slot_id] = {"spirit_id": spirit_id, "state": Visits.STATE_PLAYING, "arrived_at": now, "leave_at": now + 3600, "visit_seq": 1}
+
+
+func _first_gift(state: Dictionary) -> Dictionary:
+	return (state["pending_gifts"] as Array)[0]
+
+
+func _gift(slot_id: String, coins: int, items: Array) -> Dictionary:
+	return {"visit_seq": 1, "slot": slot_id, "spirit_id": "spirit_petal", "coins": coins, "items": items}
+
+
+func _slot_coins(state: Dictionary, slot_id: String) -> int:
+	var total: int = 0
+	for gift: Variant in state["pending_gifts"]:
+		var g: Dictionary = gift
+		if str(g["slot"]) == slot_id:
+			total += int(g["coins"])
+	return total
+
+
+func _visit_seqs(state: Dictionary, slot_id: String) -> Array:
+	var out: Array = []
+	for gift: Variant in state["pending_gifts"]:
+		var g: Dictionary = gift
+		if str(g["slot"]) == slot_id:
+			out.append(int(g["visit_seq"]))
+	return out
+
+
+func _count_of(state: Dictionary, item_id: String) -> int:
+	return int((state["inventory"] as Dictionary).get(item_id, 0))
+
+
+## Ids of the unlocked events of one kind ("card" or "scene"), in order.
+func _unlocks(events: Array, kind: String) -> Array:
+	var out: Array = []
+	for ev: Variant in events:
+		var e: Dictionary = ev
+		if str(e["type"]) == "unlocked" and str(e["kind"]) == kind:
+			out.append(str(e["id"]))
+	return out
 
 
 # ---------------------------------------------------------------- helpers

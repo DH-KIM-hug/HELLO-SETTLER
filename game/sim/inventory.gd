@@ -16,6 +16,16 @@ func count(state: Dictionary, item_id: String) -> int:
 	return int(stock.get(item_id, 0))
 
 
+## How many more of item_id fit in its stack (0 for an unknown id).
+func room(state: Dictionary, item_id: String) -> int:
+	return maxi(0, _max_stack(item_id) - count(state, item_id))
+
+
+## True when qty more of item_id fit. Changes nothing.
+func can_add(state: Dictionary, item_id: String, qty: int) -> bool:
+	return qty >= 1 and room(state, item_id) >= qty
+
+
 ## Returns false and changes nothing when qty < 1, the id is unknown, or the stack would pass max_stack.
 func add(state: Dictionary, item_id: String, qty: int) -> bool:
 	var limit: int = _max_stack(item_id)
