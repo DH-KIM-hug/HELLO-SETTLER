@@ -2,7 +2,7 @@
  "meta": {
   "genre": "방치형 수집 (네코아츠메류) + 가벼운 꾸미기",
   "engine": "Godot 4.7.2 2D / GDScript / Mobile(Android 우선)",
-  "online": "일부 (클라우드 저장·기기 옮기기)",
+  "online": "일부 — 실제 날씨 조회(위치, MVP부터) + 클라우드 저장(0.5~)",
   "combat": "없음",
   "growth": "예 (해금·친밀도)",
   "items": "예",
@@ -43,7 +43,8 @@
   "D6": {
    "status": "done",
    "file": "docs/gdd/D6-범위-판정.md",
-   "date": "2026-11-16"
+   "date": "2026-11-16",
+   "reason": "사용자: 일러스트 해금 요소 추가, MVP에 정령 일러 8장 + 특별 장면 일러 포함"
   },
   "D7": {
    "status": "done",
@@ -53,6 +54,42 @@
   "D8": {
    "status": "done",
    "file": "docs/gdd/D8-디자인-필러-플레이어-경험-목표.md",
+   "date": "2026-11-16"
+  },
+  "C1": {
+   "status": "done",
+   "file": "docs/gdd/C1-게임-개요.md",
+   "date": "2026-11-16",
+   "reason": "사용자: 시간·날씨는 위치 연동 (실제 날씨) → 온라인 범위 변경"
+  },
+  "C2": {
+   "status": "done",
+   "file": "docs/gdd/C2-핵심-플레이-루프.md",
+   "date": "2026-11-16"
+  },
+  "C3": {
+   "status": "done",
+   "file": "docs/gdd/C3-주요-시스템-목록.md",
+   "date": "2026-11-16"
+  },
+  "C4": {
+   "status": "done",
+   "file": "docs/gdd/C4-화면-목록.md",
+   "date": "2026-11-16"
+  },
+  "C5": {
+   "status": "done",
+   "file": "docs/gdd/C5-데이터-목록.md",
+   "date": "2026-11-16"
+  },
+  "C6": {
+   "status": "done",
+   "file": "docs/gdd/C6-기능-우선순위.md",
+   "date": "2026-11-16"
+  },
+  "C7": {
+   "status": "done",
+   "file": "docs/gdd/C7-예외-제한.md",
    "date": "2026-11-16"
   }
  },
@@ -93,6 +130,28 @@
   "2026-11-16 done D7 docs/gdd/D7-MVP-정의.md",
   "2026-11-16 meta title=보류 (나의 작은 지구 대체 예정)",
   "2026-11-16 start D8",
-  "2026-11-16 done D8 docs/gdd/D8-디자인-필러-플레이어-경험-목표.md"
+  "2026-11-16 done D8 docs/gdd/D8-디자인-필러-플레이어-경험-목표.md",
+  "2026-11-16 start C1",
+  "2026-11-16 done C1 docs/gdd/C1-게임-개요.md",
+  "2026-11-16 start C2",
+  "2026-11-16 reopen D6: 사용자: 일러스트 해금 요소 추가, MVP에 정령 일러 8장 + 특별 장면 일러 포함; stale=['D7', 'D8', 'C1', 'C2']",
+  "2026-11-16 done D6 docs/gdd/D6-범위-판정.md",
+  "2026-11-16 done D7 docs/gdd/D7-MVP-정의.md",
+  "2026-11-16 done D8 docs/gdd/D8-디자인-필러-플레이어-경험-목표.md",
+  "2026-11-16 done C1 docs/gdd/C1-게임-개요.md",
+  "2026-11-16 done C2 docs/gdd/C2-핵심-플레이-루프.md",
+  "2026-11-16 start C3",
+  "2026-11-16 reopen C1: 사용자: 시간·날씨는 위치 연동 (실제 날씨) → 온라인 범위 변경; stale=['C2', 'C3']",
+  "2026-11-16 done C1 docs/gdd/C1-게임-개요.md",
+  "2026-11-16 done C2 docs/gdd/C2-핵심-플레이-루프.md",
+  "2026-11-16 done C3 docs/gdd/C3-주요-시스템-목록.md",
+  "2026-11-16 meta online=일부 — 실제 날씨 조회(위치, MVP부터) + 클라우드 저장(0.5~)",
+  "2026-11-16 start C4",
+  "2026-11-16 done C4 docs/gdd/C4-화면-목록.md",
+  "2026-11-16 start C5",
+  "2026-11-16 done C5 docs/gdd/C5-데이터-목록.md",
+  "2026-11-16 start C6",
+  "2026-11-16 done C6 docs/gdd/C6-기능-우선순위.md",
+  "2026-11-16 done C7 docs/gdd/C7-예외-제한.md"
  ]
 }
